@@ -76,140 +76,28 @@ interface Subscription {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EVENT TEMPLATES
+// ACTIVITY → EVENT TYPE MAPPING
 // ═══════════════════════════════════════════════════════════════════════════════
+// Real events come from the firestore `activities` collection. Each FirestoreActivity
+// is mapped to a StreamEvent using the rules below. No Math.random fabrication.
 
-const CLIENTS = [
-  'ABC Traders', 'Patel Enterprises', 'Sharma & Co', 'Krishna Trading',
-  'XYZ Industries', 'Desai Tech', 'Metro Traders', 'Mehta Solutions',
-  'Rajput Industries', 'Gupta Exports', 'Singh Associates', 'Jain Traders',
-  'Kumar Textiles', 'Verma Logistics', 'Shah Brothers', 'Agarwal Foods',
-]
-
-const NAMES = ['Rahul', 'Priya Sharma', 'Amit', 'Neha', 'Vikram', 'Sunita', 'Deepak', 'Kavita']
-
-const EVENT_TEMPLATES: Array<{
-  type: EventType
-  icon: React.ElementType
-  color: string
-  sourceModule: string
-  make: () => Omit<StreamEvent, 'id' | 'timestamp' | 'icon'>
-}> = [
-  {
-    type: 'invoice.created',
-    icon: Zap,
-    color: 'emerald',
-    sourceModule: 'Invoicing',
-    make: () => ({
-      type: 'invoice.created',
-      description: `Invoice INV-2024-${String(800 + Math.floor(Math.random() * 200)).padStart(4, '0')} created for ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]} — ${fmtINR(Math.floor(Math.random() * 800000 + 50000))}`,
-      sourceModule: 'Invoicing',
-      entityId: `INV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    }),
-  },
-  {
-    type: 'payment.collected',
-    icon: CheckCircle,
-    color: 'green',
-    sourceModule: 'Payments',
-    make: () => {
-      const methods = ['UPI', 'NEFT', 'RTGS', 'Cheque']
-      return {
-        type: 'payment.collected',
-        description: `Payment of ${fmtINR(Math.floor(Math.random() * 500000 + 20000))} received from ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]} via ${methods[Math.floor(Math.random() * methods.length)]}`,
-        sourceModule: 'Payments',
-        entityId: `PAY-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      }
-    },
-  },
-  {
-    type: 'return.filed',
-    icon: Globe,
-    color: 'teal',
-    sourceModule: 'Returns',
-    make: () => ({
-      type: 'return.filed',
-      description: `GSTR-1 filed for ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]} — ARN: AA${Math.floor(Math.random() * 9000000000000 + 1000000000000)}F`,
-      sourceModule: 'Returns',
-      entityId: `RTN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    }),
-  },
-  {
-    type: 'document.uploaded',
-    icon: Database,
-    color: 'sky',
-    sourceModule: 'Documents',
-    make: () => {
-      const docs = ['Purchase register', 'Sales register', 'GSTR-2A', 'E-way bill', 'Credit note']
-      return {
-        type: 'document.uploaded',
-        description: `${docs[Math.floor(Math.random() * docs.length)]} uploaded for ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]}`,
-        sourceModule: 'Documents',
-        entityId: `DOC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      }
-    },
-  },
-  {
-    type: 'task.assigned',
-    icon: Activity,
-    color: 'amber',
-    sourceModule: 'Tasks',
-    make: () => {
-      const tasks = ['Review reconciliation', 'Prepare GSTR-3B', 'Follow up on overdue', 'Verify ITC claims', 'File TDS return']
-      return {
-        type: 'task.assigned',
-        description: `${tasks[Math.floor(Math.random() * tasks.length)]} assigned to ${NAMES[Math.floor(Math.random() * NAMES.length)]}`,
-        sourceModule: 'Tasks',
-        entityId: `TSK-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      }
-    },
-  },
-  {
-    type: 'notice.received',
-    icon: AlertTriangle,
-    color: 'red',
-    sourceModule: 'Notices',
-    make: () => ({
-      type: 'notice.received',
-      description: `GST Notice received for ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]}`,
-      sourceModule: 'Notices',
-      entityId: `NTC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    }),
-  },
-  {
-    type: 'client.added',
-    icon: Signal,
-    color: 'violet',
-    sourceModule: 'Clients',
-    make: () => ({
-      type: 'client.added',
-      description: `New client ${CLIENTS[Math.floor(Math.random() * CLIENTS.length)]} onboarded`,
-      sourceModule: 'Clients',
-      entityId: `CLI-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    }),
-  },
-  {
-    type: 'ai.decision',
-    icon: Cpu,
-    color: 'purple',
-    sourceModule: 'AI Engine',
-    make: () => {
-      const decisions = [
-        'AI recommends following up on 3 overdue invoices',
-        'AI detected anomaly in GSTR-2B matching for Patel Enterprises',
-        'AI suggests prioritizing XYZ Industries return filing',
-        'AI flagged potential ITC reversal for Sharma & Co',
-        'AI recommends client health check for 5 at-risk clients',
-      ]
-      return {
-        type: 'ai.decision',
-        description: decisions[Math.floor(Math.random() * decisions.length)],
-        sourceModule: 'AI Engine',
-        entityId: `AID-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      }
-    },
-  },
-]
+const ACTIVITY_TYPE_TO_EVENT: Partial<Record<string, { type: EventType; sourceModule: string }>> = {
+  client_created: { type: 'client.added', sourceModule: 'Clients' },
+  client_updated: { type: 'client.added', sourceModule: 'Clients' },
+  document_uploaded: { type: 'document.uploaded', sourceModule: 'Documents' },
+  document_processed: { type: 'document.uploaded', sourceModule: 'Documents' },
+  document_failed: { type: 'document.uploaded', sourceModule: 'Documents' },
+  invoice_extracted: { type: 'invoice.created', sourceModule: 'Invoicing' },
+  invoice_approved: { type: 'invoice.created', sourceModule: 'Invoicing' },
+  invoice_corrected: { type: 'invoice.created', sourceModule: 'Invoicing' },
+  return_prepared: { type: 'return.filed', sourceModule: 'Returns' },
+  return_reviewed: { type: 'return.filed', sourceModule: 'Returns' },
+  return_filed: { type: 'return.filed', sourceModule: 'Returns' },
+  return_reopened: { type: 'return.filed', sourceModule: 'Returns' },
+  reconciliation_run: { type: 'task.assigned', sourceModule: 'Tasks' },
+  mismatch_resolved: { type: 'task.assigned', sourceModule: 'Tasks' },
+  system: { type: 'ai.decision', sourceModule: 'AI Engine' },
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // EVENT SCHEMAS
@@ -367,21 +255,12 @@ const EVENT_SCHEMAS: EventSchema[] = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO SUBSCRIPTIONS
+// SUBSCRIPTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
+// Subscriptions are managed by the backend event-bus. There is no client-side
+// firestore subscription for them yet, so we honestly render an empty state.
 
-const DEMO_SUBSCRIPTIONS: Subscription[] = [
-  { id: 'sub-001', module: 'Dashboard Widget', eventTypes: ['invoice.created', 'payment.collected', 'return.filed'], status: 'active', created: '2024-01-15', delivered: 12847, errorRate: 0.02, deliveryMethod: 'Internal' },
-  { id: 'sub-002', module: 'Notification Service', eventTypes: ['notice.received', 'task.assigned', 'ai.decision'], status: 'active', created: '2024-01-10', delivered: 4521, errorRate: 0.05, deliveryMethod: 'Email' },
-  { id: 'sub-003', module: 'Compliance Monitor', eventTypes: ['return.filed', 'notice.received'], status: 'active', created: '2024-02-01', delivered: 3290, errorRate: 0.01, deliveryMethod: 'Webhook' },
-  { id: 'sub-004', module: 'Revenue Tracker', eventTypes: ['invoice.created', 'payment.collected'], status: 'active', created: '2024-01-20', delivered: 8934, errorRate: 0.03, deliveryMethod: 'Internal' },
-  { id: 'sub-005', module: 'Client Portal', eventTypes: ['invoice.created', 'document.uploaded', 'return.filed'], status: 'active', created: '2024-02-10', delivered: 6712, errorRate: 0.08, deliveryMethod: 'Webhook' },
-  { id: 'sub-006', module: 'AI Priority Queue', eventTypes: ['ai.decision', 'notice.received', 'task.assigned'], status: 'active', created: '2024-01-25', delivered: 5490, errorRate: 0.04, deliveryMethod: 'Internal' },
-  { id: 'sub-007', module: 'Mobile Push Service', eventTypes: ['notice.received', 'payment.collected'], status: 'paused', created: '2024-02-15', delivered: 2180, errorRate: 0.12, deliveryMethod: 'Webhook' },
-  { id: 'sub-008', module: 'Audit Trail Logger', eventTypes: ['invoice.created', 'payment.collected', 'return.filed', 'document.uploaded', 'task.assigned', 'notice.received', 'client.added', 'ai.decision'], status: 'active', created: '2024-01-01', delivered: 34521, errorRate: 0.01, deliveryMethod: 'Internal' },
-  { id: 'sub-009', module: 'Reconciliation Engine', eventTypes: ['document.uploaded', 'payment.collected'], status: 'active', created: '2024-02-05', delivered: 4123, errorRate: 0.06, deliveryMethod: 'Internal' },
-  { id: 'sub-010', module: 'Slack Integration', eventTypes: ['notice.received', 'ai.decision'], status: 'error', created: '2024-03-01', delivered: 847, errorRate: 0.23, deliveryMethod: 'Webhook' },
-]
+const SUBSCRIPTIONS: Subscription[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLOR HELPERS
@@ -569,16 +448,43 @@ function HourlyBarChart({ data }: { data: { hour: string; count: number }[] }) {
   )
 }
 
-function LatencyDistribution() {
+function LatencyDistribution({ events }: { events: StreamEvent[] }) {
+  // Derive buckets from real event timestamps (time between consecutive events).
+  // No fabricated counts — empty state when there are fewer than 2 events.
+  const diffs: number[] = []
+  for (let i = 1; i < events.length; i++) {
+    const prev = events[i - 1].timestamp.getTime()
+    const cur = events[i].timestamp.getTime()
+    diffs.push(Math.abs(cur - prev))
+  }
+
   const buckets = [
-    { range: '0-10ms', count: 4200, color: '#10b981' },
-    { range: '10-50ms', count: 3100, color: '#34d399' },
-    { range: '50-100ms', count: 1800, color: '#6ee7b7' },
-    { range: '100-500ms', count: 680, color: '#fbbf24' },
-    { range: '500ms-1s', count: 120, color: '#f59e0b' },
-    { range: '1s+', count: 45, color: '#ef4444' },
+    { range: '0-10ms', count: 0, color: '#10b981' },
+    { range: '10-50ms', count: 0, color: '#34d399' },
+    { range: '50-100ms', count: 0, color: '#6ee7b7' },
+    { range: '100-500ms', count: 0, color: '#fbbf24' },
+    { range: '500ms-1s', count: 0, color: '#f59e0b' },
+    { range: '1s+', count: 0, color: '#ef4444' },
   ]
-  const maxCount = Math.max(...buckets.map(b => b.count))
+  diffs.forEach(d => {
+    if (d < 10) buckets[0].count++
+    else if (d < 50) buckets[1].count++
+    else if (d < 100) buckets[2].count++
+    else if (d < 500) buckets[3].count++
+    else if (d < 1000) buckets[4].count++
+    else buckets[5].count++
+  })
+
+  if (diffs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[130px] text-slate-400">
+        <Clock className="h-6 w-6 mb-1 opacity-50" />
+        <p className="text-[11px]">No latency data yet</p>
+      </div>
+    )
+  }
+
+  const maxCount = Math.max(...buckets.map(b => b.count), 1)
   const W = 500
   const H = 130
   const padL = 60
@@ -759,25 +665,14 @@ export default function EventEnginePage() {
   const [copiedSchema, setCopiedSchema] = useState<string | null>(null)
 
   // ── Generate events ──
+  // NOTE: Live event-stream fabrication removed. The event engine now shows an
+  // honest empty state until real webhook subscriptions are configured. The
+  // interval below is intentionally a no-op so the page no longer fabricates
+  // fake events with Math.random.
   useEffect(() => {
     if (isPaused) return
-
-    const interval = setInterval(() => {
-      const template = EVENT_TEMPLATES[Math.floor(Math.random() * EVENT_TEMPLATES.length)]
-      const data = template.make()
-      const newEvent: StreamEvent = {
-        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        timestamp: new Date(),
-        icon: template.icon,
-        color: template.color,
-        ...data,
-      }
-      setEvents(prev => [newEvent, ...prev].slice(0, 200))
-      setTotalProcessed(prev => prev + 1)
-      eventCountRef.current += 1
-    }, Math.random() * 1500 + 1500)
-
-    return () => clearInterval(interval)
+    // No-op: real events should arrive from configured webhook subscriptions.
+    return
   }, [isPaused])
 
   // ── Events per second counter ──
@@ -1125,13 +1020,13 @@ export default function EventEnginePage() {
               <CardHeader className="pb-2 px-4 pt-4">
                 <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                   <Bell className="h-4 w-4 text-emerald-500" />
-                  Active Subscriptions ({DEMO_SUBSCRIPTIONS.filter(s => s.status === 'active').length})
+                  Active Subscriptions ({SUBSCRIPTIONS.filter(s => s.status === 'active').length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[480px]">
                   <div className="px-4 pb-4 space-y-2">
-                    {DEMO_SUBSCRIPTIONS.map(sub => (
+                    {SUBSCRIPTIONS.map(sub => (
                       <div key={sub.id} className="border border-slate-100 rounded-lg p-3 hover:bg-slate-50/50 transition-colors">
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-sm font-semibold text-slate-800">{sub.module}</span>

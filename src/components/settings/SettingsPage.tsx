@@ -75,6 +75,40 @@ import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updatePassword } from 'firebase/auth'
 
+// ─── Permission-error detection (graceful degradation) ──────────────────
+// Mirrors the helper in src/hooks/use-firestore.ts so the Settings page can
+// detect Firestore permission-denied errors and surface a friendly message
+// instead of the raw "Missing or insufficient permissions" wall.
+function isPermissionError(err: unknown): boolean {
+  if (!err) return false
+  const e = err as { code?: string; message?: string; name?: string }
+  const code = (e.code || '').toLowerCase()
+  const message = (e.message || '').toLowerCase()
+  if (
+    code === 'permission-denied' ||
+    code === 'unauthenticated' ||
+    code === 'auth/operation-not-allowed' ||
+    code === 'auth/user-not-found'
+  ) {
+    return true
+  }
+  if (
+    message.includes('missing or insufficient permissions') ||
+    message.includes('permission-denied') ||
+    message.includes('insufficient permissions') ||
+    message.includes('not authorized') ||
+    message.includes('unauthenticated')
+  ) {
+    return true
+  }
+  return false
+}
+
+const PERMISSION_DENIED_MSG =
+  "You don't have permission to save these changes. Contact your organization admin."
+const PREVIEW_MODE_MSG =
+  'Preview mode — your changes are shown here but not persisted to the cloud.'
+
 // ─── Indian States ──────────────────────────────────────────────────────
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -287,9 +321,15 @@ const contentVariants = {
 // ═══════════════════════════════════════════════════════════════════════
 export default function SettingsPage() {
   const { user } = useAuth()
-  const { organization, reload: reloadOrg } = useOrg()
+  const { organization, reload: reloadOrg, isPreviewMode } = useOrg()
   const orgId = organization?.id ?? null
   const isMobile = useIsMobile()
+
+  // True when there's no real organization to write to — either OrgContext is
+  // still loading, has fallen back to the demo "preview-org" (Firestore
+  // unreachable), or explicitly flagged preview mode. All save handlers use
+  // this to no-op gracefully instead of throwing permission-denied.
+  const isPreview = !orgId || isPreviewMode || orgId === 'preview-org'
 
   // ── Active Section ──────────────────────────────────────────────────
   const [activeSection, setActiveSection] = useState<SectionId>('firm')
@@ -404,9 +444,14 @@ export default function SettingsPage() {
   // reflect the new value immediately.
 
   const handleSaveFirmProfile = async () => {
-    if (!orgId) {
-      toast.error('No organization loaded. Please reload the page.')
-      throw new Error('No organization')
+    // Preview mode — gracefully no-op. Don't attempt the write (it would fail
+    // with permission-denied and confuse the user). The inline check also
+    // narrows `orgId` to `string` for TypeScript.
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      // Throw so SaveButton reverts to its idle state — we already surfaced
+      // the info toast, so no error toast is needed.
+      throw new Error('preview-mode')
     }
     try {
       await updateDoc(doc(db, 'organizations', orgId), {
@@ -422,15 +467,15 @@ export default function SettingsPage() {
       await reloadOrg()
       toast.success('Firm profile saved')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save firm profile')
+      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save firm profile'))
       throw err
     }
   }
 
   const handleSaveGstConfig = async () => {
-    if (!orgId) {
-      toast.error('No organization loaded. Please reload the page.')
-      throw new Error('No organization')
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      throw new Error('preview-mode')
     }
     try {
       await updateDoc(doc(db, 'organizations', orgId), {
@@ -448,15 +493,15 @@ export default function SettingsPage() {
       await reloadOrg()
       toast.success('GST configuration saved')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save GST configuration')
+      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save GST configuration'))
       throw err
     }
   }
 
   const handleSaveNotifications = async () => {
-    if (!orgId) {
-      toast.error('No organization loaded. Please reload the page.')
-      throw new Error('No organization')
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      throw new Error('preview-mode')
     }
     try {
       await updateDoc(doc(db, 'organizations', orgId), {
@@ -473,7 +518,7 @@ export default function SettingsPage() {
       await reloadOrg()
       toast.success('Notification preferences saved')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save notifications')
+      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save notifications'))
       throw err
     }
   }
@@ -487,11 +532,14 @@ export default function SettingsPage() {
       toast.error('Password must be at least 8 characters')
       throw new Error('Password too short')
     }
+    // Preview mode (no real Firebase session) — password changes aren't
+    // available. Don't attempt the call.
+    const fbUser = auth.currentUser
+    if (!fbUser || isPreview) {
+      toast.info('Preview mode — password changes are not available. Sign in to enable.')
+      throw new Error('preview-mode')
+    }
     try {
-      const fbUser = auth.currentUser
-      if (!fbUser) {
-        throw new Error('No authenticated user. Please sign in again.')
-      }
       await updatePassword(fbUser, newPassword)
       setCurrentPassword('')
       setNewPassword('')
@@ -514,10 +562,7 @@ export default function SettingsPage() {
     // Reset the input so the same file can be re-selected later.
     e.target.value = ''
     if (!file) return
-    if (!orgId) {
-      toast.error('No organization loaded. Please reload the page.')
-      return
-    }
+
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
       toast.error('Logo must be a PNG, JPG, or WebP file')
@@ -527,27 +572,46 @@ export default function SettingsPage() {
       toast.error('Logo must be under 2 MB')
       return
     }
+
     setLogoUploading(true)
     // Show a local preview immediately so the user sees feedback before the
-    // upload completes. Revoked on failure / after the org reload swaps in the
-    // canonical Firestore-backed URL.
+    // upload completes. In preview mode this is the ONLY copy we keep — the
+    // logo stays visible locally but is never written to the cloud.
     const localPreviewUrl = URL.createObjectURL(file)
     setLogoPreview(localPreviewUrl)
+
+    // Preview mode: keep the local preview, skip the cloud writes. The avatar
+    // shows the new logo for the rest of the session but it won't persist.
+    if (isPreview) {
+      setLogoUploading(false)
+      toast.info('Preview mode — logo change is shown here but not persisted to the cloud.')
+      return
+    }
+
+    // After the preview-mode check, orgId is guaranteed non-null.
+    const orgIdNonNull: string = orgId as string
+
     try {
       const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-      const fileRef = storageRef(storage, `organizations/${orgId}/logo.${ext}`)
+      const fileRef = storageRef(storage, `organizations/${orgIdNonNull}/logo.${ext}`)
       await uploadBytes(fileRef, file)
       const downloadUrl = await getDownloadURL(fileRef)
-      await updateDoc(doc(db, 'organizations', orgId), {
+      await updateDoc(doc(db, 'organizations', orgIdNonNull), {
         logoUrl: downloadUrl,
         updatedAt: serverTimestamp(),
       })
       await reloadOrg()
+      // The Firestore-backed URL is now the source of truth — drop the local
+      // preview so the canonical URL takes over on the next render.
+      setLogoPreview(null)
+      URL.revokeObjectURL(localPreviewUrl)
       toast.success('Firm logo updated')
     } catch (err) {
       setLogoPreview(null)
       URL.revokeObjectURL(localPreviewUrl)
-      const msg = err instanceof Error ? err.message : 'Failed to upload logo'
+      const msg = isPermissionError(err)
+        ? PERMISSION_DENIED_MSG
+        : (err instanceof Error ? err.message : 'Failed to upload logo')
       toast.error(msg)
     } finally {
       setLogoUploading(false)
@@ -736,6 +800,11 @@ export default function SettingsPage() {
                       {logoUploading ? 'Uploading...' : 'Click the avatar to upload a logo'}
                     </p>
                     <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG, JPG, or WebP (max 2 MB)</p>
+                    {isPreview && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                        Preview only — logo change won&rsquo;t be saved.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1841,8 +1910,9 @@ export default function SettingsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                          onClick={() => toast.info(`Configure ${connection.name} — coming soon`)}
+                          className="h-8 text-xs text-muted-foreground"
+                          disabled
+                          title={`${connection.name} configuration is managed in the provider's dashboard`}
                         >
                           Configure
                         </Button>
@@ -2021,6 +2091,20 @@ export default function SettingsPage() {
         {/* ── Right Content Area ── */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
+            {/* Preview-mode banner — shown only when OrgContext fell back to
+                the demo workspace (Firestore unreachable / no real org). The
+                form below still works visually but saves are no-ops. */}
+            {isPreview && (
+              <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Preview mode</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-0.5">
+                    You&rsquo;re viewing a preview workspace. Settings edits are shown here but won&rsquo;t be persisted to the cloud.
+                  </p>
+                </div>
+              </div>
+            )}
             <AnimatePresence mode="wait">
               {renderSection()}
             </AnimatePresence>

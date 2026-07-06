@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -90,7 +90,7 @@ interface RequestLog {
   ip: string;
 }
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const EVENT_TYPES = [
   'client.created', 'client.updated', 'client.deleted',
@@ -100,69 +100,9 @@ const EVENT_TYPES = [
   'document.uploaded', 'document.signed',
 ] as const;
 
-function generateMockAPIKeys(): APIKey[] {
-  return [
-    { id: 'key-1', name: 'Production API Key', key: 'gpk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6', permission: 'admin', status: 'active', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 0.5 * 3600000).toISOString(), requestCount: 15420 },
-    { id: 'key-2', name: 'Read-Only Integration', key: 'gpk_read_q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2', permission: 'read', status: 'active', createdAt: new Date(Date.now() - 15 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 2 * 3600000).toISOString(), requestCount: 3240 },
-    { id: 'key-3', name: 'Staging Environment', key: 'gpk_test_g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8', permission: 'write', status: 'revoked', createdAt: new Date(Date.now() - 60 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 10 * 86400000).toISOString(), requestCount: 890 },
-  ];
-}
-
-function generateMockWebhooks(): WebhookEndpoint[] {
-  return [
-    {
-      id: 'wh-1',
-      url: 'https://myapp.example.com/webhooks/gstpilot',
-      events: ['client.created', 'return.filed', 'invoice.processed'],
-      secret: 'whsec_abc123def456ghi789',
-      status: 'active',
-      createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
-      lastDelivery: new Date(Date.now() - 0.2 * 3600000).toISOString(),
-      successRate: 98.5,
-      deliveries: [
-        { id: 'd1', event: 'return.filed', timestamp: new Date(Date.now() - 0.2 * 3600000).toISOString(), statusCode: 200, duration: 245, success: true },
-        { id: 'd2', event: 'invoice.processed', timestamp: new Date(Date.now() - 1 * 3600000).toISOString(), statusCode: 200, duration: 189, success: true },
-        { id: 'd3', event: 'client.created', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), statusCode: 500, duration: 5023, success: false },
-        { id: 'd4', event: 'return.filed', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), statusCode: 200, duration: 312, success: true },
-      ],
-    },
-    {
-      id: 'wh-2',
-      url: 'https://slack.example.com/hooks/gstpilot-notifs',
-      events: ['task.completed', 'document.signed'],
-      secret: 'whsec_xyz789abc012def345',
-      status: 'active',
-      createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-      lastDelivery: new Date(Date.now() - 1.5 * 3600000).toISOString(),
-      successRate: 100,
-      deliveries: [
-        { id: 'd5', event: 'task.completed', timestamp: new Date(Date.now() - 1.5 * 3600000).toISOString(), statusCode: 200, duration: 156, success: true },
-        { id: 'd6', event: 'document.signed', timestamp: new Date(Date.now() - 4 * 3600000).toISOString(), statusCode: 200, duration: 201, success: true },
-      ],
-    },
-  ];
-}
-
-function generateMockRequestLogs(): RequestLog[] {
-  const methods = ['GET', 'POST', 'PUT', 'DELETE'];
-  const paths = ['/api/v1/clients', '/api/v1/invoices', '/api/v1/returns', '/api/v1/reconciliation', '/api/v1/documents'];
-  const statuses = [200, 200, 200, 200, 201, 400, 401, 404, 500];
-  const logs: RequestLog[] = [];
-  for (let i = 0; i < 25; i++) {
-    const minsAgo = i * 5 + Math.floor(Math.random() * 5);
-    logs.push({
-      id: `req-${String(i + 1).padStart(4, '0')}`,
-      method: methods[Math.floor(Math.random() * methods.length)],
-      path: paths[Math.floor(Math.random() * paths.length)],
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      duration: Math.floor(Math.random() * 500) + 50,
-      timestamp: new Date(Date.now() - minsAgo * 60000).toISOString(),
-      apiKey: 'gpk_live_...o5p6',
-      ip: `192.168.1.${Math.floor(Math.random() * 255)}`,
-    });
-  }
-  return logs;
-}
+// NOTE: API keys, webhooks and request logs are managed by the backend API
+// gateway. There is no client-side firestore subscription for them yet, so we
+// honestly render empty states instead of fabricating mock entries.
 
 const PERMISSION_CONFIG: Record<KeyPermission, { label: string; color: string }> = {
   read: { label: 'Read', color: 'text-blue-700 bg-blue-50 border-blue-200' },
@@ -179,10 +119,13 @@ const KEY_STATUS_CONFIG: Record<KeyStatus, { label: string; color: string }> = {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function APIPlatformPage() {
-  const [apiKeys] = useState<APIKey[]>(() => generateMockAPIKeys());
-  const [webhooks] = useState<WebhookEndpoint[]>(() => generateMockWebhooks());
-  const [requestLogs] = useState<RequestLog[]>(() => generateMockRequestLogs());
-  const [loading, setLoading] = useState(true);
+  // API keys, webhooks, and request logs are managed by the backend API gateway.
+  // There is no client-side firestore hook for them yet, so we honestly render
+  // empty states instead of fabricating mock entries.
+  const apiKeys: APIKey[] = [];
+  const webhooks: WebhookEndpoint[] = [];
+  const requestLogs: RequestLog[] = [];
+  const loading = false;
   const [activeTab, setActiveTab] = useState('keys');
   const [showKeyMap, setShowKeyMap] = useState<Record<string, boolean>>({});
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
@@ -194,11 +137,6 @@ export default function APIPlatformPage() {
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>(['client.created']);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
-
   const toggleKeyVisibility = (keyId: string) => {
     setShowKeyMap((prev) => ({ ...prev, [keyId]: !prev[keyId] }));
   };
@@ -207,10 +145,14 @@ export default function APIPlatformPage() {
     navigator.clipboard.writeText(text).catch(() => {});
   };
 
-  // Stats
+  // Stats — all zero when no request logs exist (no fabrication).
   const requestsToday = requestLogs.length;
-  const errorRate = Math.round((requestLogs.filter((r) => r.status >= 400).length / requestLogs.length) * 100);
-  const avgDuration = Math.round(requestLogs.reduce((sum, r) => sum + r.duration, 0) / requestLogs.length);
+  const errorRate = requestLogs.length > 0
+    ? Math.round((requestLogs.filter((r) => r.status >= 400).length / requestLogs.length) * 100)
+    : 0;
+  const avgDuration = requestLogs.length > 0
+    ? Math.round(requestLogs.reduce((sum, r) => sum + r.duration, 0) / requestLogs.length)
+    : 0;
 
   const handleCreateKey = () => {
     setCreateKeyOpen(false);
@@ -397,6 +339,21 @@ export default function APIPlatformPage() {
                 </Card>
               );
             })}
+
+            {apiKeys.length === 0 && (
+              <Card>
+                <CardContent className="py-16">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Key className="size-8 opacity-50" />
+                    <p className="font-medium text-foreground">No API keys yet</p>
+                    <p className="text-xs max-w-sm text-center">
+                      Generate your first API key to start integrating with the GSTPilot platform.
+                      Keys are managed by the backend API gateway.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
@@ -438,11 +395,40 @@ export default function APIPlatformPage() {
                 </CardContent>
               </Card>
             ))}
+
+            {webhooks.length === 0 && (
+              <Card>
+                <CardContent className="py-16">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Webhook className="size-8 opacity-50" />
+                    <p className="font-medium text-foreground">No webhooks configured</p>
+                    <p className="text-xs max-w-sm text-center">
+                      Register a webhook endpoint to receive real-time event notifications.
+                      Webhooks are managed by the backend API gateway.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
         {/* ─── Request Logs Tab ───────────────────────────────────────────── */}
         <TabsContent value="logs" className="space-y-4 mt-4">
+          {requestLogs.length === 0 ? (
+            <Card>
+              <CardContent className="py-16">
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Terminal className="size-8 opacity-50" />
+                  <p className="font-medium text-foreground">No API request logs yet</p>
+                  <p className="text-xs max-w-sm text-center">
+                    Once your integration starts making authenticated API calls, the most recent
+                    requests will appear here. Logs are emitted by the backend API gateway.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto rounded-lg">
@@ -488,6 +474,7 @@ export default function APIPlatformPage() {
               </div>
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         {/* ─── SDK & Docs Tab ─────────────────────────────────────────────── */}

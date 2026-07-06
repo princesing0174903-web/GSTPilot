@@ -4,22 +4,29 @@ import { safeAudit } from '@/lib/audit/safe-write'
 
 const DEFAULT_SETTINGS = {
   firmName: 'GSTPilot Firm',
-  logoUrl: null,
+  logoUrl: null as string | null,
   primaryColor: '#059669',
   accentColor: '#7c3aed',
-  customDomain: null,
-  emailFromName: null,
-  emailTemplate: null,
+  customDomain: null as string | null,
+  emailFromName: null as string | null,
+  emailTemplate: null as string | null,
+  settingsJson: null as string | null,
 }
 
-// GET /api/firm-settings — Return current FirmSettings
-export async function GET() {
+// GET /api/firm-settings?firmId=<orgId> — Return current FirmSettings for the org
+// (or the singleton row when no firmId is provided).
+export async function GET(request: Request) {
   try {
-    const settings = await db.firmSettings.findFirst()
+    const { searchParams } = new URL(request.url)
+    const firmId = searchParams.get('firmId') ?? undefined
+
+    const settings = firmId
+      ? await db.firmSettings.findUnique({ where: { firmId } })
+      : await db.firmSettings.findFirst()
 
     if (!settings) {
       // Return defaults if no record exists
-      return NextResponse.json({ settings: DEFAULT_SETTINGS })
+      return NextResponse.json({ settings: { ...DEFAULT_SETTINGS, firmId: firmId ?? null } })
     }
 
     return NextResponse.json({ settings })
@@ -32,11 +39,17 @@ export async function GET() {
   }
 }
 
-// PUT /api/firm-settings — Update FirmSettings (upsert)
+// PUT /api/firm-settings — Update FirmSettings (upsert, scoped to firmId when provided)
+// Body shape: { firmId?, firmName?, logoUrl?, primaryColor?, accentColor?,
+//   customDomain?, emailFromName?, emailTemplate?, settingsJson?, updatedBy? }
+// `settingsJson` is an opaque JSON string the caller is responsible for
+// serializing — it stores extended firm-profile / GST-config / notification
+// settings that don't have dedicated columns.
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
     const {
+      firmId,
       firmName,
       logoUrl,
       primaryColor,
@@ -44,10 +57,14 @@ export async function PUT(request: Request) {
       customDomain,
       emailFromName,
       emailTemplate,
+      settingsJson,
       updatedBy,
     } = body
 
-    const existing = await db.firmSettings.findFirst()
+    // Resolve the existing row: by firmId when provided, else the singleton.
+    const existing = firmId
+      ? await db.firmSettings.findUnique({ where: { firmId } })
+      : await db.firmSettings.findFirst()
 
     const data: Record<string, unknown> = {}
     if (firmName !== undefined) data.firmName = firmName
@@ -57,6 +74,8 @@ export async function PUT(request: Request) {
     if (customDomain !== undefined) data.customDomain = customDomain
     if (emailFromName !== undefined) data.emailFromName = emailFromName
     if (emailTemplate !== undefined) data.emailTemplate = emailTemplate
+    if (settingsJson !== undefined) data.settingsJson = settingsJson
+    if (firmId !== undefined) data.firmId = firmId
 
     let settings
 
@@ -68,6 +87,7 @@ export async function PUT(request: Request) {
     } else {
       settings = await db.firmSettings.create({
         data: {
+          firmId: (firmId as string | null) ?? null,
           firmName: (firmName as string) ?? DEFAULT_SETTINGS.firmName,
           logoUrl: (logoUrl as string | null) ?? DEFAULT_SETTINGS.logoUrl,
           primaryColor: (primaryColor as string) ?? DEFAULT_SETTINGS.primaryColor,
@@ -75,6 +95,7 @@ export async function PUT(request: Request) {
           customDomain: (customDomain as string | null) ?? DEFAULT_SETTINGS.customDomain,
           emailFromName: (emailFromName as string | null) ?? DEFAULT_SETTINGS.emailFromName,
           emailTemplate: (emailTemplate as string | null) ?? DEFAULT_SETTINGS.emailTemplate,
+          settingsJson: (settingsJson as string | null) ?? DEFAULT_SETTINGS.settingsJson,
         },
       })
     }

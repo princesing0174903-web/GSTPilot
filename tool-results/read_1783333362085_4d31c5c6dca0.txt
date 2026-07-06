@@ -1,0 +1,614 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Separator } from '@/components/ui/separator';
+    10→import { Skeleton } from '@/components/ui/skeleton';
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogHeader,
+    15→  DialogTitle,
+    16→  DialogFooter,
+    17→} from '@/components/ui/dialog';
+    18→import {
+    19→  GitBranch,
+    20→  Clock,
+    21→  User,
+    22→  Filter,
+    23→  RotateCcw,
+    24→  ChevronRight,
+    25→  FileText,
+    26→  Users,
+    27→  Receipt,
+    28→  FolderOpen,
+    29→  ArrowUpDown,
+    30→  Eye,
+    31→  Check,
+    32→  X,
+    33→} from 'lucide-react';
+    34→import { motion, AnimatePresence } from 'framer-motion';
+    35→import { format, isToday } from 'date-fns';
+    36→
+    37→// ─── Types ─────────────────────────────────────────────────────────────────────
+    38→
+    39→interface VersionEntry {
+    40→  id: string;
+    41→  version: number;
+    42→  entityType: 'client' | 'return' | 'invoice' | 'document';
+    43→  entityId: string;
+    44→  entityName: string;
+    45→  timestamp: string;
+    46→  author: string;
+    47→  summary: string;
+    48→  before: Record<string, string>;
+    49→  after: Record<string, string>;
+    50→  isCurrent: boolean;
+    51→}
+    52→
+    53→// ─── Mock Data ─────────────────────────────────────────────────────────────────
+    54→
+    55→const ENTITY_TYPES = [
+    56→  { value: 'client', label: 'Clients', icon: Users },
+    57→  { value: 'return', label: 'Returns', icon: FileText },
+    58→  { value: 'invoice', label: 'Invoices', icon: Receipt },
+    59→  { value: 'document', label: 'Documents', icon: FolderOpen },
+    60→] as const;
+    61→
+    62→const AUTHORS = ['Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Anita Desai'];
+    63→
+    64→const CLIENT_FIELDS = ['tradeName', 'gstin', 'email', 'phone', 'state', 'entityType', 'status'];
+    65→const RETURN_FIELDS = ['returnType', 'period', 'status', 'totalTax', 'filingDate'];
+    66→const INVOICE_FIELDS = ['invoiceNumber', 'vendorGstin', 'amount', 'taxAmount', 'status', 'date'];
+    67→const DOCUMENT_FIELDS = ['name', 'type', 'size', 'uploadedBy', 'status'];
+    68→
+    69→function generateMockVersions(): VersionEntry[] {
+    70→  const entries: VersionEntry[] = [];
+    71→  const entities = [
+    72→    { type: 'client' as const, id: 'CL-001', name: 'Acme Industries Pvt Ltd' },
+    73→    { type: 'client' as const, id: 'CL-002', name: 'Sharma & Associates' },
+    74→    { type: 'return' as const, id: 'RT-001', name: 'GSTR-1 Oct 2024' },
+    75→    { type: 'return' as const, id: 'RT-002', name: 'GSTR-3B Nov 2024' },
+    76→    { type: 'invoice' as const, id: 'INV-001', name: 'INV-2024-0156' },
+    77→    { type: 'invoice' as const, id: 'INV-002', name: 'INV-2024-0187' },
+    78→    { type: 'document' as const, id: 'DOC-001', name: 'PAN Card - Acme' },
+    79→    { type: 'document' as const, id: 'DOC-002', name: 'GST Certificate - Sharma' },
+    80→  ];
+    81→
+    82→  entities.forEach((entity) => {
+    83→    const versionCount = Math.floor(Math.random() * 5) + 2;
+    84→    const fields = entity.type === 'client' ? CLIENT_FIELDS
+    85→      : entity.type === 'return' ? RETURN_FIELDS
+    86→      : entity.type === 'invoice' ? INVOICE_FIELDS
+    87→      : DOCUMENT_FIELDS;
+    88→
+    89→    for (let v = 1; v <= versionCount; v++) {
+    90→      const daysAgo = (versionCount - v) * 2 + Math.floor(Math.random() * 3);
+    91→      const ts = new Date();
+    92→      ts.setDate(ts.getDate() - daysAgo);
+    93→
+    94→      const changedField = fields[Math.floor(Math.random() * fields.length)];
+    95→      const beforeVal = `value_v${v}`;
+    96→      const afterVal = `value_v${v + 1}`;
+    97→
+    98→      entries.push({
+    99→        id: `${entity.id}-v${v}`,
+   100→        version: v,
+   101→        entityType: entity.type,
+   102→        entityId: entity.id,
+   103→        entityName: entity.name,
+   104→        timestamp: ts.toISOString(),
+   105→        author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
+   106→        summary: v === 1 ? `Created ${entity.type} record` : `Updated ${changedField}`,
+   107→        before: v === 1 ? {} : { [changedField]: beforeVal },
+   108→        after: v === 1 ? { [changedField]: afterVal } : { [changedField]: afterVal },
+   109→        isCurrent: v === versionCount,
+   110→      });
+   111→    }
+   112→  });
+   113→
+   114→  return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+   115→}
+   116→
+   117→// ─── Diff Viewer ───────────────────────────────────────────────────────────────
+   118→
+   119→function VersionDiffViewer({ before, after }: { before: Record<string, string>; after: Record<string, string> }) {
+   120→  const allKeys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]));
+   121→  if (allKeys.length === 0) return <p className="text-sm text-muted-foreground">Initial creation — no prior state.</p>;
+   122→
+   123→  return (
+   124→    <div className="rounded-lg border overflow-hidden">
+   125→      <table className="w-full text-xs">
+   126→        <thead>
+   127→          <tr className="bg-muted/50">
+   128→            <th className="px-3 py-2 text-left font-medium">Field</th>
+   129→            <th className="px-3 py-2 text-left font-medium text-red-600">Before</th>
+   130→            <th className="px-3 py-2 text-left font-medium text-emerald-600">After</th>
+   131→          </tr>
+   132→        </thead>
+   133→        <tbody>
+   134→          {allKeys.map((key) => {
+   135→            const bVal = before[key] ?? '—';
+   136→            const aVal = after[key] ?? '—';
+   137→            const changed = bVal !== aVal;
+   138→            return (
+   139→              <tr key={key} className={changed ? 'bg-amber-50/50' : ''}>
+   140→                <td className="px-3 py-1.5 font-medium border-t">{key}</td>
+   141→                <td className="px-3 py-1.5 border-t text-red-600/80 font-mono">{bVal}</td>
+   142→                <td className="px-3 py-1.5 border-t text-emerald-600/80 font-mono">{aVal}</td>
+   143→              </tr>
+   144→            );
+   145→          })}
+   146→        </tbody>
+   147→      </table>
+   148→    </div>
+   149→  );
+   150→}
+   151→
+   152→// ─── Main Component ────────────────────────────────────────────────────────────
+   153→
+   154→export default function VersionHistoryPage() {
+   155→  const [versions] = useState<VersionEntry[]>(() => generateMockVersions());
+   156→  const [loading, setLoading] = useState(true);
+   157→  const [filterEntityType, setFilterEntityType] = useState<string>('all');
+   158→  const [filterAuthor, setFilterAuthor] = useState<string>('all');
+   159→  const [filterStartDate, setFilterStartDate] = useState<string>('');
+   160→  const [filterEndDate, setFilterEndDate] = useState<string>('');
+   161→  const [searchQuery, setSearchQuery] = useState<string>('');
+   162→  const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
+   163→  const [diffOpen, setDiffOpen] = useState(false);
+   164→  const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null);
+   165→  const [restoreOpen, setRestoreOpen] = useState(false);
+   166→  const [restoreVersion, setRestoreVersion] = useState<VersionEntry | null>(null);
+   167→
+   168→  // Simulate loading
+   169→  React.useEffect(() => {
+   170→    const t = setTimeout(() => setLoading(false), 500);
+   171→    return () => clearTimeout(t);
+   172→  }, []);
+   173→
+   174→  // Filtered versions
+   175→  const filteredVersions = useMemo(() => {
+   176→    let result = [...versions];
+   177→
+   178→    if (filterEntityType !== 'all') {
+   179→      result = result.filter((v) => v.entityType === filterEntityType);
+   180→    }
+   181→    if (filterAuthor !== 'all') {
+   182→      result = result.filter((v) => v.author === filterAuthor);
+   183→    }
+   184→    if (filterStartDate) {
+   185→      const start = new Date(filterStartDate);
+   186→      result = result.filter((v) => new Date(v.timestamp) >= start);
+   187→    }
+   188→    if (filterEndDate) {
+   189→      const end = new Date(filterEndDate);
+   190→      end.setHours(23, 59, 59, 999);
+   191→      result = result.filter((v) => new Date(v.timestamp) <= end);
+   192→    }
+   193→    if (searchQuery) {
+   194→      const q = searchQuery.toLowerCase();
+   195→      result = result.filter((v) =>
+   196→        v.entityName.toLowerCase().includes(q) ||
+   197→        v.summary.toLowerCase().includes(q) ||
+   198→        v.author.toLowerCase().includes(q)
+   199→      );
+   200→    }
+   201→    if (selectedEntity) {
+   202→      result = result.filter((v) => v.entityId === selectedEntity);
+   203→    }
+   204→
+   205→    return result;
+   206→  }, [versions, filterEntityType, filterAuthor, filterStartDate, filterEndDate, searchQuery, selectedEntity]);
+   207→
+   208→  // Group by entity
+   209→  const groupedByEntity = useMemo(() => {
+   210→    const groups: Record<string, VersionEntry[]> = {};
+   211→    filteredVersions.forEach((v) => {
+   212→      if (!groups[v.entityId]) groups[v.entityId] = [];
+   213→      groups[v.entityId].push(v);
+   214→    });
+   215→    // Sort each group by version desc
+   216→    Object.values(groups).forEach((g) => g.sort((a, b) => b.version - a.version));
+   217→    return groups;
+   218→  }, [filteredVersions]);
+   219→
+   220→  const uniqueEntities = useMemo(() => {
+   221→    const entities = Array.from(new Set(versions.map((v) => v.entityId)));
+   222→    return entities.map((id) => {
+   223→      const v = versions.find((ver) => ver.entityId === id)!;
+   224→      return { id, name: v.entityName, type: v.entityType };
+   225→    });
+   226→  }, [versions]);
+   227→
+   228→  const entityIcon = (type: string) => {
+   229→    const found = ENTITY_TYPES.find((e) => e.value === type);
+   230→    return found ? found.icon : FileText;
+   231→  };
+   232→
+   233→  const typeColor = (type: string) => {
+   234→    switch (type) {
+   235→      case 'client': return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+   236→      case 'return': return 'text-purple-600 bg-purple-50 border-purple-200';
+   237→      case 'invoice': return 'text-amber-600 bg-amber-50 border-amber-200';
+   238→      case 'document': return 'text-teal-600 bg-teal-50 border-teal-200';
+   239→      default: return 'text-slate-600 bg-slate-50 border-slate-200';
+   240→    }
+   241→  };
+   242→
+   243→  const handleViewDiff = (v: VersionEntry) => {
+   244→    setSelectedVersion(v);
+   245→    setDiffOpen(true);
+   246→  };
+   247→
+   248→  const handleRestoreClick = (v: VersionEntry) => {
+   249→    setRestoreVersion(v);
+   250→    setRestoreOpen(true);
+   251→  };
+   252→
+   253→  const handleRestore = () => {
+   254→    // In production, this would call an API
+   255→    setRestoreOpen(false);
+   256→    setRestoreVersion(null);
+   257→  };
+   258→
+   259→  if (loading) {
+   260→    return (
+   261→      <div className="space-y-6 p-6">
+   262→        <Skeleton className="h-10 w-64" />
+   263→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   264→          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+   265→        </div>
+   266→        <Skeleton className="h-96 rounded-xl" />
+   267→      </div>
+   268→    );
+   269→  }
+   270→
+   271→  return (
+   272→    <div className="space-y-6 p-4 md:p-6">
+   273→      {/* Header */}
+   274→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   275→        <div className="flex items-center gap-3">
+   276→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   277→            <GitBranch className="size-5 text-emerald-700" />
+   278→          </div>
+   279→          <div>
+   280→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Version History</h1>
+   281→            <p className="text-sm text-muted-foreground">Track changes and restore previous versions</p>
+   282→          </div>
+   283→        </div>
+   284→      </div>
+   285→
+   286→      {/* Stats */}
+   287→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   288→        <Card className="transition-shadow hover:shadow-md">
+   289→          <CardContent className="pt-6">
+   290→            <div className="flex items-center justify-between">
+   291→              <div>
+   292→                <p className="text-sm text-muted-foreground">Total Versions</p>
+   293→                <p className="text-2xl font-bold">{versions.length}</p>
+   294→              </div>
+   295→              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+   296→                <GitBranch className="size-5 text-emerald-600" />
+   297→              </div>
+   298→            </div>
+   299→          </CardContent>
+   300→        </Card>
+   301→        <Card className="transition-shadow hover:shadow-md">
+   302→          <CardContent className="pt-6">
+   303→            <div className="flex items-center justify-between">
+   304→              <div>
+   305→                <p className="text-sm text-muted-foreground">Tracked Entities</p>
+   306→                <p className="text-2xl font-bold">{uniqueEntities.length}</p>
+   307→              </div>
+   308→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+   309→                <ArrowUpDown className="size-5 text-amber-600" />
+   310→              </div>
+   311→            </div>
+   312→          </CardContent>
+   313→        </Card>
+   314→        <Card className="transition-shadow hover:shadow-md">
+   315→          <CardContent className="pt-6">
+   316→            <div className="flex items-center justify-between">
+   317→              <div>
+   318→                <p className="text-sm text-muted-foreground">Today&apos;s Changes</p>
+   319→                <p className="text-2xl font-bold">{versions.filter((v) => isToday(new Date(v.timestamp))).length}</p>
+   320→              </div>
+   321→              <div className="flex size-10 items-center justify-center rounded-lg bg-purple-50">
+   322→                <Clock className="size-5 text-purple-600" />
+   323→              </div>
+   324→            </div>
+   325→          </CardContent>
+   326→        </Card>
+   327→        <Card className="transition-shadow hover:shadow-md">
+   328→          <CardContent className="pt-6">
+   329→            <div className="flex items-center justify-between">
+   330→              <div>
+   331→                <p className="text-sm text-muted-foreground">Contributors</p>
+   332→                <p className="text-2xl font-bold">{new Set(versions.map((v) => v.author)).size}</p>
+   333→              </div>
+   334→              <div className="flex size-10 items-center justify-center rounded-lg bg-teal-50">
+   335→                <User className="size-5 text-teal-600" />
+   336→              </div>
+   337→            </div>
+   338→          </CardContent>
+   339→        </Card>
+   340→      </div>
+   341→
+   342→      {/* Filters */}
+   343→      <Card>
+   344→        <CardHeader className="pb-3">
+   345→          <CardTitle className="flex items-center gap-2 text-base">
+   346→            <Filter className="size-4 text-emerald-600" />
+   347→            Filters
+   348→          </CardTitle>
+   349→        </CardHeader>
+   350→        <CardContent>
+   351→          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+   352→            <Select value={filterEntityType} onValueChange={setFilterEntityType}>
+   353→              <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+   354→              <SelectContent>
+   355→                <SelectItem value="all">All Types</SelectItem>
+   356→                {ENTITY_TYPES.map((e) => (
+   357→                  <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+   358→                ))}
+   359→              </SelectContent>
+   360→            </Select>
+   361→            <Select value={filterAuthor} onValueChange={setFilterAuthor}>
+   362→              <SelectTrigger><SelectValue placeholder="All Authors" /></SelectTrigger>
+   363→              <SelectContent>
+   364→                <SelectItem value="all">All Authors</SelectItem>
+   365→                {AUTHORS.map((a) => (
+   366→                  <SelectItem key={a} value={a}>{a}</SelectItem>
+   367→                ))}
+   368→              </SelectContent>
+   369→            </Select>
+   370→            <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} />
+   371→            <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} />
+   372→            <div className="relative">
+   373→              <Input
+   374→                placeholder="Search entities..."
+   375→                value={searchQuery}
+   376→                onChange={(e) => setSearchQuery(e.target.value)}
+   377→              />
+   378→            </div>
+   379→          </div>
+   380→
+   381→          {/* Entity selector chips */}
+   382→          <div className="mt-3 flex flex-wrap gap-2">
+   383→            <Button
+   384→              variant={selectedEntity === null ? 'default' : 'outline'}
+   385→              size="sm"
+   386→              onClick={() => setSelectedEntity(null)}
+   387→              className={selectedEntity === null ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+   388→            >
+   389→              All Entities
+   390→            </Button>
+   391→            {uniqueEntities.map((e) => {
+   392→              const Icon = entityIcon(e.type);
+   393→              return (
+   394→                <Button
+   395→                  key={e.id}
+   396→                  variant={selectedEntity === e.id ? 'default' : 'outline'}
+   397→                  size="sm"
+   398→                  onClick={() => setSelectedEntity(selectedEntity === e.id ? null : e.id)}
+   399→                  className={`gap-1.5 ${selectedEntity === e.id ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+   400→                >
+   401→                  <Icon className="size-3.5" />
+   402→                  <span className="max-w-[120px] truncate">{e.name}</span>
+   403→                </Button>
+   404→              );
+   405→            })}
+   406→          </div>
+   407→        </CardContent>
+   408→      </Card>
+   409→
+   410→      {/* Version Timeline */}
+   411→      <div className="space-y-4">
+   412→        <AnimatePresence>
+   413→          {Object.entries(groupedByEntity).map(([entityId, vEntries]) => {
+   414→            const first = vEntries[0];
+   415→            const Icon = entityIcon(first.entityType);
+   416→            return (
+   417→              <motion.div
+   418→                key={entityId}
+   419→                initial={{ opacity: 0, y: 20 }}
+   420→                animate={{ opacity: 1, y: 0 }}
+   421→                exit={{ opacity: 0, y: -20 }}
+   422→                transition={{ duration: 0.3 }}
+   423→              >
+   424→                <Card>
+   425→                  <CardHeader className="pb-2">
+   426→                    <div className="flex items-center gap-3">
+   427→                      <div className={`flex size-8 items-center justify-center rounded-lg ${typeColor(first.entityType).split(' ').slice(1).join(' ')}`}>
+   428→                        <Icon className={`size-4 ${typeColor(first.entityType).split(' ')[0]}`} />
+   429→                      </div>
+   430→                      <div className="flex-1">
+   431→                        <CardTitle className="text-base">{first.entityName}</CardTitle>
+   432→                        <div className="flex items-center gap-2 mt-0.5">
+   433→                          <Badge variant="outline" className={`text-[10px] ${typeColor(first.entityType)}`}>
+   434→                            {first.entityType}
+   435→                          </Badge>
+   436→                          <span className="text-xs text-muted-foreground">{vEntries.length} versions</span>
+   437→                        </div>
+   438→                      </div>
+   439→                    </div>
+   440→                  </CardHeader>
+   441→                  <CardContent>
+   442→                    {/* Branch-style visual timeline */}
+   443→                    <div className="relative ml-4">
+   444→                      {vEntries.map((v, idx) => {
+   445→                        const isLast = idx === 0;
+   446→                        const hasMore = idx < vEntries.length - 1;
+   447→                        return (
+   448→                          <div key={v.id} className="relative flex gap-4 pb-4">
+   449→                            {/* Timeline line */}
+   450→                            <div className="flex flex-col items-center">
+   451→                              <div className={`size-3 rounded-full border-2 shrink-0 ${
+   452→                                v.isCurrent
+   453→                                  ? 'bg-emerald-500 border-emerald-500'
+   454→                                  : 'bg-white border-slate-300'
+   455→                              }`} />
+   456→                              {hasMore && (
+   457→                                <div className="w-0.5 flex-1 bg-slate-200 min-h-[20px]" />
+   458→                              )}
+   459→                            </div>
+   460→
+   461→                            {/* Content */}
+   462→                            <div className={`flex-1 rounded-lg border p-3 transition-all ${
+   463→                              v.isCurrent
+   464→                                ? 'border-emerald-200 bg-emerald-50/50'
+   465→                                : 'border-slate-200 hover:border-slate-300'
+   466→                            }`}>
+   467→                              <div className="flex items-center justify-between">
+   468→                                <div className="flex items-center gap-2">
+   469→                                  <Badge variant="outline" className="text-xs font-mono">
+   470→                                    v{v.version}
+   471→                                  </Badge>
+   472→                                  {v.isCurrent && (
+   473→                                    <Badge className="bg-emerald-600 text-white text-[10px]">Current</Badge>
+   474→                                  )}
+   475→                                  <span className="text-xs text-muted-foreground">
+   476→                                    {format(new Date(v.timestamp), 'MMM d, yyyy h:mm a')}
+   477→                                  </span>
+   478→                                </div>
+   479→                                <div className="flex items-center gap-1.5">
+   480→                                  <Button
+   481→                                    variant="ghost"
+   482→                                    size="sm"
+   483→                                    className="size-7 p-0"
+   484→                                    onClick={() => handleViewDiff(v)}
+   485→                                    title="View Diff"
+   486→                                  >
+   487→                                    <Eye className="size-3.5" />
+   488→                                  </Button>
+   489→                                  {!v.isCurrent && (
+   490→                                    <Button
+   491→                                      variant="ghost"
+   492→                                      size="sm"
+   493→                                      className="size-7 p-0 text-emerald-600 hover:text-emerald-700"
+   494→                                      onClick={() => handleRestoreClick(v)}
+   495→                                      title="Restore this version"
+   496→                                    >
+   497→                                      <RotateCcw className="size-3.5" />
+   498→                                    </Button>
+   499→                                  )}
+   500→                                </div>
+   501→                              </div>
+   502→                              <p className="text-sm mt-1">{v.summary}</p>
+   503→                              <div className="flex items-center gap-1.5 mt-1.5">
+   504→                                <div className="size-4 rounded-full bg-emerald-100 flex items-center justify-center text-[8px] font-bold text-emerald-700">
+   505→                                  {v.author.split(' ').map(w => w[0]).join('').slice(0, 2)}
+   506→                                </div>
+   507→                                <span className="text-xs text-muted-foreground">{v.author}</span>
+   508→                              </div>
+   509→                            </div>
+   510→                          </div>
+   511→                        );
+   512→                      })}
+   513→                    </div>
+   514→                  </CardContent>
+   515→                </Card>
+   516→              </motion.div>
+   517→            );
+   518→          })}
+   519→        </AnimatePresence>
+   520→
+   521→        {Object.keys(groupedByEntity).length === 0 && (
+   522→          <Card>
+   523→            <CardContent className="py-16">
+   524→              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+   525→                <GitBranch className="size-8 opacity-50" />
+   526→                <p>No version history found</p>
+   527→                <p className="text-xs">Try adjusting your filters</p>
+   528→              </div>
+   529→            </CardContent>
+   530→          </Card>
+   531→        )}
+   532→      </div>
+   533→
+   534→      {/* Diff Dialog */}
+   535→      <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
+   536→        <DialogContent className="max-w-lg">
+   537→          <DialogHeader>
+   538→            <DialogTitle className="flex items-center gap-2">
+   539→              <Eye className="size-4 text-emerald-600" />
+   540→              Version Diff — v{selectedVersion?.version}
+   541→            </DialogTitle>
+   542→          </DialogHeader>
+   543→          {selectedVersion && (
+   544→            <div className="space-y-4">
+   545→              <div className="grid grid-cols-2 gap-3 text-sm">
+   546→                <div>
+   547→                  <p className="text-xs text-muted-foreground">Entity</p>
+   548→                  <p className="font-medium">{selectedVersion.entityName}</p>
+   549→                </div>
+   550→                <div>
+   551→                  <p className="text-xs text-muted-foreground">Author</p>
+   552→                  <p>{selectedVersion.author}</p>
+   553→                </div>
+   554→                <div>
+   555→                  <p className="text-xs text-muted-foreground">Timestamp</p>
+   556→                  <p>{format(new Date(selectedVersion.timestamp), 'MMM d, yyyy h:mm a')}</p>
+   557→                </div>
+   558→                <div>
+   559→                  <p className="text-xs text-muted-foreground">Summary</p>
+   560→                  <p>{selectedVersion.summary}</p>
+   561→                </div>
+   562→              </div>
+   563→              <Separator />
+   564→              <VersionDiffViewer before={selectedVersion.before} after={selectedVersion.after} />
+   565→            </div>
+   566→          )}
+   567→        </DialogContent>
+   568→      </Dialog>
+   569→
+   570→      {/* Restore Confirmation Dialog */}
+   571→      <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
+   572→        <DialogContent className="max-w-md">
+   573→          <DialogHeader>
+   574→            <DialogTitle className="flex items-center gap-2">
+   575→              <RotateCcw className="size-4 text-amber-600" />
+   576→              Restore Version
+   577→            </DialogTitle>
+   578→          </DialogHeader>
+   579→          {restoreVersion && (
+   580→            <div className="space-y-4">
+   581→              <p className="text-sm text-muted-foreground">
+   582→                Are you sure you want to restore <strong>{restoreVersion.entityName}</strong> to <strong>Version {restoreVersion.version}</strong>?
+   583→              </p>
+   584→              <div className="rounded-lg border bg-amber-50 p-3 text-sm text-amber-700">
+   585→                This will create a new version that mirrors the state of v{restoreVersion.version}. The current version will be preserved in history.
+   586→              </div>
+   587→              <div className="grid grid-cols-2 gap-3 text-sm">
+   588→                <div>
+   589→                  <p className="text-xs text-muted-foreground">Version</p>
+   590→                  <p className="font-mono">v{restoreVersion.version}</p>
+   591→                </div>
+   592→                <div>
+   593→                  <p className="text-xs text-muted-foreground">Author</p>
+   594→                  <p>{restoreVersion.author}</p>
+   595→                </div>
+   596→              </div>
+   597→            </div>
+   598→          )}
+   599→          <DialogFooter className="gap-2">
+   600→            <Button variant="outline" onClick={() => setRestoreOpen(false)} className="gap-1">
+   601→              <X className="size-4" />
+   602→              Cancel
+   603→            </Button>
+   604→            <Button onClick={handleRestore} className="gap-1 bg-emerald-600 hover:bg-emerald-700">
+   605→              <Check className="size-4" />
+   606→              Restore
+   607→            </Button>
+   608→          </DialogFooter>
+   609→        </DialogContent>
+   610→      </Dialog>
+   611→    </div>
+   612→  );
+   613→}
+   614→

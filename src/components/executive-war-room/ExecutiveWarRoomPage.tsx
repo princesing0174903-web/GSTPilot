@@ -657,27 +657,19 @@ function GlassPanel({ children, className = '', delay = 0 }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA GENERATORS
+// DATA HELPERS — no Math.random fabrication; return empty arrays when no data
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function generateMonthlyData(base: number, months: number, volatility: number): number[] {
-  const data: number[] = []
-  let current = base
-  for (let i = 0; i < months; i++) {
-    current = current * (1 + (Math.random() - 0.45) * volatility)
-    data.push(Math.round(current))
-  }
-  return data
+// Returns an empty array of the requested length — used as a stable placeholder
+// when no real data exists. Replaces the previous Math.random-based fabrication.
+function generateMonthlyData(_base: number, months: number, _volatility: number): number[] {
+  return Array.from({ length: months }, () => 0)
 }
 
+// Returns an empty array of the requested length — used as a stable placeholder
+// for sparklines when no real data exists.
 function generateSparkline(points = 12): number[] {
-  const data: number[] = []
-  let v = 50 + Math.random() * 30
-  for (let i = 0; i < points; i++) {
-    v = Math.max(10, Math.min(100, v + (Math.random() - 0.45) * 15))
-    data.push(Math.round(v))
-  }
-  return data
+  return Array.from({ length: points }, () => 0)
 }
 
 const MONTH_LABELS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']

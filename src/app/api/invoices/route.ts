@@ -8,30 +8,50 @@ import {
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 
+// ─── Multi-tenant scoping ───────────────────────────────────────────────────
+// LEGACY NOTE: The Prisma `Invoice` model has NO `firmId` field — it reaches
+// the tenant through `client.firmId`. The modern org model uses
+// `organizationId` (Firestore). There is no firmId↔organizationId mapping yet,
+// so for THIS sprint we accept either `?organizationId=` or `?firmId=` as a
+// query param and treat the value as the tenant id (the orgId IS the firmId in
+// this app's current state). When neither is provided, we return an empty list
+// instead of leaking ALL invoices platform-wide.
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
     const period = searchParams.get('period');
     const cloud = searchParams.get('cloud') === 'true';
+    // Accept either organizationId (modern) or firmId (legacy) — same tenant id.
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId');
+
+    // Defensive empty-state: no tenant scope → no data.
+    if (!tenantId) {
+      return NextResponse.json({ invoices: [] });
+    }
+
+    // Build a where clause scoped by the tenant via the client relation.
+    // Invoice → Client → firmId. The `cloud` branch and the regular branch
+    // both apply this same scope.
+    const where: Record<string, unknown> = { client: { firmId: tenantId } };
+    if (clientId) where.clientId = clientId;
+    if (period) where.period = period;
 
     // ── Invoice Cloud™ branch ────────────────────────────────────────────────
     // When cloud=true and no specific filters, return invoices with the new
     // financial fields. Returns an empty array when the DB is empty (real
-    // empty state — no mock data).
+    // empty state — no mock data). Still scoped by tenant.
     if (cloud && !clientId && !period) {
       const invoices = await db.invoice.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
       });
       return NextResponse.json({ invoices: invoices ?? [] });
     }
 
-    const where: Record<string, string> = {};
-    if (clientId) where.clientId = clientId;
-    if (period) where.period = period;
-
     const invoices = await db.invoice.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
+      where,
       include: {
         client: true,
       },

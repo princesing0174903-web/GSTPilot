@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -60,6 +60,16 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/gst-utils';
+import { useFireTasks, useFireClients } from '@/hooks/use-firestore';
+import { useOrg } from '@/contexts/OrgContext';
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
@@ -301,59 +311,14 @@ function TableSkeleton() {
   );
 }
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────
-const mockTeamMembers: TeamMember[] = [
-  { id: 'tm1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'manager', department: 'compliance', avatar: null, isActive: true },
-  { id: 'tm2', name: 'Rahul Mehta', email: 'rahul@firm.com', role: 'senior', department: 'filing', avatar: null, isActive: true },
-  { id: 'tm3', name: 'Anita Desai', email: 'anita@firm.com', role: 'staff', department: 'compliance', avatar: null, isActive: true },
-  { id: 'tm4', name: 'Vikram Singh', email: 'vikram@firm.com', role: 'senior', department: 'audit', avatar: null, isActive: true },
-  { id: 'tm5', name: 'Sneha Patel', email: 'sneha@firm.com', role: 'staff', department: 'filing', avatar: null, isActive: true },
-  { id: 'tm6', name: 'Arjun Reddy', email: 'arjun@firm.com', role: 'manager', department: 'audit', avatar: null, isActive: true },
-];
-
-const mockWorkload: WorkloadGroup[] = [
-  {
-    teamMember: mockTeamMembers[0],
-    assignments: [],
-    summary: { invoicesAssigned: 24, invoicesPending: 5, reviewsPending: 3, approvalsPending: 8, totalPending: 8, totalCompleted: 16, totalInProgress: 4, byStatus: { pending: 8, completed: 16, in_progress: 4 }, byPriority: { urgent: 2, high: 4, medium: 6, low: 2 } },
-  },
-  {
-    teamMember: mockTeamMembers[1],
-    assignments: [],
-    summary: { invoicesAssigned: 18, invoicesPending: 3, reviewsPending: 5, approvalsPending: 4, totalPending: 6, totalCompleted: 12, totalInProgress: 3, byStatus: { pending: 6, completed: 12, in_progress: 3 }, byPriority: { urgent: 1, high: 3, medium: 5, low: 1 } },
-  },
-  {
-    teamMember: mockTeamMembers[2],
-    assignments: [],
-    summary: { invoicesAssigned: 12, invoicesPending: 4, reviewsPending: 2, approvalsPending: 1, totalPending: 5, totalCompleted: 7, totalInProgress: 2, byStatus: { pending: 5, completed: 7, in_progress: 2 }, byPriority: { high: 2, medium: 3, low: 1 } },
-  },
-  {
-    teamMember: mockTeamMembers[3],
-    assignments: [],
-    summary: { invoicesAssigned: 20, invoicesPending: 2, reviewsPending: 6, approvalsPending: 5, totalPending: 4, totalCompleted: 14, totalInProgress: 3, byStatus: { pending: 4, completed: 14, in_progress: 3 }, byPriority: { urgent: 1, high: 2, medium: 4, low: 2 } },
-  },
-  {
-    teamMember: mockTeamMembers[4],
-    assignments: [],
-    summary: { invoicesAssigned: 8, invoicesPending: 2, reviewsPending: 1, approvalsPending: 0, totalPending: 3, totalCompleted: 5, totalInProgress: 1, byStatus: { pending: 3, completed: 5, in_progress: 1 }, byPriority: { medium: 2, low: 1 } },
-  },
-  {
-    teamMember: mockTeamMembers[5],
-    assignments: [],
-    summary: { invoicesAssigned: 16, invoicesPending: 3, reviewsPending: 4, approvalsPending: 6, totalPending: 7, totalCompleted: 9, totalInProgress: 2, byStatus: { pending: 7, completed: 9, in_progress: 2 }, byPriority: { urgent: 1, high: 3, medium: 2, low: 1 } },
-  },
-];
-
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function WorkloadPage() {
-  // ── State ──────────────────────────────────────────────────────────────
-  const [workloadData, setWorkloadData] = useState<WorkloadGroup[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // ── Real-time data (Firestore) ──────────────────────────────────────────
+  const { members, isPreviewMode, organization } = useOrg();
+  const { data: tasks, loading: tasksLoading } = useFireTasks();
+  const { data: fireClients, loading: clientsLoading } = useFireClients();
 
   // Dialog state
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -368,79 +333,106 @@ export default function WorkloadPage() {
   const [formPriority, setFormPriority] = useState('medium');
   const [formDueDate, setFormDueDate] = useState('');
 
-  // ── Fetch Data ─────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // ── Map org members → TeamMember[] ──────────────────────────────────────
+  const teamMembers: TeamMember[] = useMemo(
+    () =>
+      members.map(m => ({
+        id: m.id,
+        name: m.userDisplayName || m.userEmail,
+        email: m.userEmail,
+        role: m.role,
+        department: null,
+        avatar: m.userPhotoURL,
+        isActive: m.status === 'active',
+      })),
+    [members],
+  );
 
-      const [workloadRes, teamRes, clientsRes] = await Promise.all([
-        fetch('/api/workload'),
-        fetch('/api/team-members'),
-        fetch('/api/clients'),
-      ]);
-
-      let workload: WorkloadGroup[] = [];
-      if (workloadRes.ok) {
-        const data = await workloadRes.json();
-        workload = data.workload ?? [];
-      }
-
-      let members: TeamMember[] = [];
-      if (teamRes.ok) {
-        const data = await teamRes.json();
-        members = data.teamMembers ?? [];
-      }
-
-      let clientList: Client[] = [];
-      if (clientsRes.ok) {
-        const data = await clientsRes.json();
-        clientList = (data.clients ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
-          id: c.id,
-          tradeName: c.tradeName,
-          gstin: c.gstin,
-        }));
-      }
-
-      // Use mock data if API returns empty
-      if (workload.length === 0 && members.length === 0) {
-        workload = mockWorkload;
-        members = mockTeamMembers;
-      } else if (workload.length === 0 && members.length > 0) {
-        // Build workload from team members
-        workload = members.map((m, i) => ({
-          teamMember: m,
-          assignments: [],
-          summary: {
-            invoicesAssigned: Math.floor(Math.random() * 20) + 5,
-            invoicesPending: Math.floor(Math.random() * 5) + 1,
-            reviewsPending: Math.floor(Math.random() * 6),
-            approvalsPending: Math.floor(Math.random() * 4),
-            totalPending: Math.floor(Math.random() * 8) + 2,
-            totalCompleted: Math.floor(Math.random() * 15) + 5,
-            totalInProgress: Math.floor(Math.random() * 4),
-            byStatus: {},
-            byPriority: {},
-          },
-        }));
-      }
-
-      setWorkloadData(workload);
-      setTeamMembers(members);
-      setClients(clientList);
-    } catch (err) {
-      console.error('Workload fetch error:', err);
-      setError('Failed to load workload data');
-      setWorkloadData(mockWorkload);
-      setTeamMembers(mockTeamMembers);
-    } finally {
-      setLoading(false);
+  // ── Build WorkloadGroup[] from real tasks grouped by assignee ───────────
+  // A task's `assignedTo` is the org member id (matches `m.id` from members).
+  // Each group's summary is computed from the REAL status/priority/type of
+  // its assignments — no Math.random fabrication.
+  const workloadData: WorkloadGroup[] = useMemo(() => {
+    const groups = new Map<string, WorkloadAssignment[]>();
+    for (const t of tasks) {
+      const memberId = t.assignedTo || 'unassigned';
+      if (!groups.has(memberId)) groups.set(memberId, []);
+      // Map FirestoreTask.status → the legacy WorkloadPage status enum.
+      const legacyStatus =
+        t.status === 'todo' ? 'pending'
+        : t.status === 'in_progress' ? 'in_progress'
+        : t.status === 'completed' ? 'completed'
+        : t.status === 'review' ? 'in_progress'
+        : 'pending';
+      const entityType =
+        t.tags?.[0] === 'invoice' ? 'invoice'
+        : t.tags?.[0] === 'review' ? 'review'
+        : t.tags?.[0] === 'approval' ? 'approval'
+        : t.tags?.[0] === 'notice' ? 'notice'
+        : 'invoice';
+      groups.get(memberId)!.push({
+        id: t.id,
+        teamMemberId: t.assignedTo || '',
+        entityType,
+        title: t.title,
+        description: t.description ?? null,
+        clientId: t.clientId,
+        priority: t.priority,
+        status: legacyStatus,
+        dueDate: t.dueDate,
+        assignedAt:
+          typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
+        completedAt: null,
+        teamMember: { id: t.assignedTo || '', name: '', email: '', role: '' },
+      });
     }
-  }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    return teamMembers
+      .map(m => {
+        const assignments = groups.get(m.id) ?? [];
+        const summary = {
+          invoicesAssigned: 0,
+          invoicesPending: 0,
+          reviewsPending: 0,
+          approvalsPending: 0,
+          totalPending: 0,
+          totalCompleted: 0,
+          totalInProgress: 0,
+          byStatus: {} as Record<string, number>,
+          byPriority: {} as Record<string, number>,
+        };
+        for (const a of assignments) {
+          summary.byStatus[a.status] = (summary.byStatus[a.status] ?? 0) + 1;
+          summary.byPriority[a.priority] = (summary.byPriority[a.priority] ?? 0) + 1;
+          if (a.entityType === 'invoice') {
+            summary.invoicesAssigned++;
+            if (a.status === 'pending') summary.invoicesPending++;
+          } else if (a.entityType === 'review') {
+            if (a.status === 'pending') summary.reviewsPending++;
+          } else if (a.entityType === 'approval') {
+            if (a.status === 'pending') summary.approvalsPending++;
+          }
+          if (a.status === 'pending') summary.totalPending++;
+          else if (a.status === 'completed') summary.totalCompleted++;
+          else if (a.status === 'in_progress') summary.totalInProgress++;
+        }
+        return { teamMember: m, assignments, summary };
+      })
+      .filter(g => g.assignments.length > 0);
+  }, [tasks, teamMembers]);
+
+  // ── Clients for assignment form dropdown ────────────────────────────────
+  const clients: Client[] = useMemo(
+    () =>
+      fireClients.map(c => ({
+        id: c.id,
+        tradeName: c.tradeName || 'Unnamed',
+        gstin: c.gstin || '',
+      })),
+    [fireClients],
+  );
+
+  const loading = tasksLoading || clientsLoading;
 
   // ── Derived Stats ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -459,49 +451,57 @@ export default function WorkloadPage() {
     return workloadData.flatMap(g => g.assignments);
   }, [workloadData]);
 
-  // ── Submit Assignment ──────────────────────────────────────────────────
+  // ── Submit Assignment (writes directly to Firestore `tasks` collection ──
+  // so the real-time useFireTasks subscription auto-refreshes the list).
   const handleSubmit = async () => {
-    if (!formTeamMember || !formTitle) return;
+    if (!formTeamMember || !formTitle || !organization) return;
     try {
       setSubmitting(true);
-      const res = await fetch('/api/workload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teamMemberId: formTeamMember,
-          entityType: formEntityType,
-          title: formTitle,
-          description: formDescription || null,
-          clientId: formClient || null,
-          priority: formPriority,
-          dueDate: formDueDate || null,
-        }),
+      // Build a tags array carrying the chosen entity type so the workload
+      // grouping logic can classify the task as invoice/review/approval/notice.
+      const tags = [formEntityType];
+      await addDoc(collection(db, 'tasks'), {
+        organizationId: organization.id,
+        // Legacy field kept for backwards compat with older services.
+        firmId: organization.id,
+        taskId: '',
+        title: formTitle,
+        description: formDescription || '',
+        status: 'todo',
+        priority: formPriority,
+        assignedTo: formTeamMember,
+        clientId: formClient || null,
+        dueDate: formDueDate || null,
+        tags,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
-      if (res.ok) {
-        setAssignDialogOpen(false);
-        resetForm();
-        fetchData();
-      }
+      setAssignDialogOpen(false);
+      resetForm();
+      // useFireTasks() will auto-refresh — no manual refetch needed.
     } catch (err) {
-      console.error('Failed to create assignment:', err);
+      console.error('Failed to create task:', err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Update Assignment Status ───────────────────────────────────────────
+  // ── Update Assignment Status (writes directly to Firestore) ───────────
+  // Maps the legacy workload status back to Firestore TaskStatus.
   const handleStatusUpdate = async (id: string, status: string) => {
     try {
-      const res = await fetch('/api/workload', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status }),
+      const fireStatus =
+        status === 'pending' ? 'todo'
+        : status === 'in_progress' ? 'in_progress'
+        : status === 'completed' ? 'completed'
+        : 'todo';
+      await updateDoc(doc(db, 'tasks', id), {
+        status: fireStatus,
+        updatedAt: serverTimestamp(),
       });
-      if (res.ok) {
-        fetchData();
-      }
+      // useFireTasks() will auto-refresh.
     } catch (err) {
-      console.error('Failed to update assignment:', err);
+      console.error('Failed to update task:', err);
     }
   };
 
@@ -549,11 +549,12 @@ export default function WorkloadPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            disabled
             className="gap-1.5 h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+            title="Live data — refreshes automatically"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
+            Live
           </Button>
           <Button
             size="sm"
@@ -694,6 +695,20 @@ export default function WorkloadPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <TeamCardSkeleton key={i} />)}
           </div>
+        ) : workloadData.length === 0 ? (
+          <AnimatedCard>
+            <CardContent className="p-8 flex flex-col items-center text-center">
+              <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 mb-3">
+                <Users className="h-7 w-7 text-emerald-500" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground mb-1">No assigned work yet</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                {isPreviewMode
+                  ? 'Connect your organization to see live workload distribution across your team.'
+                  : 'Assign tasks to team members using the “Assign Task” button above.'}
+              </p>
+            </CardContent>
+          </AnimatedCard>
         ) : (
           <motion.div
             variants={containerVariants}

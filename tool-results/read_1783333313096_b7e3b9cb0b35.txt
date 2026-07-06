@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useRef } from 'react'
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card'
+    11→import { Button } from '@/components/ui/button'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Separator } from '@/components/ui/separator'
+    16→import { Badge } from '@/components/ui/badge'
+    17→import { Textarea } from '@/components/ui/textarea'
+    18→import { Progress } from '@/components/ui/progress'
+    19→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    20→import {
+    21→  Select,
+    22→  SelectContent,
+    23→  SelectItem,
+    24→  SelectTrigger,
+    25→  SelectValue,
+    26→} from '@/components/ui/select'
+    27→import {
+    28→  AlertDialog,
+    29→  AlertDialogContent,
+    30→  AlertDialogHeader,
+    31→  AlertDialogTitle,
+    32→  AlertDialogDescription,
+    33→  AlertDialogFooter,
+    34→  AlertDialogAction,
+    35→  AlertDialogCancel,
+    36→} from '@/components/ui/alert-dialog'
+    37→import {
+    38→  Dialog,
+    39→  DialogContent,
+    40→  DialogHeader,
+    41→  DialogTitle,
+    42→  DialogFooter,
+    43→} from '@/components/ui/dialog'
+    44→import {
+    45→  Building2,
+    46→  ClipboardList,
+    47→  Users,
+    48→  Bell,
+    49→  Lock,
+    50→  CreditCard,
+    51→  Save,
+    52→  Check,
+    53→  Loader2,
+    54→  Camera,
+    55→  AlertTriangle,
+    56→  CalendarClock,
+    57→  Mail,
+    58→  Activity,
+    59→  Upload,
+    60→  Shield,
+    61→  Smartphone,
+    62→  Monitor,
+    63→  Globe,
+    64→  ChevronRight,
+    65→  Download,
+    66→  LockKeyhole,
+    67→} from 'lucide-react'
+    68→import { motion, AnimatePresence } from 'framer-motion'
+    69→import { toast } from 'sonner'
+    70→import { useAuth } from '@/contexts/AuthContext'
+    71→import { useOrg } from '@/contexts/OrgContext'
+    72→import { useIsMobile } from '@/hooks/use-mobile'
+    73→import { db, storage, auth } from '@/lib/firebase'
+    74→import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+    75→import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+    76→import { updatePassword } from 'firebase/auth'
+    77→
+    78→// ─── Permission-error detection (graceful degradation) ──────────────────
+    79→// Mirrors the helper in src/hooks/use-firestore.ts so the Settings page can
+    80→// detect Firestore permission-denied errors and surface a friendly message
+    81→// instead of the raw "Missing or insufficient permissions" wall.
+    82→function isPermissionError(err: unknown): boolean {
+    83→  if (!err) return false
+    84→  const e = err as { code?: string; message?: string; name?: string }
+    85→  const code = (e.code || '').toLowerCase()
+    86→  const message = (e.message || '').toLowerCase()
+    87→  if (
+    88→    code === 'permission-denied' ||
+    89→    code === 'unauthenticated' ||
+    90→    code === 'auth/operation-not-allowed' ||
+    91→    code === 'auth/user-not-found'
+    92→  ) {
+    93→    return true
+    94→  }
+    95→  if (
+    96→    message.includes('missing or insufficient permissions') ||
+    97→    message.includes('permission-denied') ||
+    98→    message.includes('insufficient permissions') ||
+    99→    message.includes('not authorized') ||
+   100→    message.includes('unauthenticated')
+   101→  ) {
+   102→    return true
+   103→  }
+   104→  return false
+   105→}
+   106→
+   107→const PERMISSION_DENIED_MSG =
+   108→  "You don't have permission to save these changes. Contact your organization admin."
+   109→const PREVIEW_MODE_MSG =
+   110→  'Preview mode — your changes are shown here but not persisted to the cloud.'
+   111→
+   112→// ─── Indian States ──────────────────────────────────────────────────────
+   113→const INDIAN_STATES = [
+   114→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+   115→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+   116→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+   117→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+   118→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+   119→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+   120→  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
+   121→  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry',
+   122→]
+   123→
+   124→const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
+   125→
+   126→// ─── Section IDs ────────────────────────────────────────────────────────
+   127→type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
+   128→
+   129→interface NavSection {
+   130→  id: SectionId
+   131→  label: string
+   132→  icon: React.ReactNode
+   133→}
+   134→
+   135→const SECTIONS: NavSection[] = [
+   136→  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
+   137→  { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
+   138→  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
+   139→  { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
+   140→  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
+   141→  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
+   142→  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
+   143→  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
+   144→]
+   145→
+   146→// ─── Team Member Type ───────────────────────────────────────────────────
+   147→interface TeamMember {
+   148→  id: string
+   149→  name: string
+   150→  email: string
+   151→  role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
+   152→  status: 'Active' | 'Invited'
+   153→  initials: string
+   154→}
+   155→
+   156→const INITIAL_TEAM: TeamMember[] = [
+   157→  { id: '1', name: 'Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'Admin', status: 'Active', initials: 'RK' },
+   158→  { id: '2', name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'Manager', status: 'Active', initials: 'PS' },
+   159→  { id: '3', name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'Staff', status: 'Active', initials: 'AP' },
+   160→]
+   161→
+   162→// ─── Session Type ───────────────────────────────────────────────────────
+   163→interface Session {
+   164→  id: string
+   165→  device: string
+   166→  location: string
+   167→  lastActive: string
+   168→  icon: React.ReactNode
+   169→  current?: boolean
+   170→}
+   171→
+   172→const MOCK_SESSIONS: Session[] = [
+   173→  { id: '1', device: 'Chrome on MacOS', location: 'Mumbai, India', lastActive: 'Now', icon: <Monitor className="h-4 w-4" />, current: true },
+   174→  { id: '2', device: 'GSTPilot Mobile App', location: 'Mumbai, India', lastActive: '2 hours ago', icon: <Smartphone className="h-4 w-4" /> },
+   175→  { id: '3', device: 'Firefox on Windows', location: 'Pune, India', lastActive: 'Yesterday', icon: <Globe className="h-4 w-4" /> },
+   176→]
+   177→
+   178→// ─── Billing History ────────────────────────────────────────────────────
+   179→interface BillingInvoice {
+   180→  id: string
+   181→  date: string
+   182→  amount: string
+   183→  status: 'Paid' | 'Pending' | 'Failed'
+   184→}
+   185→
+   186→const BILLING_HISTORY: BillingInvoice[] = [
+   187→  { id: '1', date: '1 Jun 2025', amount: '₹1,499', status: 'Paid' },
+   188→  { id: '2', date: '1 May 2025', amount: '₹1,499', status: 'Paid' },
+   189→  { id: '3', date: '1 Apr 2025', amount: '₹1,499', status: 'Paid' },
+   190→  { id: '4', date: '1 Mar 2025', amount: '₹1,499', status: 'Paid' },
+   191→]
+   192→
+   193→// ─── GST API Connection Status ──────────────────────────────────────────
+   194→interface ApiConnection {
+   195→  id: string
+   196→  name: string
+   197→  description: string
+   198→  status: 'Connected' | 'Disconnected' | 'Not Configured'
+   199→  lastSync?: string
+   200→  icon: React.ReactNode
+   201→}
+   202→
+   203→const MOCK_API_CONNECTIONS: ApiConnection[] = [
+   204→  { id: 'gst-portal', name: 'GST Portal API', description: 'GSTN portal for filing returns and viewing status', status: 'Connected', lastSync: '5 minutes ago', icon: <Globe className="h-4 w-4" /> },
+   205→  { id: 'eway-bill', name: 'E-Way Bill API', description: 'Generate and manage e-way bills for transport', status: 'Disconnected', lastSync: '2 hours ago', icon: <ClipboardList className="h-4 w-4" /> },
+   206→  { id: 'e-invoice', name: 'E-Invoice API', description: 'IRN generation and e-invoice management', status: 'Not Configured', icon: <ClipboardList className="h-4 w-4" /> },
+   207→]
+   208→
+   209→// ─── Audit Log Entry ──────────────────────────────────────────────────
+   210→interface AuditLogEntry {
+   211→  id: string
+   212→  timestamp: string
+   213→  user: string
+   214→  action: string
+   215→  entity: string
+   216→  actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
+   217→}
+   218→
+   219→const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
+   220→  { id: '1', timestamp: '2025-06-04 14:32', user: 'Rajesh Kumar', action: 'Filed GSTR-1 for Sharma Enterprises', entity: 'GSTR-1 May 2025', actionType: 'filing' },
+   221→  { id: '2', timestamp: '2025-06-04 13:15', user: 'Priya Sharma', action: 'Updated client Patel & Sons', entity: 'Client Profile', actionType: 'client_update' },
+   222→  { id: '3', timestamp: '2025-06-04 11:48', user: 'Rajesh Kumar', action: 'Uploaded 24 invoices for Krishna Traders', entity: 'Invoice Batch', actionType: 'invoice' },
+   223→  { id: '4', timestamp: '2025-06-04 10:30', user: 'Amit Patel', action: 'Reconciled GSTR-2B for Metro Retail Solutions', entity: 'Reconciliation', actionType: 'reconciliation' },
+   224→  { id: '5', timestamp: '2025-06-03 17:22', user: 'Priya Sharma', action: 'Changed notification preferences', entity: 'Settings', actionType: 'settings' },
+   225→  { id: '6', timestamp: '2025-06-03 16:10', user: 'Rajesh Kumar', action: 'Filed GSTR-3B for Sunrise Exports Ltd', entity: 'GSTR-3B May 2025', actionType: 'filing' },
+   226→  { id: '7', timestamp: '2025-06-03 14:45', user: 'Amit Patel', action: 'Approved 6 invoices for Gupta Manufacturing', entity: 'Invoice Queue', actionType: 'invoice' },
+   227→  { id: '8', timestamp: '2025-06-03 11:20', user: 'Priya Sharma', action: 'Added new client Digital Commerce India', entity: 'Client Profile', actionType: 'client_update' },
+   228→  { id: '9', timestamp: '2025-06-02 16:55', user: 'Rajesh Kumar', action: 'Reconciled ITC for Apex Logistics', entity: 'Reconciliation', actionType: 'reconciliation' },
+   229→  { id: '10', timestamp: '2025-06-02 10:05', user: 'Amit Patel', action: 'Generated e-way bill for Sharma Enterprises', entity: 'E-Way Bill', actionType: 'invoice' },
+   230→]
+   231→
+   232→// ─── Save Button with Animated States ──────────────────────────────────
+   233→function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
+   234→  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+   235→
+   236→  const handleClick = async () => {
+   237→    setState('saving')
+   238→    try {
+   239→      await onSave()
+   240→      setState('saved')
+   241→      setTimeout(() => setState('idle'), 2000)
+   242→    } catch {
+   243→      setState('idle')
+   244→    }
+   245→  }
+   246→
+   247→  return (
+   248→    <Button
+   249→      onClick={handleClick}
+   250→      disabled={state === 'saving'}
+   251→      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[110px]"
+   252→    >
+   253→      <AnimatePresence mode="wait">
+   254→        {state === 'idle' && (
+   255→          <motion.span
+   256→            key="idle"
+   257→            initial={{ opacity: 0, scale: 0.8 }}
+   258→            animate={{ opacity: 1, scale: 1 }}
+   259→            exit={{ opacity: 0, scale: 0.8 }}
+   260→            className="flex items-center gap-2"
+   261→          >
+   262→            <Save className="h-4 w-4" />
+   263→            Save
+   264→          </motion.span>
+   265→        )}
+   266→        {state === 'saving' && (
+   267→          <motion.span
+   268→            key="saving"
+   269→            initial={{ opacity: 0, scale: 0.8 }}
+   270→            animate={{ opacity: 1, scale: 1 }}
+   271→            exit={{ opacity: 0, scale: 0.8 }}
+   272→            className="flex items-center gap-2"
+   273→          >
+   274→            <Loader2 className="h-4 w-4 animate-spin" />
+   275→            Saving...
+   276→          </motion.span>
+   277→        )}
+   278→        {state === 'saved' && (
+   279→          <motion.span
+   280→            key="saved"
+   281→            initial={{ opacity: 0, scale: 0.8 }}
+   282→            animate={{ opacity: 1, scale: 1 }}
+   283→            exit={{ opacity: 0, scale: 0.8 }}
+   284→            className="flex items-center gap-2"
+   285→          >
+   286→            <Check className="h-4 w-4" />
+   287→            Saved
+   288→          </motion.span>
+   289→        )}
+   290→      </AnimatePresence>
+   291→    </Button>
+   292→  )
+   293→}
+   294→
+   295→// ─── Password Strength Helper ──────────────────────────────────────────
+   296→function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+   297→  if (!password) return { score: 0, label: '', color: '' }
+   298→  let score = 0
+   299→  if (password.length >= 8) score++
+   300→  if (password.length >= 12) score++
+   301→  if (/[A-Z]/.test(password)) score++
+   302→  if (/[0-9]/.test(password)) score++
+   303→  if (/[^A-Za-z0-9]/.test(password)) score++
+   304→
+   305→  if (score <= 1) return { score: 20, label: 'Weak', color: 'bg-red-500' }
+   306→  if (score <= 2) return { score: 40, label: 'Fair', color: 'bg-orange-500' }
+   307→  if (score <= 3) return { score: 60, label: 'Good', color: 'bg-yellow-500' }
+   308→  if (score <= 4) return { score: 80, label: 'Strong', color: 'bg-emerald-500' }
+   309→  return { score: 100, label: 'Excellent', color: 'bg-emerald-600' }
+   310→}
+   311→
+   312→// ─── Section Content Animation Variants ─────────────────────────────────
+   313→const contentVariants = {
+   314→  hidden: { opacity: 0, x: 12 },
+   315→  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+   316→  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+   317→}
+   318→
+   319→// ═══════════════════════════════════════════════════════════════════════
+   320→// MAIN COMPONENT
+   321→// ═══════════════════════════════════════════════════════════════════════
+   322→export default function SettingsPage() {
+   323→  const { user } = useAuth()
+   324→  const { organization, reload: reloadOrg, isPreviewMode } = useOrg()
+   325→  const orgId = organization?.id ?? null
+   326→  const isMobile = useIsMobile()
+   327→
+   328→  // True when there's no real organization to write to — either OrgContext is
+   329→  // still loading, has fallen back to the demo "preview-org" (Firestore
+   330→  // unreachable), or explicitly flagged preview mode. All save handlers use
+   331→  // this to no-op gracefully instead of throwing permission-denied.
+   332→  const isPreview = !orgId || isPreviewMode || orgId === 'preview-org'
+   333→
+   334→  // ── Active Section ──────────────────────────────────────────────────
+   335→  const [activeSection, setActiveSection] = useState<SectionId>('firm')
+   336→
+   337→  // ── Logo upload state ───────────────────────────────────────────────
+   338→  // `logoPreview` holds a local object-URL while the upload is in flight so
+   339→  // the avatar reflects the new image instantly. Once the Firestore write
+   340→  // completes, `organization.logoUrl` becomes the source of truth.
+   341→  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+   342→  const [logoUploading, setLogoUploading] = useState(false)
+   343→  const logoInputRef = useRef<HTMLInputElement | null>(null)
+   344→
+   345→  // Track whether we've hydrated local form state from the org doc — we only
+   346→  // want to do this once per organization to avoid clobbering in-progress edits.
+   347→  const orgInitializedRef = useRef<string | null>(null)
+   348→
+   349→  // ── Firm Profile State ──────────────────────────────────────────────
+   350→  const [firmName, setFirmName] = useState('Sharma & Associates')
+   351→  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
+   352→  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
+   353→  const [firmState, setFirmState] = useState('Maharashtra')
+   354→  const [entityType, setEntityType] = useState('LLP')
+   355→  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
+   356→  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
+   357→
+   358→  // ── GST Config State ────────────────────────────────────────────────
+   359→  const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
+   360→  const [fyStart, setFyStart] = useState<'april' | 'january'>('april')
+   361→  const [gstr1Pref, setGstr1Pref] = useState<'auto' | 'manual'>('auto')
+   362→  const [gstr3bPref, setGstr3bPref] = useState<'auto' | 'manual'>('auto')
+   363→  const [itcMethod, setItcMethod] = useState<'auto-match' | 'manual-review'>('auto-match')
+   364→  const [lateFilingAlert, setLateFilingAlert] = useState(true)
+   365→  const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
+   366→
+   367→  // ── Team State ──────────────────────────────────────────────────────
+   368→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(INITIAL_TEAM)
+   369→  const [showInviteDialog, setShowInviteDialog] = useState(false)
+   370→  const [inviteEmail, setInviteEmail] = useState('')
+   371→  const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
+   372→  const [inviting, setInviting] = useState(false)
+   373→  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+   374→  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
+   375→  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+   376→  const [editRole, setEditRole] = useState<string>('')
+   377→
+   378→  // ── Notifications State ─────────────────────────────────────────────
+   379→  const [filingDeadline, setFilingDeadline] = useState(true)
+   380→  const [mismatchAlerts, setMismatchAlerts] = useState(true)
+   381→  const [weeklySummary, setWeeklySummary] = useState(false)
+   382→  const [healthScoreChanges, setHealthScoreChanges] = useState(true)
+   383→  const [teamActivity, setTeamActivity] = useState(false)
+   384→  const [newInvoiceUploaded, setNewInvoiceUploaded] = useState(true)
+   385→
+   386→  // ── Security State ──────────────────────────────────────────────────
+   387→  const [currentPassword, setCurrentPassword] = useState('')
+   388→  const [newPassword, setNewPassword] = useState('')
+   389→  const [confirmPassword, setConfirmPassword] = useState('')
+   390→  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+   391→
+   392→  // ── Audit Log Filter ──────────────────────────────────────────────
+   393→  const [auditFilter, setAuditFilter] = useState<string>('all')
+   394→
+   395→  // ── GSTIN Validation ────────────────────────────────────────────────
+   396→  const isGstinValid = (gstin: string) => {
+   397→    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+   398→    return regex.test(gstin.toUpperCase())
+   399→  }
+   400→  const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
+   401→
+   402→  // ── Hydrate form state from the organization doc (once per org) ─────
+   403→  useEffect(() => {
+   404→    if (!organization) return
+   405→    if (orgInitializedRef.current === organization.id) return
+   406→    orgInitializedRef.current = organization.id
+   407→
+   408→    if (organization.name) setFirmName(organization.name)
+   409→    if (organization.gstin) setFirmGstin(organization.gstin)
+   410→
+   411→    // Extended fields may or may not exist on every org doc — read defensively.
+   412→    const anyOrg = organization as Record<string, unknown>
+   413→    if (typeof anyOrg.legalName === 'string' && anyOrg.legalName) setLegalName(anyOrg.legalName)
+   414→    if (typeof anyOrg.state === 'string' && anyOrg.state) setFirmState(anyOrg.state)
+   415→    if (typeof anyOrg.entityType === 'string' && anyOrg.entityType) setEntityType(anyOrg.entityType)
+   416→    if (typeof anyOrg.caRegNumber === 'string' && anyOrg.caRegNumber) setCaRegNumber(anyOrg.caRegNumber)
+   417→    if (typeof anyOrg.officeAddress === 'string' && anyOrg.officeAddress) setOfficeAddress(anyOrg.officeAddress)
+   418→    if (anyOrg.gstConfig && typeof anyOrg.gstConfig === 'object') {
+   419→      const c = anyOrg.gstConfig
+   420→      if (c.returnPeriod === 'monthly' || c.returnPeriod === 'quarterly') setReturnPeriod(c.returnPeriod)
+   421→      if (c.fyStart === 'april' || c.fyStart === 'january') setFyStart(c.fyStart)
+   422→      if (c.gstr1Pref === 'auto' || c.gstr1Pref === 'manual') setGstr1Pref(c.gstr1Pref)
+   423→      if (c.gstr3bPref === 'auto' || c.gstr3bPref === 'manual') setGstr3bPref(c.gstr3bPref)
+   424→      if (c.itcMethod === 'auto-match' || c.itcMethod === 'manual-review') setItcMethod(c.itcMethod)
+   425→      if (typeof c.lateFilingAlert === 'boolean') setLateFilingAlert(c.lateFilingAlert)
+   426→      if (typeof c.dueDateReminderDays === 'number') setDueDateReminderDays(String(c.dueDateReminderDays))
+   427→    }
+   428→    if (anyOrg.notifications && typeof anyOrg.notifications === 'object') {
+   429→      const n = anyOrg.notifications
+   430→      if (typeof n.filingDeadline === 'boolean') setFilingDeadline(n.filingDeadline)
+   431→      if (typeof n.mismatchAlerts === 'boolean') setMismatchAlerts(n.mismatchAlerts)
+   432→      if (typeof n.weeklySummary === 'boolean') setWeeklySummary(n.weeklySummary)
+   433→      if (typeof n.healthScoreChanges === 'boolean') setHealthScoreChanges(n.healthScoreChanges)
+   434→      if (typeof n.teamActivity === 'boolean') setTeamActivity(n.teamActivity)
+   435→      if (typeof n.newInvoiceUploaded === 'boolean') setNewInvoiceUploaded(n.newInvoiceUploaded)
+   436→    }
+   437→  }, [organization])
+   438→
+   439→  // ── Handlers ────────────────────────────────────────────────────────
+   440→  // Every Save button persists to Firestore `organizations/{orgId}`. Org-level
+   441→  // writes satisfy the Firestore security rules because the signed-in user is
+   442→  // a member of the org (owner/admin for the membership row). `reloadOrg()` is
+   443→  // called after each successful write so the navbar / sidebar / context
+   444→  // reflect the new value immediately.
+   445→
+   446→  const handleSaveFirmProfile = async () => {
+   447→    // Preview mode — gracefully no-op. Don't attempt the write (it would fail
+   448→    // with permission-denied and confuse the user). The inline check also
+   449→    // narrows `orgId` to `string` for TypeScript.
+   450→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   451→      toast.info(PREVIEW_MODE_MSG)
+   452→      // Throw so SaveButton reverts to its idle state — we already surfaced
+   453→      // the info toast, so no error toast is needed.
+   454→      throw new Error('preview-mode')
+   455→    }
+   456→    try {
+   457→      await updateDoc(doc(db, 'organizations', orgId), {
+   458→        name: firmName,
+   459→        legalName,
+   460→        gstin: firmGstin,
+   461→        state: firmState,
+   462→        entityType,
+   463→        caRegNumber,
+   464→        officeAddress,
+   465→        updatedAt: serverTimestamp(),
+   466→      })
+   467→      await reloadOrg()
+   468→      toast.success('Firm profile saved')
+   469→    } catch (err) {
+   470→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save firm profile'))
+   471→      throw err
+   472→    }
+   473→  }
+   474→
+   475→  const handleSaveGstConfig = async () => {
+   476→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   477→      toast.info(PREVIEW_MODE_MSG)
+   478→      throw new Error('preview-mode')
+   479→    }
+   480→    try {
+   481→      await updateDoc(doc(db, 'organizations', orgId), {
+   482→        gstConfig: {
+   483→          returnPeriod,
+   484→          fyStart,
+   485→          gstr1Pref,
+   486→          gstr3bPref,
+   487→          itcMethod,
+   488→          lateFilingAlert,
+   489→          dueDateReminderDays: parseInt(dueDateReminderDays, 10) || 3,
+   490→        },
+   491→        updatedAt: serverTimestamp(),
+   492→      })
+   493→      await reloadOrg()
+   494→      toast.success('GST configuration saved')
+   495→    } catch (err) {
+   496→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save GST configuration'))
+   497→      throw err
+   498→    }
+   499→  }
+   500→
+   501→  const handleSaveNotifications = async () => {
+   502→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   503→      toast.info(PREVIEW_MODE_MSG)
+   504→      throw new Error('preview-mode')
+   505→    }
+   506→    try {
+   507→      await updateDoc(doc(db, 'organizations', orgId), {
+   508→        notifications: {
+   509→          filingDeadline,
+   510→          mismatchAlerts,
+   511→          weeklySummary,
+   512→          healthScoreChanges,
+   513→          teamActivity,
+   514→          newInvoiceUploaded,
+   515→        },
+   516→        updatedAt: serverTimestamp(),
+   517→      })
+   518→      await reloadOrg()
+   519→      toast.success('Notification preferences saved')
+   520→    } catch (err) {
+   521→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save notifications'))
+   522→      throw err
+   523→    }
+   524→  }
+   525→
+   526→  const handleChangePassword = async () => {
+   527→    if (!newPassword || newPassword !== confirmPassword) {
+   528→      toast.error('Passwords do not match')
+   529→      throw new Error('Password mismatch')
+   530→    }
+   531→    if (newPassword.length < 8) {
+   532→      toast.error('Password must be at least 8 characters')
+   533→      throw new Error('Password too short')
+   534→    }
+   535→    // Preview mode (no real Firebase session) — password changes aren't
+   536→    // available. Don't attempt the call.
+   537→    const fbUser = auth.currentUser
+   538→    if (!fbUser || isPreview) {
+   539→      toast.info('Preview mode — password changes are not available. Sign in to enable.')
+   540→      throw new Error('preview-mode')
+   541→    }
+   542→    try {
+   543→      await updatePassword(fbUser, newPassword)
+   544→      setCurrentPassword('')
+   545→      setNewPassword('')
+   546→      setConfirmPassword('')
+   547→      toast.success('Password updated successfully')
+   548→    } catch (err) {
+   549→      // Firebase throws auth/requires-recent-login if the user hasn't signed
+   550→      // in recently — surface that hint to the user.
+   551→      const raw = err instanceof Error ? err.message : 'Failed to change password'
+   552→      const friendly = raw.includes('requires-recent-login')
+   553→        ? 'For your security, please sign out and sign back in, then try again.'
+   554→        : raw
+   555→      toast.error(friendly)
+   556→      throw err
+   557→    }
+   558→  }
+   559→
+   560→  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   561→    const file = e.target.files?.[0]
+   562→    // Reset the input so the same file can be re-selected later.
+   563→    e.target.value = ''
+   564→    if (!file) return
+   565→
+   566→    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+   567→    if (!allowedTypes.includes(file.type)) {
+   568→      toast.error('Logo must be a PNG, JPG, or WebP file')
+   569→      return
+   570→    }
+   571→    if (file.size > 2 * 1024 * 1024) {
+   572→      toast.error('Logo must be under 2 MB')
+   573→      return
+   574→    }
+   575→
+   576→    setLogoUploading(true)
+   577→    // Show a local preview immediately so the user sees feedback before the
+   578→    // upload completes. In preview mode this is the ONLY copy we keep — the
+   579→    // logo stays visible locally but is never written to the cloud.
+   580→    const localPreviewUrl = URL.createObjectURL(file)
+   581→    setLogoPreview(localPreviewUrl)
+   582→
+   583→    // Preview mode: keep the local preview, skip the cloud writes. The avatar
+   584→    // shows the new logo for the rest of the session but it won't persist.
+   585→    if (isPreview) {
+   586→      setLogoUploading(false)
+   587→      toast.info('Preview mode — logo change is shown here but not persisted to the cloud.')
+   588→      return
+   589→    }
+   590→
+   591→    // After the preview-mode check, orgId is guaranteed non-null.
+   592→    const orgIdNonNull: string = orgId as string
+   593→
+   594→    try {
+   595→      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+   596→      const fileRef = storageRef(storage, `organizations/${orgIdNonNull}/logo.${ext}`)
+   597→      await uploadBytes(fileRef, file)
+   598→      const downloadUrl = await getDownloadURL(fileRef)
+   599→      await updateDoc(doc(db, 'organizations', orgIdNonNull), {
+   600→        logoUrl: downloadUrl,
+   601→        updatedAt: serverTimestamp(),
+   602→      })
+   603→      await reloadOrg()
+   604→      // The Firestore-backed URL is now the source of truth — drop the local
+   605→      // preview so the canonical URL takes over on the next render.
+   606→      setLogoPreview(null)
+   607→      URL.revokeObjectURL(localPreviewUrl)
+   608→      toast.success('Firm logo updated')
+   609→    } catch (err) {
+   610→      setLogoPreview(null)
+   611→      URL.revokeObjectURL(localPreviewUrl)
+   612→      const msg = isPermissionError(err)
+   613→        ? PERMISSION_DENIED_MSG
+   614→        : (err instanceof Error ? err.message : 'Failed to upload logo')
+   615→      toast.error(msg)
+   616→    } finally {
+   617→      setLogoUploading(false)
+   618→    }
+   619→  }
+   620→
+   621→  const handleInviteMember = async () => {
+   622→    if (!inviteEmail.trim()) return
+   623→    setInviting(true)
+   624→    try {
+   625→      const res = await fetch('/api/team-members', {
+   626→        method: 'POST',
+   627→        headers: { 'Content-Type': 'application/json' },
+   628→        body: JSON.stringify({
+   629→          email: inviteEmail.trim(),
+   630→          role: inviteRole.toLowerCase(),
+   631→          permissions: [
+   632→            inviteRole === 'Manager' ? 'read' : 'read',
+   633→            inviteRole === 'Manager' ? 'update' : 'create',
+   634→            ...(inviteRole === 'Manager' ? ['file'] : []),
+   635→          ],
+   636→          invitedBy: user?.id,
+   637→        }),
+   638→      })
+   639→      const data = await res.json()
+   640→      if (!res.ok) {
+   641→        throw new Error(data?.error ?? 'Failed to send invite')
+   642→      }
+   643→      // Optimistically add the invited member to the visible list
+   644→      const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
+   645→      const newMember: TeamMember = {
+   646→        id: data?.teamMember?.id ?? Date.now().toString(),
+   647→        name: data?.teamMember?.name ?? inviteEmail.split('@')[0],
+   648→        email: inviteEmail,
+   649→        role: inviteRole,
+   650→        status: 'Invited',
+   651→        initials,
+   652→      }
+   653→      setTeamMembers(prev => [...prev, newMember])
+   654→      toast.success(`Invitation sent to ${inviteEmail}`)
+   655→      setInviteEmail('')
+   656→      setInviteRole('Staff')
+   657→      setShowInviteDialog(false)
+   658→    } catch (err) {
+   659→      toast.error(err instanceof Error ? err.message : 'Failed to send invite')
+   660→    } finally {
+   661→      setInviting(false)
+   662→    }
+   663→  }
+   664→
+   665→  const handleRemoveMember = async () => {
+   666→    if (!memberToRemove) return
+   667→    try {
+   668→      const res = await fetch(`/api/team-members/${memberToRemove.id}?removedBy=${encodeURIComponent(user?.id ?? '')}`, {
+   669→        method: 'DELETE',
+   670→      })
+   671→      if (!res.ok) {
+   672→        const data = await res.json().catch(() => ({}))
+   673→        throw new Error(data?.error ?? 'Failed to remove member')
+   674→      }
+   675→      setTeamMembers(prev => prev.filter(m => m.id !== memberToRemove.id))
+   676→      toast.success(`${memberToRemove.name} removed from team`)
+   677→    } catch (err) {
+   678→      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
+   679→    } finally {
+   680→      setShowRemoveDialog(false)
+   681→      setMemberToRemove(null)
+   682→    }
+   683→  }
+   684→
+   685→  const handleUpdateRole = async (memberId: string, role: string) => {
+   686→    const member = teamMembers.find(m => m.id === memberId)
+   687→    if (!member) return
+   688→    try {
+   689→      const res = await fetch(`/api/team-members/${memberId}`, {
+   690→        method: 'PATCH',
+   691→        headers: { 'Content-Type': 'application/json' },
+   692→        body: JSON.stringify({
+   693→          role: role.toLowerCase(),
+   694→          updatedBy: user?.id,
+   695→        }),
+   696→      })
+   697→      if (!res.ok) {
+   698→        const data = await res.json().catch(() => ({}))
+   699→        throw new Error(data?.error ?? 'Failed to update role')
+   700→      }
+   701→      setTeamMembers(prev => prev.map(m =>
+   702→        m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
+   703→      ))
+   704→      toast.success(`${member.name}'s role updated to ${role}`)
+   705→      setEditingMemberId(null)
+   706→      setEditRole('')
+   707→    } catch (err) {
+   708→      toast.error(err instanceof Error ? err.message : 'Failed to update role')
+   709→    }
+   710→  }
+   711→
+   712→  // ── Password strength ───────────────────────────────────────────────
+   713→  const passwordStrength = getPasswordStrength(newPassword)
+   714→
+   715→  // ── Role Badge Color ────────────────────────────────────────────────
+   716→  const getRoleBadgeClass = (role: string) => {
+   717→    switch (role) {
+   718→      case 'Admin': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   719→      case 'Manager': return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800'
+   720→      case 'Staff': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   721→      case 'Viewer': return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700'
+   722→      default: return ''
+   723→    }
+   724→  }
+   725→
+   726→  const getStatusBadgeClass = (status: string) => {
+   727→    return status === 'Active'
+   728→      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   729→      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   730→  }
+   731→
+   732→  // ═══════════════════════════════════════════════════════════════════
+   733→  // RENDER SECTION CONTENT
+   734→  // ═══════════════════════════════════════════════════════════════════
+   735→  const renderSection = () => {
+   736→    switch (activeSection) {
+   737→      // ───────────────────────────────────────────────────────────────
+   738→      // SECTION 1: FIRM PROFILE
+   739→      // ───────────────────────────────────────────────────────────────
+   740→      case 'firm':
+   741→        return (
+   742→          <motion.div
+   743→            key="firm"
+   744→            initial="hidden"
+   745→            animate="visible"
+   746→            exit="exit"
+   747→            variants={contentVariants}
+   748→            className="space-y-6"
+   749→          >
+   750→            <div>
+   751→              <h2 className="text-xl font-semibold text-foreground">Firm Profile</h2>
+   752→              <p className="text-sm text-muted-foreground mt-1">Manage your CA firm details used across all GST filings</p>
+   753→            </div>
+   754→
+   755→            <Card className="border-border/50">
+   756→              <CardContent className="pt-6 space-y-6">
+   757→                {/* Logo Upload */}
+   758→                <div className="flex items-center gap-5">
+   759→                  <div className="relative group">
+   760→                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20 overflow-hidden">
+   761→                      {/* Render the uploaded logo (Firestore-backed URL or local
+   762→                          in-flight preview) when available; otherwise fall back
+   763→                          to the firm-initials mark so the logo never disappears. */}
+   764→                      {(logoPreview || organization?.logoUrl) ? (
+   765→                        <img
+   766→                          src={(logoPreview || organization!.logoUrl) as string}
+   767→                          alt={firmName || 'Firm logo'}
+   768→                          className="h-full w-full object-cover"
+   769→                        />
+   770→                      ) : (
+   771→                        <span>
+   772→                          {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+   773→                        </span>
+   774→                      )}
+   775→                    </div>
+   776→                    <button
+   777→                      type="button"
+   778→                      onClick={() => logoInputRef.current?.click()}
+   779→                      disabled={logoUploading}
+   780→                      aria-label="Upload firm logo"
+   781→                      className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+   782→                    >
+   783→                      {logoUploading ? (
+   784→                        <Loader2 className="h-5 w-5 text-white animate-spin" />
+   785→                      ) : (
+   786→                        <Camera className="h-5 w-5 text-white" />
+   787→                      )}
+   788→                    </button>
+   789→                    <input
+   790→                      ref={logoInputRef}
+   791→                      type="file"
+   792→                      accept="image/png,image/jpeg,image/webp"
+   793→                      onChange={handleLogoUpload}
+   794→                      className="hidden"
+   795→                    />
+   796→                  </div>
+   797→                  <div>
+   798→                    <p className="text-sm font-medium text-foreground">Firm Logo</p>
+   799→                    <p className="text-xs text-muted-foreground mt-0.5">
+   800→                      {logoUploading ? 'Uploading...' : 'Click the avatar to upload a logo'}
+   801→                    </p>
+   802→                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG, JPG, or WebP (max 2 MB)</p>
+   803→                    {isPreview && (
+   804→                      <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+   805→                        Preview only — logo change won&rsquo;t be saved.
+   806→                      </p>
+   807→                    )}
+   808→                  </div>
+   809→                </div>
+   810→
+   811→                <Separator />
+   812→
+   813→                {/* Firm Name & Legal Name */}
+   814→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   815→                  <div className="space-y-2">
+   816→                    <Label htmlFor="firmName" className="text-sm font-medium">Firm Name</Label>
+   817→                    <Input
+   818→                      id="firmName"
+   819→                      value={firmName}
+   820→                      onChange={(e) => setFirmName(e.target.value)}
+   821→                      placeholder="Enter firm name"
+   822→                      className="h-10"
+   823→                    />
+   824→                  </div>
+   825→                  <div className="space-y-2">
+   826→                    <Label htmlFor="legalName" className="text-sm font-medium">Legal Name</Label>
+   827→                    <Input
+   828→                      id="legalName"
+   829→                      value={legalName}
+   830→                      onChange={(e) => setLegalName(e.target.value)}
+   831→                      placeholder="Enter legal name as per registration"
+   832→                      className="h-10"
+   833→                    />
+   834→                  </div>
+   835→                </div>
+   836→
+   837→                {/* GSTIN & State */}
+   838→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   839→                  <div className="space-y-2">
+   840→                    <Label htmlFor="firmGstin" className="text-sm font-medium">Firm GSTIN</Label>
+   841→                    <div className="relative">
+   842→                      <Input
+   843→                        id="firmGstin"
+   844→                        value={firmGstin}
+   845→                        onChange={(e) => setFirmGstin(e.target.value.toUpperCase())}
+   846→                        placeholder="22AAAAA0000A1Z5"
+   847→                        className={`h-10 pr-10 ${gstinValidation === false ? 'border-red-300 focus-visible:ring-red-400' : gstinValidation === true ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+   848→                        maxLength={15}
+   849→                      />
+   850→                      {gstinValidation !== null && (
+   851→                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${gstinValidation ? 'text-emerald-500' : 'text-red-500'}`}>
+   852→                          {gstinValidation ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+   853→                        </div>
+   854→                      )}
+   855→                    </div>
+   856→                    {gstinValidation === false && (
+   857→                      <p className="text-[11px] text-red-500">Invalid GSTIN format</p>
+   858→                    )}
+   859→                    {gstinValidation === true && (
+   860→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Valid GSTIN format</p>
+   861→                    )}
+   862→                  </div>
+   863→                  <div className="space-y-2">
+   864→                    <Label className="text-sm font-medium">Registration State</Label>
+   865→                    <Select value={firmState} onValueChange={setFirmState}>
+   866→                      <SelectTrigger className="h-10">
+   867→                        <SelectValue />
+   868→                      </SelectTrigger>
+   869→                      <SelectContent>
+   870→                        {INDIAN_STATES.map((state) => (
+   871→                          <SelectItem key={state} value={state}>{state}</SelectItem>
+   872→                        ))}
+   873→                      </SelectContent>
+   874→                    </Select>
+   875→                  </div>
+   876→                </div>
+   877→
+   878→                {/* Entity Type & CA Reg Number */}
+   879→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   880→                  <div className="space-y-2">
+   881→                    <Label className="text-sm font-medium">Entity Type</Label>
+   882→                    <Select value={entityType} onValueChange={setEntityType}>
+   883→                      <SelectTrigger className="h-10">
+   884→                        <SelectValue />
+   885→                      </SelectTrigger>
+   886→                      <SelectContent>
+   887→                        {ENTITY_TYPES.map((type) => (
+   888→                          <SelectItem key={type} value={type}>{type}</SelectItem>
+   889→                        ))}
+   890→                      </SelectContent>
+   891→                    </Select>
+   892→                  </div>
+   893→                  <div className="space-y-2">
+   894→                    <Label htmlFor="caRegNumber" className="text-sm font-medium">CA Registration Number</Label>
+   895→                    <Input
+   896→                      id="caRegNumber"
+   897→                      value={caRegNumber}
+   898→                      onChange={(e) => setCaRegNumber(e.target.value)}
+   899→                      placeholder="ICAI/M/000000"
+   900→                      className="h-10"
+   901→                    />
+   902→                  </div>
+   903→                </div>
+   904→
+   905→                {/* Office Address */}
+   906→                <div className="space-y-2">
+   907→                  <Label htmlFor="officeAddress" className="text-sm font-medium">Office Address</Label>
+   908→                  <Textarea
+   909→                    id="officeAddress"
+   910→                    value={officeAddress}
+   911→                    onChange={(e) => setOfficeAddress(e.target.value)}
+   912→                    placeholder="Enter complete office address"
+   913→                    className="min-h-[80px] resize-none"
+   914→                  />
+   915→                </div>
+   916→
+   917→                {/* Save */}
+   918→                <div className="flex justify-end pt-2">
+   919→                  <SaveButton onSave={handleSaveFirmProfile} />
+   920→                </div>
+   921→              </CardContent>
+   922→            </Card>
+   923→          </motion.div>
+   924→        )
+   925→
+   926→      // ───────────────────────────────────────────────────────────────
+   927→      // SECTION 2: GST CONFIGURATION
+   928→      // ───────────────────────────────────────────────────────────────
+   929→      case 'gst':
+   930→        return (
+   931→          <motion.div
+   932→            key="gst"
+   933→            initial="hidden"
+   934→            animate="visible"
+   935→            exit="exit"
+   936→            variants={contentVariants}
+   937→            className="space-y-6"
+   938→          >
+   939→            <div>
+   940→              <h2 className="text-xl font-semibold text-foreground">GST Configuration</h2>
+   941→              <p className="text-sm text-muted-foreground mt-1">Configure default GST filing preferences and automation rules</p>
+   942→            </div>
+   943→
+   944→            <Card className="border-border/50">
+   945→              <CardContent className="pt-6 space-y-6">
+   946→                {/* Default Return Period */}
+   947→                <div className="space-y-3">
+   948→                  <div>
+   949→                    <Label className="text-sm font-medium">Default Return Period</Label>
+   950→                    <p className="text-xs text-muted-foreground mt-0.5">Set the default filing frequency for new clients</p>
+   951→                  </div>
+   952→                  <div className="flex gap-2">
+   953→                    <button
+   954→                      onClick={() => setReturnPeriod('monthly')}
+   955→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   956→                        returnPeriod === 'monthly'
+   957→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   958→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   959→                      }`}
+   960→                    >
+   961→                      Monthly
+   962→                    </button>
+   963→                    <button
+   964→                      onClick={() => setReturnPeriod('quarterly')}
+   965→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   966→                        returnPeriod === 'quarterly'
+   967→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   968→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   969→                      }`}
+   970→                    >
+   971→                      Quarterly
+   972→                    </button>
+   973→                  </div>
+   974→                </div>
+   975→
+   976→                <Separator />
+   977→
+   978→                {/* Financial Year Start */}
+   979→                <div className="space-y-3">
+   980→                  <div>
+   981→                    <Label className="text-sm font-medium">Financial Year Start</Label>
+   982→                    <p className="text-xs text-muted-foreground mt-0.5">Start month for financial year calculations</p>
+   983→                  </div>
+   984→                  <div className="flex gap-2">
+   985→                    <button
+   986→                      onClick={() => setFyStart('april')}
+   987→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   988→                        fyStart === 'april'
+   989→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   990→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   991→                      }`}
+   992→                    >
+   993→                      April
+   994→                    </button>
+   995→                    <button
+   996→                      onClick={() => setFyStart('january')}
+   997→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   998→                        fyStart === 'january'
+   999→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+  1000→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+  1001→                      }`}
+  1002→                    >
+  1003→                      January
+  1004→                    </button>
+  1005→                  </div>
+  1006→                </div>
+  1007→
+  1008→                <Separator />
+  1009→
+  1010→                {/* GSTR-1 Filing Preference */}
+  1011→                <div className="flex items-center justify-between">
+  1012→                  <div>
+  1013→                    <Label className="text-sm font-medium">GSTR-1 Filing Preference</Label>
+  1014→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-fill from sales register or manual entry</p>
+  1015→                  </div>
+  1016→                  <Select value={gstr1Pref} onValueChange={(v) => setGstr1Pref(v as 'auto' | 'manual')}>
+  1017→                    <SelectTrigger className="w-[140px] h-9">
+  1018→                      <SelectValue />
+  1019→                    </SelectTrigger>
+  1020→                    <SelectContent>
+  1021→                      <SelectItem value="auto">Auto</SelectItem>
+  1022→                      <SelectItem value="manual">Manual</SelectItem>
+  1023→                    </SelectContent>
+  1024→                  </Select>
+  1025→                </div>
+  1026→
+  1027→                {/* GSTR-3B Filing Preference */}
+  1028→                <div className="flex items-center justify-between">
+  1029→                  <div>
+  1030→                    <Label className="text-sm font-medium">GSTR-3B Filing Preference</Label>
+  1031→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-compute liability or manual entry</p>
+  1032→                  </div>
+  1033→                  <Select value={gstr3bPref} onValueChange={(v) => setGstr3bPref(v as 'auto' | 'manual')}>
+  1034→                    <SelectTrigger className="w-[140px] h-9">
+  1035→                      <SelectValue />
+  1036→                    </SelectTrigger>
+  1037→                    <SelectContent>
+  1038→                      <SelectItem value="auto">Auto</SelectItem>
+  1039→                      <SelectItem value="manual">Manual</SelectItem>
+  1040→                    </SelectContent>
+  1041→                  </Select>
+  1042→                </div>
+  1043→
+  1044→                {/* ITC Claiming Method */}
+  1045→                <div className="flex items-center justify-between">
+  1046→                  <div>
+  1047→                    <Label className="text-sm font-medium">ITC Claiming Method</Label>
+  1048→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-match with GSTR-2A or manual review</p>
+  1049→                  </div>
+  1050→                  <Select value={itcMethod} onValueChange={(v) => setItcMethod(v as 'auto-match' | 'manual-review')}>
+  1051→                    <SelectTrigger className="w-[160px] h-9">
+  1052→                      <SelectValue />
+  1053→                    </SelectTrigger>
+  1054→                    <SelectContent>
+  1055→                      <SelectItem value="auto-match">Auto-match</SelectItem>
+  1056→                      <SelectItem value="manual-review">Manual review</SelectItem>
+  1057→                    </SelectContent>
+  1058→                  </Select>
+  1059→                </div>
+  1060→
+  1061→                <Separator />
+  1062→
+  1063→                {/* Late Filing Penalty Alert */}
+  1064→                <div className="flex items-center justify-between">
+  1065→                  <div className="flex items-center gap-3">
+  1066→                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1067→                      <AlertTriangle className="h-4 w-4" />
+  1068→                    </div>
+  1069→                    <div>
+  1070→                      <Label className="text-sm font-medium">Late Filing Penalty Alert</Label>
+  1071→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified when penalty is applicable</p>
+  1072→                    </div>
+  1073→                  </div>
+  1074→                  <Switch
+  1075→                    checked={lateFilingAlert}
+  1076→                    onCheckedChange={setLateFilingAlert}
+  1077→                    className="data-[state=checked]:bg-emerald-600"
+  1078→                  />
+  1079→                </div>
+  1080→
+  1081→                {/* Due Date Reminder Days */}
+  1082→                <div className="flex items-center justify-between">
+  1083→                  <div>
+  1084→                    <Label className="text-sm font-medium">Due Date Reminder Days</Label>
+  1085→                    <p className="text-xs text-muted-foreground mt-0.5">Days before due date to send reminder</p>
+  1086→                  </div>
+  1087→                  <Input
+  1088→                    type="number"
+  1089→                    value={dueDateReminderDays}
+  1090→                    onChange={(e) => setDueDateReminderDays(e.target.value)}
+  1091→                    min={1}
+  1092→                    max={30}
+  1093→                    className="w-[80px] h-9 text-center"
+  1094→                  />
+  1095→                </div>
+  1096→
+  1097→                {/* Save */}
+  1098→                <div className="flex justify-end pt-2">
+  1099→                  <SaveButton onSave={handleSaveGstConfig} />
+  1100→                </div>
+  1101→              </CardContent>
+  1102→            </Card>
+  1103→          </motion.div>
+  1104→        )
+  1105→
+  1106→      // ───────────────────────────────────────────────────────────────
+  1107→      // SECTION 3: TEAM MEMBERS
+  1108→      // ───────────────────────────────────────────────────────────────
+  1109→      case 'team':
+  1110→        return (
+  1111→          <motion.div
+  1112→            key="team"
+  1113→            initial="hidden"
+  1114→            animate="visible"
+  1115→            exit="exit"
+  1116→            variants={contentVariants}
+  1117→            className="space-y-6"
+  1118→          >
+  1119→            <div className="flex items-center justify-between">
+  1120→              <div>
+  1121→                <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
+  1122→                <p className="text-sm text-muted-foreground mt-1">Manage your team and their access levels</p>
+  1123→              </div>
+  1124→              <Button
+  1125→                onClick={() => setShowInviteDialog(true)}
+  1126→                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+  1127→              >
+  1128→                <Users className="h-4 w-4" />
+  1129→                Invite Team Member
+  1130→              </Button>
+  1131→            </div>
+  1132→
+  1133→            <div className="space-y-3">
+  1134→              {teamMembers.map((member) => (
+  1135→                <Card key={member.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1136→                  <CardContent className="pt-0 py-4">
+  1137→                    <div className="flex items-center gap-4">
+  1138→                      <Avatar className="h-10 w-10">
+  1139→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
+  1140→                          {member.initials}
+  1141→                        </AvatarFallback>
+  1142→                      </Avatar>
+  1143→                      <div className="flex-1 min-w-0">
+  1144→                        <div className="flex items-center gap-2 flex-wrap">
+  1145→                          <p className="text-sm font-semibold text-foreground">{member.name}</p>
+  1146→                          <Badge className={`text-[11px] px-2 py-0 border ${getRoleBadgeClass(member.role)}`}>
+  1147→                            {member.role}
+  1148→                          </Badge>
+  1149→                          <Badge className={`text-[11px] px-2 py-0 border ${getStatusBadgeClass(member.status)}`}>
+  1150→                            {member.status}
+  1151→                          </Badge>
+  1152→                        </div>
+  1153→                        <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
+  1154→                      </div>
+  1155→
+  1156→                      {/* Edit Role */}
+  1157→                      {editingMemberId === member.id ? (
+  1158→                        <div className="flex items-center gap-2">
+  1159→                          <Select value={editRole} onValueChange={(v) => setEditRole(v)}>
+  1160→                            <SelectTrigger className="w-[110px] h-8 text-xs">
+  1161→                              <SelectValue />
+  1162→                            </SelectTrigger>
+  1163→                            <SelectContent>
+  1164→                              <SelectItem value="Admin">Admin</SelectItem>
+  1165→                              <SelectItem value="Manager">Manager</SelectItem>
+  1166→                              <SelectItem value="Staff">Staff</SelectItem>
+  1167→                              <SelectItem value="Viewer">Viewer</SelectItem>
+  1168→                            </SelectContent>
+  1169→                          </Select>
+  1170→                          <Button
+  1171→                            size="sm"
+  1172→                            variant="ghost"
+  1173→                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
+  1174→                            onClick={() => handleUpdateRole(member.id, editRole)}
+  1175→                          >
+  1176→                            <Check className="h-4 w-4" />
+  1177→                          </Button>
+  1178→                        </div>
+  1179→                      ) : (
+  1180→                        <div className="flex items-center gap-1">
+  1181→                          {member.role !== 'Admin' && (
+  1182→                            <>
+  1183→                              <Button
+  1184→                                size="sm"
+  1185→                                variant="ghost"
+  1186→                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+  1187→                                onClick={() => {
+  1188→                                  setEditingMemberId(member.id)
+  1189→                                  setEditRole(member.role)
+  1190→                                }}
+  1191→                              >
+  1192→                                Edit role
+  1193→                              </Button>
+  1194→                              <Button
+  1195→                                size="sm"
+  1196→                                variant="ghost"
+  1197→                                className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+  1198→                                onClick={() => {
+  1199→                                  setMemberToRemove(member)
+  1200→                                  setShowRemoveDialog(true)
+  1201→                                }}
+  1202→                              >
+  1203→                                Remove
+  1204→                              </Button>
+  1205→                            </>
+  1206→                          )}
+  1207→                        </div>
+  1208→                      )}
+  1209→                    </div>
+  1210→                  </CardContent>
+  1211→                </Card>
+  1212→              ))}
+  1213→            </div>
+  1214→
+  1215→            {teamMembers.length === 0 && (
+  1216→              <Card className="border-border/50 border-dashed">
+  1217→                <CardContent className="pt-6 text-center py-12">
+  1218→                  <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+  1219→                  <p className="text-sm text-muted-foreground">No team members yet</p>
+  1220→                  <p className="text-xs text-muted-foreground mt-1">Invite your first team member to get started</p>
+  1221→                </CardContent>
+  1222→              </Card>
+  1223→            )}
+  1224→
+  1225→            {/* Invite Dialog */}
+  1226→            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+  1227→              <DialogContent>
+  1228→                <DialogHeader>
+  1229→                  <DialogTitle className="flex items-center gap-2">
+  1230→                    <Users className="h-5 w-5 text-emerald-600" />
+  1231→                    Invite Team Member
+  1232→                  </DialogTitle>
+  1233→                </DialogHeader>
+  1234→                <div className="space-y-4 py-2">
+  1235→                  <div className="space-y-2">
+  1236→                    <Label className="text-sm font-medium">Email Address</Label>
+  1237→                    <Input
+  1238→                      value={inviteEmail}
+  1239→                      onChange={(e) => setInviteEmail(e.target.value)}
+  1240→                      placeholder="colleague@firm.com"
+  1241→                      type="email"
+  1242→                      className="h-10"
+  1243→                    />
+  1244→                  </div>
+  1245→                  <div className="space-y-2">
+  1246→                    <Label className="text-sm font-medium">Role</Label>
+  1247→                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'Manager' | 'Staff' | 'Viewer')}>
+  1248→                      <SelectTrigger className="h-10">
+  1249→                        <SelectValue />
+  1250→                      </SelectTrigger>
+  1251→                      <SelectContent>
+  1252→                        <SelectItem value="Manager">Manager</SelectItem>
+  1253→                        <SelectItem value="Staff">Staff</SelectItem>
+  1254→                        <SelectItem value="Viewer">Viewer</SelectItem>
+  1255→                      </SelectContent>
+  1256→                    </Select>
+  1257→                    <p className="text-[11px] text-muted-foreground">Admin role can only be assigned by existing admins</p>
+  1258→                  </div>
+  1259→                </div>
+  1260→                <DialogFooter>
+  1261→                  <Button
+  1262→                    variant="outline"
+  1263→                    onClick={() => setShowInviteDialog(false)}
+  1264→                    disabled={inviting}
+  1265→                  >
+  1266→                    Cancel
+  1267→                  </Button>
+  1268→                  <Button
+  1269→                    onClick={handleInviteMember}
+  1270→                    disabled={!inviteEmail.trim() || inviting}
+  1271→                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+  1272→                  >
+  1273→                    {inviting ? (
+  1274→                      <>
+  1275→                        <Loader2 className="h-4 w-4 animate-spin" />
+  1276→                        Sending...
+  1277→                      </>
+  1278→                    ) : (
+  1279→                      <>
+  1280→                        <Mail className="h-4 w-4" />
+  1281→                        Send Invite
+  1282→                      </>
+  1283→                    )}
+  1284→                  </Button>
+  1285→                </DialogFooter>
+  1286→              </DialogContent>
+  1287→            </Dialog>
+  1288→
+  1289→            {/* Remove Confirmation */}
+  1290→            <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+  1291→              <AlertDialogContent>
+  1292→                <AlertDialogHeader>
+  1293→                  <AlertDialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
+  1294→                    <AlertTriangle className="h-5 w-5" />
+  1295→                    Remove Team Member?
+  1296→                  </AlertDialogTitle>
+  1297→                  <AlertDialogDescription>
+  1298→                    {memberToRemove && (
+  1299→                      <>Are you sure you want to remove <strong>{memberToRemove.name}</strong> from your team? They will lose access to all firm data immediately.</>
+  1300→                    )}
+  1301→                  </AlertDialogDescription>
+  1302→                </AlertDialogHeader>
+  1303→                <AlertDialogFooter>
+  1304→                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+  1305→                  <AlertDialogAction
+  1306→                    onClick={handleRemoveMember}
+  1307→                    className="bg-red-600 hover:bg-red-700 text-white"
+  1308→                  >
+  1309→                    Remove Member
+  1310→                  </AlertDialogAction>
+  1311→                </AlertDialogFooter>
+  1312→              </AlertDialogContent>
+  1313→            </AlertDialog>
+  1314→          </motion.div>
+  1315→        )
+  1316→
+  1317→      // ───────────────────────────────────────────────────────────────
+  1318→      // SECTION 4: NOTIFICATIONS
+  1319→      // ───────────────────────────────────────────────────────────────
+  1320→      case 'notifications':
+  1321→        return (
+  1322→          <motion.div
+  1323→            key="notifications"
+  1324→            initial="hidden"
+  1325→            animate="visible"
+  1326→            exit="exit"
+  1327→            variants={contentVariants}
+  1328→            className="space-y-6"
+  1329→          >
+  1330→            <div>
+  1331→              <h2 className="text-xl font-semibold text-foreground">Notifications</h2>
+  1332→              <p className="text-sm text-muted-foreground mt-1">Choose what notifications you want to receive</p>
+  1333→            </div>
+  1334→
+  1335→            <Card className="border-border/50">
+  1336→              <CardContent className="pt-6 space-y-1">
+  1337→                {/* Filing Deadline Reminders */}
+  1338→                <div className="flex items-center justify-between py-4">
+  1339→                  <div className="flex items-center gap-3">
+  1340→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1341→                      <CalendarClock className="h-4.5 w-4.5" />
+  1342→                    </div>
+  1343→                    <div>
+  1344→                      <p className="text-sm font-medium text-foreground">Filing Deadline Reminders</p>
+  1345→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified before GST filing due dates</p>
+  1346→                    </div>
+  1347→                  </div>
+  1348→                  <Switch
+  1349→                    checked={filingDeadline}
+  1350→                    onCheckedChange={setFilingDeadline}
+  1351→                    className="data-[state=checked]:bg-emerald-600"
+  1352→                  />
+  1353→                </div>
+  1354→
+  1355→                <Separator />
+  1356→
+  1357→                {/* Mismatch Alerts */}
+  1358→                <div className="flex items-center justify-between py-4">
+  1359→                  <div className="flex items-center gap-3">
+  1360→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1361→                      <AlertTriangle className="h-4.5 w-4.5" />
+  1362→                    </div>
+  1363→                    <div>
+  1364→                      <p className="text-sm font-medium text-foreground">Mismatch Alerts</p>
+  1365→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when GSTR-2A vs books mismatches are detected</p>
+  1366→                    </div>
+  1367→                  </div>
+  1368→                  <Switch
+  1369→                    checked={mismatchAlerts}
+  1370→                    onCheckedChange={setMismatchAlerts}
+  1371→                    className="data-[state=checked]:bg-emerald-600"
+  1372→                  />
+  1373→                </div>
+  1374→
+  1375→                <Separator />
+  1376→
+  1377→                {/* Weekly Summary Email */}
+  1378→                <div className="flex items-center justify-between py-4">
+  1379→                  <div className="flex items-center gap-3">
+  1380→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1381→                      <Mail className="h-4.5 w-4.5" />
+  1382→                    </div>
+  1383→                    <div>
+  1384→                      <p className="text-sm font-medium text-foreground">Weekly Summary Email</p>
+  1385→                      <p className="text-xs text-muted-foreground mt-0.5">Receive a weekly digest of filing statuses and activity</p>
+  1386→                    </div>
+  1387→                  </div>
+  1388→                  <Switch
+  1389→                    checked={weeklySummary}
+  1390→                    onCheckedChange={setWeeklySummary}
+  1391→                    className="data-[state=checked]:bg-emerald-600"
+  1392→                  />
+  1393→                </div>
+  1394→
+  1395→                <Separator />
+  1396→
+  1397→                {/* Client Health Score Changes */}
+  1398→                <div className="flex items-center justify-between py-4">
+  1399→                  <div className="flex items-center gap-3">
+  1400→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shrink-0">
+  1401→                      <Activity className="h-4.5 w-4.5" />
+  1402→                    </div>
+  1403→                    <div>
+  1404→                      <p className="text-sm font-medium text-foreground">Client Health Score Changes</p>
+  1405→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when a client&apos;s health score drops significantly</p>
+  1406→                    </div>
+  1407→                  </div>
+  1408→                  <Switch
+  1409→                    checked={healthScoreChanges}
+  1410→                    onCheckedChange={setHealthScoreChanges}
+  1411→                    className="data-[state=checked]:bg-emerald-600"
+  1412→                  />
+  1413→                </div>
+  1414→
+  1415→                <Separator />
+  1416→
+  1417→                {/* Team Activity Updates */}
+  1418→                <div className="flex items-center justify-between py-4">
+  1419→                  <div className="flex items-center gap-3">
+  1420→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+  1421→                      <Users className="h-4.5 w-4.5" />
+  1422→                    </div>
+  1423→                    <div>
+  1424→                      <p className="text-sm font-medium text-foreground">Team Activity Updates</p>
+  1425→                      <p className="text-xs text-muted-foreground mt-0.5">Notifications when team members complete filings or actions</p>
+  1426→                    </div>
+  1427→                  </div>
+  1428→                  <Switch
+  1429→                    checked={teamActivity}
+  1430→                    onCheckedChange={setTeamActivity}
+  1431→                    className="data-[state=checked]:bg-emerald-600"
+  1432→                  />
+  1433→                </div>
+  1434→
+  1435→                <Separator />
+  1436→
+  1437→                {/* New Invoice Uploaded */}
+  1438→                <div className="flex items-center justify-between py-4">
+  1439→                  <div className="flex items-center gap-3">
+  1440→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1441→                      <Upload className="h-4.5 w-4.5" />
+  1442→                    </div>
+  1443→                    <div>
+  1444→                      <p className="text-sm font-medium text-foreground">New Invoice Uploaded</p>
+  1445→                      <p className="text-xs text-muted-foreground mt-0.5">Notify when clients upload new invoices or documents</p>
+  1446→                    </div>
+  1447→                  </div>
+  1448→                  <Switch
+  1449→                    checked={newInvoiceUploaded}
+  1450→                    onCheckedChange={setNewInvoiceUploaded}
+  1451→                    className="data-[state=checked]:bg-emerald-600"
+  1452→                  />
+  1453→                </div>
+  1454→
+  1455→                {/* Save */}
+  1456→                <div className="flex justify-end pt-4">
+  1457→                  <SaveButton onSave={handleSaveNotifications} />
+  1458→                </div>
+  1459→              </CardContent>
+  1460→            </Card>
+  1461→          </motion.div>
+  1462→        )
+  1463→
+  1464→      // ───────────────────────────────────────────────────────────────
+  1465→      // SECTION 5: SECURITY
+  1466→      // ───────────────────────────────────────────────────────────────
+  1467→      case 'security':
+  1468→        return (
+  1469→          <motion.div
+  1470→            key="security"
+  1471→            initial="hidden"
+  1472→            animate="visible"
+  1473→            exit="exit"
+  1474→            variants={contentVariants}
+  1475→            className="space-y-6"
+  1476→          >
+  1477→            <div>
+  1478→              <h2 className="text-xl font-semibold text-foreground">Security</h2>
+  1479→              <p className="text-sm text-muted-foreground mt-1">Manage your password, two-factor authentication, and sessions</p>
+  1480→            </div>
+  1481→
+  1482→            {/* Change Password */}
+  1483→            <Card className="border-border/50">
+  1484→              <CardHeader className="pb-0">
+  1485→                <div className="flex items-center gap-3">
+  1486→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1487→                    <Lock className="h-4.5 w-4.5" />
+  1488→                  </div>
+  1489→                  <div>
+  1490→                    <CardTitle className="text-base">Change Password</CardTitle>
+  1491→                    <CardDescription>Update your account password</CardDescription>
+  1492→                  </div>
+  1493→                </div>
+  1494→              </CardHeader>
+  1495→              <CardContent className="space-y-4 pt-4">
+  1496→                <div className="space-y-2">
+  1497→                  <Label className="text-sm font-medium">Current Password</Label>
+  1498→                  <Input
+  1499→                    type="password"
+  1500→                    value={currentPassword}
+  1501→                    onChange={(e) => setCurrentPassword(e.target.value)}
+  1502→                    placeholder="Enter current password"
+  1503→                    className="h-10"
+  1504→                  />
+  1505→                </div>
+  1506→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1507→                  <div className="space-y-2">
+  1508→                    <Label className="text-sm font-medium">New Password</Label>
+  1509→                    <Input
+  1510→                      type="password"
+  1511→                      value={newPassword}
+  1512→                      onChange={(e) => setNewPassword(e.target.value)}
+  1513→                      placeholder="Enter new password"
+  1514→                      className="h-10"
+  1515→                    />
+  1516→                    {newPassword && (
+  1517→                      <div className="space-y-1.5">
+  1518→                        <div className="flex items-center justify-between">
+  1519→                          <span className="text-[11px] text-muted-foreground">Strength</span>
+  1520→                          <span className={`text-[11px] font-medium ${
+  1521→                            passwordStrength.score <= 40 ? 'text-red-500' :
+  1522→                            passwordStrength.score <= 60 ? 'text-yellow-600' :
+  1523→                            'text-emerald-600'
+  1524→                          }`}>{passwordStrength.label}</span>
+  1525→                        </div>
+  1526→                        <Progress value={passwordStrength.score} className={`h-1.5 ${passwordStrength.color}`} />
+  1527→                      </div>
+  1528→                    )}
+  1529→                  </div>
+  1530→                  <div className="space-y-2">
+  1531→                    <Label className="text-sm font-medium">Confirm Password</Label>
+  1532→                    <Input
+  1533→                      type="password"
+  1534→                      value={confirmPassword}
+  1535→                      onChange={(e) => setConfirmPassword(e.target.value)}
+  1536→                      placeholder="Confirm new password"
+  1537→                      className={`h-10 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : confirmPassword && newPassword === confirmPassword ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+  1538→                    />
+  1539→                    {confirmPassword && newPassword !== confirmPassword && (
+  1540→                      <p className="text-[11px] text-red-500">Passwords do not match</p>
+  1541→                    )}
+  1542→                    {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+  1543→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Passwords match</p>
+  1544→                    )}
+  1545→                  </div>
+  1546→                </div>
+  1547→                {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
+  1548→                  <div className="flex justify-end">
+  1549→                    <SaveButton onSave={handleChangePassword} />
+  1550→                  </div>
+  1551→                )}
+  1552→              </CardContent>
+  1553→            </Card>
+  1554→
+  1555→            {/* Two-Factor Authentication */}
+  1556→            <Card className="border-border/50">
+  1557→              <CardHeader className="pb-0">
+  1558→                <div className="flex items-center gap-3">
+  1559→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1560→                    <Shield className="h-4.5 w-4.5" />
+  1561→                  </div>
+  1562→                  <div className="flex-1">
+  1563→                    <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
+  1564→                    <CardDescription>Add an extra layer of security to your account</CardDescription>
+  1565→                  </div>
+  1566→                  <Badge className={`text-[11px] px-2.5 py-0.5 border ${
+  1567→                    twoFactorEnabled
+  1568→                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1569→                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1570→                  }`}>
+  1571→                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+  1572→                  </Badge>
+  1573→                </div>
+  1574→              </CardHeader>
+  1575→              <CardContent className="pt-4">
+  1576→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1577→                  <div>
+  1578→                    <p className="text-sm font-medium text-foreground">
+  1579→                      {twoFactorEnabled ? 'Two-factor authentication is enabled' : 'Enable two-factor authentication'}
+  1580→                    </p>
+  1581→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1582→                      {twoFactorEnabled
+  1583→                        ? 'Your account is protected with an additional verification step'
+  1584→                        : 'Protect your account with OTP verification on login'}
+  1585→                    </p>
+  1586→                  </div>
+  1587→                  <Switch
+  1588→                    checked={twoFactorEnabled}
+  1589→                    onCheckedChange={setTwoFactorEnabled}
+  1590→                    className="data-[state=checked]:bg-emerald-600"
+  1591→                  />
+  1592→                </div>
+  1593→              </CardContent>
+  1594→            </Card>
+  1595→
+  1596→            {/* Active Sessions */}
+  1597→            <Card className="border-border/50">
+  1598→              <CardHeader className="pb-0">
+  1599→                <div className="flex items-center gap-3">
+  1600→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1601→                    <Smartphone className="h-4.5 w-4.5" />
+  1602→                  </div>
+  1603→                  <div>
+  1604→                    <CardTitle className="text-base">Active Sessions</CardTitle>
+  1605→                    <CardDescription>Devices currently signed in to your account</CardDescription>
+  1606→                  </div>
+  1607→                </div>
+  1608→              </CardHeader>
+  1609→              <CardContent className="pt-4">
+  1610→                <div className="space-y-3">
+  1611→                  {MOCK_SESSIONS.map((session) => (
+  1612→                    <div
+  1613→                      key={session.id}
+  1614→                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+  1615→                        session.current
+  1616→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+  1617→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+  1618→                      }`}
+  1619→                    >
+  1620→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+  1621→                        session.current
+  1622→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+  1623→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1624→                      }`}>
+  1625→                        {session.icon}
+  1626→                      </div>
+  1627→                      <div className="flex-1 min-w-0">
+  1628→                        <div className="flex items-center gap-2">
+  1629→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+  1630→                          {session.current && (
+  1631→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+  1632→                              Current
+  1633→                            </Badge>
+  1634→                          )}
+  1635→                        </div>
+  1636→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+  1637→                      </div>
+  1638→                      {!session.current && (
+  1639→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+  1640→                          Revoke
+  1641→                        </Button>
+  1642→                      )}
+  1643→                    </div>
+  1644→                  ))}
+  1645→                </div>
+  1646→              </CardContent>
+  1647→            </Card>
+  1648→
+  1649→            {/* Data Encryption */}
+  1650→            <Card className="border-border/50">
+  1651→              <CardContent className="pt-6">
+  1652→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1653→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1654→                    <LockKeyhole className="h-4.5 w-4.5" />
+  1655→                  </div>
+  1656→                  <div>
+  1657→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+  1658→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+  1659→                  </div>
+  1660→                </div>
+  1661→              </CardContent>
+  1662→            </Card>
+  1663→          </motion.div>
+  1664→        )
+  1665→
+  1666→      // ───────────────────────────────────────────────────────────────
+  1667→      // SECTION 6: BILLING
+  1668→      // ───────────────────────────────────────────────────────────────
+  1669→      case 'billing':
+  1670→        return (
+  1671→          <motion.div
+  1672→            key="billing"
+  1673→            initial="hidden"
+  1674→            animate="visible"
+  1675→            exit="exit"
+  1676→            variants={contentVariants}
+  1677→            className="space-y-6"
+  1678→          >
+  1679→            <div>
+  1680→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+  1681→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+  1682→            </div>
+  1683→
+  1684→            {/* Current Plan */}
+  1685→            <Card className="border-border/50 overflow-hidden">
+  1686→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+  1687→              <CardContent className="pt-6">
+  1688→                <div className="flex items-start justify-between">
+  1689→                  <div>
+  1690→                    <div className="flex items-center gap-2">
+  1691→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+  1692→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+  1693→                        Active
+  1694→                      </Badge>
+  1695→                    </div>
+  1696→                    <div className="flex items-baseline gap-1 mt-2">
+  1697→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+  1698→                      <span className="text-sm text-muted-foreground">/month</span>
+  1699→                    </div>
+  1700→                    <p className="text-xs text-muted-foreground mt-1">
+  1701→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+  1702→                    </p>
+  1703→                  </div>
+  1704→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+  1705→                    <ChevronRight className="h-4 w-4" />
+  1706→                    Upgrade Plan
+  1707→                  </Button>
+  1708→                </div>
+  1709→              </CardContent>
+  1710→            </Card>
+  1711→
+  1712→            {/* Usage This Month */}
+  1713→            <Card className="border-border/50">
+  1714→              <CardHeader className="pb-0">
+  1715→                <CardTitle className="text-base">Usage This Month</CardTitle>
+  1716→                <CardDescription>Your current usage against plan limits</CardDescription>
+  1717→              </CardHeader>
+  1718→              <CardContent className="pt-4 space-y-5">
+  1719→                {/* Clients */}
+  1720→                <div className="space-y-2">
+  1721→                  <div className="flex items-center justify-between">
+  1722→                    <div className="flex items-center gap-2">
+  1723→                      <Users className="h-4 w-4 text-muted-foreground" />
+  1724→                      <span className="text-sm font-medium text-foreground">Clients</span>
+  1725→                    </div>
+  1726→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+  1727→                  </div>
+  1728→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+  1729→                </div>
+  1730→
+  1731→                {/* Invoices Processed */}
+  1732→                <div className="space-y-2">
+  1733→                  <div className="flex items-center justify-between">
+  1734→                    <div className="flex items-center gap-2">
+  1735→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+  1736→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+  1737→                    </div>
+  1738→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+  1739→                  </div>
+  1740→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+  1741→                </div>
+  1742→
+  1743→                {/* Reconciliation Runs */}
+  1744→                <div className="space-y-2">
+  1745→                  <div className="flex items-center justify-between">
+  1746→                    <div className="flex items-center gap-2">
+  1747→                      <Activity className="h-4 w-4 text-muted-foreground" />
+  1748→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+  1749→                    </div>
+  1750→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+  1751→                  </div>
+  1752→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+  1753→                </div>
+  1754→              </CardContent>
+  1755→            </Card>
+  1756→
+  1757→            {/* Payment Method */}
+  1758→            <Card className="border-border/50">
+  1759→              <CardHeader className="pb-0">
+  1760→                <CardTitle className="text-base">Payment Method</CardTitle>
+  1761→              </CardHeader>
+  1762→              <CardContent className="pt-4">
+  1763→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1764→                  <div className="flex items-center gap-3">
+  1765→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+  1766→                      VISA
+  1767→                    </div>
+  1768→                    <div>
+  1769→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+  1770→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+  1771→                    </div>
+  1772→                  </div>
+  1773→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+  1774→                    Update Payment Method
+  1775→                  </Button>
+  1776→                </div>
+  1777→              </CardContent>
+  1778→            </Card>
+  1779→
+  1780→            {/* Billing History */}
+  1781→            <Card className="border-border/50">
+  1782→              <CardHeader className="pb-0">
+  1783→                <CardTitle className="text-base">Billing History</CardTitle>
+  1784→                <CardDescription>Download past invoices</CardDescription>
+  1785→              </CardHeader>
+  1786→              <CardContent className="pt-4">
+  1787→                <div className="space-y-2 max-h-64 overflow-y-auto">
+  1788→                  {BILLING_HISTORY.map((invoice) => (
+  1789→                    <div
+  1790→                      key={invoice.id}
+  1791→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+  1792→                    >
+  1793→                      <div className="flex items-center gap-3">
+  1794→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1795→                          <CreditCard className="h-4 w-4" />
+  1796→                        </div>
+  1797→                        <div>
+  1798→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+  1799→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+  1800→                        </div>
+  1801→                      </div>
+  1802→                      <div className="flex items-center gap-3">
+  1803→                        <Badge className={`text-[11px] px-2 py-0 border ${
+  1804→                          invoice.status === 'Paid'
+  1805→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1806→                            : invoice.status === 'Pending'
+  1807→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1808→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+  1809→                        }`}>
+  1810→                          {invoice.status}
+  1811→                        </Badge>
+  1812→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+  1813→                          <Download className="h-4 w-4" />
+  1814→                        </Button>
+  1815→                      </div>
+  1816→                    </div>
+  1817→                  ))}
+  1818→                </div>
+  1819→              </CardContent>
+  1820→            </Card>
+  1821→          </motion.div>
+  1822→        )
+  1823→
+  1824→      // ───────────────────────────────────────────────────────────────
+  1825→      // SECTION: GST API CONNECTIONS
+  1826→      // ───────────────────────────────────────────────────────────────
+  1827→      case 'api':
+  1828→        return (
+  1829→          <motion.div
+  1830→            key="api"
+  1831→            initial="hidden"
+  1832→            animate="visible"
+  1833→            exit="exit"
+  1834→            variants={contentVariants}
+  1835→            className="space-y-6"
+  1836→          >
+  1837→            <div>
+  1838→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+  1839→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+  1840→            </div>
+  1841→
+  1842→            <div className="space-y-4">
+  1843→              {MOCK_API_CONNECTIONS.map((connection) => (
+  1844→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1845→                  <CardContent className="pt-0 py-4">
+  1846→                    <div className="flex items-center gap-4">
+  1847→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+  1848→                        connection.status === 'Connected'
+  1849→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1850→                          : connection.status === 'Disconnected'
+  1851→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1852→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+  1853→                      }`}>
+  1854→                        {connection.icon}
+  1855→                      </div>
+  1856→                      <div className="flex-1 min-w-0">
+  1857→                        <div className="flex items-center gap-2 flex-wrap">
+  1858→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+  1859→                          <Badge className={`text-[10px] px-2 py-0 border ${
+  1860→                            connection.status === 'Connected'
+  1861→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1862→                              : connection.status === 'Disconnected'
+  1863→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1864→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1865→                          }`}>
+  1866→                            <span className={`size-1.5 rounded-full mr-1 ${
+  1867→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+  1868→                            }`} />
+  1869→                            {connection.status}
+  1870→                          </Badge>
+  1871→                        </div>
+  1872→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+  1873→                        {connection.lastSync && (
+  1874→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+  1875→                            Last synced: {connection.lastSync}
+  1876→                          </p>
+  1877→                        )}
+  1878→                      </div>
+  1879→                      <div className="flex items-center gap-2 shrink-0">
+  1880→                        <Button
+  1881→                          variant="outline"
+  1882→                          size="sm"
+  1883→                          className="h-8 text-xs gap-1.5"
+  1884→                          onClick={async () => {
+  1885→                            try {
+  1886→                              // Test by hitting the GSTN connect endpoint with the
+  1887→                              // firm's own GSTIN — if it returns a valid profile,
+  1888→                              // the connection is healthy.
+  1889→                              const res = await fetch('/api/connect/gstn', {
+  1890→                                method: 'POST',
+  1891→                                headers: { 'Content-Type': 'application/json' },
+  1892→                                body: JSON.stringify({
+  1893→                                  userId: user?.id ?? 'system-test',
+  1894→                                  gstin: firmGstin || '27AABCS1429B1Z5',
+  1895→                                }),
+  1896→                              })
+  1897→                              const data = await res.json()
+  1898→                              if (!res.ok) {
+  1899→                                throw new Error(data?.error ?? 'Test failed')
+  1900→                              }
+  1901→                              toast.success(`${connection.name} — connection OK`)
+  1902→                            } catch (err) {
+  1903→                              toast.error(err instanceof Error ? err.message : 'Test failed')
+  1904→                            }
+  1905→                          }}
+  1906→                        >
+  1907→                          <Activity className="h-3.5 w-3.5" />
+  1908→                          Test Connection
+  1909→                        </Button>
+  1910→                        <Button
+  1911→                          variant="ghost"
+  1912→                          size="sm"
+  1913→                          className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+  1914→                          onClick={() => toast.info(`Configure ${connection.name} — coming soon`)}
+  1915→                        >
+  1916→                          Configure
+  1917→                        </Button>
+  1918→                      </div>
+  1919→                    </div>
+  1920→                  </CardContent>
+  1921→                </Card>
+  1922→              ))}
+  1923→            </div>
+  1924→          </motion.div>
+  1925→        )
+  1926→
+  1927→      // ───────────────────────────────────────────────────────────────
+  1928→      // SECTION: AUDIT LOGS
+  1929→      // ───────────────────────────────────────────────────────────────
+  1930→      case 'audit':
+  1931→        return (
+  1932→          <motion.div
+  1933→            key="audit"
+  1934→            initial="hidden"
+  1935→            animate="visible"
+  1936→            exit="exit"
+  1937→            variants={contentVariants}
+  1938→            className="space-y-6"
+  1939→          >
+  1940→            <div className="flex items-center justify-between">
+  1941→              <div>
+  1942→                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
+  1943→                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
+  1944→              </div>
+  1945→              <Select value={auditFilter} onValueChange={setAuditFilter}>
+  1946→                <SelectTrigger className="w-[160px] h-9">
+  1947→                  <SelectValue placeholder="Filter by type" />
+  1948→                </SelectTrigger>
+  1949→                <SelectContent>
+  1950→                  <SelectItem value="all">All Actions</SelectItem>
+  1951→                  <SelectItem value="filing">Filing</SelectItem>
+  1952→                  <SelectItem value="client_update">Client Updates</SelectItem>
+  1953→                  <SelectItem value="invoice">Invoices</SelectItem>
+  1954→                  <SelectItem value="settings">Settings</SelectItem>
+  1955→                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
+  1956→                </SelectContent>
+  1957→              </Select>
+  1958→            </div>
+  1959→
+  1960→            <Card className="border-border/50">
+  1961→              <CardContent className="pt-6 p-0">
+  1962→                <div className="max-h-[520px] overflow-y-auto">
+  1963→                  <div className="divide-y divide-border/50">
+  1964→                    {MOCK_AUDIT_LOGS
+  1965→                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
+  1966→                      .map((log, idx) => (
+  1967→                      <motion.div
+  1968→                        key={log.id}
+  1969→                        initial={{ opacity: 0, y: 4 }}
+  1970→                        animate={{ opacity: 1, y: 0 }}
+  1971→                        transition={{ duration: 0.2, delay: idx * 0.03 }}
+  1972→                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
+  1973→                      >
+  1974→                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
+  1975→                          log.actionType === 'filing'
+  1976→                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1977→                            : log.actionType === 'client_update'
+  1978→                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
+  1979→                            : log.actionType === 'invoice'
+  1980→                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1981→                            : log.actionType === 'reconciliation'
+  1982→                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+  1983→                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1984→                        }`}>
+  1985→                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
+  1986→                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
+  1987→                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
+  1988→                           <Shield className="h-4 w-4" />}
+  1989→                        </div>
+  1990→                        <div className="flex-1 min-w-0">
+  1991→                          <p className="text-sm font-medium text-foreground">{log.action}</p>
+  1992→                          <div className="flex items-center gap-2 mt-0.5">
+  1993→                            <span className="text-xs text-muted-foreground">{log.entity}</span>
+  1994→                            <span className="text-muted-foreground/40">·</span>
+  1995→                            <span className="text-xs text-muted-foreground">{log.user}</span>
+  1996→                          </div>
+  1997→                        </div>
+  1998→                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+  1999→                          {log.timestamp}
+  2000→                        </span>
+
+[showing lines 1-2000 of 2116; use offset=2001 with limit to continue reading]

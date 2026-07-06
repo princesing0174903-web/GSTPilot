@@ -92,37 +92,30 @@ interface FirmMetrics {
 
 type PeriodFilter = 'current_month' | 'last_month' | 'last_quarter' | 'custom';
 
-// ─── Mock fallback data ───────────────────────────────────────────────────
-const mockMetrics: FirmMetrics = {
-  totalRevenue: 2450000,
-  mrr: 204167,
-  arr: 2450000,
-  clientsOnboarded: 8,
-  activeClients: 42,
-  inactiveClients: 7,
-  totalClients: 49,
-  teamUtilization: 78.5,
-  avgProcessingTime: 4.2,
-  avgFilingTime: 6.8,
-  gstProcessed: 18500000,
-  profitability: 32,
-  clientGrowth: 12,
-  period: '2026-02',
-  recordedAt: new Date().toISOString(),
+// ─── Empty initial state (no mock data — honest zero state) ────────────────
+const emptyMetrics: FirmMetrics = {
+  totalRevenue: 0,
+  mrr: 0,
+  arr: 0,
+  clientsOnboarded: 0,
+  activeClients: 0,
+  inactiveClients: 0,
+  totalClients: 0,
+  teamUtilization: 0,
+  avgProcessingTime: 0,
+  avgFilingTime: 0,
+  gstProcessed: 0,
+  profitability: 0,
+  clientGrowth: 0,
+  period: null,
+  recordedAt: null,
 };
 
-const mockRevenueTrend = [
-  { month: 'Sep', revenue: 1820000, mrr: 152000 },
-  { month: 'Oct', revenue: 2050000, mrr: 171000 },
-  { month: 'Nov', revenue: 1980000, mrr: 165000 },
-  { month: 'Dec', revenue: 2210000, mrr: 184000 },
-  { month: 'Jan', revenue: 2350000, mrr: 196000 },
-  { month: 'Feb', revenue: 2450000, mrr: 204000 },
-];
+const emptyRevenueTrend: Array<{ month: string; revenue: number; mrr: number }> = [];
 
-const mockClientDistribution = [
-  { name: 'Active', value: 42, color: COLORS.emerald },
-  { name: 'Inactive', value: 7, color: COLORS.red },
+const emptyClientDistribution = [
+  { name: 'Active', value: 0, color: COLORS.emerald },
+  { name: 'Inactive', value: 0, color: COLORS.red },
 ];
 
 // ─── Animated Number Hook ──────────────────────────────────────────────────
@@ -287,12 +280,12 @@ export default function FirmOperationsPage() {
   const { setCurrentView } = useApp();
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [metrics, setMetrics] = useState<FirmMetrics>(mockMetrics);
+  const [metrics, setMetrics] = useState<FirmMetrics>(emptyMetrics);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('current_month');
-  const [revenueTrend, setRevenueTrend] = useState(mockRevenueTrend);
-  const [clientDistribution, setClientDistribution] = useState(mockClientDistribution);
+  const [revenueTrend, setRevenueTrend] = useState(emptyRevenueTrend);
+  const [clientDistribution, setClientDistribution] = useState(emptyClientDistribution);
 
   // ── Data Fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -325,24 +318,17 @@ export default function FirmOperationsPage() {
           });
 
           // Build client distribution from live data
-          if ((m.activeClients ?? 0) > 0 || (m.inactiveClients ?? 0) > 0) {
-            setClientDistribution([
-              { name: 'Active', value: m.activeClients ?? 0, color: COLORS.emerald },
-              { name: 'Inactive', value: m.inactiveClients ?? 0, color: COLORS.red },
-            ]);
-          }
+          setClientDistribution([
+            { name: 'Active', value: m.activeClients ?? 0, color: COLORS.emerald },
+            { name: 'Inactive', value: m.inactiveClients ?? 0, color: COLORS.red },
+          ]);
 
-          // Generate revenue trend from current data point
-          const base = m.totalRevenue ?? 0;
-          if (base > 0) {
-            setRevenueTrend([
-              { month: 'Sep', revenue: Math.round(base * 0.74), mrr: Math.round((base * 0.74) / 12) },
-              { month: 'Oct', revenue: Math.round(base * 0.83), mrr: Math.round((base * 0.83) / 12) },
-              { month: 'Nov', revenue: Math.round(base * 0.81), mrr: Math.round((base * 0.81) / 12) },
-              { month: 'Dec', revenue: Math.round(base * 0.9), mrr: Math.round((base * 0.9) / 12) },
-              { month: 'Jan', revenue: Math.round(base * 0.96), mrr: Math.round((base * 0.96) / 12) },
-              { month: 'Feb', revenue: base, mrr: Math.round(base / 12) },
-            ]);
+          // Revenue trend — only show if API provides real historical data
+          // (no fabrication from current value)
+          if (Array.isArray(data.revenueTrend) && data.revenueTrend.length > 0) {
+            setRevenueTrend(data.revenueTrend);
+          } else {
+            setRevenueTrend([]);
           }
         }
       } else {

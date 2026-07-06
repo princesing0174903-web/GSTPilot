@@ -1,62 +1,47 @@
 // POST /api/execution-cloud/gstn
 // Execute a GSTN action (file/fetch/generate/search/verify).
+//
+// NOTE: The real GSTN provider (live filing API, GSTR fetch, GSTIN search,
+// PAN verification) is NOT configured in this environment. Previously this
+// route fabricated `ACK${Math.floor(100000 + Math.random()*899999)}` numbers
+// and returned canned "Filed GSTR-1" success messages with no actual filing
+// or DB write. That fake success was a data-integrity landmine: the UI showed
+// acknowledgements as if real filings happened. We now return an honest 501.
 
 import { NextResponse } from 'next/server';
-import { generateCFOInsights } from '@/lib/cfo/engine';
-import { buildGstnOps, uid, minsAgo } from '@/lib/execution-cloud/engine';
-import type { GstnActionRequest, GstnActionResponse, GstnOperation } from '@/lib/execution-cloud/types';
 
 export const dynamic = 'force-dynamic';
 
+const NOT_CONFIGURED = {
+  error: 'GSTN provider not configured in this environment',
+  capability: 'gstn',
+  provider: 'unset',
+} as const;
+
 export async function POST(request: Request) {
-  let body: GstnActionRequest;
+  let body: unknown;
   try {
-    body = (await request.json()) as GstnActionRequest;
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { capability, action, gstin, period } = body;
+  const { capability, action } = (body ?? {}) as { capability?: string; action?: string };
   if (!capability || !action) {
-    return NextResponse.json({ error: 'capability and action are required' }, { status: 400 });
-  }
-
-  try {
-    const cfo = await generateCFOInsights(null);
-    // Generate an acknowledgement for the action.
-    const periodLabel = period ?? new Date().toLocaleString('en-IN', { month: 'short', year: 'numeric' }).toUpperCase();
-    const actionLabels: Record<string, string> = {
-      file: `Filed ${capability.toUpperCase()} for ${periodLabel}`,
-      fetch: `Fetched ${capability.toUpperCase()} for ${periodLabel}`,
-      generate: `Generated ${capability.toUpperCase()}`,
-      search: `Searched GSTIN ${gstin ?? '—'}`,
-      verify: `Verified PAN ${gstin ?? '—'}`,
-    };
-    const operation: GstnOperation = {
-      id: uid('gstn_op'),
-      capability,
-      action: actionLabels[action] ?? `${action} ${capability}`,
-      gstin,
-      status: 'completed',
-      ack: `ACK${Math.floor(100000 + Math.random() * 899999)}`,
-      at: minsAgo(0),
-    };
-
-    const response: GstnActionResponse = {
-      ok: true,
-      capability,
-      operation,
-      message: `${actionLabels[action]} — GSTN ack ${operation.ack}.`,
-    };
-    // Reference cfo so the engine isn't tree-shaken in dev — mirrors ABOS pattern.
-    void cfo;
-    void buildGstnOps;
-    return NextResponse.json(response, { status: 200 });
-  } catch (err) {
-    console.error('[execution-cloud/gstn] POST failed:', err);
     return NextResponse.json(
-      { error: 'Failed to execute GSTN action', detail: String(err) },
-      { status: 500 },
+      { error: 'capability and action are required' },
+      { status: 400 }
     );
   }
+
+  // No provider wired — return 501 with a clear, honest message.
+  // We do NOT fabricate acknowledgement numbers.
+  return NextResponse.json(
+    {
+      ...NOT_CONFIGURED,
+      action,
+      message: `GSTN action '${action}' could not be executed — no provider is configured.`,
+    },
+    { status: 501 }
+  );
 }

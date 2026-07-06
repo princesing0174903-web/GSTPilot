@@ -3,10 +3,29 @@ import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitClientNode } from '@/lib/graph/auto-emit'
 
-// GET /api/clients — Fetch all clients with aggregated stats
-export async function GET() {
+// ─── Multi-tenant scoping ───────────────────────────────────────────────────
+// LEGACY NOTE: The Prisma `Client` model is scoped by `firmId` (nullable
+// String?). The modern org model uses `organizationId` (Firestore). There is
+// no firmId↔organizationId mapping yet — for THIS sprint, the pragmatic fix is
+// to accept either `?organizationId=` or `?firmId=` as a query param and treat
+// the value as the tenant id (the orgId IS the firmId in this app's current
+// state). When neither is provided, we return an empty list instead of
+// leaking ALL clients platform-wide.
+
+// GET /api/clients — Fetch all clients with aggregated stats (tenant-scoped)
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    // Accept either organizationId (modern) or firmId (legacy) — same tenant id.
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
+
+    // Defensive empty-state: no tenant scope → no data.
+    if (!tenantId) {
+      return NextResponse.json({ clients: [] })
+    }
+
     const clients = await db.client.findMany({
+      where: { firmId: tenantId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -102,7 +121,12 @@ export async function POST(request: Request) {
       contactPhone,
       entityType,
       returnPeriod,
+      // Tenant scope — accept either organizationId (modern) or firmId (legacy).
+      // They are the same tenant identifier in this app's current state.
+      organizationId,
+      firmId,
     } = body
+    const tenantId = organizationId || firmId
 
     if (!gstin || !tradeName) {
       return NextResponse.json(
@@ -110,8 +134,14 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'organizationId (or firmId) is required' },
+        { status: 400 }
+      )
+    }
 
-    // Check for duplicate GSTIN
+    // Check for duplicate GSTIN within the same tenant
     const existing = await db.client.findUnique({ where: { gstin } })
     if (existing) {
       return NextResponse.json(
@@ -132,6 +162,8 @@ export async function POST(request: Request) {
         contactPhone: contactPhone ?? null,
         entityType: entityType ?? 'regular',
         returnPeriod: returnPeriod ?? null,
+        // Persist the tenant scope so subsequent reads can filter by it.
+        firmId: tenantId,
       },
     })
 

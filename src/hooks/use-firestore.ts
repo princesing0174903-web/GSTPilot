@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect -- Firestore onSnapshot hooks legitimately clear state synchronously on early-exit paths (no docId, preview mode, no user). The cascading-render concern doesn't apply here because these are deterministic single-pass resets, not derived-state updates. */
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — Real-time Firestore Hooks
 // React hooks with onSnapshot listeners for live data + optimistic UI.
@@ -170,7 +171,6 @@ function useFirestoreCollection<T>(
     return () => {
       if (unsub) unsub();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, organizationId, isPreviewMode, orgLoading, ...deps]);
 
   // When user is null, return empty data (not loading)

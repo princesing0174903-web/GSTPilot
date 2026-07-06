@@ -3,12 +3,19 @@ import { NextResponse } from 'next/server'
 // ─── POST handler ───────────────────────────────────────────────────────────
 //
 // SECURITY: This route wipes the entire Prisma database and reseeds it. It MUST
-// never be callable in production. We gate it behind an explicit env var so
-// only a developer with shell access to the server can trigger it.
+// never be callable in production. We gate it behind THREE independent guards:
 //
-// In production (NODE_ENV=production), this route is permanently disabled.
-export async function POST() {
-  // Hard block in production — no exceptions.
+//   1. Environment: process.env.NODE_ENV !== 'production' (hard block in prod).
+//   2. Env var:     process.env.GSTPILOT_ALLOW_SEED === 'true' (must be set
+//                   explicitly by a developer with shell access).
+//   3. Confirm:     ?confirm=WIPE_ALL_DATA query param (defence-in-depth against
+//                   accidental triggers from curl/scripts without the explicit
+//                   confirmation token — also blocks naive POSTs with no body
+//                   that previously could wipe everything).
+//
+// All three must pass before any DB row is deleted.
+export async function POST(request: Request) {
+  // ── Guard 1: never available in production ──
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json(
       { success: false, message: 'Seed route is disabled in production.' },
@@ -16,14 +23,26 @@ export async function POST() {
     )
   }
 
-  // In development, require an explicit env var to be set. This prevents
-  // accidental triggers from the browser or automated tools.
+  // ── Guard 2: explicit env var must be set ──
   if (process.env.GSTPILOT_ALLOW_SEED !== 'true') {
     return NextResponse.json(
       {
         success: false,
         message:
           'Seed route is disabled. Set GSTPILOT_ALLOW_SEED=true in your .env to enable it during development.',
+      },
+      { status: 403 }
+    )
+  }
+
+  // ── Guard 3: explicit ?confirm=WIPE_ALL_DATA query param ──
+  const { searchParams } = new URL(request.url)
+  if (searchParams.get('confirm') !== 'WIPE_ALL_DATA') {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          'Confirmation required. Re-issue the request with ?confirm=WIPE_ALL_DATA to acknowledge the wipe-and-reseed operation.',
       },
       { status: 403 }
     )

@@ -110,6 +110,18 @@ const monthlyRevenue = [
 
 function computeScores(invoices: typeof demoInvoices) {
   const total = invoices.length;
+  if (total === 0) {
+    return {
+      cashFlow: 0,
+      credit: 0,
+      collection: 0,
+      health: 0,
+      eligibleCount: 0,
+      eligibleAmount: 0,
+      totalAmount: 0,
+      overdueAmount: 0,
+    };
+  }
   const unpaid = invoices.filter(i => i.status === 'unpaid').length;
   const overdue = invoices.filter(i => i.status === 'overdue').length;
   const totalAmount = invoices.reduce((s, i) => s + i.amount, 0);
@@ -415,7 +427,7 @@ function EMIChart({ principal, rate, tenure }: { principal: number; rate: number
 // TAB 1: BUSINESS HEALTH DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function BusinessHealthTab({ scores }: { scores: ReturnType<typeof computeScores> }) {
+function BusinessHealthTab({ scores, invoices }: { scores: ReturnType<typeof computeScores>; invoices: typeof demoInvoices }) {
   const healthStatus = scores.health >= 70 ? 'Healthy' : scores.health >= 40 ? 'Moderate' : 'Concerning';
   const healthColor = scores.health >= 70 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : scores.health >= 40 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200';
 
@@ -557,7 +569,7 @@ function BusinessHealthTab({ scores }: { scores: ReturnType<typeof computeScores
           { label: 'Total Invoice Value', value: formatINR(scores.totalAmount), icon: IndianRupee, color: 'emerald' },
           { label: 'Eligible for Financing', value: formatINR(scores.eligibleAmount), icon: Sparkles, color: 'emerald' },
           { label: 'Overdue Amount', value: formatINR(scores.overdueAmount), icon: AlertTriangle, color: 'amber' },
-          { label: 'Eligible Invoices', value: `${scores.eligibleCount} of ${demoInvoices.length}`, icon: FileText, color: 'emerald' },
+          { label: 'Eligible Invoices', value: `${scores.eligibleCount} of ${invoices.length}`, icon: FileText, color: 'emerald' },
         ].map((stat, idx) => (
           <motion.div
             key={stat.label}
@@ -587,7 +599,7 @@ function BusinessHealthTab({ scores }: { scores: ReturnType<typeof computeScores
 // TAB 2: INVOICE FINANCING
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function InvoiceFinancingTab({ scores }: { scores: ReturnType<typeof computeScores> }) {
+function InvoiceFinancingTab({ scores, invoices }: { scores: ReturnType<typeof computeScores>; invoices: typeof demoInvoices }) {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [showCalculator, setShowCalculator] = useState(false);
 
@@ -601,16 +613,16 @@ function InvoiceFinancingTab({ scores }: { scores: ReturnType<typeof computeScor
   }, []);
 
   const selectedData = useMemo(() => {
-    const invoices = demoInvoices.filter(i => selectedInvoices.has(i.id) && i.eligible);
-    const totalValue = invoices.reduce((s, i) => s + i.amount, 0);
-    const avgAdvancePct = invoices.length > 0
-      ? invoices.reduce((s, i) => s + i.advancePct, 0) / invoices.length
+    const selected = invoices.filter(i => selectedInvoices.has(i.id) && i.eligible);
+    const totalValue = selected.reduce((s, i) => s + i.amount, 0);
+    const avgAdvancePct = selected.length > 0
+      ? selected.reduce((s, i) => s + i.advancePct, 0) / selected.length
       : 0;
     const advanceAmount = Math.round(totalValue * avgAdvancePct / 100);
     const fee = Math.round(advanceAmount * 0.03); // 3% fee
     const netDisbursement = advanceAmount - fee;
-    return { invoices, totalValue, avgAdvancePct, advanceAmount, fee, netDisbursement };
-  }, [selectedInvoices]);
+    return { invoices: selected, totalValue, avgAdvancePct, advanceAmount, fee, netDisbursement };
+  }, [selectedInvoices, invoices]);
 
   return (
     <div className="space-y-6">
@@ -656,7 +668,13 @@ function InvoiceFinancingTab({ scores }: { scores: ReturnType<typeof computeScor
         <CardContent className="px-4 pb-4">
           <ScrollArea className="max-h-80">
             <div className="space-y-2">
-              {demoInvoices.map((inv, idx) => (
+              {invoices.length === 0 ? (
+                <div className="text-center py-12 text-sm text-slate-500">
+                  <FileText className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                  No invoices available. Create invoices to see financing options here.
+                </div>
+              ) : (
+                invoices.map((inv, idx) => (
                 <motion.div
                   key={inv.id}
                   initial={{ opacity: 0, x: -10 }}
@@ -709,7 +727,8 @@ function InvoiceFinancingTab({ scores }: { scores: ReturnType<typeof computeScor
                     </p>
                   </div>
                 </motion.div>
-              ))}
+                ))
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -1414,11 +1433,35 @@ export default function WorkingCapitalPage() {
   const { data: invoices } = useFireInvoices();
   const { data: returns } = useFireReturns();
 
-  // Compute scores from demo data (would use live data in production)
-  const scores = useMemo(() => computeScores(demoInvoices), []);
+  // Acknowledge live data subscriptions (clients/returns currently used for
+  // context; invoices drives the score computation below).
+  void clients;
+  void returns;
 
-  // In production, scores would be computed from live Firestore data:
-  // const scores = useMemo(() => computeScoresFromLive(invoices, clients, returns), [invoices, clients, returns]);
+  // Map live Firestore invoices to the shape computeScores expects. When no
+  // live invoices exist, pass an empty array so computeScores returns zeros
+  // (no fabricated demo data).
+  const liveInvoices = useMemo(() => {
+    if (!Array.isArray(invoices) || invoices.length === 0) return [];
+    return invoices.map((inv: any) => {
+      const createdMs = inv.createdAt?.toMillis?.() ?? inv.createdAt ?? Date.now();
+      const ageDays = Math.max(0, Math.round((Date.now() - new Date(createdMs).getTime()) / (1000 * 60 * 60 * 24)));
+      const isOverdue = inv.status === 'overdue' || (inv.status === 'unpaid' && ageDays > 30);
+      return {
+        id: inv.id ?? `inv-${Math.random().toString(36).slice(2, 8)}`,
+        number: inv.invoiceNumber ?? inv.number ?? inv.id ?? '—',
+        client: inv.clientName ?? inv.client?.name ?? 'Unknown',
+        amount: Number(inv.amount ?? inv.total ?? 0),
+        age: ageDays,
+        status: isOverdue ? 'overdue' as const : 'unpaid' as const,
+        eligible: !isOverdue && ageDays <= 90,
+        advancePct: isOverdue ? 0 : Math.max(70, 90 - Math.floor(ageDays / 10) * 5),
+      };
+    });
+  }, [invoices]);
+
+  // Compute scores from live data (empty array → zero scores, no fabrication).
+  const scores = useMemo(() => computeScores(liveInvoices), [liveInvoices]);
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
@@ -1486,10 +1529,10 @@ export default function WorkingCapitalPage() {
             className="mt-4"
           >
             <TabsContent value="health" className="mt-0">
-              <BusinessHealthTab scores={scores} />
+              <BusinessHealthTab scores={scores} invoices={liveInvoices} />
             </TabsContent>
             <TabsContent value="financing" className="mt-0">
-              <InvoiceFinancingTab scores={scores} />
+              <InvoiceFinancingTab scores={scores} invoices={liveInvoices} />
             </TabsContent>
             <TabsContent value="loans" className="mt-0">
               <WorkingCapitalLoansTab />

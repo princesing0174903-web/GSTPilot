@@ -1,0 +1,767 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Separator } from '@/components/ui/separator';
+    10→import { Skeleton } from '@/components/ui/skeleton';
+    11→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    12→import {
+    13→  Dialog,
+    14→  DialogContent,
+    15→  DialogHeader,
+    16→  DialogTitle,
+    17→  DialogFooter,
+    18→} from '@/components/ui/dialog';
+    19→import {
+    20→  Code,
+    21→  Key,
+    22→  Webhook,
+    23→  Activity,
+    24→  Clock,
+    25→  CheckCircle2,
+    26→  XCircle,
+    27→  Copy,
+    28→  Eye,
+    29→  EyeOff,
+    30→  Plus,
+    31→  RefreshCw,
+    32→  Trash2,
+    33→  ArrowRight,
+    34→  Globe,
+    35→  Zap,
+    36→  FileText,
+    37→  Download,
+    38→  Terminal,
+    39→  AlertTriangle,
+    40→  BarChart3,
+    41→} from 'lucide-react';
+    42→import { motion, AnimatePresence } from 'framer-motion';
+    43→import { format, differenceInMinutes } from 'date-fns';
+    44→
+    45→// ─── Types ─────────────────────────────────────────────────────────────────────
+    46→
+    47→type KeyPermission = 'read' | 'write' | 'admin';
+    48→type KeyStatus = 'active' | 'revoked' | 'expired';
+    49→
+    50→interface APIKey {
+    51→  id: string;
+    52→  name: string;
+    53→  key: string;
+    54→  permission: KeyPermission;
+    55→  status: KeyStatus;
+    56→  createdAt: string;
+    57→  lastUsed: string;
+    58→  requestCount: number;
+    59→}
+    60→
+    61→interface WebhookEndpoint {
+    62→  id: string;
+    63→  url: string;
+    64→  events: string[];
+    65→  secret: string;
+    66→  status: 'active' | 'paused' | 'failed';
+    67→  createdAt: string;
+    68→  lastDelivery: string;
+    69→  successRate: number;
+    70→  deliveries: WebhookDelivery[];
+    71→}
+    72→
+    73→interface WebhookDelivery {
+    74→  id: string;
+    75→  event: string;
+    76→  timestamp: string;
+    77→  statusCode: number;
+    78→  duration: number;
+    79→  success: boolean;
+    80→}
+    81→
+    82→interface RequestLog {
+    83→  id: string;
+    84→  method: string;
+    85→  path: string;
+    86→  status: number;
+    87→  duration: number;
+    88→  timestamp: string;
+    89→  apiKey: string;
+    90→  ip: string;
+    91→}
+    92→
+    93→// ─── Mock Data ─────────────────────────────────────────────────────────────────
+    94→
+    95→const EVENT_TYPES = [
+    96→  'client.created', 'client.updated', 'client.deleted',
+    97→  'invoice.processed', 'invoice.approved',
+    98→  'return.filed', 'return.reviewed',
+    99→  'task.completed', 'task.assigned',
+   100→  'document.uploaded', 'document.signed',
+   101→] as const;
+   102→
+   103→function generateMockAPIKeys(): APIKey[] {
+   104→  return [
+   105→    { id: 'key-1', name: 'Production API Key', key: 'gpk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6', permission: 'admin', status: 'active', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 0.5 * 3600000).toISOString(), requestCount: 15420 },
+   106→    { id: 'key-2', name: 'Read-Only Integration', key: 'gpk_read_q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2', permission: 'read', status: 'active', createdAt: new Date(Date.now() - 15 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 2 * 3600000).toISOString(), requestCount: 3240 },
+   107→    { id: 'key-3', name: 'Staging Environment', key: 'gpk_test_g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8', permission: 'write', status: 'revoked', createdAt: new Date(Date.now() - 60 * 86400000).toISOString(), lastUsed: new Date(Date.now() - 10 * 86400000).toISOString(), requestCount: 890 },
+   108→  ];
+   109→}
+   110→
+   111→function generateMockWebhooks(): WebhookEndpoint[] {
+   112→  return [
+   113→    {
+   114→      id: 'wh-1',
+   115→      url: 'https://myapp.example.com/webhooks/gstpilot',
+   116→      events: ['client.created', 'return.filed', 'invoice.processed'],
+   117→      secret: 'whsec_abc123def456ghi789',
+   118→      status: 'active',
+   119→      createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
+   120→      lastDelivery: new Date(Date.now() - 0.2 * 3600000).toISOString(),
+   121→      successRate: 98.5,
+   122→      deliveries: [
+   123→        { id: 'd1', event: 'return.filed', timestamp: new Date(Date.now() - 0.2 * 3600000).toISOString(), statusCode: 200, duration: 245, success: true },
+   124→        { id: 'd2', event: 'invoice.processed', timestamp: new Date(Date.now() - 1 * 3600000).toISOString(), statusCode: 200, duration: 189, success: true },
+   125→        { id: 'd3', event: 'client.created', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), statusCode: 500, duration: 5023, success: false },
+   126→        { id: 'd4', event: 'return.filed', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), statusCode: 200, duration: 312, success: true },
+   127→      ],
+   128→    },
+   129→    {
+   130→      id: 'wh-2',
+   131→      url: 'https://slack.example.com/hooks/gstpilot-notifs',
+   132→      events: ['task.completed', 'document.signed'],
+   133→      secret: 'whsec_xyz789abc012def345',
+   134→      status: 'active',
+   135→      createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+   136→      lastDelivery: new Date(Date.now() - 1.5 * 3600000).toISOString(),
+   137→      successRate: 100,
+   138→      deliveries: [
+   139→        { id: 'd5', event: 'task.completed', timestamp: new Date(Date.now() - 1.5 * 3600000).toISOString(), statusCode: 200, duration: 156, success: true },
+   140→        { id: 'd6', event: 'document.signed', timestamp: new Date(Date.now() - 4 * 3600000).toISOString(), statusCode: 200, duration: 201, success: true },
+   141→      ],
+   142→    },
+   143→  ];
+   144→}
+   145→
+   146→function generateMockRequestLogs(): RequestLog[] {
+   147→  const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+   148→  const paths = ['/api/v1/clients', '/api/v1/invoices', '/api/v1/returns', '/api/v1/reconciliation', '/api/v1/documents'];
+   149→  const statuses = [200, 200, 200, 200, 201, 400, 401, 404, 500];
+   150→  const logs: RequestLog[] = [];
+   151→  for (let i = 0; i < 25; i++) {
+   152→    const minsAgo = i * 5 + Math.floor(Math.random() * 5);
+   153→    logs.push({
+   154→      id: `req-${String(i + 1).padStart(4, '0')}`,
+   155→      method: methods[Math.floor(Math.random() * methods.length)],
+   156→      path: paths[Math.floor(Math.random() * paths.length)],
+   157→      status: statuses[Math.floor(Math.random() * statuses.length)],
+   158→      duration: Math.floor(Math.random() * 500) + 50,
+   159→      timestamp: new Date(Date.now() - minsAgo * 60000).toISOString(),
+   160→      apiKey: 'gpk_live_...o5p6',
+   161→      ip: `192.168.1.${Math.floor(Math.random() * 255)}`,
+   162→    });
+   163→  }
+   164→  return logs;
+   165→}
+   166→
+   167→const PERMISSION_CONFIG: Record<KeyPermission, { label: string; color: string }> = {
+   168→  read: { label: 'Read', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+   169→  write: { label: 'Write', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+   170→  admin: { label: 'Admin', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+   171→};
+   172→
+   173→const KEY_STATUS_CONFIG: Record<KeyStatus, { label: string; color: string }> = {
+   174→  active: { label: 'Active', color: 'text-emerald-700 bg-emerald-50' },
+   175→  revoked: { label: 'Revoked', color: 'text-red-700 bg-red-50' },
+   176→  expired: { label: 'Expired', color: 'text-slate-500 bg-slate-50' },
+   177→};
+   178→
+   179→// ─── Main Component ────────────────────────────────────────────────────────────
+   180→
+   181→export default function APIPlatformPage() {
+   182→  const [apiKeys] = useState<APIKey[]>(() => generateMockAPIKeys());
+   183→  const [webhooks] = useState<WebhookEndpoint[]>(() => generateMockWebhooks());
+   184→  const [requestLogs] = useState<RequestLog[]>(() => generateMockRequestLogs());
+   185→  const [loading, setLoading] = useState(true);
+   186→  const [activeTab, setActiveTab] = useState('keys');
+   187→  const [showKeyMap, setShowKeyMap] = useState<Record<string, boolean>>({});
+   188→  const [createKeyOpen, setCreateKeyOpen] = useState(false);
+   189→  const [newKeyName, setNewKeyName] = useState('');
+   190→  const [newKeyPerm, setNewKeyPerm] = useState<KeyPermission>('read');
+   191→  const [webhookDetailOpen, setWebhookDetailOpen] = useState(false);
+   192→  const [selectedWebhook, setSelectedWebhook] = useState<WebhookEndpoint | null>(null);
+   193→  const [createWebhookOpen, setCreateWebhookOpen] = useState(false);
+   194→  const [newWebhookUrl, setNewWebhookUrl] = useState('');
+   195→  const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>(['client.created']);
+   196→
+   197→  React.useEffect(() => {
+   198→    const t = setTimeout(() => setLoading(false), 500);
+   199→    return () => clearTimeout(t);
+   200→  }, []);
+   201→
+   202→  const toggleKeyVisibility = (keyId: string) => {
+   203→    setShowKeyMap((prev) => ({ ...prev, [keyId]: !prev[keyId] }));
+   204→  };
+   205→
+   206→  const copyToClipboard = (text: string) => {
+   207→    navigator.clipboard.writeText(text).catch(() => {});
+   208→  };
+   209→
+   210→  // Stats
+   211→  const requestsToday = requestLogs.length;
+   212→  const errorRate = Math.round((requestLogs.filter((r) => r.status >= 400).length / requestLogs.length) * 100);
+   213→  const avgDuration = Math.round(requestLogs.reduce((sum, r) => sum + r.duration, 0) / requestLogs.length);
+   214→
+   215→  const handleCreateKey = () => {
+   216→    setCreateKeyOpen(false);
+   217→    setNewKeyName('');
+   218→    setNewKeyPerm('read');
+   219→  };
+   220→
+   221→  const handleCreateWebhook = () => {
+   222→    setCreateWebhookOpen(false);
+   223→    setNewWebhookUrl('');
+   224→    setNewWebhookEvents(['client.created']);
+   225→  };
+   226→
+   227→  const handleViewWebhookDetail = (wh: WebhookEndpoint) => {
+   228→    setSelectedWebhook(wh);
+   229→    setWebhookDetailOpen(true);
+   230→  };
+   231→
+   232→  if (loading) {
+   233→    return (
+   234→      <div className="space-y-6 p-6">
+   235→        <Skeleton className="h-10 w-64" />
+   236→        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   237→          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+   238→        </div>
+   239→        <Skeleton className="h-96 rounded-xl" />
+   240→      </div>
+   241→    );
+   242→  }
+   243→
+   244→  return (
+   245→    <div className="space-y-6 p-4 md:p-6">
+   246→      {/* Header */}
+   247→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   248→        <div className="flex items-center gap-3">
+   249→          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
+   250→            <Code className="size-5 text-emerald-700" />
+   251→          </div>
+   252→          <div>
+   253→            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">API Platform</h1>
+   254→            <p className="text-sm text-muted-foreground">API keys, webhooks, and developer tools</p>
+   255→          </div>
+   256→        </div>
+   257→        <Badge variant="outline" className="text-xs self-start">
+   258→          <div className="size-1.5 rounded-full bg-emerald-500 mr-1.5" />
+   259→          API v2.0
+   260→        </Badge>
+   261→      </div>
+   262→
+   263→      {/* Stats */}
+   264→      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   265→        <Card className="transition-shadow hover:shadow-md">
+   266→          <CardContent className="pt-6">
+   267→            <div className="flex items-center justify-between">
+   268→              <div>
+   269→                <p className="text-sm text-muted-foreground">Requests Today</p>
+   270→                <p className="text-2xl font-bold">{requestsToday}</p>
+   271→              </div>
+   272→              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
+   273→                <Activity className="size-5 text-emerald-600" />
+   274→              </div>
+   275→            </div>
+   276→          </CardContent>
+   277→        </Card>
+   278→        <Card className="transition-shadow hover:shadow-md">
+   279→          <CardContent className="pt-6">
+   280→            <div className="flex items-center justify-between">
+   281→              <div>
+   282→                <p className="text-sm text-muted-foreground">Error Rate</p>
+   283→                <p className="text-2xl font-bold">{errorRate}%</p>
+   284→              </div>
+   285→              <div className="flex size-10 items-center justify-center rounded-lg bg-red-50">
+   286→                <AlertTriangle className="size-5 text-red-600" />
+   287→              </div>
+   288→            </div>
+   289→          </CardContent>
+   290→        </Card>
+   291→        <Card className="transition-shadow hover:shadow-md">
+   292→          <CardContent className="pt-6">
+   293→            <div className="flex items-center justify-between">
+   294→              <div>
+   295→                <p className="text-sm text-muted-foreground">Avg Response</p>
+   296→                <p className="text-2xl font-bold">{avgDuration}ms</p>
+   297→              </div>
+   298→              <div className="flex size-10 items-center justify-center rounded-lg bg-purple-50">
+   299→                <Zap className="size-5 text-purple-600" />
+   300→              </div>
+   301→            </div>
+   302→          </CardContent>
+   303→        </Card>
+   304→        <Card className="transition-shadow hover:shadow-md">
+   305→          <CardContent className="pt-6">
+   306→            <div className="flex items-center justify-between">
+   307→              <div>
+   308→                <p className="text-sm text-muted-foreground">Rate Limit</p>
+   309→                <p className="text-2xl font-bold">1K/hr</p>
+   310→              </div>
+   311→              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
+   312→                <BarChart3 className="size-5 text-amber-600" />
+   313→              </div>
+   314→            </div>
+   315→          </CardContent>
+   316→        </Card>
+   317→      </div>
+   318→
+   319→      {/* Main Tabs */}
+   320→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   321→        <TabsList className="bg-muted/50">
+   322→          <TabsTrigger value="keys" className="gap-2">
+   323→            <Key className="size-4" />
+   324→            API Keys
+   325→          </TabsTrigger>
+   326→          <TabsTrigger value="webhooks" className="gap-2">
+   327→            <Webhook className="size-4" />
+   328→            Webhooks
+   329→          </TabsTrigger>
+   330→          <TabsTrigger value="logs" className="gap-2">
+   331→            <Terminal className="size-4" />
+   332→            Request Logs
+   333→          </TabsTrigger>
+   334→          <TabsTrigger value="docs" className="gap-2">
+   335→            <FileText className="size-4" />
+   336→            SDK & Docs
+   337→          </TabsTrigger>
+   338→        </TabsList>
+   339→
+   340→        {/* ─── API Keys Tab ──────────────────────────────────────────────── */}
+   341→        <TabsContent value="keys" className="space-y-4 mt-4">
+   342→          <div className="flex justify-end">
+   343→            <Button onClick={() => setCreateKeyOpen(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+   344→              <Plus className="size-4" />
+   345→              Generate New Key
+   346→            </Button>
+   347→          </div>
+   348→
+   349→          <div className="space-y-3">
+   350→            {apiKeys.map((apiKey) => {
+   351→              const permCfg = PERMISSION_CONFIG[apiKey.permission];
+   352→              const statusCfg = KEY_STATUS_CONFIG[apiKey.status];
+   353→              const isRevealed = showKeyMap[apiKey.id];
+   354→              const maskedKey = apiKey.key.slice(0, 12) + '...' + apiKey.key.slice(-4);
+   355→
+   356→              return (
+   357→                <Card key={apiKey.id} className="hover:shadow-md transition-shadow">
+   358→                  <CardContent className="p-4">
+   359→                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+   360→                      <div className="flex-1 min-w-0">
+   361→                        <div className="flex items-center gap-2 flex-wrap">
+   362→                          <h3 className="font-semibold text-sm">{apiKey.name}</h3>
+   363→                          <Badge variant="outline" className={`text-xs ${permCfg.color}`}>{permCfg.label}</Badge>
+   364→                          <Badge className={`text-xs ${statusCfg.color}`}>{statusCfg.label}</Badge>
+   365→                        </div>
+   366→                        <div className="flex items-center gap-2 mt-2">
+   367→                          <code className="text-xs font-mono bg-muted/50 px-2 py-1 rounded flex-1 truncate">
+   368→                            {isRevealed ? apiKey.key : maskedKey}
+   369→                          </code>
+   370→                          <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => toggleKeyVisibility(apiKey.id)}>
+   371→                            {isRevealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+   372→                          </Button>
+   373→                          <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => copyToClipboard(apiKey.key)}>
+   374→                            <Copy className="size-3.5" />
+   375→                          </Button>
+   376→                        </div>
+   377→                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+   378→                          <span>Created {format(new Date(apiKey.createdAt), 'MMM d, yyyy')}</span>
+   379→                          <span>Last used {differenceInMinutes(new Date(), new Date(apiKey.lastUsed))}m ago</span>
+   380→                          <span>{apiKey.requestCount.toLocaleString()} requests</span>
+   381→                        </div>
+   382→                      </div>
+   383→                      <div className="flex items-center gap-2 shrink-0">
+   384→                        <Button variant="outline" size="sm" className="gap-1">
+   385→                          <RefreshCw className="size-3.5" />
+   386→                          Rotate
+   387→                        </Button>
+   388→                        {apiKey.status === 'active' && (
+   389→                          <Button variant="outline" size="sm" className="gap-1 text-red-600 border-red-200 hover:bg-red-50">
+   390→                            <Trash2 className="size-3.5" />
+   391→                            Revoke
+   392→                          </Button>
+   393→                        )}
+   394→                      </div>
+   395→                    </div>
+   396→                  </CardContent>
+   397→                </Card>
+   398→              );
+   399→            })}
+   400→          </div>
+   401→        </TabsContent>
+   402→
+   403→        {/* ─── Webhooks Tab ───────────────────────────────────────────────── */}
+   404→        <TabsContent value="webhooks" className="space-y-4 mt-4">
+   405→          <div className="flex justify-end">
+   406→            <Button onClick={() => setCreateWebhookOpen(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+   407→              <Plus className="size-4" />
+   408→              New Webhook
+   409→            </Button>
+   410→          </div>
+   411→
+   412→          <div className="space-y-3">
+   413→            {webhooks.map((wh) => (
+   414→              <Card key={wh.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleViewWebhookDetail(wh)}>
+   415→                <CardContent className="p-4">
+   416→                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+   417→                    <div className="flex-1 min-w-0">
+   418→                      <div className="flex items-center gap-2">
+   419→                        <h3 className="font-semibold text-sm font-mono truncate">{wh.url}</h3>
+   420→                        <Badge variant="outline" className={wh.status === 'active' ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : wh.status === 'failed' ? 'text-red-600 border-red-200 bg-red-50' : 'text-amber-600 border-amber-200 bg-amber-50'}>
+   421→                          {wh.status}
+   422→                        </Badge>
+   423→                      </div>
+   424→                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+   425→                        {wh.events.map((e) => (
+   426→                          <Badge key={e} variant="outline" className="text-[10px] text-slate-600 border-slate-200">
+   427→                            {e}
+   428→                          </Badge>
+   429→                        ))}
+   430→                      </div>
+   431→                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+   432→                        <span>Success rate: {wh.successRate}%</span>
+   433→                        <span>Last delivery: {differenceInMinutes(new Date(), new Date(wh.lastDelivery))}m ago</span>
+   434→                      </div>
+   435→                    </div>
+   436→                    <ArrowRight className="size-4 text-muted-foreground" />
+   437→                  </div>
+   438→                </CardContent>
+   439→              </Card>
+   440→            ))}
+   441→          </div>
+   442→        </TabsContent>
+   443→
+   444→        {/* ─── Request Logs Tab ───────────────────────────────────────────── */}
+   445→        <TabsContent value="logs" className="space-y-4 mt-4">
+   446→          <Card>
+   447→            <CardContent className="p-0">
+   448→              <div className="overflow-x-auto rounded-lg">
+   449→                <table className="w-full text-sm">
+   450→                  <thead>
+   451→                    <tr className="bg-muted/50 border-b">
+   452→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Time</th>
+   453→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Method</th>
+   454→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Path</th>
+   455→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+   456→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Duration</th>
+   457→                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">API Key</th>
+   458→                    </tr>
+   459→                  </thead>
+   460→                  <tbody>
+   461→                    {requestLogs.slice(0, 20).map((log) => (
+   462→                      <tr key={log.id} className="border-b last:border-0 hover:bg-muted/20">
+   463→                        <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
+   464→                          {differenceInMinutes(new Date(), new Date(log.timestamp))}m ago
+   465→                        </td>
+   466→                        <td className="px-4 py-2">
+   467→                          <Badge variant="outline" className={`text-xs font-mono ${
+   468→                            log.method === 'GET' ? 'text-blue-600 border-blue-200' :
+   469→                            log.method === 'POST' ? 'text-emerald-600 border-emerald-200' :
+   470→                            log.method === 'PUT' ? 'text-amber-600 border-amber-200' :
+   471→                            'text-red-600 border-red-200'
+   472→                          }`}>
+   473→                            {log.method}
+   474→                          </Badge>
+   475→                        </td>
+   476→                        <td className="px-4 py-2 font-mono text-xs">{log.path}</td>
+   477→                        <td className="px-4 py-2">
+   478→                          <span className={`text-xs font-mono ${log.status < 300 ? 'text-emerald-600' : log.status < 400 ? 'text-amber-600' : 'text-red-600'}`}>
+   479→                            {log.status}
+   480→                          </span>
+   481→                        </td>
+   482→                        <td className="px-4 py-2 text-xs text-muted-foreground">{log.duration}ms</td>
+   483→                        <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{log.apiKey}</td>
+   484→                      </tr>
+   485→                    ))}
+   486→                  </tbody>
+   487→                </table>
+   488→              </div>
+   489→            </CardContent>
+   490→          </Card>
+   491→        </TabsContent>
+   492→
+   493→        {/* ─── SDK & Docs Tab ─────────────────────────────────────────────── */}
+   494→        <TabsContent value="docs" className="space-y-4 mt-4">
+   495→          <div className="grid gap-4 md:grid-cols-2">
+   496→            {/* SDK Downloads */}
+   497→            <Card>
+   498→              <CardHeader>
+   499→                <CardTitle className="flex items-center gap-2 text-base">
+   500→                  <Download className="size-4 text-emerald-600" />
+   501→                  SDK Downloads
+   502→                </CardTitle>
+   503→              </CardHeader>
+   504→              <CardContent className="space-y-3">
+   505→                {[
+   506→                  { name: 'JavaScript / Node.js', install: 'npm install @gstpilot/sdk', lang: 'bash' },
+   507→                  { name: 'Python', install: 'pip install gstpilot-sdk', lang: 'bash' },
+   508→                ].map((sdk) => (
+   509→                  <div key={sdk.name} className="rounded-lg border p-3">
+   510→                    <div className="flex items-center justify-between mb-2">
+   511→                      <span className="text-sm font-medium">{sdk.name}</span>
+   512→                      <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => copyToClipboard(sdk.install)}>
+   513→                        <Copy className="size-3.5" />
+   514→                      </Button>
+   515→                    </div>
+   516→                    <code className="text-xs font-mono bg-muted/50 px-2 py-1 rounded block">{sdk.install}</code>
+   517→                  </div>
+   518→                ))}
+   519→              </CardContent>
+   520→            </Card>
+   521→
+   522→            {/* Code Examples */}
+   523→            <Card>
+   524→              <CardHeader>
+   525→                <CardTitle className="flex items-center gap-2 text-base">
+   526→                  <Terminal className="size-4 text-emerald-600" />
+   527→                  Quick Start
+   528→                </CardTitle>
+   529→              </CardHeader>
+   530→              <CardContent className="space-y-3">
+   531→                <div className="rounded-lg border bg-slate-950 text-slate-100 p-4 overflow-x-auto">
+   532→                  <pre className="text-xs font-mono whitespace-pre">
+   533→{`// JavaScript Example
+   534→import GSTPilot from '@gstpilot/sdk';
+   535→
+   536→const client = new GSTPilot({
+   537→  apiKey: 'gpk_live_...',
+   538→});
+   539→
+   540→// List all clients
+   541→const clients = await client.clients.list();
+   542→
+   543→// File a return
+   544→await client.returns.file({
+   545→  clientId: 'cl_123',
+   546→  returnType: 'GSTR-1',
+   547→  period: '2024-10',
+   548→});`}
+   549→                  </pre>
+   550→                </div>
+   551→                <div className="rounded-lg border bg-slate-950 text-slate-100 p-4 overflow-x-auto">
+   552→                  <pre className="text-xs font-mono whitespace-pre">
+   553→{`# Python Example
+   554→from gstpilot import GSTPilotClient
+   555→
+   556→client = GSTPilotClient(
+   557→    api_key="gpk_live_..."
+   558→)
+   559→
+   560→# List all clients
+   561→clients = client.clients.list()
+   562→
+   563→# File a return
+   564→client.returns.file(
+   565→    client_id="cl_123",
+   566→    return_type="GSTR-1",
+   567→    period="2024-10"
+   568→)`}
+   569→                  </pre>
+   570→                </div>
+   571→                <div className="rounded-lg border bg-slate-950 text-slate-100 p-4 overflow-x-auto">
+   572→                  <pre className="text-xs font-mono whitespace-pre">
+   573→{`# cURL Example
+   574→curl -X GET https://api.gstpilot.ai/v1/clients \\
+   575→  -H "Authorization: Bearer gpk_live_..." \\
+   576→  -H "Content-Type: application/json"`}
+   577→                  </pre>
+   578→                </div>
+   579→              </CardContent>
+   580→            </Card>
+   581→
+   582→            {/* API Docs */}
+   583→            <Card className="md:col-span-2">
+   584→              <CardHeader>
+   585→                <CardTitle className="flex items-center gap-2 text-base">
+   586→                  <FileText className="size-4 text-emerald-600" />
+   587→                  API Reference
+   588→                </CardTitle>
+   589→              </CardHeader>
+   590→              <CardContent>
+   591→                <div className="space-y-2">
+   592→                  {[
+   593→                    { method: 'GET', path: '/v1/clients', desc: 'List all clients' },
+   594→                    { method: 'POST', path: '/v1/clients', desc: 'Create a new client' },
+   595→                    { method: 'GET', path: '/v1/clients/:id', desc: 'Get client details' },
+   596→                    { method: 'GET', path: '/v1/returns', desc: 'List all returns' },
+   597→                    { method: 'POST', path: '/v1/returns/file', desc: 'File a return' },
+   598→                    { method: 'GET', path: '/v1/invoices', desc: 'List all invoices' },
+   599→                    { method: 'POST', path: '/v1/invoices/process', desc: 'Process an invoice' },
+   600→                    { method: 'GET', path: '/v1/reconciliation', desc: 'Get reconciliation data' },
+   601→                    { method: 'GET', path: '/v1/documents', desc: 'List all documents' },
+   602→                    { method: 'POST', path: '/v1/webhooks', desc: 'Create a webhook' },
+   603→                  ].map((endpoint, i) => (
+   604→                    <div key={i} className="flex items-center gap-3 rounded-lg border p-2.5 hover:bg-muted/30 transition-colors cursor-pointer">
+   605→                      <Badge variant="outline" className={`text-xs font-mono min-w-[52px] justify-center ${
+   606→                        endpoint.method === 'GET' ? 'text-blue-600 border-blue-200' :
+   607→                        endpoint.method === 'POST' ? 'text-emerald-600 border-emerald-200' :
+   608→                        'text-amber-600 border-amber-200'
+   609→                      }`}>
+   610→                        {endpoint.method}
+   611→                      </Badge>
+   612→                      <code className="text-xs font-mono flex-1">{endpoint.path}</code>
+   613→                      <span className="text-xs text-muted-foreground">{endpoint.desc}</span>
+   614→                    </div>
+   615→                  ))}
+   616→                </div>
+   617→              </CardContent>
+   618→            </Card>
+   619→          </div>
+   620→        </TabsContent>
+   621→      </Tabs>
+   622→
+   623→      {/* Create API Key Dialog */}
+   624→      <Dialog open={createKeyOpen} onOpenChange={setCreateKeyOpen}>
+   625→        <DialogContent className="max-w-md">
+   626→          <DialogHeader>
+   627→            <DialogTitle className="flex items-center gap-2">
+   628→              <Key className="size-4 text-emerald-600" />
+   629→              Generate API Key
+   630→            </DialogTitle>
+   631→          </DialogHeader>
+   632→          <div className="space-y-4">
+   633→            <div>
+   634→              <label className="text-sm font-medium">Key Name</label>
+   635→              <Input value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="e.g., Production Integration" className="mt-1" />
+   636→            </div>
+   637→            <div>
+   638→              <label className="text-sm font-medium">Permission Level</label>
+   639→              <Select value={newKeyPerm} onValueChange={(v) => setNewKeyPerm(v as KeyPermission)}>
+   640→                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   641→                <SelectContent>
+   642→                  <SelectItem value="read">Read Only</SelectItem>
+   643→                  <SelectItem value="write">Read & Write</SelectItem>
+   644→                  <SelectItem value="admin">Admin (Full Access)</SelectItem>
+   645→                </SelectContent>
+   646→              </Select>
+   647→            </div>
+   648→          </div>
+   649→          <DialogFooter className="gap-2">
+   650→            <Button variant="outline" onClick={() => setCreateKeyOpen(false)}>Cancel</Button>
+   651→            <Button onClick={handleCreateKey} className="bg-emerald-600 hover:bg-emerald-700">Generate Key</Button>
+   652→          </DialogFooter>
+   653→        </DialogContent>
+   654→      </Dialog>
+   655→
+   656→      {/* Create Webhook Dialog */}
+   657→      <Dialog open={createWebhookOpen} onOpenChange={setCreateWebhookOpen}>
+   658→        <DialogContent className="max-w-md">
+   659→          <DialogHeader>
+   660→            <DialogTitle className="flex items-center gap-2">
+   661→              <Webhook className="size-4 text-emerald-600" />
+   662→              Create Webhook
+   663→            </DialogTitle>
+   664→          </DialogHeader>
+   665→          <div className="space-y-4">
+   666→            <div>
+   667→              <label className="text-sm font-medium">Endpoint URL</label>
+   668→              <Input value={newWebhookUrl} onChange={(e) => setNewWebhookUrl(e.target.value)} placeholder="https://your-app.com/webhooks/gstpilot" className="mt-1" />
+   669→            </div>
+   670→            <div>
+   671→              <label className="text-sm font-medium">Events</label>
+   672→              <div className="mt-1 flex flex-wrap gap-1.5">
+   673→                {EVENT_TYPES.map((event) => (
+   674→                  <button
+   675→                    key={event}
+   676→                    onClick={() => {
+   677→                      setNewWebhookEvents((prev) =>
+   678→                        prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]
+   679→                      );
+   680→                    }}
+   681→                    className={`px-2 py-1 rounded text-xs border transition-colors ${
+   682→                      newWebhookEvents.includes(event)
+   683→                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+   684→                        : 'bg-muted/30 border-border text-muted-foreground'
+   685→                    }`}
+   686→                  >
+   687→                    {event}
+   688→                  </button>
+   689→                ))}
+   690→              </div>
+   691→            </div>
+   692→          </div>
+   693→          <DialogFooter className="gap-2">
+   694→            <Button variant="outline" onClick={() => setCreateWebhookOpen(false)}>Cancel</Button>
+   695→            <Button onClick={handleCreateWebhook} className="bg-emerald-600 hover:bg-emerald-700">Create Webhook</Button>
+   696→          </DialogFooter>
+   697→        </DialogContent>
+   698→      </Dialog>
+   699→
+   700→      {/* Webhook Detail Dialog */}
+   701→      <Dialog open={webhookDetailOpen} onOpenChange={setWebhookDetailOpen}>
+   702→        <DialogContent className="max-w-lg">
+   703→          <DialogHeader>
+   704→            <DialogTitle className="flex items-center gap-2">
+   705→              <Webhook className="size-4 text-emerald-600" />
+   706→              Webhook Details
+   707→            </DialogTitle>
+   708→          </DialogHeader>
+   709→          {selectedWebhook && (
+   710→            <div className="space-y-4">
+   711→              <div className="rounded-lg border p-3 bg-muted/30">
+   712→                <code className="text-xs font-mono break-all">{selectedWebhook.url}</code>
+   713→                <div className="flex items-center gap-2 mt-1.5">
+   714→                  <Badge variant="outline" className={selectedWebhook.status === 'active' ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : 'text-red-600 border-red-200 bg-red-50'}>
+   715→                    {selectedWebhook.status}
+   716→                  </Badge>
+   717→                  <span className="text-xs text-muted-foreground">Success rate: {selectedWebhook.successRate}%</span>
+   718→                </div>
+   719→              </div>
+   720→
+   721→              <div>
+   722→                <p className="text-sm font-medium mb-1.5">Secret</p>
+   723→                <div className="flex items-center gap-2">
+   724→                  <code className="text-xs font-mono bg-muted/50 px-2 py-1 rounded flex-1 truncate">{selectedWebhook.secret}</code>
+   725→                  <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => copyToClipboard(selectedWebhook.secret)}>
+   726→                    <Copy className="size-3.5" />
+   727→                  </Button>
+   728→                </div>
+   729→              </div>
+   730→
+   731→              <Separator />
+   732→
+   733→              <div>
+   734→                <p className="text-sm font-medium mb-3">Recent Deliveries</p>
+   735→                <div className="space-y-2 max-h-48 overflow-y-auto">
+   736→                  {selectedWebhook.deliveries.map((delivery) => (
+   737→                    <div key={delivery.id} className="flex items-center justify-between rounded border p-2 text-xs">
+   738→                      <div className="flex items-center gap-2">
+   739→                        {delivery.success ? (
+   740→                          <CheckCircle2 className="size-3.5 text-emerald-600" />
+   741→                        ) : (
+   742→                          <XCircle className="size-3.5 text-red-600" />
+   743→                        )}
+   744→                        <span className="font-mono">{delivery.event}</span>
+   745→                      </div>
+   746→                      <div className="flex items-center gap-3 text-muted-foreground">
+   747→                        <span>{delivery.statusCode}</span>
+   748→                        <span>{delivery.duration}ms</span>
+   749→                        <span>{differenceInMinutes(new Date(), new Date(delivery.timestamp))}m ago</span>
+   750→                      </div>
+   751→                      {!delivery.success && (
+   752→                        <Button variant="ghost" size="sm" className="size-6 p-0 text-amber-600">
+   753→                          <RefreshCw className="size-3" />
+   754→                        </Button>
+   755→                      )}
+   756→                    </div>
+   757→                  ))}
+   758→                </div>
+   759→              </div>
+   760→            </div>
+   761→          )}
+   762→        </DialogContent>
+   763→      </Dialog>
+   764→    </div>
+   765→  );
+   766→}
+   767→

@@ -1,12 +1,36 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
+// ─── Multi-tenant scoping ───────────────────────────────────────────────────
+// LEGACY NOTE: The Prisma `Client` model carries `firmId` (nullable String?).
+// The modern org model uses `organizationId` (Firestore). There is no
+// firmId↔organizationId mapping yet — for THIS sprint, we accept either
+// `?organizationId=` or `?firmId=` as a query param and treat the value as the
+// tenant id (the orgId IS the firmId in this app's current state).
+//
+// After fetching a client by id, we verify the client's `firmId` matches the
+// caller's tenant id. On mismatch we return 404 (don't leak existence). When
+// no tenant id is provided at all we return 400.
+
+function resolveTenantId(request: Request): string | null {
+  const { searchParams } = new URL(request.url)
+  return searchParams.get('organizationId') || searchParams.get('firmId')
+}
+
 // GET /api/clients/[id] — Get single client with details
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const tenantId = resolveTenantId(request)
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'organizationId (or firmId) is required' },
+        { status: 400 }
+      )
+    }
+
     const { id } = await params
     const client = await db.client.findUnique({
       where: { id },
@@ -19,7 +43,8 @@ export async function GET(
       },
     })
 
-    if (!client) {
+    if (!client || client.firmId !== tenantId) {
+      // Don't leak existence — return 404 for both not-found and cross-tenant.
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
@@ -39,19 +64,27 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const tenantId = resolveTenantId(request)
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'organizationId (or firmId) is required' },
+        { status: 400 }
+      )
+    }
+
     const { id } = await params
     const body = await request.json()
     const { ...updates } = body
 
     const existing = await db.client.findUnique({ where: { id } })
-    if (!existing) {
+    if (!existing || existing.firmId !== tenantId) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
     // Check GSTIN uniqueness if being updated
     if (updates.gstin && updates.gstin !== existing.gstin) {
       const duplicate = await db.client.findUnique({
-        where: { firmId_gstin: { firmId: existing.firmId, gstin: updates.gstin } },
+        where: { firmId_gstin: { firmId: existing.firmId ?? tenantId, gstin: updates.gstin } },
       })
       if (duplicate) {
         return NextResponse.json(
@@ -75,7 +108,7 @@ export async function PATCH(
     // Create activity log
     await db.activity.create({
       data: {
-        firmId: client.firmId,
+        firmId: client.firmId ?? tenantId,
         clientId: client.id,
         type: 'client_updated',
         description: `Client ${client.businessName} updated`,
@@ -98,17 +131,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const tenantId = resolveTenantId(request)
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'organizationId (or firmId) is required' },
+        { status: 400 }
+      )
+    }
+
     const { id } = await params
 
     const existing = await db.client.findUnique({ where: { id } })
-    if (!existing) {
+    if (!existing || existing.firmId !== tenantId) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
     // Create activity log before deletion
     await db.activity.create({
       data: {
-        firmId: existing.firmId,
+        firmId: existing.firmId ?? tenantId,
         type: 'client_deleted',
         description: `Client ${existing.businessName} (${existing.gstin}) deleted`,
       },

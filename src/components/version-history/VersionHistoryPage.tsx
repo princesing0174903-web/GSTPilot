@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +50,7 @@ interface VersionEntry {
   isCurrent: boolean;
 }
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const ENTITY_TYPES = [
   { value: 'client', label: 'Clients', icon: Users },
@@ -59,60 +59,9 @@ const ENTITY_TYPES = [
   { value: 'document', label: 'Documents', icon: FolderOpen },
 ] as const;
 
-const AUTHORS = ['Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Anita Desai'];
-
-const CLIENT_FIELDS = ['tradeName', 'gstin', 'email', 'phone', 'state', 'entityType', 'status'];
-const RETURN_FIELDS = ['returnType', 'period', 'status', 'totalTax', 'filingDate'];
-const INVOICE_FIELDS = ['invoiceNumber', 'vendorGstin', 'amount', 'taxAmount', 'status', 'date'];
-const DOCUMENT_FIELDS = ['name', 'type', 'size', 'uploadedBy', 'status'];
-
-function generateMockVersions(): VersionEntry[] {
-  const entries: VersionEntry[] = [];
-  const entities = [
-    { type: 'client' as const, id: 'CL-001', name: 'Acme Industries Pvt Ltd' },
-    { type: 'client' as const, id: 'CL-002', name: 'Sharma & Associates' },
-    { type: 'return' as const, id: 'RT-001', name: 'GSTR-1 Oct 2024' },
-    { type: 'return' as const, id: 'RT-002', name: 'GSTR-3B Nov 2024' },
-    { type: 'invoice' as const, id: 'INV-001', name: 'INV-2024-0156' },
-    { type: 'invoice' as const, id: 'INV-002', name: 'INV-2024-0187' },
-    { type: 'document' as const, id: 'DOC-001', name: 'PAN Card - Acme' },
-    { type: 'document' as const, id: 'DOC-002', name: 'GST Certificate - Sharma' },
-  ];
-
-  entities.forEach((entity) => {
-    const versionCount = Math.floor(Math.random() * 5) + 2;
-    const fields = entity.type === 'client' ? CLIENT_FIELDS
-      : entity.type === 'return' ? RETURN_FIELDS
-      : entity.type === 'invoice' ? INVOICE_FIELDS
-      : DOCUMENT_FIELDS;
-
-    for (let v = 1; v <= versionCount; v++) {
-      const daysAgo = (versionCount - v) * 2 + Math.floor(Math.random() * 3);
-      const ts = new Date();
-      ts.setDate(ts.getDate() - daysAgo);
-
-      const changedField = fields[Math.floor(Math.random() * fields.length)];
-      const beforeVal = `value_v${v}`;
-      const afterVal = `value_v${v + 1}`;
-
-      entries.push({
-        id: `${entity.id}-v${v}`,
-        version: v,
-        entityType: entity.type,
-        entityId: entity.id,
-        entityName: entity.name,
-        timestamp: ts.toISOString(),
-        author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
-        summary: v === 1 ? `Created ${entity.type} record` : `Updated ${changedField}`,
-        before: v === 1 ? {} : { [changedField]: beforeVal },
-        after: v === 1 ? { [changedField]: afterVal } : { [changedField]: afterVal },
-        isCurrent: v === versionCount,
-      });
-    }
-  });
-
-  return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-}
+// NOTE: Version history is sourced from the backend audit-log / change-tracking
+// layer. There is no client-side firestore subscription for it yet, so we
+// honestly render an empty state instead of fabricating mock entries.
 
 // ─── Diff Viewer ───────────────────────────────────────────────────────────────
 
@@ -152,8 +101,10 @@ function VersionDiffViewer({ before, after }: { before: Record<string, string>; 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function VersionHistoryPage() {
-  const [versions] = useState<VersionEntry[]>(() => generateMockVersions());
-  const [loading, setLoading] = useState(true);
+  // Version history is sourced from the backend audit log; there is no
+  // client-side firestore hook for it yet. Honest empty state when no data.
+  const versions: VersionEntry[] = [];
+  const loading = false;
   const [filterEntityType, setFilterEntityType] = useState<string>('all');
   const [filterAuthor, setFilterAuthor] = useState<string>('all');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
@@ -165,11 +116,11 @@ export default function VersionHistoryPage() {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [restoreVersion, setRestoreVersion] = useState<VersionEntry | null>(null);
 
-  // Simulate loading
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+  // Unique authors present in the real data — empty when there is no data.
+  const authors = useMemo(
+    () => Array.from(new Set(versions.map((v) => v.author))).sort(),
+    [versions],
+  );
 
   // Filtered versions
   const filteredVersions = useMemo(() => {
@@ -362,7 +313,7 @@ export default function VersionHistoryPage() {
               <SelectTrigger><SelectValue placeholder="All Authors" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Authors</SelectItem>
-                {AUTHORS.map((a) => (
+                {authors.map((a) => (
                   <SelectItem key={a} value={a}>{a}</SelectItem>
                 ))}
               </SelectContent>
@@ -523,8 +474,21 @@ export default function VersionHistoryPage() {
             <CardContent className="py-16">
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <GitBranch className="size-8 opacity-50" />
-                <p>No version history found</p>
-                <p className="text-xs">Try adjusting your filters</p>
+                {versions.length === 0 ? (
+                  <>
+                    <p className="font-medium text-foreground">No version history yet</p>
+                    <p className="text-xs max-w-sm text-center">
+                      Once you start creating or editing clients, returns, invoices, or documents,
+                      their change history will appear here. Version tracking is powered by the
+                      backend audit log.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>No version history matches your filters</p>
+                    <p className="text-xs">Try adjusting your filters</p>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

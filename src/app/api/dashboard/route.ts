@@ -2,10 +2,57 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { isOverdue, getFilingDueDate } from '@/lib/gst-utils'
 
-// GET /api/dashboard — Fetch dashboard metrics
-export async function GET() {
+// ─── Multi-tenant scoping ───────────────────────────────────────────────────
+// LEGACY NOTE: The Prisma models here (Client / Invoice / GSTRFiling / Issue /
+// AuditLog) are scoped by `Client.firmId` (a nullable String?). The modern
+// org model uses `organizationId` (Firestore). There is no firmId↔organizationId
+// mapping yet — for THIS sprint, the pragmatic defensive fix is to accept
+// either `?organizationId=` or `?firmId=` as a query param and treat the value
+// as the tenant id (the orgId IS the firmId in this app's current state).
+// If neither param is provided, we return ZERO/EMPTY metrics instead of
+// leaking platform-wide aggregates.
+//
+// Invoices / GSTRFilings / Issues / AuditLogs do NOT carry `firmId` directly —
+// they all relate through `clientId`. So scoping by tenant means filtering on
+// `client: { firmId: <tenantId> }`.
+
+function emptyDashboard() {
+  return {
+    totalClients: 0,
+    totalInvoices: 0,
+    filedReturns: 0,
+    pendingReturns: 0,
+    overdueReturns: 0,
+    averageHealthScore: 0,
+    criticalIssues: 0,
+    warnings: 0,
+    matchPercentage: 0,
+    riskPercentage: 0,
+    recentAuditLogs: [],
+    filingCalendar: [],
+    monthlyFilingStatus: [],
+  }
+}
+
+// GET /api/dashboard — Fetch dashboard metrics (tenant-scoped)
+export async function GET(request: Request) {
   try {
-    // ── Core counts ────────────────────────────────────────────────────────
+    const { searchParams } = new URL(request.url)
+    // Accept either organizationId (modern) or firmId (legacy) — they are the
+    // same tenant identifier in this app's current state.
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
+
+    // ── Defensive empty-state: no tenant scope → no data ──
+    if (!tenantId) {
+      return NextResponse.json(emptyDashboard())
+    }
+
+    // Prisma where-clause scoping by tenant. Client has firmId directly; the
+    // other models reach it through the client relation.
+    const clientWhere = { firmId: tenantId }
+    const viaClient = { client: clientWhere }
+
+    // ── Core counts (all scoped by tenant) ────────────────────────────────
     const [
       totalClients,
       totalInvoices,
@@ -19,27 +66,29 @@ export async function GET() {
       perfectMatchInvoices,
       highRiskInvoices,
     ] = await Promise.all([
-      db.client.count(),
-      db.invoice.count(),
-      db.gSTRFiling.count({ where: { status: 'filed' } }),
-      db.gSTRFiling.count({ where: { status: { not: 'filed' } } }),
+      db.client.count({ where: clientWhere }),
+      db.invoice.count({ where: viaClient }),
+      db.gSTRFiling.count({ where: { ...viaClient, status: 'filed' } }),
+      db.gSTRFiling.count({ where: { ...viaClient, status: { not: 'filed' } } }),
       db.gSTRFiling.findMany({
-        where: { status: { not: 'filed' } },
+        where: { ...viaClient, status: { not: 'filed' } },
         select: { id: true, period: true, returnType: true, clientId: true },
       }),
       db.client.findMany({
+        where: clientWhere,
         select: { id: true, healthScore: true },
       }),
-      db.issue.count({ where: { severity: 'critical', status: 'open' } }),
-      db.issue.count({ where: { severity: 'warning', status: 'open' } }),
+      db.issue.count({ where: { ...viaClient, severity: 'critical', status: 'open' } }),
+      db.issue.count({ where: { ...viaClient, severity: 'warning', status: 'open' } }),
       db.invoice.count({
         where: {
+          ...viaClient,
           matchStatus: { in: ['perfect_match', 'partial_match', 'mismatch'] },
         },
       }),
-      db.invoice.count({ where: { matchStatus: 'perfect_match' } }),
+      db.invoice.count({ where: { ...viaClient, matchStatus: 'perfect_match' } }),
       db.invoice.count({
-        where: { riskLevel: { in: ['high', 'critical'] } },
+        where: { ...viaClient, riskLevel: { in: ['high', 'critical'] } },
       }),
     ])
 
@@ -64,8 +113,9 @@ export async function GET() {
     // Overdue returns
     const overdueReturns = allFilings.filter((f) => isOverdue(f.period)).length
 
-    // ── Recent audit logs (last 10) ───────────────────────────────────────
+    // ── Recent audit logs (last 10, tenant-scoped) ───────────────────────
     const recentAuditLogs = await db.auditLog.findMany({
+      where: viaClient,
       take: 10,
       orderBy: { timestamp: 'desc' },
       include: {
@@ -80,9 +130,8 @@ export async function GET() {
     })
 
     // ── Filing calendar items (upcoming due dates) ─────────────────────────
-    // Get all filings with their client info for calendar display
     const filingsWithClients = await db.gSTRFiling.findMany({
-      where: { status: { not: 'filed' } },
+      where: { ...viaClient, status: { not: 'filed' } },
       select: {
         id: true,
         returnType: true,
@@ -120,9 +169,9 @@ export async function GET() {
       }
     })
 
-    // ── Monthly filing status for chart ────────────────────────────────────
-    // Get all filings grouped by period
+    // ── Monthly filing status for chart (tenant-scoped) ────────────────────
     const allFilingsForChart = await db.gSTRFiling.findMany({
+      where: viaClient,
       select: {
         period: true,
         status: true,

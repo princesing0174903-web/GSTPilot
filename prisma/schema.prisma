@@ -386,7 +386,7 @@ model AutomationLog {
 
 model FirmSettings {
   id            String   @id @default(cuid())
-  firmId        String?
+  firmId        String?  @unique
   firmName      String   @default("GSTPilot Firm")
   logoUrl       String?
   primaryColor  String   @default("#059669")
@@ -394,6 +394,10 @@ model FirmSettings {
   customDomain  String?
   emailFromName String?
   emailTemplate String?
+  // Free-form JSON blob for extended firm-profile / GST-config / notification
+  // settings that don't warrant their own columns (legalName, state, entityType,
+  // caRegNumber, officeAddress, gstConfig, notifications, etc.).
+  settingsJson  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

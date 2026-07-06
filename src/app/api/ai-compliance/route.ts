@@ -39,10 +39,39 @@ function getImpactFromProbability(prob: number): string {
   return 'low'
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Check for existing ComplianceForecast records
+    // ─── Multi-tenant scoping ───────────────────────────────────────────────
+    // firmId (or organizationId) is REQUIRED. Previously this route read ALL
+    // clients across ALL firms (no where clause on Client.findMany) and
+    // persisted/fetched forecasts platform-wide. We now scope by tenant via
+    // the client relation. When no scope is provided, we return an empty
+    // forecast bundle instead of leaking platform-wide data.
+    const { searchParams } = new URL(request.url)
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
+
+    const emptyResponse = {
+      forecasts: {
+        notice: [],
+        filing_delay: [],
+        reconciliation_issue: [],
+        itc_loss: [],
+      } as ForecastsByType,
+      overallConfidence: 0,
+    }
+
+    if (!tenantId) {
+      return NextResponse.json(emptyResponse)
+    }
+
+    // Prisma where-clause scoping by tenant. Client has firmId directly; the
+    // ComplianceForecast model reaches it through the client relation.
+    const clientWhere = { firmId: tenantId }
+    const viaClient = { client: clientWhere }
+
+    // Check for existing ComplianceForecast records (tenant-scoped)
     const existingForecasts = await db.complianceForecast.findMany({
+      where: viaClient,
       orderBy: { createdAt: 'desc' },
       include: {
         client: {
@@ -84,8 +113,9 @@ export async function GET() {
       // Generate forecasts from existing data
       const now = new Date()
 
-      // Fetch all clients with their related data
+      // Fetch all clients (tenant-scoped) with their related data
       const allClients = await db.client.findMany({
+        where: clientWhere,
         select: {
           id: true,
           tradeName: true,
@@ -252,74 +282,16 @@ export async function GET() {
         }
       }
 
-      // If no client-specific forecasts were generated, add generic ones
-      if (
-        forecasts.notice.length === 0 &&
-        forecasts.filing_delay.length === 0 &&
-        forecasts.reconciliation_issue.length === 0 &&
-        forecasts.itc_loss.length === 0
-      ) {
-        forecasts.notice.push({
-          clientId: null,
-          clientName: null,
-          forecastType: 'notice',
-          predictedEvent: 'No specific notice risks identified - continue monitoring compliance health',
-          probability: 0.15,
-          confidence: 0.6,
-          expectedDate: null,
-          impact: 'low',
-          mitigatingActions: [
-            'Continue monthly compliance health checks',
-            'Keep all filings up to date',
-            'Monitor GST portal for any updates',
-          ],
-        })
-
-        forecasts.filing_delay.push({
-          clientId: null,
-          clientName: null,
-          forecastType: 'filing_delay',
-          predictedEvent: 'No immediate filing delay risks detected',
-          probability: 0.1,
-          confidence: 0.65,
-          expectedDate: null,
-          impact: 'low',
-          mitigatingActions: [
-            'Set up automated filing reminders',
-            'Pre-validate invoice data monthly',
-          ],
-        })
-
-        forecasts.reconciliation_issue.push({
-          clientId: null,
-          clientName: null,
-          forecastType: 'reconciliation_issue',
-          predictedEvent: 'No reconciliation issues forecasted',
-          probability: 0.12,
-          confidence: 0.6,
-          expectedDate: null,
-          impact: 'low',
-          mitigatingActions: [
-            'Run periodic reconciliation checks',
-            'Enable automated 2B matching',
-          ],
-        })
-
-        forecasts.itc_loss.push({
-          clientId: null,
-          clientName: null,
-          forecastType: 'itc_loss',
-          predictedEvent: 'No significant ITC loss risks identified',
-          probability: 0.08,
-          confidence: 0.55,
-          expectedDate: null,
-          impact: 'low',
-          mitigatingActions: [
-            'Verify ITC claims against GSTR-2B regularly',
-            'Maintain proper documentation',
-          ],
-        })
-      }
+      // ─── No fallback fabrication ───────────────────────────────────────────
+      // Previously, when no client-specific forecasts were generated, this
+      // branch injected 4 hardcoded generic "no risk identified" forecasts
+      // (notice / filing_delay / reconciliation_issue / itc_loss) with
+      // fabricated probability/confidence values. Those fakes were misleading
+      // — they presented fabricated "low risk" assessments as real
+      // intelligence. We now return the empty forecasts object honestly
+      // (overallConfidence ends up 0 in that case). When client data exists
+      // but none of the heuristics fire, that means no risks are predicted —
+      // which is itself a meaningful signal.
     }
 
     // Calculate overall confidence

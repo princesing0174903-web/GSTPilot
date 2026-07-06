@@ -18,6 +18,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'question is required' }, { status: 400 });
   }
 
+  // ─── Multi-tenant scoping ───────────────────────────────────────────────────
+  // firmId is REQUIRED. Previously this route fell back to the literal string
+  // 'gstpilot-default-firm' when firmId was missing, which silently operated
+  // on the default-firm's data for any caller — a multi-tenant leak. We now
+  // reject requests without an explicit firmId so callers must declare their
+  // tenant scope.
+  const firmId: string | undefined = body.firmId;
+  if (!firmId || typeof firmId !== 'string') {
+    return NextResponse.json(
+      { error: 'firmId is required — Oracle reasoning must be scoped to a tenant.' },
+      { status: 400 },
+    );
+  }
+
   // Rate limit: 30 asks/minute per user (or IP fallback)
   const identifier = body.userId || request.headers.get('x-forwarded-for') || 'anonymous';
   const rl = rateLimitCheck(`ask:${identifier}`, 30);
@@ -39,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const reasoning = await reason({
-      firmId: body.firmId || 'gstpilot-default-firm',
+      firmId,
       userId: body.userId ?? null,
       request: question,
       requestType: 'ask',

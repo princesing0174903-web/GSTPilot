@@ -3,24 +3,34 @@ import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 
 // GET /api/returns — List returns with optional filters
+//
+// Multi-tenant scoping: firmId (or organizationId) is REQUIRED. Previously
+// `firmId` was an optional query param and when omitted, the route returned
+// ALL GSTRFiling rows across ALL firms — a multi-tenant leak. We now return
+// an empty list when no tenant scope is provided.
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
-    const firmId = searchParams.get('firmId')
+    // Accept either organizationId (modern) or firmId (legacy) — same tenant id.
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
     const returnType = searchParams.get('returnType')
     const period = searchParams.get('period')
     const status = searchParams.get('status')
 
-    const where: Record<string, unknown> = {}
+    // ── Defensive empty-state: no tenant scope → no data ──
+    if (!tenantId) {
+      return NextResponse.json({ returns: [] })
+    }
+
+    const where: Record<string, unknown> = { firmId: tenantId }
     if (clientId) where.clientId = clientId
-    if (firmId) where.firmId = firmId
     if (returnType) where.returnType = returnType
     if (period) where.period = period
     if (status) where.status = status
 
     const returns = await db.gSTRFiling.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
+      where,
       include: {
         client: {
           select: { id: true, tradeName: true, gstin: true, state: true },

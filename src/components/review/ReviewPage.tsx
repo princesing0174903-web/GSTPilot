@@ -607,10 +607,10 @@ export default function ReviewPage() {
           return;
         }
       }
-      // Fallback to mock data
-      setInvoices(MOCK_INVOICES);
+      // Honest empty state — no mock data fabrication
+      setInvoices([]);
     } catch {
-      setInvoices(MOCK_INVOICES);
+      setInvoices([]);
     }
   }, [selectedClientId]);
 
@@ -624,9 +624,9 @@ export default function ReviewPage() {
           return;
         }
       }
-      setClients(MOCK_CLIENTS);
+      setClients([]);
     } catch {
-      setClients(MOCK_CLIENTS);
+      setClients([]);
     }
   }, []);
 

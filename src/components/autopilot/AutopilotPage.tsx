@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,45 +19,19 @@ import {
 } from 'lucide-react'
 
 // ── Workflow Steps ──
+// Sub-actions are descriptive labels only — they do NOT contain fabricated
+// counts. Real counts come from the live firestore data subscribed elsewhere.
 const workflowSteps = [
-  { id: 1, name: 'Read Documents', desc: 'Scan cloud storage for new uploads', icon: Search, subActions: ['Scanning Google Drive', 'Scanning Dropbox', 'Scanning email attachments'] },
-  { id: 2, name: 'Extract Invoices', desc: 'OCR and extract data from all invoices', icon: FileScan, subActions: ['Running OCR on 47 documents', 'Extracting GSTIN & amounts', 'Validating invoice data'] },
-  { id: 3, name: 'Prepare Returns', desc: 'Auto-prepare GSTR-1 and GSTR-3B', icon: FileText, subActions: ['Preparing GSTR-1 for 47 clients', 'Preparing GSTR-3B for 47 clients', 'Cross-validating data'] },
+  { id: 1, name: 'Read Documents', desc: 'Scan cloud storage for new uploads', icon: Search, subActions: ['Scanning connected cloud accounts', 'Scanning email attachments', 'Indexing new uploads'] },
+  { id: 2, name: 'Extract Invoices', desc: 'OCR and extract data from all invoices', icon: FileScan, subActions: ['Running OCR on new documents', 'Extracting GSTIN & amounts', 'Validating invoice data'] },
+  { id: 3, name: 'Prepare Returns', desc: 'Auto-prepare GSTR-1 and GSTR-3B', icon: FileText, subActions: ['Preparing GSTR-1 for active clients', 'Preparing GSTR-3B for active clients', 'Cross-validating data'] },
   { id: 4, name: 'Reconcile Books', desc: 'Match 2A/2B data with books', icon: CheckCircle, subActions: ['Downloading 2A/2B data', 'Matching with book entries', 'Flagging mismatches'] },
   { id: 5, name: 'Generate Notices', desc: 'Create required notices or responses', icon: AlertCircle, subActions: ['Checking for new notices', 'Drafting responses', 'Queueing for review'] },
-  { id: 6, name: 'Assign Tasks', desc: 'Assign work to team members', icon: Users, subActions: ['Analyzing workload', 'Assigning 12 tasks', 'Sending notifications'] },
-  { id: 7, name: 'Send Reminders', desc: 'Notify clients for pending items', icon: Bell, subActions: ['Checking pending documents', 'Sending 8 reminders', 'Logging communications'] },
+  { id: 6, name: 'Assign Tasks', desc: 'Assign work to team members', icon: Users, subActions: ['Analyzing workload', 'Assigning tasks', 'Sending notifications'] },
+  { id: 7, name: 'Send Reminders', desc: 'Notify clients for pending items', icon: Bell, subActions: ['Checking pending documents', 'Sending reminders', 'Logging communications'] },
   { id: 8, name: 'Prepare Reports', desc: 'Generate daily/weekly/monthly reports', icon: BarChart3, subActions: ['Generating daily summary', 'Preparing weekly metrics', 'Creating monthly P&L'] },
   { id: 9, name: 'AI Recommendations', desc: 'AI CFO/CEO generate recommendations', icon: Brain, subActions: ['Analyzing financial trends', 'Generating cost savings tips', 'Identifying growth opportunities'] },
   { id: 10, name: 'Update Dashboards', desc: 'Refresh all dashboards with latest data', icon: LayoutDashboard, subActions: ['Refreshing revenue metrics', 'Updating client health scores', 'Syncing real-time data'] },
-]
-
-// ── Sample Execution Log ──
-const sampleLogEntries = [
-  { time: '06:00:01', step: 1, msg: 'Starting document scan across 3 cloud accounts', type: 'info' as const },
-  { time: '06:00:34', step: 1, msg: 'Found 47 new documents uploaded since last run', type: 'success' as const },
-  { time: '06:01:02', step: 2, msg: 'OCR processing initiated for 47 documents', type: 'info' as const },
-  { time: '06:02:15', step: 2, msg: 'Extracted 94 invoices with 99.2% accuracy', type: 'success' as const },
-  { time: '06:03:00', step: 3, msg: 'Preparing GSTR-1 for 47 clients', type: 'info' as const },
-  { time: '06:04:22', step: 3, msg: 'GSTR-1 prepared for all clients. Total taxable: ₹2,34,56,789', type: 'success' as const },
-  { time: '06:05:10', step: 3, msg: 'GSTR-3B prepared. Net tax liability: ₹18,45,230', type: 'success' as const },
-  { time: '06:06:00', step: 4, msg: 'Downloading 2A/2B data from GST portal', type: 'info' as const },
-  { time: '06:07:45', step: 4, msg: 'Reconciliation complete. 3 mismatches found', type: 'warning' as const },
-  { time: '06:08:20', step: 5, msg: 'No new notices from GST department', type: 'success' as const },
-  { time: '06:09:05', step: 6, msg: 'Assigned 12 tasks across 5 team members', type: 'success' as const },
-  { time: '06:10:00', step: 7, msg: 'Sent 8 reminders to clients for pending documents', type: 'success' as const },
-  { time: '06:11:30', step: 8, msg: 'Generated 3 reports: daily, weekly, monthly', type: 'success' as const },
-  { time: '06:12:15', step: 9, msg: 'AI identified ₹1,23,000 in potential savings', type: 'success' as const },
-  { time: '06:13:00', step: 10, msg: 'All dashboards updated with latest data', type: 'success' as const },
-]
-
-// ── Sample Past Runs ──
-const pastRuns = [
-  { id: 1, date: '03/03/2026', startTime: '06:00 AM', duration: '13m 02s', items: 47, status: 'completed' as const },
-  { id: 2, date: '02/03/2026', startTime: '06:00 AM', duration: '11m 48s', items: 43, status: 'completed' as const },
-  { id: 3, date: '01/03/2026', startTime: '06:00 AM', duration: '14m 22s', items: 51, status: 'completed' as const },
-  { id: 4, date: '28/02/2026', startTime: '06:00 AM', duration: '09m 55s', items: 38, status: 'completed' as const },
-  { id: 5, date: '27/02/2026', startTime: '06:00 AM', duration: '—', items: 0, status: 'failed' as const },
 ]
 
 // ── Helpers ──
@@ -88,10 +62,17 @@ export default function AutopilotPage() {
   const [runState, setRunState] = useState<'idle' | 'running' | 'complete'>('idle')
   const [currentStep, setCurrentStep] = useState(0)
   const [stepProgress, setStepProgress] = useState(0)
-  const [logEntries, setLogEntries] = useState(sampleLogEntries)
-  const [schedule, setSchedule] = useState({
+  // Execution log is empty until the backend workflow runner emits real entries.
+  // The UI animation below drives the visual step transitions only — no real
+  // log lines are fabricated client-side.
+  const logEntries: Array<{ time: string; step: number; msg: string; type: 'info' | 'success' | 'warning' | 'error' }> = []
+  const [schedule] = useState({
     enabled: true, time: '06:00', days: 'weekdays', timezone: 'IST (UTC+5:30)',
   })
+  // Past runs are sourced from the backend workflow execution history. There is
+  // no client-side firestore subscription for them yet, so we honestly render
+  // an empty state.
+  const pastRuns: Array<{ id: number; date: string; startTime: string; duration: string; items: number; status: 'completed' | 'failed' }> = []
 
   // Auto-step through workflow when running
   useEffect(() => {
@@ -152,13 +133,13 @@ export default function AutopilotPage() {
       ? 'bg-gradient-to-br from-amber-500 to-amber-600'
       : 'bg-gradient-to-br from-emerald-600 to-emerald-800'
 
-  // KPI metrics
+  // KPI metrics — derived from real state. No fabricated counts.
   const metrics = {
-    runsToday: runState === 'complete' ? 1 : 0,
-    itemsProcessed: runState === 'complete' ? 47 : 0,
-    timeSaved: runState === 'complete' ? '3h 42m' : '0m',
-    successRate: 98.6,
-    nextRun: schedule.enabled ? '04/03/2026 06:00 AM' : 'Not scheduled',
+    runsToday: 0,
+    itemsProcessed: 0,
+    timeSaved: '0m',
+    successRate: 0,
+    nextRun: schedule.enabled ? `${schedule.time} ${schedule.days}` : 'Not scheduled',
   }
 
   return (
@@ -188,7 +169,7 @@ export default function AutopilotPage() {
           { label: 'Items Processed', value: String(metrics.itemsProcessed), icon: Package, color: 'text-emerald-600' },
           { label: 'Time Saved', value: metrics.timeSaved, icon: Timer, color: 'text-emerald-600' },
           { label: 'Success Rate', value: `${metrics.successRate}%`, icon: TrendingUp, color: 'text-emerald-600' },
-          { label: 'Next Run', value: '06:00 AM', icon: Calendar, color: 'text-slate-600' },
+          { label: 'Next Run', value: schedule.enabled ? schedule.time : 'Off', icon: Calendar, color: 'text-slate-600' },
         ].map((kpi, i) => (
           <Card key={i} className="border-slate-200/60 shadow-sm">
             <CardContent className="p-3">
@@ -362,12 +343,12 @@ export default function AutopilotPage() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: 'Docs Processed', value: runState === 'complete' ? '47' : '—', icon: Search, color: 'text-emerald-600' },
-                      { label: 'Returns Prepared', value: runState === 'complete' ? '94' : '—', icon: FileText, color: 'text-emerald-600' },
-                      { label: 'Reconciliations', value: runState === 'complete' ? '47' : '—', icon: CheckCircle, color: 'text-emerald-600' },
-                      { label: 'Tasks Assigned', value: runState === 'complete' ? '12' : '—', icon: Users, color: 'text-emerald-600' },
-                      { label: 'Reminders Sent', value: runState === 'complete' ? '8' : '—', icon: Bell, color: 'text-emerald-600' },
-                      { label: 'Reports Generated', value: runState === 'complete' ? '3' : '—', icon: BarChart3, color: 'text-emerald-600' },
+                      { label: 'Docs Processed', value: '—', icon: Search, color: 'text-emerald-600' },
+                      { label: 'Returns Prepared', value: '—', icon: FileText, color: 'text-emerald-600' },
+                      { label: 'Reconciliations', value: '—', icon: CheckCircle, color: 'text-emerald-600' },
+                      { label: 'Tasks Assigned', value: '—', icon: Users, color: 'text-emerald-600' },
+                      { label: 'Reminders Sent', value: '—', icon: Bell, color: 'text-emerald-600' },
+                      { label: 'Reports Generated', value: '—', icon: BarChart3, color: 'text-emerald-600' },
                     ].map((item, i) => (
                       <div key={i} className="p-3 rounded-lg bg-slate-50/80 border border-slate-100">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -387,7 +368,7 @@ export default function AutopilotPage() {
                         <span className="text-xs font-semibold text-emerald-700">Run Complete</span>
                       </div>
                       <p className="text-[11px] text-emerald-600">
-                        All 10 steps completed successfully in 13m 02s. 47 clients processed, 94 returns prepared, ₹1,23,000 potential savings identified.
+                        All 10 workflow steps executed. Detailed per-step counts will appear here once the backend workflow runner publishes real execution results.
                       </p>
                     </motion.div>
                   )}
@@ -492,6 +473,16 @@ export default function AutopilotPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {logEntries.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+                    <FileText className="h-8 w-8 opacity-50" />
+                    <p className="text-sm font-medium text-foreground">No execution logs yet</p>
+                    <p className="text-xs max-w-sm text-center">
+                      When the backend workflow runner executes a run, live step-by-step log
+                      entries will stream here in real time.
+                    </p>
+                  </div>
+                ) : (
                 <ScrollArea className="max-h-[520px]">
                   <div className="space-y-1">
                     {logEntries.map((entry, i) => (
@@ -509,6 +500,7 @@ export default function AutopilotPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -614,6 +606,16 @@ export default function AutopilotPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {pastRuns.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+                    <Clock className="h-8 w-8 opacity-50" />
+                    <p className="text-sm font-medium text-foreground">No past runs yet</p>
+                    <p className="text-xs max-w-sm text-center">
+                      Once the backend workflow runner records executions, recent runs with their
+                      durations, item counts, and statuses will appear here.
+                    </p>
+                  </div>
+                ) : (
                 <div className="space-y-2">
                   {pastRuns.map((run, i) => (
                     <motion.div key={run.id}
@@ -646,6 +648,7 @@ export default function AutopilotPage() {
                     </motion.div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -659,10 +662,10 @@ export default function AutopilotPage() {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Total Runs', value: '28', sub: 'this month' },
-                    { label: 'Success Rate', value: '96.4%', sub: '27/28 runs' },
-                    { label: 'Avg Duration', value: '12m 18s', sub: 'per run' },
-                    { label: 'Total Items', value: '1,234', sub: 'processed' },
+                    { label: 'Total Runs', value: String(pastRuns.length), sub: 'recorded' },
+                    { label: 'Success Rate', value: pastRuns.length > 0 ? `${Math.round((pastRuns.filter(r => r.status === 'completed').length / pastRuns.length) * 100)}%` : '—', sub: `${pastRuns.filter(r => r.status === 'completed').length}/${pastRuns.length} runs` },
+                    { label: 'Avg Duration', value: '—', sub: 'per run' },
+                    { label: 'Total Items', value: String(pastRuns.reduce((s, r) => s + r.items, 0)), sub: 'processed' },
                   ].map((stat, i) => (
                     <div key={i} className="text-center p-3 rounded-lg bg-slate-50/80">
                       <p className="text-[10px] text-slate-500 uppercase">{stat.label}</p>

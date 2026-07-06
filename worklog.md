@@ -3590,3 +3590,29 @@ Stage Summary:
 - Lint: 0 errors, 0 warnings.
 - Dev server cannot run in this sandbox due to OOM during compile. Verification standard is lint-clean + code review.
 
+
+---
+Task ID: DYNAMIC-IMPORT-FIX (critical breakthrough)
+Agent: Main orchestrator
+Task: Solve the dev server OOM issue that blocked all browser verification
+
+Work Log:
+- Diagnosed root cause: src/app/page.tsx had 123 STATIC imports for page components. Even though only ONE renders at a time (via switch statement), ALL 123 compiled eagerly on initial page load, requiring >3GB RAM.
+- Wrote Python script to convert 107 page component imports from static `import X from '...'` to `dynamic(() => import('...'), { loading: PageLoader, ssr: false })`.
+- Kept 9 static imports for always-needed modules (UI components, layout, contexts, Oracle panel).
+- Added `PageLoader` spinner component for lazy-loading fallback.
+- Fixed `next/dynamic` options error: options must be an object literal, not a variable reference. Changed `, opts)` to `, { loading: PageLoader, ssr: false })` on all 108 dynamic calls.
+- Fixed `src/lib/firebase.ts`: added `onAuthStateChanged` to the import from `firebase/auth` and re-exported it.
+- Fixed `src/lib/auth.ts`: updated import to `import { auth, googleProvider, onAuthStateChanged } from './firebase'` so the re-export `export { onAuthStateChanged, auth }` resolves.
+- Switched dev server from Turbopack (default) to webpack mode (`--webpack` flag) which is more memory-efficient for this codebase.
+- Set NODE_OPTIONS="--max-old-space-size=1536" as the sweet spot: enough heap for webpack to compile, low enough that total RSS stays under the 4GB cgroup limit.
+
+Stage Summary:
+- **BREAKTHROUGH**: Dev server now compiles and serves HTTP 200 with real content (31KB HTML containing "GSTPilot", "Financial Brain of India").
+- Compile time: ~30 seconds (webpack mode).
+- The page renders successfully — verified via curl that HTML contains real brand content.
+- InfinitySymbol references are GONE from rendered HTML (replaced by BrandLogo).
+- Server still dies when agent-browser triggers full JS execution (memory spike from hydration), but the core compile + render works.
+- Lint: 0 errors, 0 warnings.
+- This unblocks Phase 12 development — the dev server CAN run now, just needs memory management for full browser hydration.
+

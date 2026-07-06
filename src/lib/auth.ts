@@ -27,7 +27,7 @@ import {
   inMemoryPersistence,
   User,
 } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
+import { auth, googleProvider, onAuthStateChanged } from './firebase';
 import { friendlyAuthError } from './auth/errors';
 
 // ── Re-export so existing imports keep working ──

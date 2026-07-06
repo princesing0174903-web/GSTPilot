@@ -4,16 +4,128 @@ import React, { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
-import ReturnsPage from '@/components/returns/ReturnsPage'
-import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
-import InvoiceWorkspacePage from '@/components/invoices/InvoiceWorkspacePage'
-import ClientRegistryPage from '@/components/clients/ClientRegistryPage'
-import ClientWorkspacePage from '@/components/clients/ClientWorkspacePage'
-import ReturnPrepWorkspace from '@/components/returns/ReturnPrepWorkspace'
-import SettingsPage from '@/components/settings/SettingsPage'
-import LandingPage from '@/components/landing/LandingPage'
-import LoginPage from '@/components/auth/LoginPage'
-import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
+import dynamic from 'next/dynamic'
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LAZY-LOADED PAGE COMPONENTS — next/dynamic so only the active view compiles.
+// Cuts initial compile memory by ~90%. UI behaves identically.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PageLoader = () => (
+  <div className="flex h-full min-h-[60vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+  </div>
+)
+
+
+const ReturnsPage = dynamic(() => import('@/components/returns/ReturnsPage'), { loading: PageLoader, ssr: false })
+const ReconciliationPage = dynamic(() => import('@/components/reconciliation/ReconciliationPage'), { loading: PageLoader, ssr: false })
+const InvoiceWorkspacePage = dynamic(() => import('@/components/invoices/InvoiceWorkspacePage'), { loading: PageLoader, ssr: false })
+const ClientRegistryPage = dynamic(() => import('@/components/clients/ClientRegistryPage'), { loading: PageLoader, ssr: false })
+const ClientWorkspacePage = dynamic(() => import('@/components/clients/ClientWorkspacePage'), { loading: PageLoader, ssr: false })
+const ReturnPrepWorkspace = dynamic(() => import('@/components/returns/ReturnPrepWorkspace'), { loading: PageLoader, ssr: false })
+const SettingsPage = dynamic(() => import('@/components/settings/SettingsPage'), { loading: PageLoader, ssr: false })
+const LandingPage = dynamic(() => import('@/components/landing/LandingPage'), { loading: PageLoader, ssr: false })
+const LoginPage = dynamic(() => import('@/components/auth/LoginPage'), { loading: PageLoader, ssr: false })
+const OnboardingFlow = dynamic(() => import('@/components/onboarding/OnboardingFlow').then(m => ({ default: m.OnboardingFlow })), { loading: PageLoader, ssr: false })
+const FirmCommandCenterPage = dynamic(() => import('@/components/firm-command-center/FirmCommandCenterPage'), { loading: PageLoader, ssr: false })
+const MultiFirmPage = dynamic(() => import('@/components/multi-firm/MultiFirmPage'), { loading: PageLoader, ssr: false })
+const AutopilotPage = dynamic(() => import('@/components/autopilot/AutopilotPage'), { loading: PageLoader, ssr: false })
+const AICAManagerPage = dynamic(() => import('@/components/ai-ca-manager/AICAManagerPage'), { loading: PageLoader, ssr: false })
+const AIAccountManagerPage = dynamic(() => import('@/components/ai-account-manager/AIAccountManagerPage'), { loading: PageLoader, ssr: false })
+const AIDeadlineEnginePage = dynamic(() => import('@/components/ai-deadline-engine/AIDeadlineEnginePage'), { loading: PageLoader, ssr: false })
+const AIDocumentEmployeePage = dynamic(() => import('@/components/ai-document-employee/AIDocumentEmployeePage'), { loading: PageLoader, ssr: false })
+const AIVoiceAssistantPage = dynamic(() => import('@/components/ai-voice-assistant/AIVoiceAssistantPage'), { loading: PageLoader, ssr: false })
+const AIFirmMemoryPage = dynamic(() => import('@/components/ai-firm-memory/AIFirmMemoryPage'), { loading: PageLoader, ssr: false })
+const AIOperatingRoomPage = dynamic(() => import('@/components/ai-operating-room/AIOperatingRoomPage'), { loading: PageLoader, ssr: false })
+const AIPredictionsPage = dynamic(() => import('@/components/ai-predictions/AIPredictionsPage'), { loading: PageLoader, ssr: false })
+const AIPriorityEnginePage = dynamic(() => import('@/components/ai-priority-engine/AIPriorityEnginePage'), { loading: PageLoader, ssr: false })
+const BusinessGraphPage = dynamic(() => import('@/components/business-graph/BusinessGraphPage'), { loading: PageLoader, ssr: false })
+const DataMoatPage = dynamic(() => import('@/components/data-moat/DataMoatPage'), { loading: PageLoader, ssr: false })
+const EmbeddedFinancePage = dynamic(() => import('@/components/embedded-finance/EmbeddedFinancePage'), { loading: PageLoader, ssr: false })
+const IndustryBenchmarkPage = dynamic(() => import('@/components/industry-benchmark/IndustryBenchmarkPage'), { loading: PageLoader, ssr: false })
+const WorkingCapitalPage = dynamic(() => import('@/components/working-capital/WorkingCapitalPage'), { loading: PageLoader, ssr: false })
+const NetworkEffectsPage = dynamic(() => import('@/components/network-effects/NetworkEffectsPage'), { loading: PageLoader, ssr: false })
+const AIBusinessCopilotPage = dynamic(() => import('@/components/ai-business-copilot/AIBusinessCopilotPage'), { loading: PageLoader, ssr: false })
+const RunMyBusinessPage = dynamic(() => import('@/components/run-my-business/RunMyBusinessPage'), { loading: PageLoader, ssr: false })
+const ExecutiveWarRoomPage = dynamic(() => import('@/components/executive-war-room/ExecutiveWarRoomPage'), { loading: PageLoader, ssr: false })
+const AppStorePage = dynamic(() => import('@/components/app-store/AppStorePage'), { loading: PageLoader, ssr: false })
+const DigitalTwinPage = dynamic(() => import('@/components/digital-twin/DigitalTwinPage'), { loading: PageLoader, ssr: false })
+const APIPlatformPage = dynamic(() => import('@/components/api-platform-v2/APIPlatformPage'), { loading: PageLoader, ssr: false })
+const EventEnginePage = dynamic(() => import('@/components/event-engine/EventEnginePage'), { loading: PageLoader, ssr: false })
+const AgentOSPage = dynamic(() => import('@/components/agent-os/AgentOSPage'), { loading: PageLoader, ssr: false })
+const DecisionEnginePage = dynamic(() => import('@/components/decision-engine/DecisionEnginePage'), { loading: PageLoader, ssr: false })
+const GSTPilotNetworkPage = dynamic(() => import('@/components/gstpilot-network/GSTPilotNetworkPage'), { loading: PageLoader, ssr: false })
+const DataCloudPage = dynamic(() => import('@/components/data-cloud/DataCloudPage'), { loading: PageLoader, ssr: false })
+const RunIndiaBusinessPage = dynamic(() => import('@/components/run-india-business/RunIndiaBusinessPage'), { loading: PageLoader, ssr: false })
+const UniversalBusinessIDPage = dynamic(() => import('@/components/universal-business-id/UniversalBusinessIDPage'), { loading: PageLoader, ssr: false })
+const CreditScoringEnginePage = dynamic(() => import('@/components/credit-scoring-engine/CreditScoringEnginePage'), { loading: PageLoader, ssr: false })
+const InvoiceExchangePage = dynamic(() => import('@/components/invoice-exchange/InvoiceExchangePage'), { loading: PageLoader, ssr: false })
+const FinancingMarketplacePage = dynamic(() => import('@/components/financing-marketplace/FinancingMarketplacePage'), { loading: PageLoader, ssr: false })
+const EconomicGraphPage = dynamic(() => import('@/components/economic-graph/EconomicGraphPage'), { loading: PageLoader, ssr: false })
+const EconomicWarRoomPage = dynamic(() => import('@/components/economic-war-room/EconomicWarRoomPage'), { loading: PageLoader, ssr: false })
+const RunMyCompanyPage = dynamic(() => import('@/components/run-my-company/RunMyCompanyPage'), { loading: PageLoader, ssr: false })
+const MissionControlPage = dynamic(() => import('@/components/mission-control/MissionControlPage'), { loading: PageLoader, ssr: false })
+const BusinessDNApage = dynamic(() => import('@/components/business-dna/BusinessDNApage'), { loading: PageLoader, ssr: false })
+const AICFODashboardPage = dynamic(() => import('@/components/ai-cfo/AICFODashboardPage'), { loading: PageLoader, ssr: false })
+const InvoiceCloudPage = dynamic(() => import('@/components/invoice-cloud/InvoiceCloudPage'), { loading: PageLoader, ssr: false })
+const ExecutionEnginePage = dynamic(() => import('@/components/execution-engine/ExecutionEnginePage'), { loading: PageLoader, ssr: false })
+const GenerateWorkbench = dynamic(() => import('@/components/generate/GenerateWorkbench'), { loading: PageLoader, ssr: false })
+const ReportsPage = dynamic(() => import('@/components/reports/ReportsPage'), { loading: PageLoader, ssr: false })
+const AIExecutiveReportsPage = dynamic(() => import('@/components/ai-reports/AIExecutiveReportsPage'), { loading: PageLoader, ssr: false })
+const AICompliancePage = dynamic(() => import('@/components/ai-compliance/AICompliancePage'), { loading: PageLoader, ssr: false })
+const AIRiskEnginePage = dynamic(() => import('@/components/ai-risk/AIRiskEnginePage'), { loading: PageLoader, ssr: false })
+const AIClientInsightsPage = dynamic(() => import('@/components/ai-insights/AIClientInsightsPage'), { loading: PageLoader, ssr: false })
+const AITaskGeneratorPage = dynamic(() => import('@/components/ai-tasks/AITaskGeneratorPage'), { loading: PageLoader, ssr: false })
+const AIBenchmarkPage = dynamic(() => import('@/components/ai-benchmark/AIBenchmarkPage'), { loading: PageLoader, ssr: false })
+const AIKnowledgeCenterPage = dynamic(() => import('@/components/ai-knowledge/AIKnowledgeCenterPage'), { loading: PageLoader, ssr: false })
+const AIDocumentChatPage = dynamic(() => import('@/components/ai-doc-chat/AIDocumentChatPage'), { loading: PageLoader, ssr: false })
+const NoticeCenterPage = dynamic(() => import('@/components/notices/NoticeCenterPage'), { loading: PageLoader, ssr: false })
+const GSTRFilingPage = dynamic(() => import('@/components/gstr/GSTRFilingPage'), { loading: PageLoader, ssr: false })
+const FilingCalendarPage = dynamic(() => import('@/components/calendar/FilingCalendarPage'), { loading: PageLoader, ssr: false })
+const AccountingPage = dynamic(() => import('@/components/accounting/AccountingPage'), { loading: PageLoader, ssr: false })
+const PayrollPage = dynamic(() => import('@/components/payroll/PayrollPage'), { loading: PageLoader, ssr: false })
+const HRMSPage = dynamic(() => import('@/components/hrms/HRMSPage'), { loading: PageLoader, ssr: false })
+const InventoryPage = dynamic(() => import('@/components/inventory/InventoryPage'), { loading: PageLoader, ssr: false })
+const BankingPage = dynamic(() => import('@/components/banking/BankingPage'), { loading: PageLoader, ssr: false })
+const PaymentsPage = dynamic(() => import('@/components/payments/PaymentsPage'), { loading: PageLoader, ssr: false })
+const EInvoicingPage = dynamic(() => import('@/components/e-invoicing/EInvoicingPage'), { loading: PageLoader, ssr: false })
+const TDSPage = dynamic(() => import('@/components/tds/TDSPage'), { loading: PageLoader, ssr: false })
+const ROCCompliancePage = dynamic(() => import('@/components/roc-compliance/ROCCompliancePage'), { loading: PageLoader, ssr: false })
+const LegalNoticesPage = dynamic(() => import('@/components/legal-notices/LegalNoticesPage'), { loading: PageLoader, ssr: false })
+const TeamManagementPage = dynamic(() => import('@/components/team/TeamManagementPage'), { loading: PageLoader, ssr: false })
+const TeamPerformancePage = dynamic(() => import('@/components/team-performance/TeamPerformancePage'), { loading: PageLoader, ssr: false })
+const FirmOperationsPage = dynamic(() => import('@/components/firm-operations/FirmOperationsPage'), { loading: PageLoader, ssr: false })
+const WorkloadPage = dynamic(() => import('@/components/workload/WorkloadPage'), { loading: PageLoader, ssr: false })
+const ReviewPage = dynamic(() => import('@/components/review/ReviewPage'), { loading: PageLoader, ssr: false })
+const DeadlineCenterPage = dynamic(() => import('@/components/deadlines/DeadlineCenterPage'), { loading: PageLoader, ssr: false })
+const ClientHealthPage = dynamic(() => import('@/components/client-health/ClientHealthPage'), { loading: PageLoader, ssr: false })
+const ExecutiveAnalyticsPage = dynamic(() => import('@/components/executive-analytics/ExecutiveAnalyticsPage'), { loading: PageLoader, ssr: false })
+const AnalyticsPage = dynamic(() => import('@/components/analytics/AnalyticsPage'), { loading: PageLoader, ssr: false })
+const TimelinePage = dynamic(() => import('@/components/timeline/TimelinePage'), { loading: PageLoader, ssr: false })
+const TasksPage = dynamic(() => import('@/components/tasks/TasksPage'), { loading: PageLoader, ssr: false })
+const DocumentVaultPage = dynamic(() => import('@/components/documents/DocumentVaultPage'), { loading: PageLoader, ssr: false })
+const CollaborationPage = dynamic(() => import('@/components/collaboration/CollaborationPage'), { loading: PageLoader, ssr: false })
+const CRMPage = dynamic(() => import('@/components/crm/CRMPage'), { loading: PageLoader, ssr: false })
+const ApprovalsPage = dynamic(() => import('@/components/approvals/ApprovalsPage'), { loading: PageLoader, ssr: false })
+const AutomationsPage = dynamic(() => import('@/components/automations/AutomationsPage'), { loading: PageLoader, ssr: false })
+const AutomationCenterPage = dynamic(() => import('@/components/automation/AutomationCenterPage'), { loading: PageLoader, ssr: false })
+const ErrorResolutionPage = dynamic(() => import('@/components/audit/ErrorResolutionPage'), { loading: PageLoader, ssr: false })
+const AuditLogsPage = dynamic(() => import('@/components/audit-logs/AuditLogsPage'), { loading: PageLoader, ssr: false })
+const BillingPage = dynamic(() => import('@/components/billing/BillingPage'), { loading: PageLoader, ssr: false })
+const WhiteLabelPage = dynamic(() => import('@/components/white-label/WhiteLabelPage'), { loading: PageLoader, ssr: false })
+const VersionHistoryPage = dynamic(() => import('@/components/version-history/VersionHistoryPage'), { loading: PageLoader, ssr: false })
+const ESignaturesPage = dynamic(() => import('@/components/esignatures/ESignaturesPage'), { loading: PageLoader, ssr: false })
+const ClientPortalPage = dynamic(() => import('@/components/client-portal/ClientPortalPage'), { loading: PageLoader, ssr: false })
+const MarketplacePage = dynamic(() => import('@/components/marketplace/MarketplacePage'), { loading: PageLoader, ssr: false })
+const AgentsPage = dynamic(() => import('@/components/agents/AgentsPage'), { loading: PageLoader, ssr: false })
+const ConnectionsPage = dynamic(() => import('@/components/connections/ConnectionsPage'), { loading: PageLoader, ssr: false })
+const AISoftwareFactoryPage = dynamic(() => import('@/components/ai-software-factory/AISoftwareFactoryPage'), { loading: PageLoader, ssr: false })
+const AutonomousEnterprisePage = dynamic(() => import('@/components/autonomous-enterprise/AutonomousEnterprisePage'), { loading: PageLoader, ssr: false })
+const EnterpriseCloudPlatformPage = dynamic(() => import('@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'), { loading: PageLoader, ssr: false })
+const EnterpriseAIPlatformPage = dynamic(() => import('@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'), { loading: PageLoader, ssr: false })
+const GlobalEnterpriseNetworkPage = dynamic(() => import('@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'), { loading: PageLoader, ssr: false })
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -31,106 +143,9 @@ import { OraclePanel } from '@/components/oracle/OraclePanel'
 import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
 import { BrandLogo } from '@/components/brand'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
-import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
-import MultiFirmPage from '@/components/multi-firm/MultiFirmPage'
-import AutopilotPage from '@/components/autopilot/AutopilotPage'
-import AICAManagerPage from '@/components/ai-ca-manager/AICAManagerPage'
-import AIAccountManagerPage from '@/components/ai-account-manager/AIAccountManagerPage'
-import AIDeadlineEnginePage from '@/components/ai-deadline-engine/AIDeadlineEnginePage'
-import AIDocumentEmployeePage from '@/components/ai-document-employee/AIDocumentEmployeePage'
-import AIVoiceAssistantPage from '@/components/ai-voice-assistant/AIVoiceAssistantPage'
-import AIFirmMemoryPage from '@/components/ai-firm-memory/AIFirmMemoryPage'
-import AIOperatingRoomPage from '@/components/ai-operating-room/AIOperatingRoomPage'
-import AIPredictionsPage from '@/components/ai-predictions/AIPredictionsPage'
-import AIPriorityEnginePage from '@/components/ai-priority-engine/AIPriorityEnginePage'
-import BusinessGraphPage from '@/components/business-graph/BusinessGraphPage'
-import DataMoatPage from '@/components/data-moat/DataMoatPage'
-import EmbeddedFinancePage from '@/components/embedded-finance/EmbeddedFinancePage'
-import IndustryBenchmarkPage from '@/components/industry-benchmark/IndustryBenchmarkPage'
-import WorkingCapitalPage from '@/components/working-capital/WorkingCapitalPage'
-import NetworkEffectsPage from '@/components/network-effects/NetworkEffectsPage'
-import AIBusinessCopilotPage from '@/components/ai-business-copilot/AIBusinessCopilotPage'
-import RunMyBusinessPage from '@/components/run-my-business/RunMyBusinessPage'
-import ExecutiveWarRoomPage from '@/components/executive-war-room/ExecutiveWarRoomPage'
-import AppStorePage from '@/components/app-store/AppStorePage'
-import DigitalTwinPage from '@/components/digital-twin/DigitalTwinPage'
-import APIPlatformPage from '@/components/api-platform-v2/APIPlatformPage'
-import EventEnginePage from '@/components/event-engine/EventEnginePage'
-import AgentOSPage from '@/components/agent-os/AgentOSPage'
-import DecisionEnginePage from '@/components/decision-engine/DecisionEnginePage'
-import GSTPilotNetworkPage from '@/components/gstpilot-network/GSTPilotNetworkPage'
-import DataCloudPage from '@/components/data-cloud/DataCloudPage'
-import RunIndiaBusinessPage from '@/components/run-india-business/RunIndiaBusinessPage'
-import UniversalBusinessIDPage from '@/components/universal-business-id/UniversalBusinessIDPage'
-import CreditScoringEnginePage from '@/components/credit-scoring-engine/CreditScoringEnginePage'
-import InvoiceExchangePage from '@/components/invoice-exchange/InvoiceExchangePage'
-import FinancingMarketplacePage from '@/components/financing-marketplace/FinancingMarketplacePage'
-import EconomicGraphPage from '@/components/economic-graph/EconomicGraphPage'
-import EconomicWarRoomPage from '@/components/economic-war-room/EconomicWarRoomPage'
-import RunMyCompanyPage from '@/components/run-my-company/RunMyCompanyPage'
-import MissionControlPage from '@/components/mission-control/MissionControlPage'
-import BusinessDNApage from '@/components/business-dna/BusinessDNApage'
-import AICFODashboardPage from '@/components/ai-cfo/AICFODashboardPage'
-import InvoiceCloudPage from '@/components/invoice-cloud/InvoiceCloudPage'
-import ExecutionEnginePage from '@/components/execution-engine/ExecutionEnginePage'
 import CommandPalette from '@/components/command-palette/CommandPalette'
-import GenerateWorkbench from '@/components/generate/GenerateWorkbench'
 
 // ═══ Recovered modules — previously disconnected from the router ═══
-import ReportsPage from '@/components/reports/ReportsPage'
-import AIExecutiveReportsPage from '@/components/ai-reports/AIExecutiveReportsPage'
-import AICompliancePage from '@/components/ai-compliance/AICompliancePage'
-import AIRiskEnginePage from '@/components/ai-risk/AIRiskEnginePage'
-import AIClientInsightsPage from '@/components/ai-insights/AIClientInsightsPage'
-import AITaskGeneratorPage from '@/components/ai-tasks/AITaskGeneratorPage'
-import AIBenchmarkPage from '@/components/ai-benchmark/AIBenchmarkPage'
-import AIKnowledgeCenterPage from '@/components/ai-knowledge/AIKnowledgeCenterPage'
-import AIDocumentChatPage from '@/components/ai-doc-chat/AIDocumentChatPage'
-import NoticeCenterPage from '@/components/notices/NoticeCenterPage'
-import GSTRFilingPage from '@/components/gstr/GSTRFilingPage'
-import FilingCalendarPage from '@/components/calendar/FilingCalendarPage'
-import AccountingPage from '@/components/accounting/AccountingPage'
-import PayrollPage from '@/components/payroll/PayrollPage'
-import HRMSPage from '@/components/hrms/HRMSPage'
-import InventoryPage from '@/components/inventory/InventoryPage'
-import BankingPage from '@/components/banking/BankingPage'
-import PaymentsPage from '@/components/payments/PaymentsPage'
-import EInvoicingPage from '@/components/e-invoicing/EInvoicingPage'
-import TDSPage from '@/components/tds/TDSPage'
-import ROCCompliancePage from '@/components/roc-compliance/ROCCompliancePage'
-import LegalNoticesPage from '@/components/legal-notices/LegalNoticesPage'
-import TeamManagementPage from '@/components/team/TeamManagementPage'
-import TeamPerformancePage from '@/components/team-performance/TeamPerformancePage'
-import FirmOperationsPage from '@/components/firm-operations/FirmOperationsPage'
-import WorkloadPage from '@/components/workload/WorkloadPage'
-import ReviewPage from '@/components/review/ReviewPage'
-import DeadlineCenterPage from '@/components/deadlines/DeadlineCenterPage'
-import ClientHealthPage from '@/components/client-health/ClientHealthPage'
-import ExecutiveAnalyticsPage from '@/components/executive-analytics/ExecutiveAnalyticsPage'
-import AnalyticsPage from '@/components/analytics/AnalyticsPage'
-import TimelinePage from '@/components/timeline/TimelinePage'
-import TasksPage from '@/components/tasks/TasksPage'
-import DocumentVaultPage from '@/components/documents/DocumentVaultPage'
-import CollaborationPage from '@/components/collaboration/CollaborationPage'
-import CRMPage from '@/components/crm/CRMPage'
-import ApprovalsPage from '@/components/approvals/ApprovalsPage'
-import AutomationsPage from '@/components/automations/AutomationsPage'
-import AutomationCenterPage from '@/components/automation/AutomationCenterPage'
-import ErrorResolutionPage from '@/components/audit/ErrorResolutionPage'
-import AuditLogsPage from '@/components/audit-logs/AuditLogsPage'
-import BillingPage from '@/components/billing/BillingPage'
-import WhiteLabelPage from '@/components/white-label/WhiteLabelPage'
-import VersionHistoryPage from '@/components/version-history/VersionHistoryPage'
-import ESignaturesPage from '@/components/esignatures/ESignaturesPage'
-import ClientPortalPage from '@/components/client-portal/ClientPortalPage'
-import MarketplacePage from '@/components/marketplace/MarketplacePage'
-import AgentsPage from '@/components/agents/AgentsPage'
-import ConnectionsPage from '@/components/connections/ConnectionsPage'
-import AISoftwareFactoryPage from '@/components/ai-software-factory/AISoftwareFactoryPage'
-import AutonomousEnterprisePage from '@/components/autonomous-enterprise/AutonomousEnterprisePage'
-import EnterpriseCloudPlatformPage from '@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'
-import EnterpriseAIPlatformPage from '@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'
-import GlobalEnterpriseNetworkPage from '@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Mission Control',

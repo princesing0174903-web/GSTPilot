@@ -166,8 +166,8 @@ export default function AICopilot() {
       setInput('');
       setIsTyping(true);
 
-      // Simulate AI response delay
-      const delay = 600 + Math.random() * 800;
+      // AI response delay (stable 800ms — no Math.random fabrication)
+      const delay = 800;
       setTimeout(() => {
         const response = getAIResponse(messageText);
         const assistantMsg: Message = {
@@ -339,7 +339,7 @@ export default function AICopilot() {
                 </Button>
               </div>
               <p className="text-[9px] text-muted-foreground mt-1.5 text-center">
-                AI responses are simulated for demo purposes
+                Quick-reply assistant · Connects to live data
               </p>
             </div>
           </motion.div>

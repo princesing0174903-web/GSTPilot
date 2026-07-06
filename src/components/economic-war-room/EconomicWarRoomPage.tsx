@@ -1398,19 +1398,10 @@ function LiveActivityFeedCard() {
   })
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const tpl = ACTIVITY_TEMPLATES[Math.floor(Math.random() * ACTIVITY_TEMPLATES.length)]
-      const newItem: FeedItem = {
-        id: nextFeedId(),
-        icon: tpl.icon,
-        text: tpl.text,
-        category: tpl.category,
-        time: 'just now',
-      }
-      setItems(prev => [newItem, ...prev].slice(0, 50))
-    }, 2200)
-
-    return () => clearInterval(interval)
+    // Live activity feed fabrication removed. The feed now shows only real
+    // items (initial seed). Real activities should arrive via Firestore
+    // subscription or webhook — not Math.random fabrication.
+    return
   }, [])
 
   // Update "time ago" labels periodically

@@ -29,7 +29,7 @@ import { FloatingDock } from '@/components/layout/FloatingDock'
 import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 import { OraclePanel } from '@/components/oracle/OraclePanel'
 import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
-import { InfinitySymbol } from '@/components/layout/InfinityMark'
+import { BrandLogo } from '@/components/brand'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import FirmCommandCenterPage from '@/components/firm-command-center/FirmCommandCenterPage'
 import MultiFirmPage from '@/components/multi-firm/MultiFirmPage'
@@ -476,13 +476,13 @@ function DashboardContent() {
 
       {/* ═══ TOP BAR ═══ */}
       <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
-        {/* Brand + subtitle — V16 InfinityMark™ */}
+        {/* Brand + subtitle — official GSTPilot winged logo */}
         <button
           onClick={() => setCurrentView('dashboard')}
           className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
           aria-label="GSTPilot Infinity — Home"
         >
-          <InfinitySymbol size={28} />
+          <BrandLogo variant="icon" theme="dark" size={28} animated={false} disableGlow />
           <div className="hidden flex-col items-start leading-none sm:flex">
             <span className="text-sm font-semibold tracking-tight text-foreground">
               GSTPilot Infinity<span className="accent-text">™</span>

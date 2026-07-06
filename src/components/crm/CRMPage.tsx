@@ -1130,9 +1130,22 @@ function RevenueForecastView({ leads, deals, loading }: { leads: Array<Firestore
   }, [deals])
 
   const monthlyTrend = useMemo(() => {
+    // Compute from real deals — no Math.random fabrication.
+    // Returns empty array when no deals exist (honest empty state).
+    if (!deals || deals.length === 0) return []
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    return months.map(m => ({ month: m, converted: Math.floor(Math.random() * 3) + 1, value: Math.floor(Math.random() * 500000) + 100000 }))
-  }, [])
+    return months.map(m => {
+      const monthDeals = deals.filter((d: any) => {
+        const dDate = new Date(d.closeDate ?? d.createdAt ?? 0)
+        return dDate.getMonth() === months.indexOf(m) && (d.status === 'won' || d.status === 'closed')
+      })
+      return {
+        month: m,
+        converted: monthDeals.length,
+        value: monthDeals.reduce((s: number, d: any) => s + Number(d.value ?? 0), 0),
+      }
+    })
+  }, [deals])
 
   if (loading) {
     return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>

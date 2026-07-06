@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { Home, Brain, Zap, Wallet, Network, Settings, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
-import { InfinitySymbol } from './InfinityMark';
+import { BrandLogo } from '@/components/brand';
 
 interface NavItem {
   id: AppView;
@@ -60,13 +60,13 @@ export function LeftNav() {
       aria-label="Primary"
       className="glass-surface flex h-full w-[68px] flex-col items-center gap-1.5 rounded-3xl p-2.5 xl:w-[200px] xl:items-stretch xl:gap-1 xl:p-3"
     >
-      {/* Brand mark at top — V16 InfinitySymbol (consistent with the top bar) */}
+      {/* Brand mark at top — official GSTPilot winged logo */}
       <button
         onClick={() => setCurrentView('dashboard')}
         className="mb-2 flex h-10 items-center justify-center rounded-xl px-1 py-2 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-emerald-400/60 xl:mb-3"
         aria-label="GSTPilot Infinity — Home"
       >
-        <InfinitySymbol size={30} />
+        <BrandLogo variant="icon" theme="dark" size={30} animated={false} disableGlow />
       </button>
 
       {/* Nav items */}

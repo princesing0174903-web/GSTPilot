@@ -1695,8 +1695,9 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
                 <div key={client.id} className="grid grid-cols-7 gap-1 mb-1">
                   <div className="text-[10px] text-slate-700 font-medium px-2 truncate">{client.tradeName.split(' ')[0]}</div>
                   {coverageTypes.map((_, ti) => {
-                    const hasData = Math.random() > 0.2;
-                    const quality = hasData ? (Math.random() > 0.3 ? 'high' : Math.random() > 0.5 ? 'medium' : 'low') : 'none';
+                    // Honest empty state — no data coverage yet.
+                    // Previously used Math.random to fabricate coverage quality.
+                    const quality = 'none' as const;
                     return (
                       <div key={ti} className="flex items-center justify-center">
                         {quality === 'high' ? (

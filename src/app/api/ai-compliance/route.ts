@@ -127,8 +127,11 @@ export async function GET() {
         // Clients with low healthScore (<60) → predict notice probability
         if (client.healthScore < 60) {
           const prob = Math.min(0.95, (100 - client.healthScore) / 100)
-          const conf = 0.7 + Math.random() * 0.15
-          const expectedDate = formatDate(addMonths(now, Math.ceil(Math.random() * 3)))
+          // Deterministic confidence: lower health → higher confidence in the forecast.
+          const conf = Math.min(0.95, 0.65 + (100 - client.healthScore) / 300)
+          // Deterministic timeframe: scale with the number of late filings (1-3 months).
+          const monthsOut = Math.min(3, Math.max(1, lateFilings.length))
+          const expectedDate = formatDate(addMonths(now, monthsOut))
 
           const mitigatingActions: string[] = []
           if (lateFilings.length > 0) {
@@ -158,7 +161,8 @@ export async function GET() {
         if (lateFilings.length > 0) {
           const delayRatio = lateFilings.length / Math.max(1, client.gstrFilings.length)
           const prob = Math.min(0.9, delayRatio * 1.5 + 0.2)
-          const conf = 0.65 + Math.random() * 0.2
+          // Deterministic confidence: scales with the delay ratio.
+          const conf = Math.min(0.9, 0.6 + delayRatio * 0.3)
           const nextPeriod = addMonths(now, 1)
           const expectedDate = formatDate(nextPeriod)
 
@@ -189,7 +193,8 @@ export async function GET() {
           const mismatchRatio =
             mismatchInvoices.length / Math.max(1, client.invoices.length)
           const prob = Math.min(0.85, mismatchRatio * 2 + 0.3)
-          const conf = 0.6 + Math.random() * 0.2
+          // Deterministic confidence: scales with the mismatch ratio.
+          const conf = Math.min(0.85, 0.55 + mismatchRatio * 0.3)
           const expectedDate = formatDate(addMonths(now, 1))
 
           const mitigatingActions: string[] = []
@@ -216,9 +221,12 @@ export async function GET() {
         // ─── ITC Loss Forecasts ───
         // Clients with high ITC risk → predict loss amount
         if (totalITC > 0 && (client.healthScore < 70 || mismatchInvoices.length > 2)) {
-          const itcLossEstimate = totalITC * (0.05 + Math.random() * 0.1) // 5-15% potential loss
+          // Deterministic loss estimate: scales with the mismatch ratio (5-15% range).
+          const lossPct = 0.05 + Math.min(0.1, mismatchInvoices.length * 0.02)
+          const itcLossEstimate = totalITC * lossPct
           const prob = mismatchInvoices.length > 3 ? 0.75 : 0.45
-          const conf = 0.55 + Math.random() * 0.2
+          // Deterministic confidence: scales inversely with health score.
+          const conf = Math.min(0.8, 0.5 + (100 - client.healthScore) / 250)
           const expectedDate = formatDate(addMonths(now, 2))
 
           const mitigatingActions: string[] = []

@@ -34,9 +34,15 @@ function computePercentile(value: number, sortedValues: number[]): number {
   return Math.round(Math.max(0, Math.min(100, percentile)) * 10) / 10
 }
 
-// Helper: randomize a base value ±10%
-function randomize(base: number): number {
-  const factor = 0.9 + Math.random() * 0.2
+// Helper: deterministic offset from a base value. Uses a seeded pseudo-random
+// derived from the metric name + index so the same inputs always produce the
+// same outputs (no Math.random — benchmarks must be stable across reloads).
+function deterministicOffset(base: number, seed: number): number {
+  // Mulberry32-style hash → [0,1) — deterministic, no Math.random.
+  const t = (seed + 0x6d2b79f5) | 0
+  const x = Math.imul(t ^ (t >>> 15), 1 | t)
+  const y = Math.imul(x ^ (x >>> 14), 1 | x)
+  const factor = 0.9 + ((y ^ (y >>> 13)) >>> 0) / 0xffffffff * 0.2
   return Math.round(base * factor * 10) / 10
 }
 
@@ -273,16 +279,22 @@ async function calculateBenchmarksFromData(
         ? Math.round((sortedValues.reduce((s, v) => s + v, 0) / sortedValues.length) * 10) / 10
         : 50
 
-    // Generate industry/state comparison datasets
-    const industryDataset = sortedValues.map(() => randomize(industryBases[metric] ?? 60))
-    const stateDataset = sortedValues.map(() => randomize(stateBases[metric] ?? 55))
+    // Deterministic seed from the metric name so results are stable across reloads.
+    let metricSeed = 0
+    for (let i = 0; i < metric.length; i++) metricSeed = (metricSeed * 31 + metric.charCodeAt(i)) | 0
+    const baseIndustry = industryBases[metric] ?? 60
+    const baseState = stateBases[metric] ?? 55
+
+    // Generate industry/state comparison datasets (deterministic — no Math.random)
+    const industryDataset = sortedValues.map((_, i) => deterministicOffset(baseIndustry, metricSeed + i))
+    const stateDataset = sortedValues.map((_, i) => deterministicOffset(baseState, metricSeed + i + 1000))
 
     for (const cd of clientData) {
       const clientValue = cd.values[metric]
       if (clientValue === undefined) continue
 
-      const industryAverage = randomize(industryBases[metric] ?? 60)
-      const stateAverage = randomize(stateBases[metric] ?? 55)
+      const industryAverage = deterministicOffset(baseIndustry, metricSeed)
+      const stateAverage = deterministicOffset(baseState, metricSeed + 7)
 
       const industryPercentile = computePercentile(clientValue, industryDataset)
       const statePercentile = computePercentile(clientValue, stateDataset)

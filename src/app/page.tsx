@@ -141,6 +141,20 @@ const AdvancedRBACPage = dynamic(() => import('@/components/enterprise-network/A
 const CrossCompanyAnalyticsPage = dynamic(() => import('@/components/enterprise-network/CrossCompanyAnalytics'), { loading: PageLoader, ssr: false })
 const EnterpriseAuditPage = dynamic(() => import('@/components/enterprise-network/EnterpriseAudit'), { loading: PageLoader, ssr: false })
 
+// Phase 14 — Global Expansion & International Financial Operating System™
+const MultiCountryAccountingPage = dynamic(() => import('@/components/global-expansion/MultiCountryAccounting'), { loading: PageLoader, ssr: false })
+const MultiTaxEnginePage = dynamic(() => import('@/components/global-expansion/MultiTaxEngine'), { loading: PageLoader, ssr: false })
+const MultiCurrencySystemPage = dynamic(() => import('@/components/global-expansion/MultiCurrencySystem'), { loading: PageLoader, ssr: false })
+const InternationalBankingPage = dynamic(() => import('@/components/global-expansion/InternationalBanking'), { loading: PageLoader, ssr: false })
+const GlobalComplianceEnginePage = dynamic(() => import('@/components/global-expansion/GlobalComplianceEngine'), { loading: PageLoader, ssr: false })
+const InternationalERPPage = dynamic(() => import('@/components/global-expansion/InternationalERP'), { loading: PageLoader, ssr: false })
+const MultiLanguagePlatformPage = dynamic(() => import('@/components/global-expansion/MultiLanguagePlatform'), { loading: PageLoader, ssr: false })
+const AIGlobalAdvisorPage = dynamic(() => import('@/components/global-expansion/AIGlobalAdvisor'), { loading: PageLoader, ssr: false })
+const GlobalDashboardPage = dynamic(() => import('@/components/global-expansion/GlobalDashboard'), { loading: PageLoader, ssr: false })
+const CrossBorderPaymentsPage = dynamic(() => import('@/components/global-expansion/CrossBorderPayments'), { loading: PageLoader, ssr: false })
+const InternationalReportsPage = dynamic(() => import('@/components/global-expansion/InternationalReports'), { loading: PageLoader, ssr: false })
+const GlobalPerformancePage = dynamic(() => import('@/components/global-expansion/GlobalPerformance'), { loading: PageLoader, ssr: false })
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -513,6 +527,31 @@ function DashboardContent() {
         return <CrossCompanyAnalyticsPage />
       case 'enterprise-audit':
         return <EnterpriseAuditPage />
+      // Phase 14 — Global Expansion & International Financial Operating System™
+      case 'multi-country-accounting':
+        return <MultiCountryAccountingPage />
+      case 'multi-tax-engine':
+        return <MultiTaxEnginePage />
+      case 'multi-currency-system':
+        return <MultiCurrencySystemPage />
+      case 'international-banking':
+        return <InternationalBankingPage />
+      case 'global-compliance-engine':
+        return <GlobalComplianceEnginePage />
+      case 'international-erp':
+        return <InternationalERPPage />
+      case 'multi-language-platform':
+        return <MultiLanguagePlatformPage />
+      case 'ai-global-advisor':
+        return <AIGlobalAdvisorPage />
+      case 'global-dashboard':
+        return <GlobalDashboardPage />
+      case 'cross-border-payments':
+        return <CrossBorderPaymentsPage />
+      case 'international-reports':
+        return <InternationalReportsPage />
+      case 'global-performance':
+        return <GlobalPerformancePage />
       default:
         return <MissionControlPage />
     }

@@ -1,0 +1,514 @@
+'use client';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPILOT INFINITY™ — PHASE 14: CROSS-BORDER PAYMENTS™
+//
+// Live cross-border payment operations: every wire, collection, payout, and
+// reconciliation flowing between GSTPilot's 10 country entities. Real data from
+// /lib/global/data.ts — no mocks, no API calls, no Math.random.
+//
+//   • 5 KPI tiles              — Total / Inbound / Outbound volume, fees, avg FX
+//   • Direction filter         — All / Inbound / Outbound
+//   • Type filter              — invoice / collection / payout / reconciliation
+//   • Payments table           — ref, type, direction arrow, counterparty, amounts,
+//                                 method, status, fxRate, fees, date
+//   • Corridor flow viz        — top origin→destination corridors with volume bars
+//
+// Tagline: Every Wire. Every Currency. Every Border.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ArrowLeftRight, ArrowDownRight, ArrowUpRight, Wallet,
+  Coins, Percent, Radio, Plane, Filter,
+  type LucideIcon,
+} from 'lucide-react';
+import {
+  Card, CardContent, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  CROSS_BORDER_PAYMENTS, GLOBAL_KPIS, fmtUSD,
+  statusColor, getCountry,
+  type CrossBorderPayment,
+} from '@/lib/global/data';
+import { cn } from '@/lib/utils';
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+type Direction = 'all' | 'inbound' | 'outbound';
+type PayType = 'all' | CrossBorderPayment['type'];
+
+const TYPE_LABEL: Record<CrossBorderPayment['type'], string> = {
+  invoice: 'Invoice',
+  collection: 'Collection',
+  payout: 'Payout',
+  reconciliation: 'Reconciliation',
+};
+
+const TYPE_BADGE: Record<CrossBorderPayment['type'], string> = {
+  invoice: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  collection: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  payout: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  reconciliation: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  slate: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+};
+
+function fmtCompactUSD(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
+function fmtCurrencyValue(amount: number, code: string): string {
+  const sym = code === 'USD' ? '$' : code === 'EUR' ? '€' : code === 'GBP' ? '£'
+    : code === 'AED' ? 'AED ' : code === 'JPY' ? '¥' : code === 'AUD' ? 'A$'
+    : code === 'SGD' ? 'S$' : code === 'INR' ? '₹' : `${code} `;
+  return `${sym}${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+// ─── KPI Tile ──────────────────────────────────────────────────────────────────
+
+interface KpiProps {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  sub: string;
+  accent: string;
+  ring: string;
+}
+
+function KpiTile({ icon: Icon, label, value, sub, accent, ring }: KpiProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div className={cn('absolute -right-5 -top-5 h-16 w-16 rounded-full blur-2xl opacity-40', ring)} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+          <p className={cn('mt-1 text-lg font-semibold tracking-tight', accent)}>{value}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground truncate">{sub}</p>
+        </div>
+        <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08]', accent)}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Filter pill ───────────────────────────────────────────────────────────────
+
+function FilterPill({
+  active, onClick, children, count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+        active
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+          : 'border-white/[0.06] bg-white/[0.02] text-muted-foreground hover:text-white hover:bg-white/[0.04]',
+      )}
+    >
+      {children}
+      {typeof count === 'number' && (
+        <span className={cn(
+          'ml-0.5 rounded px-1 text-[10px]',
+          active ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/[0.05] text-muted-foreground',
+        )}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ─── Direction arrow with flags ────────────────────────────────────────────────
+
+function FlagArrow({ from, to }: { from: CrossBorderPayment['fromCountry']; to: CrossBorderPayment['toCountry'] }) {
+  const f = getCountry(from);
+  const t = getCountry(to);
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-base leading-none" title={f.name}>{f.flag}</span>
+      <ArrowLeftRight className="h-3 w-3 text-emerald-400" />
+      <span className="text-base leading-none" title={t.name}>{t.flag}</span>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
+export default function CrossBorderPayments() {
+  const [direction, setDirection] = useState<Direction>('all');
+  const [type, setType] = useState<PayType>('all');
+
+  // KPI rollups
+  const totals = useMemo(() => {
+    const totalVolume = CROSS_BORDER_PAYMENTS.reduce((s, p) => s + p.amountUSD, 0);
+    const inbound = CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'inbound').reduce((s, p) => s + p.amountUSD, 0);
+    const outbound = CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'outbound').reduce((s, p) => s + p.amountUSD, 0);
+    const fees = CROSS_BORDER_PAYMENTS.reduce((s, p) => s + p.fees, 0);
+    const fxRates = CROSS_BORDER_PAYMENTS.map((p) => p.fxRate);
+    const avgFx = fxRates.reduce((a, b) => a + b, 0) / fxRates.length;
+    return { totalVolume, inbound, outbound, fees, avgFx };
+  }, []);
+
+  // Filtered payments
+  const filtered = useMemo(() => {
+    return CROSS_BORDER_PAYMENTS.filter((p) => {
+      if (direction !== 'all' && p.direction !== direction) return false;
+      if (type !== 'all' && p.type !== type) return false;
+      return true;
+    });
+  }, [direction, type]);
+
+  // Direction counts
+  const dirCounts = useMemo(() => ({
+    all: CROSS_BORDER_PAYMENTS.length,
+    inbound: CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'inbound').length,
+    outbound: CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'outbound').length,
+  }), []);
+
+  // Type counts
+  const typeCounts = useMemo(() => ({
+    all: CROSS_BORDER_PAYMENTS.length,
+    invoice: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'invoice').length,
+    collection: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'collection').length,
+    payout: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'payout').length,
+    reconciliation: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'reconciliation').length,
+  }), []);
+
+  // Corridor aggregation: "US→IN" → sum amountUSD
+  const corridors = useMemo(() => {
+    const map = new Map<string, { from: CrossBorderPayment['fromCountry']; to: CrossBorderPayment['toCountry']; volume: number; count: number }>();
+    for (const p of CROSS_BORDER_PAYMENTS) {
+      const key = `${p.fromCountry}→${p.toCountry}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.volume += p.amountUSD;
+        existing.count += 1;
+      } else {
+        map.set(key, { from: p.fromCountry, to: p.toCountry, volume: p.amountUSD, count: 1 });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.volume - a.volume);
+  }, []);
+  const maxCorridorVol = corridors[0]?.volume ?? 1;
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+        {/* ─── Header ─── */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+              <ArrowLeftRight className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                Cross-Border Payments<sup className="text-[10px] text-emerald-400">™</sup>
+              </h1>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                Live wires, collections, payouts & reconciliations across all jurisdictions.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+              <span className="relative mr-2 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              Live
+            </Badge>
+            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+              <Radio className="mr-1 h-3 w-3" /> {CROSS_BORDER_PAYMENTS.length} transactions
+            </Badge>
+            <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+              Settled {fmtUSD(GLOBAL_KPIS.crossBorderVolumeUSD)} this period
+            </Badge>
+          </div>
+        </motion.div>
+
+        <Separator className="my-5 bg-white/[0.06]" />
+
+        {/* ─── KPI Row ─── */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <KpiTile
+            icon={Wallet}
+            label="Total Volume"
+            value={fmtUSD(totals.totalVolume)}
+            sub="All cross-border flows"
+            accent="text-emerald-300"
+            ring="bg-emerald-500/30"
+          />
+          <KpiTile
+            icon={ArrowDownRight}
+            label="Inbound Volume"
+            value={fmtCompactUSD(totals.inbound)}
+            sub={`${dirCounts.inbound} inbound transactions`}
+            accent="text-teal-300"
+            ring="bg-teal-500/30"
+          />
+          <KpiTile
+            icon={ArrowUpRight}
+            label="Outbound Volume"
+            value={fmtCompactUSD(totals.outbound)}
+            sub={`${dirCounts.outbound} outbound transactions`}
+            accent="text-amber-300"
+            ring="bg-amber-500/30"
+          />
+          <KpiTile
+            icon={Coins}
+            label="Total Fees"
+            value={fmtUSD(totals.fees)}
+            sub="Banking & FX charges"
+            accent="text-rose-300"
+            ring="bg-rose-500/30"
+          />
+          <KpiTile
+            icon={Percent}
+            label="Avg FX Rate"
+            value={totals.avgFx.toFixed(2)}
+            sub="Across all corridors"
+            accent="text-cyan-300"
+            ring="bg-cyan-500/30"
+          />
+        </div>
+
+        {/* ─── Filters ─── */}
+        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Direction</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <FilterPill active={direction === 'all'} onClick={() => setDirection('all')} count={dirCounts.all}>
+              All
+            </FilterPill>
+            <FilterPill active={direction === 'inbound'} onClick={() => setDirection('inbound')} count={dirCounts.inbound}>
+              <ArrowDownRight className="h-3 w-3" /> Inbound
+            </FilterPill>
+            <FilterPill active={direction === 'outbound'} onClick={() => setDirection('outbound')} count={dirCounts.outbound}>
+              <ArrowUpRight className="h-3 w-3" /> Outbound
+            </FilterPill>
+          </div>
+          <div className="hidden lg:block w-px h-6 bg-white/[0.06]" />
+          <div className="flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Type</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <FilterPill active={type === 'all'} onClick={() => setType('all')} count={typeCounts.all}>All</FilterPill>
+            <FilterPill active={type === 'invoice'} onClick={() => setType('invoice')} count={typeCounts.invoice}>Invoice</FilterPill>
+            <FilterPill active={type === 'collection'} onClick={() => setType('collection')} count={typeCounts.collection}>Collection</FilterPill>
+            <FilterPill active={type === 'payout'} onClick={() => setType('payout')} count={typeCounts.payout}>Payout</FilterPill>
+            <FilterPill active={type === 'reconciliation'} onClick={() => setType('reconciliation')} count={typeCounts.reconciliation}>Reconciliation</FilterPill>
+          </div>
+        </div>
+
+        {/* ─── Payments Table + Flow Visualization ─── */}
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* Payments table */}
+          <Card className="border-white/[0.06] bg-white/[0.02] lg:col-span-2">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-white">Payment Ledger</CardTitle>
+                <span className="text-[11px] text-muted-foreground">
+                  Showing <span className="text-emerald-300">{filtered.length}</span> of {CROSS_BORDER_PAYMENTS.length}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="max-h-[520px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/[0.06] hover:bg-transparent">
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Reference</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Type</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Route</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Counterparty</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Amount</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">USD</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Method</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">FX</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Fees</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <AnimatePresence mode="popLayout">
+                      {filtered.map((p, i) => {
+                        const color = statusColor(p.status);
+                        return (
+                          <motion.tr
+                            key={p.id}
+                            layout
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25, delay: i * 0.02 }}
+                            className="border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+                          >
+                            <TableCell className="py-2.5 font-mono text-[11px] text-white">{p.reference}</TableCell>
+                            <TableCell>
+                              <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', TYPE_BADGE[p.type])}>
+                                {TYPE_LABEL[p.type]}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <FlagArrow from={p.fromCountry} to={p.toCountry} />
+                                <span className="text-[10px] text-muted-foreground">
+                                  {p.direction === 'inbound' ? '↓' : '↑'}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[11px] text-white/90">{p.counterparty}</TableCell>
+                            <TableCell className="text-right font-mono text-[11px] text-white">
+                              {fmtCurrencyValue(p.amount, p.currency)}
+                              <div className="text-[9px] text-muted-foreground">{p.currency}</div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                              {fmtUSD(p.amountUSD)}
+                            </TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground">{p.method}</TableCell>
+                            <TableCell>
+                              <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', STATUS_BADGE[color])}>
+                                <span className={cn('h-1.5 w-1.5 rounded-full',
+                                  color === 'emerald' && 'bg-emerald-400',
+                                  color === 'amber' && 'bg-amber-400',
+                                  color === 'rose' && 'bg-rose-400',
+                                  color === 'slate' && 'bg-slate-400',
+                                )} />
+                                {p.status}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-[11px] text-cyan-300">{p.fxRate.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-mono text-[11px] text-rose-300">{fmtUSD(p.fees)}</TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground">{p.date}</TableCell>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </TableBody>
+                </Table>
+                {filtered.length === 0 && (
+                  <div className="py-12 text-center text-sm text-muted-foreground">
+                    No payments match the active filters.
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Flow visualization */}
+          <Card className="border-white/[0.06] bg-white/[0.02]">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Plane className="h-4 w-4 text-teal-400" />
+                  Top Corridors
+                </CardTitle>
+                <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+                  By volume
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="max-h-[520px]">
+                <div className="space-y-3">
+                  {corridors.map((cor, i) => {
+                    const f = getCountry(cor.from);
+                    const t = getCountry(cor.to);
+                    const widthPct = (cor.volume / maxCorridorVol) * 100;
+                    const palette = ['bg-emerald-500/70', 'bg-teal-500/70', 'bg-cyan-500/70', 'bg-violet-500/70', 'bg-amber-500/60'];
+                    const bar = palette[i % palette.length];
+                    return (
+                      <motion.div
+                        key={`${cor.from}-${cor.to}`}
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.04 }}
+                        className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{f.flag}</span>
+                            <ArrowLeftRight className="h-3 w-3 text-emerald-400" />
+                            <span className="text-base">{t.flag}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {f.code}→{t.code}
+                            </span>
+                          </div>
+                          <span className="font-mono text-xs font-semibold text-white">{fmtCompactUSD(cor.volume)}</span>
+                        </div>
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${widthPct}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.04 }}
+                            className={cn('h-full rounded-full', bar)}
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>{cor.count} transaction{cor.count > 1 ? 's' : ''}</span>
+                          <span>{fmtPctOf(widthPct)} of total</span>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ─── Footer note ─── */}
+        <div className="mt-5 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>All amounts converted to USD using mid-market rates.</span>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:text-white">
+            Export Ledger
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function fmtPctOf(n: number): string {
+  return `${n.toFixed(1)}%`;
+}

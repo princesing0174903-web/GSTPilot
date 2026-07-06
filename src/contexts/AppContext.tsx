@@ -167,7 +167,20 @@ export type AppView =
   | 'enterprise-notifications'
   | 'advanced-rbac'
   | 'cross-company-analytics'
-  | 'enterprise-audit';
+  | 'enterprise-audit'
+  // Phase 14 — Global Expansion & International Financial Operating System™
+  | 'multi-country-accounting'
+  | 'multi-tax-engine'
+  | 'multi-currency-system'
+  | 'international-banking'
+  | 'global-compliance-engine'
+  | 'international-erp'
+  | 'multi-language-platform'
+  | 'ai-global-advisor'
+  | 'global-dashboard'
+  | 'cross-border-payments'
+  | 'international-reports'
+  | 'global-performance';
 
 export interface ReturnPrepContext {
   clientId: string | null;

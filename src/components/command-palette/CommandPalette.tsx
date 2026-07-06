@@ -29,6 +29,7 @@ import {
   Crown,
   Cloud,
   Globe,
+  Brain,
   ShieldCheck,
   Calendar,
   Network,
@@ -36,6 +37,15 @@ import {
   ScrollText,
   Layers,
   LayoutDashboard,
+  Globe2,
+  Coins,
+  Banknote,
+  Warehouse,
+  Languages,
+  Plane,
+  FileBarChart,
+  Server,
+  Calculator,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -545,6 +555,139 @@ export default function CommandPalette() {
           addToRecent('cmd-open-enterprise-audit', 'Open Enterprise Audit™', 'command');
         },
         group: 'Phase 13 — Enterprise',
+      },
+      // ─── Phase 14 — Global Expansion & International Financial Operating System™ ───
+      {
+        id: 'cmd-open-multi-country-accounting',
+        label: 'Open Multi-Country Accounting™',
+        description: '10 countries (IN, US, CA, GB, AU, AE, SG, DE, FR, JP) with automatic country-specific rules',
+        icon: Globe2,
+        action: () => {
+          setCurrentView('multi-country-accounting');
+          addToRecent('cmd-open-multi-country-accounting', 'Open Multi-Country Accounting™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-multi-tax-engine',
+        label: 'Open Multi-Tax Engine™',
+        description: 'GST, VAT, Sales Tax, Corporate Tax, Payroll Tax, Import/Export Duty — country-specific calculations',
+        icon: Calculator,
+        action: () => {
+          setCurrentView('multi-tax-engine');
+          addToRecent('cmd-open-multi-tax-engine', 'Open Multi-Tax Engine™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-multi-currency-system',
+        label: 'Open Multi-Currency System™',
+        description: 'USD, INR, EUR, GBP, AED, CAD, JPY, AUD, SGD — live rates, conversion, historical trends',
+        icon: Coins,
+        action: () => {
+          setCurrentView('multi-currency-system');
+          addToRecent('cmd-open-multi-currency-system', 'Open Multi-Currency System™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-international-banking',
+        label: 'Open International Banking™',
+        description: 'Stripe, PayPal, Wise, Revolut, Mercury, Brex, HSBC, Citibank, JP Morgan, Razorpay, Cashfree',
+        icon: Banknote,
+        action: () => {
+          setCurrentView('international-banking');
+          addToRecent('cmd-open-international-banking', 'Open International Banking™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-global-compliance-engine',
+        label: 'Open Global Compliance Engine™',
+        description: 'India, USA, UK, EU, Singapore, Australia, Canada — automated compliance report generation',
+        icon: ShieldCheck,
+        action: () => {
+          setCurrentView('global-compliance-engine');
+          addToRecent('cmd-open-global-compliance-engine', 'Open Global Compliance Engine™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-international-erp',
+        label: 'Open International ERP™',
+        description: 'Global inventory, warehouses, branches, cross-border purchase orders & invoices',
+        icon: Warehouse,
+        action: () => {
+          setCurrentView('international-erp');
+          addToRecent('cmd-open-international-erp', 'Open International ERP™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-multi-language-platform',
+        label: 'Open Multi-Language Platform™',
+        description: 'English, Hindi, French, German, Spanish, Arabic, Japanese, Chinese — runtime switching',
+        icon: Languages,
+        action: () => {
+          setCurrentView('multi-language-platform');
+          addToRecent('cmd-open-multi-language-platform', 'Open Multi-Language Platform™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-ai-global-advisor',
+        label: 'Open AI Global Advisor™',
+        description: 'Oracle AI for country regulations, international taxation, currency risks, cross-border finance',
+        icon: Brain,
+        action: () => {
+          setCurrentView('ai-global-advisor');
+          addToRecent('cmd-open-ai-global-advisor', 'Open AI Global Advisor™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-global-dashboard',
+        label: 'Open Global Dashboard™',
+        description: 'Country-wise revenue, expenses, tax, exchange gains/losses, international cash flow, regional KPIs',
+        icon: LayoutDashboard,
+        action: () => {
+          setCurrentView('global-dashboard');
+          addToRecent('cmd-open-global-dashboard', 'Open Global Dashboard™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-cross-border-payments',
+        label: 'Open Cross-Border Payments™',
+        description: 'International invoices, collections, payouts & cross-border reconciliation',
+        icon: Plane,
+        action: () => {
+          setCurrentView('cross-border-payments');
+          addToRecent('cmd-open-cross-border-payments', 'Open Cross-Border Payments™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-international-reports',
+        label: 'Open International Reports™',
+        description: 'Country reports, currency reports, global cash flow, international P&L, regional analytics',
+        icon: FileBarChart,
+        action: () => {
+          setCurrentView('international-reports');
+          addToRecent('cmd-open-international-reports', 'Open International Reports™', 'command');
+        },
+        group: 'Phase 14 — Global',
+      },
+      {
+        id: 'cmd-open-global-performance',
+        label: 'Open Global Performance™',
+        description: '10,000+ users, 100,000+ orgs, millions of invoices, worldwide scaling, CDN optimization',
+        icon: Server,
+        action: () => {
+          setCurrentView('global-performance');
+          addToRecent('cmd-open-global-performance', 'Open Global Performance™', 'command');
+        },
+        group: 'Phase 14 — Global',
       },
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]

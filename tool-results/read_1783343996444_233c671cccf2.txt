@@ -1,0 +1,717 @@
+     1→     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→     2→// GSTPilot Infinity™ — Phase 14: Global Expansion Data Layer
+     3→     3→//
+     4→     4→// Pure static data for Multi-Country Accounting, Multi-Currency, Multi-Tax,
+     5→     5→// International Banking, Global Compliance, International ERP, Multi-Language,
+     6→     6→// AI Global Advisor, Global Dashboards, Cross-Border Payments & Reports.
+     7→     7→//
+     8→     8→// NO API calls. NO Math.random. Deterministic & typed.
+     9→     9→// ═══════════════════════════════════════════════════════════════════════════════
+    10→    10→
+    11→    11→// ─── Countries ─────────────────────────────────────────────────────────────────
+    12→    12→
+    13→    13→export type CountryCode =
+    14→    14→  | 'IN' | 'US' | 'CA' | 'GB' | 'AU' | 'AE' | 'SG' | 'DE' | 'FR' | 'JP';
+    15→    15→
+    16→    16→export interface Country {
+    17→    17→  code: CountryCode;
+    18→    18→  name: string;
+    19→    19→  flag: string;            // emoji flag
+    20→    20→  currency: string;        // ISO 4217
+    21→    21→  timezone: string;
+    22→    22→  taxSystem: TaxSystemType;
+    23→    23→  primaryTaxName: string;  // GST / VAT / Sales Tax
+    24→    24→  taxRate: number;         // % standard rate
+    25→    25→  corporateTaxRate: number;// %
+    26→    26→  payrollTaxRate: number;   // %
+    27→    27→  importDuty: number;       // %
+    28→    28→  exportDuty: number;       // %
+    29→    29→  language: string;
+    30→    30→  complianceBodies: string[];
+    31→    31→  fiscalYearStart: string;  // month
+    32→    32→  revenue: number;          // revenue from this country (INR equiv, deterministic)
+    33→    33→  expenses: number;
+    34→    34→  taxLiability: number;
+    35→    35→  organizations: number;    // # orgs operating in this country
+    36→    36→  growthScore: number;      // 0-100
+    37→    37→  riskScore: number;        // 0-100
+    38→    38→  complianceScore: number;  // 0-100
+    39→    39→}
+    40→    40→
+    41→    41→export type TaxSystemType = 'GST' | 'VAT' | 'Sales Tax' | 'Consumption Tax';
+    42→    42→
+    43→    43→export const COUNTRIES: Country[] = [
+    44→    44→  {
+    45→    45→    code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR', timezone: 'Asia/Kolkata',
+    46→    46→    taxSystem: 'GST', primaryTaxName: 'GST', taxRate: 18, corporateTaxRate: 25.17,
+    47→    47→    payrollTaxRate: 12, importDuty: 15, exportDuty: 0, language: 'Hindi / English',
+    48→    48→    complianceBodies: ['GSTN', 'Income Tax Dept', 'RBI', 'MCA', 'CBIC'],
+    49→    49→    fiscalYearStart: 'April',
+    50→    50→    revenue: 847200000, expenses: 612400000, taxLiability: 152596000,
+    51→    51→    organizations: 1247, growthScore: 82, riskScore: 24, complianceScore: 94,
+    52→    52→  },
+    53→    53→  {
+    54→    54→    code: 'US', name: 'United States', flag: '🇺🇸', currency: 'USD', timezone: 'America/New_York',
+    55→    55→    taxSystem: 'Sales Tax', primaryTaxName: 'Sales Tax', taxRate: 7.25, corporateTaxRate: 21,
+    56→    56→    payrollTaxRate: 15.3, importDuty: 3.4, exportDuty: 0, language: 'English',
+    57→    57→    complianceBodies: ['IRS', 'State Revenue', 'FinCEN', 'SEC', 'DOL'],
+    58→    58→    fiscalYearStart: 'January',
+    59→    59→    revenue: 1240000, expenses: 892000, taxLiability: 260400,
+    60→    60→    organizations: 834, growthScore: 88, riskScore: 18, complianceScore: 91,
+    61→    61→  },
+    62→    62→  {
+    63→    63→    code: 'CA', name: 'Canada', flag: '🇨🇦', currency: 'CAD', timezone: 'America/Toronto',
+    64→    64→    taxSystem: 'GST', primaryTaxName: 'GST/HST', taxRate: 13, corporateTaxRate: 26.5,
+    65→    65→    payrollTaxRate: 14.2, importDuty: 5, exportDuty: 0, language: 'English / French',
+    66→    66→    complianceBodies: ['CRA', 'Provincial Revenue', 'FINTRAC'],
+    67→    67→    fiscalYearStart: 'April',
+    68→    68→    revenue: 640000, expenses: 458000, taxLiability: 83200,
+    69→    69→    organizations: 312, growthScore: 76, riskScore: 21, complianceScore: 93,
+    70→    70→  },
+    71→    71→  {
+    72→    72→    code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP', timezone: 'Europe/London',
+    73→    73→    taxSystem: 'VAT', primaryTaxName: 'VAT', taxRate: 20, corporateTaxRate: 25,
+    74→    74→    payrollTaxRate: 13.8, importDuty: 4.7, exportDuty: 0, language: 'English',
+    75→    75→    complianceBodies: ['HMRC', 'FCA', 'Companies House'],
+    76→    76→    fiscalYearStart: 'April',
+    77→    77→    revenue: 480000, expenses: 356000, taxLiability: 96000,
+    78→    78→    organizations: 287, growthScore: 74, riskScore: 26, complianceScore: 90,
+    79→    79→  },
+    80→    80→  {
+    81→    81→    code: 'AU', name: 'Australia', flag: '🇦🇺', currency: 'AUD', timezone: 'Australia/Sydney',
+    82→    82→    taxSystem: 'GST', primaryTaxName: 'GST', taxRate: 10, corporateTaxRate: 30,
+    83→    83→    payrollTaxRate: 11, importDuty: 5, exportDuty: 0, language: 'English',
+    84→    84→    complianceBodies: ['ATO', 'ASIC', 'AUSTRAC'],
+    85→    85→    fiscalYearStart: 'July',
+    86→    86→    revenue: 380000, expenses: 274000, taxLiability: 38000,
+    87→    87→    organizations: 198, growthScore: 79, riskScore: 19, complianceScore: 95,
+    88→    88→  },
+    89→    89→  {
+    90→    90→    code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', currency: 'AED', timezone: 'Asia/Dubai',
+    91→    91→    taxSystem: 'VAT', primaryTaxName: 'VAT', taxRate: 5, corporateTaxRate: 9,
+    92→    92→    payrollTaxRate: 0, importDuty: 5, exportDuty: 0, language: 'Arabic / English',
+    93→    93→    complianceBodies: ['FTA', 'Central Bank', 'MoE'],
+    94→    94→    fiscalYearStart: 'January',
+    95→    95→    revenue: 520000, expenses: 364000, taxLiability: 26000,
+    96→    96→    organizations: 156, growthScore: 91, riskScore: 15, complianceScore: 88,
+    97→    97→  },
+    98→    98→  {
+    99→    99→    code: 'SG', name: 'Singapore', flag: '🇸🇬', currency: 'SGD', timezone: 'Asia/Singapore',
+   100→   100→    taxSystem: 'GST', primaryTaxName: 'GST', taxRate: 9, corporateTaxRate: 17,
+   101→   101→    payrollTaxRate: 17, importDuty: 0, exportDuty: 0, language: 'English / Malay / Chinese / Tamil',
+   102→   102→    complianceBodies: ['IRAS', 'MAS', 'ACRA'],
+   103→   103→    fiscalYearStart: 'January',
+   104→   104→    revenue: 610000, expenses: 427000, taxLiability: 54900,
+   105→   105→    organizations: 224, growthScore: 86, riskScore: 12, complianceScore: 97,
+   106→   106→  },
+   107→   107→  {
+   108→   108→    code: 'DE', name: 'Germany', flag: '🇩🇪', currency: 'EUR', timezone: 'Europe/Berlin',
+   109→   109→    taxSystem: 'VAT', primaryTaxName: 'MwSt (VAT)', taxRate: 19, corporateTaxRate: 30.2,
+   110→   110→    payrollTaxRate: 19.7, importDuty: 4.2, exportDuty: 0, language: 'German',
+   111→   111→    complianceBodies: ['BZSt', 'BaFin', 'Bundesbank'],
+   112→   112→    fiscalYearStart: 'January',
+   113→   113→    revenue: 720000, expenses: 548000, taxLiability: 136800,
+   114→   114→    organizations: 341, growthScore: 71, riskScore: 22, complianceScore: 92,
+   115→   115→  },
+   116→   116→  {
+   117→   117→    code: 'FR', name: 'France', flag: '🇫🇷', currency: 'EUR', timezone: 'Europe/Paris',
+   118→   118→    taxSystem: 'VAT', primaryTaxName: 'TVA (VAT)', taxRate: 20, corporateTaxRate: 25.8,
+   119→   119→    payrollTaxRate: 22, importDuty: 4.2, exportDuty: 0, language: 'French',
+   120→   120→    complianceBodies: ['DGFiP', 'ACPR', 'AMF'],
+   121→   121→    fiscalYearStart: 'January',
+   122→   122→    revenue: 540000, expenses: 412000, taxLiability: 108000,
+   123→   123→    organizations: 203, growthScore: 68, riskScore: 28, complianceScore: 89,
+   124→   124→  },
+   125→   125→  {
+   126→   126→    code: 'JP', name: 'Japan', flag: '🇯🇵', currency: 'JPY', timezone: 'Asia/Tokyo',
+   127→   127→    taxSystem: 'Consumption Tax', primaryTaxName: 'Consumption Tax', taxRate: 10, corporateTaxRate: 30.6,
+   128→   128→    payrollTaxRate: 16.4, importDuty: 3.6, exportDuty: 0, language: 'Japanese',
+   129→   129→    complianceBodies: ['NTA', 'FSA', 'METI'],
+   130→   130→    fiscalYearStart: 'April',
+   131→   131→    revenue: 98000000, expenses: 74500000, taxLiability: 9800000,
+   132→   132→    organizations: 176, growthScore: 65, riskScore: 20, complianceScore: 94,
+   133→   133→  },
+   134→   134→];
+   135→   135→
+   136→   136→export const getCountry = (code: CountryCode): Country =>
+   137→   137→  COUNTRIES.find(c => c.code === code) ?? COUNTRIES[0];
+   138→   138→
+   139→   139→// ─── Currencies ─────────────────────────────────────────────────────────────────
+   140→   140→
+   141→   141→export interface Currency {
+   142→   142→  code: string;
+   143→   143→  name: string;
+   144→   144→  symbol: string;
+   145→   145→  flag: string;
+   146→   146→  rateToUSD: number;   // 1 unit = rateToUSD USD
+   147→   147→  change24h: number;   // % change vs USD
+   148→   148→  supported: boolean;
+   149→   149→}
+   150→   150→
+   151→   151→export const CURRENCIES: Currency[] = [
+   152→   152→  { code: 'USD', name: 'US Dollar', symbol: '$', flag: '🇺🇸', rateToUSD: 1, change24h: 0, supported: true },
+   153→   153→  { code: 'INR', name: 'Indian Rupee', symbol: '₹', flag: '🇮🇳', rateToUSD: 0.012, change24h: -0.21, supported: true },
+   154→   154→  { code: 'EUR', name: 'Euro', symbol: '€', flag: '🇪🇺', rateToUSD: 1.08, change24h: 0.14, supported: true },
+   155→   155→  { code: 'GBP', name: 'British Pound', symbol: '£', flag: '🇬🇧', rateToUSD: 1.27, change24h: -0.08, supported: true },
+   156→   156→  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', flag: '🇦🇪', rateToUSD: 0.27, change24h: 0.01, supported: true },
+   157→   157→  { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', flag: '🇨🇦', rateToUSD: 0.73, change24h: -0.15, supported: true },
+   158→   158→  { code: 'JPY', name: 'Japanese Yen', symbol: '¥', flag: '🇯🇵', rateToUSD: 0.0067, change24h: 0.32, supported: true },
+   159→   159→  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', flag: '🇦🇺', rateToUSD: 0.66, change24h: -0.19, supported: true },
+   160→   160→  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', flag: '🇸🇬', rateToUSD: 0.74, change24h: 0.05, supported: true },
+   161→   161→];
+   162→   162→
+   163→   163→export const convertCurrency = (amount: number, from: string, to: string): number => {
+   164→   164→  const fromCur = CURRENCIES.find(c => c.code === from);
+   165→   165→  const toCur = CURRENCIES.find(c => c.code === to);
+   166→   166→  if (!fromCur || !toCur) return amount;
+   167→   167→  const usd = amount * fromCur.rateToUSD;
+   168→   168→  return usd / toCur.rateToUSD;
+   169→   169→};
+   170→   170→
+   171→   171→export const formatCurrency = (amount: number, code: string): string => {
+   172→   172→  const cur = CURRENCIES.find(c => c.code === code);
+   173→   173→  if (!cur) return `${amount.toFixed(2)}`;
+   174→   174→  const decimals = code === 'JPY' || code === 'INR' ? 0 : 2;
+   175→   175→  return `${cur.symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+   176→   176→};
+   177→   177→
+   178→   178→// ─── Tax Systems ────────────────────────────────────────────────────────────────
+   179→   179→
+   180→   180→export interface TaxSystem {
+   181→   181→  type: TaxSystemType;
+   182→   182→  name: string;
+   183→   183→  countries: CountryCode[];
+   184→   184→  description: string;
+   185→   185→  standardRate: number;
+   186→   186→  reducedRate: number;
+   187→   187→  zeroRate: number;
+   188→   188→  features: string[];
+   189→   189→}
+   190→   190→
+   191→   191→export const TAX_SYSTEMS: TaxSystem[] = [
+   192→   192→  {
+   193→   193→    type: 'GST', name: 'Goods & Services Tax (GST)',
+   194→   194→    countries: ['IN', 'CA', 'AU', 'SG'],
+   195→   195→    description: 'Multi-stage value-added tax on goods and services',
+   196→   196→    standardRate: 18, reducedRate: 5, zeroRate: 0,
+   197→   197→    features: ['Input Tax Credit', 'E-invoicing', 'E-way bill', 'GSTR filing', 'Reverse charge'],
+   198→   198→  },
+   199→   199→  {
+   200→   200→    type: 'VAT', name: 'Value Added Tax (VAT)',
+   201→   201→    countries: ['GB', 'AE', 'DE', 'FR'],
+   202→   202→    description: 'Consumption tax levied on value added at each stage',
+   203→   203→    standardRate: 20, reducedRate: 5, zeroRate: 0,
+   204→   204→    features: ['VAT returns', 'EC Sales lists', 'Intrastat', 'Reverse charge', 'MOSS'],
+   205→   205→  },
+   206→   206→  {
+   207→   207→    type: 'Sales Tax', name: 'Sales Tax',
+   208→   208→    countries: ['US'],
+   209→   209→    description: 'State-level tax on retail sales of goods and services',
+   210→   210→    standardRate: 7.25, reducedRate: 0, zeroRate: 0,
+   211→   211→    features: ['State nexus', 'Economic nexus', 'Marketplace facilitator', 'Origin/destination', 'Exemption certificates'],
+   212→   212→  },
+   213→   213→  {
+   214→   214→    type: 'Consumption Tax', name: 'Consumption Tax',
+   215→   215→    countries: ['JP'],
+   216→   216→    description: 'National tax on consumption of goods and services',
+   217→   217→    standardRate: 10, reducedRate: 8, zeroRate: 0,
+   218→   218→    features: ['Reduced rate (food)', 'Invoice system', 'Qualified invoice', 'Tax-exempt businesses'],
+   219→   219→  },
+   220→   220→];
+   221→   221→
+   222→   222→export interface TaxCalculation {
+   223→   223→  taxType: string;
+   224→   224→  rate: number;
+   225→   225→  baseAmount: number;
+   226→   226→  taxAmount: number;
+   227→   227→  totalAmount: number;
+   228→   228→}
+   229→   229→
+   230→   230→export const calculateTax = (
+   231→   231→  amount: number,
+   232→   232→  countryCode: CountryCode,
+   233→   233→  taxType: 'indirect' | 'corporate' | 'payroll' | 'import' | 'export' = 'indirect'
+   234→   234→): TaxCalculation => {
+   235→   235→  const country = getCountry(countryCode);
+   236→   236→  let rate = 0;
+   237→   237→  let taxName = '';
+   238→   238→  switch (taxType) {
+   239→   239→    case 'indirect': rate = country.taxRate; taxName = country.primaryTaxName; break;
+   240→   240→    case 'corporate': rate = country.corporateTaxRate; taxName = 'Corporate Tax'; break;
+   241→   241→    case 'payroll': rate = country.payrollTaxRate; taxName = 'Payroll Tax'; break;
+   242→   242→    case 'import': rate = country.importDuty; taxName = 'Import Duty'; break;
+   243→   243→    case 'export': rate = country.exportDuty; taxName = 'Export Duty'; break;
+   244→   244→  }
+   245→   245→  return {
+   246→   246→    taxType: taxName,
+   247→   247→    rate,
+   248→   248→    baseAmount: amount,
+   249→   249→    taxAmount: (amount * rate) / 100,
+   250→   250→    totalAmount: amount + (amount * rate) / 100,
+   251→   251→  };
+   252→   252→};
+   253→   253→
+   254→   254→// ─── International Banking ──────────────────────────────────────────────────────
+   255→   255→
+   256→   256→export interface BankIntegration {
+   257→   257→  id: string;
+   258→   258→  name: string;
+   259→   259→  type: string;
+   260→   260→  region: string;
+   261→   261→  countries: string[];
+   262→   262→  status: 'connected' | 'available' | 'coming-soon';
+   263→   263→  transactions: number;       // monthly tx count
+   264→   264→  volume: number;             // monthly volume (USD)
+   265→   265→  fees: string;
+   266→   266→  features: string[];
+   267→   267→  logo: string;               // emoji or letter
+   268→   268→  color: string;              // accent
+   269→   269→}
+   270→   270→
+   271→   271→export const BANK_INTEGRATIONS: BankIntegration[] = [
+   272→   272→  {
+   273→   273→    id: 'stripe', name: 'Stripe', type: 'Payment Processor', region: 'Global',
+   274→   274→    countries: ['US', 'GB', 'DE', 'FR', 'AU', 'CA', 'SG'],
+   275→   275→    status: 'connected', transactions: 14820, volume: 2840000, fees: '2.9% + $0.30',
+   276→   276→    features: ['Cards', 'ACH', 'SEPA', 'Apple Pay', 'Google Pay', 'Subscriptions'],
+   277→   277→    logo: 'S', color: 'violet',
+   278→   278→  },
+   279→   279→  {
+   280→   280→    id: 'paypal', name: 'PayPal', type: 'Digital Wallet', region: 'Global',
+   281→   281→    countries: ['US', 'GB', 'DE', 'FR', 'AU', 'CA', 'AE', 'SG'],
+   282→   282→    status: 'connected', transactions: 6230, volume: 1180000, fees: '3.49% + fixed',
+   283→   283→    features: ['PayPal balance', 'Cards', 'Pay Later', 'Payouts', 'Invoicing'],
+   284→   284→    logo: 'P', color: 'blue',
+   285→   285→  },
+   286→   286→  {
+   287→   287→    id: 'wise', name: 'Wise', type: 'Cross-Border', region: 'Global',
+   288→   288→    countries: ['US', 'GB', 'DE', 'FR', 'AU', 'CA', 'AE', 'SG', 'JP'],
+   289→   289→    status: 'connected', transactions: 1840, volume: 890000, fees: '0.41% avg',
+   290→   290→    features: ['Multi-currency', 'Mid-market rate', 'Borderless account', 'Debit card', 'API'],
+   291→   291→    logo: 'W', color: 'emerald',
+   292→   292→  },
+   293→   293→  {
+   294→   294→    id: 'revolut', name: 'Revolut Business', type: 'Neobank', region: 'EU/UK',
+   295→   295→    countries: ['GB', 'DE', 'FR'],
+   296→   296→    status: 'available', transactions: 0, volume: 0, fees: 'From £25/mo',
+   297→   297→    features: ['Multi-currency', 'Cards', 'FX', 'Payments', 'Analytics'],
+   298→   298→    logo: 'R', color: 'slate',
+   299→   299→  },
+   300→   300→  {
+   301→   301→    id: 'mercury', name: 'Mercury', type: 'Neobank', region: 'US',
+   302→   302→    countries: ['US'],
+   303→   303→    status: 'connected', transactions: 920, volume: 540000, fees: 'Free',
+   304→   304→    features: ['Business banking', 'FDIC insured', 'API', 'Virtual cards', 'Treasury'],
+   305→   305→    logo: 'M', color: 'orange',
+   306→   306→  },
+   307→   307→  {
+   308→   308→    id: 'brex', name: 'Brex', type: 'Corporate Cards', region: 'US',
+   309→   309→    countries: ['US'],
+   310→   310→    status: 'available', transactions: 0, volume: 0, fees: 'Free',
+   311→   311→    features: ['Corporate cards', 'Banking', 'Spend mgmt', 'Rewards', 'Bill pay'],
+   312→   312→    logo: 'B', color: 'teal',
+   313→   313→  },
+   314→   314→  {
+   315→   315→    id: 'hsbc', name: 'HSBC', type: 'Global Bank', region: 'Global',
+   316→   316→    countries: ['GB', 'AE', 'SG', 'IN'],
+   317→   317→    status: 'connected', transactions: 3120, volume: 4200000, fees: 'Custom',
+   318→   318→    features: ['Global accounts', 'Trade finance', 'FX', 'Treasury', 'Cash mgmt'],
+   319→   319→    logo: 'H', color: 'red',
+   320→   320→  },
+   321→   321→  {
+   322→   322→    id: 'citibank', name: 'Citibank', type: 'Global Bank', region: 'Global',
+   323→   323→    countries: ['US', 'GB', 'AE', 'SG', 'IN'],
+   324→   324→    status: 'connected', transactions: 2480, volume: 3600000, fees: 'Custom',
+   325→   325→    features: ['Global network', 'CitiDirect BEB', 'Cash mgmt', 'Trade', 'FX'],
+   326→   326→    logo: 'C', color: 'blue',
+   327→   327→  },
+   328→   328→  {
+   329→   329→    id: 'jpmorgan', name: 'JP Morgan', type: 'Investment Bank', region: 'Global',
+   330→   330→    countries: ['US', 'GB', 'DE', 'SG'],
+   331→   331→    status: 'available', transactions: 0, volume: 0, fees: 'Enterprise',
+   332→   332→    features: ['Treasury services', 'Trade finance', 'Custody', 'FX', 'Commercial cards'],
+   333→   333→    logo: 'J', color: 'slate',
+   334→   334→  },
+   335→   335→  {
+   336→   336→    id: 'razorpay', name: 'Razorpay', type: 'Payment Gateway', region: 'India',
+   337→   337→    countries: ['IN'],
+   338→   338→    status: 'connected', transactions: 22400, volume: 1850000, fees: '2% domestic',
+   339→   339→    features: ['UPI', 'Cards', 'Net banking', 'Subscriptions', 'Route', 'Payouts'],
+   340→   340→    logo: 'R', color: 'blue',
+   341→   341→  },
+   342→   342→  {
+   343→   343→    id: 'cashfree', name: 'Cashfree', type: 'Payment Gateway', region: 'India',
+   344→   344→    countries: ['IN'],
+   345→   345→    status: 'connected', transactions: 11200, volume: 920000, fees: '1.75% domestic',
+   346→   346→    features: ['UPI', 'Cards', 'Payouts', 'Split pay', 'International', 'Auto-collect'],
+   347→   347→    logo: 'C', color: 'emerald',
+   348→   348→  },
+   349→   349→];
+   350→   350→
+   351→   351→// ─── Global Compliance ──────────────────────────────────────────────────────────
+   352→   352→
+   353→   353→export interface ComplianceFramework {
+   354→   354→  id: string;
+   355→   355→  name: string;
+   356→   356→  region: string;
+   357→   357→  countries: string[];
+   358→   358→  category: string;
+   359→   359→  description: string;
+   360→   360→  requirements: string[];
+   361→   361→  deadline: string;
+   362→   362→  status: 'compliant' | 'in-progress' | 'attention' | 'upcoming';
+   363→   363→  lastAudit: string;
+   364→   364→  nextAudit: string;
+   365→   365→}
+   366→   366→
+   367→   367→export const COMPLIANCE_FRAMEWORKS: ComplianceFramework[] = [
+   368→   368→  {
+   369→   369→    id: 'gst-india', name: 'GST Returns (India)', region: 'India', countries: ['IN'],
+   370→   370→    category: 'Indirect Tax',
+   371→   371→    description: 'Monthly/quarterly GST return filing under Indian GST regime',
+   372→   372→    requirements: ['GSTR-1 (outward supplies)', 'GSTR-3B (summary)', 'GSTR-2B (auto ITC)', 'Annual return GSTR-9'],
+   373→   373→    deadline: '20th of next month', status: 'compliant',
+   374→   374→    lastAudit: 'Aug 2024', nextAudit: 'Oct 2024',
+   375→   375→  },
+   376→   376→  {
+   377→   377→    id: 'us-sales-tax', name: 'US Sales Tax Nexus', region: 'United States', countries: ['US'],
+   378→   378→    category: 'Indirect Tax',
+   379→   379→    description: 'State-by-state sales tax collection and remittance',
+   380→   380→    requirements: ['Economic nexus tracking', 'State registration', 'Tax filing per state', 'Exemption certificates'],
+   381→   381→    deadline: 'Quarterly', status: 'in-progress',
+   382→   382→    lastAudit: 'Jul 2024', nextAudit: 'Oct 2024',
+   383→   383→  },
+   384→   384→  {
+   385→   385→    id: 'uk-vat', name: 'UK VAT (HMRC)', region: 'United Kingdom', countries: ['GB'],
+   386→   386→    category: 'Indirect Tax',
+   387→   387→    description: 'VAT registration, returns, and MTD compliance',
+   388→   388→    requirements: ['VAT registration', 'MTD-compatible software', 'Quarterly returns', 'VAT EC Sales List'],
+   389→   389→    deadline: 'Quarterly', status: 'compliant',
+   390→   390→    lastAudit: 'Aug 2024', nextAudit: 'Nov 2024',
+   391→   391→  },
+   392→   392→  {
+   393→   393→    id: 'eu-vat-oss', name: 'EU VAT OSS', region: 'European Union', countries: ['DE', 'FR'],
+   394→   394→    category: 'Indirect Tax',
+   395→   395→    description: 'One Stop Shop for cross-border B2C VAT in the EU',
+   396→   396→    requirements: ['OSS registration', 'Quarterly OSS return', 'Intrastat reporting', 'EC Sales lists'],
+   397→   397→    deadline: 'Quarterly', status: 'compliant',
+   398→   398→    lastAudit: 'Jul 2024', nextAudit: 'Oct 2024',
+   399→   399→  },
+   400→   400→  {
+   401→   401→    id: 'gdpr', name: 'GDPR (EU)', region: 'European Union', countries: ['DE', 'FR'],
+   402→   402→    category: 'Data Protection',
+   403→   403→    description: 'General Data Protection Regulation compliance',
+   404→   404→    requirements: ['Data processing records', 'DPO appointment', 'Privacy policy', 'Data subject rights', 'Breach notification'],
+   405→   405→    deadline: 'Continuous', status: 'compliant',
+   406→   406→    lastAudit: 'Jun 2024', nextAudit: 'Dec 2024',
+   407→   407→  },
+   408→   408→  {
+   409→   409→    id: 'sox', name: 'SOX 404 (US)', region: 'United States', countries: ['US'],
+   410→   410→    category: 'Financial Reporting',
+   411→   411→    description: 'Sarbanes-Oxley internal controls over financial reporting',
+   412→   412→    requirements: ['Internal controls', 'Audit committee', 'CEO/CFO certification', 'External audit'],
+   413→   413→    deadline: 'Annual', status: 'in-progress',
+   414→   414→    lastAudit: 'Mar 2024', nextAudit: 'Mar 2025',
+   415→   415→  },
+   416→   416→  {
+   417→   417→    id: 'ae-vat', name: 'UAE VAT (FTA)', region: 'UAE', countries: ['AE'],
+   418→   418→    category: 'Indirect Tax',
+   419→   419→    description: 'Federal Tax Authority VAT compliance',
+   420→   420→    requirements: ['VAT registration', 'Tax invoices', 'Quarterly returns', 'Reverse charge'],
+   421→   421→    deadline: 'Quarterly', status: 'compliant',
+   422→   422→    lastAudit: 'Aug 2024', nextAudit: 'Nov 2024',
+   423→   423→  },
+   424→   424→  {
+   425→   425→    id: 'sg-gst', name: 'Singapore GST (IRAS)', region: 'Singapore', countries: ['SG'],
+   426→   426→    category: 'Indirect Tax',
+   427→   427→    description: 'IRAS GST registration and filing',
+   428→   428→    requirements: ['GST registration', 'Taxable supply tracking', 'Quarterly returns', 'GST F5'],
+   429→   429→    deadline: 'Quarterly', status: 'compliant',
+   430→   430→    lastAudit: 'Aug 2024', nextAudit: 'Nov 2024',
+   431→   431→  },
+   432→   432→  {
+   433→   433→    id: 'aus-gst', name: 'Australia GST (ATO)', region: 'Australia', countries: ['AU'],
+   434→   434→    category: 'Indirect Tax',
+   435→   435→    description: 'ATO GST, BAS, and PAYG compliance',
+   436→   436→    requirements: ['GST registration', 'BAS filing', 'PAYG withholding', 'STP reporting'],
+   437→   437→    deadline: 'Quarterly', status: 'compliant',
+   438→   438→    lastAudit: 'Jul 2024', nextAudit: 'Oct 2024',
+   439→   439→  },
+   440→   440→  {
+   441→   441→    id: 'ca-gst-hst', name: 'Canada GST/HST (CRA)', region: 'Canada', countries: ['CA'],
+   442→   442→    category: 'Indirect Tax',
+   443→   443→    description: 'CRA GST/HST registration and filing',
+   444→   444→    requirements: ['GST/HST registration', 'Input tax credits', 'Annual/quarterly returns', 'Rebate claims'],
+   445→   445→    deadline: 'Annual', status: 'attention',
+   446→   446→    lastAudit: 'May 2024', nextAudit: 'Dec 2024',
+   447→   447→  },
+   448→   448→  {
+   449→   449→    id: 'jp-ct', name: 'Japan Consumption Tax (NTA)', region: 'Japan', countries: ['JP'],
+   450→   450→    category: 'Indirect Tax',
+   451→   451→    description: 'NTA consumption tax and qualified invoice system',
+   452→   452→    requirements: ['Qualified invoice issuer', 'Tax returns', 'Simplified taxation', 'Tax exemption'],
+   453→   453→    deadline: 'Annual', status: 'upcoming',
+   454→   454→    lastAudit: 'Feb 2024', nextAudit: 'Feb 2025',
+   455→   455→  },
+   456→   456→  {
+   457→   457→    id: 'fatca', name: 'FATCA (US)', region: 'United States', countries: ['US'],
+   458→   458→    category: 'Financial Reporting',
+   459→   459→    description: 'Foreign Account Tax Compliance Act reporting',
+   460→   460→    requirements: ['FFI registration', 'Account identification', 'Annual reporting', 'Withholding'],
+   461→   461→    deadline: 'Annual', status: 'compliant',
+   462→   462→    lastAudit: 'Mar 2024', nextAudit: 'Mar 2025',
+   463→   463→  },
+   464→   464→];
+   465→   465→
+   466→   466→// ─── International ERP ──────────────────────────────────────────────────────────
+   467→   467→
+   468→   468→export interface Warehouse {
+   469→   469→  id: string;
+   470→   470→  name: string;
+   471→   471→  country: CountryCode;
+   472→   472→  city: string;
+   473→   473→  capacity: number;          // units
+   474→   474→  utilized: number;
+   475→   475→  items: number;
+   476→   476→  type: 'Owned' | 'Leased' | '3PL';
+   477→   477→}
+   478→   478→
+   479→   479→export const WAREHOUSES: Warehouse[] = [
+   480→   480→  { id: 'wh-1', name: 'Mumbai DC', country: 'IN', city: 'Mumbai', capacity: 50000, utilized: 38200, items: 1240, type: 'Owned' },
+   481→   481→  { id: 'wh-2', name: 'Bengaluru Hub', country: 'IN', city: 'Bengaluru', capacity: 35000, utilized: 28900, items: 980, type: 'Owned' },
+   482→   482→  { id: 'wh-3', name: 'Newark East', country: 'US', city: 'Newark, NJ', capacity: 40000, utilized: 31200, items: 1450, type: 'Leased' },
+   483→   483→  { id: 'wh-4', name: 'LA West', country: 'US', city: 'Los Angeles, CA', capacity: 30000, utilized: 21600, items: 720, type: '3PL' },
+   484→   484→  { id: 'wh-5', name: 'London DC', country: 'GB', city: 'London', capacity: 25000, utilized: 19400, items: 610, type: 'Leased' },
+   485→   485→  { id: 'wh-6', name: 'Frankfurt Hub', country: 'DE', city: 'Frankfurt', capacity: 28000, utilized: 22300, items: 840, type: 'Owned' },
+   486→   486→  { id: 'wh-7', name: 'Dubai Free Zone', country: 'AE', city: 'Dubai', capacity: 22000, utilized: 16800, items: 520, type: '3PL' },
+   487→   487→  { id: 'wh-8', name: 'Singapore Logistics', country: 'SG', city: 'Singapore', capacity: 32000, utilized: 26100, items: 1130, type: 'Owned' },
+   488→   488→  { id: 'wh-9', name: 'Sydney South', country: 'AU', city: 'Sydney', capacity: 18000, utilized: 12400, items: 380, type: 'Leased' },
+   489→   489→  { id: 'wh-10', name: 'Tokyo Bay', country: 'JP', city: 'Tokyo', capacity: 20000, utilized: 15600, items: 290, type: '3PL' },
+   490→   490→];
+   491→   491→
+   492→   492→export interface InternationalPO {
+   493→   493→  id: string;
+   494→   494→  poNumber: string;
+   495→   495→  vendor: string;
+   496→   496→  vendorCountry: CountryCode;
+   497→   497→  originCountry: CountryCode;
+   498→   498→  destinationCountry: CountryCode;
+   499→   499→  amount: number;
+   500→   500→  currency: string;
+   501→   501→  status: 'pending' | 'in-transit' | 'customs' | 'delivered' | 'cancelled';
+   502→   502→  items: number;
+   503→   503→  eta: string;
+   504→   504→  incoterm: string;
+   505→   505→}
+   506→   506→
+   507→   507→export const INTERNATIONAL_POS: InternationalPO[] = [
+   508→   508→  { id: 'po-1', poNumber: 'PO-2024-0891', vendor: 'Shenzhen Electronics Co.', vendorCountry: 'SG', originCountry: 'SG', destinationCountry: 'IN', amount: 184000, currency: 'USD', status: 'in-transit', items: 4200, eta: '2024-10-15', incoterm: 'CIF' },
+   509→   509→  { id: 'po-2', poNumber: 'PO-2024-0892', vendor: 'Bayern Maschinen GmbH', vendorCountry: 'DE', originCountry: 'DE', destinationCountry: 'US', amount: 312000, currency: 'EUR', status: 'customs', items: 80, eta: '2024-10-08', incoterm: 'FOB' },
+   510→   510→  { id: 'po-3', poNumber: 'PO-2024-0893', vendor: 'Texas Components Inc.', vendorCountry: 'US', originCountry: 'US', destinationCountry: 'GB', amount: 96000, currency: 'USD', status: 'delivered', items: 12400, eta: '2024-09-28', incoterm: 'EXW' },
+   511→   511→  { id: 'po-4', poNumber: 'PO-2024-0894', vendor: 'Lyon Textiles SARL', vendorCountry: 'FR', originCountry: 'FR', destinationCountry: 'AE', amount: 64000, currency: 'EUR', status: 'pending', items: 8800, eta: '2024-10-22', incoterm: 'CIF' },
+   512→   512→  { id: 'po-5', poNumber: 'PO-2024-0895', vendor: 'Osaka Precision Ltd.', vendorCountry: 'JP', originCountry: 'JP', destinationCountry: 'SG', amount: 142000, currency: 'USD', status: 'in-transit', items: 340, eta: '2024-10-12', incoterm: 'CIF' },
+   513→   513→  { id: 'po-6', poNumber: 'PO-2024-0896', vendor: 'Manchester Steelworks', vendorCountry: 'GB', originCountry: 'GB', destinationCountry: 'DE', amount: 88000, currency: 'GBP', status: 'customs', items: 220, eta: '2024-10-05', incoterm: 'FOB' },
+   514→   514→];
+   515→   515→
+   516→   516→// ─── Languages ──────────────────────────────────────────────────────────────────
+   517→   517→
+   518→   518→export interface Language {
+   519→   519→  code: string;
+   520→   520→  name: string;
+   521→   521→  nativeName: string;
+   522→   522→  flag: string;
+   523→   523→  rtl: boolean;
+   524→   524→  coverage: number;        // % of UI translated
+   525→   525→  supported: boolean;
+   526→   526→}
+   527→   527→
+   528→   528→export const LANGUAGES: Language[] = [
+   529→   529→  { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧', rtl: false, coverage: 100, supported: true },
+   530→   530→  { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳', rtl: false, coverage: 96, supported: true },
+   531→   531→  { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷', rtl: false, coverage: 92, supported: true },
+   532→   532→  { code: 'de', name: 'German', nativeName: 'Deutsch', flag: '🇩🇪', rtl: false, coverage: 89, supported: true },
+   533→   533→  { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸', rtl: false, coverage: 94, supported: true },
+   534→   534→  { code: 'ar', name: 'Arabic', nativeName: 'العربية', flag: '🇦🇪', rtl: true, coverage: 81, supported: true },
+   535→   535→  { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: '🇯🇵', rtl: false, coverage: 78, supported: true },
+   536→   536→  { code: 'zh', name: 'Chinese', nativeName: '中文', flag: '🇨🇳', rtl: false, coverage: 85, supported: true },
+   537→   537→];
+   538→   538→
+   539→   539→// ─── AI Global Advisor ──────────────────────────────────────────────────────────
+   540→   540→
+   541→   541→export interface AIAdvisorInsight {
+   542→   542→  id: string;
+   543→   543→  category: 'Tax' | 'Currency' | 'Compliance' | 'Cross-Border' | 'Regulation';
+   544→   544→  title: string;
+   545→   545→  description: string;
+   546→   546→  countries: string[];
+   547→   547→  impact: 'high' | 'medium' | 'low';
+   548→   548→  recommendation: string;
+   549→   549→  potentialSaving: string;
+   550→   550→}
+   551→   551→
+   552→   552→export const AI_ADVISOR_INSIGHTS: AIAdvisorInsight[] = [
+   553→   553→  {
+   554→   554→    id: 'ai-1', category: 'Tax', title: 'Transfer Pricing Optimization',
+   555→   555→    description: 'Realign inter-company pricing between IN and SG entities to leverage the India-Singapore DTAA.',
+   556→   556→    countries: ['IN', 'SG'], impact: 'high',
+   557→   557→    recommendation: 'Restructure royalty payments to align with arm\'s length principle and DTAA rates.',
+   558→   558→    potentialSaving: '$240K/yr',
+   559→   559→  },
+   560→   560→  {
+   561→   561→    id: 'ai-2', category: 'Currency', title: 'EUR Hedge Opportunity',
+   562→   562→    description: 'EUR/USD volatility suggests a 6-month forward contract to lock in receivables from DE and FR.',
+   563→   563→    countries: ['DE', 'FR'], impact: 'high',
+   564→   564→    recommendation: 'Enter forward contracts for €480K at 1.0850 to hedge Q4 receivables.',
+   565→   565→    potentialSaving: '$38K',
+   566→   566→  },
+   567→   567→  {
+   568→   568→    id: 'ai-3', category: 'Compliance', title: 'EU VAT OSS Registration',
+   569→   569→    description: 'Cross-border B2C sales exceed €10K threshold — OSS registration required to simplify VAT filing.',
+   570→   570→    countries: ['DE', 'FR'], impact: 'medium',
+   571→   571→    recommendation: 'Register in Germany as OSS identification member state before next quarter.',
+   572→   572→    potentialSaving: 'Avoid penalties',
+   573→   573→  },
+   574→   574→  {
+   575→   575→    id: 'ai-4', category: 'Cross-Border', title: 'US-India Invoice Routing',
+   576→   576→    description: 'Routing US→IN shipments via Singapore Free Trade Zone reduces duty by 4.2%.',
+   577→   577→    countries: ['US', 'IN', 'SG'], impact: 'high',
+   578→   578→    recommendation: 'Use Singapore FTZ for transshipment; apply CECA preferential tariff.',
+   579→   579→    potentialSaving: '$62K/qtr',
+   580→   580→  },
+   581→   581→  {
+   582→   582→    id: 'ai-5', category: 'Regulation', title: 'UAE Corporate Tax Filing',
+   583→   583→    description: 'UAE corporate tax (9%) effective June 2023 — first return due for FY2024.',
+   584→   584→    countries: ['AE'], impact: 'medium',
+   585→   585→    recommendation: 'Register with FTA, file Q1 2025 return, maintain transfer pricing documentation.',
+   586→   586→    potentialSaving: 'Compliance',
+   587→   587→  },
+   588→   588→  {
+   589→   589→    id: 'ai-6', category: 'Tax', title: 'UK R&D Tax Credit',
+   590→   590→    description: 'Software development in UK entity qualifies for SME R&D tax credit at 186% enhancement.',
+   591→   591→    countries: ['GB'], impact: 'high',
+   592→   592→    recommendation: 'File R&D claim for £420K qualifying expenditure; expect £78K credit.',
+   593→   593→    potentialSaving: '£78K',
+   594→   594→  },
+   595→   595→];
+   596→   596→
+   597→   597→// ─── Cross-Border Payments ──────────────────────────────────────────────────────
+   598→   598→
+   599→   599→export interface CrossBorderPayment {
+   600→   600→  id: string;
+   601→   601→  reference: string;
+   602→   602→  type: 'invoice' | 'collection' | 'payout' | 'reconciliation';
+   603→   603→  direction: 'inbound' | 'outbound';
+   604→   604→  fromCountry: CountryCode;
+   605→   605→  toCountry: CountryCode;
+   606→   606→  amount: number;
+   607→   607→  currency: string;
+   608→   608→  amountUSD: number;
+   609→   609→  method: string;
+   610→   610→  status: 'pending' | 'processing' | 'completed' | 'failed';
+   611→   611→  fxRate: number;
+   612→   612→  fees: number;
+   613→   613→  date: string;
+   614→   614→  counterparty: string;
+   615→   615→}
+   616→   616→
+   617→   617→export const CROSS_BORDER_PAYMENTS: CrossBorderPayment[] = [
+   618→   618→  { id: 'cbp-1', reference: 'INV-INT-0891', type: 'collection', direction: 'inbound', fromCountry: 'US', toCountry: 'IN', amount: 84000, currency: 'USD', amountUSD: 84000, method: 'Wise', status: 'completed', fxRate: 83.2, fees: 344, date: '2024-09-28', counterparty: 'Global Tech Inc.' },
+   619→   619→  { id: 'cbp-2', reference: 'INV-INT-0892', type: 'collection', direction: 'inbound', fromCountry: 'DE', toCountry: 'IN', amount: 52000, currency: 'EUR', amountUSD: 56160, method: 'Stripe SEPA', status: 'processing', fxRate: 90.4, fees: 1180, date: '2024-10-01', counterparty: 'Bayern GmbH' },
+   620→   620→  { id: 'cbp-3', reference: 'PO-INT-0893', type: 'payout', direction: 'outbound', fromCountry: 'IN', toCountry: 'JP', amount: 14200000, currency: 'JPY', amountUSD: 95140, method: 'HSBC', status: 'pending', fxRate: 0.0067, fees: 420, date: '2024-10-02', counterparty: 'Osaka Precision' },
+   621→   621→  { id: 'cbp-4', reference: 'INV-INT-0894', type: 'collection', direction: 'inbound', fromCountry: 'GB', toCountry: 'IN', amount: 38000, currency: 'GBP', amountUSD: 48260, method: 'Wise', status: 'completed', fxRate: 105.6, fees: 156, date: '2024-09-30', counterparty: 'Manchester Steel' },
+   622→   622→  { id: 'cbp-5', reference: 'PO-INT-0895', type: 'payout', direction: 'outbound', fromCountry: 'US', toCountry: 'SG', amount: 96000, currency: 'USD', amountUSD: 96000, method: 'Mercury', status: 'completed', fxRate: 1.35, fees: 15, date: '2024-09-29', counterparty: 'Singapore Logistics' },
+   623→   623→  { id: 'cbp-6', reference: 'INV-INT-0896', type: 'invoice', direction: 'outbound', fromCountry: 'IN', toCountry: 'AE', amount: 180000, currency: 'AED', amountUSD: 48600, method: 'Razorpay Intl', status: 'processing', fxRate: 22.7, fees: 840, date: '2024-10-03', counterparty: 'Dubai Traders LLC' },
+   624→   624→  { id: 'cbp-7', reference: 'REC-INT-0897', type: 'reconciliation', direction: 'inbound', fromCountry: 'FR', toCountry: 'IN', amount: 24000, currency: 'EUR', amountUSD: 25920, method: 'Stripe SEPA', status: 'completed', fxRate: 90.4, fees: 540, date: '2024-09-27', counterparty: 'Lyon Textiles' },
+   625→   625→  { id: 'cbp-8', reference: 'INV-INT-0898', type: 'collection', direction: 'inbound', fromCountry: 'AU', toCountry: 'IN', amount: 62000, currency: 'AUD', amountUSD: 40920, method: 'Wise', status: 'pending', fxRate: 54.8, fees: 168, date: '2024-10-04', counterparty: 'Sydney Retail Pty' },
+   626→   626→];
+   627→   627→
+   628→   628→// ─── Global Reports ─────────────────────────────────────────────────────────────
+   629→   629→
+   630→   630→export interface GlobalReport {
+   631→   631→  id: string;
+   632→   632→  name: string;
+   633→   633→  category: 'Country' | 'Currency' | 'Cash Flow' | 'P&L' | 'Regional' | 'Tax';
+   634→   634→  scope: string;
+   635→   635→  period: string;
+   636→   636→  generatedOn: string;
+   637→   637→  format: 'PDF' | 'XLSX' | 'CSV';
+   638→   638→  status: 'ready' | 'generating' | 'scheduled';
+   639→   639→}
+   640→   640→
+   641→   641→export const GLOBAL_REPORTS: GlobalReport[] = [
+   642→   642→  { id: 'rpt-1', name: 'India — Q3 FY24 GST Summary', category: 'Country', scope: 'India', period: 'Q3 FY24', generatedOn: '2024-09-30', format: 'PDF', status: 'ready' },
+   643→   643→  { id: 'rpt-2', name: 'USA — State Sales Tax Report', category: 'Tax', scope: 'United States', period: 'Q3 2024', generatedOn: '2024-09-30', format: 'XLSX', status: 'ready' },
+   644→   644→  { id: 'rpt-3', name: 'Global Cash Flow — Q3 2024', category: 'Cash Flow', scope: 'All Countries', period: 'Q3 2024', generatedOn: '2024-10-01', format: 'PDF', status: 'ready' },
+   645→   645→  { id: 'rpt-4', name: 'EUR Consolidated P&L', category: 'P&L', scope: 'EU Region', period: 'Q3 2024', generatedOn: '2024-10-01', format: 'XLSX', status: 'ready' },
+   646→   646→  { id: 'rpt-5', name: 'Multi-Currency Exposure Report', category: 'Currency', scope: 'All Currencies', period: 'Sep 2024', generatedOn: '2024-10-02', format: 'PDF', status: 'ready' },
+   647→   647→  { id: 'rpt-6', name: 'APAC Regional Analytics', category: 'Regional', scope: 'APAC', period: 'Q3 2024', generatedOn: '2024-10-02', format: 'PDF', status: 'generating' },
+   648→   648→  { id: 'rpt-7', name: 'Cross-Border Transfer Pricing', category: 'Tax', scope: 'Global', period: 'FY24', generatedOn: '2024-10-03', format: 'XLSX', status: 'scheduled' },
+   649→   649→  { id: 'rpt-8', name: 'UK — VAT MTD Report', category: 'Country', scope: 'United Kingdom', period: 'Q3 2024', generatedOn: '2024-10-03', format: 'CSV', status: 'ready' },
+   650→   650→];
+   651→   651→
+   652→   652→// ─── Global Dashboard KPIs ──────────────────────────────────────────────────────
+   653→   653→
+   654→   654→export const GLOBAL_KPIS = {
+   655→   655→  totalRevenueUSD: 5684000,
+   656→   656→  totalExpensesUSD: 4148000,
+   657→   657→  netCashFlowUSD: 1536000,
+   658→   658→  totalTaxLiabilityUSD: 842000,
+   659→   659→  countriesActive: 10,
+   660→   660→  currenciesActive: 9,
+   661→   661→  banksConnected: 7,
+   662→   662→  complianceScore: 91,
+   663→   663→  exchangeGainLossUSD: 42800,
+   664→   664→  crossBorderVolumeUSD: 594000,
+   665→   665→  avgGrowthScore: 78,
+   666→   666→  avgRiskScore: 21,
+   667→   667→};
+   668→   668→
+   669→   669→// ─── Exchange Rate History (deterministic) ──────────────────────────────────────
+   670→   670→
+   671→   671→export const EXCHANGE_RATE_HISTORY = [
+   672→   672→  { month: 'Apr', usdInr: 83.2, usdEur: 0.93, usdGbp: 0.79, usdJpy: 151.4 },
+   673→   673→  { month: 'May', usdInr: 83.4, usdEur: 0.92, usdGbp: 0.79, usdJpy: 157.3 },
+   674→   674→  { month: 'Jun', usdInr: 83.5, usdEur: 0.93, usdGbp: 0.79, usdJpy: 160.8 },
+   675→   675→  { month: 'Jul', usdInr: 83.7, usdEur: 0.92, usdGbp: 0.78, usdJpy: 155.2 },
+   676→   676→  { month: 'Aug', usdInr: 83.9, usdEur: 0.91, usdGbp: 0.78, usdJpy: 149.6 },
+   677→   677→  { month: 'Sep', usdInr: 83.2, usdEur: 0.92, usdGbp: 0.79, usdJpy: 148.3 },
+   678→   678→];
+   679→   679→
+   680→   680→// ─── Helpers ────────────────────────────────────────────────────────────────────
+   681→   681→
+   682→   682→export const fmtUSD = (n: number): string =>
+   683→   683→  `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+   684→   684→
+   685→   685→export const fmtINR = (n: number): string =>
+   686→   686→  `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+   687→   687→
+   688→   688→export const fmtPct = (n: number): string => `${n.toFixed(1)}%`;
+   689→   689→
+   690→   690→export const statusColor = (status: string): string => {
+   691→   691→  switch (status) {
+   692→   692→    case 'compliant':
+   693→   693→    case 'completed':
+   694→   694→    case 'connected':
+   695→   695→    case 'delivered':
+   696→   696→    case 'ready':
+   697→   697→      return 'emerald';
+   698→   698→    case 'in-progress':
+   699→   699→    case 'processing':
+   700→   700→    case 'in-transit':
+   701→   701→    case 'generating':
+   702→   702→      return 'amber';
+   703→   703→    case 'attention':
+   704→   704→    case 'pending':
+   705→   705→    case 'customs':
+   706→   706→    case 'failed':
+   707→   707→      return 'rose';
+   708→   708→    case 'coming-soon':
+   709→   709→    case 'upcoming':
+   710→   710→    case 'scheduled':
+   711→   711→    case 'cancelled':
+   712→   712→      return 'slate';
+   713→   713→    default:
+   714→   714→      return 'slate';
+   715→   715→  }
+   716→   716→};
+   717→   717→

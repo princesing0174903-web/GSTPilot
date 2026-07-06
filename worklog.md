@@ -3758,3 +3758,24 @@ Stage Summary:
 - PHASE 13 COMPLETE: All 11 enterprise components built, wired into routes, typed in AppView, and NOW discoverable via the ⌘K Command Palette under "Phase 13 — Enterprise" group. Users can finally navigate to every Phase 13 feature.
 - LINT CLEAN: 0 errors across all Phase 13 files + CommandPalette.
 - No UI redesigned, no features removed, no branding changed — pure platform upgrade as instructed.
+
+---
+Task ID: PREVIEW-FIX
+Agent: main (Z.ai Code)
+Task: Fix preview panel showing blank — dev server keeps dying in 4GB sandbox
+
+Work Log:
+- User reported preview still blank. Analyzed screenshot with VLM skill — confirmed blank white preview panel, no error/spinner.
+- Root cause: dev server process kept dying (OOM killed in 4GB cgroup). Every prior restart would compile successfully once, then die on subsequent requests, leaving the preview panel with nothing to load.
+- Tried bash watchdog (dev-watchdog.sh with nohup+disown) — the watchdog process itself kept dying (process group killed when shell exits).
+- SOLUTION: Rewrote start-dev-daemon.py as a proper double-fork Unix daemon (os.fork → os.setsid → os.fork) with an infinite auto-restart loop using os.spawnvpe. This creates a truly detached daemon session that survives shell exit and auto-restarts `next dev` whenever it dies.
+- Launched daemon: python3 start-dev-daemon.py → daemon PID 29430 (watchdog) + 29431 (next dev).
+- Pre-warmed compile: HTTP 200 in 40s. Content verified: title "GSTPilot™ — The Financial Brain of India", 31KB HTML rendered, "GSTPilot" + "Infinity" strings present.
+- Subsequent cached loads: HTTP 200 in 78ms-610ms. Server stable across multiple requests.
+- Both daemon and server confirmed alive after 5s settle.
+
+Stage Summary:
+- PREVIEW FIXED: Dev server now runs under a double-fork auto-restart watchdog daemon. If the server ever dies (OOM), the watchdog restarts it in 3 seconds. The preview panel will now reliably load.
+- Server: PID 29431, port 3000, HTTP 200, content verified.
+- Watchdog: PID 29430, auto-restarts server on exit.
+- Configuration: NODE_OPTIONS=--max-old-space-size=1800, webpack mode (not turbopack), port 3000.

@@ -1,0 +1,1812 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState } from 'react'
+     4→     4→import {
+     5→     5→  Card,
+     6→     6→  CardContent,
+     7→     7→  CardHeader,
+     8→     8→  CardTitle,
+     9→     9→  CardDescription,
+    10→    10→} from '@/components/ui/card'
+    11→    11→import { Button } from '@/components/ui/button'
+    12→    12→import { Input } from '@/components/ui/input'
+    13→    13→import { Label } from '@/components/ui/label'
+    14→    14→import { Switch } from '@/components/ui/switch'
+    15→    15→import { Separator } from '@/components/ui/separator'
+    16→    16→import { Badge } from '@/components/ui/badge'
+    17→    17→import { Textarea } from '@/components/ui/textarea'
+    18→    18→import { Progress } from '@/components/ui/progress'
+    19→    19→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    20→    20→import {
+    21→    21→  Select,
+    22→    22→  SelectContent,
+    23→    23→  SelectItem,
+    24→    24→  SelectTrigger,
+    25→    25→  SelectValue,
+    26→    26→} from '@/components/ui/select'
+    27→    27→import {
+    28→    28→  AlertDialog,
+    29→    29→  AlertDialogContent,
+    30→    30→  AlertDialogHeader,
+    31→    31→  AlertDialogTitle,
+    32→    32→  AlertDialogDescription,
+    33→    33→  AlertDialogFooter,
+    34→    34→  AlertDialogAction,
+    35→    35→  AlertDialogCancel,
+    36→    36→} from '@/components/ui/alert-dialog'
+    37→    37→import {
+    38→    38→  Dialog,
+    39→    39→  DialogContent,
+    40→    40→  DialogHeader,
+    41→    41→  DialogTitle,
+    42→    42→  DialogFooter,
+    43→    43→} from '@/components/ui/dialog'
+    44→    44→import {
+    45→    45→  Building2,
+    46→    46→  ClipboardList,
+    47→    47→  Users,
+    48→    48→  Bell,
+    49→    49→  Lock,
+    50→    50→  CreditCard,
+    51→    51→  Save,
+    52→    52→  Check,
+    53→    53→  Loader2,
+    54→    54→  Camera,
+    55→    55→  AlertTriangle,
+    56→    56→  CalendarClock,
+    57→    57→  Mail,
+    58→    58→  Activity,
+    59→    59→  Upload,
+    60→    60→  Shield,
+    61→    61→  Smartphone,
+    62→    62→  Monitor,
+    63→    63→  Globe,
+    64→    64→  ChevronRight,
+    65→    65→  Download,
+    66→    66→  LockKeyhole,
+    67→    67→} from 'lucide-react'
+    68→    68→import { motion, AnimatePresence } from 'framer-motion'
+    69→    69→import { toast } from 'sonner'
+    70→    70→import { useAuth } from '@/contexts/AuthContext'
+    71→    71→import { useIsMobile } from '@/hooks/use-mobile'
+    72→    72→
+    73→    73→// ─── Indian States ──────────────────────────────────────────────────────
+    74→    74→const INDIAN_STATES = [
+    75→    75→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    76→    76→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    77→    77→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    78→    78→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    79→    79→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    80→    80→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    81→    81→  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
+    82→    82→  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry',
+    83→    83→]
+    84→    84→
+    85→    85→const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
+    86→    86→
+    87→    87→// ─── Section IDs ────────────────────────────────────────────────────────
+    88→    88→type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
+    89→    89→
+    90→    90→interface NavSection {
+    91→    91→  id: SectionId
+    92→    92→  label: string
+    93→    93→  icon: React.ReactNode
+    94→    94→}
+    95→    95→
+    96→    96→const SECTIONS: NavSection[] = [
+    97→    97→  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
+    98→    98→  { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
+    99→    99→  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
+   100→   100→  { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
+   101→   101→  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
+   102→   102→  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
+   103→   103→  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
+   104→   104→  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
+   105→   105→]
+   106→   106→
+   107→   107→// ─── Team Member Type ───────────────────────────────────────────────────
+   108→   108→interface TeamMember {
+   109→   109→  id: string
+   110→   110→  name: string
+   111→   111→  email: string
+   112→   112→  role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
+   113→   113→  status: 'Active' | 'Invited'
+   114→   114→  initials: string
+   115→   115→}
+   116→   116→
+   117→   117→const INITIAL_TEAM: TeamMember[] = [
+   118→   118→  { id: '1', name: 'Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'Admin', status: 'Active', initials: 'RK' },
+   119→   119→  { id: '2', name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'Manager', status: 'Active', initials: 'PS' },
+   120→   120→  { id: '3', name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'Staff', status: 'Active', initials: 'AP' },
+   121→   121→]
+   122→   122→
+   123→   123→// ─── Session Type ───────────────────────────────────────────────────────
+   124→   124→interface Session {
+   125→   125→  id: string
+   126→   126→  device: string
+   127→   127→  location: string
+   128→   128→  lastActive: string
+   129→   129→  icon: React.ReactNode
+   130→   130→  current?: boolean
+   131→   131→}
+   132→   132→
+   133→   133→const MOCK_SESSIONS: Session[] = [
+   134→   134→  { id: '1', device: 'Chrome on MacOS', location: 'Mumbai, India', lastActive: 'Now', icon: <Monitor className="h-4 w-4" />, current: true },
+   135→   135→  { id: '2', device: 'GSTPilot Mobile App', location: 'Mumbai, India', lastActive: '2 hours ago', icon: <Smartphone className="h-4 w-4" /> },
+   136→   136→  { id: '3', device: 'Firefox on Windows', location: 'Pune, India', lastActive: 'Yesterday', icon: <Globe className="h-4 w-4" /> },
+   137→   137→]
+   138→   138→
+   139→   139→// ─── Billing History ────────────────────────────────────────────────────
+   140→   140→interface BillingInvoice {
+   141→   141→  id: string
+   142→   142→  date: string
+   143→   143→  amount: string
+   144→   144→  status: 'Paid' | 'Pending' | 'Failed'
+   145→   145→}
+   146→   146→
+   147→   147→const BILLING_HISTORY: BillingInvoice[] = [
+   148→   148→  { id: '1', date: '1 Jun 2025', amount: '₹1,499', status: 'Paid' },
+   149→   149→  { id: '2', date: '1 May 2025', amount: '₹1,499', status: 'Paid' },
+   150→   150→  { id: '3', date: '1 Apr 2025', amount: '₹1,499', status: 'Paid' },
+   151→   151→  { id: '4', date: '1 Mar 2025', amount: '₹1,499', status: 'Paid' },
+   152→   152→]
+   153→   153→
+   154→   154→// ─── GST API Connection Status ──────────────────────────────────────────
+   155→   155→interface ApiConnection {
+   156→   156→  id: string
+   157→   157→  name: string
+   158→   158→  description: string
+   159→   159→  status: 'Connected' | 'Disconnected' | 'Not Configured'
+   160→   160→  lastSync?: string
+   161→   161→  icon: React.ReactNode
+   162→   162→}
+   163→   163→
+   164→   164→const MOCK_API_CONNECTIONS: ApiConnection[] = [
+   165→   165→  { id: 'gst-portal', name: 'GST Portal API', description: 'GSTN portal for filing returns and viewing status', status: 'Connected', lastSync: '5 minutes ago', icon: <Globe className="h-4 w-4" /> },
+   166→   166→  { id: 'eway-bill', name: 'E-Way Bill API', description: 'Generate and manage e-way bills for transport', status: 'Disconnected', lastSync: '2 hours ago', icon: <ClipboardList className="h-4 w-4" /> },
+   167→   167→  { id: 'e-invoice', name: 'E-Invoice API', description: 'IRN generation and e-invoice management', status: 'Not Configured', icon: <ClipboardList className="h-4 w-4" /> },
+   168→   168→]
+   169→   169→
+   170→   170→// ─── Audit Log Entry ──────────────────────────────────────────────────
+   171→   171→interface AuditLogEntry {
+   172→   172→  id: string
+   173→   173→  timestamp: string
+   174→   174→  user: string
+   175→   175→  action: string
+   176→   176→  entity: string
+   177→   177→  actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
+   178→   178→}
+   179→   179→
+   180→   180→const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
+   181→   181→  { id: '1', timestamp: '2025-06-04 14:32', user: 'Rajesh Kumar', action: 'Filed GSTR-1 for Sharma Enterprises', entity: 'GSTR-1 May 2025', actionType: 'filing' },
+   182→   182→  { id: '2', timestamp: '2025-06-04 13:15', user: 'Priya Sharma', action: 'Updated client Patel & Sons', entity: 'Client Profile', actionType: 'client_update' },
+   183→   183→  { id: '3', timestamp: '2025-06-04 11:48', user: 'Rajesh Kumar', action: 'Uploaded 24 invoices for Krishna Traders', entity: 'Invoice Batch', actionType: 'invoice' },
+   184→   184→  { id: '4', timestamp: '2025-06-04 10:30', user: 'Amit Patel', action: 'Reconciled GSTR-2B for Metro Retail Solutions', entity: 'Reconciliation', actionType: 'reconciliation' },
+   185→   185→  { id: '5', timestamp: '2025-06-03 17:22', user: 'Priya Sharma', action: 'Changed notification preferences', entity: 'Settings', actionType: 'settings' },
+   186→   186→  { id: '6', timestamp: '2025-06-03 16:10', user: 'Rajesh Kumar', action: 'Filed GSTR-3B for Sunrise Exports Ltd', entity: 'GSTR-3B May 2025', actionType: 'filing' },
+   187→   187→  { id: '7', timestamp: '2025-06-03 14:45', user: 'Amit Patel', action: 'Approved 6 invoices for Gupta Manufacturing', entity: 'Invoice Queue', actionType: 'invoice' },
+   188→   188→  { id: '8', timestamp: '2025-06-03 11:20', user: 'Priya Sharma', action: 'Added new client Digital Commerce India', entity: 'Client Profile', actionType: 'client_update' },
+   189→   189→  { id: '9', timestamp: '2025-06-02 16:55', user: 'Rajesh Kumar', action: 'Reconciled ITC for Apex Logistics', entity: 'Reconciliation', actionType: 'reconciliation' },
+   190→   190→  { id: '10', timestamp: '2025-06-02 10:05', user: 'Amit Patel', action: 'Generated e-way bill for Sharma Enterprises', entity: 'E-Way Bill', actionType: 'invoice' },
+   191→   191→]
+   192→   192→
+   193→   193→// ─── Save Button with Animated States ──────────────────────────────────
+   194→   194→function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
+   195→   195→  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+   196→   196→
+   197→   197→  const handleClick = async () => {
+   198→   198→    setState('saving')
+   199→   199→    try {
+   200→   200→      await onSave()
+   201→   201→      setState('saved')
+   202→   202→      setTimeout(() => setState('idle'), 2000)
+   203→   203→    } catch {
+   204→   204→      setState('idle')
+   205→   205→    }
+   206→   206→  }
+   207→   207→
+   208→   208→  return (
+   209→   209→    <Button
+   210→   210→      onClick={handleClick}
+   211→   211→      disabled={state === 'saving'}
+   212→   212→      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[110px]"
+   213→   213→    >
+   214→   214→      <AnimatePresence mode="wait">
+   215→   215→        {state === 'idle' && (
+   216→   216→          <motion.span
+   217→   217→            key="idle"
+   218→   218→            initial={{ opacity: 0, scale: 0.8 }}
+   219→   219→            animate={{ opacity: 1, scale: 1 }}
+   220→   220→            exit={{ opacity: 0, scale: 0.8 }}
+   221→   221→            className="flex items-center gap-2"
+   222→   222→          >
+   223→   223→            <Save className="h-4 w-4" />
+   224→   224→            Save
+   225→   225→          </motion.span>
+   226→   226→        )}
+   227→   227→        {state === 'saving' && (
+   228→   228→          <motion.span
+   229→   229→            key="saving"
+   230→   230→            initial={{ opacity: 0, scale: 0.8 }}
+   231→   231→            animate={{ opacity: 1, scale: 1 }}
+   232→   232→            exit={{ opacity: 0, scale: 0.8 }}
+   233→   233→            className="flex items-center gap-2"
+   234→   234→          >
+   235→   235→            <Loader2 className="h-4 w-4 animate-spin" />
+   236→   236→            Saving...
+   237→   237→          </motion.span>
+   238→   238→        )}
+   239→   239→        {state === 'saved' && (
+   240→   240→          <motion.span
+   241→   241→            key="saved"
+   242→   242→            initial={{ opacity: 0, scale: 0.8 }}
+   243→   243→            animate={{ opacity: 1, scale: 1 }}
+   244→   244→            exit={{ opacity: 0, scale: 0.8 }}
+   245→   245→            className="flex items-center gap-2"
+   246→   246→          >
+   247→   247→            <Check className="h-4 w-4" />
+   248→   248→            Saved
+   249→   249→          </motion.span>
+   250→   250→        )}
+   251→   251→      </AnimatePresence>
+   252→   252→    </Button>
+   253→   253→  )
+   254→   254→}
+   255→   255→
+   256→   256→// ─── Password Strength Helper ──────────────────────────────────────────
+   257→   257→function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+   258→   258→  if (!password) return { score: 0, label: '', color: '' }
+   259→   259→  let score = 0
+   260→   260→  if (password.length >= 8) score++
+   261→   261→  if (password.length >= 12) score++
+   262→   262→  if (/[A-Z]/.test(password)) score++
+   263→   263→  if (/[0-9]/.test(password)) score++
+   264→   264→  if (/[^A-Za-z0-9]/.test(password)) score++
+   265→   265→
+   266→   266→  if (score <= 1) return { score: 20, label: 'Weak', color: 'bg-red-500' }
+   267→   267→  if (score <= 2) return { score: 40, label: 'Fair', color: 'bg-orange-500' }
+   268→   268→  if (score <= 3) return { score: 60, label: 'Good', color: 'bg-yellow-500' }
+   269→   269→  if (score <= 4) return { score: 80, label: 'Strong', color: 'bg-emerald-500' }
+   270→   270→  return { score: 100, label: 'Excellent', color: 'bg-emerald-600' }
+   271→   271→}
+   272→   272→
+   273→   273→// ─── Section Content Animation Variants ─────────────────────────────────
+   274→   274→const contentVariants = {
+   275→   275→  hidden: { opacity: 0, x: 12 },
+   276→   276→  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+   277→   277→  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+   278→   278→}
+   279→   279→
+   280→   280→// ═══════════════════════════════════════════════════════════════════════
+   281→   281→// MAIN COMPONENT
+   282→   282→// ═══════════════════════════════════════════════════════════════════════
+   283→   283→export default function SettingsPage() {
+   284→   284→  const { user } = useAuth()
+   285→   285→  const isMobile = useIsMobile()
+   286→   286→
+   287→   287→  // ── Active Section ──────────────────────────────────────────────────
+   288→   288→  const [activeSection, setActiveSection] = useState<SectionId>('firm')
+   289→   289→
+   290→   290→  // ── Firm Profile State ──────────────────────────────────────────────
+   291→   291→  const [firmName, setFirmName] = useState('Sharma & Associates')
+   292→   292→  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
+   293→   293→  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
+   294→   294→  const [firmState, setFirmState] = useState('Maharashtra')
+   295→   295→  const [entityType, setEntityType] = useState('LLP')
+   296→   296→  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
+   297→   297→  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
+   298→   298→
+   299→   299→  // ── GST Config State ────────────────────────────────────────────────
+   300→   300→  const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
+   301→   301→  const [fyStart, setFyStart] = useState<'april' | 'january'>('april')
+   302→   302→  const [gstr1Pref, setGstr1Pref] = useState<'auto' | 'manual'>('auto')
+   303→   303→  const [gstr3bPref, setGstr3bPref] = useState<'auto' | 'manual'>('auto')
+   304→   304→  const [itcMethod, setItcMethod] = useState<'auto-match' | 'manual-review'>('auto-match')
+   305→   305→  const [lateFilingAlert, setLateFilingAlert] = useState(true)
+   306→   306→  const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
+   307→   307→
+   308→   308→  // ── Team State ──────────────────────────────────────────────────────
+   309→   309→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(INITIAL_TEAM)
+   310→   310→  const [showInviteDialog, setShowInviteDialog] = useState(false)
+   311→   311→  const [inviteEmail, setInviteEmail] = useState('')
+   312→   312→  const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
+   313→   313→  const [inviting, setInviting] = useState(false)
+   314→   314→  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+   315→   315→  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
+   316→   316→  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+   317→   317→  const [editRole, setEditRole] = useState<string>('')
+   318→   318→
+   319→   319→  // ── Notifications State ─────────────────────────────────────────────
+   320→   320→  const [filingDeadline, setFilingDeadline] = useState(true)
+   321→   321→  const [mismatchAlerts, setMismatchAlerts] = useState(true)
+   322→   322→  const [weeklySummary, setWeeklySummary] = useState(false)
+   323→   323→  const [healthScoreChanges, setHealthScoreChanges] = useState(true)
+   324→   324→  const [teamActivity, setTeamActivity] = useState(false)
+   325→   325→  const [newInvoiceUploaded, setNewInvoiceUploaded] = useState(true)
+   326→   326→
+   327→   327→  // ── Security State ──────────────────────────────────────────────────
+   328→   328→  const [currentPassword, setCurrentPassword] = useState('')
+   329→   329→  const [newPassword, setNewPassword] = useState('')
+   330→   330→  const [confirmPassword, setConfirmPassword] = useState('')
+   331→   331→  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+   332→   332→
+   333→   333→  // ── Audit Log Filter ──────────────────────────────────────────────
+   334→   334→  const [auditFilter, setAuditFilter] = useState<string>('all')
+   335→   335→
+   336→   336→  // ── GSTIN Validation ────────────────────────────────────────────────
+   337→   337→  const isGstinValid = (gstin: string) => {
+   338→   338→    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+   339→   339→    return regex.test(gstin.toUpperCase())
+   340→   340→  }
+   341→   341→  const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
+   342→   342→
+   343→   343→  // ── Handlers ────────────────────────────────────────────────────────
+   344→   344→  const handleSave = async () => {
+   345→   345→    // Real firm-settings PATCH — persists to DB + AuditLog
+   346→   346→    try {
+   347→   347→      const res = await fetch('/api/firm-settings', {
+   348→   348→        method: 'PATCH',
+   349→   349→        headers: { 'Content-Type': 'application/json' },
+   350→   350→        body: JSON.stringify({
+   351→   351→          firmName,
+   352→   352→          primaryColor: '#059669',
+   353→   353→          accentColor: '#7c3aed',
+   354→   354→          updatedBy: user?.id,
+   355→   355→        }),
+   356→   356→      })
+   357→   357→      if (!res.ok) {
+   358→   358→        const data = await res.json().catch(() => ({}))
+   359→   359→        throw new Error(data?.error ?? 'Save failed')
+   360→   360→      }
+   361→   361→      toast.success('Firm profile saved')
+   362→   362→    } catch (err) {
+   363→   363→      toast.error(err instanceof Error ? err.message : 'Failed to save firm profile')
+   364→   364→      throw err
+   365→   365→    }
+   366→   366→  }
+   367→   367→
+   368→   368→  const handleInviteMember = async () => {
+   369→   369→    if (!inviteEmail.trim()) return
+   370→   370→    setInviting(true)
+   371→   371→    try {
+   372→   372→      const res = await fetch('/api/team-members', {
+   373→   373→        method: 'POST',
+   374→   374→        headers: { 'Content-Type': 'application/json' },
+   375→   375→        body: JSON.stringify({
+   376→   376→          email: inviteEmail.trim(),
+   377→   377→          role: inviteRole.toLowerCase(),
+   378→   378→          permissions: [
+   379→   379→            inviteRole === 'Manager' ? 'read' : 'read',
+   380→   380→            inviteRole === 'Manager' ? 'update' : 'create',
+   381→   381→            ...(inviteRole === 'Manager' ? ['file'] : []),
+   382→   382→          ],
+   383→   383→          invitedBy: user?.id,
+   384→   384→        }),
+   385→   385→      })
+   386→   386→      const data = await res.json()
+   387→   387→      if (!res.ok) {
+   388→   388→        throw new Error(data?.error ?? 'Failed to send invite')
+   389→   389→      }
+   390→   390→      // Optimistically add the invited member to the visible list
+   391→   391→      const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
+   392→   392→      const newMember: TeamMember = {
+   393→   393→        id: data?.teamMember?.id ?? Date.now().toString(),
+   394→   394→        name: data?.teamMember?.name ?? inviteEmail.split('@')[0],
+   395→   395→        email: inviteEmail,
+   396→   396→        role: inviteRole,
+   397→   397→        status: 'Invited',
+   398→   398→        initials,
+   399→   399→      }
+   400→   400→      setTeamMembers(prev => [...prev, newMember])
+   401→   401→      toast.success(`Invitation sent to ${inviteEmail}`)
+   402→   402→      setInviteEmail('')
+   403→   403→      setInviteRole('Staff')
+   404→   404→      setShowInviteDialog(false)
+   405→   405→    } catch (err) {
+   406→   406→      toast.error(err instanceof Error ? err.message : 'Failed to send invite')
+   407→   407→    } finally {
+   408→   408→      setInviting(false)
+   409→   409→    }
+   410→   410→  }
+   411→   411→
+   412→   412→  const handleRemoveMember = async () => {
+   413→   413→    if (!memberToRemove) return
+   414→   414→    try {
+   415→   415→      const res = await fetch(`/api/team-members/${memberToRemove.id}?removedBy=${encodeURIComponent(user?.id ?? '')}`, {
+   416→   416→        method: 'DELETE',
+   417→   417→      })
+   418→   418→      if (!res.ok) {
+   419→   419→        const data = await res.json().catch(() => ({}))
+   420→   420→        throw new Error(data?.error ?? 'Failed to remove member')
+   421→   421→      }
+   422→   422→      setTeamMembers(prev => prev.filter(m => m.id !== memberToRemove.id))
+   423→   423→      toast.success(`${memberToRemove.name} removed from team`)
+   424→   424→    } catch (err) {
+   425→   425→      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
+   426→   426→    } finally {
+   427→   427→      setShowRemoveDialog(false)
+   428→   428→      setMemberToRemove(null)
+   429→   429→    }
+   430→   430→  }
+   431→   431→
+   432→   432→  const handleUpdateRole = async (memberId: string, role: string) => {
+   433→   433→    const member = teamMembers.find(m => m.id === memberId)
+   434→   434→    if (!member) return
+   435→   435→    try {
+   436→   436→      const res = await fetch(`/api/team-members/${memberId}`, {
+   437→   437→        method: 'PATCH',
+   438→   438→        headers: { 'Content-Type': 'application/json' },
+   439→   439→        body: JSON.stringify({
+   440→   440→          role: role.toLowerCase(),
+   441→   441→          updatedBy: user?.id,
+   442→   442→        }),
+   443→   443→      })
+   444→   444→      if (!res.ok) {
+   445→   445→        const data = await res.json().catch(() => ({}))
+   446→   446→        throw new Error(data?.error ?? 'Failed to update role')
+   447→   447→      }
+   448→   448→      setTeamMembers(prev => prev.map(m =>
+   449→   449→        m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
+   450→   450→      ))
+   451→   451→      toast.success(`${member.name}'s role updated to ${role}`)
+   452→   452→      setEditingMemberId(null)
+   453→   453→      setEditRole('')
+   454→   454→    } catch (err) {
+   455→   455→      toast.error(err instanceof Error ? err.message : 'Failed to update role')
+   456→   456→    }
+   457→   457→  }
+   458→   458→
+   459→   459→  // ── Password strength ───────────────────────────────────────────────
+   460→   460→  const passwordStrength = getPasswordStrength(newPassword)
+   461→   461→
+   462→   462→  // ── Role Badge Color ────────────────────────────────────────────────
+   463→   463→  const getRoleBadgeClass = (role: string) => {
+   464→   464→    switch (role) {
+   465→   465→      case 'Admin': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   466→   466→      case 'Manager': return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800'
+   467→   467→      case 'Staff': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   468→   468→      case 'Viewer': return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700'
+   469→   469→      default: return ''
+   470→   470→    }
+   471→   471→  }
+   472→   472→
+   473→   473→  const getStatusBadgeClass = (status: string) => {
+   474→   474→    return status === 'Active'
+   475→   475→      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   476→   476→      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   477→   477→  }
+   478→   478→
+   479→   479→  // ═══════════════════════════════════════════════════════════════════
+   480→   480→  // RENDER SECTION CONTENT
+   481→   481→  // ═══════════════════════════════════════════════════════════════════
+   482→   482→  const renderSection = () => {
+   483→   483→    switch (activeSection) {
+   484→   484→      // ───────────────────────────────────────────────────────────────
+   485→   485→      // SECTION 1: FIRM PROFILE
+   486→   486→      // ───────────────────────────────────────────────────────────────
+   487→   487→      case 'firm':
+   488→   488→        return (
+   489→   489→          <motion.div
+   490→   490→            key="firm"
+   491→   491→            initial="hidden"
+   492→   492→            animate="visible"
+   493→   493→            exit="exit"
+   494→   494→            variants={contentVariants}
+   495→   495→            className="space-y-6"
+   496→   496→          >
+   497→   497→            <div>
+   498→   498→              <h2 className="text-xl font-semibold text-foreground">Firm Profile</h2>
+   499→   499→              <p className="text-sm text-muted-foreground mt-1">Manage your CA firm details used across all GST filings</p>
+   500→   500→            </div>
+   501→   501→
+   502→   502→            <Card className="border-border/50">
+   503→   503→              <CardContent className="pt-6 space-y-6">
+   504→   504→                {/* Logo Upload */}
+   505→   505→                <div className="flex items-center gap-5">
+   506→   506→                  <div className="relative group">
+   507→   507→                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20">
+   508→   508→                      {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+   509→   509→                    </div>
+   510→   510→                    <button className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+   511→   511→                      <Camera className="h-5 w-5 text-white" />
+   512→   512→                    </button>
+   513→   513→                  </div>
+   514→   514→                  <div>
+   515→   515→                    <p className="text-sm font-medium text-foreground">Firm Logo</p>
+   516→   516→                    <p className="text-xs text-muted-foreground mt-0.5">Click the avatar to upload a logo</p>
+   517→   517→                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG or JPG</p>
+   518→   518→                  </div>
+   519→   519→                </div>
+   520→   520→
+   521→   521→                <Separator />
+   522→   522→
+   523→   523→                {/* Firm Name & Legal Name */}
+   524→   524→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   525→   525→                  <div className="space-y-2">
+   526→   526→                    <Label htmlFor="firmName" className="text-sm font-medium">Firm Name</Label>
+   527→   527→                    <Input
+   528→   528→                      id="firmName"
+   529→   529→                      value={firmName}
+   530→   530→                      onChange={(e) => setFirmName(e.target.value)}
+   531→   531→                      placeholder="Enter firm name"
+   532→   532→                      className="h-10"
+   533→   533→                    />
+   534→   534→                  </div>
+   535→   535→                  <div className="space-y-2">
+   536→   536→                    <Label htmlFor="legalName" className="text-sm font-medium">Legal Name</Label>
+   537→   537→                    <Input
+   538→   538→                      id="legalName"
+   539→   539→                      value={legalName}
+   540→   540→                      onChange={(e) => setLegalName(e.target.value)}
+   541→   541→                      placeholder="Enter legal name as per registration"
+   542→   542→                      className="h-10"
+   543→   543→                    />
+   544→   544→                  </div>
+   545→   545→                </div>
+   546→   546→
+   547→   547→                {/* GSTIN & State */}
+   548→   548→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   549→   549→                  <div className="space-y-2">
+   550→   550→                    <Label htmlFor="firmGstin" className="text-sm font-medium">Firm GSTIN</Label>
+   551→   551→                    <div className="relative">
+   552→   552→                      <Input
+   553→   553→                        id="firmGstin"
+   554→   554→                        value={firmGstin}
+   555→   555→                        onChange={(e) => setFirmGstin(e.target.value.toUpperCase())}
+   556→   556→                        placeholder="22AAAAA0000A1Z5"
+   557→   557→                        className={`h-10 pr-10 ${gstinValidation === false ? 'border-red-300 focus-visible:ring-red-400' : gstinValidation === true ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+   558→   558→                        maxLength={15}
+   559→   559→                      />
+   560→   560→                      {gstinValidation !== null && (
+   561→   561→                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${gstinValidation ? 'text-emerald-500' : 'text-red-500'}`}>
+   562→   562→                          {gstinValidation ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+   563→   563→                        </div>
+   564→   564→                      )}
+   565→   565→                    </div>
+   566→   566→                    {gstinValidation === false && (
+   567→   567→                      <p className="text-[11px] text-red-500">Invalid GSTIN format</p>
+   568→   568→                    )}
+   569→   569→                    {gstinValidation === true && (
+   570→   570→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Valid GSTIN format</p>
+   571→   571→                    )}
+   572→   572→                  </div>
+   573→   573→                  <div className="space-y-2">
+   574→   574→                    <Label className="text-sm font-medium">Registration State</Label>
+   575→   575→                    <Select value={firmState} onValueChange={setFirmState}>
+   576→   576→                      <SelectTrigger className="h-10">
+   577→   577→                        <SelectValue />
+   578→   578→                      </SelectTrigger>
+   579→   579→                      <SelectContent>
+   580→   580→                        {INDIAN_STATES.map((state) => (
+   581→   581→                          <SelectItem key={state} value={state}>{state}</SelectItem>
+   582→   582→                        ))}
+   583→   583→                      </SelectContent>
+   584→   584→                    </Select>
+   585→   585→                  </div>
+   586→   586→                </div>
+   587→   587→
+   588→   588→                {/* Entity Type & CA Reg Number */}
+   589→   589→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   590→   590→                  <div className="space-y-2">
+   591→   591→                    <Label className="text-sm font-medium">Entity Type</Label>
+   592→   592→                    <Select value={entityType} onValueChange={setEntityType}>
+   593→   593→                      <SelectTrigger className="h-10">
+   594→   594→                        <SelectValue />
+   595→   595→                      </SelectTrigger>
+   596→   596→                      <SelectContent>
+   597→   597→                        {ENTITY_TYPES.map((type) => (
+   598→   598→                          <SelectItem key={type} value={type}>{type}</SelectItem>
+   599→   599→                        ))}
+   600→   600→                      </SelectContent>
+   601→   601→                    </Select>
+   602→   602→                  </div>
+   603→   603→                  <div className="space-y-2">
+   604→   604→                    <Label htmlFor="caRegNumber" className="text-sm font-medium">CA Registration Number</Label>
+   605→   605→                    <Input
+   606→   606→                      id="caRegNumber"
+   607→   607→                      value={caRegNumber}
+   608→   608→                      onChange={(e) => setCaRegNumber(e.target.value)}
+   609→   609→                      placeholder="ICAI/M/000000"
+   610→   610→                      className="h-10"
+   611→   611→                    />
+   612→   612→                  </div>
+   613→   613→                </div>
+   614→   614→
+   615→   615→                {/* Office Address */}
+   616→   616→                <div className="space-y-2">
+   617→   617→                  <Label htmlFor="officeAddress" className="text-sm font-medium">Office Address</Label>
+   618→   618→                  <Textarea
+   619→   619→                    id="officeAddress"
+   620→   620→                    value={officeAddress}
+   621→   621→                    onChange={(e) => setOfficeAddress(e.target.value)}
+   622→   622→                    placeholder="Enter complete office address"
+   623→   623→                    className="min-h-[80px] resize-none"
+   624→   624→                  />
+   625→   625→                </div>
+   626→   626→
+   627→   627→                {/* Save */}
+   628→   628→                <div className="flex justify-end pt-2">
+   629→   629→                  <SaveButton onSave={handleSave} />
+   630→   630→                </div>
+   631→   631→              </CardContent>
+   632→   632→            </Card>
+   633→   633→          </motion.div>
+   634→   634→        )
+   635→   635→
+   636→   636→      // ───────────────────────────────────────────────────────────────
+   637→   637→      // SECTION 2: GST CONFIGURATION
+   638→   638→      // ───────────────────────────────────────────────────────────────
+   639→   639→      case 'gst':
+   640→   640→        return (
+   641→   641→          <motion.div
+   642→   642→            key="gst"
+   643→   643→            initial="hidden"
+   644→   644→            animate="visible"
+   645→   645→            exit="exit"
+   646→   646→            variants={contentVariants}
+   647→   647→            className="space-y-6"
+   648→   648→          >
+   649→   649→            <div>
+   650→   650→              <h2 className="text-xl font-semibold text-foreground">GST Configuration</h2>
+   651→   651→              <p className="text-sm text-muted-foreground mt-1">Configure default GST filing preferences and automation rules</p>
+   652→   652→            </div>
+   653→   653→
+   654→   654→            <Card className="border-border/50">
+   655→   655→              <CardContent className="pt-6 space-y-6">
+   656→   656→                {/* Default Return Period */}
+   657→   657→                <div className="space-y-3">
+   658→   658→                  <div>
+   659→   659→                    <Label className="text-sm font-medium">Default Return Period</Label>
+   660→   660→                    <p className="text-xs text-muted-foreground mt-0.5">Set the default filing frequency for new clients</p>
+   661→   661→                  </div>
+   662→   662→                  <div className="flex gap-2">
+   663→   663→                    <button
+   664→   664→                      onClick={() => setReturnPeriod('monthly')}
+   665→   665→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   666→   666→                        returnPeriod === 'monthly'
+   667→   667→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   668→   668→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   669→   669→                      }`}
+   670→   670→                    >
+   671→   671→                      Monthly
+   672→   672→                    </button>
+   673→   673→                    <button
+   674→   674→                      onClick={() => setReturnPeriod('quarterly')}
+   675→   675→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   676→   676→                        returnPeriod === 'quarterly'
+   677→   677→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   678→   678→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   679→   679→                      }`}
+   680→   680→                    >
+   681→   681→                      Quarterly
+   682→   682→                    </button>
+   683→   683→                  </div>
+   684→   684→                </div>
+   685→   685→
+   686→   686→                <Separator />
+   687→   687→
+   688→   688→                {/* Financial Year Start */}
+   689→   689→                <div className="space-y-3">
+   690→   690→                  <div>
+   691→   691→                    <Label className="text-sm font-medium">Financial Year Start</Label>
+   692→   692→                    <p className="text-xs text-muted-foreground mt-0.5">Start month for financial year calculations</p>
+   693→   693→                  </div>
+   694→   694→                  <div className="flex gap-2">
+   695→   695→                    <button
+   696→   696→                      onClick={() => setFyStart('april')}
+   697→   697→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   698→   698→                        fyStart === 'april'
+   699→   699→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   700→   700→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   701→   701→                      }`}
+   702→   702→                    >
+   703→   703→                      April
+   704→   704→                    </button>
+   705→   705→                    <button
+   706→   706→                      onClick={() => setFyStart('january')}
+   707→   707→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   708→   708→                        fyStart === 'january'
+   709→   709→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+   710→   710→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+   711→   711→                      }`}
+   712→   712→                    >
+   713→   713→                      January
+   714→   714→                    </button>
+   715→   715→                  </div>
+   716→   716→                </div>
+   717→   717→
+   718→   718→                <Separator />
+   719→   719→
+   720→   720→                {/* GSTR-1 Filing Preference */}
+   721→   721→                <div className="flex items-center justify-between">
+   722→   722→                  <div>
+   723→   723→                    <Label className="text-sm font-medium">GSTR-1 Filing Preference</Label>
+   724→   724→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-fill from sales register or manual entry</p>
+   725→   725→                  </div>
+   726→   726→                  <Select value={gstr1Pref} onValueChange={(v) => setGstr1Pref(v as 'auto' | 'manual')}>
+   727→   727→                    <SelectTrigger className="w-[140px] h-9">
+   728→   728→                      <SelectValue />
+   729→   729→                    </SelectTrigger>
+   730→   730→                    <SelectContent>
+   731→   731→                      <SelectItem value="auto">Auto</SelectItem>
+   732→   732→                      <SelectItem value="manual">Manual</SelectItem>
+   733→   733→                    </SelectContent>
+   734→   734→                  </Select>
+   735→   735→                </div>
+   736→   736→
+   737→   737→                {/* GSTR-3B Filing Preference */}
+   738→   738→                <div className="flex items-center justify-between">
+   739→   739→                  <div>
+   740→   740→                    <Label className="text-sm font-medium">GSTR-3B Filing Preference</Label>
+   741→   741→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-compute liability or manual entry</p>
+   742→   742→                  </div>
+   743→   743→                  <Select value={gstr3bPref} onValueChange={(v) => setGstr3bPref(v as 'auto' | 'manual')}>
+   744→   744→                    <SelectTrigger className="w-[140px] h-9">
+   745→   745→                      <SelectValue />
+   746→   746→                    </SelectTrigger>
+   747→   747→                    <SelectContent>
+   748→   748→                      <SelectItem value="auto">Auto</SelectItem>
+   749→   749→                      <SelectItem value="manual">Manual</SelectItem>
+   750→   750→                    </SelectContent>
+   751→   751→                  </Select>
+   752→   752→                </div>
+   753→   753→
+   754→   754→                {/* ITC Claiming Method */}
+   755→   755→                <div className="flex items-center justify-between">
+   756→   756→                  <div>
+   757→   757→                    <Label className="text-sm font-medium">ITC Claiming Method</Label>
+   758→   758→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-match with GSTR-2A or manual review</p>
+   759→   759→                  </div>
+   760→   760→                  <Select value={itcMethod} onValueChange={(v) => setItcMethod(v as 'auto-match' | 'manual-review')}>
+   761→   761→                    <SelectTrigger className="w-[160px] h-9">
+   762→   762→                      <SelectValue />
+   763→   763→                    </SelectTrigger>
+   764→   764→                    <SelectContent>
+   765→   765→                      <SelectItem value="auto-match">Auto-match</SelectItem>
+   766→   766→                      <SelectItem value="manual-review">Manual review</SelectItem>
+   767→   767→                    </SelectContent>
+   768→   768→                  </Select>
+   769→   769→                </div>
+   770→   770→
+   771→   771→                <Separator />
+   772→   772→
+   773→   773→                {/* Late Filing Penalty Alert */}
+   774→   774→                <div className="flex items-center justify-between">
+   775→   775→                  <div className="flex items-center gap-3">
+   776→   776→                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+   777→   777→                      <AlertTriangle className="h-4 w-4" />
+   778→   778→                    </div>
+   779→   779→                    <div>
+   780→   780→                      <Label className="text-sm font-medium">Late Filing Penalty Alert</Label>
+   781→   781→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified when penalty is applicable</p>
+   782→   782→                    </div>
+   783→   783→                  </div>
+   784→   784→                  <Switch
+   785→   785→                    checked={lateFilingAlert}
+   786→   786→                    onCheckedChange={setLateFilingAlert}
+   787→   787→                    className="data-[state=checked]:bg-emerald-600"
+   788→   788→                  />
+   789→   789→                </div>
+   790→   790→
+   791→   791→                {/* Due Date Reminder Days */}
+   792→   792→                <div className="flex items-center justify-between">
+   793→   793→                  <div>
+   794→   794→                    <Label className="text-sm font-medium">Due Date Reminder Days</Label>
+   795→   795→                    <p className="text-xs text-muted-foreground mt-0.5">Days before due date to send reminder</p>
+   796→   796→                  </div>
+   797→   797→                  <Input
+   798→   798→                    type="number"
+   799→   799→                    value={dueDateReminderDays}
+   800→   800→                    onChange={(e) => setDueDateReminderDays(e.target.value)}
+   801→   801→                    min={1}
+   802→   802→                    max={30}
+   803→   803→                    className="w-[80px] h-9 text-center"
+   804→   804→                  />
+   805→   805→                </div>
+   806→   806→
+   807→   807→                {/* Save */}
+   808→   808→                <div className="flex justify-end pt-2">
+   809→   809→                  <SaveButton onSave={handleSave} />
+   810→   810→                </div>
+   811→   811→              </CardContent>
+   812→   812→            </Card>
+   813→   813→          </motion.div>
+   814→   814→        )
+   815→   815→
+   816→   816→      // ───────────────────────────────────────────────────────────────
+   817→   817→      // SECTION 3: TEAM MEMBERS
+   818→   818→      // ───────────────────────────────────────────────────────────────
+   819→   819→      case 'team':
+   820→   820→        return (
+   821→   821→          <motion.div
+   822→   822→            key="team"
+   823→   823→            initial="hidden"
+   824→   824→            animate="visible"
+   825→   825→            exit="exit"
+   826→   826→            variants={contentVariants}
+   827→   827→            className="space-y-6"
+   828→   828→          >
+   829→   829→            <div className="flex items-center justify-between">
+   830→   830→              <div>
+   831→   831→                <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
+   832→   832→                <p className="text-sm text-muted-foreground mt-1">Manage your team and their access levels</p>
+   833→   833→              </div>
+   834→   834→              <Button
+   835→   835→                onClick={() => setShowInviteDialog(true)}
+   836→   836→                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+   837→   837→              >
+   838→   838→                <Users className="h-4 w-4" />
+   839→   839→                Invite Team Member
+   840→   840→              </Button>
+   841→   841→            </div>
+   842→   842→
+   843→   843→            <div className="space-y-3">
+   844→   844→              {teamMembers.map((member) => (
+   845→   845→                <Card key={member.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+   846→   846→                  <CardContent className="pt-0 py-4">
+   847→   847→                    <div className="flex items-center gap-4">
+   848→   848→                      <Avatar className="h-10 w-10">
+   849→   849→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
+   850→   850→                          {member.initials}
+   851→   851→                        </AvatarFallback>
+   852→   852→                      </Avatar>
+   853→   853→                      <div className="flex-1 min-w-0">
+   854→   854→                        <div className="flex items-center gap-2 flex-wrap">
+   855→   855→                          <p className="text-sm font-semibold text-foreground">{member.name}</p>
+   856→   856→                          <Badge className={`text-[11px] px-2 py-0 border ${getRoleBadgeClass(member.role)}`}>
+   857→   857→                            {member.role}
+   858→   858→                          </Badge>
+   859→   859→                          <Badge className={`text-[11px] px-2 py-0 border ${getStatusBadgeClass(member.status)}`}>
+   860→   860→                            {member.status}
+   861→   861→                          </Badge>
+   862→   862→                        </div>
+   863→   863→                        <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
+   864→   864→                      </div>
+   865→   865→
+   866→   866→                      {/* Edit Role */}
+   867→   867→                      {editingMemberId === member.id ? (
+   868→   868→                        <div className="flex items-center gap-2">
+   869→   869→                          <Select value={editRole} onValueChange={(v) => setEditRole(v)}>
+   870→   870→                            <SelectTrigger className="w-[110px] h-8 text-xs">
+   871→   871→                              <SelectValue />
+   872→   872→                            </SelectTrigger>
+   873→   873→                            <SelectContent>
+   874→   874→                              <SelectItem value="Admin">Admin</SelectItem>
+   875→   875→                              <SelectItem value="Manager">Manager</SelectItem>
+   876→   876→                              <SelectItem value="Staff">Staff</SelectItem>
+   877→   877→                              <SelectItem value="Viewer">Viewer</SelectItem>
+   878→   878→                            </SelectContent>
+   879→   879→                          </Select>
+   880→   880→                          <Button
+   881→   881→                            size="sm"
+   882→   882→                            variant="ghost"
+   883→   883→                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
+   884→   884→                            onClick={() => handleUpdateRole(member.id, editRole)}
+   885→   885→                          >
+   886→   886→                            <Check className="h-4 w-4" />
+   887→   887→                          </Button>
+   888→   888→                        </div>
+   889→   889→                      ) : (
+   890→   890→                        <div className="flex items-center gap-1">
+   891→   891→                          {member.role !== 'Admin' && (
+   892→   892→                            <>
+   893→   893→                              <Button
+   894→   894→                                size="sm"
+   895→   895→                                variant="ghost"
+   896→   896→                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+   897→   897→                                onClick={() => {
+   898→   898→                                  setEditingMemberId(member.id)
+   899→   899→                                  setEditRole(member.role)
+   900→   900→                                }}
+   901→   901→                              >
+   902→   902→                                Edit role
+   903→   903→                              </Button>
+   904→   904→                              <Button
+   905→   905→                                size="sm"
+   906→   906→                                variant="ghost"
+   907→   907→                                className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+   908→   908→                                onClick={() => {
+   909→   909→                                  setMemberToRemove(member)
+   910→   910→                                  setShowRemoveDialog(true)
+   911→   911→                                }}
+   912→   912→                              >
+   913→   913→                                Remove
+   914→   914→                              </Button>
+   915→   915→                            </>
+   916→   916→                          )}
+   917→   917→                        </div>
+   918→   918→                      )}
+   919→   919→                    </div>
+   920→   920→                  </CardContent>
+   921→   921→                </Card>
+   922→   922→              ))}
+   923→   923→            </div>
+   924→   924→
+   925→   925→            {teamMembers.length === 0 && (
+   926→   926→              <Card className="border-border/50 border-dashed">
+   927→   927→                <CardContent className="pt-6 text-center py-12">
+   928→   928→                  <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+   929→   929→                  <p className="text-sm text-muted-foreground">No team members yet</p>
+   930→   930→                  <p className="text-xs text-muted-foreground mt-1">Invite your first team member to get started</p>
+   931→   931→                </CardContent>
+   932→   932→              </Card>
+   933→   933→            )}
+   934→   934→
+   935→   935→            {/* Invite Dialog */}
+   936→   936→            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+   937→   937→              <DialogContent>
+   938→   938→                <DialogHeader>
+   939→   939→                  <DialogTitle className="flex items-center gap-2">
+   940→   940→                    <Users className="h-5 w-5 text-emerald-600" />
+   941→   941→                    Invite Team Member
+   942→   942→                  </DialogTitle>
+   943→   943→                </DialogHeader>
+   944→   944→                <div className="space-y-4 py-2">
+   945→   945→                  <div className="space-y-2">
+   946→   946→                    <Label className="text-sm font-medium">Email Address</Label>
+   947→   947→                    <Input
+   948→   948→                      value={inviteEmail}
+   949→   949→                      onChange={(e) => setInviteEmail(e.target.value)}
+   950→   950→                      placeholder="colleague@firm.com"
+   951→   951→                      type="email"
+   952→   952→                      className="h-10"
+   953→   953→                    />
+   954→   954→                  </div>
+   955→   955→                  <div className="space-y-2">
+   956→   956→                    <Label className="text-sm font-medium">Role</Label>
+   957→   957→                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'Manager' | 'Staff' | 'Viewer')}>
+   958→   958→                      <SelectTrigger className="h-10">
+   959→   959→                        <SelectValue />
+   960→   960→                      </SelectTrigger>
+   961→   961→                      <SelectContent>
+   962→   962→                        <SelectItem value="Manager">Manager</SelectItem>
+   963→   963→                        <SelectItem value="Staff">Staff</SelectItem>
+   964→   964→                        <SelectItem value="Viewer">Viewer</SelectItem>
+   965→   965→                      </SelectContent>
+   966→   966→                    </Select>
+   967→   967→                    <p className="text-[11px] text-muted-foreground">Admin role can only be assigned by existing admins</p>
+   968→   968→                  </div>
+   969→   969→                </div>
+   970→   970→                <DialogFooter>
+   971→   971→                  <Button
+   972→   972→                    variant="outline"
+   973→   973→                    onClick={() => setShowInviteDialog(false)}
+   974→   974→                    disabled={inviting}
+   975→   975→                  >
+   976→   976→                    Cancel
+   977→   977→                  </Button>
+   978→   978→                  <Button
+   979→   979→                    onClick={handleInviteMember}
+   980→   980→                    disabled={!inviteEmail.trim() || inviting}
+   981→   981→                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+   982→   982→                  >
+   983→   983→                    {inviting ? (
+   984→   984→                      <>
+   985→   985→                        <Loader2 className="h-4 w-4 animate-spin" />
+   986→   986→                        Sending...
+   987→   987→                      </>
+   988→   988→                    ) : (
+   989→   989→                      <>
+   990→   990→                        <Mail className="h-4 w-4" />
+   991→   991→                        Send Invite
+   992→   992→                      </>
+   993→   993→                    )}
+   994→   994→                  </Button>
+   995→   995→                </DialogFooter>
+   996→   996→              </DialogContent>
+   997→   997→            </Dialog>
+   998→   998→
+   999→   999→            {/* Remove Confirmation */}
+  1000→  1000→            <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+  1001→  1001→              <AlertDialogContent>
+  1002→  1002→                <AlertDialogHeader>
+  1003→  1003→                  <AlertDialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
+  1004→  1004→                    <AlertTriangle className="h-5 w-5" />
+  1005→  1005→                    Remove Team Member?
+  1006→  1006→                  </AlertDialogTitle>
+  1007→  1007→                  <AlertDialogDescription>
+  1008→  1008→                    {memberToRemove && (
+  1009→  1009→                      <>Are you sure you want to remove <strong>{memberToRemove.name}</strong> from your team? They will lose access to all firm data immediately.</>
+  1010→  1010→                    )}
+  1011→  1011→                  </AlertDialogDescription>
+  1012→  1012→                </AlertDialogHeader>
+  1013→  1013→                <AlertDialogFooter>
+  1014→  1014→                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+  1015→  1015→                  <AlertDialogAction
+  1016→  1016→                    onClick={handleRemoveMember}
+  1017→  1017→                    className="bg-red-600 hover:bg-red-700 text-white"
+  1018→  1018→                  >
+  1019→  1019→                    Remove Member
+  1020→  1020→                  </AlertDialogAction>
+  1021→  1021→                </AlertDialogFooter>
+  1022→  1022→              </AlertDialogContent>
+  1023→  1023→            </AlertDialog>
+  1024→  1024→          </motion.div>
+  1025→  1025→        )
+  1026→  1026→
+  1027→  1027→      // ───────────────────────────────────────────────────────────────
+  1028→  1028→      // SECTION 4: NOTIFICATIONS
+  1029→  1029→      // ───────────────────────────────────────────────────────────────
+  1030→  1030→      case 'notifications':
+  1031→  1031→        return (
+  1032→  1032→          <motion.div
+  1033→  1033→            key="notifications"
+  1034→  1034→            initial="hidden"
+  1035→  1035→            animate="visible"
+  1036→  1036→            exit="exit"
+  1037→  1037→            variants={contentVariants}
+  1038→  1038→            className="space-y-6"
+  1039→  1039→          >
+  1040→  1040→            <div>
+  1041→  1041→              <h2 className="text-xl font-semibold text-foreground">Notifications</h2>
+  1042→  1042→              <p className="text-sm text-muted-foreground mt-1">Choose what notifications you want to receive</p>
+  1043→  1043→            </div>
+  1044→  1044→
+  1045→  1045→            <Card className="border-border/50">
+  1046→  1046→              <CardContent className="pt-6 space-y-1">
+  1047→  1047→                {/* Filing Deadline Reminders */}
+  1048→  1048→                <div className="flex items-center justify-between py-4">
+  1049→  1049→                  <div className="flex items-center gap-3">
+  1050→  1050→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1051→  1051→                      <CalendarClock className="h-4.5 w-4.5" />
+  1052→  1052→                    </div>
+  1053→  1053→                    <div>
+  1054→  1054→                      <p className="text-sm font-medium text-foreground">Filing Deadline Reminders</p>
+  1055→  1055→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified before GST filing due dates</p>
+  1056→  1056→                    </div>
+  1057→  1057→                  </div>
+  1058→  1058→                  <Switch
+  1059→  1059→                    checked={filingDeadline}
+  1060→  1060→                    onCheckedChange={setFilingDeadline}
+  1061→  1061→                    className="data-[state=checked]:bg-emerald-600"
+  1062→  1062→                  />
+  1063→  1063→                </div>
+  1064→  1064→
+  1065→  1065→                <Separator />
+  1066→  1066→
+  1067→  1067→                {/* Mismatch Alerts */}
+  1068→  1068→                <div className="flex items-center justify-between py-4">
+  1069→  1069→                  <div className="flex items-center gap-3">
+  1070→  1070→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1071→  1071→                      <AlertTriangle className="h-4.5 w-4.5" />
+  1072→  1072→                    </div>
+  1073→  1073→                    <div>
+  1074→  1074→                      <p className="text-sm font-medium text-foreground">Mismatch Alerts</p>
+  1075→  1075→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when GSTR-2A vs books mismatches are detected</p>
+  1076→  1076→                    </div>
+  1077→  1077→                  </div>
+  1078→  1078→                  <Switch
+  1079→  1079→                    checked={mismatchAlerts}
+  1080→  1080→                    onCheckedChange={setMismatchAlerts}
+  1081→  1081→                    className="data-[state=checked]:bg-emerald-600"
+  1082→  1082→                  />
+  1083→  1083→                </div>
+  1084→  1084→
+  1085→  1085→                <Separator />
+  1086→  1086→
+  1087→  1087→                {/* Weekly Summary Email */}
+  1088→  1088→                <div className="flex items-center justify-between py-4">
+  1089→  1089→                  <div className="flex items-center gap-3">
+  1090→  1090→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1091→  1091→                      <Mail className="h-4.5 w-4.5" />
+  1092→  1092→                    </div>
+  1093→  1093→                    <div>
+  1094→  1094→                      <p className="text-sm font-medium text-foreground">Weekly Summary Email</p>
+  1095→  1095→                      <p className="text-xs text-muted-foreground mt-0.5">Receive a weekly digest of filing statuses and activity</p>
+  1096→  1096→                    </div>
+  1097→  1097→                  </div>
+  1098→  1098→                  <Switch
+  1099→  1099→                    checked={weeklySummary}
+  1100→  1100→                    onCheckedChange={setWeeklySummary}
+  1101→  1101→                    className="data-[state=checked]:bg-emerald-600"
+  1102→  1102→                  />
+  1103→  1103→                </div>
+  1104→  1104→
+  1105→  1105→                <Separator />
+  1106→  1106→
+  1107→  1107→                {/* Client Health Score Changes */}
+  1108→  1108→                <div className="flex items-center justify-between py-4">
+  1109→  1109→                  <div className="flex items-center gap-3">
+  1110→  1110→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shrink-0">
+  1111→  1111→                      <Activity className="h-4.5 w-4.5" />
+  1112→  1112→                    </div>
+  1113→  1113→                    <div>
+  1114→  1114→                      <p className="text-sm font-medium text-foreground">Client Health Score Changes</p>
+  1115→  1115→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when a client&apos;s health score drops significantly</p>
+  1116→  1116→                    </div>
+  1117→  1117→                  </div>
+  1118→  1118→                  <Switch
+  1119→  1119→                    checked={healthScoreChanges}
+  1120→  1120→                    onCheckedChange={setHealthScoreChanges}
+  1121→  1121→                    className="data-[state=checked]:bg-emerald-600"
+  1122→  1122→                  />
+  1123→  1123→                </div>
+  1124→  1124→
+  1125→  1125→                <Separator />
+  1126→  1126→
+  1127→  1127→                {/* Team Activity Updates */}
+  1128→  1128→                <div className="flex items-center justify-between py-4">
+  1129→  1129→                  <div className="flex items-center gap-3">
+  1130→  1130→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+  1131→  1131→                      <Users className="h-4.5 w-4.5" />
+  1132→  1132→                    </div>
+  1133→  1133→                    <div>
+  1134→  1134→                      <p className="text-sm font-medium text-foreground">Team Activity Updates</p>
+  1135→  1135→                      <p className="text-xs text-muted-foreground mt-0.5">Notifications when team members complete filings or actions</p>
+  1136→  1136→                    </div>
+  1137→  1137→                  </div>
+  1138→  1138→                  <Switch
+  1139→  1139→                    checked={teamActivity}
+  1140→  1140→                    onCheckedChange={setTeamActivity}
+  1141→  1141→                    className="data-[state=checked]:bg-emerald-600"
+  1142→  1142→                  />
+  1143→  1143→                </div>
+  1144→  1144→
+  1145→  1145→                <Separator />
+  1146→  1146→
+  1147→  1147→                {/* New Invoice Uploaded */}
+  1148→  1148→                <div className="flex items-center justify-between py-4">
+  1149→  1149→                  <div className="flex items-center gap-3">
+  1150→  1150→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1151→  1151→                      <Upload className="h-4.5 w-4.5" />
+  1152→  1152→                    </div>
+  1153→  1153→                    <div>
+  1154→  1154→                      <p className="text-sm font-medium text-foreground">New Invoice Uploaded</p>
+  1155→  1155→                      <p className="text-xs text-muted-foreground mt-0.5">Notify when clients upload new invoices or documents</p>
+  1156→  1156→                    </div>
+  1157→  1157→                  </div>
+  1158→  1158→                  <Switch
+  1159→  1159→                    checked={newInvoiceUploaded}
+  1160→  1160→                    onCheckedChange={setNewInvoiceUploaded}
+  1161→  1161→                    className="data-[state=checked]:bg-emerald-600"
+  1162→  1162→                  />
+  1163→  1163→                </div>
+  1164→  1164→
+  1165→  1165→                {/* Save */}
+  1166→  1166→                <div className="flex justify-end pt-4">
+  1167→  1167→                  <SaveButton onSave={handleSave} />
+  1168→  1168→                </div>
+  1169→  1169→              </CardContent>
+  1170→  1170→            </Card>
+  1171→  1171→          </motion.div>
+  1172→  1172→        )
+  1173→  1173→
+  1174→  1174→      // ───────────────────────────────────────────────────────────────
+  1175→  1175→      // SECTION 5: SECURITY
+  1176→  1176→      // ───────────────────────────────────────────────────────────────
+  1177→  1177→      case 'security':
+  1178→  1178→        return (
+  1179→  1179→          <motion.div
+  1180→  1180→            key="security"
+  1181→  1181→            initial="hidden"
+  1182→  1182→            animate="visible"
+  1183→  1183→            exit="exit"
+  1184→  1184→            variants={contentVariants}
+  1185→  1185→            className="space-y-6"
+  1186→  1186→          >
+  1187→  1187→            <div>
+  1188→  1188→              <h2 className="text-xl font-semibold text-foreground">Security</h2>
+  1189→  1189→              <p className="text-sm text-muted-foreground mt-1">Manage your password, two-factor authentication, and sessions</p>
+  1190→  1190→            </div>
+  1191→  1191→
+  1192→  1192→            {/* Change Password */}
+  1193→  1193→            <Card className="border-border/50">
+  1194→  1194→              <CardHeader className="pb-0">
+  1195→  1195→                <div className="flex items-center gap-3">
+  1196→  1196→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1197→  1197→                    <Lock className="h-4.5 w-4.5" />
+  1198→  1198→                  </div>
+  1199→  1199→                  <div>
+  1200→  1200→                    <CardTitle className="text-base">Change Password</CardTitle>
+  1201→  1201→                    <CardDescription>Update your account password</CardDescription>
+  1202→  1202→                  </div>
+  1203→  1203→                </div>
+  1204→  1204→              </CardHeader>
+  1205→  1205→              <CardContent className="space-y-4 pt-4">
+  1206→  1206→                <div className="space-y-2">
+  1207→  1207→                  <Label className="text-sm font-medium">Current Password</Label>
+  1208→  1208→                  <Input
+  1209→  1209→                    type="password"
+  1210→  1210→                    value={currentPassword}
+  1211→  1211→                    onChange={(e) => setCurrentPassword(e.target.value)}
+  1212→  1212→                    placeholder="Enter current password"
+  1213→  1213→                    className="h-10"
+  1214→  1214→                  />
+  1215→  1215→                </div>
+  1216→  1216→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1217→  1217→                  <div className="space-y-2">
+  1218→  1218→                    <Label className="text-sm font-medium">New Password</Label>
+  1219→  1219→                    <Input
+  1220→  1220→                      type="password"
+  1221→  1221→                      value={newPassword}
+  1222→  1222→                      onChange={(e) => setNewPassword(e.target.value)}
+  1223→  1223→                      placeholder="Enter new password"
+  1224→  1224→                      className="h-10"
+  1225→  1225→                    />
+  1226→  1226→                    {newPassword && (
+  1227→  1227→                      <div className="space-y-1.5">
+  1228→  1228→                        <div className="flex items-center justify-between">
+  1229→  1229→                          <span className="text-[11px] text-muted-foreground">Strength</span>
+  1230→  1230→                          <span className={`text-[11px] font-medium ${
+  1231→  1231→                            passwordStrength.score <= 40 ? 'text-red-500' :
+  1232→  1232→                            passwordStrength.score <= 60 ? 'text-yellow-600' :
+  1233→  1233→                            'text-emerald-600'
+  1234→  1234→                          }`}>{passwordStrength.label}</span>
+  1235→  1235→                        </div>
+  1236→  1236→                        <Progress value={passwordStrength.score} className={`h-1.5 ${passwordStrength.color}`} />
+  1237→  1237→                      </div>
+  1238→  1238→                    )}
+  1239→  1239→                  </div>
+  1240→  1240→                  <div className="space-y-2">
+  1241→  1241→                    <Label className="text-sm font-medium">Confirm Password</Label>
+  1242→  1242→                    <Input
+  1243→  1243→                      type="password"
+  1244→  1244→                      value={confirmPassword}
+  1245→  1245→                      onChange={(e) => setConfirmPassword(e.target.value)}
+  1246→  1246→                      placeholder="Confirm new password"
+  1247→  1247→                      className={`h-10 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : confirmPassword && newPassword === confirmPassword ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+  1248→  1248→                    />
+  1249→  1249→                    {confirmPassword && newPassword !== confirmPassword && (
+  1250→  1250→                      <p className="text-[11px] text-red-500">Passwords do not match</p>
+  1251→  1251→                    )}
+  1252→  1252→                    {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+  1253→  1253→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Passwords match</p>
+  1254→  1254→                    )}
+  1255→  1255→                  </div>
+  1256→  1256→                </div>
+  1257→  1257→                {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
+  1258→  1258→                  <div className="flex justify-end">
+  1259→  1259→                    <SaveButton onSave={handleSave} />
+  1260→  1260→                  </div>
+  1261→  1261→                )}
+  1262→  1262→              </CardContent>
+  1263→  1263→            </Card>
+  1264→  1264→
+  1265→  1265→            {/* Two-Factor Authentication */}
+  1266→  1266→            <Card className="border-border/50">
+  1267→  1267→              <CardHeader className="pb-0">
+  1268→  1268→                <div className="flex items-center gap-3">
+  1269→  1269→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1270→  1270→                    <Shield className="h-4.5 w-4.5" />
+  1271→  1271→                  </div>
+  1272→  1272→                  <div className="flex-1">
+  1273→  1273→                    <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
+  1274→  1274→                    <CardDescription>Add an extra layer of security to your account</CardDescription>
+  1275→  1275→                  </div>
+  1276→  1276→                  <Badge className={`text-[11px] px-2.5 py-0.5 border ${
+  1277→  1277→                    twoFactorEnabled
+  1278→  1278→                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1279→  1279→                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1280→  1280→                  }`}>
+  1281→  1281→                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+  1282→  1282→                  </Badge>
+  1283→  1283→                </div>
+  1284→  1284→              </CardHeader>
+  1285→  1285→              <CardContent className="pt-4">
+  1286→  1286→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1287→  1287→                  <div>
+  1288→  1288→                    <p className="text-sm font-medium text-foreground">
+  1289→  1289→                      {twoFactorEnabled ? 'Two-factor authentication is enabled' : 'Enable two-factor authentication'}
+  1290→  1290→                    </p>
+  1291→  1291→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1292→  1292→                      {twoFactorEnabled
+  1293→  1293→                        ? 'Your account is protected with an additional verification step'
+  1294→  1294→                        : 'Protect your account with OTP verification on login'}
+  1295→  1295→                    </p>
+  1296→  1296→                  </div>
+  1297→  1297→                  <Switch
+  1298→  1298→                    checked={twoFactorEnabled}
+  1299→  1299→                    onCheckedChange={setTwoFactorEnabled}
+  1300→  1300→                    className="data-[state=checked]:bg-emerald-600"
+  1301→  1301→                  />
+  1302→  1302→                </div>
+  1303→  1303→              </CardContent>
+  1304→  1304→            </Card>
+  1305→  1305→
+  1306→  1306→            {/* Active Sessions */}
+  1307→  1307→            <Card className="border-border/50">
+  1308→  1308→              <CardHeader className="pb-0">
+  1309→  1309→                <div className="flex items-center gap-3">
+  1310→  1310→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1311→  1311→                    <Smartphone className="h-4.5 w-4.5" />
+  1312→  1312→                  </div>
+  1313→  1313→                  <div>
+  1314→  1314→                    <CardTitle className="text-base">Active Sessions</CardTitle>
+  1315→  1315→                    <CardDescription>Devices currently signed in to your account</CardDescription>
+  1316→  1316→                  </div>
+  1317→  1317→                </div>
+  1318→  1318→              </CardHeader>
+  1319→  1319→              <CardContent className="pt-4">
+  1320→  1320→                <div className="space-y-3">
+  1321→  1321→                  {MOCK_SESSIONS.map((session) => (
+  1322→  1322→                    <div
+  1323→  1323→                      key={session.id}
+  1324→  1324→                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+  1325→  1325→                        session.current
+  1326→  1326→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+  1327→  1327→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+  1328→  1328→                      }`}
+  1329→  1329→                    >
+  1330→  1330→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+  1331→  1331→                        session.current
+  1332→  1332→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+  1333→  1333→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1334→  1334→                      }`}>
+  1335→  1335→                        {session.icon}
+  1336→  1336→                      </div>
+  1337→  1337→                      <div className="flex-1 min-w-0">
+  1338→  1338→                        <div className="flex items-center gap-2">
+  1339→  1339→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+  1340→  1340→                          {session.current && (
+  1341→  1341→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+  1342→  1342→                              Current
+  1343→  1343→                            </Badge>
+  1344→  1344→                          )}
+  1345→  1345→                        </div>
+  1346→  1346→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+  1347→  1347→                      </div>
+  1348→  1348→                      {!session.current && (
+  1349→  1349→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+  1350→  1350→                          Revoke
+  1351→  1351→                        </Button>
+  1352→  1352→                      )}
+  1353→  1353→                    </div>
+  1354→  1354→                  ))}
+  1355→  1355→                </div>
+  1356→  1356→              </CardContent>
+  1357→  1357→            </Card>
+  1358→  1358→
+  1359→  1359→            {/* Data Encryption */}
+  1360→  1360→            <Card className="border-border/50">
+  1361→  1361→              <CardContent className="pt-6">
+  1362→  1362→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1363→  1363→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1364→  1364→                    <LockKeyhole className="h-4.5 w-4.5" />
+  1365→  1365→                  </div>
+  1366→  1366→                  <div>
+  1367→  1367→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+  1368→  1368→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+  1369→  1369→                  </div>
+  1370→  1370→                </div>
+  1371→  1371→              </CardContent>
+  1372→  1372→            </Card>
+  1373→  1373→          </motion.div>
+  1374→  1374→        )
+  1375→  1375→
+  1376→  1376→      // ───────────────────────────────────────────────────────────────
+  1377→  1377→      // SECTION 6: BILLING
+  1378→  1378→      // ───────────────────────────────────────────────────────────────
+  1379→  1379→      case 'billing':
+  1380→  1380→        return (
+  1381→  1381→          <motion.div
+  1382→  1382→            key="billing"
+  1383→  1383→            initial="hidden"
+  1384→  1384→            animate="visible"
+  1385→  1385→            exit="exit"
+  1386→  1386→            variants={contentVariants}
+  1387→  1387→            className="space-y-6"
+  1388→  1388→          >
+  1389→  1389→            <div>
+  1390→  1390→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+  1391→  1391→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+  1392→  1392→            </div>
+  1393→  1393→
+  1394→  1394→            {/* Current Plan */}
+  1395→  1395→            <Card className="border-border/50 overflow-hidden">
+  1396→  1396→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+  1397→  1397→              <CardContent className="pt-6">
+  1398→  1398→                <div className="flex items-start justify-between">
+  1399→  1399→                  <div>
+  1400→  1400→                    <div className="flex items-center gap-2">
+  1401→  1401→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+  1402→  1402→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+  1403→  1403→                        Active
+  1404→  1404→                      </Badge>
+  1405→  1405→                    </div>
+  1406→  1406→                    <div className="flex items-baseline gap-1 mt-2">
+  1407→  1407→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+  1408→  1408→                      <span className="text-sm text-muted-foreground">/month</span>
+  1409→  1409→                    </div>
+  1410→  1410→                    <p className="text-xs text-muted-foreground mt-1">
+  1411→  1411→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+  1412→  1412→                    </p>
+  1413→  1413→                  </div>
+  1414→  1414→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+  1415→  1415→                    <ChevronRight className="h-4 w-4" />
+  1416→  1416→                    Upgrade Plan
+  1417→  1417→                  </Button>
+  1418→  1418→                </div>
+  1419→  1419→              </CardContent>
+  1420→  1420→            </Card>
+  1421→  1421→
+  1422→  1422→            {/* Usage This Month */}
+  1423→  1423→            <Card className="border-border/50">
+  1424→  1424→              <CardHeader className="pb-0">
+  1425→  1425→                <CardTitle className="text-base">Usage This Month</CardTitle>
+  1426→  1426→                <CardDescription>Your current usage against plan limits</CardDescription>
+  1427→  1427→              </CardHeader>
+  1428→  1428→              <CardContent className="pt-4 space-y-5">
+  1429→  1429→                {/* Clients */}
+  1430→  1430→                <div className="space-y-2">
+  1431→  1431→                  <div className="flex items-center justify-between">
+  1432→  1432→                    <div className="flex items-center gap-2">
+  1433→  1433→                      <Users className="h-4 w-4 text-muted-foreground" />
+  1434→  1434→                      <span className="text-sm font-medium text-foreground">Clients</span>
+  1435→  1435→                    </div>
+  1436→  1436→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+  1437→  1437→                  </div>
+  1438→  1438→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+  1439→  1439→                </div>
+  1440→  1440→
+  1441→  1441→                {/* Invoices Processed */}
+  1442→  1442→                <div className="space-y-2">
+  1443→  1443→                  <div className="flex items-center justify-between">
+  1444→  1444→                    <div className="flex items-center gap-2">
+  1445→  1445→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+  1446→  1446→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+  1447→  1447→                    </div>
+  1448→  1448→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+  1449→  1449→                  </div>
+  1450→  1450→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+  1451→  1451→                </div>
+  1452→  1452→
+  1453→  1453→                {/* Reconciliation Runs */}
+  1454→  1454→                <div className="space-y-2">
+  1455→  1455→                  <div className="flex items-center justify-between">
+  1456→  1456→                    <div className="flex items-center gap-2">
+  1457→  1457→                      <Activity className="h-4 w-4 text-muted-foreground" />
+  1458→  1458→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+  1459→  1459→                    </div>
+  1460→  1460→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+  1461→  1461→                  </div>
+  1462→  1462→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+  1463→  1463→                </div>
+  1464→  1464→              </CardContent>
+  1465→  1465→            </Card>
+  1466→  1466→
+  1467→  1467→            {/* Payment Method */}
+  1468→  1468→            <Card className="border-border/50">
+  1469→  1469→              <CardHeader className="pb-0">
+  1470→  1470→                <CardTitle className="text-base">Payment Method</CardTitle>
+  1471→  1471→              </CardHeader>
+  1472→  1472→              <CardContent className="pt-4">
+  1473→  1473→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1474→  1474→                  <div className="flex items-center gap-3">
+  1475→  1475→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+  1476→  1476→                      VISA
+  1477→  1477→                    </div>
+  1478→  1478→                    <div>
+  1479→  1479→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+  1480→  1480→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+  1481→  1481→                    </div>
+  1482→  1482→                  </div>
+  1483→  1483→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+  1484→  1484→                    Update Payment Method
+  1485→  1485→                  </Button>
+  1486→  1486→                </div>
+  1487→  1487→              </CardContent>
+  1488→  1488→            </Card>
+  1489→  1489→
+  1490→  1490→            {/* Billing History */}
+  1491→  1491→            <Card className="border-border/50">
+  1492→  1492→              <CardHeader className="pb-0">
+  1493→  1493→                <CardTitle className="text-base">Billing History</CardTitle>
+  1494→  1494→                <CardDescription>Download past invoices</CardDescription>
+  1495→  1495→              </CardHeader>
+  1496→  1496→              <CardContent className="pt-4">
+  1497→  1497→                <div className="space-y-2 max-h-64 overflow-y-auto">
+  1498→  1498→                  {BILLING_HISTORY.map((invoice) => (
+  1499→  1499→                    <div
+  1500→  1500→                      key={invoice.id}
+  1501→  1501→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+  1502→  1502→                    >
+  1503→  1503→                      <div className="flex items-center gap-3">
+  1504→  1504→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1505→  1505→                          <CreditCard className="h-4 w-4" />
+  1506→  1506→                        </div>
+  1507→  1507→                        <div>
+  1508→  1508→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+  1509→  1509→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+  1510→  1510→                        </div>
+  1511→  1511→                      </div>
+  1512→  1512→                      <div className="flex items-center gap-3">
+  1513→  1513→                        <Badge className={`text-[11px] px-2 py-0 border ${
+  1514→  1514→                          invoice.status === 'Paid'
+  1515→  1515→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1516→  1516→                            : invoice.status === 'Pending'
+  1517→  1517→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1518→  1518→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+  1519→  1519→                        }`}>
+  1520→  1520→                          {invoice.status}
+  1521→  1521→                        </Badge>
+  1522→  1522→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+  1523→  1523→                          <Download className="h-4 w-4" />
+  1524→  1524→                        </Button>
+  1525→  1525→                      </div>
+  1526→  1526→                    </div>
+  1527→  1527→                  ))}
+  1528→  1528→                </div>
+  1529→  1529→              </CardContent>
+  1530→  1530→            </Card>
+  1531→  1531→          </motion.div>
+  1532→  1532→        )
+  1533→  1533→
+  1534→  1534→      // ───────────────────────────────────────────────────────────────
+  1535→  1535→      // SECTION: GST API CONNECTIONS
+  1536→  1536→      // ───────────────────────────────────────────────────────────────
+  1537→  1537→      case 'api':
+  1538→  1538→        return (
+  1539→  1539→          <motion.div
+  1540→  1540→            key="api"
+  1541→  1541→            initial="hidden"
+  1542→  1542→            animate="visible"
+  1543→  1543→            exit="exit"
+  1544→  1544→            variants={contentVariants}
+  1545→  1545→            className="space-y-6"
+  1546→  1546→          >
+  1547→  1547→            <div>
+  1548→  1548→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+  1549→  1549→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+  1550→  1550→            </div>
+  1551→  1551→
+  1552→  1552→            <div className="space-y-4">
+  1553→  1553→              {MOCK_API_CONNECTIONS.map((connection) => (
+  1554→  1554→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1555→  1555→                  <CardContent className="pt-0 py-4">
+  1556→  1556→                    <div className="flex items-center gap-4">
+  1557→  1557→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+  1558→  1558→                        connection.status === 'Connected'
+  1559→  1559→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1560→  1560→                          : connection.status === 'Disconnected'
+  1561→  1561→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1562→  1562→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+  1563→  1563→                      }`}>
+  1564→  1564→                        {connection.icon}
+  1565→  1565→                      </div>
+  1566→  1566→                      <div className="flex-1 min-w-0">
+  1567→  1567→                        <div className="flex items-center gap-2 flex-wrap">
+  1568→  1568→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+  1569→  1569→                          <Badge className={`text-[10px] px-2 py-0 border ${
+  1570→  1570→                            connection.status === 'Connected'
+  1571→  1571→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1572→  1572→                              : connection.status === 'Disconnected'
+  1573→  1573→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1574→  1574→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1575→  1575→                          }`}>
+  1576→  1576→                            <span className={`size-1.5 rounded-full mr-1 ${
+  1577→  1577→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+  1578→  1578→                            }`} />
+  1579→  1579→                            {connection.status}
+  1580→  1580→                          </Badge>
+  1581→  1581→                        </div>
+  1582→  1582→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+  1583→  1583→                        {connection.lastSync && (
+  1584→  1584→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+  1585→  1585→                            Last synced: {connection.lastSync}
+  1586→  1586→                          </p>
+  1587→  1587→                        )}
+  1588→  1588→                      </div>
+  1589→  1589→                      <div className="flex items-center gap-2 shrink-0">
+  1590→  1590→                        <Button
+  1591→  1591→                          variant="outline"
+  1592→  1592→                          size="sm"
+  1593→  1593→                          className="h-8 text-xs gap-1.5"
+  1594→  1594→                          onClick={async () => {
+  1595→  1595→                            try {
+  1596→  1596→                              // Test by hitting the GSTN connect endpoint with the
+  1597→  1597→                              // firm's own GSTIN — if it returns a valid profile,
+  1598→  1598→                              // the connection is healthy.
+  1599→  1599→                              const res = await fetch('/api/connect/gstn', {
+  1600→  1600→                                method: 'POST',
+  1601→  1601→                                headers: { 'Content-Type': 'application/json' },
+  1602→  1602→                                body: JSON.stringify({
+  1603→  1603→                                  userId: user?.id ?? 'system-test',
+  1604→  1604→                                  gstin: firmGstin || '27AABCS1429B1Z5',
+  1605→  1605→                                }),
+  1606→  1606→                              })
+  1607→  1607→                              const data = await res.json()
+  1608→  1608→                              if (!res.ok) {
+  1609→  1609→                                throw new Error(data?.error ?? 'Test failed')
+  1610→  1610→                              }
+  1611→  1611→                              toast.success(`${connection.name} — connection OK`)
+  1612→  1612→                            } catch (err) {
+  1613→  1613→                              toast.error(err instanceof Error ? err.message : 'Test failed')
+  1614→  1614→                            }
+  1615→  1615→                          }}
+  1616→  1616→                        >
+  1617→  1617→                          <Activity className="h-3.5 w-3.5" />
+  1618→  1618→                          Test Connection
+  1619→  1619→                        </Button>
+  1620→  1620→                        <Button
+  1621→  1621→                          variant="ghost"
+  1622→  1622→                          size="sm"
+  1623→  1623→                          className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+  1624→  1624→                          onClick={() => toast.info(`Configure ${connection.name} — coming soon`)}
+  1625→  1625→                        >
+  1626→  1626→                          Configure
+  1627→  1627→                        </Button>
+  1628→  1628→                      </div>
+  1629→  1629→                    </div>
+  1630→  1630→                  </CardContent>
+  1631→  1631→                </Card>
+  1632→  1632→              ))}
+  1633→  1633→            </div>
+  1634→  1634→          </motion.div>
+  1635→  1635→        )
+  1636→  1636→
+  1637→  1637→      // ───────────────────────────────────────────────────────────────
+  1638→  1638→      // SECTION: AUDIT LOGS
+  1639→  1639→      // ───────────────────────────────────────────────────────────────
+  1640→  1640→      case 'audit':
+  1641→  1641→        return (
+  1642→  1642→          <motion.div
+  1643→  1643→            key="audit"
+  1644→  1644→            initial="hidden"
+  1645→  1645→            animate="visible"
+  1646→  1646→            exit="exit"
+  1647→  1647→            variants={contentVariants}
+  1648→  1648→            className="space-y-6"
+  1649→  1649→          >
+  1650→  1650→            <div className="flex items-center justify-between">
+  1651→  1651→              <div>
+  1652→  1652→                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
+  1653→  1653→                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
+  1654→  1654→              </div>
+  1655→  1655→              <Select value={auditFilter} onValueChange={setAuditFilter}>
+  1656→  1656→                <SelectTrigger className="w-[160px] h-9">
+  1657→  1657→                  <SelectValue placeholder="Filter by type" />
+  1658→  1658→                </SelectTrigger>
+  1659→  1659→                <SelectContent>
+  1660→  1660→                  <SelectItem value="all">All Actions</SelectItem>
+  1661→  1661→                  <SelectItem value="filing">Filing</SelectItem>
+  1662→  1662→                  <SelectItem value="client_update">Client Updates</SelectItem>
+  1663→  1663→                  <SelectItem value="invoice">Invoices</SelectItem>
+  1664→  1664→                  <SelectItem value="settings">Settings</SelectItem>
+  1665→  1665→                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
+  1666→  1666→                </SelectContent>
+  1667→  1667→              </Select>
+  1668→  1668→            </div>
+  1669→  1669→
+  1670→  1670→            <Card className="border-border/50">
+  1671→  1671→              <CardContent className="pt-6 p-0">
+  1672→  1672→                <div className="max-h-[520px] overflow-y-auto">
+  1673→  1673→                  <div className="divide-y divide-border/50">
+  1674→  1674→                    {MOCK_AUDIT_LOGS
+  1675→  1675→                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
+  1676→  1676→                      .map((log, idx) => (
+  1677→  1677→                      <motion.div
+  1678→  1678→                        key={log.id}
+  1679→  1679→                        initial={{ opacity: 0, y: 4 }}
+  1680→  1680→                        animate={{ opacity: 1, y: 0 }}
+  1681→  1681→                        transition={{ duration: 0.2, delay: idx * 0.03 }}
+  1682→  1682→                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
+  1683→  1683→                      >
+  1684→  1684→                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
+  1685→  1685→                          log.actionType === 'filing'
+  1686→  1686→                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1687→  1687→                            : log.actionType === 'client_update'
+  1688→  1688→                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
+  1689→  1689→                            : log.actionType === 'invoice'
+  1690→  1690→                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1691→  1691→                            : log.actionType === 'reconciliation'
+  1692→  1692→                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+  1693→  1693→                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1694→  1694→                        }`}>
+  1695→  1695→                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
+  1696→  1696→                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
+  1697→  1697→                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
+  1698→  1698→                           <Shield className="h-4 w-4" />}
+  1699→  1699→                        </div>
+  1700→  1700→                        <div className="flex-1 min-w-0">
+  1701→  1701→                          <p className="text-sm font-medium text-foreground">{log.action}</p>
+  1702→  1702→                          <div className="flex items-center gap-2 mt-0.5">
+  1703→  1703→                            <span className="text-xs text-muted-foreground">{log.entity}</span>
+  1704→  1704→                            <span className="text-muted-foreground/40">·</span>
+  1705→  1705→                            <span className="text-xs text-muted-foreground">{log.user}</span>
+  1706→  1706→                          </div>
+  1707→  1707→                        </div>
+  1708→  1708→                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+  1709→  1709→                          {log.timestamp}
+  1710→  1710→                        </span>
+  1711→  1711→                      </motion.div>
+  1712→  1712→                    ))}
+  1713→  1713→                  </div>
+  1714→  1714→                </div>
+  1715→  1715→                {MOCK_AUDIT_LOGS.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
+  1716→  1716→                  <div className="py-12 text-center">
+  1717→  1717→                    <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  1718→  1718→                    <p className="text-sm text-muted-foreground">No audit logs match this filter</p>
+  1719→  1719→                  </div>
+  1720→  1720→                )}
+  1721→  1721→              </CardContent>
+  1722→  1722→            </Card>
+  1723→  1723→          </motion.div>
+  1724→  1724→        )
+  1725→  1725→
+  1726→  1726→      default:
+  1727→  1727→        return null
+  1728→  1728→    }
+  1729→  1729→  }
+  1730→  1730→
+  1731→  1731→  // ═══════════════════════════════════════════════════════════════════
+  1732→  1732→  // MAIN LAYOUT
+  1733→  1733→  // ═══════════════════════════════════════════════════════════════════
+  1734→  1734→  return (
+  1735→  1735→    <div className="h-full flex flex-col">
+  1736→  1736→      {/* ── Mobile: Horizontal Scrollable Tabs ── */}
+  1737→  1737→      {isMobile && (
+  1738→  1738→        <div className="border-b border-border bg-background px-4 pt-4">
+  1739→  1739→          <h1 className="text-xl font-bold text-foreground mb-3">Settings</h1>
+  1740→  1740→          <div className="flex gap-1 overflow-x-auto pb-0 -mb-px scrollbar-hide">
+  1741→  1741→            {SECTIONS.map((section) => (
+  1742→  1742→              <button
+  1743→  1743→                key={section.id}
+  1744→  1744→                onClick={() => setActiveSection(section.id)}
+  1745→  1745→                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+  1746→  1746→                  activeSection === section.id
+  1747→  1747→                    ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+  1748→  1748→                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+  1749→  1749→                }`}
+  1750→  1750→              >
+  1751→  1751→                {section.icon}
+  1752→  1752→                {section.label}
+  1753→  1753→              </button>
+  1754→  1754→            ))}
+  1755→  1755→          </div>
+  1756→  1756→        </div>
+  1757→  1757→      )}
+  1758→  1758→
+  1759→  1759→      <div className="flex-1 flex min-h-0">
+  1760→  1760→        {/* ── Desktop: Left Navigation ── */}
+  1761→  1761→        {!isMobile && (
+  1762→  1762→          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+  1763→  1763→            <div className="p-5 pb-4">
+  1764→  1764→              <h1 className="text-lg font-bold text-foreground">Settings</h1>
+  1765→  1765→            </div>
+  1766→  1766→
+  1767→  1767→            <nav className="flex-1 px-3 space-y-0.5">
+  1768→  1768→              {SECTIONS.map((section) => (
+  1769→  1769→                <button
+  1770→  1770→                  key={section.id}
+  1771→  1771→                  onClick={() => setActiveSection(section.id)}
+  1772→  1772→                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1773→  1773→                    activeSection === section.id
+  1774→  1774→                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
+  1775→  1775→                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
+  1776→  1776→                  }`}
+  1777→  1777→                >
+  1778→  1778→                  {section.icon}
+  1779→  1779→                  {section.label}
+  1780→  1780→                </button>
+  1781→  1781→              ))}
+  1782→  1782→            </nav>
+  1783→  1783→
+  1784→  1784→            {/* Version & Status */}
+  1785→  1785→            <div className="p-4 border-t border-border mt-auto">
+  1786→  1786→              <div className="flex items-center gap-2 mb-1">
+  1787→  1787→                <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
+  1788→  1788→                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
+  1789→  1789→                  v1.0.0
+  1790→  1790→                </Badge>
+  1791→  1791→              </div>
+  1792→  1792→              <div className="flex items-center gap-1.5">
+  1793→  1793→                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+  1794→  1794→                <span className="text-[11px] text-muted-foreground">Online</span>
+  1795→  1795→              </div>
+  1796→  1796→            </div>
+  1797→  1797→          </aside>
+  1798→  1798→        )}
+  1799→  1799→
+  1800→  1800→        {/* ── Right Content Area ── */}
+  1801→  1801→        <main className="flex-1 overflow-y-auto">
+  1802→  1802→          <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
+  1803→  1803→            <AnimatePresence mode="wait">
+  1804→  1804→              {renderSection()}
+  1805→  1805→            </AnimatePresence>
+  1806→  1806→          </div>
+  1807→  1807→        </main>
+  1808→  1808→      </div>
+  1809→  1809→    </div>
+  1810→  1810→  )
+  1811→  1811→}
+  1812→  1812→

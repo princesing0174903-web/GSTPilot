@@ -883,8 +883,14 @@ function AppRouter() {
   }
 
   // ── PART 8 ── Org context failed to load after retries. Show a friendly
-  // error with a retry button. Never crash, never expose Firebase errors.
-  if (isAuthenticated && !orgLoading && orgError && !organization) {
+  // error with a retry button — BUT never for permission errors. Permission
+  // errors mean the user is in preview/offline mode; OrgContext already falls
+  // back to a demo org in that case, so we treat any residual permission error
+  // as "preview mode" and render the app shell with empty states.
+  const isOrgPermissionError = !!orgError && (
+    /permission|insufficient|unauthenticated|not authorized|missing or/i.test(orgError)
+  )
+  if (isAuthenticated && !orgLoading && orgError && !organization && !isOrgPermissionError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black p-6">
         <div className="flex flex-col items-center gap-5 max-w-md text-center">
@@ -906,9 +912,11 @@ function AppRouter() {
     )
   }
 
-  // ── PART 5 ── Protected route: only render the app shell when authenticated
-  // AND the organization context is fully loaded.
-  if (currentScreen === 'app' && isAuthenticated && organization) {
+  // ── PART 5 ── Protected route: render the app shell when authenticated AND
+  // (the organization is loaded OR we're in preview/permission-error mode).
+  // This guarantees the user never gets stuck behind a wall when Firestore is
+  // unreachable — they see the dashboard with premium empty states instead.
+  if (currentScreen === 'app' && isAuthenticated && (organization || isOrgPermissionError)) {
     return (
       <div className="flex min-h-screen flex-col">
         {needsEmailVerification && <EmailVerificationBanner />}

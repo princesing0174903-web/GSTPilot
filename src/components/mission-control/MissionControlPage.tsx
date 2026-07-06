@@ -702,7 +702,14 @@ export default function MissionControlPage() {
   if (showLoading) return <MissionControlSkeleton />;
 
   // ── Error ──
-  if (error) {
+  // Permission errors are NEVER shown as a wall. The firestore hooks already
+  // degrade permission errors to empty data, but if a residual permission
+  // error string reaches here, treat it as "no data" and render the dashboard
+  // with premium empty states instead of blocking the user.
+  const isPermissionErr = !!error && (
+    /permission|insufficient|unauthenticated|not authorized|missing or/i.test(error)
+  );
+  if (error && !isPermissionErr) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <div className="glass-surface rounded-3xl p-8">

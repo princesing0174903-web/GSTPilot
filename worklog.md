@@ -3261,3 +3261,260 @@ Stage Summary:
 - Data integrity: BankingPage auto-reconcile no longer fabricates reconciliation.
 - No new features, no redesign, no new pages, no workflow changes — pure stabilization.
 - Follow-up noted: AI CFO engine needs org-scoping (requires Firebase-org ↔ Prisma-firm mapping layer).
+
+---
+Task ID: AUDIT-API
+Agent: Explore (API auth & mock audit)
+Task: Audit API routes for auth gaps and mock data
+
+Work Log:
+- Read last ~150 lines of worklog.md to absorb prior context (Phase 5-8 provider pattern, the firmId-vs-organizationId architecture mismatch noted in stab-sprint, the 6s Firestore timeout guard, the known /api/ai-cfo multi-tenant leak).
+- Enumerated all 563 route.ts files under src/app/api/. Pattern-matched counts:
+  * 104 routes import `@/lib/db` (Prisma direct access)
+  * 63 routes reference `organizationId` field (Phase 6-8 provider pattern)
+  * 27 routes reference legacy `firmId` field
+  * 12 routes import `resolveOrgId` helper (default-to-anchor-org pattern)
+  * 11 routes import ZAI SDK directly (oracle/asr|speak|tts|transcribe|chat, portal/chat, intelligence, business-copilot, ai-copilot, agents/run, business-graph/ai)
+  * 4 routes import `getServerSession` from next-auth (all in /api/rmb/* — dead config, all return null)
+  * 0 routes verify a Firebase ID token server-side (no verifyIdToken, no admin.auth(), no Firebase Admin SDK)
+- Read both canonical org-resolution helpers fully: src/lib/ecosystem/org-resolver.ts and src/lib/network/organizations.ts (lines 579-587). Both take an explicit orgId from the POST body; if absent, fall back to the FIRST org in the platform_organizations table ("anchor org"). Neither verifies the caller's identity — purely trust-the-client.
+- Confirmed `src/lib/auth.ts` is purely CLIENT-SIDE Firebase auth wrappers (signInWithPopup, etc.) — no server-side equivalent exists.
+- Sampled 12 representative routes across domains: dashboard, clients, clients/[id], invoices, returns, banking/connect, banking/sync, ai/oracle/chat, ai-cfo/intelligence, ai-compliance, ai-benchmark, execution-cloud/{banking,gstn,invoice}, abos/execute, gst/2b, gstr1, oracle/ask, communication/automation/run, data/clients, data/notices, data/payments, seed.
+- Verified the GSTN engine (src/lib/gstn/client.ts) generates DETERMINISTIC MOCK data via hashStr(gstin+period) — generateGstr2bInvoices returns 8-19 fabricated invoices. Mock data is persisted to Prisma (gSTReturn, gSTR2BInvoice tables) so it looks "real" but is fabricated.
+- Searched for routes touching Firestore directly — only 3 routes import `@/lib/firebase` (none import `@/lib/firestore-service` directly). Firestore access is mediated entirely through provider orchestrators (banking-provider/server/orchestrator, communication-provider/server/automation-engine, etc.) — so permission errors manifest as service-layer 503s, not direct route failures.
+
+Stage Summary:
+
+══════════════════════════════════════════════════════════════════════════════
+API AUTH & MOCK AUDIT — FINAL REPORT
+══════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────
+1. CANONICAL SERVER-SIDE ORG-RESOLUTION HELPER(S)
+────────────────────────────────────────────────────────────────────────────
+
+There is NO server-side auth helper. There are TWO org-resolution helpers, both
+"trust-the-client" (no identity verification):
+
+  • src/lib/ecosystem/org-resolver.ts (line 11)
+      export async function resolveOrgId(explicit?: string): Promise<string>
+    Falls back to `db.platformOrganization.findFirst({ orderBy: { createdAt: 'asc' } })`
+    → returns the anchor org ("GSTPilot Anchor Org") if no orgId provided.
+
+  • src/lib/network/organizations.ts (line 579)
+      export async function resolveOrgId(explicit?: string): Promise<{ orgId: string; hostNodeName: string }>
+    Same pattern — defaults to first org in DB.
+
+The de-facto "auth pattern" used by 63 Phase 6-8 routes:
+      const { organizationId } = await req.json();
+      if (!organizationId) return 400;
+      // pass organizationId to provider orchestrator
+  → The orgId is taken from the request body. NO token verification. Any caller
+    can pass any organizationId and read/write that org's data.
+
+────────────────────────────────────────────────────────────────────────────
+2. COUNTS
+────────────────────────────────────────────────────────────────────────────
+
+  Total route.ts files .................................... 563
+  Routes importing `@/lib/db` (Prisma direct) ............. 104
+  Routes referencing `organizationId` (Phase 6-8 pattern) .  63  ← "canonical" (but unauthenticated)
+  Routes using legacy `firmId` (no auth, optional scope) ..  27  ← legacy/broken
+  Routes using `resolveOrgId` (default to anchor org) .....  12  ← legacy/broken
+  Routes importing ZAI SDK (real AI, but no auth) .........  11
+  Routes importing `getServerSession` (next-auth, dead) ...   4  ← dead config (rmb/*)
+  Routes verifying Firebase ID token server-side ...........   0  ← CRITICAL AUTH GAP
+  Routes with `Math.random` .................................  10
+  Routes with mock/demo/placeholder/hardcoded ............... ~12 (most are "NO mock" comments)
+  Routes touching Firestore directly (collection/doc/getDoc)  0  (all via service-layer orchestrators)
+  Routes importing `@/lib/firebase` ..........................   3  (ai-copilot, ai/drafts, ai/jobs/[id]/cancel)
+
+────────────────────────────────────────────────────────────────────────────
+3. TOP 15 MOCK-DATA OFFENDERS (file:line + description)
+────────────────────────────────────────────────────────────────────────────
+
+  1. src/app/api/ai-compliance/route.ts:130,131,161,192,219,221 — uses Math.random for
+     confidence values (0.7+rnd*0.15 etc.) AND falls back to 4 hardcoded generic
+     forecasts (lines 254-314) when no client-specific data exists. Reads ALL
+     clients across ALL firms (no org/firm filter). PERSISTED to ComplianceForecast.
+
+  2. src/app/api/ai-benchmark/route.ts:39,277-285 — `randomize()` helper does
+     `0.9 + Math.random()*0.2` to fabricate "industry average" + "state average"
+     from hardcoded bases (72,78,55,68). industryPercentile/statePercentile computed
+     against the randomized dataset — completely synthetic benchmarks.
+
+  3. src/app/api/execution-cloud/banking/route.ts:37-42 — POST "reconcile" returns
+     fabricated `UTR...` bank refs, `INV-2025-4xxx` matchedInvoice numbers,
+     `Reliance Retail Ltd` hardcoded matchedTo, `Math.random` confidencePct. No
+     DB write. CFO engine called with `null` orgId (multi-tenant leak).
+
+  4. src/app/api/execution-cloud/gstn/route.ts:25,41 — POST generates fake
+     `ACK${Math.floor(100000 + Math.random()*899999)}` acknowledgement. CFO engine
+     called with `null` orgId. No DB write. Returns "Filed GSTR-1" canned messages.
+
+  5. src/app/api/execution-cloud/invoice/route.ts:26 — POST generates
+     `INV-2025-${Math.floor(4300 + Math.random()*700)}` invoice number. Returns
+     fabricated InvoiceRecord. No DB persistence.
+
+  6. src/app/api/abos/execute/route.ts:50 — POST fabricates execution action with
+     `ex_${Math.random().toString(36).slice(2,10)}` id. Returns hardcoded
+     "I've generated the report..." spokenAck strings (lines 22-31). No actual
+     execution, no DB write.
+
+  7. src/lib/gstn/client.ts:337 — `generateGstr2bInvoices(gstin, period)` returns
+     8-19 DETERMINISTIC MOCK invoices based on `hashStr(gstin+period)`. Used by:
+       /api/gst/2b/route.ts (downloadGstr2b), /api/gstr1/route.ts, /api/gstr3b/route.ts,
+       /api/einvoice/route.ts, /api/ewaybill/route.ts, /api/gst/search/route.ts,
+       /api/reconcile/route.ts — ALL GST routes return mock data persisted as real rows.
+
+  8. src/app/api/oracle/ask/route.ts:42 — passes `body.firmId || 'gstpilot-default-firm'`
+     to the reasoning engine — defaults to a literal string when caller omits firmId.
+     No auth check on `body.userId` (any caller can pass any userId).
+
+  9. src/app/api/clients/[id]/route.ts:54 — uses `firmId_gstin` compound uniqueness
+     (legacy firm-scoped Prisma schema). No auth verification that the caller
+     belongs to the same firm as the client — any caller can fetch any client by ID.
+
+ 10. src/app/api/dashboard/route.ts:22-44 — GET with no params at all queries ALL
+     db.client.count(), db.invoice.count(), db.gSTRFiling.count(), db.issue.count()
+     across ALL firms. Returns aggregate dashboard metrics for the entire platform
+     to any caller.
+
+ 11. src/app/api/clients/route.ts:9 — GET returns ALL clients (no firm/org filter
+     on the `findMany`). POST creates a client with no firmId. Multi-tenant leak.
+
+ 12. src/app/api/invoices/route.ts:23 — GET (cloud=true branch) returns ALL invoices
+     across ALL firms (`findMany` with no where clause). Same for the non-cloud
+     branch when no clientId/period filter is provided.
+
+ 13. src/app/api/returns/route.ts:17 — `firmId` is OPTIONAL query param. When
+     omitted, returns ALL GSTRFiling rows across ALL firms. POST requires firmId
+     but doesn't verify the caller owns it.
+
+ 14. src/app/api/ai-cfo/intelligence/route.ts:42 — GET (no params) calls
+     `computeFinancialIntelligence()` with NO orgId. The orchestrator queries
+     Prisma Client/Invoice/GSTRFiling with no where clause → reads ALL firms'
+     data. 60s in-memory cache. KNOWN MULTI-TENANT LEAK (noted in stab-sprint).
+
+ 15. src/app/api/seed/route.ts:5-36 — POST with no body, no auth — DELETES ALL
+     data (deleteMany on 30+ tables) and reseeds. Anyone can wipe the database.
+     Also references `firmId` (legacy Prisma firm model).
+
+────────────────────────────────────────────────────────────────────────────
+4. TOP 10 HIGHEST-IMPACT ROUTES TO FIX (ranked)
+────────────────────────────────────────────────────────────────────────────
+
+  Rank  Route                                  Impact                              Root Cause
+  ────  ─────────────────────────────────────  ──────────────────────────────────  ──────────────────────────────
+  1     /api/dashboard                         Powers the main dashboard          No auth + no firm/org scope; reads all data
+  2     /api/ai-cfo/intelligence               Powers the AI CFO dashboard        No auth + no orgId passed to orchestrator; reads all firms
+  3     /api/clients (GET)                     Powers the Clients page            No auth + no scope; returns all clients platform-wide
+  4     /api/clients/[id] (GET/PATCH/DELETE)   Powers Client Detail page          No auth + arbitrary id; no firm-ownership check
+  5     /api/invoices (GET)                    Powers Invoices page               No auth + unscoped findMany; returns all invoices
+  6     /api/returns (GET)                     Powers Returns page                Optional firmId (often omitted); leaks all returns
+  7     /api/ai-compliance                     Powers AI Compliance forecasts     Math.random confidence + hardcoded fallback + reads all clients (no scope)
+  8     /api/execution-cloud/{banking,gstn,invoice}  Powers Execution Cloud UI     Pure mock — fabricates UTR/ACK/INV numbers, no DB write, no real provider call
+  9     /api/oracle/ask                        Powers Oracle reasoning engine     firmId defaults to literal string; userId from body (untrusted)
+ 10     /api/seed                              Database wipe/reseed               No auth at all — anyone can POST and wipe all tables
+
+  Honorable mentions (mock-data issues but lower user impact):
+  • /api/ai-benchmark — randomized industry/state averages (mock comparison data)
+  • /api/abos/execute — pure mock execution actions (no actual work performed)
+  • /api/gst/2b, /api/gstr1, /api/gstr3b — deterministic mock invoices via hashStr(gstin+period)
+
+────────────────────────────────────────────────────────────────────────────
+5. ROUTES THAT WOULD THROW PERMISSION-DENIED FOR AN AUTHENTICATED USER
+────────────────────────────────────────────────────────────────────────────
+
+NONE of the routes verify a Firebase ID token, so an authenticated user would
+NOT receive permission-denied. Instead, EVERY route trusts the client-supplied
+`organizationId` (or `firmId`, or no scope at all).
+
+  • Phase 6-8 provider-backed routes (banking/connect, banking/sync, gstn/*,
+    communication/*, ai/jobs, ai/drafts, ai/oracle/chat, ai/insights,
+    ai/recommendations, ai/alerts, ai/memory, ai/score, ai/analyze,
+    ai/predict) — pass `organizationId` from request body to provider
+    orchestrator. The Firestore writes happen with the SERVER Firebase SDK
+    (admin-equivalent), so they SUCCEED regardless of the user's actual
+    permissions. **Org-scope is correct AT THE DATA LAYER but the route trusts
+    any caller to specify any orgId.**
+
+  • Legacy Prisma routes (dashboard, clients, invoices, returns, activities,
+    notices, payments, tds, expenses, payables, receivables, purchases,
+    data/*) — read ALL rows in the table when no filter is provided. NO
+    permission-denied because there's no auth check — they just leak data.
+
+  • The only routes that COULD throw Firestore PERMISSION_DENIED are those
+    that delegate to provider orchestrators (banking-provider/server/orchestrator,
+    communication-provider/server/automation-engine) — and these are already
+    wrapped in the 6s `withTimeout` guard added during stab-sprint, returning
+    a clean 503 FIRESTORE_TIMEOUT instead of hanging 120s. This is the
+    "Firestore API disabled in preview env" issue (Firebase project gstpilot1).
+
+────────────────────────────────────────────────────────────────────────────
+6. ROOT-CAUSE ARCHITECTURE FINDINGS
+────────────────────────────────────────────────────────────────────────────
+
+  A. No server-side auth at all. There is NO Firebase Admin SDK init, NO
+     `verifyIdToken`, NO `getServerSession` (the 4 rmb/* imports are dead
+     next-auth config returning null). Every route is effectively public.
+
+  B. Two parallel data scopes that don't talk to each other:
+     • `organizationId` (Phase 6-8) — used by provider orchestrators that
+       write to Firestore (banking_connections, communication_*, ai_memory).
+     • `firmId` (legacy Prisma) — used by Client/Invoice/GSTRFiling/Issue/etc.
+       Prisma models. There is NO firmId↔organizationId mapping layer.
+     Result: even if you add auth and pass the user's organizationId, the
+     legacy Prisma routes don't know how to filter by it. This was already
+     noted in the stab-sprint worklog as a deferred follow-up.
+
+  C. The `resolveOrgId` helpers DEFAULT TO THE ANCHOR ORG when no orgId is
+     provided. This means the 12 ecosystem/* + network/* + rmb/* routes will
+     silently operate on the first org in the DB for any caller — multi-tenant
+     leak via default-fallback.
+
+  D. The GSTN engine (src/lib/gstn/client.ts) generates DETERMINISTIC MOCK
+     data via `hashStr(gstin+period)`. This means the GST module "works"
+     (returns invoices, computes ITC, persists to Prisma) but the data is
+     fabricated — it's not real GSTN data. Switching to the official GSTN
+     provider requires the same provider-pattern swap used in Phase 6 banking.
+
+══════════════════════════════════════════════════════════════════════════════
+END REPORT
+══════════════════════════════════════════════════════════════════════════════
+
+---
+Task ID: AUDIT-UI
+Agent: Explore (UI mock-data & broken-button audit)
+Task: Audit components/pages for mock data, broken buttons, bad empty states
+
+Work Log:
+- Read worklog.md tail (~3100–3263) to absorb prior context. Key relevant entries: Phase 5/6/7/8 wired firestore hooks + provider patterns for banking/communication/AI; "stab-sprint" already removed 3 dead files, fixed dead Bell/Profile buttons, eliminated Prisma P2003 flood + 120s Firestore stalls, fixed BankingPage auto-reconcile data-integrity landmine. Noted prior "AI CFO multi-tenant leak" follow-up still open.
+- Read `src/hooks/use-firestore.ts` to enumerate the real-time hook surface (35+ exports: useFireClients/Invoices/Returns/Notices/Tasks/Leads/Deals/Meetings/BankAccounts/GstProfiles/Expenses/Payments/Reports + useLiveDashboardMetrics + useFirmExecutiveScores + useFireAiMemories). 42 component files import from this module.
+- Grep `Math\.random` across `src/components/` → 95 matches in ~30 files. Read each in turn to classify into BAD (render-path produces fake user-visible data) vs LESS-BAD (unique-ID generation, animation particle positions, simulated typing latency, fallback-only paths).
+- Grep `(const|let)\s+(mock|demo|sample|fake|dummy)\w*\s*[:=]` (case-insensitive) → 36 hits across 21 files. Read each to confirm whether the array literal is actually rendered or just defined-and-discarded. Confirmed live-offender list (renders into the DOM): WorkloadPage, FirmOperationsPage, ReviewPage, AutopilotPage, DataMoatPage, TeamPerformancePage, CollaborationPage, SettingsPage, DocumentsPage, EventEnginePage, APIPlatformPage (v2), MarketplacePage, InvoiceExchangePage, NoticeCenterPage (mockTeamMembers, despite being firestore-wired for notices), WorkingCapitalPage, CRMPage.
+- Grep `placeholder` → all hits are `<Input placeholder=...>` props or CSS class names — NOT a "placeholder data" pattern. No additional offenders.
+- Grep `from ['"]@/hooks/use-firestore['"]` → 42 component files import. Cross-referenced against the ~210 components in `src/components/` to identify the major page components that are NOT wired. Read AGIDashboardPage, IntegrationMarketplacePage, GlobalEnterpriseNetworkPage to confirm they fetch from REST APIs (less bad than showing static arrays, but still not real-time).
+- Grep `@/lib/demo/preview-data|@/data/sample-data` → only `src/components/shared/DemoPreviewPanel.tsx` imports `@/lib/demo/preview-data`. No `@/data/sample-data` module exists. DemoPreviewPanel is the ONE component deliberately built to show demo data (with an honest banner) — by design.
+- Grep `disabled|onClick=\{\(\) => \{\}\}|coming soon|TODO|not implemented` (and variants) → 250+ matches. Filtered to find the actual broken buttons: 5 "coming soon" toasts (SettingsPage connection configure, DocumentsPage file preview, ClientDetailPage JSON download, InvoiceCloudPage record-bill & receipt-OCR), 2 "coming soon" titles on Oracle input attach/voice buttons, 1 ReturnsPage info-toast button. Most other `disabled={}` attributes are legitimate form-submit disabled states tied to validation/loading flags (NOT broken buttons).
+- Grep `>\s*No (data|results|records|items|entries|clients|invoices)` to find empty-state messages. Read each in context. Most are legit (the component IS subscribed, just renders empty when Firestore returns no docs). The bad ones are components that show a permanent "No data" because they have NO data source at all.
+- Read worst-offender files in full context to confirm:
+  • WorkloadPage.tsx — calls /api/workload + /api/team-members + /api/clients, but if workload+team both empty, swaps in `mockWorkload` + `mockTeamMembers`; if team present but workload empty, fabricates per-member counts via Math.random. BAD.
+  • FirmOperationsPage.tsx — `mockMetrics`, `mockRevenueTrend`, `mockClientDistribution` are static const literals rendered into the DOM (no fetch). BAD.
+  • WorkingCapitalPage.tsx — imports firestore hooks (`useFireClients`, `useFireInvoices`, `useFireReturns`) but then `void`s them and renders `computeScores(demoInvoices)` with a comment "Compute scores from demo data (would use live data in production)". BAD — hooks present but unused.
+  • IndustryBenchmarkPage.tsx — imports firestore hooks but explicitly `void`s live counts and falls back to `YOUR_FIRM.clientCount` static value. BAD.
+  • EmbeddedFinancePage.tsx — comment says "Firestore hooks (used for reference; demo data drives the display)" — hooks present but only /api/payments is fetched; all other surfaces render empty arrays. PARTIAL.
+  • ReviewPage.tsx — has `MOCK_CLIENTS` + `MOCK_INVOICES`, comment "Fallback to mock data". Falls back when API returns empty. BAD.
+  • AutopilotPage.tsx — `sampleLogEntries` + `pastRuns` static const arrays; no fetch at all. BAD.
+  • EventEnginePage.tsx — `DEMO_SUBSCRIPTIONS` + `EVENT_TEMPLATES` + Math.random fabricates every event description/ID. BAD.
+  • VersionHistoryPage.tsx — `generateVersionHistory()` uses Math.random to fabricate version entries on every render. BAD.
+  • APIPlatformPage.tsx (old v1) — `generateMockRequestLogs()` produces 25 fake API request logs. BAD.
+  • ExecutiveWarRoomPage.tsx — `generateMonthlyData` + `generateSparkline` produce fake forecast/sparkline data. BAD (despite being firestore-wired, those specific charts are fabricated).
+
+Stage Summary:
+- Audit complete. Read-only — no code changed.
+- The codebase has TWO real demo-data modules: `@/lib/demo/preview-data` (consumed only by `DemoPreviewPanel` which is the intentional demo-preview-with-honest-banner) and the various per-component inline `mock`/`demo`/`sample` const arrays. No `@/data/sample-data` exists.
+- 42 components are wired to `@/hooks/use-firestore`; ~21 components ship hardcoded demo/sample arrays inline (some of those ARE also firestore-wired but render the static array instead of the live data — these are the worst because the wiring is decorative).
+- 7 "coming soon" buttons + 1 navigate-info button are the entire dead-button surface; the prior "stab-sprint" already fixed the major dead buttons (Bell, Profile, etc.). The remaining ones are mostly low-priority (file preview, JSON download, voice/attach in Oracle input — the voice/attach ones are pre-feature placeholders, not bugs).
+- 5 components render Math.random-driven fake data into the DOM on every render (EventEngine, ExecutiveWarRoom, VersionHistory, APIPlatform v1, Analytics). These are top-priority because they look "live" to users but are pure noise.
+- The "Top 20 components to fix" ranked list (delivered in the report to the orchestrator) prioritizes: components with decorative firestore wiring (WorkingCapital, IndustryBenchmark, EmbeddedFinance), then pure-mock components (Autopilot, FirmOperations, ReviewPage, EventEngine, APIPlatform v1, VersionHistory, ExecutiveWarRoom, Analytics-margins, CRMPage-monthlyTrend, ClientHealthPage-trends, WorkloadPage, DataMoatPage, CollaborationPage, TeamPerformancePage, SettingsPage, DocumentsPage, MarketplacePage, InvoiceExchangePage, NoticeCenterPage-teamMembers), then the "coming soon" button cleanups.

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Card,
   CardContent,
@@ -68,7 +68,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useOrg } from '@/contexts/OrgContext'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { db, storage, auth } from '@/lib/firebase'
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { updatePassword } from 'firebase/auth'
 
 // ─── Indian States ──────────────────────────────────────────────────────
 const INDIAN_STATES = [
@@ -282,10 +287,24 @@ const contentVariants = {
 // ═══════════════════════════════════════════════════════════════════════
 export default function SettingsPage() {
   const { user } = useAuth()
+  const { organization, reload: reloadOrg } = useOrg()
+  const orgId = organization?.id ?? null
   const isMobile = useIsMobile()
 
   // ── Active Section ──────────────────────────────────────────────────
   const [activeSection, setActiveSection] = useState<SectionId>('firm')
+
+  // ── Logo upload state ───────────────────────────────────────────────
+  // `logoPreview` holds a local object-URL while the upload is in flight so
+  // the avatar reflects the new image instantly. Once the Firestore write
+  // completes, `organization.logoUrl` becomes the source of truth.
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Track whether we've hydrated local form state from the org doc — we only
+  // want to do this once per organization to avoid clobbering in-progress edits.
+  const orgInitializedRef = useRef<string | null>(null)
 
   // ── Firm Profile State ──────────────────────────────────────────────
   const [firmName, setFirmName] = useState('Sharma & Associates')
@@ -340,28 +359,198 @@ export default function SettingsPage() {
   }
   const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
 
+  // ── Hydrate form state from the organization doc (once per org) ─────
+  useEffect(() => {
+    if (!organization) return
+    if (orgInitializedRef.current === organization.id) return
+    orgInitializedRef.current = organization.id
+
+    if (organization.name) setFirmName(organization.name)
+    if (organization.gstin) setFirmGstin(organization.gstin)
+
+    // Extended fields may or may not exist on every org doc — read defensively.
+    const anyOrg = organization as Record<string, unknown>
+    if (typeof anyOrg.legalName === 'string' && anyOrg.legalName) setLegalName(anyOrg.legalName)
+    if (typeof anyOrg.state === 'string' && anyOrg.state) setFirmState(anyOrg.state)
+    if (typeof anyOrg.entityType === 'string' && anyOrg.entityType) setEntityType(anyOrg.entityType)
+    if (typeof anyOrg.caRegNumber === 'string' && anyOrg.caRegNumber) setCaRegNumber(anyOrg.caRegNumber)
+    if (typeof anyOrg.officeAddress === 'string' && anyOrg.officeAddress) setOfficeAddress(anyOrg.officeAddress)
+    if (anyOrg.gstConfig && typeof anyOrg.gstConfig === 'object') {
+      const c = anyOrg.gstConfig
+      if (c.returnPeriod === 'monthly' || c.returnPeriod === 'quarterly') setReturnPeriod(c.returnPeriod)
+      if (c.fyStart === 'april' || c.fyStart === 'january') setFyStart(c.fyStart)
+      if (c.gstr1Pref === 'auto' || c.gstr1Pref === 'manual') setGstr1Pref(c.gstr1Pref)
+      if (c.gstr3bPref === 'auto' || c.gstr3bPref === 'manual') setGstr3bPref(c.gstr3bPref)
+      if (c.itcMethod === 'auto-match' || c.itcMethod === 'manual-review') setItcMethod(c.itcMethod)
+      if (typeof c.lateFilingAlert === 'boolean') setLateFilingAlert(c.lateFilingAlert)
+      if (typeof c.dueDateReminderDays === 'number') setDueDateReminderDays(String(c.dueDateReminderDays))
+    }
+    if (anyOrg.notifications && typeof anyOrg.notifications === 'object') {
+      const n = anyOrg.notifications
+      if (typeof n.filingDeadline === 'boolean') setFilingDeadline(n.filingDeadline)
+      if (typeof n.mismatchAlerts === 'boolean') setMismatchAlerts(n.mismatchAlerts)
+      if (typeof n.weeklySummary === 'boolean') setWeeklySummary(n.weeklySummary)
+      if (typeof n.healthScoreChanges === 'boolean') setHealthScoreChanges(n.healthScoreChanges)
+      if (typeof n.teamActivity === 'boolean') setTeamActivity(n.teamActivity)
+      if (typeof n.newInvoiceUploaded === 'boolean') setNewInvoiceUploaded(n.newInvoiceUploaded)
+    }
+  }, [organization])
+
   // ── Handlers ────────────────────────────────────────────────────────
-  const handleSave = async () => {
-    // Real firm-settings PATCH — persists to DB + AuditLog
+  // Every Save button persists to Firestore `organizations/{orgId}`. Org-level
+  // writes satisfy the Firestore security rules because the signed-in user is
+  // a member of the org (owner/admin for the membership row). `reloadOrg()` is
+  // called after each successful write so the navbar / sidebar / context
+  // reflect the new value immediately.
+
+  const handleSaveFirmProfile = async () => {
+    if (!orgId) {
+      toast.error('No organization loaded. Please reload the page.')
+      throw new Error('No organization')
+    }
     try {
-      const res = await fetch('/api/firm-settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firmName,
-          primaryColor: '#059669',
-          accentColor: '#7c3aed',
-          updatedBy: user?.id,
-        }),
+      await updateDoc(doc(db, 'organizations', orgId), {
+        name: firmName,
+        legalName,
+        gstin: firmGstin,
+        state: firmState,
+        entityType,
+        caRegNumber,
+        officeAddress,
+        updatedAt: serverTimestamp(),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error ?? 'Save failed')
-      }
+      await reloadOrg()
       toast.success('Firm profile saved')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save firm profile')
       throw err
+    }
+  }
+
+  const handleSaveGstConfig = async () => {
+    if (!orgId) {
+      toast.error('No organization loaded. Please reload the page.')
+      throw new Error('No organization')
+    }
+    try {
+      await updateDoc(doc(db, 'organizations', orgId), {
+        gstConfig: {
+          returnPeriod,
+          fyStart,
+          gstr1Pref,
+          gstr3bPref,
+          itcMethod,
+          lateFilingAlert,
+          dueDateReminderDays: parseInt(dueDateReminderDays, 10) || 3,
+        },
+        updatedAt: serverTimestamp(),
+      })
+      await reloadOrg()
+      toast.success('GST configuration saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save GST configuration')
+      throw err
+    }
+  }
+
+  const handleSaveNotifications = async () => {
+    if (!orgId) {
+      toast.error('No organization loaded. Please reload the page.')
+      throw new Error('No organization')
+    }
+    try {
+      await updateDoc(doc(db, 'organizations', orgId), {
+        notifications: {
+          filingDeadline,
+          mismatchAlerts,
+          weeklySummary,
+          healthScoreChanges,
+          teamActivity,
+          newInvoiceUploaded,
+        },
+        updatedAt: serverTimestamp(),
+      })
+      await reloadOrg()
+      toast.success('Notification preferences saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save notifications')
+      throw err
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword !== confirmPassword) {
+      toast.error('Passwords do not match')
+      throw new Error('Password mismatch')
+    }
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      throw new Error('Password too short')
+    }
+    try {
+      const fbUser = auth.currentUser
+      if (!fbUser) {
+        throw new Error('No authenticated user. Please sign in again.')
+      }
+      await updatePassword(fbUser, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      toast.success('Password updated successfully')
+    } catch (err) {
+      // Firebase throws auth/requires-recent-login if the user hasn't signed
+      // in recently — surface that hint to the user.
+      const raw = err instanceof Error ? err.message : 'Failed to change password'
+      const friendly = raw.includes('requires-recent-login')
+        ? 'For your security, please sign out and sign back in, then try again.'
+        : raw
+      toast.error(friendly)
+      throw err
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // Reset the input so the same file can be re-selected later.
+    e.target.value = ''
+    if (!file) return
+    if (!orgId) {
+      toast.error('No organization loaded. Please reload the page.')
+      return
+    }
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Logo must be a PNG, JPG, or WebP file')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo must be under 2 MB')
+      return
+    }
+    setLogoUploading(true)
+    // Show a local preview immediately so the user sees feedback before the
+    // upload completes. Revoked on failure / after the org reload swaps in the
+    // canonical Firestore-backed URL.
+    const localPreviewUrl = URL.createObjectURL(file)
+    setLogoPreview(localPreviewUrl)
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+      const fileRef = storageRef(storage, `organizations/${orgId}/logo.${ext}`)
+      await uploadBytes(fileRef, file)
+      const downloadUrl = await getDownloadURL(fileRef)
+      await updateDoc(doc(db, 'organizations', orgId), {
+        logoUrl: downloadUrl,
+        updatedAt: serverTimestamp(),
+      })
+      await reloadOrg()
+      toast.success('Firm logo updated')
+    } catch (err) {
+      setLogoPreview(null)
+      URL.revokeObjectURL(localPreviewUrl)
+      const msg = err instanceof Error ? err.message : 'Failed to upload logo'
+      toast.error(msg)
+    } finally {
+      setLogoUploading(false)
     }
   }
 
@@ -504,17 +693,49 @@ export default function SettingsPage() {
                 {/* Logo Upload */}
                 <div className="flex items-center gap-5">
                   <div className="relative group">
-                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20">
-                      {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20 overflow-hidden">
+                      {/* Render the uploaded logo (Firestore-backed URL or local
+                          in-flight preview) when available; otherwise fall back
+                          to the firm-initials mark so the logo never disappears. */}
+                      {(logoPreview || organization?.logoUrl) ? (
+                        <img
+                          src={(logoPreview || organization!.logoUrl) as string}
+                          alt={firmName || 'Firm logo'}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>
+                          {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
                     </div>
-                    <button className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <Camera className="h-5 w-5 text-white" />
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={logoUploading}
+                      aria-label="Upload firm logo"
+                      className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {logoUploading ? (
+                        <Loader2 className="h-5 w-5 text-white animate-spin" />
+                      ) : (
+                        <Camera className="h-5 w-5 text-white" />
+                      )}
                     </button>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Firm Logo</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Click the avatar to upload a logo</p>
-                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG or JPG</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {logoUploading ? 'Uploading...' : 'Click the avatar to upload a logo'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG, JPG, or WebP (max 2 MB)</p>
                   </div>
                 </div>
 
@@ -626,7 +847,7 @@ export default function SettingsPage() {
 
                 {/* Save */}
                 <div className="flex justify-end pt-2">
-                  <SaveButton onSave={handleSave} />
+                  <SaveButton onSave={handleSaveFirmProfile} />
                 </div>
               </CardContent>
             </Card>
@@ -806,7 +1027,7 @@ export default function SettingsPage() {
 
                 {/* Save */}
                 <div className="flex justify-end pt-2">
-                  <SaveButton onSave={handleSave} />
+                  <SaveButton onSave={handleSaveGstConfig} />
                 </div>
               </CardContent>
             </Card>
@@ -1164,7 +1385,7 @@ export default function SettingsPage() {
 
                 {/* Save */}
                 <div className="flex justify-end pt-4">
-                  <SaveButton onSave={handleSave} />
+                  <SaveButton onSave={handleSaveNotifications} />
                 </div>
               </CardContent>
             </Card>
@@ -1256,7 +1477,7 @@ export default function SettingsPage() {
                 </div>
                 {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
                   <div className="flex justify-end">
-                    <SaveButton onSave={handleSave} />
+                    <SaveButton onSave={handleChangePassword} />
                   </div>
                 )}
               </CardContent>

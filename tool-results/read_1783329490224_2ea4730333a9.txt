@@ -1,0 +1,250 @@
+     1→/home/z/my-project/src/services/gst-portal.service.ts:5: * Currently implements stub methods with local GSTIN validation.
+     2→/home/z/my-project/src/services/storage.service.ts:8: * - Upload returns a mock result with local path
+     3→/home/z/my-project/src/services/storage.service.ts:48:   * Currently returns a mock result — V2 will use real cloud storage.
+     4→/home/z/my-project/src/services/storage.service.ts:52:    // For now, just return a mock result
+     5→/home/z/my-project/src/hooks/useBanking.ts:216:            provider: input.provider ?? 'mock',
+     6→/home/z/my-project/src/hooks/useBanking.ts:236:          provider: input.provider ?? 'mock',
+     7→/home/z/my-project/src/hooks/useGenerationJobs.ts:107:  text: 'mock-text-pro',
+     8→/home/z/my-project/src/hooks/useGenerationJobs.ts:108:  image: 'mock-image-v2',
+     9→/home/z/my-project/src/hooks/useGenerationJobs.ts:109:  video: 'mock-video-1',
+    10→/home/z/my-project/src/hooks/useGenerationJobs.ts:110:  audio: 'mock-audio-v1',
+    11→/home/z/my-project/src/hooks/useGenerationJobs.ts:111:  code: 'mock-code-pro',
+    12→/home/z/my-project/src/hooks/useGenerationJobs.ts:112:  structured: 'mock-structured-v1',
+    13→/home/z/my-project/src/hooks/useGenerationJobs.ts:132:function genMockContent(assetType: GenAssetType, input: GenJobInput): { content: string; contentType: string } {
+    14→/home/z/my-project/src/hooks/useGenerationJobs.ts:156:      return { content: 'mock-audio://silent', contentType: 'audio/wav' };
+    15→/home/z/my-project/src/hooks/useGenerationJobs.ts:158:      return { content: `mock-video://${genId('vid')}`, contentType: 'video/mp4' };
+    16→/home/z/my-project/src/hooks/useGenerationJobs.ts:190:    provider: input.provider ?? 'mock',
+    17→/home/z/my-project/src/hooks/useGenerationJobs.ts:246:      const { content, contentType } = genMockContent(current.assetType, current.input);
+    18→/home/z/my-project/src/hooks/useGenerationJobs.ts:254:        output: { content, contentType, metadata: { provider: 'mock', model: current.model } },
+    19→/home/z/my-project/src/hooks/useGenerationJobs.ts:518:          provider: input.provider ?? 'mock',
+    20→/home/z/my-project/src/hooks/useCommunications.ts:276:            provider: input.provider ?? 'mock',
+    21→/home/z/my-project/src/hooks/useCommunications.ts:294:          provider: input.provider ?? 'mock',
+    22→/home/z/my-project/src/hooks/useCommunications.ts:496:            provider: input.provider ?? 'mock',
+    23→/home/z/my-project/src/hooks/useCommunications.ts:515:          provider: input.provider ?? 'mock',
+    24→/home/z/my-project/src/lib/app-platform/sdk.ts:37:    { command: 'gstpilot emulate', description: 'Start local emulator with mock data' },
+    25→/home/z/my-project/src/lib/app-platform/catalog.ts:4:// installable definition — not mock data. Seeded into the App table on first run.
+    26→/home/z/my-project/src/lib/workforce/types.ts:10:// Pure server-side TypeScript. No mock values. No placeholders. Every value
+    27→/home/z/my-project/src/lib/workforce/decisions.ts:9:// Pure server-side TypeScript. Never throws. No mock triggers.
+    28→/home/z/my-project/src/lib/workforce/employee-engine.ts:7:// for every one of the 17 roles. No mock values — every number traces back to
+    29→/home/z/my-project/src/lib/workforce/collaboration.ts:11:// No mock values. Every ₹ figure, invoice number, client name, vendor name
+    30→/home/z/my-project/src/lib/autonomous/types.ts:10:// Pure server-side TypeScript. No mock values. No placeholders. Every value
+    31→/home/z/my-project/src/lib/autonomous/observer.ts:10:// data. No mock values, ever.
+    32→/home/z/my-project/src/lib/autonomous/simulator.ts:169:// ─── The deterministic financial model (no random/mock — pure arithmetic) ────
+    33→/home/z/my-project/src/lib/workforce/data.ts:7:// touches Prisma directly — only reuses existing engines. No mock data.
+    34→/home/z/my-project/src/lib/network/payments.ts:6:// database — no mock totals.
+    35→/home/z/my-project/src/lib/network/business-graph.ts:5:// here is derived from rows in the database (no mock values).
+    36→/home/z/my-project/src/lib/twin/types.ts:11:// Pure server-side TypeScript. No mock values. No placeholders. Everything is
+    37→/home/z/my-project/src/lib/twin/timeline.ts:7:// Data sources (all REAL, no mock):
+    38→/home/z/my-project/src/lib/twin/snapshots.ts:18:// payments, filings, employees) bucketed by time period. No mock values.
+    39→/home/z/my-project/src/lib/twin/decision-impact.ts:19:// expenses, payroll, runway) — never from mock values.
+    40→/home/z/my-project/src/lib/invoices/tds.ts:116:// Previously this module shipped 8 hardcoded TDS records attributed to fake
+    41→/home/z/my-project/src/lib/platform/billing.ts:6:// invoice records (no mock totals).
+    42→/home/z/my-project/src/lib/invoices/payroll.ts:137:// Previously these functions emitted 8 fake Indian employees + 1 month of
+    43→/home/z/my-project/src/lib/data-intelligence/lineage.ts:13:// No mock data. Founder & Owner: Prince Singh.
+    44→/home/z/my-project/src/lib/data-intelligence/analytics.ts:4:// Every metric is derived from live Prisma queries. No mock values. Append-only snapshots.
+    45→/home/z/my-project/src/lib/data-intelligence/catalog.ts:12:// No mock data. Every number traces back to a real Prisma query.
+    46→/home/z/my-project/src/lib/data-intelligence/master-data.ts:22:// No mock data. Every value traces back to a real Prisma row.
+    47→/home/z/my-project/src/lib/data-intelligence/predictions.ts:5:// No random numbers. No mock values. Every figure derived from real Prisma data.
+    48→/home/z/my-project/src/lib/invoices/invoices.ts:183:// fake Indian enterprise buyers. The export name is preserved so existing
+    49→/home/z/my-project/src/lib/invoices/payments.ts:104:// ─── Seed data: 10 mock payments ──────────────────────────────────────────────
+    50→/home/z/my-project/src/lib/oracle/real-data.ts:11:// No demo values. No mock values. Only real connected data.
+    51→/home/z/my-project/src/lib/email-validation.ts:11:// ── Disposable / temp / fake email domain blocklist ─────────────────────────
+    52→/home/z/my-project/src/lib/communication-provider/types.ts:10://   • MockGmailProvider  — deterministic simulated responses (default)
+    53→/home/z/my-project/src/lib/communication-provider/types.ts:14://   • MockWhatsAppProvider — deterministic simulated responses (default)
+    54→/home/z/my-project/src/lib/communication-provider/types.ts:31: * Supported Gmail provider backends. Today only 'mock' is live; 'google' is a
+    55→/home/z/my-project/src/lib/communication-provider/types.ts:34:export type GmailProviderName = 'mock' | 'google';
+    56→/home/z/my-project/src/lib/communication-provider/types.ts:37: * Supported WhatsApp provider backends. Today only 'mock' is live; 'meta' is a
+    57→/home/z/my-project/src/lib/communication-provider/types.ts:40:export type WhatsAppProviderName = 'mock' | 'meta';
+    58→/home/z/my-project/src/lib/communication-provider/types.ts:354:  /** Initial label list (just ['INBOX', 'SENT'] for mock). */
+    59→/home/z/my-project/src/lib/communication-provider/provider.ts:8://   • MockGmailProvider     — deterministic simulated responses (default)
+    60→/home/z/my-project/src/lib/communication-provider/provider.ts:10://   • MockWhatsAppProvider  — deterministic simulated responses (default)
+    61→/home/z/my-project/src/lib/communication-provider/provider.ts:108:   * immediately for the mock provider).
+    62→/home/z/my-project/src/lib/communication-provider/provider.ts:115:   * the session + profile. For the mock provider this is instant.
+    63→/home/z/my-project/src/lib/communication-provider/provider.ts:181:   * Initiate a WhatsApp Business connection. For the mock provider this is
+    64→/home/z/my-project/src/lib/ceo/types.ts:10:// Pure server-side TypeScript. No mock values. No placeholders. Every value
+    65→/home/z/my-project/src/lib/communication-provider/communication-analysis.ts:5://   • MockGmailProvider / MockWhatsAppProvider (to stamp categories on generated
+    66→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:2:// GSTPilot Gmail & WhatsApp Business Automation™ — MockGmailProvider (SERVER-ONLY)
+    67→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:56:// In production, Google tracks OAuth state. The mock keeps it locally.
+    68→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:58:interface MockGmailConnectionEntry {
+    69→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:65:const connectionStore = new Map<string, MockGmailConnectionEntry>();
+    70→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:292:    const messageId = `<${crypto.randomBytes(12).toString('hex')}@gstpilot-mock.gmail.com>`;
+    71→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:343:// ─── MockGmailProvider ────────────────────────────────────────────────────────
+    72→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:345:export class MockGmailProvider implements IGmailProvider {
+    73→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:347:  readonly provider = 'mock' as const;
+    74→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:387:      provider: 'mock',
+    75→/home/z/my-project/src/lib/communication-provider/server/mock-gmail-provider.ts:456:    const messageId = `<${crypto.randomBytes(12).toString('hex')}@gstpilot-mock.gmail.com>`;
+    76→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:32:import { MockGmailProvider } from './mock-gmail-provider';
+    77→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:33:import { MockWhatsAppProvider } from './mock-whatsapp-provider';
+    78→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:238:    case 'mock':
+    79→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:239:      return new MockGmailProvider();
+    80→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:249:    case 'mock':
+    81→/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:250:      return new MockWhatsAppProvider();
+    82→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:2:// GSTPilot Gmail & WhatsApp Business Automation™ — MockWhatsAppProvider (SERVER-ONLY)
+    83→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:53:interface MockWhatsAppConnectionEntry {
+    84→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:62:const connectionStore = new Map<string, MockWhatsAppConnectionEntry>();
+    85→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:280:// ─── MockWhatsAppProvider ─────────────────────────────────────────────────────
+    86→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:282:export class MockWhatsAppProvider implements IWhatsAppProvider {
+    87→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:284:  readonly provider = 'mock' as const;
+    88→/home/z/my-project/src/lib/communication-provider/server/mock-whatsapp-provider.ts:335:      provider: 'mock',
+    89→/home/z/my-project/src/lib/communication-provider/server/registry.ts:4:// The SINGLE switch-point between providers. Today returns the mock providers;
+    90→/home/z/my-project/src/lib/communication-provider/server/registry.ts:28: *   • 'mock' / undefined → MockGmailProvider (default)
+    91→/home/z/my-project/src/lib/communication-provider/server/registry.ts:32:  const raw = (process.env.COMMUNICATION_GMAIL_PROVIDER ?? 'mock').toLowerCase().trim();
+    92→/home/z/my-project/src/lib/communication-provider/server/registry.ts:33:  const valid: GmailProviderName[] = ['mock', 'google'];
+    93→/home/z/my-project/src/lib/communication-provider/server/registry.ts:34:  return (valid as string[]).includes(raw) ? (raw as GmailProviderName) : 'mock';
+    94→/home/z/my-project/src/lib/communication-provider/server/registry.ts:40: *   • 'mock' / undefined → MockWhatsAppProvider (default)
+    95→/home/z/my-project/src/lib/communication-provider/server/registry.ts:44:  const raw = (process.env.COMMUNICATION_WHATSAPP_PROVIDER ?? 'mock').toLowerCase().trim();
+    96→/home/z/my-project/src/lib/communication-provider/server/registry.ts:45:  const valid: WhatsAppProviderName[] = ['mock', 'meta'];
+    97→/home/z/my-project/src/lib/communication-provider/server/registry.ts:46:  return (valid as string[]).includes(raw) ? (raw as WhatsAppProviderName) : 'mock';
+    98→/home/z/my-project/src/lib/ceo/tasks.ts:19:// No fabrication. No mock tasks. Capped at 15 active tasks.
+    99→/home/z/my-project/src/lib/communication-provider/errors.ts:113: * back to the mock provider or surface a clear "feature not available" message.
+   100→/home/z/my-project/src/lib/communication-provider/service.ts:178:    provider: (raw.provider as GmailConnection['provider']) ?? 'mock',
+   101→/home/z/my-project/src/lib/communication-provider/service.ts:256:    provider: (raw.provider as WhatsAppConnection['provider']) ?? 'mock',
+   102→/home/z/my-project/src/lib/ceo/data.ts:7:// engines (no mock data, no duplication).
+   103→/home/z/my-project/src/lib/ai-pipeline/types.ts:10://   • MockGenProvider — deterministic simulated responses (default)
+   104→/home/z/my-project/src/lib/ai-pipeline/types.ts:65:  | 'mock'
+   105→/home/z/my-project/src/lib/ai-pipeline/provider.ts:6://   • MockGenProvider          — deterministic simulated responses (default)
+   106→/home/z/my-project/src/lib/ai-pipeline/server/processor.ts:101:    provider: (raw.provider as GenProviderName) ?? 'mock',
+   107→/home/z/my-project/src/lib/ai-pipeline/server/processor.ts:306:        // fine here because the mock provider only fires 5 steps).
+   108→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:2:// GSTPilot AI Production Pipeline™ — MockGenProvider (SERVER-ONLY)
+   109→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:65:  text: 'mock-text-pro',
+   110→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:66:  image: 'mock-image-v2',
+   111→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:67:  video: 'mock-video-1',
+   112→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:68:  audio: 'mock-audio-v1',
+   113→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:69:  code: 'mock-code-pro',
+   114→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:70:  structured: 'mock-structured-v1',
+   115→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:166:      mock: true,
+   116→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:230:  return `mock-video://${seed}/${encodeURIComponent(input.prompt.slice(0, 60))}`;
+   117→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:244:      return { content: generateStructuredContent(rng, input), contentType: 'application/json', metadata: { schema: 'mock-v1' } };
+   118→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:254:// ─── MockGenProvider ─────────────────────────────────────────────────────────
+   119→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:256:export class MockGenProvider implements IGenProvider {
+   120→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:258:  readonly providerName: GenProviderName = 'mock';
+   121→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:328:        provider: 'mock',
+   122→/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:332:      costUsdCents: 0, // mock is free
+   123→/home/z/my-project/src/lib/ai-pipeline/server/official-provider.ts:29: * The contract (input/output shapes) is identical to MockGenProvider, so the
+   124→/home/z/my-project/src/lib/connectors/gmail.ts:16:// This is REAL Gmail integration — no mock data.
+   125→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:4:// The SINGLE switch-point between providers. Today returns MockGenProvider;
+   126→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:16:import { MockGenProvider } from './mock-provider';
+   127→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:19:export type AIProviderName = 'mock' | 'official';
+   128→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:26: *   • everything else (default, 'mock', undefined) → MockGenProvider
+   129→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:29:  const raw = (process.env.AI_PROVIDER ?? 'mock').toLowerCase().trim();
+   130→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:33:  return 'mock';
+   131→/home/z/my-project/src/lib/ai-pipeline/server/registry.ts:47:    : new MockGenProvider();
+   132→/home/z/my-project/src/lib/ai-pipeline/index.ts:23://       ├─ mock-provider.ts   (deterministic simulated AI — default)
+   133→/home/z/my-project/src/lib/ai-pipeline/errors.ts:98: * the mock provider or surface a clear "feature not available" message.
+   134→/home/z/my-project/src/lib/ai-pipeline/service.ts:86:    provider: (raw.provider as GenProviderName) ?? 'mock',
+   135→/home/z/my-project/src/lib/ai-pipeline/service.ts:283:    provider: (raw.provider as GenProviderName) ?? 'mock',
+   136→/home/z/my-project/src/lib/ai-pipeline/service.ts:355:    provider: (raw.provider as GenProviderName) ?? 'mock',
+   137→/home/z/my-project/src/lib/gstn-provider/types.ts:10://   • MockGSTProvider — deterministic simulated responses (default)
+   138→/home/z/my-project/src/lib/gstn-provider/provider.ts:6://   • MockGSTProvider          — deterministic simulated responses (default)
+   139→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:2:// GSTPilot Real GSTN Integration™ — MockGSTProvider (SERVER-ONLY)
+   140→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:68:// We re-implement the GSTN checksum here so the mock provider rejects malformed
+   141→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:159:// ─── In-memory OTP store (mock) ──────────────────────────────────────────────
+   142→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:160:// In production, the GSTN API itself tracks OTP state. The mock has to do it
+   143→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:164:interface MockOTPEntry {
+   144→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:172:const otpStore = new Map<string, MockOTPEntry>();
+   145→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:291:      mock: true,
+   146→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:364:      mock: true,
+   147→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:366:      body: `This is a mock ${noticeType} generated for ${gstin}. In production this would contain the full notice text from GSTN.`,
+   148→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:443:// ─── MockGSTProvider ──────────────────────────────────────────────────────────
+   149→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:445:export class MockGSTProvider implements IGSTProvider {
+   150→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:472:      otpSentTo: '***@**.in (mock — use 123456 to verify)',
+   151→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:473:      message: 'Mock OTP sent. In production, an OTP would be sent to the registered mobile/email. Use 123456 to verify in this mock mode.',
+   152→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:489:    let entry: MockOTPEntry | undefined;
+   153→/home/z/my-project/src/lib/gstn-provider/server/mock-provider.ts:521:      metadata: { provider: 'mock', txnId: entry.txnId },
+   154→/home/z/my-project/src/lib/gstn-provider/server/official-provider.ts:36: * The contract (input/output shapes) is identical to MockGSTProvider, so the
+   155→/home/z/my-project/src/lib/integrations/types.ts:12:// NO fake data lives here. Every adapter that needs credentials throws
+   156→/home/z/my-project/src/lib/integrations/types.ts:387: * adapter. Adapters MUST NOT fabricate fake data to mask a missing config.
+   157→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:4:// The SINGLE switch-point between providers. Today returns MockGSTProvider;
+   158→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:16:import { MockGSTProvider } from './mock-provider';
+   159→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:19:export type GSTProviderName = 'mock' | 'official';
+   160→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:26: *   • everything else (default, 'mock', undefined) → MockGSTProvider
+   161→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:29:  const raw = (process.env.GSTN_PROVIDER ?? 'mock').toLowerCase().trim();
+   162→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:33:  return 'mock';
+   163→/home/z/my-project/src/lib/gstn-provider/server/registry.ts:48:    : new MockGSTProvider();
+   164→/home/z/my-project/src/lib/integrations/banks.ts:18:// API. NO fake data.
+   165→/home/z/my-project/src/lib/gstn-provider/errors.ts:108: * the mock provider or surface a clear "feature not available" message.
+   166→/home/z/my-project/src/lib/integrations/gstn.ts:14:// India, Tax GX) and a signed GSP agreement. NO fake data is returned.
+   167→/home/z/my-project/src/lib/integrations/gmail.ts:11:// present but the live API call hasn't been wired yet. NO fake data.
+   168→/home/z/my-project/src/lib/banking-provider/types.ts:10://   • MockBankProvider — deterministic simulated responses (default)
+   169→/home/z/my-project/src/lib/banking-provider/types.ts:30: * The set of supported banking provider backends. Today only 'mock' is live;
+   170→/home/z/my-project/src/lib/banking-provider/types.ts:34:  | 'mock'
+   171→/home/z/my-project/src/lib/banking-provider/provider.ts:6://   • MockBankProvider — deterministic simulated responses (default)
+   172→/home/z/my-project/src/lib/integrations/excel.ts:8:// This adapter is fully functional today. NO fake data — it returns whatever
+   173→/home/z/my-project/src/lib/integrations/razorpay.ts:10:// requires live API keys...') with creds but unwired API. NO fake data.
+   174→/home/z/my-project/src/lib/integrations/drive.ts:10:// requires live Google OAuth creds...') with creds but unwired API. NO fake
+   175→/home/z/my-project/src/lib/integrations/sync.ts:15:// ends with status="error" and the error message. NO fake data is written.
+   176→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:2:// GSTPilot Real Banking Foundation™ — MockBankProvider (SERVER-ONLY)
+   177→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:96:// ─── In-memory connection store (mock) ───────────────────────────────────────
+   178→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:97:// In production, the AA / bank tracks connection state. The mock has to do it
+   179→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:101:interface MockConnectionEntry {
+   180→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:112:const connectionStore = new Map<string, MockConnectionEntry>();
+   181→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:238:// ─── MockBankProvider ─────────────────────────────────────────────────────────
+   182→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:240:export class MockBankProvider implements IBankProvider {
+   183→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:242:  readonly provider = 'mock' as const;
+   184→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:304:      provider: 'mock',
+   185→/home/z/my-project/src/lib/banking-provider/server/mock-provider.ts:330:    // needed; the mock keeps the entry for deterministic data generation.
+   186→/home/z/my-project/src/lib/banking-provider/server/registry.ts:4:// The SINGLE switch-point between providers. Today returns MockBankProvider;
+   187→/home/z/my-project/src/lib/banking-provider/server/registry.ts:18:import { MockBankProvider } from './mock-provider';
+   188→/home/z/my-project/src/lib/banking-provider/server/registry.ts:26: *   • 'mock' / undefined → MockBankProvider (default)
+   189→/home/z/my-project/src/lib/banking-provider/server/registry.ts:34:  const raw = (process.env.BANK_PROVIDER ?? 'mock').toLowerCase().trim();
+   190→/home/z/my-project/src/lib/banking-provider/server/registry.ts:35:  const valid: BankProviderName[] = ['mock', 'aa', 'razorpayx', 'setu', 'perfios', 'finvu'];
+   191→/home/z/my-project/src/lib/banking-provider/server/registry.ts:36:  return (valid as string[]).includes(raw) ? (raw as BankProviderName) : 'mock';
+   192→/home/z/my-project/src/lib/banking-provider/server/registry.ts:50:  cachedProvider = name === 'mock' ? new MockBankProvider() : createFutureProvider(name);
+   193→/home/z/my-project/src/lib/banking-provider/errors.ts:99: * to the mock provider or surface a clear "feature not available" message.
+   194→/home/z/my-project/src/lib/banking-provider/service.ts:100:    provider: (raw.provider as BankConnection['provider']) ?? 'mock',
+   195→/home/z/my-project/src/lib/agi/swarm.ts:12:// No mock values.
+   196→/home/z/my-project/src/lib/agi/core.ts:13:// Prisma tables — no mock values. A capability is "online" when its underlying
+   197→/home/z/my-project/src/lib/agi/memory.ts:13:// No mock values.
+   198→/home/z/my-project/src/lib/agi/learning.ts:16:// No mock values.
+   199→/home/z/my-project/src/lib/ecosystem/extensions.ts:4:// Anchored to the live platform orgs. No mock values.
+   200→/home/z/my-project/src/lib/ecosystem/extensions.ts:76:// ─── Canonical app catalog — real, useful apps (not mock data) ────────────────
+   201→/home/z/my-project/src/lib/software-factory/templates.ts:6:// count, invoice volume, GST returns, health scores). No mock values — every
+   202→/home/z/my-project/src/lib/execution-cloud/workers.ts:42:    // topology. These are NOT mock jobs — they're the worker nodes themselves.
+   203→/home/z/my-project/src/lib/execution-cloud/engine.ts:13:// No mock data. Every job traces back to a real production record.
+   204→/home/z/my-project/src/lib/rmb/run-agent.ts:7:// ExecutiveReport / Issue). No mock data, no canned responses — every summary
+   205→/home/z/my-project/src/lib/rmb/run-agent.ts:138:      // Last-resort fallback — return a stub so the agent doesn't crash.
+   206→/home/z/my-project/src/lib/rmb/run-agent.ts:139:      return { id: `audit-stub-${Date.now()}` };
+   207→/home/z/my-project/src/lib/rmb/run-agent.ts:180:      return { id: `notif-stub-${Date.now()}` };
+   208→/home/z/my-project/src/lib/cfo/types.ts:405:// No mock values. No placeholder analytics.
+   209→/home/z/my-project/src/lib/cfo/phase1/revenue-analytics.ts:12:// No mock values — every number is computed from real Invoice rows.
+   210→/home/z/my-project/src/lib/cfo/phase1/data.ts:20:// All fetched from REAL Prisma models. No mock data. No placeholders.
+   211→/home/z/my-project/src/lib/ai-provider/types.ts:11://   • MockAIProvider        — deterministic real-data analysis (default, NO LLM)
+   212→/home/z/my-project/src/lib/ai-provider/types.ts:20:// CRITICAL DESIGN PRINCIPLE: The MockAIProvider does NOT fabricate values. It
+   213→/home/z/my-project/src/lib/ai-provider/types.ts:22:// rules and template phrasing. "Never answer using fake data" is enforced at
+   214→/home/z/my-project/src/lib/ai-provider/types.ts:30: * The set of supported AI provider backends. Today only 'mock' is live; the
+   215→/home/z/my-project/src/lib/ai-provider/types.ts:34:  | 'mock'      // MockAIProvider — deterministic real-data analysis (default)
+   216→/home/z/my-project/src/lib/ai-provider/provider.ts:6://   • MockAIProvider — deterministic real-data analysis (default, NO LLM)
+   217→/home/z/my-project/src/components/connections/ConnectionsPage.tsx:150:          Connect your real data sources. Oracle uses only connected data — no demo values, no mock values.
+   218→/home/z/my-project/src/components/connections/ConnectionsPage.tsx:398:    // Trigger a real sync — creates SyncedRecord stub rows
+   219→/home/z/my-project/src/lib/ai-provider/server/orchestrator.ts:603:  // unless the orchestrator passes raw invoices. The MockAIProvider exposes
+   220→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:2:// GSTPilot AI Oracle™ & AI CFO™ — MockAIProvider (SERVER-ONLY, default)
+   221→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:9:// deterministic rules and template phrasing. "Never answer using fake data" is
+   222→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:41: * The MockAIProvider — deterministic real-data analysis, NO external LLM.
+   223→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:47:export class MockAIProvider implements IAIProvider {
+   224→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:49:  readonly provider: AIProviderName = 'mock';
+   225→/home/z/my-project/src/lib/ai-provider/server/mock-provider.ts:109:    // The mock provider is always "available" — it's pure computation.
+   226→/home/z/my-project/src/lib/ai-provider/server/registry.ts:4:// The SINGLE switch-point between AI providers. Today returns MockAIProvider;
+   227→/home/z/my-project/src/lib/ai-provider/server/registry.ts:18:import { MockAIProvider } from './mock-provider';
+   228→/home/z/my-project/src/lib/ai-provider/server/registry.ts:26: *   • 'mock' / undefined → MockAIProvider (default)
+   229→/home/z/my-project/src/lib/ai-provider/server/registry.ts:32:  const raw = (process.env.AI_PROVIDER ?? 'mock').toLowerCase().trim();
+   230→/home/z/my-project/src/lib/ai-provider/server/registry.ts:33:  const valid: AIProviderName[] = ['mock', 'openai', 'gemini', 'claude'];
+   231→/home/z/my-project/src/lib/ai-provider/server/registry.ts:34:  return (valid as string[]).includes(raw) ? (raw as AIProviderName) : 'mock';
+   232→/home/z/my-project/src/lib/ai-provider/server/registry.ts:47:  cachedProvider = name === 'mock' ? new MockAIProvider() : createFutureProvider(name);
+   233→/home/z/my-project/src/lib/ai-provider/index.ts:27:// Pure engines — safe for client + server (used by the mock provider + future
+   234→/home/z/my-project/src/lib/ai-provider/recommendations.ts:21:// recommendations. The MockAIProvider delegates to this; future LLM providers
+   235→/home/z/my-project/src/lib/ai-provider/errors.ts:92: * to the mock provider or surface a clear "feature not available" message.
+   236→/home/z/my-project/src/lib/ai-provider/chat.ts:24:// same answer. The MockAIProvider delegates to this; future LLM providers can
+   237→/home/z/my-project/src/lib/ai-provider/scoring.ts:19:// scores. The MockAIProvider delegates to this.
+   238→/home/z/my-project/src/lib/ai-provider/insights.ts:23:// insights. The MockAIProvider delegates to this; future LLM providers may
+   239→/home/z/my-project/src/lib/ai-provider/predictions.ts:67:    method: 'dampened-linear-trend (mock)',
+   240→/home/z/my-project/src/lib/ai-provider/predictions.ts:118:    method: 'net-inflow-persistence (mock)',
+   241→/home/z/my-project/src/lib/command-network/engine.ts:11:// Every metric is derived from REAL production data. No mock values.
+   242→/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:87:// renders an empty state with a CTA. The generateMockSignatures helper is kept
+   243→/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:90:function generateMockSignatures(): SignatureRequest[] {
+   244→/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:98:  const [signatures] = useState<SignatureRequest[]>(() => generateMockSignatures());
+   245→/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:213:  // PT-1-a-retry: start with an empty task list (no mock fallback) so the empty
+   246→/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:249:        // empty state with CTA renders instead of stale mock data (which contained
+   247→/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:250:        // a fake ₹3.2L duplicate ITC claim alert). Map DB rows → AITask shape.
+   248→/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:555:              // in the DB (instead of falling back to fake ₹3.2L ITC claim alert).
+   249→/home/z/my-project/src/lib/intelligence/recommendations.ts:7:// pattern, or MarketIndicator that triggered it. No mock values are ever emitted;
+   250→/home/z/my-project/src/lib/intelligence/market.ts:7:// They are NOT mock data — they reflect the actual state of the Indian economy

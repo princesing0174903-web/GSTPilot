@@ -1,0 +1,202 @@
+/home/z/my-project/src/lib/ai-provider/types.ts:12://   • FutureOpenAIProvider  — OpenAI GPT (placeholder, throws NotImplementedError)
+/home/z/my-project/src/lib/ai-provider/types.ts:13://   • FutureGeminiProvider  — Google Gemini (placeholder)
+/home/z/my-project/src/lib/ai-provider/types.ts:14://   • FutureClaudeProvider  — Anthropic Claude (placeholder)
+/home/z/my-project/src/lib/ai-provider/types.ts:35:  | 'openai'    // FutureOpenAIProvider — OpenAI GPT (placeholder)
+/home/z/my-project/src/lib/ai-provider/types.ts:36:  | 'gemini'    // FutureGeminiProvider — Google Gemini (placeholder)
+/home/z/my-project/src/lib/ai-provider/types.ts:37:  | 'claude';   // FutureClaudeProvider — Anthropic Claude (placeholder)
+/home/z/my-project/src/lib/ai-provider/provider.ts:7://   • FutureOpenAIProvider  — OpenAI GPT (placeholder, throws NotImplementedError)
+/home/z/my-project/src/lib/ai-provider/provider.ts:8://   • FutureGeminiProvider  — Google Gemini (placeholder)
+/home/z/my-project/src/lib/ai-provider/provider.ts:9://   • FutureClaudeProvider  — Anthropic Claude (placeholder)
+/home/z/my-project/src/lib/ai-provider/server/future-providers.ts:93: * FutureOpenAIProvider — OpenAI GPT integration (placeholder).
+/home/z/my-project/src/lib/ai-provider/server/future-providers.ts:108: * FutureGeminiProvider — Google Gemini integration (placeholder).
+/home/z/my-project/src/lib/ai-provider/server/future-providers.ts:121: * FutureClaudeProvider — Anthropic Claude integration (placeholder).
+/home/z/my-project/src/lib/ai-provider/server/future-providers.ts:134: * Factory: return the placeholder provider for a given name.
+/home/z/my-project/src/lib/ai-provider/server/scheduler.ts:102: * Today this is a no-op placeholder — the scheduler is wired to be invoked by
+/home/z/my-project/src/lib/connectivity/engine.ts:279:      encryptedValue: `enc:${instance.id}:${now.getTime()}`, // secrets-manager placeholder
+/home/z/my-project/src/lib/business-memory.ts:9:// conversations, insights, embeddings (placeholder).
+/home/z/my-project/src/lib/gstn/einvoice.ts:30:  // Generate a simulated QR code (base64 placeholder)
+/home/z/my-project/src/lib/invoice-engine/pdf.ts:14://   • QR placeholder (visual square — no third-party QR lib)
+/home/z/my-project/src/lib/invoice-engine/pdf.ts:236:  .qr-placeholder {
+/home/z/my-project/src/lib/invoice-engine/pdf.ts:249:  .qr-placeholder::after {
+/home/z/my-project/src/lib/invoice-engine/pdf.ts:387:        <div class="qr-placeholder"></div>
+/home/z/my-project/src/lib/communication/reports.ts:87:// ─── Seed placeholder (no-op) ─────────────────────────────────────────────────
+/home/z/my-project/src/lib/communication/templates.ts:243:    const placeholder = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+/home/z/my-project/src/lib/communication/templates.ts:244:    rendered = rendered.replace(placeholder, String(value));
+/home/z/my-project/src/lib/communication/templates.ts:251:      const placeholder = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+/home/z/my-project/src/lib/communication/templates.ts:252:      subject = subject.replace(placeholder, String(value));
+/home/z/my-project/src/lib/communication/templates.ts:273:    const placeholder = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+/home/z/my-project/src/lib/communication/templates.ts:274:    subject = subject.replace(placeholder, String(value));
+/home/z/my-project/src/lib/communication/templates.ts:275:    body = body.replace(placeholder, String(value));
+/home/z/my-project/src/lib/oracle-intelligence.ts:20://   • NO placeholder text ("I don't have enough data", "connect your data", etc.)
+/home/z/my-project/src/lib/oracle-intelligence.ts:820: * The prompt is strict about the 4-section structure and the no-placeholder rule.
+/home/z/my-project/src/lib/oracle-intelligence.ts:890:4. **NEVER use Lorem Ipsum, "TBD", "TODO", "[placeholder]", or sample text.**
+/home/z/my-project/src/lib/oracle-intelligence.ts:913:Remember: you are GSTPilot Oracle™. You always respond. You always give all 4 sections. You never use placeholder text.`
+/home/z/my-project/src/lib/compliance-cloud/engine.ts:193:  // For corporate/MCA/RBI/audit filings — placeholder date derived from period.
+/home/z/my-project/src/lib/execution/execute.ts:15://   • seedExecutionTasks  — no-op placeholder (returns []); real tasks come from DB
+/home/z/my-project/src/lib/invoices/tds.ts:115:// ─── Seed placeholder (no-op) ─────────────────────────────────────────────────
+/home/z/my-project/src/lib/invoices/intelligence.ts:95:  // ── Stage 5: Forecast (computed below, placeholder delta) ──
+/home/z/my-project/src/lib/invoices/invoices.ts:181:// ─── Seed placeholder (no-op) ─────────────────────────────────────────────────
+/home/z/my-project/src/lib/integrations/gstn.ts:163: * This is a placeholder — when wired, store the resulting `authToken` and
+/home/z/my-project/src/lib/platform/api-platform.ts:121:      hashedKey: '$2a$12$placeholder.hash.for.security.demo.only',
+/home/z/my-project/src/lib/platform/organizations.ts:296:          hashedKey: '$2a$12$placeholder.hash.for.security.demo.only',
+/home/z/my-project/src/lib/platform/organizations.ts:427:          hashedKey: '$2a$12$placeholder.hash.for.security.demo.only',
+/home/z/my-project/src/components/accounting/AccountingPage.tsx:375:                  <Input placeholder="Search entries..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+/home/z/my-project/src/components/accounting/AccountingPage.tsx:426:                  <Input placeholder="Search accounts..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+/home/z/my-project/src/components/dashboard/BusinessActivation.tsx:288:              placeholder="colleague@firm.com"
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:430:                placeholder="Search 37 apps... (CashFlow Forecaster, Tally Bridge, Manufacturing AI™)"
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:439:                <SelectTrigger className="h-9 w-36 text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:700:                <Input placeholder="Review title" value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} className="h-8 text-sm" />
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:701:                <Textarea placeholder="Share your experience..." value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} rows={3} className="text-sm" />
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:863:                      <Input placeholder="e.g. 1.0.0" value={rollbackVersion} onChange={(e) => setRollbackVersion(e.target.value)} className="h-7 w-28 text-xs" />
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:1155:              <SelectTrigger className="h-9 w-64 text-xs"><SelectValue placeholder="Select developer" /></SelectTrigger>
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:1486:                <Input placeholder="My Webhook" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:1490:                <Input placeholder="https://example.com/webhook" value={url} onChange={(e) => setUrl(e.target.value)} className="mt-1" />
+/home/z/my-project/src/components/app-platform/AppMarketplacePage.tsx:2115:            placeholder="e.g. Build a CRM extension that tracks leads and sends WhatsApp notifications..."
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:636:                  placeholder="e.g. 27ABCDE1234F1Z5"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:638:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:649:                  placeholder="e.g. Acme Industries Pvt Ltd"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:650:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:680:                  placeholder="6-digit OTP"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:682:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:775:                  placeholder="e.g. 1234"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:777:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:787:                  placeholder="6-digit PIN"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:789:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:797:                  placeholder="e.g. HDFC0001234"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:798:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:825:                placeholder="e.g. +91 98765 43210"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:826:                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:842:                  placeholder="e.g. Acme Industries Pvt Ltd"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:843:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:851:                  placeholder="e.g. 27ABCDE1234F1Z5"
+/home/z/my-project/src/components/connections/ConnectionsPage.tsx:852:                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-blue-500/40 focus:outline-none"
+/home/z/my-project/src/components/connections/ConnectDataDialog.tsx:45:  color: string;     // accent color for the logo placeholder
+/home/z/my-project/src/components/connections/ConnectDataDialog.tsx:497:                          placeholder="e.g. 27ABCDE1234F1Z5"
+/home/z/my-project/src/components/connections/ConnectDataDialog.tsx:501:                          className="font-mono tracking-wider h-11 text-sm border-white/10 bg-white/[0.03] text-white placeholder:text-white/30"
+/home/z/my-project/src/components/connections/ConnectDataDialog.tsx:614:                          placeholder="Enter your account number"
+/home/z/my-project/src/components/connections/ConnectDataDialog.tsx:616:                          className="font-mono tracking-wider h-11 text-sm border-white/10 bg-white/[0.03] text-white placeholder:text-white/30"
+/home/z/my-project/src/components/economic-graph/EconomicGraphPage.tsx:1161:                    <SelectValue placeholder="Select industry" />
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:1108:              placeholder="e.g. Should we extend credit to a new customer with ₹50L monthly orders but a thin credit history?"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:1214:                placeholder="Search unified memory…"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:1219:              <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:1228:              <SelectTrigger><SelectValue placeholder="Source" /></SelectTrigger>
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:1380:              placeholder="e.g. Should we expand to the UAE market in Q3?"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2228:                placeholder="e.g. Customer accepted 14-day payment terms"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2237:              placeholder="e.g. Offering 14-day terms to repeat customers increases retention by 22%."
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2246:              placeholder='{"sampleSize": 47, "upliftPct": 22}'
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2730:            placeholder="e.g. What is our cash runway if we delay receivables by 30 days?"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2829:            placeholder="e.g. Launch a new product line in the West India market within 60 days"
+/home/z/my-project/src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx:2924:            placeholder="e.g. Why did our Q3 margins drop 4%?"
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:728:                placeholder="Search notices..."
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:739:                <SelectValue placeholder="Status" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:752:                <SelectValue placeholder="Type" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1003:                  <SelectValue placeholder="Select client" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1019:                    <SelectValue placeholder="Select type" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1040:                    <SelectValue placeholder="Select priority" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1059:                  placeholder="e.g., GST/2026/001"
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1080:                placeholder="Enter notice subject..."
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1091:                placeholder="Describe the notice details..."
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1112:                    <SelectValue placeholder="Select member" />
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1279:                          placeholder="Enter resolution details..."
+/home/z/my-project/src/components/notices/NoticeCenterPage.tsx:1300:                            <SelectValue placeholder="Select team member" />
+/home/z/my-project/src/components/invoice-exchange/InvoiceExchangePage.tsx:1265:                <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="INV-2026-0001" />
+/home/z/my-project/src/components/invoice-exchange/InvoiceExchangePage.tsx:1269:                <Input value={buyer} onChange={(e) => setBuyer(e.target.value)} placeholder="Reliance Retail Ltd" />
+/home/z/my-project/src/components/invoice-exchange/InvoiceExchangePage.tsx:1274:                  <Input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="4500000" type="text" inputMode="numeric" />
+/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:488:                placeholder="e.g., GSTR-1 Authorization Letter"
+/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:513:                placeholder="e.g., Vikram Mehta"
+/home/z/my-project/src/components/esignatures/ESignaturesPage.tsx:522:                placeholder="e.g., vikram@company.com"
+/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:725:                  <SelectValue placeholder="Select client (optional)" />
+/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:758:                placeholder="Task title..."
+/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:768:                placeholder="Task description..."
+/home/z/my-project/src/components/ai-tasks/AITaskGeneratorPage.tsx:807:                  <SelectValue placeholder="Select team member (optional)" />
+/home/z/my-project/src/components/roc-compliance/ROCCompliancePage.tsx:350:                      placeholder="Search filings..."
+/home/z/my-project/src/lib/oracle-store.ts:86:  /** Internal: append an oracle placeholder (isLoading=true) and return its id */
+/home/z/my-project/src/components/automation/AutomationCenterPage.tsx:877:                placeholder="e.g., Auto-file on invoice match"
+/home/z/my-project/src/components/automation/AutomationCenterPage.tsx:890:                placeholder="Brief description of what this rule does"
+/home/z/my-project/src/components/automation/AutomationCenterPage.tsx:901:                  <SelectValue placeholder="Select a trigger event" />
+/home/z/my-project/src/components/automation/AutomationCenterPage.tsx:929:                placeholder='e.g., {"matchStatus": "perfect_match"} or key=value pairs'
+/home/z/my-project/src/components/automation/AutomationCenterPage.tsx:947:                placeholder="e.g., Auto-assign to filing team and send notification"
+/home/z/my-project/src/components/embedded-finance/EmbeddedFinancePage.tsx:940:                  <Input type="number" placeholder="1,00,000" className="text-sm" />
+/home/z/my-project/src/components/embedded-finance/EmbeddedFinancePage.tsx:944:                  <Input placeholder="Select client" className="text-sm" />
+/home/z/my-project/src/components/embedded-finance/EmbeddedFinancePage.tsx:949:                <Input placeholder="Payment for GSTR-1 filing - March 2026" className="text-sm" />
+/home/z/my-project/src/components/embedded-finance/EmbeddedFinancePage.tsx:958:                  <Input type="number" placeholder="15" className="text-sm" />
+/home/z/my-project/src/components/execution-engine/ExecutionEnginePage.tsx:344:/** Empty state placeholder. */
+/home/z/my-project/src/lib/communication-provider/types.ts:11://   • FutureGoogleProvider — Gmail API (placeholder, throws NotImplementedError)
+/home/z/my-project/src/lib/communication-provider/types.ts:15://   • FutureMetaProvider — WhatsApp Business Cloud API (placeholder)
+/home/z/my-project/src/lib/communication-provider/types.ts:32: * placeholder that throws NotImplementedError until the real OAuth flow is wired.
+/home/z/my-project/src/lib/communication-provider/types.ts:38: * placeholder that throws NotImplementedError until the WhatsApp Cloud API is wired.
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:967:                  <SelectValue placeholder="Select team member" />
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:983:                    <SelectValue placeholder="Select type" />
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:997:                    <SelectValue placeholder="Select priority" />
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:1015:                placeholder="Enter task title..."
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:1026:                placeholder="Describe the task..."
+/home/z/my-project/src/components/workload/WorkloadPage.tsx:1036:                  <SelectValue placeholder="Select client (optional)" />
+/home/z/my-project/src/lib/communication-provider/provider.ts:9://   • FutureGoogleProvider  — Gmail API placeholder (throws NotImplementedError)
+/home/z/my-project/src/lib/communication-provider/provider.ts:11://   • FutureMetaProvider    — WhatsApp Cloud API placeholder
+/home/z/my-project/src/components/autonomous-enterprise/AutonomousEnterprisePage.tsx:542:                placeholder='Try: "Run my company today" · "Pay all vendors" · "Prepare GST" · "Recover collections"'
+/home/z/my-project/src/components/autonomous-enterprise/AutonomousEnterprisePage.tsx:734:                    placeholder="Search every decision, meeting, strategy, simulation, alert…"
+/home/z/my-project/src/components/business-graph/BusinessGraphPage.tsx:525:                placeholder="Search nodes by label…"
+/home/z/my-project/src/components/business-graph/BusinessGraphPage.tsx:1295:                  placeholder="Ask: Why did revenue drop? · Who are my risky clients? · Which invoices are overdue?"
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:750:                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:763:                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:774:                    <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:853:                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:866:                  <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+/home/z/my-project/src/components/reconciliation/ReconciliationPage.tsx:877:                  <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+/home/z/my-project/src/components/white-label/WhiteLabelPage.tsx:541:                  placeholder="Enter your firm name"
+/home/z/my-project/src/components/white-label/WhiteLabelPage.tsx:654:                      placeholder="#059669"
+/home/z/my-project/src/components/white-label/WhiteLabelPage.tsx:699:                      placeholder="#7c3aed"
+/home/z/my-project/src/components/white-label/WhiteLabelPage.tsx:741:                    placeholder="yourfirm.gstpilot.com"
+/home/z/my-project/src/components/white-label/WhiteLabelPage.tsx:797:                  placeholder="Your Firm Name"
+/home/z/my-project/src/components/global-intelligence-cloud/GlobalIntelligenceCloudPage.tsx:1468:            <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Revenue and compliance health" />
+/home/z/my-project/src/components/global-intelligence-cloud/GlobalIntelligenceCloudPage.tsx:1629:            <Input value={scenario} onChange={(e) => setScenario(e.target.value)} placeholder="e.g. 10% price increase" />
+/home/z/my-project/src/components/ai-benchmark/AIBenchmarkPage.tsx:403:                <SelectValue placeholder="Select a client" />
+/home/z/my-project/src/components/version-history/VersionHistoryPage.tsx:353:              <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+/home/z/my-project/src/components/version-history/VersionHistoryPage.tsx:362:              <SelectTrigger><SelectValue placeholder="All Authors" /></SelectTrigger>
+/home/z/my-project/src/components/version-history/VersionHistoryPage.tsx:374:                placeholder="Search entities..."
+/home/z/my-project/src/lib/communication-provider/server/future-providers.ts:5:// Two placeholder providers for production integrations. Every method throws
+/home/z/my-project/src/components/compliance-cloud/GlobalComplianceCloudPage.tsx:1472:                placeholder="Search by code, title, jurisdiction…"
+/home/z/my-project/src/components/compliance-cloud/GlobalComplianceCloudPage.tsx:1475:                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+/home/z/my-project/src/components/calendar/FilingCalendarPage.tsx:492:              <SelectValue placeholder="All Clients" />
+/home/z/my-project/src/components/calendar/FilingCalendarPage.tsx:507:              <SelectValue placeholder="Return Type" />
+/home/z/my-project/src/components/ai-business-copilot/AIBusinessCopilotPage.tsx:556:                placeholder="Ask about your business — revenue, clients, compliance, cash flow..."
+/home/z/my-project/src/components/enterprise-cloud/EnterpriseCloudPage.tsx:467:                  <Input placeholder="Email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="h-8 bg-white/[0.03] border-white/10 text-xs" />
+/home/z/my-project/src/components/enterprise-cloud/EnterpriseCloudPage.tsx:468:                  <Input placeholder="Name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="h-8 bg-white/[0.03] border-white/10 text-xs" />
+/home/z/my-project/src/components/enterprise-cloud/EnterpriseCloudPage.tsx:725:            <Input placeholder="Filter events…" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-7 w-48 bg-white/[0.03] border-white/10 text-xs" />
+/home/z/my-project/src/components/enterprise-cloud/EnterpriseCloudPage.tsx:940:                placeholder="Search companies, clients, invoices, users, integrations, audit logs…"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:531:                      placeholder="Enter firm name"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:541:                      placeholder="Enter legal name as per registration"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:556:                        placeholder="22AAAAA0000A1Z5"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:609:                      placeholder="ICAI/M/000000"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:622:                    placeholder="Enter complete office address"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:950:                      placeholder="colleague@firm.com"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:1212:                    placeholder="Enter current password"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:1223:                      placeholder="Enter new password"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:1246:                      placeholder="Confirm new password"
+/home/z/my-project/src/components/settings/SettingsPage.tsx:1657:                  <SelectValue placeholder="Filter by type" />
+/home/z/my-project/src/components/client-health/ClientHealthPage.tsx:690:              placeholder="Search clients..."
+/home/z/my-project/src/components/client-health/ClientHealthPage.tsx:699:              <SelectValue placeholder="All States" />
+/home/z/my-project/src/components/client-health/ClientHealthPage.tsx:711:              <SelectValue placeholder="All Health" />
+/home/z/my-project/src/components/working-capital/WorkingCapitalPage.tsx:1124:                <input className="w-full mt-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400" placeholder="₹10,00,000" />
+/home/z/my-project/src/components/working-capital/WorkingCapitalPage.tsx:1128:                <input className="w-full mt-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400" placeholder="Working capital for operations" />
+/home/z/my-project/src/lib/ai-pipeline/types.ts:11://   • FutureOfficialGenProvider — placeholder for OpenAI / Anthropic / etc.
+/home/z/my-project/src/components/run-my-business/RunMyBusinessPage.tsx:592:                placeholder="e.g. Recover collections. · File my GST returns. · Generate monthly report."
+/home/z/my-project/src/components/run-my-business/RunMyBusinessPage.tsx:1279:                placeholder="Delegate anything… e.g. Prepare monthly compliance report."
+/home/z/my-project/src/lib/ai-pipeline/provider.ts:7://   • FutureOfficialGenProvider — throws NotImplementedError (placeholder)
+/home/z/my-project/src/components/data-intelligence/DataIntelligenceCloudPage.tsx:650:                    placeholder="Search invoices, clients, employees, payments, emails, memories…"
+/home/z/my-project/src/components/payroll/PayrollPage.tsx:365:                      placeholder="Search employee..."
+/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:181:  // Mock — return a placeholder SVG as a data URL so the UI can render it.
+/home/z/my-project/src/lib/ai-pipeline/server/mock-provider.ts:226:  // Mock — return a placeholder MP4 poster (we can't easily generate a real MP4 here).
+/home/z/my-project/src/components/ai-software-factory/AISoftwareFactoryPage.tsx:210:                placeholder="e.g. Build a CRM, Create Hospital Management, Generate Manufacturing ERP…"
+/home/z/my-project/src/components/inventory/InventoryPage.tsx:287:                        placeholder="Search products..."
+/home/z/my-project/src/lib/ai-pipeline/server/official-provider.ts:4:// The placeholder for real production AI provider integrations (OpenAI,
+/home/z/my-project/src/components/crm/CRMPage.tsx:419:            placeholder="Search leads by name or company..."
+/home/z/my-project/src/components/crm/CRMPage.tsx:427:            <SelectValue placeholder="Source" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:685:              <Input value={newDeal.title} onChange={e => setNewDeal(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Annual GST Retainer" className="h-9 text-sm" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:690:                <Input type="number" value={newDeal.value} onChange={e => setNewDeal(p => ({ ...p, value: e.target.value }))} placeholder="500000" className="h-9 text-sm" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:708:                <Input type="number" value={newDeal.probability} onChange={e => setNewDeal(p => ({ ...p, probability: e.target.value }))} placeholder="50" className="h-9 text-sm" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:717:              <Input value={newDeal.assignedTo} onChange={e => setNewDeal(p => ({ ...p, assignedTo: e.target.value }))} placeholder="Team member name" className="h-9 text-sm" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:721:              <Textarea value={newDeal.description} onChange={e => setNewDeal(p => ({ ...p, description: e.target.value }))} placeholder="Deal details..." className="text-sm min-h-[60px]" />
+/home/z/my-project/src/components/crm/CRMPage.tsx:899:              <Input value={newMeeting.title} onChange={e => setNewMeeting(p => ({ ...p, title: e.target.value }))} placeholder="e.g., GST Compliance Discussion" className="h-9 text-sm" />
+
+[Showing results with pagination = limit: 200]

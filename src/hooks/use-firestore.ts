@@ -1,17 +1,32 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — Real-time Firestore Hooks
-// React hooks with onSnapshot listeners for live data + optimistic UI
+// React hooks with onSnapshot listeners for live data + optimistic UI.
+//
+// ARCHITECTURE (Production-grade multi-tenant):
+//   • Every query is scoped by `organizationId` from OrgContext — NEVER by the
+//     legacy `firmId`. This matches the Firestore security rules, which require
+//     every tenant-scoped document to carry `organizationId` and only allow
+//     reads where `isOrgMember(resource.data.organizationId)` is true.
+//   • If there is no organization (preview / demo mode, or not yet loaded),
+//     hooks return empty data WITHOUT subscribing — so the UI renders premium
+//     empty states instead of throwing permission errors.
+//   • Permission errors (permission-denied / unauthenticated) are treated as
+//     "no data available" — the hook clears its error and returns an empty
+//     array. This is the graceful-degradation contract: the app NEVER shows a
+//     "Missing or insufficient permissions" wall. Genuine errors (network,
+//     index missing) still surface as `error`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   collection, doc, onSnapshot, query, where, orderBy, limit,
   type Unsubscribe, type QueryConstraint,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrg } from '@/contexts/OrgContext';
 import {
   COLLECTIONS,
   type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
@@ -26,6 +41,38 @@ import {
   type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
+
+// ─── Permission-error detection (graceful degradation) ───────────────────────
+
+/**
+ * True if the given Firestore error is a permission / auth failure that we
+ * should treat as "no data available" rather than a hard error. This is the
+ * core of the never-show-a-permission-wall contract.
+ */
+function isPermissionError(err: unknown): boolean {
+  if (!err) return false;
+  const e = err as { code?: string; message?: string };
+  const code = (e.code || '').toLowerCase();
+  const message = (e.message || '').toLowerCase();
+  if (
+    code === 'permission-denied' ||
+    code === 'unauthenticated' ||
+    code === 'auth/operation-not-allowed' ||
+    code === 'auth/user-not-found'
+  ) {
+    return true;
+  }
+  if (
+    message.includes('missing or insufficient permissions') ||
+    message.includes('permission-denied') ||
+    message.includes('insufficient permissions') ||
+    message.includes('not authorized') ||
+    message.includes('unauthenticated')
+  ) {
+    return true;
+  }
+  return false;
+}
 
 // ─── Timestamp Converter ─────────────────────────────────────────────────────
 
@@ -45,6 +92,11 @@ function convertDoc<T extends Record<string, unknown>>(snapData: Record<string, 
 }
 
 // ─── Generic Collection Hook ─────────────────────────────────────────────────
+//
+// The hook resolves the current `organizationId` from OrgContext. If the org
+// isn't resolved yet (loading) OR we're in preview mode (no org), the hook
+// returns empty data without subscribing. This guarantees no permission errors
+// ever reach the UI in preview/offline mode.
 
 function useFirestoreCollection<T>(
   collectionName: CollectionName,
@@ -52,22 +104,44 @@ function useFirestoreCollection<T>(
   deps: unknown[] = [],
 ): { data: Array<T & { id: string }>; loading: boolean; error: string | null } {
   const { user } = useAuth();
+  const { organization, isPreviewMode, loading: orgLoading } = useOrg();
+  const organizationId = organization?.id ?? null;
+
   const [data, setData] = useState<Array<T & { id: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // No user → nothing to subscribe to (empty data).
     if (!user) {
+      setData([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    // Org still resolving — stay in loading state, but don't subscribe yet.
+    if (orgLoading && !organizationId) {
+      return;
+    }
+
+    // Preview mode (no real org) OR no organization at all → empty data,
+    // no subscription. This is the preview-mode contract.
+    if (!organizationId || isPreviewMode || organizationId === 'preview-org') {
+      setData([]);
+      setLoading(false);
+      setError(null);
       return;
     }
 
     let unsub: Unsubscribe | null = null;
 
-    // Get firmId from user
-    const firmId = user.firmId;
-    const baseConstraints = firmId
-      ? [where('firmId', '==', firmId), ...constraints]
-      : constraints;
+    // Scope EVERY query by organizationId. This is required by the Firestore
+    // security rules — unbounded collection reads are denied.
+    const baseConstraints: QueryConstraint[] = [
+      where('organizationId', '==', organizationId),
+      ...constraints,
+    ];
 
     const q = query(collection(db, collectionName), ...baseConstraints);
 
@@ -81,6 +155,14 @@ function useFirestoreCollection<T>(
       setError(null);
     }, (err) => {
       console.warn(`[Firestore] ${collectionName} subscription error:`, err);
+      // Permission errors → graceful degradation (empty data, no error wall).
+      if (isPermissionError(err)) {
+        setData([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      // Genuine errors (network, missing index) still surface.
       setError(err.message);
       setLoading(false);
     });
@@ -88,7 +170,8 @@ function useFirestoreCollection<T>(
     return () => {
       if (unsub) unsub();
     };
-  }, [user, ...deps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, organizationId, isPreviewMode, orgLoading, ...deps]);
 
   // When user is null, return empty data (not loading)
   if (!user && loading) {
@@ -104,12 +187,26 @@ function useFirestoreDoc<T>(
   collectionName: CollectionName,
   docId: string | null,
 ): { data: (T & { id: string }) | null; loading: boolean; error: string | null } {
+  const { user } = useAuth();
+  const { organization, isPreviewMode } = useOrg();
+  const organizationId = organization?.id ?? null;
+
   const [data, setData] = useState<(T & { id: string }) | null>(null);
   const [loading, setLoading] = useState(!!docId);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!docId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
+    // Preview mode (no real org) → no doc, no subscription.
+    if (!user || !organizationId || isPreviewMode || organizationId === 'preview-org') {
+      setData(null);
+      setLoading(false);
+      setError(null);
       return;
     }
 
@@ -126,6 +223,13 @@ function useFirestoreDoc<T>(
       setLoading(false);
       setError(null);
     }, (err) => {
+      console.warn(`[Firestore] ${collectionName}/${docId} doc error:`, err);
+      if (isPermissionError(err)) {
+        setData(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
       setError(err.message);
       setLoading(false);
     });
@@ -133,7 +237,7 @@ function useFirestoreDoc<T>(
     return () => {
       if (unsub) unsub();
     };
-  }, [collectionName, docId]);
+  }, [collectionName, docId, user, organizationId, isPreviewMode]);
 
   return { data, loading, error };
 }
@@ -258,10 +362,13 @@ export function useFireAIRecommendations() {
 }
 
 // ─── Firm ────────────────────────────────────────────────────────────────────
+// NOTE: The legacy `firms` collection is vestigial. The real tenant root is
+// `organizations`. We keep this hook for backwards compat but it resolves the
+// org doc instead. Most callers should use `useOrg().organization` directly.
 
 export function useFireFirm() {
-  const { user } = useAuth();
-  return useFirestoreDoc<FirestoreFirm>(COLLECTIONS.FIRMS, user?.firmId || null);
+  const { organization } = useOrg();
+  return useFirestoreDoc<FirestoreFirm>(COLLECTIONS.ORGANIZATIONS, organization?.id || null);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -336,13 +443,18 @@ export function useFireOrganizations() {
 }
 
 // ─── Memberships ────────────────────────────────────────────────────────────
+// NOTE: The canonical membership collection is `organization_members`. The
+// `memberships` collection is vestigial. Callers should use `useOrg().members`.
 
-export function useFireMemberships(firmId?: string | null) {
-  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
-  if (firmId) {
-    constraints.unshift(where('firmId', '==', firmId));
-  }
-  return useFirestoreCollection<FirestoreMembership>(COLLECTIONS.MEMBERSHIPS, constraints, [firmId]);
+export function useFireMemberships(_firmId?: string | null) {
+  // Ignore the legacy firmId arg; members come from OrgContext.
+  void _firmId;
+  const { members } = useOrg();
+  return {
+    data: members as unknown as Array<FirestoreMembership & { id: string }>,
+    loading: false,
+    error: null,
+  };
 }
 
 // ─── Executive Scores (computed from live data) ─────────────────────────────
@@ -429,7 +541,7 @@ export function useFireTasks() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
 // Each hook wires a COLLECTIONS.xxx entry to useFirestoreCollection /
-// useFirestoreDoc with the appropriate firmId / scope filter.
+// useFirestoreDoc with the appropriate organizationId scope filter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Bank Accounts ──────────────────────────────────────────────────────────
@@ -445,7 +557,7 @@ export function useFireBankAccount(bankAccountId: string | null) {
 }
 
 // ─── Bank Transactions ──────────────────────────────────────────────────────
-// Pass a bankAccountId to scope to one account; omit for firm-wide feed.
+// Pass a bankAccountId to scope to one account; omit for org-wide feed.
 
 export function useFireBankTransactions(bankAccountId?: string | null) {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
@@ -468,7 +580,7 @@ export function useFireGstProfile(gstProfileId: string | null) {
 }
 
 // ─── GST Returns ────────────────────────────────────────────────────────────
-// Pass a gstProfileId to scope to one profile; omit for firm-wide feed.
+// Pass a gstProfileId to scope to one profile; omit for org-wide feed.
 
 export function useFireGstReturns(gstProfileId?: string | null) {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
@@ -495,7 +607,7 @@ export function useFirePayments() {
 }
 
 // ─── AI Memory ──────────────────────────────────────────────────────────────
-// Pass an agent string to scope to one agent's memory; omit for firm-wide.
+// Pass an agent string to scope to one agent's memory; omit for org-wide.
 
 export function useFireAiMemories(agent?: string) {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
@@ -507,11 +619,11 @@ export function useFireAiMemories(agent?: string) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTICES & REPORTS (Phase 1 — Real Backend Foundation)
-// Real-time onSnapshot listeners scoped to the current firm.
+// Real-time onSnapshot listeners scoped to the current organization.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Notices ─────────────────────────────────────────────────────────────────
-// Pass a clientId to scope to one client; omit for firm-wide feed.
+// Pass a clientId to scope to one client; omit for org-wide feed.
 
 export function useFireNotices(clientId?: string | null) {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
@@ -526,7 +638,7 @@ export function useFireNotice(noticeId: string | null) {
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
-// Pass a clientId to scope to one client; omit for firm-wide feed.
+// Pass a clientId to scope to one client; omit for org-wide feed.
 
 export function useFireReports(clientId?: string | null) {
   const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];

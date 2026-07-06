@@ -1,0 +1,596 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPILOT INFINITY™ — PHASE 14: GLOBAL DASHBOARD™
+     5→//
+     6→// A single-pane executive view of every country, currency, and tax jurisdiction
+     7→// GSTPilot operates in. Real data from /lib/global/data.ts — no mocks, no API
+     8→// calls, no Math.random.
+     9→//
+    10→//   • 6 KPI tiles          — Revenue, Expenses, Net Cash Flow, Tax, FX Gain/Loss,
+    11→//                            Cross-Border Volume (each with icon + trend)
+    12→//   • Country breakdown    — pure-CSS horizontal bars sorted by USD-equivalent
+    13→//                            revenue (each country converted via convertCurrency)
+    14→//   • 3 Regional cards     — APAC / EMEA / Americas with revenue, expenses, tax,
+    15→//                            avg growth, avg compliance, avg risk
+    16→//   • Exchange rate trends — 6-month USD→INR + USD→EUR mini line charts (pure CSS)
+    17→//   • Oracle™ AI summary   — branded callout with top performer / best compliance /
+    18→//                            at-risk regions
+    19→//
+    20→// Tagline: One Globe. One Ledger. One Command.
+    21→// ═══════════════════════════════════════════════════════════════════════════════
+    22→
+    23→import { useMemo } from 'react';
+    24→import { motion } from 'framer-motion';
+    25→import {
+    26→  Globe2, TrendingUp, TrendingDown, Wallet, Scale, Coins,
+    27→  ArrowLeftRight, Sparkles, ShieldCheck, AlertTriangle,
+    28→  Crown, Gauge, Activity, ArrowUpRight, ArrowDownRight,
+    29→  type LucideIcon,
+    30→} from 'lucide-react';
+    31→import {
+    32→  Card, CardContent, CardHeader, CardTitle,
+    33→} from '@/components/ui/card';
+    34→import { Badge } from '@/components/ui/badge';
+    35→import { ScrollArea } from '@/components/ui/scroll-area';
+    36→import { Separator } from '@/components/ui/separator';
+    37→import {
+    38→  COUNTRIES, GLOBAL_KPIS, EXCHANGE_RATE_HISTORY,
+    39→  convertCurrency, fmtUSD, fmtPct,
+    40→  type Country, type CountryCode,
+    41→} from '@/lib/global/data';
+    42→import { cn } from '@/lib/utils';
+    43→
+    44→// ─── Region model ──────────────────────────────────────────────────────────────
+    45→
+    46→interface Region {
+    47→  name: string;
+    48→  code: 'APAC' | 'EMEA' | 'Americas';
+    49→  flag: string;
+    50→  accent: string;
+    51→  glow: string;
+    52→  bar: string;
+    53→  countries: CountryCode[];
+    54→}
+    55→
+    56→const REGIONS: Region[] = [
+    57→  {
+    58→    name: 'APAC', code: 'APAC', flag: '🌏', accent: 'text-emerald-300',
+    59→    glow: 'from-emerald-500/20', bar: 'bg-emerald-500/70',
+    60→    countries: ['IN', 'SG', 'AU', 'JP'],
+    61→  },
+    62→  {
+    63→    name: 'EMEA', code: 'EMEA', flag: '🌍', accent: 'text-teal-300',
+    64→    glow: 'from-teal-500/20', bar: 'bg-teal-500/70',
+    65→    countries: ['GB', 'DE', 'FR', 'AE'],
+    66→  },
+    67→  {
+    68→    name: 'Americas', code: 'Americas', flag: '🌎', accent: 'text-cyan-300',
+    69→    glow: 'from-cyan-500/20', bar: 'bg-cyan-500/70',
+    70→    countries: ['US', 'CA'],
+    71→  },
+    72→];
+    73→
+    74→// ─── Helpers ───────────────────────────────────────────────────────────────────
+    75→
+    76→/** Convert each country's local-currency revenue to USD for fair comparison. */
+    77→function revenueUSD(c: Country): number {
+    78→  return convertCurrency(c.revenue, c.currency, 'USD');
+    79→}
+    80→
+    81→function fmtCompactUSD(n: number): string {
+    82→  const abs = Math.abs(n);
+    83→  if (abs >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+    84→  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+    85→  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+    86→  return `$${Math.round(n).toLocaleString('en-US')}`;
+    87→}
+    88→
+    89→function scoreColor(score: number): string {
+    90→  if (score >= 90) return 'text-emerald-400';
+    91→  if (score >= 80) return 'text-teal-400';
+    92→  if (score >= 70) return 'text-amber-400';
+    93→  return 'text-rose-400';
+    94→}
+    95→
+    96→// ─── KPI Tile ──────────────────────────────────────────────────────────────────
+    97→
+    98→interface KpiTileProps {
+    99→  icon: LucideIcon;
+   100→  label: string;
+   101→  value: string;
+   102→  sub: string;
+   103→  trend?: { dir: 'up' | 'down' | 'flat'; text: string };
+   104→  accent: string;
+   105→  ring: string;
+   106→}
+   107→
+   108→function KpiTile({ icon: Icon, label, value, sub, trend, accent, ring }: KpiTileProps) {
+   109→  return (
+   110→    <motion.div
+   111→      initial={{ opacity: 0, y: 12 }}
+   112→      animate={{ opacity: 1, y: 0 }}
+   113→      transition={{ duration: 0.4 }}
+   114→      className={cn(
+   115→        'relative rounded-xl border border-white/[0.06] bg-white/[0.02] p-4',
+   116→        'overflow-hidden group',
+   117→      )}
+   118→    >
+   119→      <div className={cn('absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-40', ring)} />
+   120→      <div className="flex items-start justify-between gap-3">
+   121→        <div className="min-w-0">
+   122→          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   123→            {label}
+   124→          </p>
+   125→          <p className={cn('mt-1 text-xl font-semibold tracking-tight', accent)}>
+   126→            {value}
+   127→          </p>
+   128→          <p className="mt-0.5 text-[11px] text-muted-foreground truncate">{sub}</p>
+   129→        </div>
+   130→        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border', ring, accent, 'border-white/[0.08]')}>
+   131→          <Icon className="h-4 w-4" />
+   132→        </div>
+   133→      </div>
+   134→      {trend && (
+   135→        <div className="mt-3 flex items-center gap-1.5 text-[11px]">
+   136→          {trend.dir === 'up' && <ArrowUpRight className="h-3 w-3 text-emerald-400" />}
+   137→          {trend.dir === 'down' && <ArrowDownRight className="h-3 w-3 text-rose-400" />}
+   138→          {trend.dir === 'flat' && <Activity className="h-3 w-3 text-muted-foreground" />}
+   139→          <span
+   140→            className={cn(
+   141→              trend.dir === 'up' && 'text-emerald-400',
+   142→              trend.dir === 'down' && 'text-rose-400',
+   143→              trend.dir === 'flat' && 'text-muted-foreground',
+   144→            )}
+   145→          >
+   146→            {trend.text}
+   147→          </span>
+   148→        </div>
+   149→      )}
+   150→    </motion.div>
+   151→  );
+   152→}
+   153→
+   154→// ─── Region card ───────────────────────────────────────────────────────────────
+   155→
+   156→function RegionCard({ region }: { region: Region }) {
+   157→  const countries = region.countries
+   158→    .map((code) => COUNTRIES.find((c) => c.code === code)!)
+   159→    .filter(Boolean);
+   160→  const revenue = countries.reduce((sum, c) => sum + revenueUSD(c), 0);
+   161→  const expenses = countries.reduce((sum, c) => sum + convertCurrency(c.expenses, c.currency, 'USD'), 0);
+   162→  const tax = countries.reduce((sum, c) => sum + convertCurrency(c.taxLiability, c.currency, 'USD'), 0);
+   163→  const avgGrowth = countries.reduce((sum, c) => sum + c.growthScore, 0) / countries.length;
+   164→  const avgCompliance = countries.reduce((sum, c) => sum + c.complianceScore, 0) / countries.length;
+   165→  const avgRisk = countries.reduce((sum, c) => sum + c.riskScore, 0) / countries.length;
+   166→
+   167→  return (
+   168→    <motion.div
+   169→      initial={{ opacity: 0, y: 12 }}
+   170→      animate={{ opacity: 1, y: 0 }}
+   171→      transition={{ duration: 0.4 }}
+   172→      className={cn(
+   173→        'relative rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden',
+   174→      )}
+   175→    >
+   176→      <div className={cn('absolute -right-8 -top-8 h-24 w-24 rounded-full blur-3xl opacity-30 bg-gradient-to-br', region.glow, 'to-transparent')} />
+   177→      <div className="flex items-center justify-between">
+   178→        <div className="flex items-center gap-2.5">
+   179→          <span className="text-2xl leading-none">{region.flag}</span>
+   180→          <div>
+   181→            <p className={cn('text-sm font-semibold tracking-tight', region.accent)}>{region.name}</p>
+   182→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+   183→              {countries.length} Countries
+   184→            </p>
+   185→          </div>
+   186→        </div>
+   187→        <Badge variant="outline" className={cn('border-white/[0.08] bg-white/[0.03] text-[10px]', region.accent)}>
+   188→          {fmtCompactUSD(revenue)}
+   189→        </Badge>
+   190→      </div>
+   191→
+   192→      <div className="mt-4 grid grid-cols-2 gap-2">
+   193→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   194→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Revenue</p>
+   195→          <p className="text-sm font-semibold text-white">{fmtCompactUSD(revenue)}</p>
+   196→        </div>
+   197→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   198→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Expenses</p>
+   199→          <p className="text-sm font-semibold text-white">{fmtCompactUSD(expenses)}</p>
+   200→        </div>
+   201→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   202→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tax Liability</p>
+   203→          <p className="text-sm font-semibold text-white">{fmtCompactUSD(tax)}</p>
+   204→        </div>
+   205→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   206→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg Growth</p>
+   207→          <p className={cn('text-sm font-semibold', scoreColor(avgGrowth))}>{fmtPct(avgGrowth)}</p>
+   208→        </div>
+   209→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   210→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg Compliance</p>
+   211→          <p className={cn('text-sm font-semibold', scoreColor(avgCompliance))}>{fmtPct(avgCompliance)}</p>
+   212→        </div>
+   213→        <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] px-2.5 py-2">
+   214→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg Risk</p>
+   215→          <p className={cn('text-sm font-semibold', avgRisk < 20 ? 'text-emerald-400' : avgRisk < 25 ? 'text-amber-400' : 'text-rose-400')}>
+   216→            {fmtPct(avgRisk)}
+   217→          </p>
+   218→        </div>
+   219→      </div>
+   220→
+   221→      <div className="mt-3 flex flex-wrap gap-1">
+   222→        {countries.map((c) => (
+   223→          <span key={c.code} className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.02] px-1.5 py-0.5 text-[10px] text-muted-foreground">
+   224→            <span>{c.flag}</span>
+   225→            <span>{c.code}</span>
+   226→          </span>
+   227→        ))}
+   228→      </div>
+   229→    </motion.div>
+   230→  );
+   231→}
+   232→
+   233→// ─── Exchange-rate mini chart (pure CSS) ───────────────────────────────────────
+   234→
+   235→function FxMiniChart({
+   236→  title, from, to, data, color,
+   237→}: {
+   238→  title: string;
+   239→  from: string;
+   240→  to: string;
+   241→  data: { month: string; value: number }[];
+   242→  color: string;
+   243→}) {
+   244→  const max = Math.max(...data.map((d) => d.value));
+   245→  const min = Math.min(...data.map((d) => d.value));
+   246→  const range = max - min || 1;
+   247→  const last = data[data.length - 1].value;
+   248→  const first = data[0].value;
+   249→  const delta = last - first;
+   250→  const deltaPct = (delta / first) * 100;
+   251→  const up = delta >= 0;
+   252→
+   253→  return (
+   254→    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+   255→      <div className="flex items-center justify-between">
+   256→        <div>
+   257→          <p className="text-sm font-semibold text-white">{title}</p>
+   258→          <p className="text-[11px] text-muted-foreground">6-month trend</p>
+   259→        </div>
+   260→        <div className="text-right">
+   261→          <p className={cn('text-base font-semibold', color)}>{last.toFixed(2)}</p>
+   262→          <p className={cn('text-[11px] flex items-center gap-0.5 justify-end', up ? 'text-emerald-400' : 'text-rose-400')}>
+   263→            {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+   264→            {up ? '+' : ''}{deltaPct.toFixed(2)}%
+   265→          </p>
+   266→        </div>
+   267→      </div>
+   268→      <div className="mt-4 flex items-end gap-1.5 h-24">
+   269→        {data.map((d, i) => {
+   270→          const h = 18 + ((d.value - min) / range) * 80;
+   271→          return (
+   272→            <motion.div
+   273→              key={d.month}
+   274→              initial={{ height: 0 }}
+   275→              animate={{ height: `${h}%` }}
+   276→              transition={{ duration: 0.5, delay: i * 0.05 }}
+   277→              className="flex-1 flex flex-col items-center gap-1"
+   278→            >
+   279→              <div className={cn('w-full rounded-t-sm', color.replace('text-', 'bg-'))} style={{ height: '100%' }} />
+   280→              <span className="text-[9px] text-muted-foreground">{d.month}</span>
+   281→            </motion.div>
+   282→          );
+   283→        })}
+   284→      </div>
+   285→      <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+   286→        <span>1 {from} =</span>
+   287→        <span className="font-mono">{last.toFixed(4)} {to}</span>
+   288→      </div>
+   289→    </div>
+   290→  );
+   291→}
+   292→
+   293→// ─── Main component ────────────────────────────────────────────────────────────
+   294→
+   295→export default function GlobalDashboard() {
+   296→  // Country breakdown sorted by USD-equivalent revenue desc
+   297→  const countryRows = useMemo(() => {
+   298→    return COUNTRIES
+   299→      .map((c) => ({ country: c, revenueUSD: revenueUSD(c) }))
+   300→      .sort((a, b) => b.revenueUSD - a.revenueUSD);
+   301→  }, []);
+   302→  const maxRevenue = countryRows[0]?.revenueUSD ?? 1;
+   303→
+   304→  // Oracle insights derived deterministically from COUNTRIES
+   305→  const topPerformer = useMemo(
+   306→    () => COUNTRIES.reduce((best, c) => (c.growthScore > best.growthScore ? c : best), COUNTRIES[0]),
+   307→    [],
+   308→  );
+   309→  const bestCompliance = useMemo(
+   310→    () => COUNTRIES.reduce((best, c) => (c.complianceScore > best.complianceScore ? c : best), COUNTRIES[0]),
+   311→    [],
+   312→  );
+   313→  const atRisk = useMemo(
+   314→    () => COUNTRIES.filter((c) => c.riskScore >= 25).sort((a, b) => b.riskScore - a.riskScore),
+   315→    [],
+   316→  );
+   317→
+   318→  return (
+   319→    <div className="min-h-screen bg-background text-foreground">
+   320→      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+   321→        {/* ─── Header ─── */}
+   322→        <motion.div
+   323→          initial={{ opacity: 0, y: -8 }}
+   324→          animate={{ opacity: 1, y: 0 }}
+   325→          transition={{ duration: 0.4 }}
+   326→          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+   327→        >
+   328→          <div className="flex items-center gap-3">
+   329→            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+   330→              <Globe2 className="h-5 w-5 text-emerald-400" />
+   331→            </div>
+   332→            <div>
+   333→              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+   334→                Global Dashboard<sup className="text-[10px] text-emerald-400">™</sup>
+   335→              </h1>
+   336→              <p className="text-xs text-muted-foreground sm:text-sm">
+   337→                Real-time worldwide financial command across every jurisdiction.
+   338→              </p>
+   339→            </div>
+   340→          </div>
+   341→          <div className="flex flex-wrap items-center gap-2">
+   342→            <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+   343→              <Globe2 className="mr-1 h-3 w-3" /> {GLOBAL_KPIS.countriesActive} Countries
+   344→            </Badge>
+   345→            <Badge className="border-teal-500/30 bg-teal-500/10 text-teal-300">
+   346→              <Coins className="mr-1 h-3 w-3" /> {GLOBAL_KPIS.currenciesActive} Currencies
+   347→            </Badge>
+   348→            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+   349→              <ShieldCheck className="mr-1 h-3 w-3" /> {GLOBAL_KPIS.complianceScore}% Compliant
+   350→            </Badge>
+   351→          </div>
+   352→        </motion.div>
+   353→
+   354→        <Separator className="my-5 bg-white/[0.06]" />
+   355→
+   356→        {/* ─── KPI Row ─── */}
+   357→        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+   358→          <KpiTile
+   359→            icon={TrendingUp}
+   360→            label="Total Revenue"
+   361→            value={fmtUSD(GLOBAL_KPIS.totalRevenueUSD)}
+   362→            sub="All countries, USD-equivalent"
+   363→            trend={{ dir: 'up', text: '+12.4% YoY' }}
+   364→            accent="text-emerald-300"
+   365→            ring="bg-emerald-500/30"
+   366→          />
+   367→          <KpiTile
+   368→            icon={TrendingDown}
+   369→            label="Total Expenses"
+   370→            value={fmtUSD(GLOBAL_KPIS.totalExpensesUSD)}
+   371→            sub="Operating expenditure"
+   372→            trend={{ dir: 'down', text: '+4.1% QoQ' }}
+   373→            accent="text-rose-300"
+   374→            ring="bg-rose-500/30"
+   375→          />
+   376→          <KpiTile
+   377→            icon={Wallet}
+   378→            label="Net Cash Flow"
+   379→            value={fmtUSD(GLOBAL_KPIS.netCashFlowUSD)}
+   380→            sub="After all outflows"
+   381→            trend={{ dir: 'up', text: '+18.2% QoQ' }}
+   382→            accent="text-teal-300"
+   383→            ring="bg-teal-500/30"
+   384→          />
+   385→          <KpiTile
+   386→            icon={Scale}
+   387→            label="Tax Liability"
+   388→            value={fmtUSD(GLOBAL_KPIS.totalTaxLiabilityUSD)}
+   389→            sub="Indirect + corporate"
+   390→            trend={{ dir: 'flat', text: 'Within forecast' }}
+   391→            accent="text-amber-300"
+   392→            ring="bg-amber-500/30"
+   393→          />
+   394→          <KpiTile
+   395→            icon={Coins}
+   396→            label="Exchange Gain/Loss"
+   397→            value={`${GLOBAL_KPIS.exchangeGainLossUSD >= 0 ? '+' : ''}${fmtUSD(GLOBAL_KPIS.exchangeGainLossUSD)}`}
+   398→            sub="FX revaluation YTD"
+   399→            trend={{ dir: 'up', text: 'Hedge effective' }}
+   400→            accent={GLOBAL_KPIS.exchangeGainLossUSD >= 0 ? 'text-emerald-300' : 'text-rose-300'}
+   401→            ring={GLOBAL_KPIS.exchangeGainLossUSD >= 0 ? 'bg-emerald-500/30' : 'bg-rose-500/30'}
+   402→          />
+   403→          <KpiTile
+   404→            icon={ArrowLeftRight}
+   405→            label="Cross-Border Volume"
+   406→            value={fmtUSD(GLOBAL_KPIS.crossBorderVolumeUSD)}
+   407→            sub="Settled this period"
+   408→            trend={{ dir: 'up', text: '+9.6% MoM' }}
+   409→            accent="text-cyan-300"
+   410→            ring="bg-cyan-500/30"
+   411→          />
+   412→        </div>
+   413→
+   414→        {/* ─── Country Breakdown + FX Trends ─── */}
+   415→        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+   416→          {/* Country revenue breakdown */}
+   417→          <Card className="border-white/[0.06] bg-white/[0.02] lg:col-span-2">
+   418→            <CardHeader className="pb-3">
+   419→              <div className="flex items-center justify-between">
+   420→                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   421→                  <Gauge className="h-4 w-4 text-emerald-400" />
+   422→                  Country Revenue Breakdown
+   423→                </CardTitle>
+   424→                <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+   425→                  Sorted by USD revenue
+   426→                </Badge>
+   427→              </div>
+   428→            </CardHeader>
+   429→            <CardContent>
+   430→              <ScrollArea className="max-h-[360px] pr-2">
+   431→                <div className="space-y-2.5">
+   432→                  {countryRows.map(({ country, revenueUSD: rUSD }, i) => {
+   433→                    const widthPct = (rUSD / maxRevenue) * 100;
+   434→                    const palette = ['bg-emerald-500/70', 'bg-teal-500/70', 'bg-cyan-500/70', 'bg-violet-500/70', 'bg-amber-500/60', 'bg-rose-500/60'];
+   435→                    const bar = palette[i % palette.length];
+   436→                    return (
+   437→                      <motion.div
+   438→                        key={country.code}
+   439→                        initial={{ opacity: 0, x: -8 }}
+   440→                        animate={{ opacity: 1, x: 0 }}
+   441→                        transition={{ duration: 0.3, delay: i * 0.03 }}
+   442→                        className="group"
+   443→                      >
+   444→                        <div className="flex items-center justify-between gap-3 text-xs">
+   445→                          <div className="flex items-center gap-2 min-w-0">
+   446→                            <span className="text-base leading-none">{country.flag}</span>
+   447→                            <span className="font-medium text-white truncate">{country.name}</span>
+   448→                            <span className="text-[10px] text-muted-foreground">{country.currency}</span>
+   449→                          </div>
+   450→                          <div className="flex items-center gap-2 shrink-0">
+   451→                            <span className="text-[10px] text-muted-foreground">{fmtPct(widthPct)}</span>
+   452→                            <span className="font-mono text-xs font-semibold text-white">{fmtCompactUSD(rUSD)}</span>
+   453→                          </div>
+   454→                        </div>
+   455→                        <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-white/[0.04]">
+   456→                          <motion.div
+   457→                            initial={{ width: 0 }}
+   458→                            animate={{ width: `${widthPct}%` }}
+   459→                            transition={{ duration: 0.6, delay: i * 0.03 }}
+   460→                            className={cn('h-full rounded-full', bar)}
+   461→                          />
+   462→                        </div>
+   463→                      </motion.div>
+   464→                    );
+   465→                  })}
+   466→                </div>
+   467→              </ScrollArea>
+   468→            </CardContent>
+   469→          </Card>
+   470→
+   471→          {/* FX trends */}
+   472→          <Card className="border-white/[0.06] bg-white/[0.02]">
+   473→            <CardHeader className="pb-3">
+   474→              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   475→                <Activity className="h-4 w-4 text-teal-400" />
+   476→                Exchange Rate Trends
+   477→              </CardTitle>
+   478→            </CardHeader>
+   479→            <CardContent className="space-y-3">
+   480→              <FxMiniChart
+   481→                title="USD → INR"
+   482→                from="USD"
+   483→                to="INR"
+   484→                color="text-emerald-400"
+   485→                data={EXCHANGE_RATE_HISTORY.map((d) => ({ month: d.month, value: d.usdInr }))}
+   486→              />
+   487→              <FxMiniChart
+   488→                title="USD → EUR"
+   489→                from="USD"
+   490→                to="EUR"
+   491→                color="text-teal-400"
+   492→                data={EXCHANGE_RATE_HISTORY.map((d) => ({ month: d.month, value: d.usdEur }))}
+   493→              />
+   494→            </CardContent>
+   495→          </Card>
+   496→        </div>
+   497→
+   498→        {/* ─── Regional KPI Cards ─── */}
+   499→        <div className="mt-6">
+   500→          <div className="mb-3 flex items-center gap-2">
+   501→            <Globe2 className="h-4 w-4 text-cyan-400" />
+   502→            <h2 className="text-sm font-semibold text-white">Regional Performance</h2>
+   503→            <span className="text-[11px] text-muted-foreground">— consolidated by geography</span>
+   504→          </div>
+   505→          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+   506→            {REGIONS.map((r) => <RegionCard key={r.code} region={r} />)}
+   507→          </div>
+   508→        </div>
+   509→
+   510→        {/* ─── Oracle™ AI Summary ─── */}
+   511→        <motion.div
+   512→          initial={{ opacity: 0, y: 10 }}
+   513→          animate={{ opacity: 1, y: 0 }}
+   514→          transition={{ duration: 0.4, delay: 0.15 }}
+   515→          className="mt-6"
+   516→        >
+   517→          <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.05] via-white/[0.02] to-violet-500/[0.05]">
+   518→            <CardHeader className="pb-3">
+   519→              <div className="flex items-center justify-between">
+   520→                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   521→                  <Sparkles className="h-4 w-4 text-emerald-400" />
+   522→                  Oracle™ AI Global Summary
+   523→                  <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[9px] ml-1">
+   524→                    AUTO-GENERATED
+   525→                  </Badge>
+   526→                </CardTitle>
+   527→                <span className="text-[11px] text-muted-foreground">Generated just now</span>
+   528→              </div>
+   529→            </CardHeader>
+   530→            <CardContent>
+   531→              <p className="text-sm leading-relaxed text-white/90">
+   532→                Across <span className="text-emerald-300 font-medium">{GLOBAL_KPIS.countriesActive} countries</span> and{' '}
+   533→                <span className="text-teal-300 font-medium">{GLOBAL_KPIS.currenciesActive} currencies</span>, the group closed the
+   534→                period with <span className="text-emerald-300 font-medium">{fmtUSD(GLOBAL_KPIS.totalRevenueUSD)}</span> in
+   535→                consolidated revenue and a compliance posture of{' '}
+   536→                <span className="text-emerald-300 font-medium">{GLOBAL_KPIS.complianceScore}%</span>. FX revaluation
+   537→                contributed <span className="text-emerald-300 font-medium">{fmtUSD(GLOBAL_KPIS.exchangeGainLossUSD)}</span> to
+   538→                the bottom line. The Oracle recommends prioritising transfer-pricing realignment in APAC and accelerating
+   539→                EU OSS registration ahead of the next filing window.
+   540→              </p>
+   541→
+   542→              <Separator className="my-4 bg-white/[0.06]" />
+   543→
+   544→              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+   545→                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+   546→                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-emerald-300">
+   547→                    <Crown className="h-3 w-3" /> Top Performer
+   548→                  </div>
+   549→                  <p className="mt-1.5 text-sm font-semibold text-white">{topPerformer.flag} {topPerformer.name}</p>
+   550→                  <p className="text-[11px] text-muted-foreground">
+   551→                    Growth score {topPerformer.growthScore}/100 — leading all regions on revenue momentum.
+   552→                  </p>
+   553→                </div>
+   554→                <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-3">
+   555→                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-teal-300">
+   556→                    <ShieldCheck className="h-3 w-3" /> Best Compliance
+   557→                  </div>
+   558→                  <p className="mt-1.5 text-sm font-semibold text-white">{bestCompliance.flag} {bestCompliance.name}</p>
+   559→                  <p className="text-[11px] text-muted-foreground">
+   560→                    Compliance score {bestCompliance.complianceScore}/100 — eligible for simplified audit pathway.
+   561→                  </p>
+   562→                </div>
+   563→                <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-3">
+   564→                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-rose-300">
+   565→                    <AlertTriangle className="h-3 w-3" /> At-Risk Regions
+   566→                  </div>
+   567→                  {atRisk.length > 0 ? (
+   568→                    <div className="mt-1.5 space-y-0.5">
+   569→                      {atRisk.slice(0, 3).map((c) => (
+   570→                        <p key={c.code} className="text-sm font-medium text-white">
+   571→                          {c.flag} {c.name} <span className="text-rose-300 text-[11px]">({c.riskScore}/100 risk)</span>
+   572→                        </p>
+   573→                      ))}
+   574→                    </div>
+   575→                  ) : (
+   576→                    <p className="mt-1.5 text-sm font-medium text-emerald-300">No elevated-risk regions</p>
+   577→                  )}
+   578→                </div>
+   579→              </div>
+   580→
+   581→              <div className="mt-4 flex flex-wrap gap-2">
+   582→                {['Realign IN→SG royalty pricing', 'Hedge EUR Q4 receivables', 'File OSS registration (DE)', 'Trigger UK R&D claim'].map((rec) => (
+   583→                  <Badge key={rec} variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-white/80">
+   584→                    <Sparkles className="mr-1 h-2.5 w-2.5 text-emerald-400" />
+   585→                    {rec}
+   586→                  </Badge>
+   587→                ))}
+   588→              </div>
+   589→            </CardContent>
+   590→          </Card>
+   591→        </motion.div>
+   592→      </div>
+   593→    </div>
+   594→  );
+   595→}
+   596→

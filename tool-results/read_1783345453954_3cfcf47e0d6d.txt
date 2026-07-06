@@ -1,0 +1,402 @@
+   600→  id: string;
+   601→  reference: string;
+   602→  type: 'invoice' | 'collection' | 'payout' | 'reconciliation';
+   603→  direction: 'inbound' | 'outbound';
+   604→  fromCountry: CountryCode;
+   605→  toCountry: CountryCode;
+   606→  amount: number;
+   607→  currency: string;
+   608→  amountUSD: number;
+   609→  method: string;
+   610→  status: 'pending' | 'processing' | 'completed' | 'failed';
+   611→  fxRate: number;
+   612→  fees: number;
+   613→  date: string;
+   614→  counterparty: string;
+   615→}
+   616→
+   617→export const CROSS_BORDER_PAYMENTS: CrossBorderPayment[] = [
+   618→  { id: 'cbp-1', reference: 'INV-INT-0891', type: 'collection', direction: 'inbound', fromCountry: 'US', toCountry: 'IN', amount: 84000, currency: 'USD', amountUSD: 84000, method: 'Wise', status: 'completed', fxRate: 83.2, fees: 344, date: '2024-09-28', counterparty: 'Global Tech Inc.' },
+   619→  { id: 'cbp-2', reference: 'INV-INT-0892', type: 'collection', direction: 'inbound', fromCountry: 'DE', toCountry: 'IN', amount: 52000, currency: 'EUR', amountUSD: 56160, method: 'Stripe SEPA', status: 'processing', fxRate: 90.4, fees: 1180, date: '2024-10-01', counterparty: 'Bayern GmbH' },
+   620→  { id: 'cbp-3', reference: 'PO-INT-0893', type: 'payout', direction: 'outbound', fromCountry: 'IN', toCountry: 'JP', amount: 14200000, currency: 'JPY', amountUSD: 95140, method: 'HSBC', status: 'pending', fxRate: 0.0067, fees: 420, date: '2024-10-02', counterparty: 'Osaka Precision' },
+   621→  { id: 'cbp-4', reference: 'INV-INT-0894', type: 'collection', direction: 'inbound', fromCountry: 'GB', toCountry: 'IN', amount: 38000, currency: 'GBP', amountUSD: 48260, method: 'Wise', status: 'completed', fxRate: 105.6, fees: 156, date: '2024-09-30', counterparty: 'Manchester Steel' },
+   622→  { id: 'cbp-5', reference: 'PO-INT-0895', type: 'payout', direction: 'outbound', fromCountry: 'US', toCountry: 'SG', amount: 96000, currency: 'USD', amountUSD: 96000, method: 'Mercury', status: 'completed', fxRate: 1.35, fees: 15, date: '2024-09-29', counterparty: 'Singapore Logistics' },
+   623→  { id: 'cbp-6', reference: 'INV-INT-0896', type: 'invoice', direction: 'outbound', fromCountry: 'IN', toCountry: 'AE', amount: 180000, currency: 'AED', amountUSD: 48600, method: 'Razorpay Intl', status: 'processing', fxRate: 22.7, fees: 840, date: '2024-10-03', counterparty: 'Dubai Traders LLC' },
+   624→  { id: 'cbp-7', reference: 'REC-INT-0897', type: 'reconciliation', direction: 'inbound', fromCountry: 'FR', toCountry: 'IN', amount: 24000, currency: 'EUR', amountUSD: 25920, method: 'Stripe SEPA', status: 'completed', fxRate: 90.4, fees: 540, date: '2024-09-27', counterparty: 'Lyon Textiles' },
+   625→  { id: 'cbp-8', reference: 'INV-INT-0898', type: 'collection', direction: 'inbound', fromCountry: 'AU', toCountry: 'IN', amount: 62000, currency: 'AUD', amountUSD: 40920, method: 'Wise', status: 'pending', fxRate: 54.8, fees: 168, date: '2024-10-04', counterparty: 'Sydney Retail Pty' },
+   626→];
+   627→
+   628→// ─── Global Reports ─────────────────────────────────────────────────────────────
+   629→
+   630→export interface GlobalReport {
+   631→  id: string;
+   632→  name: string;
+   633→  category: 'Country' | 'Currency' | 'Cash Flow' | 'P&L' | 'Regional' | 'Tax';
+   634→  scope: string;
+   635→  period: string;
+   636→  generatedOn: string;
+   637→  format: 'PDF' | 'XLSX' | 'CSV';
+   638→  status: 'ready' | 'generating' | 'scheduled';
+   639→}
+   640→
+   641→export const GLOBAL_REPORTS: GlobalReport[] = [
+   642→  { id: 'rpt-1', name: 'India — Q3 FY24 GST Summary', category: 'Country', scope: 'India', period: 'Q3 FY24', generatedOn: '2024-09-30', format: 'PDF', status: 'ready' },
+   643→  { id: 'rpt-2', name: 'USA — State Sales Tax Report', category: 'Tax', scope: 'United States', period: 'Q3 2024', generatedOn: '2024-09-30', format: 'XLSX', status: 'ready' },
+   644→  { id: 'rpt-3', name: 'Global Cash Flow — Q3 2024', category: 'Cash Flow', scope: 'All Countries', period: 'Q3 2024', generatedOn: '2024-10-01', format: 'PDF', status: 'ready' },
+   645→  { id: 'rpt-4', name: 'EUR Consolidated P&L', category: 'P&L', scope: 'EU Region', period: 'Q3 2024', generatedOn: '2024-10-01', format: 'XLSX', status: 'ready' },
+   646→  { id: 'rpt-5', name: 'Multi-Currency Exposure Report', category: 'Currency', scope: 'All Currencies', period: 'Sep 2024', generatedOn: '2024-10-02', format: 'PDF', status: 'ready' },
+   647→  { id: 'rpt-6', name: 'APAC Regional Analytics', category: 'Regional', scope: 'APAC', period: 'Q3 2024', generatedOn: '2024-10-02', format: 'PDF', status: 'generating' },
+   648→  { id: 'rpt-7', name: 'Cross-Border Transfer Pricing', category: 'Tax', scope: 'Global', period: 'FY24', generatedOn: '2024-10-03', format: 'XLSX', status: 'scheduled' },
+   649→  { id: 'rpt-8', name: 'UK — VAT MTD Report', category: 'Country', scope: 'United Kingdom', period: 'Q3 2024', generatedOn: '2024-10-03', format: 'CSV', status: 'ready' },
+   650→];
+   651→
+   652→// ─── Global Dashboard KPIs ──────────────────────────────────────────────────────
+   653→
+   654→export const GLOBAL_KPIS = {
+   655→  totalRevenueUSD: 5684000,
+   656→  totalExpensesUSD: 4148000,
+   657→  netCashFlowUSD: 1536000,
+   658→  totalTaxLiabilityUSD: 842000,
+   659→  countriesActive: 10,
+   660→  currenciesActive: 9,
+   661→  banksConnected: 7,
+   662→  complianceScore: 91,
+   663→  exchangeGainLossUSD: 42800,
+   664→  crossBorderVolumeUSD: 594000,
+   665→  avgGrowthScore: 78,
+   666→  avgRiskScore: 21,
+   667→};
+   668→
+   669→// ─── Exchange Rate History (deterministic) ──────────────────────────────────────
+   670→
+   671→export const EXCHANGE_RATE_HISTORY = [
+   672→  { month: 'Apr', usdInr: 83.2, usdEur: 0.93, usdGbp: 0.79, usdJpy: 151.4 },
+   673→  { month: 'May', usdInr: 83.4, usdEur: 0.92, usdGbp: 0.79, usdJpy: 157.3 },
+   674→  { month: 'Jun', usdInr: 83.5, usdEur: 0.93, usdGbp: 0.79, usdJpy: 160.8 },
+   675→  { month: 'Jul', usdInr: 83.7, usdEur: 0.92, usdGbp: 0.78, usdJpy: 155.2 },
+   676→  { month: 'Aug', usdInr: 83.9, usdEur: 0.91, usdGbp: 0.78, usdJpy: 149.6 },
+   677→  { month: 'Sep', usdInr: 83.2, usdEur: 0.92, usdGbp: 0.79, usdJpy: 148.3 },
+   678→];
+   679→
+   680→// ─── Helpers ────────────────────────────────────────────────────────────────────
+   681→
+   682→export const fmtUSD = (n: number): string =>
+   683→  `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+   684→
+   685→export const fmtINR = (n: number): string =>
+   686→  `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+   687→
+   688→export const fmtPct = (n: number): string => `${n.toFixed(1)}%`;
+   689→
+   690→export const statusColor = (status: string): string => {
+   691→  switch (status) {
+   692→    case 'compliant':
+   693→    case 'completed':
+   694→    case 'connected':
+   695→    case 'delivered':
+   696→    case 'ready':
+   697→      return 'emerald';
+   698→    case 'in-progress':
+   699→    case 'processing':
+   700→    case 'in-transit':
+   701→    case 'generating':
+   702→      return 'amber';
+   703→    case 'attention':
+   704→    case 'pending':
+   705→    case 'customs':
+   706→    case 'failed':
+   707→      return 'rose';
+   708→    case 'coming-soon':
+   709→    case 'upcoming':
+   710→    case 'scheduled':
+   711→    case 'cancelled':
+   712→      return 'slate';
+   713→    default:
+   714→      return 'slate';
+   715→  }
+   716→};
+   717→
+   718→// ═══════════════════════════════════════════════════════════════════════════════
+   719→// PHASE 14 EXPANSION — Deep Enterprise Data (Billion-Dollar Grade)
+   720→// ═══════════════════════════════════════════════════════════════════════════════
+   721→
+   722→// ─── Country Filing Calendar ───────────────────────────────────────────────────
+   723→
+   724→export interface FilingDeadline {
+   725→  id: string;
+   726→  country: CountryCode;
+   727→  form: string;
+   728→  description: string;
+   729→  dueDate: string;
+   730→  frequency: 'Monthly' | 'Quarterly' | 'Half-Yearly' | 'Annual';
+   731→  daysLeft: number;
+   732→  status: 'filed' | 'upcoming' | 'overdue' | 'in-progress';
+   733→  priority: 'critical' | 'high' | 'medium' | 'low';
+   734→}
+   735→
+   736→export const FILING_DEADLINES: FilingDeadline[] = [
+   737→  { id: 'fd-1', country: 'IN', form: 'GSTR-1', description: 'Outward supplies return', dueDate: '2024-10-11', frequency: 'Monthly', daysLeft: 8, status: 'upcoming', priority: 'critical' },
+   738→  { id: 'fd-2', country: 'IN', form: 'GSTR-3B', description: 'Summary return + tax payment', dueDate: '2024-10-20', frequency: 'Monthly', daysLeft: 17, status: 'upcoming', priority: 'critical' },
+   739→  { id: 'fd-3', country: 'IN', form: 'TDS Return', description: 'Quarterly TDS return 24Q', dueDate: '2024-10-31', frequency: 'Quarterly', daysLeft: 28, status: 'in-progress', priority: 'high' },
+   740→  { id: 'fd-4', country: 'US', form: 'Form 941', description: 'Employer quarterly federal tax', dueDate: '2024-10-31', frequency: 'Quarterly', daysLeft: 28, status: 'in-progress', priority: 'critical' },
+   741→  { id: 'fd-5', country: 'US', form: 'Sales Tax', description: 'State sales tax filing (CA, NY, TX)', dueDate: '2024-10-20', frequency: 'Quarterly', daysLeft: 17, status: 'upcoming', priority: 'high' },
+   742→  { id: 'fd-6', country: 'GB', form: 'VAT 100', description: 'VAT return under MTD', dueDate: '2024-11-07', frequency: 'Quarterly', daysLeft: 35, status: 'upcoming', priority: 'high' },
+   743→  { id: 'fd-7', country: 'GB', form: 'CT600', description: 'Corporation Tax return', dueDate: '2024-12-31', frequency: 'Annual', daysLeft: 89, status: 'upcoming', priority: 'medium' },
+   744→  { id: 'fd-8', country: 'DE', form: 'Umsatzsteuervoranmeldung', description: 'Advanced VAT return', dueDate: '2024-10-10', frequency: 'Monthly', daysLeft: 7, status: 'upcoming', priority: 'critical' },
+   745→  { id: 'fd-9', country: 'FR', form: 'CA3 (TVA)', description: 'VAT return', dueDate: '2024-10-19', frequency: 'Monthly', daysLeft: 16, status: 'upcoming', priority: 'high' },
+   746→  { id: 'fd-10', country: 'AE', form: 'VAT 201', description: 'FTA VAT return', dueDate: '2024-11-28', frequency: 'Quarterly', daysLeft: 56, status: 'upcoming', priority: 'medium' },
+   747→  { id: 'fd-11', country: 'SG', form: 'GST F5', description: 'IRAS GST return', dueDate: '2024-10-31', frequency: 'Quarterly', daysLeft: 28, status: 'filed', priority: 'low' },
+   748→  { id: 'fd-12', country: 'AU', form: 'BAS', description: 'Business Activity Statement', dueDate: '2024-10-28', frequency: 'Quarterly', daysLeft: 25, status: 'in-progress', priority: 'high' },
+   749→  { id: 'fd-13', country: 'CA', form: 'GST/HST', description: 'CRA GST/HST return', dueDate: '2024-10-31', frequency: 'Annual', daysLeft: 28, status: 'upcoming', priority: 'medium' },
+   750→  { id: 'fd-14', country: 'JP', form: '消費税', description: 'Consumption tax interim return', dueDate: '2024-11-30', frequency: 'Annual', daysLeft: 58, status: 'upcoming', priority: 'medium' },
+   751→];
+   752→
+   753→// ─── Tax Loss Carryforwards & Credits ──────────────────────────────────────────
+   754→
+   755→export interface TaxPosition {
+   756→  country: CountryCode;
+   757→  entity: string;
+   758→  revenue: number;
+   759→  taxableIncome: number;
+   760→  corporateTax: number;
+   761→  lossCarryforward: number;
+   762→  taxCredits: number;
+   763→  effectiveRate: number;
+   764→  netTax: number;
+   765→}
+   766→
+   767→export const TAX_POSITIONS: TaxPosition[] = [
+   768→  { country: 'IN', entity: 'GSTPilot India Pvt Ltd', revenue: 847200000, taxableIncome: 184600000, corporateTax: 46605820, lossCarryforward: 12000000, taxCredits: 3400000, effectiveRate: 22.4, netTax: 31205820 },
+   769→  { country: 'US', entity: 'GSTPilot Inc. (Delaware)', revenue: 1240000, taxableIncome: 248000, corporateTax: 52080, lossCarryforward: 45000, taxCredits: 12000, effectiveRate: 16.3, netTax: 37080 },
+   770→  { country: 'GB', entity: 'GSTPilot UK Ltd', revenue: 480000, taxableIncome: 92000, corporateTax: 23000, lossCarryforward: 18000, taxCredits: 5000, effectiveRate: 19.6, netTax: 13000 },
+   771→  { country: 'DE', entity: 'GSTPilot GmbH', revenue: 720000, taxableIncome: 138000, corporateTax: 41676, lossCarryforward: 22000, taxCredits: 8000, effectiveRate: 22.3, netTax: 28676 },
+   772→  { country: 'SG', entity: 'GSTPilot Pte Ltd', revenue: 610000, taxableIncome: 152000, corporateTax: 25840, lossCarryforward: 0, taxCredits: 6000, effectiveRate: 13.1, netTax: 19840 },
+   773→  { country: 'AE', entity: 'GSTPilot FZ-LLC', revenue: 520000, taxableIncome: 142000, corporateTax: 12780, lossCarryforward: 0, taxCredits: 0, effectiveRate: 9.0, netTax: 12780 },
+   774→];
+   775→
+   776→// ─── FX Exposure & Hedging ─────────────────────────────────────────────────────
+   777→
+   778→export interface FXExposure {
+   779→  currency: string;
+   780→  flag: string;
+   781→  exposure: number;       // USD equivalent
+   782→  hedged: number;         // USD equivalent hedged
+   783→  unhedged: number;       // USD equivalent unhedged
+   784→  hedgeRatio: number;     // %
+   785→  riskScore: number;      // 0-100
+   786→  volatility30d: number;  // %
+   787→  forwardRate: number;
+   788→  spotRate: number;
+   789→  forwardPoints: number;
+   790→}
+   791→
+   792→export const FX_EXPOSURES: FXExposure[] = [
+   793→  { currency: 'EUR', flag: '🇪🇺', exposure: 1260000, hedged: 840000, unhedged: 420000, hedgeRatio: 66.7, riskScore: 38, volatility30d: 6.8, forwardRate: 1.0850, spotRate: 1.0800, forwardPoints: 50 },
+   794→  { currency: 'GBP', flag: '🇬🇧', exposure: 680000, hedged: 340000, unhedged: 340000, hedgeRatio: 50.0, riskScore: 32, volatility30d: 5.2, forwardRate: 1.2750, spotRate: 1.2700, forwardPoints: 50 },
+   795→  { currency: 'INR', flag: '🇮🇳', exposure: 2840000, hedged: 1988000, unhedged: 852000, hedgeRatio: 70.0, riskScore: 28, volatility30d: 4.1, forwardRate: 83.50, spotRate: 83.20, forwardPoints: 30 },
+   796→  { currency: 'JPY', flag: '🇯🇵', exposure: 420000, hedged: 126000, unhedged: 294000, hedgeRatio: 30.0, riskScore: 52, volatility30d: 8.4, forwardRate: 148.80, spotRate: 148.30, forwardPoints: 50 },
+   797→  { currency: 'AED', flag: '🇦🇪', exposure: 320000, hedged: 0, unhedged: 320000, hedgeRatio: 0, riskScore: 8, volatility30d: 0.3, forwardRate: 3.6725, spotRate: 3.6725, forwardPoints: 0 },
+   798→  { currency: 'AUD', flag: '🇦🇺', exposure: 280000, hedged: 112000, unhedged: 168000, hedgeRatio: 40.0, riskScore: 35, volatility30d: 5.9, forwardRate: 0.6620, spotRate: 0.6600, forwardPoints: 20 },
+   799→  { currency: 'CAD', flag: '🇨🇦', exposure: 340000, hedged: 170000, unhedged: 170000, hedgeRatio: 50.0, riskScore: 30, volatility30d: 4.8, forwardRate: 0.7320, spotRate: 0.7300, forwardPoints: 20 },
+   800→  { currency: 'SGD', flag: '🇸🇬', exposure: 240000, hedged: 120000, unhedged: 120000, hedgeRatio: 50.0, riskScore: 18, volatility30d: 2.1, forwardRate: 0.7420, spotRate: 0.7400, forwardPoints: 20 },
+   801→];
+   802→
+   803→// ─── Bank Balances & Cash Positions ────────────────────────────────────────────
+   804→
+   805→export interface BankBalance {
+   806→  bankId: string;
+   807→  bankName: string;
+   808→  accountType: string;
+   809→  accountNumber: string;
+   810→  currency: string;
+   811→  balance: number;
+   812→  balanceUSD: number;
+   813→  available: number;
+   814→  pending: number;
+   815→  lastSync: string;
+   816→}
+   817→
+   818→export const BANK_BALANCES: BankBalance[] = [
+   819→  { bankId: 'hsbc', bankName: 'HSBC', accountType: 'Current', accountNumber: '****8421', currency: 'USD', balance: 1840000, balanceUSD: 1840000, available: 1780000, pending: 60000, lastSync: '2 min ago' },
+   820→  { bankId: 'hsbc', bankName: 'HSBC', accountType: 'Current', accountNumber: '****3210', currency: 'GBP', balance: 680000, balanceUSD: 863600, available: 650000, pending: 30000, lastSync: '2 min ago' },
+   821→  { bankId: 'hsbc', bankName: 'HSBC', accountType: 'Current', accountNumber: '****5512', currency: 'SGD', balance: 420000, balanceUSD: 310800, available: 400000, pending: 20000, lastSync: '2 min ago' },
+   822→  { bankId: 'citibank', bankName: 'Citibank', accountType: 'Operating', accountNumber: '****7733', currency: 'USD', balance: 1240000, balanceUSD: 1240000, available: 1180000, pending: 60000, lastSync: '1 min ago' },
+   823→  { bankId: 'citibank', bankName: 'Citibank', accountType: 'Operating', accountNumber: '****9981', currency: 'EUR', balance: 580000, balanceUSD: 626400, available: 560000, pending: 20000, lastSync: '1 min ago' },
+   824→  { bankId: 'razorpay', bankName: 'Razorpay', accountType: 'Virtual', accountNumber: '****1142', currency: 'INR', balance: 14200000, balanceUSD: 170400, available: 13800000, pending: 400000, lastSync: 'Just now' },
+   825→  { bankId: 'mercury', bankName: 'Mercury', accountType: 'Business', accountNumber: '****2024', currency: 'USD', balance: 540000, balanceUSD: 540000, available: 520000, pending: 20000, lastSync: '3 min ago' },
+   826→  { bankId: 'wise', bankName: 'Wise', accountType: 'Borderless', accountNumber: '****8890', currency: 'EUR', balance: 180000, balanceUSD: 194400, available: 180000, pending: 0, lastSync: 'Just now' },
+   827→  { bankId: 'wise', bankName: 'Wise', accountType: 'Borderless', accountNumber: '****8891', currency: 'GBP', balance: 94000, balanceUSD: 119380, available: 94000, pending: 0, lastSync: 'Just now' },
+   828→];
+   829→
+   830→// ─── Supply Chain Vendors & Landed Cost ────────────────────────────────────────
+   831→
+   832→export interface Vendor {
+   833→  id: string;
+   834→  name: string;
+   835→  country: CountryCode;
+   836→  category: string;
+   837→  rating: number;         // 0-5
+   838→  onTimeRate: number;     // %
+   839→  defectRate: number;     // %
+   840→  totalSpend: number;     // USD
+   841→  activePOs: number;
+   842→  paymentTerms: string;
+   843→  riskLevel: 'low' | 'medium' | 'high';
+   844→}
+   845→
+   846→export const VENDORS: Vendor[] = [
+   847→  { id: 'v-1', name: 'Shenzhen Electronics Co.', country: 'SG', category: 'Electronics', rating: 4.2, onTimeRate: 87, defectRate: 1.8, totalSpend: 1840000, activePOs: 12, paymentTerms: 'Net 60', riskLevel: 'medium' },
+   848→  { id: 'v-2', name: 'Bayern Maschinen GmbH', country: 'DE', category: 'Machinery', rating: 4.7, onTimeRate: 94, defectRate: 0.4, totalSpend: 3120000, activePOs: 8, paymentTerms: 'Net 90', riskLevel: 'low' },
+   849→  { id: 'v-3', name: 'Texas Components Inc.', country: 'US', category: 'Electronics', rating: 4.5, onTimeRate: 91, defectRate: 0.8, totalSpend: 960000, activePOs: 15, paymentTerms: 'Net 30', riskLevel: 'low' },
+   850→  { id: 'v-4', name: 'Lyon Textiles SARL', country: 'FR', category: 'Textiles', rating: 3.9, onTimeRate: 82, defectRate: 2.4, totalSpend: 640000, activePOs: 6, paymentTerms: 'Net 45', riskLevel: 'medium' },
+   851→  { id: 'v-5', name: 'Osaka Precision Ltd.', country: 'JP', category: 'Precision', rating: 4.9, onTimeRate: 98, defectRate: 0.1, totalSpend: 1420000, activePOs: 4, paymentTerms: 'Advance', riskLevel: 'low' },
+   852→  { id: 'v-6', name: 'Manchester Steelworks', country: 'GB', category: 'Raw Material', rating: 4.1, onTimeRate: 85, defectRate: 1.2, totalSpend: 880000, activePOs: 9, paymentTerms: 'Net 60', riskLevel: 'medium' },
+   853→  { id: 'v-7', name: 'Mumbai Packaging Pvt Ltd', country: 'IN', category: 'Packaging', rating: 4.3, onTimeRate: 89, defectRate: 1.5, totalSpend: 320000, activePOs: 22, paymentTerms: 'Net 30', riskLevel: 'low' },
+   854→  { id: 'v-8', name: 'Dubai Logistics FZE', country: 'AE', category: 'Logistics', rating: 4.4, onTimeRate: 92, defectRate: 0, totalSpend: 540000, activePOs: 18, paymentTerms: 'Net 15', riskLevel: 'low' },
+   855→];
+   856→
+   857→// ─── DTAA (Double Tax Avoidance Agreement) Matrix ──────────────────────────────
+   858→
+   859→export interface DTAAEntry {
+   860→  country1: CountryCode;
+   861→  country2: CountryCode;
+   862→  withholdingTax: number;    // % on royalties
+   863→  dividendTax: number;       // % on dividends
+   864→  interestTax: number;       // % on interest
+   865→  ftaType: string;           // Free Trade Agreement type
+   866→  status: 'active' | 'negotiating' | 'none';
+   867→}
+   868→
+   869→export const DTAA_MATRIX: DTAAEntry[] = [
+   870→  { country1: 'IN', country2: 'SG', withholdingTax: 10, dividendTax: 15, interestTax: 15, ftaType: 'CECA', status: 'active' },
+   871→  { country1: 'IN', country2: 'US', withholdingTax: 15, dividendTax: 25, interestTax: 15, ftaType: 'DTAA', status: 'active' },
+   872→  { country1: 'IN', country2: 'GB', withholdingTax: 15, dividendTax: 15, interestTax: 10, ftaType: 'DTAA', status: 'active' },
+   873→  { country1: 'IN', country2: 'AE', withholdingTax: 10, dividendTax: 10, interestTax: 10, ftaType: 'CEPA', status: 'active' },
+   874→  { country1: 'IN', country2: 'JP', withholdingTax: 10, dividendTax: 10, interestTax: 10, ftaType: 'CEPA', status: 'active' },
+   875→  { country1: 'US', country2: 'GB', withholdingTax: 0, dividendTax: 5, interestTax: 0, ftaType: 'Treaty', status: 'active' },
+   876→  { country1: 'DE', country2: 'FR', withholdingTax: 0, dividendTax: 0, interestTax: 0, ftaType: 'EU Single Market', status: 'active' },
+   877→  { country1: 'SG', country2: 'JP', withholdingTax: 5, dividendTax: 5, interestTax: 10, ftaType: 'EPA', status: 'active' },
+   878→  { country1: 'AE', country2: 'SG', withholdingTax: 5, dividendTax: 5, interestTax: 5, ftaType: 'CEPA', status: 'active' },
+   879→];
+   880→
+   881→// ─── Regulatory Changes Monitor ────────────────────────────────────────────────
+   882→
+   883→export interface RegulatoryChange {
+   884→  id: string;
+   885→  country: CountryCode;
+   886→  title: string;
+   887→  description: string;
+   888→  category: string;
+   889→  effectiveDate: string;
+   890→  impact: 'high' | 'medium' | 'low';
+   891→  actionRequired: boolean;
+   892→  daysToComply: number;
+   893→}
+   894→
+   895→export const REGULATORY_CHANGES: RegulatoryChange[] = [
+   896→  { id: 'rc-1', country: 'AE', title: 'UAE Corporate Tax Law', description: '9% federal corporate tax on profits exceeding AED 375,000', category: 'Corporate Tax', effectiveDate: '2024-06-01', impact: 'high', actionRequired: true, daysToComply: 12 },
+   897→  { id: 'rc-2', country: 'IN', title: 'GST E-invoicing threshold reduction', description: 'Mandatory e-invoicing for turnover ≥ ₹5 Cr (from ₹100 Cr)', category: 'GST', effectiveDate: '2024-08-01', impact: 'medium', actionRequired: true, daysToComply: 5 },
+   898→  { id: 'rc-3', country: 'GB', title: 'MTD for ITSA phased rollout', description: 'Making Tax Digital for Income Tax Self Assessment begins', category: 'Income Tax', effectiveDate: '2026-04-06', impact: 'medium', actionRequired: false, daysToComply: 580 },
+   899→  { id: 'rc-4', country: 'EU', title: 'ViDA (VAT in the Digital Age)', description: 'Real-time digital VAT reporting & single VAT registration', category: 'VAT', effectiveDate: '2025-01-01', impact: 'high', actionRequired: true, daysToComply: 92 } as RegulatoryChange,
+   900→  { id: 'rc-5', country: 'US', title: 'Beneficial Ownership Information (BOI) Report', description: 'FinCEN BOI reporting required for all LLCs & corps', category: 'Reporting', effectiveDate: '2024-01-01', impact: 'high', actionRequired: true, daysToComply: 3 },
+   901→  { id: 'rc-6', country: 'JP', title: 'Qualified Invoice System (QIS)', description: 'New e-invoicing regime — qualified invoices required for input credit', category: 'Consumption Tax', effectiveDate: '2023-10-01', impact: 'high', actionRequired: true, daysToComply: 0 },
+   902→];
+   903→
+   904→// ─── Regional Aggregation ──────────────────────────────────────────────────────
+   905→
+   906→export const REGIONAL_DATA = {
+   907→  APAC: {
+   908→    countries: ['IN', 'SG', 'AU', 'JP'] as CountryCode[],
+   909→    label: 'Asia-Pacific',
+   910→    color: 'emerald',
+   911→    revenue: 2272000, expenses: 1642000, taxLiability: 332000,
+   912→    growthScore: 78, complianceScore: 95, riskScore: 19,
+   913→  },
+   914→  EMEA: {
+   915→    countries: ['GB', 'DE', 'FR', 'AE'] as CountryCode[],
+   916→    label: 'Europe, Middle East & Africa',
+   917→    color: 'teal',
+   918→    revenue: 2260000, expenses: 1680000, taxLiability: 370800,
+   919→    growthScore: 76, complianceScore: 90, riskScore: 23,
+   920→  },
+   921→  Americas: {
+   922→    countries: ['US', 'CA'] as CountryCode[],
+   923→    label: 'Americas',
+   924→    color: 'cyan',
+   925→    revenue: 1880000, expenses: 1350000, taxLiability: 343600,
+   926→    growthScore: 87, complianceScore: 92, riskScore: 19,
+   927→  },
+   928→};
+   929→
+   930→// ─── Payment Lifecycle (for Cross-Border Payments) ─────────────────────────────
+   931→
+   932→export interface PaymentStage {
+   933→  stage: string;
+   934→  timestamp: string;
+   935→  location: string;
+   936→  status: 'completed' | 'pending' | 'failed';
+   937→  detail: string;
+   938→}
+   939→
+   940→export const PAYMENT_LIFECYCLE: Record<string, PaymentStage[]> = {
+   941→  'cbp-1': [
+   942→    { stage: 'Initiated', timestamp: '2024-09-28 09:14', location: 'Mumbai, IN', status: 'completed', detail: 'Payment initiated via Wise' },
+   943→    { stage: 'Compliance Check', timestamp: '2024-09-28 09:15', location: 'RBI / FEMA', status: 'completed', detail: 'FEMA compliance verified' },
+   944→    { stage: 'FX Conversion', timestamp: '2024-09-28 09:22', location: 'Wise mid-market', status: 'completed', detail: 'USD 84,000 @ ₹83.20 = ₹6,988,800' },
+   945→    { stage: 'Correspondent Bank', timestamp: '2024-09-28 14:00', location: 'JP Morgan Chase, NY', status: 'completed', detail: 'SWIFT MT103 transmitted' },
+   946→    { stage: 'Beneficiary Credit', timestamp: '2024-09-28 16:30', location: 'HSBC India', status: 'completed', detail: 'Credited to GSTPilot India account' },
+   947→  ],
+   948→  'cbp-2': [
+   949→    { stage: 'Initiated', timestamp: '2024-10-01 11:00', location: 'Frankfurt, DE', status: 'completed', detail: 'SEPA direct debit via Stripe' },
+   950→    { stage: 'SEPA Clearing', timestamp: '2024-10-01 14:00', location: 'Deutsche Bundesbank', status: 'completed', detail: 'SEPA Clearing processed' },
+   951→    { stage: 'FX Conversion', timestamp: '2024-10-02 09:00', location: 'Wise mid-market', status: 'pending', detail: 'Awaiting conversion EUR→INR' },
+   952→    { stage: 'Beneficiary Credit', timestamp: '—', location: 'HSBC India', status: 'pending', detail: 'Expected by Oct 2, 16:00 IST' },
+   953→  ],
+   954→  'cbp-3': [
+   955→    { stage: 'Initiated', timestamp: '2024-10-02 08:00', location: 'Tokyo, JP', status: 'pending', detail: 'Awaiting approval — Finance Manager sign-off' },
+   956→    { stage: 'Compliance Check', timestamp: '—', location: 'RBI / FEMA', status: 'pending', detail: 'Pending approval' },
+   957→    { stage: 'FX Conversion', timestamp: '—', location: 'HSBC FX desk', status: 'pending', detail: 'Pending' },
+   958→    { stage: 'Correspondent Bank', timestamp: '—', location: 'MUFG Bank', status: 'pending', detail: 'Pending' },
+   959→  ],
+   960→};
+   961→
+   962→// ─── CDN Region Performance ────────────────────────────────────────────────────
+   963→
+   964→export interface CDNRegion {
+   965→  id: string;
+   966→  region: string;
+   967→  city: string;
+   968→  country: string;
+   969→  flag: string;
+   970→  status: 'online' | 'syncing' | 'degraded';
+   971→  latencyMs: number;        // from India
+   972→  uptime30d: number;        // %
+   973→  requestsPerSec: number;
+   974→  cacheHitRate: number;     // %
+   975→}
+   976→
+   977→export const CDN_REGIONS: CDNRegion[] = [
+   978→  { id: 'cdn-1', region: 'AP-South', city: 'Mumbai', country: 'India', flag: '🇮🇳', status: 'online', latencyMs: 2, uptime30d: 99.99, requestsPerSec: 4820, cacheHitRate: 96.4 },
+   979→  { id: 'cdn-2', region: 'AP-Southeast', city: 'Singapore', country: 'Singapore', flag: '🇸🇬', status: 'online', latencyMs: 38, uptime30d: 99.98, requestsPerSec: 3140, cacheHitRate: 94.8 },
+   980→  { id: 'cdn-3', region: 'AP-Northeast', city: 'Tokyo', country: 'Japan', flag: '🇯🇵', status: 'online', latencyMs: 68, uptime30d: 99.97, requestsPerSec: 2240, cacheHitRate: 93.2 },
+   981→  { id: 'cdn-4', region: 'AP-Northeast', city: 'Seoul', country: 'South Korea', flag: '🇰🇷', status: 'online', latencyMs: 72, uptime30d: 99.99, requestsPerSec: 1480, cacheHitRate: 95.1 },
+   982→  { id: 'cdn-5', region: 'ME-Central', city: 'Dubai', country: 'UAE', flag: '🇦🇪', status: 'online', latencyMs: 42, uptime30d: 99.96, requestsPerSec: 1820, cacheHitRate: 92.8 },
+   983→  { id: 'cdn-6', region: 'EU-West', city: 'Dublin', country: 'Ireland', flag: '🇮🇪', status: 'online', latencyMs: 128, uptime30d: 99.99, requestsPerSec: 2940, cacheHitRate: 94.6 },
+   984→  { id: 'cdn-7', region: 'EU-Central', city: 'Frankfurt', country: 'Germany', flag: '🇩🇪', status: 'online', latencyMs: 134, uptime30d: 99.98, requestsPerSec: 3280, cacheHitRate: 95.3 },
+   985→  { id: 'cdn-8', region: 'EU-South', city: 'Milan', country: 'Italy', flag: '🇮🇹', status: 'syncing', latencyMs: 142, uptime30d: 99.92, requestsPerSec: 980, cacheHitRate: 88.4 },
+   986→  { id: 'cdn-9', region: 'US-East', city: 'Virginia', country: 'USA', flag: '🇺🇸', status: 'online', latencyMs: 218, uptime30d: 99.99, requestsPerSec: 5240, cacheHitRate: 96.8 },
+   987→  { id: 'cdn-10', region: 'US-West', city: 'Oregon', country: 'USA', flag: '🇺🇸', status: 'online', latencyMs: 242, uptime30d: 99.98, requestsPerSec: 3120, cacheHitRate: 95.2 },
+   988→  { id: 'cdn-11', region: 'CA-Central', city: 'Toronto', country: 'Canada', flag: '🇨🇦', status: 'online', latencyMs: 226, uptime30d: 99.97, requestsPerSec: 840, cacheHitRate: 93.9 },
+   989→  { id: 'cdn-12', region: 'SA-East', city: 'São Paulo', country: 'Brazil', flag: '🇧🇷', status: 'degraded', latencyMs: 312, uptime30d: 98.84, requestsPerSec: 620, cacheHitRate: 87.2 },
+   990→];
+   991→
+   992→// ─── Performance Endpoints ─────────────────────────────────────────────────────
+   993→
+   994→export interface EndpointMetric {
+   995→  endpoint: string;
+   996→  method: string;
+   997→  avgLatencyMs: number;
+   998→  p99LatencyMs: number;
+   999→  requestsPerSec: number;
+
+[showing lines 600-999 of 1080; use offset=1000 with limit to continue reading]

@@ -1,15 +1,20 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPILOT INFINITY™ — PHASE 14: MULTI-TAX ENGINE™
+// GSTPILOT INFINITY™ — PHASE 14: MULTI-TAX ENGINE™ (ENHANCED)
 //
 // Unified indirect + direct tax engine across every jurisdiction — GST, VAT,
-// Sales Tax and Consumption Tax side-by-side with an interactive calculator
-// and a country × tax-type comparison matrix. Pure static data layer.
+// Sales Tax, Consumption Tax, transfer pricing, loss carry-forward tracking,
+// AI-style optimization recommendations. Pure static data layer.
 //
-//   • 4 tax system cards      — GST / VAT / Sales Tax / Consumption Tax
-//   • Interactive calculator  — country × tax type × amount → live breakdown
-//   • Comparison matrix       — countries × tax types rates table
+//   • 4 tax system cards             — GST / VAT / Sales Tax / Consumption Tax
+//   • Interactive calculator         — country × tax type × amount → live breakdown
+//   • Comparison matrix              — countries × tax types rates table
+//   • Tax Scenario Simulator         — multi-input + deduction toggles + step-by-step
+//   • Transfer Pricing Calculator    — arm's length range + DTAA withholding
+//   • Tax Loss Carryforward Tracker  — per entity savings vs statutory
+//   • Tax Calendar                   — filtered filing deadlines
+//   • Tax Optimization Recommendations — AI-style suggestions per country
 //
 // Tagline: Every Tax System. One Engine. Zero Surprises.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -19,7 +24,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calculator, Receipt, Building2, Users, Ship, Plane, Gauge,
   CheckCircle2, Sparkles, ArrowRight, Layers, Coins, Scale,
-  TrendingUp, type LucideIcon,
+  TrendingUp, TrendingDown, Lightbulb, FileText, AlarmClock,
+  Network, Brain, Percent, PiggyBank, Workflow,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -27,8 +34,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table';
@@ -36,7 +45,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
+  Tabs, TabsList, TabsTrigger, TabsContent,
+} from '@/components/ui/tabs';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   COUNTRIES, TAX_SYSTEMS, calculateTax, fmtUSD, fmtPct, getCountry,
+  TAX_POSITIONS, FILING_DEADLINES, DTAA_MATRIX,
   type Country, type CountryCode, type TaxSystem,
 } from '@/lib/global/data';
 
@@ -192,7 +208,7 @@ function TaxCalculator() {
           </Badge>
         </CardTitle>
         <p className="text-[11px] text-zinc-500">
-          Compute indirect, corporate, payroll & customs tax for any jurisdiction in real time.
+          Compute indirect, corporate, payroll &amp; customs tax for any jurisdiction in real time.
         </p>
       </CardHeader>
       <CardContent>
@@ -446,9 +462,857 @@ function ComparisonMatrix() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED — Tax Scenario Simulator
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TaxScenarioSimulator() {
+  const [country, setCountry] = useState<CountryCode>('IN');
+  const [amount, setAmount] = useState<string>('500000');
+  const [applyLossCf, setApplyLossCf] = useState(true);
+  const [applyCredits, setApplyCredits] = useState(true);
+  const [applySpecialDep, setApplySpecialDep] = useState(false);
+
+  const selected = getCountry(country);
+  const parsed = Number(amount) || 0;
+  const position = TAX_POSITIONS.find((p) => p.country === country);
+
+  const scenario = useMemo(() => {
+    const baseTax = (parsed * selected.corporateTaxRate) / 100;
+    let taxable = parsed;
+    let lossUsed = 0;
+    let creditUsed = 0;
+    let specialDep = 0;
+    const steps: { label: string; detail: string; amount: number; kind: 'info' | 'minus' | 'plus' }[] = [];
+
+    steps.push({
+      label: 'Gross Taxable Income',
+      detail: `Pre-tax income in ${selected.name}`,
+      amount: parsed,
+      kind: 'info',
+    });
+
+    if (applyLossCf && position && position.lossCarryforward > 0) {
+      lossUsed = Math.min(position.lossCarryforward, taxable);
+      taxable -= lossUsed;
+      steps.push({
+        label: 'Apply Loss Carry-forward',
+        detail: `Utilize ${fmtUSD(lossUsed)} of ${fmtUSD(position.lossCarryforward)} available`,
+        amount: -lossUsed,
+        kind: 'minus',
+      });
+    }
+
+    if (applySpecialDep) {
+      specialDep = (taxable * 0.2);
+      taxable -= specialDep;
+      steps.push({
+        label: 'Additional Depreciation (Sec 32AD)',
+        detail: '20% additional depreciation on plant & machinery',
+        amount: -specialDep,
+        kind: 'minus',
+      });
+    }
+
+    steps.push({
+      label: 'Net Taxable Income',
+      detail: 'After deductions',
+      amount: taxable,
+      kind: 'info',
+    });
+
+    const grossTax = (taxable * selected.corporateTaxRate) / 100;
+    steps.push({
+      label: `Gross Corporate Tax @ ${fmtPct(selected.corporateTaxRate)}`,
+      detail: `${selected.name} statutory rate`,
+      amount: grossTax,
+      kind: 'info',
+    });
+
+    if (applyCredits && position && position.taxCredits > 0) {
+      creditUsed = Math.min(position.taxCredits, grossTax);
+      steps.push({
+        label: 'Apply Tax Credits',
+        detail: `Withholding & foreign tax credits: ${fmtUSD(creditUsed)} of ${fmtUSD(position.taxCredits)}`,
+        amount: -creditUsed,
+        kind: 'minus',
+      });
+    }
+
+    const netTax = Math.max(0, grossTax - creditUsed);
+    const effectiveRate = parsed > 0 ? (netTax / parsed) * 100 : 0;
+    const statutoryTax = (parsed * selected.corporateTaxRate) / 100;
+    const savings = statutoryTax - netTax;
+
+    return {
+      steps,
+      netTax,
+      effectiveRate,
+      statutoryRate: selected.corporateTaxRate,
+      savings,
+      lossUsed,
+      creditUsed,
+      specialDep,
+    };
+  }, [parsed, selected, position, applyLossCf, applyCredits, applySpecialDep]);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Workflow className="h-4 w-4 text-violet-400" />
+          Tax Scenario Simulator
+          <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+            Step-by-step
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Build complex scenarios with loss carry-forward, tax credits &amp; additional depreciation — see each calculation step.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Left: inputs */}
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Country</label>
+              <Select value={country} onValueChange={(v) => setCountry(v as CountryCode)}>
+                <SelectTrigger className="w-full border-white/10 bg-white/[0.02] text-zinc-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-200">
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      <span className="inline-flex items-center gap-2">
+                        <span>{c.flag}</span>
+                        <span>{c.name}</span>
+                        <span className="text-zinc-500">· {fmtPct(c.corporateTaxRate)}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">
+                Taxable Income (USD)
+              </label>
+              <Input
+                type="number"
+                min={0}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="border-white/10 bg-white/[0.02] text-zinc-100"
+                placeholder="Enter income"
+              />
+            </div>
+
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">Deductions &amp; Adjustments</div>
+              <div className="space-y-2.5">
+                <ToggleRow
+                  label="Apply loss carry-forward"
+                  detail={position ? `${fmtUSD(position.lossCarryforward)} available` : 'No position data'}
+                  enabled={applyLossCf}
+                  onChange={setApplyLossCf}
+                  disabled={!position || position.lossCarryforward === 0}
+                  accent="amber"
+                />
+                <ToggleRow
+                  label="Apply tax credits"
+                  detail={position ? `${fmtUSD(position.taxCredits)} available` : 'No position data'}
+                  enabled={applyCredits}
+                  onChange={setApplyCredits}
+                  disabled={!position || position.taxCredits === 0}
+                  accent="cyan"
+                />
+                <ToggleRow
+                  label="Additional depreciation (Sec 32AD)"
+                  detail="20% extra on plant & machinery"
+                  enabled={applySpecialDep}
+                  onChange={setApplySpecialDep}
+                  accent="violet"
+                />
+              </div>
+            </div>
+
+            {/* Summary tiles */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+                <div className="text-[9px] uppercase tracking-wide text-emerald-300/80">Net Tax</div>
+                <div className="mt-0.5 text-sm font-semibold text-emerald-300">{fmtUSD(scenario.netTax)}</div>
+              </div>
+              <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.05] p-2.5">
+                <div className="text-[9px] uppercase tracking-wide text-teal-300/80">Effective Rate</div>
+                <div className="mt-0.5 text-sm font-semibold text-teal-300">{fmtPct(scenario.effectiveRate)}</div>
+              </div>
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.05] p-2.5">
+                <div className="text-[9px] uppercase tracking-wide text-violet-300/80">Savings</div>
+                <div className="mt-0.5 text-sm font-semibold text-violet-300">{fmtUSD(scenario.savings)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: step-by-step */}
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">Calculation Breakdown</div>
+              <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-400">
+                {scenario.steps.length} steps
+              </Badge>
+            </div>
+            <ScrollArea className="max-h-[380px] pr-2">
+              <div className="space-y-2">
+                <AnimatePresence>
+                  {scenario.steps.map((step, i) => (
+                    <motion.div
+                      key={`${step.label}-${i}`}
+                      layout
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: i * 0.05 }}
+                      className={`flex items-start gap-2.5 rounded-md border p-2.5 ${
+                        step.kind === 'minus'
+                          ? 'border-amber-500/20 bg-amber-500/[0.04]'
+                          : step.label.includes('Net Tax')
+                          ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+                          : 'border-white/[0.06] bg-white/[0.02]'
+                      }`}
+                    >
+                      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-mono font-semibold ${
+                        step.kind === 'minus'
+                          ? 'bg-amber-500/15 text-amber-300'
+                          : step.kind === 'plus'
+                          ? 'bg-emerald-500/15 text-emerald-300'
+                          : 'bg-white/[0.06] text-zinc-400'
+                      }`}>
+                        {i + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-200">{step.label}</span>
+                          <span className={`font-mono text-xs font-semibold ${
+                            step.kind === 'minus'
+                              ? 'text-amber-300'
+                              : step.label.includes('Net Tax')
+                              ? 'text-emerald-300'
+                              : 'text-zinc-300'
+                          }`}>
+                            {step.amount < 0 ? '-' : ''}{fmtUSD(Math.abs(step.amount))}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500">{step.detail}</div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </ScrollArea>
+
+            <Separator className="my-3 bg-white/[0.06]" />
+
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-zinc-400">Statutory vs Effective</span>
+              <span className="text-[11px] text-zinc-300">
+                <span className="text-zinc-500">{fmtPct(scenario.statutoryRate)}</span>
+                <ArrowRight className="mx-1 inline h-3 w-3 text-zinc-600" />
+                <span className="font-semibold text-emerald-300">{fmtPct(scenario.effectiveRate)}</span>
+                <span className="ml-2 inline-flex items-center gap-0.5 text-violet-300">
+                  <TrendingDown className="h-3 w-3" />
+                  {(scenario.statutoryRate - scenario.effectiveRate).toFixed(1)}pp saved
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ToggleRow({
+  label, detail, enabled, onChange, disabled, accent,
+}: {
+  label: string;
+  detail: string;
+  enabled: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  accent: 'amber' | 'cyan' | 'violet';
+}) {
+  const accentText: Record<typeof accent, string> = {
+    amber: 'text-amber-300',
+    cyan: 'text-cyan-300',
+    violet: 'text-violet-300',
+  };
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-medium text-zinc-200">{label}</div>
+        <div className={`text-[10px] ${disabled ? 'text-zinc-600' : accentText[accent]}`}>{detail}</div>
+      </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        className="data-[state=checked]:bg-emerald-500"
+      />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED — Transfer Pricing Calculator
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TransferPricingCalculator() {
+  const [country1, setCountry1] = useState<CountryCode>('IN');
+  const [country2, setCountry2] = useState<CountryCode>('SG');
+  const [transactionValue, setTransactionValue] = useState<string>('500000');
+  const [markup, setMarkup] = useState<string>('15');
+
+  const parsed = Number(transactionValue) || 0;
+  const markupPct = Number(markup) || 0;
+
+  const dtaa = useMemo(
+    () => DTAA_MATRIX.find(
+      (d) =>
+        (d.country1 === country1 && d.country2 === country2) ||
+        (d.country1 === country2 && d.country2 === country1),
+    ),
+    [country1, country2],
+  );
+
+  const armsLength = useMemo(() => {
+    // OECD-style arm's length range: median ± 5pp tolerance band
+    const low = markupPct - 5;
+    const mid = markupPct;
+    const high = markupPct + 5;
+    const baseCost = parsed / (1 + markupPct / 100);
+    const armLow = baseCost * (1 + Math.max(0, low) / 100);
+    const armMid = baseCost * (1 + mid / 100);
+    const armHigh = baseCost * (1 + high / 100);
+    return { low, mid, high, armLow, armMid, armHigh, baseCost };
+  }, [parsed, markupPct]);
+
+  const withholding = dtaa ? dtaa.withholdingTax : 0;
+  const whAmount = (parsed * withholding) / 100;
+  const c1 = getCountry(country1);
+  const c2 = getCountry(country2);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Network className="h-4 w-4 text-cyan-400" />
+          Transfer Pricing Calculator
+          <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+            OECD-aligned
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Compute arm&apos;s length range &amp; DTAA withholding implications for inter-company transactions.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">From Country</label>
+            <Select value={country1} onValueChange={(v) => setCountry1(v as CountryCode)}>
+              <SelectTrigger className="w-full border-white/10 bg-white/[0.02] text-zinc-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-white/10 bg-zinc-950 text-zinc-200">
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{c.flag}</span><span>{c.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">To Country</label>
+            <Select value={country2} onValueChange={(v) => setCountry2(v as CountryCode)}>
+              <SelectTrigger className="w-full border-white/10 bg-white/[0.02] text-zinc-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-white/10 bg-zinc-950 text-zinc-200">
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{c.flag}</span><span>{c.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Transaction Value (USD)</label>
+            <Input
+              type="number"
+              min={0}
+              value={transactionValue}
+              onChange={(e) => setTransactionValue(e.target.value)}
+              className="border-white/10 bg-white/[0.02] text-zinc-100"
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Markup %</label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={markup}
+              onChange={(e) => setMarkup(e.target.value)}
+              className="border-white/10 bg-white/[0.02] text-zinc-100"
+              placeholder="15"
+            />
+          </div>
+        </div>
+
+        {/* Country pair banner */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/20 p-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xl">{c1.flag}</span>
+            <span className="font-medium text-zinc-200">{c1.name}</span>
+            <ArrowRight className="h-4 w-4 text-zinc-500" />
+            <span className="text-xl">{c2.flag}</span>
+            <span className="font-medium text-zinc-200">{c2.name}</span>
+          </div>
+          {dtaa ? (
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+                {dtaa.ftaType}
+              </Badge>
+              <span className="text-zinc-400">Withholding: <span className="text-rose-300 font-mono">{dtaa.withholdingTax}%</span></span>
+              <span className="text-zinc-400">Dividend: <span className="text-amber-300 font-mono">{dtaa.dividendTax}%</span></span>
+              <span className="text-zinc-400">Interest: <span className="text-cyan-300 font-mono">{dtaa.interestTax}%</span></span>
+            </div>
+          ) : (
+            <Badge variant="outline" className="text-[9px] border-rose-500/30 bg-rose-500/10 text-rose-300">
+              No DTAA between these countries
+            </Badge>
+          )}
+        </div>
+
+        {/* Arm's length range */}
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-3">
+            <div className="text-[9px] uppercase tracking-wide text-amber-300/80">Quartile 1 (Low)</div>
+            <div className="mt-1 text-base font-semibold text-amber-300">{fmtUSD(armsLength.armLow)}</div>
+            <div className="text-[9px] text-zinc-500">markup {Math.max(0, armsLength.low).toFixed(1)}%</div>
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-3">
+            <div className="text-[9px] uppercase tracking-wide text-emerald-300/80">Median (Target)</div>
+            <div className="mt-1 text-base font-semibold text-emerald-300">{fmtUSD(armsLength.armMid)}</div>
+            <div className="text-[9px] text-zinc-500">markup {armsLength.mid.toFixed(1)}%</div>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.05] p-3">
+            <div className="text-[9px] uppercase tracking-wide text-teal-300/80">Quartile 3 (High)</div>
+            <div className="mt-1 text-base font-semibold text-teal-300">{fmtUSD(armsLength.armHigh)}</div>
+            <div className="text-[9px] text-zinc-500">markup {armsLength.high.toFixed(1)}%</div>
+          </div>
+        </div>
+
+        {/* Range visualization */}
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between text-[10px] text-zinc-500">
+            <span>Arm&apos;s Length Range</span>
+            <span>Tolerance band ±5pp</span>
+          </div>
+          <div className="relative h-3 w-full overflow-hidden rounded-full bg-black/40">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: '60%' }}
+              transition={{ duration: 0.6 }}
+              className="absolute left-[20%] h-full bg-gradient-to-r from-amber-500/60 via-emerald-500/60 to-teal-500/60"
+            />
+            <div
+              className="absolute top-0 h-full w-0.5 bg-emerald-300"
+              style={{ left: '50%' }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[9px] text-zinc-500">
+            <span>{fmtUSD(armsLength.armLow)}</span>
+            <span className="text-emerald-300">{fmtUSD(armsLength.armMid)} (your price)</span>
+            <span>{fmtUSD(armsLength.armHigh)}</span>
+          </div>
+        </div>
+
+        {/* Withholding impact */}
+        <Separator className="my-3 bg-white/[0.06]" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Base Cost</div>
+            <div className="mt-0.5 text-xs font-semibold text-zinc-200">{fmtUSD(armsLength.baseCost)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Markup Earned</div>
+            <div className="mt-0.5 text-xs font-semibold text-emerald-300">{fmtUSD(parsed - armsLength.baseCost)}</div>
+          </div>
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-rose-300/80">Withholding @ {withholding}%</div>
+            <div className="mt-0.5 text-xs font-semibold text-rose-300">{fmtUSD(whAmount)}</div>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-violet-300/80">Net Receivable</div>
+            <div className="mt-0.5 text-xs font-semibold text-violet-300">{fmtUSD(parsed - whAmount)}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED — Tax Loss Carryforward Tracker
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function LossCarryforwardTracker() {
+  const totals = useMemo(() => {
+    const totalLoss = TAX_POSITIONS.reduce((s, p) => s + p.lossCarryforward, 0);
+    const totalCredits = TAX_POSITIONS.reduce((s, p) => s + p.taxCredits, 0);
+    const totalSavings = TAX_POSITIONS.reduce((s, p) => {
+      const country = getCountry(p.country);
+      const statutory = (p.taxableIncome * country.corporateTaxRate) / 100;
+      return s + (statutory - p.netTax);
+    }, 0);
+    return { totalLoss, totalCredits, totalSavings };
+  }, []);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PiggyBank className="h-4 w-4 text-amber-400" />
+              Tax Loss Carry-forward Tracker
+              <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-300">
+                {TAX_POSITIONS.length} entities
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Track loss carry-forwards &amp; tax credits per entity — see effective rate vs statutory &amp; cumulative savings.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-300">
+              Loss CF: {fmtUSD(totals.totalLoss)}
+            </Badge>
+            <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+              Credits: {fmtUSD(totals.totalCredits)}
+            </Badge>
+            <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+              Total Saved: {fmtUSD(totals.totalSavings)}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="max-h-[440px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Entity</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Taxable Income</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Loss Carry-fwd</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Tax Credits</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Eff. Rate</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Stat. Rate</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Savings</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {TAX_POSITIONS.map((p) => {
+                const country = getCountry(p.country);
+                const statutory = (p.taxableIncome * country.corporateTaxRate) / 100;
+                const savings = statutory - p.netTax;
+                const deltaPp = country.corporateTaxRate - p.effectiveRate;
+                return (
+                  <TableRow key={p.country} className="border-white/[0.04] hover:bg-white/[0.02]">
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{country.flag}</span>
+                        <div>
+                          <div className="text-xs font-medium text-zinc-200">{p.entity}</div>
+                          <div className="text-[9px] text-zinc-500">{p.country} · {country.currency}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-zinc-300">{fmtUSD(p.taxableIncome)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`text-[11px] font-mono ${p.lossCarryforward > 0 ? 'text-amber-300' : 'text-zinc-600'}`}>
+                        {fmtUSD(p.lossCarryforward)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`text-[11px] font-mono ${p.taxCredits > 0 ? 'text-cyan-300' : 'text-zinc-600'}`}>
+                        {fmtUSD(p.taxCredits)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-emerald-300">{fmtPct(p.effectiveRate)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-zinc-400">{fmtPct(country.corporateTaxRate)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <span className="text-[11px] font-mono text-violet-300">{fmtUSD(savings)}</span>
+                        <Badge variant="outline" className="text-[9px] border-emerald-500/20 bg-emerald-500/5 text-emerald-300">
+                          <TrendingDown className="mr-0.5 h-2 w-2" />
+                          {deltaPp.toFixed(1)}pp
+                        </Badge>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED — Tax Calendar (filtered to tax-related)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PRIORITY_BADGE: Record<'critical' | 'high' | 'medium' | 'low', string> = {
+  critical: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
+  high: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+  medium: 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300',
+  low: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+};
+
+function daysLeftBadgeClass(daysLeft: number): string {
+  if (daysLeft <= 7) return 'border-rose-500/50 bg-rose-500/20 text-rose-200';
+  if (daysLeft <= 21) return 'border-amber-500/50 bg-amber-500/20 text-amber-200';
+  if (daysLeft <= 45) return 'border-cyan-500/50 bg-cyan-500/20 text-cyan-200';
+  return 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300';
+}
+
+function TaxCalendar() {
+  const taxFilings = useMemo(
+    () => [...FILING_DEADLINES].sort((a, b) => a.daysLeft - b.daysLeft),
+    [],
+  );
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <AlarmClock className="h-4 w-4 text-rose-400" />
+          Tax Filing Calendar
+          <Badge variant="outline" className="text-[9px] border-rose-500/30 bg-rose-500/10 text-rose-300">
+            {taxFilings.length} filings
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          All tax-related regulatory filings sorted by days remaining.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="max-h-[440px] pr-2">
+          <div className="space-y-2">
+            {taxFilings.map((f, i) => {
+              const country = getCountry(f.country);
+              return (
+                <motion.div
+                  key={f.id}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.02 }}
+                  className={`flex items-center gap-3 rounded-lg border p-2.5 hover:bg-white/[0.03] ${
+                    f.priority === 'critical' ? 'border-rose-500/20 bg-rose-500/[0.03]' : 'border-white/[0.06] bg-white/[0.02]'
+                  }`}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-black/30 text-sm">
+                    {country?.flag ?? '🏳️'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-zinc-100">{f.form}</span>
+                      <Badge variant="outline" className={`text-[9px] ${PRIORITY_BADGE[f.priority]}`}>{f.priority}</Badge>
+                    </div>
+                    <div className="truncate text-[10px] text-zinc-500">{f.description}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className={`text-[10px] font-mono ${daysLeftBadgeClass(f.daysLeft)}`}>
+                      {f.status === 'filed' ? 'Filed' : `${f.daysLeft}d`}
+                    </Badge>
+                    <span className="text-[10px] text-zinc-500 hidden sm:inline">{f.dueDate}</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED — Tax Optimization Recommendations
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface TaxRec {
+  country: CountryCode;
+  title: string;
+  body: string;
+  impact: 'high' | 'medium' | 'low';
+  saving: string;
+  icon: LucideIcon;
+  section?: string;
+}
+
+const TAX_RECS: TaxRec[] = [
+  { country: 'IN', title: 'Claim Additional Depreciation (Section 32AD)', body: 'Acquire new plant & machinery before FY end to claim 20% additional depreciation under Section 32AD of the Income Tax Act.', impact: 'high', saving: '₹2.4Cr/yr', icon: TrendingDown, section: 'Sec 32AD' },
+  { country: 'IN', title: 'Set off losses against capital gains', body: 'Carry-forward of STCG losses (2-year) and LTCG losses (8-year) — file ITR within due date to preserve entitlement.', impact: 'medium', saving: '₹84L', icon: PiggyBank, section: 'Sec 74' },
+  { country: 'SG', title: 'Utilize Pioneer Industry Incentive', body: 'Qualifying pioneer activities receive up to 15% tax exemption for 5 years — apply via EDB before fiscal year end.', impact: 'high', saving: 'S$420K/yr', icon: Lightbulb, section: 'Pioneer Scheme' },
+  { country: 'SG', title: 'R&D Tax Deduction (Section 14D)', body: '250% deduction on qualifying R&D expenditure — including staff costs, consumables & outsourced R&D.', impact: 'high', saving: 'S$310K', icon: Brain, section: 'Sec 14D' },
+  { country: 'AE', title: 'Small Business Relief (9% CT)', body: 'First AED 375,000 of taxable income is taxed at 0% — structure profits to maximize relief across entities.', impact: 'medium', saving: 'AED 33,750', icon: Percent, section: 'CT Law Art. 4' },
+  { country: 'GB', title: 'UK R&D SME Tax Credit', body: '186% enhancement on qualifying R&D expenditure for SMEs — payable credit at 10% if loss-making.', impact: 'high', saving: '£78K', icon: Lightbulb, section: 'R&D SME' },
+  { country: 'GB', title: 'Patent Box (10% rate)', body: 'Elect into Patent Box regime to apply 10% corporation tax to profits attributable to patented inventions.', impact: 'high', saving: '£42K/yr', icon: Scale, section: 'Patent Box' },
+  { country: 'US', title: 'R&D Tax Credit (IRC §41)', body: '20% credit on qualified research expenditures above base amount — alternatively 14% simplified credit.', impact: 'high', saving: '$94K', icon: Brain, section: 'IRC §41' },
+  { country: 'US', title: 'Section 179 Expensing', body: 'Deduct full cost of qualifying equipment (up to $1.16M) in year of purchase rather than depreciating over time.', impact: 'medium', saving: '$38K', icon: TrendingDown, section: 'IRC §179' },
+  { country: 'DE', title: 'Investitionsabzugsbetrag (IAB)', body: 'Tax-reserved deduction up to €200K for planned investments in movable assets — SME benefit under §7g EStG.', impact: 'medium', saving: '€58K', icon: PiggyBank, section: '§7g EStG' },
+  { country: 'FR', title: 'Crédit d&apos;Impôt Recherche (CIR)', body: '30% credit on R&D up to €100M, 5% above — refundable for SMEs and young innovative companies.', impact: 'high', saving: '€72K', icon: Lightbulb, section: 'CIR' },
+  { country: 'AU', title: 'Instant Asset Write-off', body: 'Deduct full cost of eligible depreciating assets below threshold immediately — currently $20K per asset.', impact: 'medium', saving: 'A$24K', icon: TrendingDown, section: 'ITAA 1997' },
+  { country: 'JP', title: 'SME Tax Reduction (中堅企業)', body: 'Reduced corporate tax rate (15%) on first ¥8M of income for SMEs with capital ≤ ¥100M.', impact: 'medium', saving: '¥2.4M', icon: Percent, section: '法人税法' },
+  { country: 'CA', title: 'SR&ED Tax Credit', body: '35% refundable credit on qualifying R&D for CCPCs (Canadian-Controlled Private Corps), 15% non-refundable for others.', impact: 'high', saving: 'C$48K', icon: Brain, section: 'SR&ED' },
+];
+
+const REC_IMPACT_STYLE: Record<TaxRec['impact'], { ring: string; text: string; dot: string }> = {
+  high: { ring: 'border-rose-500/30 bg-rose-500/[0.06]', text: 'text-rose-300', dot: 'bg-rose-400' },
+  medium: { ring: 'border-amber-500/30 bg-amber-500/[0.06]', text: 'text-amber-300', dot: 'bg-amber-400' },
+  low: { ring: 'border-teal-500/30 bg-teal-500/[0.06]', text: 'text-teal-300', dot: 'bg-teal-400' },
+};
+
+function OptimizationRecommendations() {
+  const [filter, setFilter] = useState<'ALL' | CountryCode>('ALL');
+  const filtered = filter === 'ALL' ? TAX_RECS : TAX_RECS.filter((r) => r.country === filter);
+  const totalSavingsCount = filtered.length;
+  const highImpact = filtered.filter((r) => r.impact === 'high').length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Brain className="h-4 w-4 text-violet-400" />
+              Tax Optimization Recommendations
+              <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+                AI-driven · {totalSavingsCount}
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Country-specific tax incentives, deductions &amp; credits — ranked by potential impact.
+            </p>
+          </div>
+          <Select value={filter} onValueChange={(v) => setFilter(v as 'ALL' | CountryCode)}>
+            <SelectTrigger className="w-[180px] border-white/10 bg-white/[0.02] text-zinc-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 bg-zinc-950 text-zinc-200">
+              <SelectItem value="ALL">All Countries</SelectItem>
+              {[...new Set(TAX_RECS.map((r) => r.country))].map((cc) => {
+                const c = getCountry(cc);
+                return (
+                  <SelectItem key={cc} value={cc}>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{c.flag}</span><span>{c.name}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="max-h-[520px] pr-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((r, i) => {
+                const style = REC_IMPACT_STYLE[r.impact];
+                const country = getCountry(r.country);
+                const Icon = r.icon;
+                return (
+                  <motion.div
+                    key={`${r.country}-${r.title}`}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
+                    transition={{ duration: 0.3, delay: i * 0.03 }}
+                    className={`rounded-xl border p-3 ${style.ring}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-black/30 text-base">
+                          {country.flag}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className={`text-[9px] uppercase ${style.ring} ${style.text}`}>
+                              <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                              {r.impact}
+                            </Badge>
+                            {r.section && (
+                              <span className="font-mono text-[9px] text-zinc-500">{r.section}</span>
+                            )}
+                          </div>
+                          <div className="mt-1 text-xs font-semibold text-zinc-100">{r.title}</div>
+                        </div>
+                      </div>
+                      <Icon className={`h-4 w-4 shrink-0 ${style.text}`} />
+                    </div>
+                    <p className="mt-2 text-[11px] leading-snug text-zinc-400">{r.body}</p>
+                    <Separator className="my-2 bg-white/[0.06]" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-zinc-500">{country.name}</span>
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${style.text}`}>
+                        <TrendingDown className="h-3 w-3" /> {r.saving}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </ScrollArea>
+        <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-500">
+          <span className="inline-flex items-center gap-1.5">
+            <Lightbulb className="h-3 w-3 text-violet-400" />
+            {highImpact} high-impact recommendations across {filter === 'ALL' ? COUNTRIES.length : 1} {filter === 'ALL' ? 'jurisdictions' : 'jurisdiction'}
+          </span>
+          <span className="text-zinc-500">Oracle™ AI Advisor</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export default function MultiTaxEngine() {
+  const [sectionTab, setSectionTab] = useState<'simulator' | 'tp' | 'loss' | 'calendar' | 'recs'>('simulator');
+
   return (
     <div className="min-h-screen w-full bg-zinc-950 text-zinc-100">
       {/* Ambient glow */}
@@ -473,7 +1337,7 @@ export default function MultiTaxEngine() {
               Multi-Tax Engine<span className="text-emerald-400">™</span>
             </h1>
             <p className="text-sm text-zinc-400">
-              GST, VAT, Sales Tax & Consumption Tax unified — calculate, compare & file across every jurisdiction.
+              GST, VAT, Sales Tax &amp; Consumption Tax unified — simulate scenarios, transfer pricing, loss tracking &amp; AI recommendations.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -508,14 +1372,61 @@ export default function MultiTaxEngine() {
           <ComparisonMatrix />
         </section>
 
+        {/* ─── Deep Dives: tabbed enterprise sections ─────────────────────────── */}
+        <section className="mt-6">
+          <TooltipProvider delayDuration={200}>
+            <Tabs value={sectionTab} onValueChange={(v) => setSectionTab(v as typeof sectionTab)}>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-teal-400" />
+                  <h2 className="text-sm font-semibold text-zinc-200">Tax Engineering Deep Dives</h2>
+                </div>
+                <TabsList className="bg-white/[0.03] h-9 overflow-x-auto">
+                  <TabsTrigger value="simulator" className="text-[11px]">
+                    <Workflow className="mr-1 h-3 w-3" /> Scenario Simulator
+                  </TabsTrigger>
+                  <TabsTrigger value="tp" className="text-[11px]">
+                    <Network className="mr-1 h-3 w-3" /> Transfer Pricing
+                  </TabsTrigger>
+                  <TabsTrigger value="loss" className="text-[11px]">
+                    <PiggyBank className="mr-1 h-3 w-3" /> Loss Tracker
+                  </TabsTrigger>
+                  <TabsTrigger value="calendar" className="text-[11px]">
+                    <AlarmClock className="mr-1 h-3 w-3" /> Tax Calendar
+                  </TabsTrigger>
+                  <TabsTrigger value="recs" className="text-[11px]">
+                    <Brain className="mr-1 h-3 w-3" /> Optimization
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="simulator" className="mt-0">
+                <TaxScenarioSimulator />
+              </TabsContent>
+              <TabsContent value="tp" className="mt-0">
+                <TransferPricingCalculator />
+              </TabsContent>
+              <TabsContent value="loss" className="mt-0">
+                <LossCarryforwardTracker />
+              </TabsContent>
+              <TabsContent value="calendar" className="mt-0">
+                <TaxCalendar />
+              </TabsContent>
+              <TabsContent value="recs" className="mt-0">
+                <OptimizationRecommendations />
+              </TabsContent>
+            </Tabs>
+          </TooltipProvider>
+        </section>
+
         {/* ─── Footer ─────────────────────────────────────────────────────────── */}
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 border-t border-white/[0.06] pt-4 text-[10px] text-zinc-500 sm:flex-row">
           <div className="flex items-center gap-2">
             <Gauge className="h-3 w-3 text-emerald-400" />
-            Multi-Tax Engine™ · Phase 14 · {TAX_SYSTEMS.length} systems · {COUNTRIES.length} jurisdictions
+            Multi-Tax Engine™ · Phase 14 · {TAX_SYSTEMS.length} systems · {COUNTRIES.length} jurisdictions · {TAX_RECS.length} recommendations
           </div>
           <div className="flex items-center gap-2">
-            <Sparkles className="h-3 w-3 text-teal-400" /> Founder & Owner: Prince Singh
+            <Sparkles className="h-3 w-3 text-teal-400" /> Founder &amp; Owner: Prince Singh
           </div>
         </footer>
       </div>

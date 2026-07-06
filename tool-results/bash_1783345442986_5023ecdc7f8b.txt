@@ -1,0 +1,200 @@
+    - Tasks: 4-column Kanban (To Do/In Progress/Review/Done) with task cards showing priority badge, tags, assignee avatar, due date, comment/mention counts.
+    - Chat: channel list (selectable, unread badges) + message thread with avatars, AI Copilot badge, reactions, animated "AI Copilot is typing..." indicator, message input.
+    - Activity: timeline with type-colored left borders (approval=emerald, comment=cyan, mention=amber, filing=teal, payment=violet, document=slate, ai-alert=rose).
+  * RIGHT col: Live indicator cards — Active Now (animated pulse), Workspace Pulse (4-cell stats grid), Real-Time Sync (static green WebSocket dot + latency/events/uptime), Quick Channels.
+- Built /home/z/my-project/src/components/enterprise-network/WorkflowEngine.tsx (557 lines):
+  * Header + 5-card stats row (Pending, In Review, Approved Today, Rejected Today, Avg Approval Time) computed from WORKFLOW_APPROVALS.
+  * Filter bar with 9 type tabs (All + 8 types) using horizontally-scrollable TabsList.
+  * Approval queue: rich cards with type icon, priority badge, title, description, amount (fmtINR or "—"), company, submitter avatar, submitted time, horizontal approval chain visualization (avatars with status rings, animated in-review pulse, approve/reject/check icons), "Level X of Y" label, action buttons (Approve emerald / Reject red outline / View Details ghost) with toast feedback via useToast.
+  * Sidebar: Workflow Templates card listing 8 configured chains (e.g., "Invoice > ₹10L: Accountant → Finance Manager → CFO") + Approver Status Legend card.
+- Ran ESLint on both new files — clean (no errors or warnings). Verified dev server still serving / on port 3000.
+- Both components use 'use client', framer-motion (motion.div + AnimatePresence), lucide-react icons, dark theme (border-white/[0.06] bg-white/[0.02], emerald/teal/cyan accents, NO indigo/blue), responsive grid collapse on mobile, ScrollArea with max-h-* overflow for long lists.
+
+Stage Summary:
+- 2 polished interactive React components delivered for Phase 13 Enterprise Collaboration module.
+- TeamCollaboration.tsx (702 lines): team presence + tabbed Tasks/Chat/Activity hub with live indicators.
+- WorkflowEngine.tsx (557 lines): multi-level approval workflow engine with filterable queue, animated approval chains, approve/reject toasts, and workflow templates reference.
+- All data sourced statically from @/lib/enterprise/data; no API calls; no Math.random.
+- ESLint clean; components already wired into page.tsx routing (cases 'team-collaboration' → TeamCollaborationPage, 'workflow-engine' → WorkflowEnginePage).
+
+---
+Task ID: P13-FINAL
+Agent: main (Z.ai Code)
+Task: Fix preview not showing + complete Phase 13 discoverability wiring
+
+Work Log:
+- Investigated "preview is not seeing" report: dev server had died (HTTP 000, connection refused). Root cause = OOM kills in the 4GB cgroup sandbox. The webpack compile of the 990-line page.tsx (80+ dynamic imports) spikes memory to the 4GB limit, and any concurrent memory pressure (chromium, eslint, rapid successive requests) tips the OOM killer.
+- Tried swap creation — denied (no root). Tried drop_caches — denied (read-only). 
+- Found the stable configuration: NODE_OPTIONS=--max-old-space-size=1800, --webpack (not turbopack), and CRITICAL: no concurrent chromium/eslint while server is compiling. Server compiles `/` in ~38s on first hit, then serves cached in ~120ms. Server survives multiple requests when nothing else competes for memory.
+- Restarted dev server cleanly (killed all orphan chrome processes first to free 3.5GB). Pre-warmed the `/` compile. Server now stable: PID 28955, RSS 74MB, HTTP 200.
+- Fixed pre-existing lint error in CrossCompanyAnalytics.tsx (line 196): useMemo dependency array was [selectedMetricKey] but body referenced selectedMetric.key — changed to [selectedMetric] to match. React Compiler was rejecting the manual memoization.
+- DISCOVERABILITY GAP: All 11 Phase 13 components were built by prior agents (P13-4A/4B) and wired into page.tsx routes + AppView type, but were NOT registered in the CommandPalette — meaning users had NO way to navigate to them (the LeftNav uses a minimal 6-item design, everything else is via ⌘K Command Palette).
+- Added all 11 Phase 13 commands to CommandPalette.tsx under a new "Phase 13 — Enterprise" group:
+  • enterprise-command-center (LayoutDashboard icon)
+  • multi-company-workspace (Layers icon)
+  • team-collaboration (Users icon)
+  • workflow-engine (GitBranch icon)
+  • enterprise-documents (FolderOpen icon)
+  • executive-calendar (Calendar icon)
+  • enterprise-search (Search icon)
+  • enterprise-notifications (Bell icon)
+  • advanced-rbac (ShieldCheck icon)
+  • cross-company-analytics (BarChart3 icon)
+  • enterprise-audit (ScrollText icon)
+- Each command has a rich description, correct icon, setCurrentView action, and addToRecent tracking — matching the existing command pattern.
+- Added 6 new icon imports to CommandPalette.tsx: ShieldCheck, Calendar, Network, GitBranch, ScrollText, Layers, LayoutDashboard.
+- Ran `npx eslint` on all modified files (CommandPalette.tsx, CrossCompanyAnalytics.tsx) and the entire src/components/enterprise-network/ folder — ALL CLEAN (0 errors, 0 warnings).
+
+Stage Summary:
+- PREVIEW FIXED: Dev server restarted with memory-safe config (1800MB heap, webpack, no concurrent heavy processes). Serving HTTP 200 on port 3000. First load ~38s (webpack compile), cached loads ~120ms.
+- PHASE 13 COMPLETE: All 11 enterprise components built, wired into routes, typed in AppView, and NOW discoverable via the ⌘K Command Palette under "Phase 13 — Enterprise" group. Users can finally navigate to every Phase 13 feature.
+- LINT CLEAN: 0 errors across all Phase 13 files + CommandPalette.
+- No UI redesigned, no features removed, no branding changed — pure platform upgrade as instructed.
+
+---
+Task ID: PREVIEW-FIX
+Agent: main (Z.ai Code)
+Task: Fix preview panel showing blank — dev server keeps dying in 4GB sandbox
+
+Work Log:
+- User reported preview still blank. Analyzed screenshot with VLM skill — confirmed blank white preview panel, no error/spinner.
+- Root cause: dev server process kept dying (OOM killed in 4GB cgroup). Every prior restart would compile successfully once, then die on subsequent requests, leaving the preview panel with nothing to load.
+- Tried bash watchdog (dev-watchdog.sh with nohup+disown) — the watchdog process itself kept dying (process group killed when shell exits).
+- SOLUTION: Rewrote start-dev-daemon.py as a proper double-fork Unix daemon (os.fork → os.setsid → os.fork) with an infinite auto-restart loop using os.spawnvpe. This creates a truly detached daemon session that survives shell exit and auto-restarts `next dev` whenever it dies.
+- Launched daemon: python3 start-dev-daemon.py → daemon PID 29430 (watchdog) + 29431 (next dev).
+- Pre-warmed compile: HTTP 200 in 40s. Content verified: title "GSTPilot™ — The Financial Brain of India", 31KB HTML rendered, "GSTPilot" + "Infinity" strings present.
+- Subsequent cached loads: HTTP 200 in 78ms-610ms. Server stable across multiple requests.
+- Both daemon and server confirmed alive after 5s settle.
+
+Stage Summary:
+- PREVIEW FIXED: Dev server now runs under a double-fork auto-restart watchdog daemon. If the server ever dies (OOM), the watchdog restarts it in 3 seconds. The preview panel will now reliably load.
+- Server: PID 29431, port 3000, HTTP 200, content verified.
+- Watchdog: PID 29430, auto-restarts server on exit.
+- Configuration: NODE_OPTIONS=--max-old-space-size=1800, webpack mode (not turbopack), port 3000.
+
+---
+Task ID: P14-BATCH1
+Agent: full-stack-developer
+Task: Build MultiCountryAccounting + MultiTaxEngine + MultiCurrencySystem + InternationalBanking components
+
+Work Log:
+- Read worklog.md and full Phase 14 data layer at src/lib/global/data.ts (COUNTRIES, CURRENCIES, TAX_SYSTEMS, BANK_INTEGRATIONS, EXCHANGE_RATE_HISTORY, calculateTax, convertCurrency, fmtUSD, fmtPct, getCountry) to understand types & helpers
+- Studied existing Phase 13 enterprise-network dark-theme aesthetic (border-white/[0.06], bg-white/[0.02], emerald/teal/cyan/violet accents, framer-motion entrance, "Live" pulse badges, Gauge header pill, founder footer "Prince Singh") via EnterpriseCommandCenter.tsx
+- Verified shadcn/ui components present (Card, Badge, Button, Select, Input, Table, Progress, Separator, ScrollArea, Tabs, Dialog, Avatar) and that global-expansion/ folder needed creating
+- Built src/components/global-expansion/MultiCountryAccounting.tsx:
+  - 'use client' header with Phase 14 pill + "Multi-Country Accounting™" title
+  - Country filter Select (All + 10 countries with flags)
+  - 4 KPI tiles (Countries Active=10, Total Orgs computed, Avg Compliance weighted, Combined Tax Liability summed) using emerald/teal/cyan/violet accent rings
+  - Country cards grid (1/2/3/4 cols responsive) — flag, name, code/currency/tz, tax system badge w/ dot, primary+corporate rates, revenue/expenses/tax liability/orgs, compliance/growth/risk ScoreBars, compliance body chips, FY start
+  - Clickable cards open Dialog modal with: 4 RuleTiles (fiscal year, payroll tax, import/export duty), language + primary tax cards, 5-cell tax structure grid, compliance body badges, financial snapshot panel
+  - AnimatePresence transitions throughout, motion.div entrance animations (opacity:0 y:8 → opacity:1 y:0)
+- Built src/components/global-expansion/MultiTaxEngine.tsx:
+  - Header with system/jurisdiction count badges
+  - 4 TaxSystemCards (GST/VAT/Sales Tax/Consumption Tax) each with accent ring, description, country flag chips, standard/reduced/zero rate cells, feature list with check icons
+  - Interactive TaxCalculator Card: Select country, Select tax type (indirect/corporate/payroll/import/export), Input amount → calculateTax() returns breakdown shown in 4 tiles (base, rate, tax amount, total) with AnimatePresence re-animating on input change + composition bar (base vs tax)
+  - ComparisonMatrix Card using shadcn Table: countries × 5 tax types rate matrix with color-coded rates (0=slate, ≥20=rose, ≥10=amber, <10=emerald) and per-country average column, ScrollArea max-h-480px
+- Built src/components/global-expansion/MultiCurrencySystem.tsx:
+  - Header with "Live Rates" badge containing animate-ping emerald dot + Radio icon + "Updated 2s ago" badge
+  - 4 KPI tiles (active currencies, gaining vs USD, losing vs USD, base currency USD)
+  - Currency cards grid (9 currencies): flag, code/symbol, name, supported badge (emerald), rate-to-USD, 24h change with trend icon (emerald+/rose-), mini rate visualization bar
+  - Interactive CurrencyConverter Card: From select, swap button (rounded emerald), To select, amount input → convertCurrency() displays converted amount in emerald-tinted output box; mid-market rate, inverse rate, USD equivalent shown in 3 stat tiles
+  - ExchangeRateChart Card: pure SVG line chart with 4 series (USD→INR/EUR/GBP/JPY) over 6 months (Apr-Sep), each normalized to own min/max range, animated pathLength draw-in + dot scale-in, area fills, grid lines, x-axis month labels, color legend with current values, plus 4-tile stats grid below with 6-mo % change
+- Built src/components/global-expansion/InternationalBanking.tsx:
+  - Header with "7 Connected" badge (animate-ping emerald dot) + total count badge
+  - 4 KPI tiles (Total Connected, Total Volume via fmtUSD, Total Transactions, Avg Fees — parsed from % strings in fee data)
+  - Filter Tabs (All/Connected/Available/Coming Soon) with live count chips in each tab
+  - Bank integration cards grid: colored logo letter circle, name, type badge, status badge (connected=emerald, available=amber, coming-soon=slate), region w/ globe icon, country flag row, 3-cell stats (tx count, volume, fees), feature chips
+  - Connected banks get emerald ring + "Active integration" indicator; available banks get dashed amber "Connect" button; coming-soon get "Pending integration" with Plug icon
+  - 3-card compliance strip below grid: PCI DSS L1, SWIFT/SEPA/UPI, Multi-Currency Treasury
+  - COLOR_MAP maps data-layer "blue" color to teal-safe accent to honor NO indigo/blue rule
+- Ran `npx eslint` on all 4 files — EXIT_CODE=0 (0 errors, 0 warnings)
+- Cleaned up 3 unused icon imports (TrendingUp, TrendingDown, ArrowRightLeft) from MultiCountryAccounting.tsx; re-ran eslint → still EXIT_CODE=0
+- Verified dev server still running cleanly on port 3000 (dev.log shows 200s on /)
+
+Stage Summary:
+- 4 production-ready global expansion components delivered in src/components/global-expansion/: MultiCountryAccounting.tsx, MultiTaxEngine.tsx, MultiCurrencySystem.tsx, InternationalBanking.tsx
+- All components: 'use client', default export, no props, no API calls, no Math.random — pure static data from @/lib/global/data
+- Visual system matches Phase 13 enterprise-network dark theme: bg-zinc-950 + ambient emerald/teal glows, border-white/[0.06] cards, bg-white/[0.02] surfaces, emerald/teal/cyan/violet accents (zero indigo/blue), framer-motion entrance animations, lucide-react icons throughout
+- Responsive grids (1→2→3→4 cols), ScrollArea with max-h-* for long lists, accessible (semantic main/header/footer, keyboard-clickable cards, ARIA labels on swap button)
+- Interactive features: country filter, clickable country cards opening detail Dialog, live tax calculator, currency converter with swap, 4-series SVG exchange-rate chart, bank status filter tabs
+- All ESLint checks pass with 0 errors
+
+---
+Task ID: P14-BATCH3
+Agent: full-stack-developer
+Task: Build GlobalDashboard + CrossBorderPayments + InternationalReports + GlobalPerformance components
+
+Work Log:
+- Read /home/z/my-project/worklog.md tail to absorb prior context: Phase 13 enterprise components (P13-4A/4B/FINAL) already established the dark-theme aesthetic (bg-white/[0.02], border-white/[0.06], emerald/teal/cyan accents, framer-motion entrance animations, lucide-react icons, ScrollArea with max-h-* overflow, useToast for action feedback). Dev server running as double-fork daemon on port 3000 with webpack mode (1800MB heap, 4GB cgroup sandbox).
+- Read /home/z/my-project/src/lib/global/data.ts (717 lines) to inventory every available export: COUNTRIES (10 with revenue/expenses/taxLiability/growthScore/riskScore/complianceScore in mixed local currencies), CURRENCIES (9 with rateToUSD), convertCurrency, formatCurrency, TAX_SYSTEMS, calculateTax, BANK_INTEGRATIONS, COMPLIANCE_FRAMEWORKS, WAREHOUSES, INTERNATIONAL_POS, LANGUAGES, AI_ADVISOR_INSIGHTS, CROSS_BORDER_PAYMENTS (8 records), GLOBAL_REPORTS (8 records), GLOBAL_KPIS (12 numeric KPIs), EXCHANGE_RATE_HISTORY (6 months USD→INR/EUR/GBP/JPY), helpers fmtUSD/fmtINR/fmtPct/statusColor/getCountry.
+- Verified src/components/global-expansion/ folder did NOT yet exist; created it with mkdir -p.
+- Confirmed cn() helper exists at src/lib/utils.ts and all required shadcn/ui primitives (Card, Badge, Button, ScrollArea, Separator, Progress, Tabs, Table, Avatar) exist in src/components/ui/.
+- Confirmed useToast hook exists at @/hooks/use-toast.
+- Built GlobalDashboard.tsx (~420 lines): 'use client' directive; header with "Global Dashboard™" + subtitle + "10 Countries" badge + "9 Currencies" + "91% Compliant" badges; 6 KPI tiles (Total Revenue/Expenses/Net Cash Flow/Tax Liability/Exchange Gain-Loss/Cross-Border Volume) each with icon, value via fmtUSD, sub-label, trend indicator (ArrowUpRight/ArrowDownRight/Activity); Country Revenue Breakdown using pure-CSS horizontal bars — each country's local-currency revenue converted to USD via convertCurrency() for fair comparison, sorted descending, animated bar widths as % of max; Regional KPI cards for APAC (IN/SG/AU/JP), EMEA (GB/DE/FR/AE), Americas (US/CA) — each card shows regional revenue/expenses/tax/avg growth/avg compliance/avg risk computed via reduce(); Exchange Rate Trends using EXCHANGE_RATE_HISTORY with two FxMiniChart components (USD→INR emerald, USD→EUR teal) showing 6-month mini bar charts with delta %; Oracle™ AI Summary callout card with branded gradient, top performer (highest growthScore via reduce), best compliance (highest complianceScore via reduce), at-risk regions (filter riskScore >= 25), and recommended actions pills.
+- Built CrossBorderPayments.tsx (~410 lines): 'use client' directive; header with "Cross-Border Payments™" + subtitle + green "Live" badge with animated ping dot + transaction count badge; 5 KPI tiles (Total Volume via sum amountUSD, Inbound Volume, Outbound Volume, Total Fees, Avg FX Rate) computed via useMemo reduce; Direction filter tabs (All/Inbound/Outbound) with live counts; secondary Type filter (All/Invoice/Collection/Payout/Reconciliation) with live counts; Payments table from CROSS_BORDER_PAYMENTS with 11 columns — reference (mono), type badge (color per type), direction arrow using FlagArrow helper (from flag → to flag), counterparty, amount + currency (fmtCurrencyValue helper), amountUSD (emerald), method, status badge (color via statusColor()), fxRate (cyan mono), fees (rose mono), date; AnimatePresence with layout for filtered list transitions; Flow visualization panel showing top corridors aggregated by from→to pair via Map, sorted by volume desc, each with flag pair + animated bar + transaction count + % of total.
+- Built InternationalReports.tsx (~380 lines): 'use client' directive; header with "International Reports™" + subtitle + Ready/Generating/Scheduled status badges; "Generate New Report" CTA card at the top with emerald→cyan gradient, Plus icon, AI-Assisted badge, motion.button with toast feedback; 4 KPI tiles (Total/Ready/Generating/Scheduled) computed from GLOBAL_REPORTS; Category filter tabs (All/Country/Currency/Cash Flow/P&L/Regional/Tax) with live counts via categoryCounts memo; Reports table from GLOBAL_REPORTS — name (with format icon), category badge (color per category), scope, period, generatedOn, format badge (PDF=rose, XLSX=emerald, CSV=cyan), status badge (color via statusColor() with CheckCircle2/Loader2-spin/Clock icons); action buttons per row — Download (emerald, disabled unless status='ready'), Regenerate (cyan), Schedule (violet), each with toast feedback via useToast; AnimatePresence with layout for filtered transitions.
+- Built GlobalPerformance.tsx (~470 lines): 'use client' directive; header with "Global Performance™" + subtitle + "Enterprise-Grade" badge + 99.99% Uptime + 12 CDN Regions badges; Scale Metrics row of 6 cards (Organizations 100,000+, Invoices Billions, Concurrent Users 10,000+, Uptime SLA 99.99%, API Latency <50ms, CDN Regions 12); Architecture visualization as 4 layered horizontal bands — Edge CDN (8 nodes: US-East/West, EU-West/Central, AP-South/SE/NE, ME-Central), API Gateway (REST/GraphQL/WebSocket/Webhooks), Microservices (Auth/Tax Engine/Payment/Compliance/AI Oracle), Data Layer (Primary DB/Read Replicas/Cache/Search/Object Store) — each band with icon, name, subtitle, node chips, layer number badge; request flow indicator below; Performance Metrics table with 8 endpoints (GET/POST mixed) showing avg latency, p99 latency, RPS, error rate — color-coded via latencyColor() and errorRateColor() helpers; Scaling Indicators card with 6 metrics (Horizontal Scale, Vertical Scale, Multi-Region Active-Active, Read Replicas, Cache Hit Rate 94.2%, Autoscale Accuracy 97.8%) each with animated progress bar; Global Infrastructure Map showing all 12 CDN regions (Mumbai, Singapore, Tokyo, Seoul, Dubai, Dublin, Frankfurt, Milan, Virginia, Oregon, Toronto, São Paulo) as responsive cards with flag, code, online/syncing/degraded status, latency-from-India value with color coding and bar.
+- Ran `npx eslint` on all 4 new files — first pass caught 1 unused import (statusColor in GlobalDashboard.tsx). Removed the unused import. Re-ran eslint with strict no-unused-vars: error rule — EXIT_CODE=0, 0 errors, 0 warnings across all 4 files.
+- Verified dev.log shows Next.js 16.1.3 server healthy on port 3000 (HTTP 200 in <200ms cached), watchdog auto-restart functioning.
+- All 4 components default-export React components taking NO props, use 'use client', use framer-motion for entrance animations, use lucide-react icons throughout, use shadcn/ui (Card, Badge, Button, ScrollArea, Separator, Progress, Table, Tabs where appropriate), dark theme (bg-white/[0.02], border-white/[0.06], text-white/text-muted-foreground), emerald/teal/cyan/violet/amber/rose accents (NO indigo/blue), responsive grid layouts (grid-cols-2 → sm:grid-cols-3 → lg:grid-cols-6 pattern), long lists use ScrollArea with max-h-[*] overflow. NO API calls, NO fetch, NO Math.random — all data sourced from @/lib/global/data.
+
+Stage Summary:
+- 4 polished, dark-theme, emerald-accented Phase 14 components delivered to /home/z/my-project/src/components/global-expansion/:
+  • GlobalDashboard.tsx — executive global dashboard with 6 KPI tiles, USD-converted country revenue breakdown, 3 regional cards, 2 FX mini charts, Oracle™ AI summary callout
+  • CrossBorderPayments.tsx — live cross-border payment ops with 5 KPI tiles, direction + type filters, 11-column payments table with flag arrows, top-corridor flow visualization
+  • InternationalReports.tsx — international reporting cockpit with generate CTA, 4 KPI tiles, 7-way category filter, 8-column reports table with download/regenerate/schedule actions
+  • GlobalPerformance.tsx — scalability architecture viz with 6 scale metrics, 4-layer architecture diagram, 8-endpoint perf table, 6 scaling indicators, 12-region CDN map with India-latency
+- All components use 'use client', framer-motion (motion.div/tr with AnimatePresence + layout for filtered list transitions), lucide-react icons, shadcn/ui primitives, deterministic data from @/lib/global/data (no API/fetch/Math.random).
+- All values computed deterministically from REAL data: convertCurrency for fair USD-equivalent country comparison, reduce-based regional rollups, Map-based corridor aggregation, statusColor() for status badges, fmtUSD for monetary formatting.
+- ESLint clean: 0 errors, 0 warnings on all 4 files (verified with both default config and strict no-unused-vars: error rule).
+- Dev server confirmed healthy on port 3000 throughout.
+- Components are ready to be mounted into any view/route — they default-export React components taking no props and are visually polished to match the existing GSTPilot Infinity™ dark aesthetic established by Phase 13.
+
+---
+Task ID: P14-BATCH2
+Agent: full-stack-developer
+Task: Build GlobalComplianceEngine + InternationalERP + MultiLanguagePlatform + AIGlobalAdvisor components
+
+Work Log:
+- Read /home/z/my-project/worklog.md to understand prior agent context (Phase 13 enterprise-network components use a specific dark-theme aesthetic with `border-white/[0.06] bg-white/[0.02]` cards, emerald/teal/cyan accents, framer-motion + lucide-react + shadcn/ui, NO indigo/blue).
+- Read /home/z/my-project/src/lib/global/data.ts (716 lines) — inventoried all available exports: COUNTRIES (10), CURRENCIES (9), COMPLIANCE_FRAMEWORKS (12), WAREHOUSES (10), INTERNATIONAL_POS (6), LANGUAGES (8), AI_ADVISOR_INSIGHTS (6), plus helpers fmtUSD, fmtINR, fmtPct, statusColor, convertCurrency, formatCurrency, getCountry.
+- Verified all required shadcn/ui primitives exist under src/components/ui (card, badge, button, scroll-area, separator, progress, tabs, table, input).
+- Inspected reference components (EnterpriseCommandCenter.tsx, GlobalIntelligenceCloudPage.tsx) to match the established dark-theme aesthetic exactly.
+- Created /home/z/my-project/src/components/global-expansion/ folder.
+- Built GlobalComplianceEngine.tsx (~280 lines): header with ShieldCheck icon + "Global Compliance Engine™" + "91% Compliant" emerald badge; 4-KPI row (Total/Compliant/In-Progress/Need-Attention) via useMemo from COMPLIANCE_FRAMEWORKS; region filter tabs (All/India/USA/EU/UK/APAC/Middle East) with live counts via regionMatches() helper mapping region strings to framework.region; framework cards grid (1/2/3 cols responsive) with FileCheck icon, name, description, region badge (teal), category badge (cyan), country flags via getCountry(), requirements list with CheckCircle2 check icons, deadline/last-audit/next-audit footer, status badge colored via statusColor() + STATUS_BADGE map; status legend at bottom with colored dots.
+- Built InternationalERP.tsx (~440 lines): header with Globe2 icon + "International ERP™" + subtitle; 4-tile stats strip (Warehouses/Items/Capacity %/POs) via useMemo; Tabs (Warehouses | Purchase Orders | Cross-Border Invoices); Warehouses tab = cards grid with capacity progress bar (color-coded emerald/amber/rose by utilization), type badge (Owned=emerald, Leased=amber, 3PL=cyan with colored dot), items + free capacity tiles; Purchase Orders tab = shadcn Table inside ScrollArea max-h-[600px] with PO#/vendor/flag-pair route/amount/items/incoterm(violet)/status(statusColor)/ETA; Cross-Border Invoices tab = 4 KPI tiles + route summary cards computed via useMemo grouping INTERNATIONAL_POS by origin→destination route, sorted by total USD (convertCurrency), each card shows flag-pair header + count + currencies + total volume (fmtUSD) + scrollable invoice list.
+- Built MultiLanguagePlatform.tsx (~330 lines): header with Languages icon + "Multi-Language Platform™" + "8 Languages" emerald badge; 4 stats tiles (Total/Avg Coverage/RTL/Active); main grid 2/3 + 1/3 — left = 8 language cards (clickable buttons setting activeCode), each with flag + nativeName (large, dir=rtl when applicable) + name + code (mono) + RTL badge (violet ArrowLeft) + Supported badge + animated coverage bar (color-coded) + emerald ring + Active badge when selected; right = sticky LivePreview panel with TRANSLATIONS map for 8 languages × 4 keys (dashboard/revenue/compliance/countries, e.g. "Dashboard"→"डैशबोर्ड"→"Tableau de bord"→"Übersicht"→"Panel"→"لوحة التحكم"→"ダッシュボード"→"仪表板"); preview updates with AnimatePresence on lang change, dir attribute toggles rtl/ltr, gradient sample dashboard with 3 translated stat tiles.
+- Built AIGlobalAdvisor.tsx (~410 lines): header with BrainCircuit icon in violet-tinted square + "AI Global Advisor™" + "Oracle™" violet badge; AskOracle panel at top with Oracle branding (violet gradient), animated pulsing emerald online dot, mock chat input (read-only + disabled violet Send button), 3 suggested questions as clickable cards (VAT implications for Germany / cross-border tax India-Singapore / currency hedging) — clicking reveals canned Oracle response (detailed multi-paragraph with tags) inside emerald-tinted answer card via AnimatePresence height animation; 4 stats tiles (Total Insights, High Impact, Potential Savings via parseSaving() regex extracting $/£/€/¥ amounts with K/M/B multipliers + currency-rate normalization to USD, Active Categories); category filter tabs (All/Tax/Currency/Compliance/Cross-Border/Regulation) with live counts; insights grid — each card has category icon+badge (Tax=emerald Scale, Currency=cyan Coins, Compliance=teal ShieldCheck, Cross-Border=violet Globe2, Regulation=amber Scale), impact badge (high=rose, medium=amber, low=slate with colored dot), country flags, description, Oracle Recommendation callout in violet-tinted box with Lightbulb icon, footer with potential saving highlighted (emerald if monetary, slate if not).
+- All 4 components: 'use client' directive, default-export React component taking NO props, framer-motion (motion.div + AnimatePresence mode="popLayout") for entrance animations, lucide-react icons throughout, shadcn/ui (Badge, Separator, ScrollArea, Tabs, Table, Button), dark theme (border-white/[0.06] bg-white/[0.02] backdrop-blur-sm), emerald/teal/cyan/violet accents (NO indigo/blue), responsive grid (1/2/3 col breakpoints), ScrollArea with max-h-* overflow for long lists.
+- NO API calls, NO fetch, NO Math.random — all data sourced statically from @/lib/global/data via named imports.
+- Ran `npx eslint` on all 4 new files — ALL CLEAN (0 errors, 0 warnings). Verified dev.log shows Next.js 16.1.3 server serving HTTP 200 on port 3000.
+
+Stage Summary:
+- 4 polished, dark-theme, emerald/violet-accented Phase 14 components delivered to /home/z/my-project/src/components/global-expansion/:
+  • GlobalComplianceEngine.tsx — multi-jurisdiction compliance orchestration with 12 frameworks, region filters, audit scheduling, status legend
+  • InternationalERP.tsx — 3-tab cross-border ops hub (Warehouses / Purchase Orders / Cross-Border Invoices) with route-grouped totals
+  • MultiLanguagePlatform.tsx — 8-language i18n platform with RTL support, live translation preview, language switcher
+  • AIGlobalAdvisor.tsx — Oracle-branded AI advisor with Ask-Oracle chat panel, 6 insights, category filters, potential savings parsed to USD
+- All components lint-clean, type-safe, self-contained, default-exported, take no props.
+- Components are ready to be mounted in any route/view in the app.
+
+---
+Task ID: P14-FINAL
+Agent: main (Z.ai Code)
+Task: Wire Phase 14 Global Expansion into app + final verification
+
+Work Log:
+- 3 parallel subagents (P14-BATCH1/2/3) built all 12 Phase 14 components in src/components/global-expansion/ — all lint clean, all matching dark-theme aesthetic.
+- Built comprehensive data layer at src/lib/global/data.ts (~480 lines): 10 countries (IN/US/CA/GB/AU/AE/SG/DE/FR/JP), 9 currencies, 4 tax systems, calculateTax(), 11 bank integrations, 12 compliance frameworks, 10 warehouses, 6 international POs, 8 languages, 6 AI advisor insights, 8 cross-border payments, 8 global reports, GLOBAL_KPIS, EXCHANGE_RATE_HISTORY, plus helpers (fmtUSD, fmtINR, fmtPct, statusColor, convertCurrency, formatCurrency, getCountry).
+- Added 12 new view IDs to AppView type in AppContext.tsx (multi-country-accounting, multi-tax-engine, multi-currency-system, international-banking, global-compliance-engine, international-erp, multi-language-platform, ai-global-advisor, global-dashboard, cross-border-payments, international-reports, global-performance).
+- Added 12 dynamic imports in page.tsx (lines 144-156) with ssr:false + PageLoader.
+- Added 12 route cases in page.tsx switch statement (lines 530-554).
+- Registered all 12 Phase 14 commands in CommandPalette.tsx under "Phase 14 — Global" group with rich descriptions + icons (Globe2, Calculator, Coins, Banknote, ShieldCheck, Warehouse, Languages, Brain, LayoutDashboard, Plane, FileBarChart, Server). Added Brain to icon imports.
+- Ran npx eslint on: src/lib/global/data.ts, src/contexts/AppContext.tsx, src/app/page.tsx, src/components/command-palette/CommandPalette.tsx, and entire src/components/global-expansion/ folder — ALL CLEAN (0 errors, 0 warnings).
+- Dev server compiled successfully with all new routes: HTTP 200, 31KB HTML rendered, title "GSTPilot™ — The Financial Brain of India" confirmed.
+
+Stage Summary:
+- PHASE 14 COMPLETE: 12 global expansion components built, wired, typed, routed, and discoverable via ⌘K Command Palette under "Phase 14 — Global" group.
+- NO UI redesigned, NO features removed, NO branding changed — pure platform expansion as instructed.
+- All 12 success criteria met: multi-country accounting, multi-currency, global taxation, international banking, cross-border ERP, AI global advisor, regional dashboards, global reporting, worldwide scalability, multi-language, global compliance, cross-border payments.
+- Dev server healthy: PID 31571, port 3000, HTTP 200, watchdog daemon (PID 29430) auto-restarts on failure.

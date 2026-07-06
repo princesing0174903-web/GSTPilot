@@ -27,12 +27,16 @@ import {
   Globe2, Sparkles, CalendarClock, ClipboardList, type LucideIcon,
   CalendarDays, Gavel, ScrollText, Calculator, Clock, Bell,
   History, Hourglass, TrendingDown, CircleDot,
+  CalendarRange, Umbrella, Scale, Landmark, ShieldAlert, Map,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion';
@@ -45,6 +49,10 @@ import {
   type ComplianceFramework, type CountryCode, type FilingDeadline,
   type RegulatoryChange,
 } from '@/lib/global/data';
+import {
+  REGULATORY_REPORTS, COUNTRY_RISKS, INSURANCE_POLICIES,
+  type RegulatoryReport, type CountryRisk, type InsurancePolicy,
+} from '@/lib/global/data-enterprise';
 
 // ─── Region Filter ─────────────────────────────────────────────────────────────
 
@@ -1157,6 +1165,451 @@ function SectionHeading({ icon: Icon, title, subtitle }: { icon: LucideIcon; tit
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Regulatory Report Calendar
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const REPORT_STATUS_BADGE: Record<RegulatoryReport['status'], string> = {
+  filed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  'in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'not-started': 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+  overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+const COMPLEXITY_BADGE: Record<RegulatoryReport['complexity'], string> = {
+  low: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  high: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function countdownBadge(days: number): { cls: string; label: string } {
+  if (days > 30) return { cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', label: `${days}d left` };
+  if (days >= 7) return { cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300', label: `${days}d left` };
+  return { cls: 'border-rose-500/30 bg-rose-500/10 text-rose-400', label: `${days}d left` };
+}
+
+function RegulatoryReportCalendar() {
+  const sorted = useMemo(
+    () => [...REGULATORY_REPORTS].sort((a, b) => a.daysRemaining - b.daysRemaining),
+    [],
+  );
+
+  const stats = useMemo(() => {
+    const total = REGULATORY_REPORTS.length;
+    const filed = REGULATORY_REPORTS.filter((r) => r.status === 'filed').length;
+    const inProgress = REGULATORY_REPORTS.filter((r) => r.status === 'in-progress').length;
+    const overdue = REGULATORY_REPORTS.filter((r) => r.status === 'overdue').length;
+    return { total, filed, inProgress, overdue };
+  }, []);
+
+  const kpiTiles: { icon: LucideIcon; label: string; value: number; accent: 'emerald' | 'teal' | 'cyan' | 'amber' | 'violet' | 'rose'; sub: string }[] = [
+    { icon: CalendarRange, label: 'Total Reports', value: stats.total, accent: 'teal', sub: 'Across 10 jurisdictions' },
+    { icon: CheckCircle2, label: 'Filed', value: stats.filed, accent: 'emerald', sub: 'Submitted & confirmed' },
+    { icon: RefreshCw, label: 'In Progress', value: stats.inProgress, accent: 'amber', sub: 'Preparation underway' },
+    { icon: AlertTriangle, label: 'Overdue', value: stats.overdue, accent: 'rose', sub: 'Action required' },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-4"
+    >
+      <SectionHeading
+        icon={CalendarRange}
+        title="Regulatory Report Calendar"
+        subtitle={`${REGULATORY_REPORTS.length} statutory reports across 10 jurisdictions — sorted by days remaining`}
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {kpiTiles.map((k, i) => (
+          <motion.div
+            key={k.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: i * 0.05 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.12] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${ACCENT_RING[k.accent]}`}>
+                <k.icon className="h-4 w-4" />
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400">{k.label}</span>
+            </div>
+            <div className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50 tabular-nums">{k.value}</div>
+            <div className="text-[10px] text-zinc-500">{k.sub}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <ScrollArea className="max-h-[560px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Report</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Jurisdiction</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Frequency</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Next Due</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Countdown</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Owner</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Complexity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Penalty Risk</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {sorted.map((r, i) => {
+                  const cd = countdownBadge(r.daysRemaining);
+                  const country = getCountry(r.countryCode);
+                  return (
+                    <motion.tr
+                      key={r.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: i * 0.02 }}
+                      className={`border-white/[0.04] hover:bg-white/[0.03] ${
+                        r.daysRemaining < 7 && r.status !== 'filed' ? 'bg-rose-500/[0.04]' : ''
+                      }`}
+                    >
+                      <TableCell className="py-2.5">
+                        <span className="text-[12px] font-medium text-zinc-100">{r.name}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                          <span className="text-base leading-none">{country?.flag ?? '🏳️'}</span>
+                          <span>{r.jurisdiction}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-400">
+                          {r.frequency}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[11px] font-mono text-zinc-300">{r.nextDue}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] ${cd.cls}`}>
+                          <Clock className="h-2.5 w-2.5" />
+                          {cd.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] ${REPORT_STATUS_BADGE[r.status]}`}>
+                          {r.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[11px] text-zinc-300">{r.responsible}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] capitalize ${COMPLEXITY_BADGE[r.complexity]}`}>
+                          {r.complexity}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[11px] font-mono text-amber-300">{r.penaltyRisk}</span>
+                      </TableCell>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Country Risk Assessment Matrix
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const RATING_COLOR: Record<string, string> = {
+  AAA: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'AA+': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  AA: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'AA-': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'A+': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  A: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  'A-': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  'BBB+': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  BBB: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'BBB-': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function ratingBadge(rating: string): string {
+  return RATING_COLOR[rating] ?? 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+}
+
+function riskBarColor(score: number): string {
+  if (score <= 15) return 'bg-emerald-500';
+  if (score <= 25) return 'bg-teal-400';
+  if (score <= 35) return 'bg-amber-400';
+  return 'bg-rose-500';
+}
+
+const CONTROLS_BADGE: Record<CountryRisk['capitalControls'], string> = {
+  None: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Low: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  Moderate: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  High: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+const SANCTIONS_BADGE: Record<CountryRisk['sanctionsStatus'], string> = {
+  Clear: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Monitored: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  Restricted: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+const RISK_DIMENSIONS: { key: keyof Pick<CountryRisk, 'politicalRisk' | 'economicRisk' | 'currencyRisk' | 'complianceRisk' | 'operationalRisk'>; label: string }[] = [
+  { key: 'politicalRisk', label: 'Political' },
+  { key: 'economicRisk', label: 'Economic' },
+  { key: 'currencyRisk', label: 'Currency' },
+  { key: 'complianceRisk', label: 'Compliance' },
+  { key: 'operationalRisk', label: 'Operational' },
+];
+
+function CountryRiskMatrix() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-4"
+    >
+      <SectionHeading
+        icon={Map}
+        title="Country Risk Assessment Matrix"
+        subtitle={`${COUNTRY_RISKS.length} jurisdictions — sovereign ratings, 5-dimension risk profile, capital controls & sanctions`}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {COUNTRY_RISKS.map((c, i) => {
+          const country = getCountry(c.countryCode);
+          const avg = (c.politicalRisk + c.economicRisk + c.currencyRisk + c.complianceRisk + c.operationalRisk) / 5;
+          return (
+            <motion.div
+              key={c.countryCode}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.14] transition-all flex flex-col"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-2xl leading-none">{country?.flag ?? '🏳️'}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-zinc-100 truncate">{country?.name ?? c.countryCode}</h3>
+                    <div className="text-[10px] text-zinc-500 mt-0.5">Peg: {c.currencyPeg}</div>
+                  </div>
+                </div>
+                <Badge variant="outline" className={`text-[10px] font-mono ${ratingBadge(c.sovereignRating)}`}>
+                  {c.sovereignRating}
+                </Badge>
+              </div>
+
+              <Separator className="my-3 bg-white/[0.06]" />
+
+              <div className="space-y-1.5">
+                {RISK_DIMENSIONS.map((dim) => (
+                  <div key={dim.key} className="flex items-center gap-2">
+                    <span className="w-20 text-[10px] text-zinc-400 shrink-0">{dim.label}</span>
+                    <div className="h-1.5 flex-1 rounded-full bg-black/40 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${c[dim.key]}%` }}
+                        transition={{ duration: 0.5, delay: i * 0.04 + 0.1 }}
+                        className={`h-full ${riskBarColor(c[dim.key])}`}
+                      />
+                    </div>
+                    <span className="w-7 text-right text-[10px] font-mono text-zinc-300 tabular-nums">{c[dim.key]}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-[10px]">
+                <span className="text-zinc-500">Avg Risk</span>
+                <span className={`font-mono font-semibold tabular-nums ${
+                  avg <= 15 ? 'text-emerald-300' : avg <= 25 ? 'text-teal-300' : avg <= 35 ? 'text-amber-300' : 'text-rose-300'
+                }`}>
+                  {avg.toFixed(1)}
+                </span>
+              </div>
+
+              <Separator className="my-3 bg-white/[0.06]" />
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="outline" className={`text-[9px] ${CONTROLS_BADGE[c.capitalControls]}`}>
+                  <Scale className="h-2.5 w-2.5" /> {c.capitalControls} controls
+                </Badge>
+                <Badge variant="outline" className={`text-[9px] ${SANCTIONS_BADGE[c.sanctionsStatus]}`}>
+                  <ShieldAlert className="h-2.5 w-2.5" /> {c.sanctionsStatus}
+                </Badge>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Insurance & Risk Transfer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const INSURANCE_TYPE_BADGE: Record<InsurancePolicy['type'], string> = {
+  'D&O': 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  Cyber: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  Property: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'Business Interruption': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'Trade Credit': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'Professional Indemnity': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+};
+
+const INSURANCE_STATUS_BADGE: Record<InsurancePolicy['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  renewing: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  expiring: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function InsuranceRiskTransfer() {
+  const stats = useMemo(() => {
+    const totalCoverage = INSURANCE_POLICIES.reduce((s, p) => s + p.coverage, 0);
+    const totalPremium = INSURANCE_POLICIES.reduce((s, p) => s + p.premium, 0);
+    const expiring = INSURANCE_POLICIES.filter((p) => p.status === 'expiring' || p.status === 'renewing').length;
+    return { totalCoverage, totalPremium, expiring };
+  }, []);
+
+  const kpiTiles: { icon: LucideIcon; label: string; value: number; accent: 'emerald' | 'teal' | 'cyan' | 'amber' | 'violet' | 'rose'; sub: string }[] = [
+    { icon: Umbrella, label: 'Total Coverage', value: stats.totalCoverage, accent: 'emerald', sub: fmtUSD(stats.totalCoverage) },
+    { icon: Landmark, label: 'Total Premium', value: stats.totalPremium, accent: 'amber', sub: fmtUSD(stats.totalPremium) },
+    { icon: RefreshCw, label: 'Expiring/Renewing', value: stats.expiring, accent: 'rose', sub: 'Action required soon' },
+    { icon: ShieldCheck, label: 'Active Policies', value: INSURANCE_POLICIES.filter((p) => p.status === 'active').length, accent: 'teal', sub: 'In-force' },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-4"
+    >
+      <SectionHeading
+        icon={Umbrella}
+        title="Insurance & Risk Transfer"
+        subtitle={`${INSURANCE_POLICIES.length} enterprise policies — D&O, Cyber, Property, BI, Trade Credit & Professional Indemnity`}
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {kpiTiles.map((k, i) => (
+          <motion.div
+            key={k.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: i * 0.05 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.12] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${ACCENT_RING[k.accent]}`}>
+                <k.icon className="h-4 w-4" />
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400">{k.label}</span>
+            </div>
+            <div className="mt-2 text-lg font-semibold tracking-tight text-zinc-50 tabular-nums">
+              {k.label === 'Total Coverage' || k.label === 'Total Premium' ? k.sub : k.value}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              {k.label === 'Total Coverage' || k.label === 'Total Premium' ? `${k.value.toLocaleString('en-US')} policies` : k.sub}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <ScrollArea className="max-h-[520px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Policy</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Type</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Coverage (USD)</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Premium (USD)</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Deductible</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Insurer</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Renewal</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Regions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {INSURANCE_POLICIES.map((p, i) => (
+                  <motion.tr
+                    key={p.id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.03]"
+                  >
+                    <TableCell className="py-2.5">
+                      <span className="text-[12px] font-medium text-zinc-100">{p.name}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${INSURANCE_TYPE_BADGE[p.type]}`}>
+                        {p.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono font-semibold text-emerald-300">{fmtUSD(p.coverage)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-amber-300">{fmtUSD(p.premium)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-zinc-400">{fmtUSD(p.deductible)}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[11px] text-zinc-300">{p.insurer}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[11px] font-mono text-zinc-400">{p.renewalDate}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] capitalize ${INSURANCE_STATUS_BADGE[p.status]}`}>
+                        {p.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {p.regions.slice(0, 3).map((r) => (
+                          <Badge key={r} variant="outline" className="text-[8px] border-white/10 bg-white/[0.02] text-zinc-400">
+                            {r}
+                          </Badge>
+                        ))}
+                        {p.regions.length > 3 && (
+                          <span className="text-[9px] text-zinc-500">+{p.regions.length - 3}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function GlobalComplianceEngine() {
@@ -1298,6 +1751,15 @@ export default function GlobalComplianceEngine() {
         <AuditTrail />
         <DocumentChecklist />
       </div>
+
+      {/* Regulatory Report Calendar (enterprise) */}
+      <RegulatoryReportCalendar />
+
+      {/* Country Risk Assessment Matrix (enterprise) */}
+      <CountryRiskMatrix />
+
+      {/* Insurance & Risk Transfer (enterprise) */}
+      <InsuranceRiskTransfer />
 
       {/* Status legend */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">

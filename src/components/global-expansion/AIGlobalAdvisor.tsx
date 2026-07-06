@@ -22,10 +22,11 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BrainCircuit, Sparkles, Send, Lightbulb, TrendingUp, ShieldCheck,
+  BrainCircuit, Sparkles, Send, Lightbulb, TrendingUp, TrendingDown, ShieldCheck,
   Coins, Globe2, Scale, ArrowRight, Zap, Target, type LucideIcon,
   AlertTriangle, Network, Building2, Briefcase, Server, UserCheck,
   Warehouse, Bot, User, RefreshCw, ArrowLeftRight, CheckCircle2,
+  Filter, FileText, ShieldAlert, Ban, Gauge,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,10 +37,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
   AI_ADVISOR_INSIGHTS, REGULATORY_CHANGES, DTAA_MATRIX, getCountry,
   fmtUSD,
   type AIAdvisorInsight, type CountryCode, type RegulatoryChange,
 } from '@/lib/global/data';
+import {
+  AI_SCENARIOS, TRANSFER_PRICING, COUNTRY_RISKS,
+  type AIScenario, type TransferPricingTxn, type CountryRisk,
+} from '@/lib/global/data-enterprise';
 
 // ─── Category Style Maps ───────────────────────────────────────────────────────
 
@@ -1446,6 +1454,558 @@ function CrossBorderTaxPlanner() {
   );
 }
 
+// ─── AI Scenario Planning ──────────────────────────────────────────────────────
+
+const SCENARIO_FILTERS = ['all', 'negative', 'positive'] as const;
+type ScenarioFilter = typeof SCENARIO_FILTERS[number];
+
+function AIScenarioPlanning() {
+  const [filter, setFilter] = useState<ScenarioFilter>('all');
+
+  const filtered = useMemo(() => {
+    if (filter === 'all') return AI_SCENARIOS;
+    if (filter === 'negative') return AI_SCENARIOS.filter((s) => s.impactUSD < 0);
+    return AI_SCENARIOS.filter((s) => s.impactUSD >= 0);
+  }, [filter]);
+
+  const summary = useMemo(() => {
+    const totalImpact = AI_SCENARIOS.reduce((s, x) => s + x.impactUSD, 0);
+    const negative = AI_SCENARIOS.filter((s) => s.impactUSD < 0).reduce((s, x) => s + x.impactUSD, 0);
+    const positive = AI_SCENARIOS.filter((s) => s.impactUSD >= 0).reduce((s, x) => s + x.impactUSD, 0);
+    const highProb = AI_SCENARIOS.filter((s) => s.probability >= 60).length;
+    return { totalImpact, negative, positive, highProb };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.04] to-transparent p-4"
+    >
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/30 bg-violet-500/10 text-violet-300">
+            <BrainCircuit className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">AI Scenario Planning</h2>
+            <p className="text-[11px] text-zinc-500">
+              {AI_SCENARIOS.length} forward-looking scenarios with probability, impact & mitigation
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Filter className="h-3 w-3 text-zinc-500" />
+          {SCENARIO_FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all capitalize ${
+                filter === f
+                  ? 'border-violet-500/40 bg-violet-500/10 text-violet-200'
+                  : 'border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total Net Impact</div>
+          <div className={`text-base font-semibold tabular-nums ${summary.totalImpact >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+            {summary.totalImpact >= 0 ? '+' : ''}{fmtUSD(summary.totalImpact)}
+          </div>
+        </div>
+        <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Downside Risk</div>
+          <div className="text-base font-semibold text-rose-300 tabular-nums">{fmtUSD(summary.negative)}</div>
+        </div>
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Upside Opportunity</div>
+          <div className="text-base font-semibold text-emerald-300 tabular-nums">+{fmtUSD(summary.positive)}</div>
+        </div>
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">High Probability (≥60%)</div>
+          <div className="text-base font-semibold text-amber-300 tabular-nums">{summary.highProb}</div>
+        </div>
+      </div>
+
+      {/* Scenario cards grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {filtered.map((s, i) => {
+          const isNegative = s.impactUSD < 0;
+          const impactColor = isNegative ? 'text-rose-300' : 'text-emerald-300';
+          const impactBorder = isNegative ? 'border-rose-500/30 bg-rose-500/[0.06]' : 'border-emerald-500/30 bg-emerald-500/[0.06]';
+          const probColor = s.probability >= 60 ? 'bg-rose-500' : s.probability >= 30 ? 'bg-amber-400' : 'bg-teal-400';
+          const confidenceColor = s.confidence >= 80 ? 'text-emerald-300' : s.confidence >= 60 ? 'text-amber-300' : 'text-zinc-400';
+          return (
+            <motion.div
+              key={s.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 hover:border-white/[0.14] transition-all"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-start gap-1.5 min-w-0">
+                  {isNegative
+                    ? <TrendingDown className="h-3.5 w-3.5 text-rose-400 mt-0.5 shrink-0" />
+                    : <TrendingUp className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />}
+                  <h3 className="text-[12px] font-semibold text-zinc-100 leading-tight">{s.name}</h3>
+                </div>
+                <Badge variant="outline" className={`text-[10px] font-bold shrink-0 ${impactBorder} ${impactColor}`}>
+                  {isNegative ? '' : '+'}{fmtUSD(s.impactUSD)}
+                </Badge>
+              </div>
+
+              {/* Probability bar */}
+              <div className="mb-2">
+                <div className="flex items-center justify-between text-[10px] mb-1">
+                  <span className="text-zinc-500 uppercase tracking-wider">Probability</span>
+                  <span className="text-zinc-200 font-medium tabular-nums">{s.probability}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-black/40 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${s.probability}%` }}
+                    transition={{ duration: 0.6, delay: i * 0.04 }}
+                    className={`h-full ${probColor}`}
+                  />
+                </div>
+              </div>
+
+              {/* Meta row */}
+              <div className="flex items-center gap-2 text-[10px] mb-2">
+                <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+                  <Target className="h-2.5 w-2.5" />{s.timeHorizon}
+                </Badge>
+                <Badge variant="outline" className={`text-[9px] ${confidenceColor} border-current/30 bg-current/10`}>
+                  <Gauge className="h-2.5 w-2.5" />{s.confidence}% conf.
+                </Badge>
+              </div>
+
+              {/* Country flag chips */}
+              <div className="flex items-center gap-1 mb-2">
+                <span className="text-[9px] uppercase tracking-wider text-zinc-500 mr-0.5">Affected:</span>
+                {s.countries.map((cc) => {
+                  const c = getCountry(cc as CountryCode);
+                  return (
+                    <span key={cc} title={c?.name ?? cc} className="text-sm leading-none">
+                      {c?.flag ?? '🏳️'}
+                    </span>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] text-zinc-300 leading-relaxed mb-2">{s.description}</p>
+
+              <div className="rounded-md border border-violet-500/20 bg-violet-500/[0.05] p-2">
+                <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-violet-300 mb-0.5">
+                  <Lightbulb className="h-2.5 w-2.5" />Mitigation
+                </div>
+                <p className="text-[10px] text-zinc-200 leading-snug">{s.mitigation}</p>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-zinc-500">
+        <Sparkles className="h-3 w-3 text-violet-300" />
+        <span>Oracle™ forecasts derived from macroeconomic indicators, regulatory trajectories & historical patterns</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Transfer Pricing Intelligence ─────────────────────────────────────────────
+
+const TP_METHOD_STYLE: Record<TransferPricingTxn['method'], string> = {
+  CUP: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'Resale Price': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'Cost Plus': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  TNMM: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  'Profit Split': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+const TP_DOC_STYLE: Record<TransferPricingTxn['documentation'], string> = {
+  Current: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Expiring: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  Overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+const TP_RISK_STYLE: Record<TransferPricingTxn['riskLevel'], string> = {
+  low: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  high: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function TransferPricingIntelligence() {
+  const summary = useMemo(() => {
+    const totalUSD = TRANSFER_PRICING.reduce((s, t) => s + t.amountUSD, 0);
+    const highRisk = TRANSFER_PRICING.filter((t) => t.riskLevel === 'high').length;
+    const overdue = TRANSFER_PRICING.filter((t) => t.documentation === 'Overdue').length;
+    const expiring = TRANSFER_PRICING.filter((t) => t.documentation === 'Expiring').length;
+    return { totalUSD, highRisk, overdue, expiring };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+          <Scale className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Transfer Pricing Intelligence</h2>
+          <p className="text-[11px] text-zinc-500">
+            {TRANSFER_PRICING.length} intercompany transactions · arm's length analysis · OECD-aligned documentation
+          </p>
+        </div>
+      </div>
+
+      {/* Summary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total IC Volume</div>
+          <div className="text-base font-semibold text-emerald-300 tabular-nums">{fmtUSD(summary.totalUSD)}</div>
+        </div>
+        <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">High Risk</div>
+          <div className="text-base font-semibold text-rose-300 tabular-nums">{summary.highRisk}</div>
+        </div>
+        <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Overdue Docs</div>
+          <div className="text-base font-semibold text-rose-300 tabular-nums">{summary.overdue}</div>
+        </div>
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Expiring Docs</div>
+          <div className="text-base font-semibold text-amber-300 tabular-nums">{summary.expiring}</div>
+        </div>
+      </div>
+
+      {/* TP Table */}
+      <div className="rounded-lg border border-white/[0.06] overflow-hidden mb-3">
+        <ScrollArea className="max-h-[420px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Transaction</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Type</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24 text-right">Amount (USD)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24">Method</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-16 text-right">Markup</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-28">Arm's Length</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Docs</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-16">Risk</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {TRANSFER_PRICING.map((t) => {
+                const fromC = getCountry(t.fromCountry as CountryCode);
+                const toC = getCountry(t.toCountry as CountryCode);
+                return (
+                  <TableRow key={t.id} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base leading-none">{fromC?.flag ?? '🏳️'}</span>
+                        <ArrowRight className="h-3 w-3 text-zinc-500" />
+                        <span className="text-base leading-none">{toC?.flag ?? '🏳️'}</span>
+                        <div className="ml-1 min-w-0">
+                          <div className="text-[10px] text-zinc-400 truncate max-w-[200px]">{t.fromEntity}</div>
+                          <div className="text-[10px] text-zinc-500 truncate max-w-[200px]">→ {t.toEntity}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-200">{t.type}</TableCell>
+                    <TableCell className="text-[11px] text-zinc-100 text-right tabular-nums font-medium">
+                      {fmtUSD(t.amountUSD)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${TP_METHOD_STYLE[t.method]}`}>{t.method}</Badge>
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">
+                      {t.markupPct > 0 ? `${t.markupPct}%` : '—'}
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-400 font-mono">{t.armLengthRange}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${TP_DOC_STYLE[t.documentation]}`}>
+                        {t.documentation}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] capitalize ${TP_RISK_STYLE[t.riskLevel]}`}>
+                        {t.riskLevel}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+
+      {/* AI Commentary */}
+      <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.05] p-3">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-violet-300 mb-2">
+          <BrainCircuit className="h-3 w-3" />Oracle™ Transfer Pricing Commentary
+        </div>
+        <div className="space-y-2 text-[11px] text-zinc-200 leading-relaxed">
+          {summary.overdue > 0 && (
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-3 w-3 text-rose-400 mt-0.5 shrink-0" />
+              <span>
+                <span className="text-rose-300 font-semibold">Critical:</span> {summary.overdue} transaction(s) have Overdue TP documentation.
+                File Local File & Master File immediately under OECD BEPS Action 13 to avoid 2% penalty on transaction value (Section 271BA in India, equivalent in other jurisdictions).
+              </span>
+            </div>
+          )}
+          {summary.expiring > 0 && (
+            <div className="flex items-start gap-2">
+              <FileText className="h-3 w-3 text-amber-300 mt-0.5 shrink-0" />
+              <span>
+                <span className="text-amber-300 font-semibold">Watch:</span> {summary.expiring} transaction(s) have documentation expiring within 90 days.
+                Initiate refresh of benchmarking studies and economic analysis ahead of fiscal year-end.
+              </span>
+            </div>
+          )}
+          {summary.highRisk > 0 && (
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-3 w-3 text-rose-400 mt-0.5 shrink-0" />
+              <span>
+                <span className="text-rose-300 font-semibold">Risk:</span> {summary.highRisk} high-risk transaction(s) flagged — review pricing methodology & consider Advance Pricing Agreement (APA) to lock in tax treatment for 5 years.
+              </span>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <Lightbulb className="h-3 w-3 text-emerald-300 mt-0.5 shrink-0" />
+            <span>
+              <span className="text-emerald-300 font-semibold">Recommendation:</span> Pre-file Form 3CEB by Oct 31 for Indian entities.
+              Consolidate Master File at HQ level — share with all 14 subsidiaries. Prepare Country-by-Country Report (CbCR) if group revenue exceeds €750M.
+            </span>
+            </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Country Risk Heatmap ──────────────────────────────────────────────────────
+
+const RISK_DIMENSIONS: { key: keyof Pick<CountryRisk, 'politicalRisk' | 'economicRisk' | 'currencyRisk' | 'complianceRisk' | 'operationalRisk'>; label: string; short: string }[] = [
+  { key: 'politicalRisk', label: 'Political Risk', short: 'POL' },
+  { key: 'economicRisk', label: 'Economic Risk', short: 'ECO' },
+  { key: 'currencyRisk', label: 'Currency Risk', short: 'FX' },
+  { key: 'complianceRisk', label: 'Compliance Risk', short: 'CMP' },
+  { key: 'operationalRisk', label: 'Operational Risk', short: 'OPS' },
+];
+
+function riskCellColor(score: number): string {
+  if (score < 20) return 'bg-emerald-500/40 text-emerald-200 border-emerald-500/40';
+  if (score < 35) return 'bg-teal-500/40 text-teal-100 border-teal-500/40';
+  if (score < 50) return 'bg-amber-500/40 text-amber-100 border-amber-500/40';
+  return 'bg-rose-500/40 text-rose-100 border-rose-500/40';
+}
+
+const RATING_COLOR: Record<string, string> = {
+  'AAA': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'AA+': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'AA': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'AA-': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'A+': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'A': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  'A-': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  'BBB+': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'BBB': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'BBB-': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+const SANCTIONS_STYLE: Record<CountryRisk['sanctionsStatus'], string> = {
+  Clear: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Monitored: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  Restricted: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function CountryRiskHeatmap() {
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode | null>(null);
+  const selected = useMemo(
+    () => COUNTRY_RISKS.find((c) => c.countryCode === selectedCountry) ?? null,
+    [selectedCountry],
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-rose-500/20 bg-rose-500/10 text-rose-300">
+          <ShieldAlert className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Country Risk Heatmap</h2>
+          <p className="text-[11px] text-zinc-500">
+            {COUNTRY_RISKS.length} jurisdictions × 5 risk dimensions with sovereign rating & sanctions screening
+          </p>
+        </div>
+      </div>
+
+      {/* Heatmap grid */}
+      <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/[0.06] hover:bg-transparent">
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Country</TableHead>
+              {RISK_DIMENSIONS.map((d) => (
+                <TableHead key={d.key} className="text-[10px] uppercase tracking-wider text-zinc-500 text-center w-16">
+                  <div className="flex flex-col items-center">
+                    <span>{d.short}</span>
+                    <span className="text-[9px] text-zinc-600 normal-case">{d.label}</span>
+                  </div>
+                </TableHead>
+              ))}
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Rating</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Sanctions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {COUNTRY_RISKS.map((r) => {
+              const c = getCountry(r.countryCode as CountryCode);
+              const isSelected = selectedCountry === r.countryCode;
+              return (
+                <TableRow
+                  key={r.countryCode}
+                  className={`border-white/[0.04] cursor-pointer transition-colors ${isSelected ? 'bg-violet-500/[0.06]' : 'hover:bg-white/[0.03]'}`}
+                  onClick={() => setSelectedCountry(isSelected ? null : r.countryCode as CountryCode)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base leading-none">{c?.flag ?? '🏳️'}</span>
+                      <span className="text-[11px] font-medium text-zinc-100">{c?.code ?? r.countryCode}</span>
+                      <span className="text-[10px] text-zinc-500">{r.currencyPeg}</span>
+                    </div>
+                  </TableCell>
+                  {RISK_DIMENSIONS.map((d) => {
+                    const score = r[d.key];
+                    return (
+                      <TableCell key={d.key} className="text-center p-1.5">
+                        <div
+                          className={`h-8 rounded-md border flex items-center justify-center text-[11px] font-semibold tabular-nums ${riskCellColor(score)}`}
+                          title={`${d.label}: ${score}/100`}
+                        >
+                          {score}
+                        </div>
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[9px] font-bold ${RATING_COLOR[r.sovereignRating] ?? 'border-white/[0.06] bg-white/[0.02] text-zinc-300'}`}>
+                      {r.sovereignRating}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      {r.sanctionsStatus === 'Restricted' && <Ban className="h-2.5 w-2.5 text-rose-400" />}
+                      {r.sanctionsStatus === 'Monitored' && <AlertTriangle className="h-2.5 w-2.5 text-amber-300" />}
+                      {r.sanctionsStatus === 'Clear' && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-300" />}
+                      <Badge variant="outline" className={`text-[9px] ${SANCTIONS_STYLE[r.sanctionsStatus]}`}>
+                        {r.sanctionsStatus}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Legend */}
+      <div className="mt-2 flex items-center gap-3 text-[10px] text-zinc-500 flex-wrap">
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500/40 border border-emerald-500/40" />&lt;20 Low</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-teal-500/40 border border-teal-500/40" />20-34 Moderate</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-500/40 border border-amber-500/40" />35-49 Elevated</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/40 border border-rose-500/40" />≥50 High</span>
+        <span className="ml-auto">Click a row to view risk factors & mitigations</span>
+      </div>
+
+      {/* Selected country detail */}
+      <AnimatePresence>
+        {selected && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-3 overflow-hidden"
+          >
+            <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.05] p-3">
+              {(() => {
+                const c = getCountry(selected.countryCode as CountryCode);
+                const avgRisk = (selected.politicalRisk + selected.economicRisk + selected.currencyRisk + selected.complianceRisk + selected.operationalRisk) / 5;
+                return (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl leading-none">{c?.flag ?? '🏳️'}</span>
+                      <div>
+                        <div className="text-sm font-semibold text-zinc-100">{c?.name ?? selected.countryCode}</div>
+                        <div className="text-[10px] text-zinc-500">
+                          Sovereign Rating: {selected.sovereignRating} · Capital Controls: {selected.capitalControls} · Avg Risk: {avgRisk.toFixed(1)}/100
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-rose-300 mb-1.5">
+                          <AlertTriangle className="h-3 w-3" />Risk Factors
+                        </div>
+                        <ul className="space-y-1">
+                          {selected.riskFactors.map((rf, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-zinc-300">
+                              <span className="text-rose-400 mt-0.5">•</span>
+                              <span>{rf}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 mb-1.5">
+                          <ShieldCheck className="h-3 w-3" />Mitigation Actions
+                        </div>
+                        <ul className="space-y-1">
+                          {selected.mitigationActions.map((ma, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-zinc-300">
+                              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-400 mt-0.5 shrink-0" />
+                              <span>{ma}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function AIGlobalAdvisor() {
@@ -1589,6 +2149,15 @@ export default function AIGlobalAdvisor() {
 
       {/* Cross-Border Tax Planner */}
       <CrossBorderTaxPlanner />
+
+      {/* AI Scenario Planning */}
+      <AIScenarioPlanning />
+
+      {/* Transfer Pricing Intelligence */}
+      <TransferPricingIntelligence />
+
+      {/* Country Risk Heatmap */}
+      <CountryRiskHeatmap />
 
       {/* Footer */}
       <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">

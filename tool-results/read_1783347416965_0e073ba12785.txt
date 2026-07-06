@@ -1,0 +1,301 @@
+     1→  mitigationActions: string[];
+     2→}
+     3→
+     4→export const COUNTRY_RISKS: CountryRisk[] = [
+     5→  { countryCode: 'IN', politicalRisk: 28, economicRisk: 32, currencyRisk: 38, complianceRisk: 22, operationalRisk: 26, sovereignRating: 'BBB-', currencyPeg: 'Float', capitalControls: 'Moderate', sanctionsStatus: 'Clear', riskFactors: ['INR volatility vs USD', 'GST rate changes', 'FEMA compliance'], mitigationActions: ['INR NDF hedge 48%', 'Automated GSTR filing', 'FEMA pre-approval for >$25K'] },
+     6→  { countryCode: 'US', politicalRisk: 18, economicRisk: 15, currencyRisk: 5, complianceRisk: 20, operationalRisk: 14, sovereignRating: 'AA+', currencyPeg: 'Reserve', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['State sales tax nexus complexity', 'SOX compliance', 'FATCA reporting'], mitigationActions: ['Economic nexus engine', 'SOX quarterly audit', 'FATCA auto-filing'] },
+     7→  { countryCode: 'GB', politicalRisk: 24, economicRisk: 22, currencyRisk: 28, complianceRisk: 18, operationalRisk: 16, sovereignRating: 'AA', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['Post-Brexit trade rules', 'GBP volatility', 'VAT MTD'], mitigationActions: ['GBP forward hedge 68%', 'MTD-compatible filing', 'Customs declaration automation'] },
+     8→  { countryCode: 'SG', politicalRisk: 8, economicRisk: 12, currencyRisk: 14, complianceRisk: 8, operationalRisk: 10, sovereignRating: 'AAA', currencyPeg: 'Managed', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['MAS regulatory changes', 'SGD managed float'], mitigationActions: ['MAS compliance monitoring', 'SGD forward hedge 65%'] },
+     9→  { countryCode: 'AE', politicalRisk: 15, economicRisk: 18, currencyRisk: 8, complianceRisk: 20, operationalRisk: 14, sovereignRating: 'AA-', currencyPeg: 'USD Peg', capitalControls: 'Low', sanctionsStatus: 'Monitored', riskFactors: ['New 9% corporate tax', 'VAT compliance', 'Sanctions screening (dual-use)'], mitigationActions: ['FTA registration complete', 'VAT auto-filing', 'Enhanced sanctions screening'] },
+    10→  { countryCode: 'DE', politicalRisk: 16, economicRisk: 20, currencyRisk: 12, complianceRisk: 16, operationalRisk: 14, sovereignRating: 'AAA', currencyPeg: 'EUR', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['EU sanctions compliance', 'Supply chain act', 'Energy costs'], mitigationActions: ['EU sanctions screening', 'Supply chain audit', 'Energy cost hedging'] },
+    11→  { countryCode: 'FR', politicalRisk: 26, economicRisk: 24, currencyRisk: 12, complianceRisk: 22, operationalRisk: 18, sovereignRating: 'AA-', currencyPeg: 'EUR', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['Labor law complexity', 'Pension reform impact', 'Strikes'], mitigationActions: ['Legal counsel retainer', 'Payroll compliance automation', 'Business continuity plan'] },
+    12→  { countryCode: 'AU', politicalRisk: 14, economicRisk: 16, currencyRisk: 22, complianceRisk: 12, operationalRisk: 12, sovereignRating: 'AAA', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['AUD commodity correlation', 'STP reporting', 'ASIC fees'], mitigationActions: ['AUD forward hedge 60%', 'STP automation', 'ASIC fee tracking'] },
+    13→  { countryCode: 'CA', politicalRisk: 16, economicRisk: 18, currencyRisk: 20, complianceRisk: 18, operationalRisk: 14, sovereignRating: 'AA+', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['CAD oil correlation', 'Provincial tax complexity', 'FINTRAC reporting'], mitigationActions: ['CAD forward hedge 58%', 'Provincial tax engine', 'FINTRAC auto-filing'] },
+    14→  { countryCode: 'JP', politicalRisk: 12, economicRisk: 22, currencyRisk: 30, complianceRisk: 16, operationalRisk: 14, sovereignRating: 'A+', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['JPY volatility', 'Consumption tax invoice system', 'Aging workforce'], mitigationActions: ['JPY option hedge 55%', 'Qualified invoice system', 'Talent retention program'] },
+    15→];
+    16→
+    17→// ─── Intercompany Loans ───────────────────────────────────────────────────────
+    18→
+    19→export interface IntercompanyLoan {
+    20→  id: string;
+    21→  lender: string;
+    22→  borrower: string;
+    23→  lenderCountry: CountryCode;
+    24→  borrowerCountry: CountryCode;
+    25→  principal: number;
+    26→  currency: string;
+    27→  principalUSD: number;
+    28→  interestRate: number;
+    29→  term: string;
+    30→  outstanding: number;
+    31→  nextPayment: string;
+    32→  status: 'active' | 'repaid' | 'restructured';
+    33→}
+    34→
+    35→export const INTERCOMPANY_LOANS: IntercompanyLoan[] = [
+    36→  { id: 'icl-1', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot India Pvt Ltd', lenderCountry: 'SG', borrowerCountry: 'IN', principal: 800000, currency: 'USD', principalUSD: 800000, interestRate: 4.5, term: '3 years', outstanding: 640000, nextPayment: '2024-12-31', status: 'active' },
+    37→  { id: 'icl-2', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot AI Labs Inc', lenderCountry: 'US', borrowerCountry: 'US', principal: 500000, currency: 'USD', principalUSD: 500000, interestRate: 5.0, term: '2 years', outstanding: 420000, nextPayment: '2024-12-31', status: 'active' },
+    38→  { id: 'icl-3', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot FZ-LLC', lenderCountry: 'SG', borrowerCountry: 'AE', principal: 1200000, currency: 'USD', principalUSD: 1200000, interestRate: 4.25, term: '5 years', outstanding: 1080000, nextPayment: '2025-03-31', status: 'active' },
+    39→  { id: 'icl-4', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot UK Ltd', lenderCountry: 'US', borrowerCountry: 'GB', principal: 400000, currency: 'USD', principalUSD: 400000, interestRate: 4.75, term: '3 years', outstanding: 280000, nextPayment: '2024-12-31', status: 'active' },
+    40→  { id: 'icl-5', lender: 'GSTPilot Asia Pte Ltd', borrower: 'GSTPilot K.K.', lenderCountry: 'SG', borrowerCountry: 'JP', principal: 600000, currency: 'USD', principalUSD: 600000, interestRate: 4.5, term: '4 years', outstanding: 480000, nextPayment: '2025-01-31', status: 'active' },
+    41→  { id: 'icl-6', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot SARL', lenderCountry: 'US', borrowerCountry: 'FR', principal: 300000, currency: 'EUR', principalUSD: 324000, interestRate: 4.0, term: '3 years', outstanding: 210000, nextPayment: '2024-12-31', status: 'active' },
+    42→  { id: 'icl-7', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot Pty Ltd', lenderCountry: 'SG', borrowerCountry: 'AU', principal: 250000, currency: 'AUD', principalUSD: 165000, interestRate: 4.5, term: '2 years', outstanding: 140000, nextPayment: '2025-03-31', status: 'active' },
+    43→  { id: 'icl-8', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot Canada Inc', lenderCountry: 'US', borrowerCountry: 'CA', principal: 350000, currency: 'CAD', principalUSD: 256000, interestRate: 4.5, term: '3 years', outstanding: 260000, nextPayment: '2024-12-31', status: 'active' },
+    44→];
+    45→
+    46→// ─── Trade Treaties & Tax Agreements ──────────────────────────────────────────
+    47→
+    48→export interface TradeTreaty {
+    49→  id: string;
+    50→  name: string;
+    51→  type: 'DTAA' | 'FTA' | 'PTA' | 'Investment';
+    52→  countries: CountryCode[];
+    53→  effectiveDate: string;
+    54→  withholdingDividend: number;
+    55→  withholdingInterest: number;
+    56→  withholdingRoyalty: number;
+    57→  capitalGains: string;
+    58→  permanentEstablishment: string;
+    59→  status: 'active' | 'under-review' | 'pending';
+    60→}
+    61→
+    62→export const TRADE_TREATIES: TradeTreaty[] = [
+    63→  { id: 'tr-1', name: 'India–Singapore DTAA (CECA)', type: 'DTAA', countries: ['IN', 'SG'], effectiveDate: '2005-08-01', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Source-based (transition)', permanentEstablishment: '183 days', status: 'active' },
+    64→  { id: 'tr-2', name: 'India–USA DTAA', type: 'DTAA', countries: ['IN', 'US'], effectiveDate: '1991-01-01', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+    65→  { id: 'tr-3', name: 'India–UK DTAA', type: 'DTAA', countries: ['IN', 'GB'], effectiveDate: '1994-10-25', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+    66→  { id: 'tr-4', name: 'India–UAE DTAA', type: 'DTAA', countries: ['IN', 'AE'], effectiveDate: '1993-05-23', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'under-review' },
+    67→  { id: 'tr-5', name: 'India–Japan DTAA', type: 'DTAA', countries: ['IN', 'JP'], effectiveDate: '1960-04-01', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+    68→  { id: 'tr-6', name: 'India–Australia DTAA (CECA)', type: 'DTAA', countries: ['IN', 'AU'], effectiveDate: '1991-10-30', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Source-based', permanentEstablishment: '183 days', status: 'active' },
+    69→  { id: 'tr-7', name: 'India–Canada DTAA', type: 'DTAA', countries: ['IN', 'CA'], effectiveDate: '1997-05-13', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+    70→  { id: 'tr-8', name: 'India–Germany DTAA', type: 'DTAA', countries: ['IN', 'DE'], effectiveDate: '1996-10-26', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+    71→  { id: 'tr-9', name: 'India–France DTAA', type: 'DTAA', countries: ['IN', 'FR'], effectiveDate: '1994-08-29', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+    72→  { id: 'tr-10', name: 'Singapore–Japan EPA', type: 'FTA', countries: ['SG', 'JP'], effectiveDate: '2002-11-30', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+    73→  { id: 'tr-11', name: 'US–UK DTAA', type: 'DTAA', countries: ['US', 'GB'], effectiveDate: '2003-03-31', withholdingDividend: 5, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+    74→  { id: 'tr-12', name: 'EU–Japan EPA', type: 'FTA', countries: ['DE', 'FR', 'JP'], effectiveDate: '2019-02-01', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+    75→  { id: 'tr-13', name: 'UAE–Singapore DTAA', type: 'DTAA', countries: ['AE', 'SG'], effectiveDate: '2015-09-01', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+    76→  { id: 'tr-14', name: 'Australia–Japan JAEPA', type: 'FTA', countries: ['AU', 'JP'], effectiveDate: '2015-01-15', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+    77→];
+    78→
+    79→// ─── Global Customs Declarations ──────────────────────────────────────────────
+    80→
+    81→export interface CustomsDeclaration {
+    82→  id: string;
+    83→  reference: string;
+    84→  type: 'Import' | 'Export';
+    85→  originCountry: CountryCode;
+    86→  destinationCountry: CountryCode;
+    87→  hsCode: string;
+    88→  description: string;
+    89→  declaredValue: number;
+    90→  currency: string;
+    91→  declaredValueUSD: number;
+    92→  dutyRate: number;
+    93→  dutyPaid: number;
+    94→  gstVatPaid: number;
+    95→  status: 'filed' | 'cleared' | 'held' | 'pending';
+    96→  port: string;
+    97→  filingDate: string;
+    98→  incoterm: string;
+    99→}
+   100→
+   101→export const CUSTOMS_DECLARATIONS: CustomsDeclaration[] = [
+   102→  { id: 'cus-1', reference: 'BOE-2024-0891', type: 'Import', originCountry: 'SG', destinationCountry: 'IN', hsCode: '8517.62.00', description: 'Telecom networking modules', declaredValue: 184000, currency: 'USD', declaredValueUSD: 184000, dutyRate: 15, dutyPaid: 27600, gstVatPaid: 33120, status: 'cleared', port: 'Nhava Sheva (IN)', filingDate: '2024-10-02', incoterm: 'CIF' },
+   103→  { id: 'cus-2', reference: 'BOE-2024-0892', type: 'Import', originCountry: 'DE', destinationCountry: 'US', hsCode: '8471.50.01', description: 'Industrial CNC machinery', declaredValue: 312000, currency: 'EUR', declaredValueUSD: 337000, dutyRate: 3.4, dutyPaid: 11458, gstVatPaid: 0, status: 'held', port: 'Newark, NJ (US)', filingDate: '2024-10-01', incoterm: 'FOB' },
+   104→  { id: 'cus-3', reference: 'BOE-2024-0893', type: 'Import', originCountry: 'JP', destinationCountry: 'SG', hsCode: '9031.49.00', description: 'Precision optical instruments', declaredValue: 142000, currency: 'USD', declaredValueUSD: 142000, dutyRate: 0, dutyPaid: 0, gstVatPaid: 12780, status: 'filed', port: 'Port of Singapore', filingDate: '2024-10-03', incoterm: 'CIF' },
+   105→  { id: 'cus-4', reference: 'SAD-2024-0894', type: 'Export', originCountry: 'IN', destinationCountry: 'AE', hsCode: '8542.31.00', description: 'Electronic integrated circuits', declaredValue: 86000, currency: 'USD', declaredValueUSD: 86000, dutyRate: 5, dutyPaid: 4300, gstVatPaid: 0, status: 'cleared', port: 'Mumbai (IN)', filingDate: '2024-09-30', incoterm: 'CIF' },
+   106→  { id: 'cus-5', reference: 'BOE-2024-0895', type: 'Import', originCountry: 'FR', destinationCountry: 'AE', hsCode: '5208.52.00', description: 'Woven cotton textiles', declaredValue: 64000, currency: 'EUR', declaredValueUSD: 69120, dutyRate: 5, dutyPaid: 3456, gstVatPaid: 3110, status: 'pending', port: 'Jebel Ali (AE)', filingDate: '2024-10-04', incoterm: 'CIF' },
+   107→  { id: 'cus-6', reference: 'SAD-2024-0896', type: 'Export', originCountry: 'GB', destinationCountry: 'DE', hsCode: '7208.51.00', description: 'Hot-rolled steel plates', declaredValue: 88000, currency: 'GBP', declaredValueUSD: 111760, dutyRate: 0, dutyPaid: 0, gstVatPaid: 21234, status: 'cleared', port: 'Felixstowe (GB)', filingDate: '2024-10-01', incoterm: 'FOB' },
+   108→  { id: 'cus-7', reference: 'BOE-2024-0897', type: 'Import', originCountry: 'US', destinationCountry: 'IN', hsCode: '8473.30.00', description: 'Computer components & parts', declaredValue: 96000, currency: 'USD', declaredValueUSD: 96000, dutyRate: 10, dutyPaid: 9600, gstVatPaid: 17280, status: 'cleared', port: 'Chennai (IN)', filingDate: '2024-09-28', incoterm: 'EXW' },
+   109→  { id: 'cus-8', reference: 'BOE-2024-0898', type: 'Import', originCountry: 'AU', destinationCountry: 'IN', hsCode: '2601.11.00', description: 'Iron ore concentrates', declaredValue: 48000, currency: 'AUD', declaredValueUSD: 31680, dutyRate: 5, dutyPaid: 1584, gstVatPaid: 5702, status: 'filed', port: 'Visakhapatnam (IN)', filingDate: '2024-10-03', incoterm: 'CIF' },
+   110→];
+   111→
+   112→// ─── Consolidated Financials ──────────────────────────────────────────────────
+   113→
+   114→export interface ConsolidatedBalance {
+   115→  category: string;
+   116→  inr: number;
+   117→  usd: number;
+   118→  eur: number;
+   119→  gbp: number;
+   120→  other: number;
+   121→  totalUSD: number;
+   122→  pctOfTotal: number;
+   123→}
+   124→
+   125→export const CONSOLIDATED_ASSETS: ConsolidatedBalance[] = [
+   126→  { category: 'Cash & Equivalents', inr: 18000000, usd: 3200000, eur: 680000, gbp: 240000, other: 840000, totalUSD: 5958000, pctOfTotal: 30.2 },
+   127→  { category: 'Accounts Receivable', inr: 24000000, usd: 1840000, eur: 420000, gbp: 180000, other: 320000, totalUSD: 5036000, pctOfTotal: 25.5 },
+   128→  { category: 'Inventory', inr: 12000000, usd: 680000, eur: 180000, gbp: 90000, other: 140000, totalUSD: 2620000, pctOfTotal: 13.3 },
+   129→  { category: 'Prepaid Expenses', inr: 3200000, usd: 240000, eur: 80000, gbp: 40000, other: 60000, totalUSD: 820000, pctOfTotal: 4.2 },
+   130→  { category: 'Property, Plant & Equipment', inr: 8400000, usd: 1200000, eur: 340000, gbp: 120000, other: 180000, totalUSD: 2904000, pctOfTotal: 14.7 },
+   131→  { category: 'Intangible Assets', inr: 4800000, usd: 680000, eur: 120000, gbp: 60000, other: 80000, totalUSD: 1500000, pctOfTotal: 7.6 },
+   132→  { category: 'Intercompany Receivables', inr: 6000000, usd: 420000, eur: 140000, gbp: 80000, other: 100000, totalUSD: 1360000, pctOfTotal: 6.9 },
+   133→  { category: 'Deferred Tax Assets', inr: 2000000, usd: 140000, eur: 40000, gbp: 20000, other: 30000, totalUSD: 480000, pctOfTotal: 2.4 },
+   134→];
+   135→
+   136→export const CONSOLIDATED_LIABILITIES: ConsolidatedBalance[] = [
+   137→  { category: 'Accounts Payable', inr: 16000000, usd: 1240000, eur: 280000, gbp: 120000, other: 200000, totalUSD: 3480000, pctOfTotal: 28.4 },
+   138→  { category: 'Accrued Expenses', inr: 8000000, usd: 680000, eur: 160000, gbp: 80000, other: 120000, totalUSD: 2140000, pctOfTotal: 17.5 },
+   139→  { category: 'Deferred Revenue', inr: 12000000, usd: 920000, eur: 240000, gbp: 100000, other: 160000, totalUSD: 3140000, pctOfTotal: 25.6 },
+   140→  { category: 'Short-Term Debt', inr: 4000000, usd: 480000, eur: 80000, gbp: 40000, other: 60000, totalUSD: 1140000, pctOfTotal: 9.3 },
+   141→  { category: 'Intercompany Payables', inr: 5000000, usd: 340000, eur: 100000, gbp: 60000, other: 80000, totalUSD: 1080000, pctOfTotal: 8.8 },
+   142→  { category: 'Long-Term Debt', inr: 3000000, usd: 520000, eur: 60000, gbp: 30000, other: 40000, totalUSD: 780000, pctOfTotal: 6.4 },
+   143→  { category: 'Deferred Tax Liabilities', inr: 1600000, usd: 120000, eur: 40000, gbp: 20000, other: 20000, totalUSD: 380000, pctOfTotal: 3.1 },
+   144→  { category: 'Lease Liabilities', inr: 1000000, usd: 80000, eur: 20000, gbp: 10000, other: 10000, totalUSD: 220000, pctOfTotal: 1.8 },
+   145→];
+   146→
+   147→// ─── Global AR/AP Aging ───────────────────────────────────────────────────────
+   148→
+   149→export interface ARAPAging {
+   150→  countryCode: CountryCode;
+   151→  receivablesCurrent: number;
+   152→  receivables30: number;
+   153→  receivables60: number;
+   154→  receivables90: number;
+   155→  receivablesTotal: number;
+   156→  payablesCurrent: number;
+   157→  payables30: number;
+   158→  payables60: number;
+   159→  payables90: number;
+   160→  payablesTotal: number;
+   161→  dso: number;   // days sales outstanding
+   162→  dpo: number;   // days payable outstanding
+   163→}
+   164→
+   165→export const AR_AP_AGING: ARAPAging[] = [
+   166→  { countryCode: 'IN', receivablesCurrent: 8400000, receivables30: 2200000, receivables60: 680000, receivables90: 240000, receivablesTotal: 11520000, payablesCurrent: 5200000, payables30: 1400000, payables60: 420000, payables90: 180000, payablesTotal: 7200000, dso: 48, dpo: 62 },
+   167→  { countryCode: 'US', receivablesCurrent: 980000, receivables30: 240000, receivables60: 80000, receivables90: 20000, receivablesTotal: 1320000, payablesCurrent: 620000, payables30: 180000, payables60: 60000, payables90: 20000, payablesTotal: 880000, dso: 39, dpo: 54 },
+   168→  { countryCode: 'GB', receivablesCurrent: 280000, receivables30: 80000, receivables60: 24000, receivables90: 8000, receivablesTotal: 392000, payablesCurrent: 180000, payables30: 60000, payables60: 20000, payables90: 6000, payablesTotal: 266000, dso: 34, dpo: 52 },
+   169→  { countryCode: 'SG', receivablesCurrent: 420000, receivables30: 120000, receivables60: 40000, receivables90: 10000, receivablesTotal: 590000, payablesCurrent: 240000, payables30: 80000, payables60: 30000, payables90: 8000, payablesTotal: 358000, dso: 36, dpo: 48 },
+   170→  { countryCode: 'AE', receivablesCurrent: 320000, receivables30: 100000, receivables60: 30000, receivables90: 12000, receivablesTotal: 462000, payablesCurrent: 180000, payables30: 60000, payables60: 24000, payables90: 6000, payablesTotal: 270000, dso: 38, dpo: 46 },
+   171→  { countryCode: 'DE', receivablesCurrent: 480000, receivables30: 140000, receivables60: 40000, receivables90: 10000, receivablesTotal: 670000, payablesCurrent: 280000, payables30: 100000, payables60: 36000, payables90: 8000, payablesTotal: 424000, dso: 40, dpo: 58 },
+   172→  { countryCode: 'FR', receivablesCurrent: 320000, receivables30: 100000, receivables60: 28000, receivables90: 8000, receivablesTotal: 456000, payablesCurrent: 200000, payables30: 70000, payables60: 24000, payables90: 6000, payablesTotal: 300000, dso: 42, dpo: 50 },
+   173→  { countryCode: 'AU', receivablesCurrent: 180000, receivables30: 50000, receivables60: 16000, receivables90: 4000, receivablesTotal: 250000, payablesCurrent: 120000, payables30: 40000, payables60: 14000, payables90: 4000, payablesTotal: 178000, dso: 31, dpo: 44 },
+   174→  { countryCode: 'CA', receivablesCurrent: 240000, receivables30: 70000, receivables60: 20000, receivables90: 6000, receivablesTotal: 336000, payablesCurrent: 140000, payables30: 50000, payables60: 18000, payables90: 4000, payablesTotal: 212000, dso: 33, dpo: 47 },
+   175→  { countryCode: 'JP', receivablesCurrent: 380000, receivables30: 100000, receivables60: 30000, receivables90: 8000, receivablesTotal: 518000, payablesCurrent: 200000, payables30: 70000, payables60: 24000, payables90: 6000, payablesTotal: 300000, dso: 35, dpo: 49 },
+   176→];
+   177→
+   178→// ─── Tax Credits & Incentives ─────────────────────────────────────────────────
+   179→
+   180→export interface TaxCredit {
+   181→  id: string;
+   182→  name: string;
+   183→  countryCode: CountryCode;
+   184→  type: 'R&D Credit' | 'Investment Allowance' | 'Export Incentive' | 'SEZ Benefit' | 'Regional Benefit';
+   185→  eligibleAmount: number;
+   186→  claimedAmount: number;
+   187→  remaining: number;
+   188→  expiry: string;
+   189→  status: 'claimed' | 'pending' | 'expiring' | 'expired';
+   190→  savingUSD: number;
+   191→}
+   192→
+   193→export const TAX_CREDITS: TaxCredit[] = [
+   194→  { id: 'tc-1', name: 'India R&D Tax Credit (Sec 35(2AB))', countryCode: 'IN', type: 'R&D Credit', eligibleAmount: 840000, claimedAmount: 588000, remaining: 252000, expiry: '2025-03-31', status: 'claimed', savingUSD: 147000 },
+   195→  { id: 'tc-2', name: 'India SEZ Export Benefit (Section 10AA)', countryCode: 'IN', type: 'SEZ Benefit', eligibleAmount: 420000, claimedAmount: 210000, remaining: 210000, expiry: '2025-03-31', status: 'claimed', savingUSD: 52500 },
+   196→  { id: 'tc-3', name: 'UK R&D SME Tax Credit', countryCode: 'GB', type: 'R&D Credit', eligibleAmount: 530000, claimedAmount: 0, remaining: 530000, expiry: '2025-04-05', status: 'pending', savingUSD: 98600 },
+   197→  { id: 'tc-4', name: 'US R&D Tax Credit (IRC 41)', countryCode: 'US', type: 'R&D Credit', eligibleAmount: 680000, claimedAmount: 408000, remaining: 272000, expiry: '2025-12-31', status: 'claimed', savingUSD: 136000 },
+   198→  { id: 'tc-5', name: 'Singapore PIC+ Innovation Credit', countryCode: 'SG', type: 'R&D Credit', eligibleAmount: 320000, claimedAmount: 160000, remaining: 160000, expiry: '2025-12-31', status: 'claimed', savingUSD: 27200 },
+   199→  { id: 'tc-6', name: 'Australia R&D Tax Incentive', countryCode: 'AU', type: 'R&D Credit', eligibleAmount: 180000, claimedAmount: 0, remaining: 180000, expiry: '2025-06-30', status: 'pending', savingUSD: 32400 },
+   200→  { id: 'tc-7', name: 'France CIR (Crédit Impôt Recherche)', countryCode: 'FR', type: 'R&D Credit', eligibleAmount: 240000, claimedAmount: 120000, remaining: 120000, expiry: '2025-12-31', status: 'claimed', savingUSD: 21600 },
+   201→  { id: 'tc-8', name: 'Japan R&D Tax System (Special)', countryCode: 'JP', type: 'R&D Credit', eligibleAmount: 160000, claimedAmount: 80000, remaining: 80000, expiry: '2025-03-15', status: 'expiring', savingUSD: 14400 },
+   202→  { id: 'tc-9', name: 'Germany Investment Allowance', countryCode: 'DE', type: 'Investment Allowance', eligibleAmount: 280000, claimedAmount: 140000, remaining: 140000, expiry: '2026-12-31', status: 'claimed', savingUSD: 42340 },
+   203→  { id: 'tc-10', name: 'UAE Free Zone 0% Corporate Tax', countryCode: 'AE', type: 'Regional Benefit', eligibleAmount: 920000, claimedAmount: 460000, remaining: 460000, expiry: '2027-06-01', status: 'claimed', savingUSD: 41400 },
+   204→  { id: 'tc-11', name: 'Canada SR&ED Tax Credit', countryCode: 'CA', type: 'R&D Credit', eligibleAmount: 140000, claimedAmount: 0, remaining: 140000, expiry: '2025-06-30', status: 'pending', savingUSD: 36400 },
+   205→  { id: 'tc-12', name: 'India Merchandise Export Incentive (RODTEP)', countryCode: 'IN', type: 'Export Incentive', eligibleAmount: 180000, claimedAmount: 90000, remaining: 90000, expiry: '2025-09-30', status: 'claimed', savingUSD: 18000 },
+   206→];
+   207→
+   208→// ─── Global Insurance & Risk Transfer ─────────────────────────────────────────
+   209→
+   210→export interface InsurancePolicy {
+   211→  id: string;
+   212→  name: string;
+   213→  type: 'D&O' | 'Cyber' | 'Property' | 'Business Interruption' | 'Trade Credit' | 'Professional Indemnity';
+   214→  coverage: number;
+   215→  premium: number;
+   216→  deductible: number;
+   217→  insurer: string;
+   218→  renewalDate: string;
+   219→  status: 'active' | 'renewing' | 'expiring';
+   220→  regions: string[];
+   221→}
+   222→
+   223→export const INSURANCE_POLICIES: InsurancePolicy[] = [
+   224→  { id: 'ins-1', name: 'Global D&O Liability', type: 'D&O', coverage: 50000000, premium: 280000, deductible: 500000, insurer: 'AIG', renewalDate: '2025-06-30', status: 'active', regions: ['Global'] },
+   225→  { id: 'ins-2', name: 'Cyber Liability Plus', type: 'Cyber', coverage: 25000000, premium: 180000, deductible: 250000, insurer: 'Chubb', renewalDate: '2025-03-31', status: 'active', regions: ['Global'] },
+   226→  { id: 'ins-3', name: 'Global Property All-Risk', type: 'Property', coverage: 18000000, premium: 96000, deductible: 100000, insurer: 'Allianz', renewalDate: '2025-01-31', status: 'renewing', regions: ['IN', 'US', 'SG', 'DE'] },
+   227→  { id: 'ins-4', name: 'Business Interruption', type: 'Business Interruption', coverage: 12000000, premium: 84000, deductible: 200000, insurer: 'AXA', renewalDate: '2025-01-31', status: 'renewing', regions: ['Global'] },
+   228→  { id: 'ins-5', name: 'Global Trade Credit Insurance', type: 'Trade Credit', coverage: 20000000, premium: 120000, deductible: 50000, insurer: 'Euler Hermes', renewalDate: '2025-09-30', status: 'active', regions: ['Global'] },
+   229→  { id: 'ins-6', name: 'Professional Indemnity', type: 'Professional Indemnity', coverage: 10000000, premium: 68000, deductible: 100000, insurer: 'Hiscox', renewalDate: '2025-04-30', status: 'active', regions: ['Global'] },
+   230→  { id: 'ins-7', name: 'APAC Property Extension', type: 'Property', coverage: 6000000, premium: 32000, deductible: 75000, insurer: 'Allianz', renewalDate: '2025-01-31', status: 'renewing', regions: ['IN', 'SG', 'AU', 'JP'] },
+   231→  { id: 'ins-8', name: 'US Cyber Extension', type: 'Cyber', coverage: 10000000, premium: 64000, deductible: 100000, insurer: 'Chubb', renewalDate: '2025-03-31', status: 'active', regions: ['US', 'CA'] },
+   232→];
+   233→
+   234→// ─── ESG / Sustainability Metrics ─────────────────────────────────────────────
+   235→
+   236→export interface ESGMetric {
+   237→  countryCode: CountryCode;
+   238→  scope1Emissions: number;    // tCO2e
+   239→  scope2Emissions: number;    // tCO2e
+   240→  scope3Emissions: number;    // tCO2e
+   241→  renewableEnergyPct: number;
+   242→  waterUsage: number;          // m³
+   243→  wasteRecycledPct: number;
+   244→  diversityScore: number;      // 0-100
+   245→  employeeSatisfaction: number;
+   246→  communityInvestment: number; // USD
+   247→}
+   248→
+   249→export const ESG_METRICS: ESGMetric[] = [
+   250→  { countryCode: 'IN', scope1Emissions: 420, scope2Emissions: 2840, scope3Emissions: 18600, renewableEnergyPct: 42, waterUsage: 12400, wasteRecycledPct: 78, diversityScore: 72, employeeSatisfaction: 84, communityInvestment: 180000 },
+   251→  { countryCode: 'US', scope1Emissions: 180, scope2Emissions: 920, scope3Emissions: 8400, renewableEnergyPct: 38, waterUsage: 4200, wasteRecycledPct: 82, diversityScore: 68, employeeSatisfaction: 81, communityInvestment: 120000 },
+   252→  { countryCode: 'GB', scope1Emissions: 80, scope2Emissions: 340, scope3Emissions: 3200, renewableEnergyPct: 64, waterUsage: 1800, wasteRecycledPct: 88, diversityScore: 74, employeeSatisfaction: 86, communityInvestment: 64000 },
+   253→  { countryCode: 'SG', scope1Emissions: 120, scope2Emissions: 680, scope3Emissions: 5400, renewableEnergyPct: 28, waterUsage: 2400, wasteRecycledPct: 76, diversityScore: 82, employeeSatisfaction: 83, communityInvestment: 84000 },
+   254→  { countryCode: 'AE', scope1Emissions: 140, scope2Emissions: 820, scope3Emissions: 4200, renewableEnergyPct: 22, waterUsage: 3200, wasteRecycledPct: 68, diversityScore: 64, employeeSatisfaction: 79, communityInvestment: 56000 },
+   255→  { countryCode: 'DE', scope1Emissions: 90, scope2Emissions: 280, scope3Emissions: 3800, renewableEnergyPct: 72, waterUsage: 1600, wasteRecycledPct: 91, diversityScore: 76, employeeSatisfaction: 88, communityInvestment: 72000 },
+   256→  { countryCode: 'FR', scope1Emissions: 70, scope2Emissions: 220, scope3Emissions: 2800, renewableEnergyPct: 68, waterUsage: 1400, wasteRecycledPct: 89, diversityScore: 78, employeeSatisfaction: 85, communityInvestment: 48000 },
+   257→  { countryCode: 'AU', scope1Emissions: 60, scope2Emissions: 240, scope3Emissions: 2200, renewableEnergyPct: 46, waterUsage: 1200, wasteRecycledPct: 84, diversityScore: 70, employeeSatisfaction: 82, communityInvestment: 36000 },
+   258→  { countryCode: 'CA', scope1Emissions: 65, scope2Emissions: 260, scope3Emissions: 2400, renewableEnergyPct: 68, waterUsage: 1400, wasteRecycledPct: 86, diversityScore: 72, employeeSatisfaction: 84, communityInvestment: 42000 },
+   259→  { countryCode: 'JP', scope1Emissions: 55, scope2Emissions: 220, scope3Emissions: 2000, renewableEnergyPct: 24, waterUsage: 1100, wasteRecycledPct: 87, diversityScore: 66, employeeSatisfaction: 80, communityInvestment: 38000 },
+   260→];
+   261→
+   262→// ─── Cash Pooling ─────────────────────────────────────────────────────────────
+   263→
+   264→export interface CashPoolPosition {
+   265→  id: string;
+   266→  entity: string;
+   267→  countryCode: CountryCode;
+   268→  accountType: 'Header' | 'Participant';
+   269→  balance: number;
+   270→  currency: string;
+   271→  balanceUSD: number;
+   272→  sweepStatus: 'swept' | 'pending' | 'manual';
+   273→  interestRate: number;
+   274→  lastSweep: string;
+   275→}
+   276→
+   277→export const CASH_POOL: CashPoolPosition[] = [
+   278→  { id: 'cp-1', entity: 'GSTPilot Treasury Pte Ltd (Header)', countryCode: 'SG', accountType: 'Header', balance: 4200000, currency: 'USD', balanceUSD: 4200000, sweepStatus: 'swept', interestRate: 4.8, lastSweep: '2024-10-04 06:00' },
+   279→  { id: 'cp-2', entity: 'GSTPilot India Pvt Ltd', countryCode: 'IN', accountType: 'Participant', balance: 28000000, currency: 'INR', balanceUSD: 336000, sweepStatus: 'swept', interestRate: 4.2, lastSweep: '2024-10-04 06:00' },
+   280→  { id: 'cp-3', entity: 'GSTPilot Inc (Delaware)', countryCode: 'US', accountType: 'Participant', balance: 1840000, currency: 'USD', balanceUSD: 1840000, sweepStatus: 'swept', interestRate: 4.8, lastSweep: '2024-10-04 06:00' },
+   281→  { id: 'cp-4', entity: 'GSTPilot UK Ltd', countryCode: 'GB', accountType: 'Participant', balance: 680000, currency: 'GBP', balanceUSD: 863600, sweepStatus: 'swept', interestRate: 4.6, lastSweep: '2024-10-04 06:00' },
+   282→  { id: 'cp-5', entity: 'GSTPilot GmbH', countryCode: 'DE', accountType: 'Participant', balance: 920000, currency: 'EUR', balanceUSD: 993600, sweepStatus: 'pending', interestRate: 4.4, lastSweep: '2024-10-03 06:00' },
+   283→  { id: 'cp-6', entity: 'GSTPilot FZ-LLC', countryCode: 'AE', accountType: 'Participant', balance: 1200000, currency: 'AED', balanceUSD: 324000, sweepStatus: 'swept', interestRate: 4.0, lastSweep: '2024-10-04 06:00' },
+   284→  { id: 'cp-7', entity: 'GSTPilot Asia Pte Ltd', countryCode: 'SG', accountType: 'Participant', balance: 680000, currency: 'SGD', balanceUSD: 503200, sweepStatus: 'swept', interestRate: 4.5, lastSweep: '2024-10-04 06:00' },
+   285→  { id: 'cp-8', entity: 'GSTPilot Pty Ltd', countryCode: 'AU', accountType: 'Participant', balance: 340000, currency: 'AUD', balanceUSD: 224400, sweepStatus: 'manual', interestRate: 4.2, lastSweep: '2024-10-02 06:00' },
+   286→  { id: 'cp-9', entity: 'GSTPilot Canada Inc', countryCode: 'CA', accountType: 'Participant', balance: 420000, currency: 'CAD', balanceUSD: 306600, sweepStatus: 'swept', interestRate: 4.3, lastSweep: '2024-10-04 06:00' },
+   287→  { id: 'cp-10', entity: 'GSTPilot K.K.', countryCode: 'JP', accountType: 'Participant', balance: 38000000, currency: 'JPY', balanceUSD: 254600, sweepStatus: 'swept', interestRate: 4.1, lastSweep: '2024-10-04 06:00' },
+   288→];
+   289→
+   290→// ─── Board & Governance ───────────────────────────────────────────────────────
+   291→
+   292→export interface BoardMember {
+   293→  id: string;
+   294→  name: string;
+   295→  role: string;
+   296→  independent: boolean;
+   297→  nationality: string;
+   298→  countryCode: CountryCode;
+   299→  committees: string[];
+   300→  attendance: number;       // %
+   301→  since: string;

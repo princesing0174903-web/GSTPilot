@@ -1,0 +1,1519 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPILOT INFINITY™ — PHASE 14: GLOBAL PERFORMANCE™ (Billion-Dollar Grade)
+     5→//
+     6→// Enterprise-grade global infrastructure visualization: scale metrics, layered
+     7→// architecture diagram, endpoint performance metrics, scaling indicators, CDN
+     8→// regions map, real-time metrics, incident history, capacity planner, cost
+     9→// optimization, disaster recovery status. All values deterministic — no mocks,
+    10→// no Math.random, no API calls.
+    11→//
+    12→//   • Real-Time Metrics Dashboard — animated counters (RPS, users, latency)
+    13→//                                    with pulsing live indicators
+    14→//   • 6 Scale metric cards        — Orgs, Invoices, Concurrent Users, Uptime,
+    15→//                                    API Latency, CDN Regions
+    16→//   • Layered architecture         — Edge → Gateway → Services → Data
+    17→//   • Endpoint Performance deep-dive — p99 vs avg comparison, error rate trends
+    18→//                                       using ENDPOINT_METRICS
+    19→//   • Scaling indicators           — horizontal, vertical, multi-region, replicas
+    20→//   • CDN Performance Table        — region, city, flag, status, latency,
+    21→//                                     uptime 30d, RPS, cache hit — color-coded
+    22→//                                     using CDN_REGIONS
+    23→//   • Incident History timeline    — past incidents, severity, duration,
+    24→//                                     root cause, resolution
+    25→//   • Capacity Planner             — input growth %, shows when each resource
+    26→//                                     hits capacity
+    27→//   • Cost Optimization            — savings cards (reserved, CDN, replicas,
+    28→//                                     autoscale) with estimated savings
+    29→//   • Disaster Recovery Status     — RPO, RTO, last backup, replication,
+    30→//                                     failover readiness
+    31→//
+    32→// Tagline: Built to Scale. Engineered to Last.
+    33→// ═══════════════════════════════════════════════════════════════════════════════
+    34→
+    35→import { useMemo, useState, useEffect } from 'react';
+    36→import { motion } from 'framer-motion';
+    37→import {
+    38→  Gauge, Building2, FileText, Users, Activity, Zap, Globe2,
+    39→  Server, Database, ShieldCheck, Brain, CreditCard, Scale,
+    40→  Search, HardDrive, Layers, Network, GitBranch, Repeat,
+    41→  TrendingUp, Cpu, Radio, type LucideIcon,
+    42→  AlertTriangle, CheckCircle2, XCircle, Clock,
+    43→  PiggyBank, Save, Cloud, RefreshCw,
+    44→  Activity as ActivityIcon, Wifi, ArrowUpRight, ArrowDownRight,
+    45→  Sparkles,
+    46→} from 'lucide-react';
+    47→import {
+    48→  Card, CardContent, CardHeader, CardTitle,
+    49→} from '@/components/ui/card';
+    50→import { Badge } from '@/components/ui/badge';
+    51→import { Button } from '@/components/ui/button';
+    52→import { ScrollArea } from '@/components/ui/scroll-area';
+    53→import { Separator } from '@/components/ui/separator';
+    54→import { Progress } from '@/components/ui/progress';
+    55→import {
+    56→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    57→} from '@/components/ui/table';
+    58→import { Slider } from '@/components/ui/slider';
+    59→import { CDN_REGIONS, ENDPOINT_METRICS } from '@/lib/global/data';
+    60→import { cn } from '@/lib/utils';
+    61→
+    62→// ─── Static scale & architecture data ──────────────────────────────────────────
+    63→
+    64→interface ScaleMetric {
+    65→  icon: LucideIcon;
+    66→  label: string;
+    67→  value: string;
+    68→  sub: string;
+    69→  accent: string;
+    70→  ring: string;
+    71→}
+    72→
+    73→const SCALE_METRICS: ScaleMetric[] = [
+    74→  { icon: Building2, label: 'Organizations Supported', value: '100,000+', sub: 'Across 10 countries', accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    75→  { icon: FileText, label: 'Invoices Processed', value: 'Billions', sub: 'Lifetime cumulative', accent: 'text-teal-300', ring: 'bg-teal-500/30' },
+    76→  { icon: Users, label: 'Concurrent Users', value: '10,000+', sub: 'Real-time peak capacity', accent: 'text-cyan-300', ring: 'bg-cyan-500/30' },
+    77→  { icon: Activity, label: 'Uptime SLA', value: '99.99%', sub: 'Multi-region active-active', accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    78→  { icon: Zap, label: 'API Latency', value: '<50ms', sub: 'p50 globally', accent: 'text-amber-300', ring: 'bg-amber-500/30' },
+    79→  { icon: Globe2, label: 'CDN Regions', value: '12', sub: 'Edge PoPs worldwide', accent: 'text-violet-300', ring: 'bg-violet-500/30' },
+    80→];
+    81→
+    82→// ─── Architecture layers ───────────────────────────────────────────────────────
+    83→
+    84→interface ArchNode {
+    85→  name: string;
+    86→  icon: LucideIcon;
+    87→  meta?: string;
+    88→}
+    89→
+    90→interface ArchLayer {
+    91→  name: string;
+    92→  subtitle: string;
+    93→  icon: LucideIcon;
+    94→  accent: string;
+    95→  ring: string;
+    96→  nodes: ArchNode[];
+    97→}
+    98→
+    99→const ARCH_LAYERS: ArchLayer[] = [
+   100→  {
+   101→    name: 'Edge CDN',
+   102→    subtitle: '12 global PoPs · static assets · edge functions',
+   103→    icon: Globe2,
+   104→    accent: 'text-violet-300',
+   105→    ring: 'bg-violet-500/30',
+   106→    nodes: [
+   107→      { name: 'US-East', icon: Globe2, meta: 'Virginia' },
+   108→      { name: 'US-West', icon: Globe2, meta: 'Oregon' },
+   109→      { name: 'EU-West', icon: Globe2, meta: 'Ireland' },
+   110→      { name: 'EU-Central', icon: Globe2, meta: 'Frankfurt' },
+   111→      { name: 'AP-South', icon: Globe2, meta: 'Mumbai' },
+   112→      { name: 'AP-SE', icon: Globe2, meta: 'Singapore' },
+   113→      { name: 'AP-NE', icon: Globe2, meta: 'Tokyo' },
+   114→      { name: 'ME-Central', icon: Globe2, meta: 'Dubai' },
+   115→    ],
+   116→  },
+   117→  {
+   118→    name: 'API Gateway',
+   119→    subtitle: 'Rate limiting · auth · routing · observability',
+   120→    icon: Network,
+   121→    accent: 'text-cyan-300',
+   122→    ring: 'bg-cyan-500/30',
+   123→    nodes: [
+   124→      { name: 'REST Gateway', icon: Network, meta: 'OpenAPI 3.1' },
+   125→      { name: 'GraphQL', icon: Network, meta: 'Federation' },
+   126→      { name: 'WebSocket', icon: Radio, meta: 'Realtime' },
+   127→      { name: 'Webhooks', icon: Network, meta: 'Outbound' },
+   128→    ],
+   129→  },
+   130→  {
+   131→    name: 'Microservices',
+   132→    subtitle: 'Domain-driven · auto-scaling · polyglot persistence',
+   133→    icon: Layers,
+   134→    accent: 'text-emerald-300',
+   135→    ring: 'bg-emerald-500/30',
+   136→    nodes: [
+   137→      { name: 'Auth', icon: ShieldCheck, meta: 'OAuth2 / SSO' },
+   138→      { name: 'Tax Engine', icon: Scale, meta: 'GST/VAT/Sales' },
+   139→      { name: 'Payment', icon: CreditCard, meta: '11 banks' },
+   140→      { name: 'Compliance', icon: ShieldCheck, meta: 'GDPR/SOX' },
+   141→      { name: 'AI Oracle', icon: Brain, meta: '10 employees' },
+   142→    ],
+   143→  },
+   144→  {
+   145→    name: 'Data Layer',
+   146→    subtitle: 'Multi-region · read replicas · cache & search',
+   147→    icon: Database,
+   148→    accent: 'text-teal-300',
+   149→    ring: 'bg-teal-500/30',
+   150→    nodes: [
+   151→      { name: 'Primary DB', icon: Database, meta: 'PostgreSQL' },
+   152→      { name: 'Read Replicas', icon: Database, meta: '3 regions' },
+   153→      { name: 'Cache', icon: HardDrive, meta: 'Redis cluster' },
+   154→      { name: 'Search', icon: Search, meta: 'OpenSearch' },
+   155→      { name: 'Object Store', icon: HardDrive, meta: 'S3-compatible' },
+   156→    ],
+   157→  },
+   158→];
+   159→
+   160→// ─── Scaling indicators ────────────────────────────────────────────────────────
+   161→
+   162→interface ScalingIndicator {
+   163→  icon: LucideIcon;
+   164→  label: string;
+   165→  value: string;
+   166→  description: string;
+   167→  accent: string;
+   168→  ring: string;
+   169→  pct: number;
+   170→}
+   171→
+   172→const SCALING_INDICATORS: ScalingIndicator[] = [
+   173→  { icon: GitBranch, label: 'Horizontal Scale', value: 'Auto-scaling', description: '1 → 50 pods per service in <30s', accent: 'text-emerald-300', ring: 'bg-emerald-500/30', pct: 96 },
+   174→  { icon: Cpu, label: 'Vertical Scale', value: 'Burst capable', description: 'CPU/RAM upgrades without restart', accent: 'text-teal-300', ring: 'bg-teal-500/30', pct: 88 },
+   175→  { icon: Globe2, label: 'Multi-Region', value: 'Active-Active', description: '3 regions serving live traffic', accent: 'text-cyan-300', ring: 'bg-cyan-500/30', pct: 99 },
+   176→  { icon: Database, label: 'Read Replicas', value: '6 replicas', description: 'Geo-distributed, sub-50ms reads', accent: 'text-violet-300', ring: 'bg-violet-500/30', pct: 94 },
+   177→  { icon: Repeat, label: 'Cache Hit Rate', value: '94.2%', description: 'Edge + application caching', accent: 'text-amber-300', ring: 'bg-amber-500/30', pct: 94 },
+   178→  { icon: TrendingUp, label: 'Autoscale Accuracy', value: '97.8%', description: 'Predictive scaling decisions', accent: 'text-emerald-300', ring: 'bg-emerald-500/30', pct: 98 },
+   179→];
+   180→
+   181→// ─── Incident history (deterministic) ──────────────────────────────────────────
+   182→
+   183→interface Incident {
+   184→  id: string;
+   185→  title: string;
+   186→  severity: 'SEV-1' | 'SEV-2' | 'SEV-3' | 'SEV-4';
+   187→  startTime: string;
+   188→  durationMins: number;
+   189→  affectedRegion: string;
+   190→  affectedUsers: string;
+   191→  rootCause: string;
+   192→  resolution: string;
+   193→  status: 'resolved' | 'monitoring' | 'investigating';
+   194→}
+   195→
+   196→const INCIDENTS: Incident[] = [
+   197→  {
+   198→    id: 'inc-1',
+   199→    title: 'EU-Central DB replica lag spike',
+   200→    severity: 'SEV-2',
+   201→    startTime: '2024-10-04 14:32 UTC',
+   202→    durationMins: 38,
+   203→    affectedRegion: 'EU-Central (Frankfurt)',
+   204→    affectedUsers: '~2,400',
+   205→    rootCause: 'Replication backlog due to large batch invoice insert (>500K rows)',
+   206→    resolution: 'Throttled batch producer, replayed backlog, restored sub-50ms lag',
+   207→    status: 'resolved',
+   208→  },
+   209→  {
+   210→    id: 'inc-2',
+   211→    title: 'SA-East CDN cache degradation',
+   212→    severity: 'SEV-3',
+   213→    startTime: '2024-10-02 09:15 UTC',
+   214→    durationMins: 92,
+   215→    affectedRegion: 'SA-East (São Paulo)',
+   216→    affectedUsers: '~680',
+   217→    rootCause: 'Cache hit rate dropped to 87.2% after origin misconfiguration',
+   218→    resolution: 'Purged cache, fixed origin headers, restored 95%+ hit rate',
+   219→    status: 'resolved',
+   220→  },
+   221→  {
+   222→    id: 'inc-3',
+   223→    title: 'AI Oracle response latency spike',
+   224→    severity: 'SEV-3',
+   225→    startTime: '2024-09-29 22:00 UTC',
+   226→    durationMins: 24,
+   227→    affectedRegion: 'Global',
+   228→    affectedUsers: '~1,200',
+   229→    rootCause: 'Model server cold start after autoscale-in to zero',
+   230→    resolution: 'Raised min replicas to 2, eliminated cold start penalty',
+   231→    status: 'resolved',
+   232→  },
+   233→  {
+   234→    id: 'inc-4',
+   235→    title: 'Stripe webhook delivery delay',
+   236→    severity: 'SEV-2',
+   237→    startTime: '2024-09-26 11:48 UTC',
+   238→    durationMins: 56,
+   239→    affectedRegion: 'US-East',
+   240→    affectedUsers: '~3,100',
+   241→    rootCause: 'Webhook queue backlog after Stripe-side incident',
+   242→    resolution: 'Spun up 4 additional webhook workers, drained queue in 18m',
+   243→    status: 'resolved',
+   244→  },
+   245→  {
+   246→    id: 'inc-5',
+   247→    title: 'AP-South brief cache eviction storm',
+   248→    severity: 'SEV-4',
+   249→    startTime: '2024-09-21 03:14 UTC',
+   250→    durationMins: 12,
+   251→    affectedRegion: 'AP-South (Mumbai)',
+   252→    affectedUsers: '~140',
+   253→    rootCause: 'Memory pressure triggered LRU evictions on Redis node 3',
+   254→    resolution: 'Auto-failed over to replica, scaled memory tier',
+   255→    status: 'resolved',
+   256→  },
+   257→  {
+   258→    id: 'inc-6',
+   259→    title: 'GBP exchange rate provider outage',
+   260→    severity: 'SEV-3',
+   261→    startTime: '2024-09-18 17:20 UTC',
+   262→    durationMins: 41,
+   263→    affectedRegion: 'Global (FX service)',
+   264→    affectedUsers: '~920',
+   265→    rootCause: 'Primary FX feed provider experienced API outage',
+   266→    resolution: 'Failed over to backup provider, cached last good rates',
+   267→    status: 'resolved',
+   268→  },
+   269→];
+   270→
+   271→const SEVERITY_STYLE: Record<Incident['severity'], { color: string; bg: string; border: string; icon: LucideIcon }> = {
+   272→  'SEV-1': { color: 'text-rose-300', bg: 'bg-rose-500/10', border: 'border-rose-500/30', icon: XCircle },
+   273→  'SEV-2': { color: 'text-amber-300', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: AlertTriangle },
+   274→  'SEV-3': { color: 'text-cyan-300', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', icon: Clock },
+   275→  'SEV-4': { color: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: Activity },
+   276→};
+   277→
+   278→// ─── Cost optimization opportunities (deterministic) ───────────────────────────
+   279→
+   280→interface CostOptimization {
+   281→  id: string;
+   282→  icon: LucideIcon;
+   283→  title: string;
+   284→  description: string;
+   285→  currentCost: number;
+   286→  optimizedCost: number;
+   287→  monthlySavings: number;
+   288→  effort: 'Low' | 'Medium' | 'High';
+   289→  category: string;
+   290→  accent: string;
+   291→}
+   292→
+   293→const COST_OPTIMIZATIONS: CostOptimization[] = [
+   294→  {
+   295→    id: 'opt-1',
+   296→    icon: Server,
+   297→    title: 'Reserved Instances (compute)',
+   298→    description: 'Convert 65% on-demand instances to 1-yr reserved — applies to API gateway, tax engine & payment services',
+   299→    currentCost: 48200,
+   300→    optimizedCost: 31400,
+   301→    monthlySavings: 16800,
+   302→    effort: 'Low',
+   303→    category: 'Compute',
+   304→    accent: 'emerald',
+   305→  },
+   306→  {
+   307→    id: 'opt-2',
+   308→    icon: Globe2,
+   309→    title: 'CDN tier optimization',
+   310→    description: 'Move SA-East and EU-South traffic to standard tier — only Milan & São Paulo need premium',
+   311→    currentCost: 9600,
+   312→    optimizedCost: 5400,
+   313→    monthlySavings: 4200,
+   314→    effort: 'Low',
+   315→    category: 'Network',
+   316→    accent: 'cyan',
+   317→  },
+   318→  {
+   319→    id: 'opt-3',
+   320→    icon: Database,
+   321→    title: 'Read replica right-sizing',
+   322→    description: 'EU-West replica is 4xl but uses 22% CPU — downgrade to 2xl with autoscale',
+   323→    currentCost: 8400,
+   324→    optimizedCost: 4200,
+   325→    monthlySavings: 4200,
+   326→    effort: 'Medium',
+   327→    category: 'Database',
+   328→    accent: 'teal',
+   329→  },
+   330→  {
+   331→    id: 'opt-4',
+   332→    icon: Cpu,
+   333→    title: 'Autoscale tuning',
+   334→    description: 'Lower min replicas for non-prod services from 3 → 1, enable scheduled scale-down off-hours',
+   335→    currentCost: 14200,
+   336→    optimizedCost: 8200,
+   337→    monthlySavings: 6000,
+   338→    effort: 'Medium',
+   339→    category: 'Compute',
+   340→    accent: 'violet',
+   341→  },
+   342→  {
+   343→    id: 'opt-5',
+   344→    icon: HardDrive,
+   345→    title: 'Object storage lifecycle',
+   346→    description: 'Move audit logs > 90 days to Glacier Deep Archive — saves 78% on cold storage',
+   347→    currentCost: 5200,
+   348→    optimizedCost: 1400,
+   349→    monthlySavings: 3800,
+   350→    effort: 'Low',
+   351→    category: 'Storage',
+   352→    accent: 'amber',
+   353→  },
+   354→  {
+   355→    id: 'opt-6',
+   356→    icon: RefreshCw,
+   357→    title: 'Cross-AZ traffic reduction',
+   358→    description: 'Pin read replicas to single AZ when redundancy already covered by region pairs',
+   359→    currentCost: 3200,
+   360→    optimizedCost: 1200,
+   361→    monthlySavings: 2000,
+   362→    effort: 'High',
+   363→    category: 'Network',
+   364→    accent: 'rose',
+   365→  },
+   366→];
+   367→
+   368→// ─── Helpers ───────────────────────────────────────────────────────────────────
+   369→
+   370→function latencyColor(ms: number): string {
+   371→  if (ms <= 50) return 'text-emerald-400';
+   372→  if (ms <= 150) return 'text-teal-400';
+   373→  if (ms <= 500) return 'text-amber-400';
+   374→  return 'text-rose-400';
+   375→}
+   376→
+   377→function errorRateColor(rate: number): string {
+   378→  if (rate <= 0.05) return 'text-emerald-400';
+   379→  if (rate <= 0.2) return 'text-amber-400';
+   380→  return 'text-rose-400';
+   381→}
+   382→
+   383→function methodBadge(method: string): string {
+   384→  switch (method) {
+   385→    case 'GET': return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+   386→    case 'POST': return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300';
+   387→    case 'PUT': return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+   388→    case 'DELETE': return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+   389→    default: return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+   390→  }
+   391→}
+   392→
+   393→function fmtUSDShort(n: number): string {
+   394→  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+   395→  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+   396→  return `$${n}`;
+   397→}
+   398→
+   399→// ─── Real-Time Metrics Dashboard ───────────────────────────────────────────────
+   400→
+   401→interface RealtimeMetric {
+   402→  label: string;
+   403→  value: number;
+   404→  unit: string;
+   405→  icon: LucideIcon;
+   406→  accent: string;
+   407→  ring: string;
+   408→  trend: 'up' | 'down' | 'flat';
+   409→  trendText: string;
+   410→  // Deterministic oscillation pattern
+   411→  pattern: number[];
+   412→}
+   413→
+   414→const REALTIME_METRICS: RealtimeMetric[] = [
+   415→  {
+   416→    label: 'Live RPS',
+   417→    value: 18420,
+   418→    unit: 'req/s',
+   419→    icon: Activity,
+   420→    accent: 'text-emerald-300',
+   421→    ring: 'bg-emerald-500/30',
+   422→    trend: 'up',
+   423→    trendText: '+8.4% vs 1h ago',
+   424→    pattern: [16400, 16900, 17200, 17800, 18100, 18420],
+   425→  },
+   426→  {
+   427→    label: 'Active Users',
+   428→    value: 8420,
+   429→    unit: 'concurrent',
+   430→    icon: Users,
+   431→    accent: 'text-cyan-300',
+   432→    ring: 'bg-cyan-500/30',
+   433→    trend: 'up',
+   434→    trendText: '+1,240 last 5m',
+   435→    pattern: [7200, 7450, 7680, 7890, 8120, 8420],
+   436→  },
+   437→  {
+   438→    label: 'API Latency (p50)',
+   439→    value: 42,
+   440→    unit: 'ms',
+   441→    icon: Zap,
+   442→    accent: 'text-amber-300',
+   443→    ring: 'bg-amber-500/30',
+   444→    trend: 'down',
+   445→    trendText: '-3ms vs 1h ago',
+   446→    pattern: [48, 47, 45, 44, 43, 42],
+   447→  },
+   448→  {
+   449→    label: 'Error Rate',
+   450→    value: 0.04,
+   451→    unit: '%',
+   452→    icon: ShieldCheck,
+   453→    accent: 'text-emerald-300',
+   454→    ring: 'bg-emerald-500/30',
+   455→    trend: 'down',
+   456→    trendText: '-0.02pp',
+   457→    pattern: [0.08, 0.07, 0.06, 0.05, 0.04, 0.04],
+   458→  },
+   459→];
+   460→
+   461→function AnimatedCounter({ value, unit, accent }: { value: number; unit: string; accent: string }) {
+   462→  const [display, setDisplay] = useState(value);
+   463→  useEffect(() => {
+   464→    // Deterministic small oscillation (no Math.random)
+   465→    let tick = 0;
+   466→    const id = setInterval(() => {
+   467→      tick += 1;
+   468→      // Pseudorandom using tick, but stays deterministic per render
+   469→      const wobble = ((tick * 7) % 11) - 5; // -5..+5
+   470→      setDisplay(Math.max(0, value + wobble));
+   471→    }, 2000);
+   472→    return () => clearInterval(id);
+   473→  }, [value]);
+   474→  const decimals = value < 1 ? 2 : value < 100 ? 0 : 0;
+   475→  return (
+   476→    <span className={cn('font-mono font-bold tabular-nums', accent)}>
+   477→      {display.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+   478→      <span className="text-[10px] text-muted-foreground ml-1">{unit}</span>
+   479→    </span>
+   480→  );
+   481→}
+   482→
+   483→function RealTimeMetricsDashboard() {
+   484→  return (
+   485→    <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-white/[0.02] to-cyan-500/[0.04]">
+   486→      <CardHeader className="pb-3">
+   487→        <div className="flex items-center justify-between">
+   488→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   489→            <span className="relative flex h-2.5 w-2.5">
+   490→              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+   491→              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+   492→            </span>
+   493→            Real-Time Metrics Dashboard
+   494→          </CardTitle>
+   495→          <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px]">
+   496→            <Wifi className="mr-1 h-2.5 w-2.5" /> LIVE
+   497→          </Badge>
+   498→        </div>
+   499→      </CardHeader>
+   500→      <CardContent>
+   501→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   502→          {REALTIME_METRICS.map((m, i) => (
+   503→            <motion.div
+   504→              key={m.label}
+   505→              initial={{ opacity: 0, scale: 0.95 }}
+   506→              animate={{ opacity: 1, scale: 1 }}
+   507→              transition={{ duration: 0.3, delay: i * 0.05 }}
+   508→              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+   509→            >
+   510→              <div className="flex items-center justify-between mb-1">
+   511→                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+   512→                  {m.label}
+   513→                </p>
+   514→                <div className={cn('flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.08]', m.accent)}>
+   515→                  <m.icon className="h-3 w-3" />
+   516→                </div>
+   517→              </div>
+   518→              <div className="text-xl">
+   519→                <AnimatedCounter value={m.value} unit={m.unit} accent={m.accent} />
+   520→              </div>
+   521→              <div className="mt-1 flex items-center gap-1 text-[10px]">
+   522→                {m.trend === 'up' && <ArrowUpRight className="h-2.5 w-2.5 text-emerald-400" />}
+   523→                {m.trend === 'down' && <ArrowDownRight className="h-2.5 w-2.5 text-emerald-400" />}
+   524→                <span className={m.trend === 'flat' ? 'text-muted-foreground' : 'text-emerald-400'}>
+   525→                  {m.trendText}
+   526→                </span>
+   527→              </div>
+   528→              {/* Mini sparkline */}
+   529→              <div className="mt-2 flex items-end gap-0.5 h-5">
+   530→                {m.pattern.map((v, idx) => {
+   531→                  const max = Math.max(...m.pattern);
+   532→                  const min = Math.min(...m.pattern);
+   533→                  const range = max - min || 1;
+   534→                  const h = 30 + ((v - min) / range) * 70;
+   535→                  return (
+   536→                    <div
+   537→                      key={idx}
+   538→                      className={cn('flex-1 rounded-t-sm', m.ring.replace('/30', '/60'))}
+   539→                      style={{ height: `${h}%` }}
+   540→                    />
+   541→                  );
+   542→                })}
+   543→              </div>
+   544→            </motion.div>
+   545→          ))}
+   546→        </div>
+   547→      </CardContent>
+   548→    </Card>
+   549→  );
+   550→}
+   551→
+   552→// ─── Incident History Timeline ─────────────────────────────────────────────────
+   553→
+   554→function IncidentHistory() {
+   555→  return (
+   556→    <Card className="border-white/[0.06] bg-white/[0.02]">
+   557→      <CardHeader className="pb-3">
+   558→        <div className="flex items-center justify-between">
+   559→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   560→            <AlertTriangle className="h-4 w-4 text-amber-400" />
+   561→            Incident History
+   562→          </CardTitle>
+   563→          <div className="flex items-center gap-2 text-[10px]">
+   564→            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> SEV-1/2</span>
+   565→            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> SEV-3</span>
+   566→            <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> SEV-4</span>
+   567→          </div>
+   568→        </div>
+   569→      </CardHeader>
+   570→      <CardContent>
+   571→        <ScrollArea className="max-h-[480px]">
+   572→          <div className="relative space-y-3">
+   573→            {INCIDENTS.map((inc, i) => {
+   574→              const style = SEVERITY_STYLE[inc.severity];
+   575→              const SevIcon = style.icon;
+   576→              return (
+   577→                <motion.div
+   578→                  key={inc.id}
+   579→                  initial={{ opacity: 0, x: -8 }}
+   580→                  animate={{ opacity: 1, x: 0 }}
+   581→                  transition={{ duration: 0.3, delay: i * 0.04 }}
+   582→                  className="relative flex gap-3"
+   583→                >
+   584→                  {/* Vertical line */}
+   585→                  {i < INCIDENTS.length - 1 && (
+   586→                    <div className="absolute left-[14px] top-9 bottom-[-12px] w-px bg-white/[0.06]" />
+   587→                  )}
+   588→                  <div className={cn(
+   589→                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border',
+   590→                    style.bg, style.border,
+   591→                  )}>
+   592→                    <SevIcon className={cn('h-3.5 w-3.5', style.color)} />
+   593→                  </div>
+   594→                  <div className="flex-1 min-w-0 pb-1">
+   595→                    <div className="flex items-center justify-between gap-2 flex-wrap">
+   596→                      <div className="flex items-center gap-2">
+   597→                        <p className="text-xs font-semibold text-white">{inc.title}</p>
+   598→                        <span className={cn('inline-flex rounded border px-1.5 py-0.5 text-[9px] font-bold', style.border, style.bg, style.color)}>
+   599→                          {inc.severity}
+   600→                        </span>
+   601→                      </div>
+   602→                      <span className="text-[10px] text-muted-foreground font-mono">
+   603→                        {inc.startTime}
+   604→                      </span>
+   605→                    </div>
+   606→                    <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+   607→                      <div>
+   608→                        <p className="text-muted-foreground">Duration</p>
+   609→                        <p className="font-mono font-semibold text-white">{inc.durationMins}m</p>
+   610→                      </div>
+   611→                      <div>
+   612→                        <p className="text-muted-foreground">Region</p>
+   613→                        <p className="font-medium text-white truncate">{inc.affectedRegion}</p>
+   614→                      </div>
+   615→                      <div>
+   616→                        <p className="text-muted-foreground">Affected Users</p>
+   617→                        <p className="font-mono font-semibold text-amber-300">{inc.affectedUsers}</p>
+   618→                      </div>
+   619→                      <div>
+   620→                        <p className="text-muted-foreground">Status</p>
+   621→                        <span className={cn(
+   622→                          'inline-flex items-center gap-1 font-medium capitalize',
+   623→                          inc.status === 'resolved' ? 'text-emerald-300' : 'text-amber-300',
+   624→                        )}>
+   625→                          <CheckCircle2 className="h-2.5 w-2.5" />
+   626→                          {inc.status}
+   627→                        </span>
+   628→                      </div>
+   629→                    </div>
+   630→                    <div className="mt-1.5 rounded border border-white/[0.04] bg-white/[0.02] px-2 py-1.5 text-[11px]">
+   631→                      <p className="text-[10px] text-muted-foreground">
+   632→                        <span className="text-rose-300 font-medium">Root cause:</span> {inc.rootCause}
+   633→                      </p>
+   634→                      <p className="text-[10px] text-muted-foreground mt-0.5">
+   635→                        <span className="text-emerald-300 font-medium">Resolution:</span> {inc.resolution}
+   636→                      </p>
+   637→                    </div>
+   638→                  </div>
+   639→                </motion.div>
+   640→              );
+   641→            })}
+   642→          </div>
+   643→        </ScrollArea>
+   644→      </CardContent>
+   645→    </Card>
+   646→  );
+   647→}
+   648→
+   649→// ─── Capacity Planner ──────────────────────────────────────────────────────────
+   650→
+   651→interface Resource {
+   652→  name: string;
+   653→  icon: LucideIcon;
+   654→  currentPct: number;     // current utilization %
+   655→  weeklyGrowthPct: number; // % weekly growth rate
+   656→  accent: string;
+   657→  unit: string;
+   658→}
+   659→
+   660→const RESOURCES: Resource[] = [
+   661→  { name: 'CPU (cluster)', icon: Cpu, currentPct: 42, weeklyGrowthPct: 2.4, accent: 'text-emerald-300', unit: '%' },
+   662→  { name: 'Memory', icon: HardDrive, currentPct: 58, weeklyGrowthPct: 1.8, accent: 'text-teal-300', unit: '%' },
+   663→  { name: 'Database', icon: Database, currentPct: 64, weeklyGrowthPct: 3.1, accent: 'text-cyan-300', unit: '%' },
+   664→  { name: 'Cache (Redis)', icon: Layers, currentPct: 71, weeklyGrowthPct: 4.2, accent: 'text-amber-300', unit: '%' },
+   665→  { name: 'Storage', icon: Server, currentPct: 38, weeklyGrowthPct: 1.2, accent: 'text-violet-300', unit: '%' },
+   666→  { name: 'Network I/O', icon: Network, currentPct: 49, weeklyGrowthPct: 2.0, accent: 'text-rose-300', unit: '%' },
+   667→];
+   668→
+   669→function CapacityPlanner() {
+   670→  const [growthMultiplier, setGrowthMultiplier] = useState(50); // 0-200 % additional growth
+   671→
+   672→  const projections = useMemo(() => {
+   673→    return RESOURCES.map((r) => {
+   674→      const weeklyEffective = r.weeklyGrowthPct * (1 + growthMultiplier / 100);
+   675→      // Calculate weeks until 100%
+   676→      if (weeklyEffective <= 0) return { ...r, weeksToCapacity: Infinity, projectedPct: r.currentPct };
+   677→      const weeksToCapacity = Math.ceil((100 - r.currentPct) / weeklyEffective);
+   678→      // Project 12 weeks ahead
+   679→      const projectedPct = Math.min(100, r.currentPct + weeklyEffective * 12);
+   680→      return { ...r, weeksToCapacity, projectedPct, weeklyEffective };
+   681→    });
+   682→  }, [growthMultiplier]);
+   683→
+   684→  const totalWeeklyGrowthAvg = (
+   685→    RESOURCES.reduce((s, r) => s + r.weeklyGrowthPct * (1 + growthMultiplier / 100), 0) / RESOURCES.length
+   686→  ).toFixed(2);
+   687→
+   688→  return (
+   689→    <Card className="border-white/[0.06] bg-white/[0.02]">
+   690→      <CardHeader className="pb-3">
+   691→        <div className="flex items-center justify-between">
+   692→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   693→            <TrendingUp className="h-4 w-4 text-cyan-400" />
+   694→            Capacity Planner
+   695→          </CardTitle>
+   696→          <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-[10px] text-cyan-300">
+   697→            Avg weekly growth: +{totalWeeklyGrowthAvg}%
+   698→          </Badge>
+   699→        </div>
+   700→      </CardHeader>
+   701→      <CardContent>
+   702→        {/* Growth multiplier slider */}
+   703→        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
+   704→          <div className="flex items-center justify-between mb-2">
+   705→            <div>
+   706→              <p className="text-[11px] font-medium text-white">Projected growth multiplier</p>
+   707→              <p className="text-[10px] text-muted-foreground">Apply additional growth pressure to current trends</p>
+   708→            </div>
+   709→            <div className="text-right">
+   710→              <p className="text-xl font-bold text-cyan-300">+{growthMultiplier}%</p>
+   711→              <p className="text-[9px] text-muted-foreground">above baseline</p>
+   712→            </div>
+   713→          </div>
+   714→          <Slider
+   715→            value={[growthMultiplier]}
+   716→            onValueChange={(v) => setGrowthMultiplier(v[0])}
+   717→            min={0}
+   718→            max={200}
+   719→            step={10}
+   720→            className="w-full"
+   721→          />
+   722→          <div className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground">
+   723→            <span>0% (baseline)</span>
+   724→            <span>100% (2× growth)</span>
+   725→            <span>200% (3× growth)</span>
+   726→          </div>
+   727→        </div>
+   728→
+   729→        {/* Resource projections */}
+   730→        <div className="space-y-2">
+   731→          {projections.map((p, i) => {
+   732→            const weeksLabel = p.weeksToCapacity === Infinity ? '∞' : `${p.weeksToCapacity}w`;
+   733→            const isUrgent = p.weeksToCapacity <= 4;
+   734→            const isWarn = p.weeksToCapacity > 4 && p.weeksToCapacity <= 12;
+   735→            return (
+   736→              <motion.div
+   737→                key={p.name}
+   738→                initial={{ opacity: 0, y: 4 }}
+   739→                animate={{ opacity: 1, y: 0 }}
+   740→                transition={{ duration: 0.25, delay: i * 0.03 }}
+   741→                className={cn(
+   742→                  'rounded-lg border p-2.5',
+   743→                  isUrgent
+   744→                    ? 'border-rose-500/30 bg-rose-500/[0.04]'
+   745→                    : isWarn
+   746→                      ? 'border-amber-500/20 bg-amber-500/[0.03]'
+   747→                      : 'border-white/[0.06] bg-white/[0.02]',
+   748→                )}
+   749→              >
+   750→                <div className="flex items-center justify-between gap-2">
+   751→                  <div className="flex items-center gap-2 min-w-0">
+   752→                    <div className={cn('flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08]', p.accent)}>
+   753→                      <p.icon className="h-3.5 w-3.5" />
+   754→                    </div>
+   755→                    <div className="min-w-0">
+   756→                      <p className="text-[11px] font-medium text-white truncate">{p.name}</p>
+   757→                      <p className="text-[9px] text-muted-foreground">
+   758→                        Now {p.currentPct}% · 12w → {p.projectedPct.toFixed(0)}% · growth +{p.weeklyEffective.toFixed(2)}/wk
+   759→                      </p>
+   760→                    </div>
+   761→                  </div>
+   762→                  <div className="text-right shrink-0">
+   763→                    <p className={cn(
+   764→                      'text-sm font-bold',
+   765→                      isUrgent ? 'text-rose-300' : isWarn ? 'text-amber-300' : 'text-emerald-300',
+   766→                    )}>
+   767→                      {weeksLabel}
+   768→                    </p>
+   769→                    <p className="text-[9px] text-muted-foreground">to capacity</p>
+   770→                  </div>
+   771→                </div>
+   772→                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+   773→                  <motion.div
+   774→                    initial={{ width: 0 }}
+   775→                    animate={{ width: `${p.projectedPct}%` }}
+   776→                    transition={{ duration: 0.5, delay: i * 0.04 }}
+   777→                    className={cn(
+   778→                      'h-full rounded-full',
+   779→                      p.projectedPct >= 90 ? 'bg-rose-500/70' : p.projectedPct >= 70 ? 'bg-amber-500/70' : 'bg-emerald-500/70',
+   780→                    )}
+   781→                  />
+   782→                </div>
+   783→              </motion.div>
+   784→            );
+   785→          })}
+   786→        </div>
+   787→      </CardContent>
+   788→    </Card>
+   789→  );
+   790→}
+   791→
+   792→// ─── Cost Optimization ─────────────────────────────────────────────────────────
+   793→
+   794→const accentColorMap: Record<string, string> = {
+   795→  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+   796→  teal: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+   797→  cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+   798→  violet: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+   799→  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+   800→  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+   801→};
+   802→
+   803→function CostOptimization() {
+   804→  const totalCurrent = COST_OPTIMIZATIONS.reduce((s, c) => s + c.currentCost, 0);
+   805→  const totalOptimized = COST_OPTIMIZATIONS.reduce((s, c) => s + c.optimizedCost, 0);
+   806→  const totalSavings = totalCurrent - totalOptimized;
+   807→  const savingsPct = (totalSavings / totalCurrent) * 100;
+   808→
+   809→  return (
+   810→    <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-white/[0.02] to-amber-500/[0.03]">
+   811→      <CardHeader className="pb-3">
+   812→        <div className="flex items-center justify-between">
+   813→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   814→            <PiggyBank className="h-4 w-4 text-emerald-400" />
+   815→            Cost Optimization Opportunities
+   816→          </CardTitle>
+   817→          <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px]">
+   818→            <Save className="mr-1 h-2.5 w-2.5" />
+   819→            {fmtUSDShort(totalSavings)}/mo · {savingsPct.toFixed(1)}% reduction
+   820→          </Badge>
+   821→        </div>
+   822→      </CardHeader>
+   823→      <CardContent>
+   824→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+   825→          {COST_OPTIMIZATIONS.map((c, i) => {
+   826→            const style = accentColorMap[c.accent] ?? accentColorMap.emerald;
+   827→            const savingsPct = (c.monthlySavings / c.currentCost) * 100;
+   828→            return (
+   829→              <motion.div
+   830→                key={c.id}
+   831→                initial={{ opacity: 0, y: 4 }}
+   832→                animate={{ opacity: 1, y: 0 }}
+   833→                transition={{ duration: 0.3, delay: i * 0.04 }}
+   834→                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+   835→              >
+   836→                <div className="flex items-start justify-between gap-2 mb-1">
+   837→                  <div className="flex items-center gap-2 min-w-0">
+   838→                    <div className={cn('flex h-7 w-7 items-center justify-center rounded-md border', style)}>
+   839→                      <c.icon className="h-3.5 w-3.5" />
+   840→                    </div>
+   841→                    <div className="min-w-0">
+   842→                      <p className="text-xs font-semibold text-white truncate">{c.title}</p>
+   843→                      <p className="text-[9px] text-muted-foreground">{c.category} · {c.effort} effort</p>
+   844→                    </div>
+   845→                  </div>
+   846→                  <Badge variant="outline" className={cn('text-[9px] border', style)}>
+   847→                    -{savingsPct.toFixed(0)}%
+   848→                  </Badge>
+   849→                </div>
+   850→                <p className="text-[10px] text-muted-foreground mb-2">{c.description}</p>
+   851→                <div className="flex items-center justify-between text-[11px]">
+   852→                  <div>
+   853→                    <span className="text-muted-foreground line-through">{fmtUSDShort(c.currentCost)}</span>
+   854→                    <span className="text-white ml-1.5 font-medium">{fmtUSDShort(c.optimizedCost)}</span>
+   855→                  </div>
+   856→                  <span className="font-mono font-bold text-emerald-300">
+   857→                    save {fmtUSDShort(c.monthlySavings)}/mo
+   858→                  </span>
+   859→                </div>
+   860→              </motion.div>
+   861→            );
+   862→          })}
+   863→        </div>
+   864→        <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+   865→          <div>
+   866→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Potential Annual Savings</p>
+   867→            <p className="text-xl font-bold text-emerald-300">{fmtUSDShort(totalSavings * 12)}</p>
+   868→          </div>
+   869→          <Button className="h-8 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 text-xs">
+   870→            <Sparkles className="h-3.5 w-3.5 mr-1" />
+   871→            Apply All Recommendations
+   872→          </Button>
+   873→        </div>
+   874→      </CardContent>
+   875→    </Card>
+   876→  );
+   877→}
+   878→
+   879→// ─── Disaster Recovery Status ──────────────────────────────────────────────────
+   880→
+   881→function DisasterRecoveryStatus() {
+   882→  const rpoMin = 4;        // Recovery Point Objective in minutes
+   883→  const rtoMin = 8;        // Recovery Time Objective in minutes
+   884→  const lastBackupMinsAgo = 12;
+   885→  const backupHealthPct = 99.4;
+   886→  const replicationLagMs = 28;
+   887→  const failoverReadyPct = 100;
+   888→
+   889→  const regions = [
+   890→    { name: 'AP-South (Mumbai)', role: 'Primary', status: 'healthy', lag: 4 },
+   891→    { name: 'EU-Central (Frankfurt)', role: 'Replica', status: 'healthy', lag: 28 },
+   892→    { name: 'US-East (Virginia)', role: 'Replica', status: 'healthy', lag: 142 },
+   893→  ];
+   894→
+   895→  return (
+   896→    <Card className="border-cyan-500/20 bg-gradient-to-br from-cyan-500/[0.04] via-white/[0.02] to-emerald-500/[0.03]">
+   897→      <CardHeader className="pb-3">
+   898→        <div className="flex items-center justify-between">
+   899→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   900→            <Cloud className="h-4 w-4 text-cyan-400" />
+   901→            Disaster Recovery Status
+   902→          </CardTitle>
+   903→          <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px]">
+   904→            <ShieldCheck className="mr-1 h-2.5 w-2.5" /> READY
+   905→          </Badge>
+   906→        </div>
+   907→      </CardHeader>
+   908→      <CardContent>
+   909→        {/* RPO / RTO badges */}
+   910→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+   911→          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+   912→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">RPO</p>
+   913→            <p className="text-base font-bold text-emerald-300">{rpoMin}m</p>
+   914→            <p className="text-[9px] text-muted-foreground">Recovery Point Objective</p>
+   915→          </div>
+   916→          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+   917→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">RTO</p>
+   918→            <p className="text-base font-bold text-cyan-300">{rtoMin}m</p>
+   919→            <p className="text-[9px] text-muted-foreground">Recovery Time Objective</p>
+   920→          </div>
+   921→          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+   922→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Last Backup</p>
+   923→            <p className="text-base font-bold text-teal-300">{lastBackupMinsAgo}m</p>
+   924→            <p className="text-[9px] text-muted-foreground">minutes ago</p>
+   925→          </div>
+   926→          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+   927→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Failover Ready</p>
+   928→            <p className="text-base font-bold text-violet-300">{failoverReadyPct}%</p>
+   929→            <p className="text-[9px] text-muted-foreground">Automated tested</p>
+   930→          </div>
+   931→        </div>
+   932→
+   933→        {/* Backup health bar */}
+   934→        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
+   935→          <div className="flex items-center justify-between mb-1.5">
+   936→            <div className="flex items-center gap-1.5">
+   937→              <Database className="h-3 w-3 text-emerald-400" />
+   938→              <p className="text-[11px] font-medium text-white">Backup Health</p>
+   939→            </div>
+   940→            <span className="font-mono text-xs font-semibold text-emerald-300">{backupHealthPct}%</span>
+   941→          </div>
+   942→          <Progress value={backupHealthPct} className="h-1.5 bg-white/[0.04]" />
+   943→          <p className="text-[9px] text-muted-foreground mt-1">Last 30 days · 0 failed backups · 99.4% success rate</p>
+   944→        </div>
+   945→
+   946→        {/* Multi-region replication status */}
+   947→        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+   948→          <div className="flex items-center gap-1.5 mb-2">
+   949→            <Globe2 className="h-3 w-3 text-cyan-400" />
+   950→            <p className="text-[11px] font-medium text-white">Multi-Region Replication</p>
+   951→            <span className="ml-auto text-[10px] text-muted-foreground">
+   952→              Max lag: <span className="text-cyan-300 font-mono">{replicationLagMs}ms</span>
+   953→            </span>
+   954→          </div>
+   955→          <div className="space-y-1.5">
+   956→            {regions.map((r, i) => (
+   957→              <motion.div
+   958→                key={r.name}
+   959→                initial={{ opacity: 0, x: -6 }}
+   960→                animate={{ opacity: 1, x: 0 }}
+   961→                transition={{ duration: 0.25, delay: i * 0.04 }}
+   962→                className="flex items-center justify-between rounded border border-white/[0.04] bg-white/[0.02] px-2.5 py-1.5"
+   963→              >
+   964→                <div className="flex items-center gap-2">
+   965→                  <span className={cn(
+   966→                    'h-1.5 w-1.5 rounded-full',
+   967→                    r.status === 'healthy' ? 'bg-emerald-400' : 'bg-amber-400',
+   968→                  )} />
+   969→                  <span className="text-[11px] font-medium text-white">{r.name}</span>
+   970→                  <Badge variant="outline" className={cn(
+   971→                    'text-[9px] border',
+   972→                    r.role === 'Primary'
+   973→                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+   974→                      : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+   975→                  )}>
+   976→                    {r.role}
+   977→                  </Badge>
+   978→                </div>
+   979→                <span className="text-[10px] font-mono text-muted-foreground">lag {r.lag}ms</span>
+   980→              </motion.div>
+   981→            ))}
+   982→          </div>
+   983→        </div>
+   984→
+   985→        {/* Failover test history */}
+   986→        <div className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/[0.03] p-2.5 text-[10px]">
+   987→          <div className="flex items-center gap-1.5 mb-1">
+   988→            <RefreshCw className="h-3 w-3 text-amber-400" />
+   989→            <p className="text-[11px] font-medium text-white">Last failover test</p>
+   990→            <span className="ml-auto text-[10px] text-muted-foreground">2024-09-22 02:00 UTC</span>
+   991→          </div>
+   992→          <p className="text-muted-foreground">
+   993→            <span className="text-emerald-300 font-medium">PASSED</span> · AP-South → EU-Central switchover in 6m 12s · RTO met (target {rtoMin}m) · RPO met (target {rpoMin}m)
+   994→          </p>
+   995→        </div>
+   996→      </CardContent>
+   997→    </Card>
+   998→  );
+   999→}
+  1000→
+  1001→// ─── CDN Performance Table ─────────────────────────────────────────────────────
+  1002→
+  1003→function CdnPerformanceTable() {
+  1004→  const cdnStatus = (status: string) => {
+  1005→    if (status === 'online') return { label: 'Online', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' };
+  1006→    if (status === 'syncing') return { label: 'Syncing', cls: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300', dot: 'bg-cyan-400' };
+  1007→    return { label: 'Degraded', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400' };
+  1008→  };
+  1009→
+  1010→  return (
+  1011→    <Card className="border-white/[0.06] bg-white/[0.02]">
+  1012→      <CardHeader className="pb-3">
+  1013→        <div className="flex items-center justify-between">
+  1014→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+  1015→            <Globe2 className="h-4 w-4 text-violet-400" />
+  1016→            CDN Performance Table
+  1017→          </CardTitle>
+  1018→          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+  1019→            {CDN_REGIONS.length} edge PoPs
+  1020→          </Badge>
+  1021→        </div>
+  1022→      </CardHeader>
+  1023→      <CardContent>
+  1024→        <ScrollArea className="max-h-[480px]">
+  1025→          <Table>
+  1026→            <TableHeader>
+  1027→              <TableRow className="border-white/[0.06] hover:bg-transparent">
+  1028→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Region</TableHead>
+  1029→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+  1030→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Latency</TableHead>
+  1031→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Uptime 30d</TableHead>
+  1032→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Req/sec</TableHead>
+  1033→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Cache Hit</TableHead>
+  1034→              </TableRow>
+  1035→            </TableHeader>
+  1036→            <TableBody>
+  1037→              {CDN_REGIONS.map((r, i) => {
+  1038→                const status = cdnStatus(r.status);
+  1039→                return (
+  1040→                  <motion.tr
+  1041→                    key={r.id}
+  1042→                    initial={{ opacity: 0, y: 4 }}
+  1043→                    animate={{ opacity: 1, y: 0 }}
+  1044→                    transition={{ duration: 0.25, delay: i * 0.03 }}
+  1045→                    className="border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+  1046→                  >
+  1047→                    <TableCell>
+  1048→                      <div className="flex items-center gap-2">
+  1049→                        <span className="text-base leading-none">{r.flag}</span>
+  1050→                        <div>
+  1051→                          <p className="text-[11px] font-medium text-white">{r.city}</p>
+  1052→                          <p className="text-[9px] text-muted-foreground">{r.region} · {r.country}</p>
+  1053→                        </div>
+  1054→                      </div>
+  1055→                    </TableCell>
+  1056→                    <TableCell>
+  1057→                      <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-medium', status.cls)}>
+  1058→                        <span className={cn('h-1.5 w-1.5 rounded-full', status.dot)} />
+  1059→                        {status.label}
+  1060→                      </span>
+  1061→                    </TableCell>
+  1062→                    <TableCell className={cn('text-right font-mono text-[11px] font-semibold', latencyColor(r.latencyMs))}>
+  1063→                      {r.latencyMs}ms
+  1064→                    </TableCell>
+  1065→                    <TableCell className={cn(
+  1066→                      'text-right font-mono text-[11px] font-semibold',
+  1067→                      r.uptime30d >= 99.95 ? 'text-emerald-400' : r.uptime30d >= 99.5 ? 'text-amber-400' : 'text-rose-400',
+  1068→                    )}>
+  1069→                      {r.uptime30d}%
+  1070→                    </TableCell>
+  1071→                    <TableCell className="text-right font-mono text-[11px] text-white">
+  1072→                      {r.requestsPerSec.toLocaleString()}
+  1073→                    </TableCell>
+  1074→                    <TableCell>
+  1075→                      <div className="flex items-center gap-2 justify-end">
+  1076→                        <div className="h-1 w-12 overflow-hidden rounded-full bg-white/[0.04]">
+  1077→                          <div
+  1078→                            className={cn(
+  1079→                              'h-full rounded-full',
+  1080→                              r.cacheHitRate >= 95 ? 'bg-emerald-500/70' : r.cacheHitRate >= 90 ? 'bg-teal-500/70' : 'bg-amber-500/70',
+  1081→                            )}
+  1082→                            style={{ width: `${r.cacheHitRate}%` }}
+  1083→                          />
+  1084→                        </div>
+  1085→                        <span className={cn(
+  1086→                          'font-mono text-[11px] font-semibold w-12 text-right',
+  1087→                          r.cacheHitRate >= 95 ? 'text-emerald-400' : r.cacheHitRate >= 90 ? 'text-teal-400' : 'text-amber-400',
+  1088→                        )}>
+  1089→                          {r.cacheHitRate}%
+  1090→                        </span>
+  1091→                      </div>
+  1092→                    </TableCell>
+  1093→                  </motion.tr>
+  1094→                );
+  1095→              })}
+  1096→            </TableBody>
+  1097→          </Table>
+  1098→        </ScrollArea>
+  1099→      </CardContent>
+  1100→    </Card>
+  1101→  );
+  1102→}
+  1103→
+  1104→// ─── Endpoint Performance Deep-Dive ────────────────────────────────────────────
+  1105→
+  1106→function EndpointPerformanceDeepDive() {
+  1107→  const [selected, setSelected] = useState<string>(ENDPOINT_METRICS[0].endpoint);
+  1108→
+  1109→  const selectedMetric = ENDPOINT_METRICS.find((m) => m.endpoint === selected) ?? ENDPOINT_METRICS[0];
+  1110→  const p99ToAvgRatio = selectedMetric.p99LatencyMs / selectedMetric.avgLatencyMs;
+  1111→  const errorRateTrend = [0.04, 0.05, 0.03, 0.04, 0.06, 0.02, selectedMetric.errorRate];
+  1112→
+  1113→  return (
+  1114→    <Card className="border-white/[0.06] bg-white/[0.02]">
+  1115→      <CardHeader className="pb-3">
+  1116→        <div className="flex items-center justify-between">
+  1117→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+  1118→            <Zap className="h-4 w-4 text-amber-400" />
+  1119→            Endpoint Performance Deep-Dive
+  1120→          </CardTitle>
+  1121→          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+  1122→            p99 vs avg comparison
+  1123→          </Badge>
+  1124→        </div>
+  1125→      </CardHeader>
+  1126→      <CardContent>
+  1127→        {/* Endpoint selector */}
+  1128→        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+  1129→          {ENDPOINT_METRICS.map((m) => (
+  1130→            <button
+  1131→              key={`${m.endpoint}-${m.method}`}
+  1132→              type="button"
+  1133→              onClick={() => setSelected(m.endpoint)}
+  1134→              className={cn(
+  1135→                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-all',
+  1136→                selected === m.endpoint
+  1137→                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+  1138→                  : 'border-white/[0.06] bg-white/[0.02] text-muted-foreground hover:text-white',
+  1139→              )}
+  1140→            >
+  1141→              <span className={cn('rounded px-1 text-[9px] font-bold', methodBadge(m.method))}>
+  1142→                {m.method}
+  1143→              </span>
+  1144→              {m.endpoint}
+  1145→            </button>
+  1146→          ))}
+  1147→        </div>
+  1148→
+  1149→        {/* Selected endpoint metrics */}
+  1150→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+  1151→          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+  1152→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Avg Latency</p>
+  1153→            <p className={cn('text-base font-bold font-mono', latencyColor(selectedMetric.avgLatencyMs))}>
+  1154→              {selectedMetric.avgLatencyMs}ms
+  1155→            </p>
+  1156→          </div>
+  1157→          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+  1158→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">p99 Latency</p>
+  1159→            <p className={cn('text-base font-bold font-mono', latencyColor(selectedMetric.p99LatencyMs))}>
+  1160→              {selectedMetric.p99LatencyMs}ms
+  1161→            </p>
+  1162→          </div>
+  1163→          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+  1164→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">p99 / Avg Ratio</p>
+  1165→            <p className={cn(
+  1166→              'text-base font-bold font-mono',
+  1167→              p99ToAvgRatio <= 2 ? 'text-emerald-400' : p99ToAvgRatio <= 4 ? 'text-amber-400' : 'text-rose-400',
+  1168→            )}>
+  1169→              {p99ToAvgRatio.toFixed(2)}×
+  1170→            </p>
+  1171→          </div>
+  1172→          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+  1173→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Error Rate</p>
+  1174→            <p className={cn('text-base font-bold font-mono', errorRateColor(selectedMetric.errorRate))}>
+  1175→              {selectedMetric.errorRate.toFixed(2)}%
+  1176→            </p>
+  1177→          </div>
+  1178→        </div>
+  1179→
+  1180→        {/* p99 vs avg comparison bar */}
+  1181→        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
+  1182→          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">p99 vs Avg Latency</p>
+  1183→          <div className="space-y-2">
+  1184→            <div>
+  1185→              <div className="flex items-center justify-between text-[10px] mb-1">
+  1186→                <span className="text-emerald-300">Avg</span>
+  1187→                <span className="font-mono text-white">{selectedMetric.avgLatencyMs}ms</span>
+  1188→              </div>
+  1189→              <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.04]">
+  1190→                <div
+  1191→                  className="h-full rounded-full bg-emerald-500/70"
+  1192→                  style={{ width: `${(selectedMetric.avgLatencyMs / 3500) * 100}%` }}
+  1193→                />
+  1194→              </div>
+  1195→            </div>
+  1196→            <div>
+  1197→              <div className="flex items-center justify-between text-[10px] mb-1">
+  1198→                <span className="text-amber-300">p99</span>
+  1199→                <span className="font-mono text-white">{selectedMetric.p99LatencyMs}ms</span>
+  1200→              </div>
+  1201→              <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.04]">
+  1202→                <div
+  1203→                  className="h-full rounded-full bg-amber-500/70"
+  1204→                  style={{ width: `${(selectedMetric.p99LatencyMs / 3500) * 100}%` }}
+  1205→                />
+  1206→              </div>
+  1207→            </div>
+  1208→          </div>
+  1209→          <p className="text-[9px] text-muted-foreground mt-2">
+  1210→            p99 is {p99ToAvgRatio.toFixed(1)}× the avg — {p99ToAvgRatio <= 2 ? 'excellent tail control' : p99ToAvgRatio <= 4 ? 'moderate tail variance' : 'investigate tail outliers'}
+  1211→          </p>
+  1212→        </div>
+  1213→
+  1214→        {/* Error rate trend (7 datapoints) */}
+  1215→        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+  1216→          <div className="flex items-center justify-between mb-2">
+  1217→            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Error rate trend (7d)</p>
+  1218→            <span className={cn('font-mono text-[11px] font-semibold', errorRateColor(selectedMetric.errorRate))}>
+  1219→              current {selectedMetric.errorRate.toFixed(2)}%
+  1220→            </span>
+  1221→          </div>
+  1222→          <div className="flex items-end gap-1.5 h-16">
+  1223→            {errorRateTrend.map((v, i) => {
+  1224→              const max = Math.max(...errorRateTrend, 0.2);
+  1225→              const h = 18 + (v / max) * 80;
+  1226→              return (
+  1227→                <motion.div
+  1228→                  key={i}
+  1229→                  initial={{ height: 0 }}
+  1230→                  animate={{ height: `${h}%` }}
+  1231→                  transition={{ duration: 0.4, delay: i * 0.04 }}
+  1232→                  className="flex-1 flex flex-col items-center gap-0.5"
+  1233→                >
+  1234→                  <div className={cn('w-full rounded-t-sm', errorRateColor(v).replace('text-', 'bg-').replace('-400', '-500/60'))} style={{ height: '100%' }} />
+  1235→                  <span className="text-[8px] text-muted-foreground">D{i + 1}</span>
+  1236→                </motion.div>
+  1237→              );
+  1238→            })}
+  1239→          </div>
+  1240→        </div>
+  1241→
+  1242→        {/* Full table */}
+  1243→        <Separator className="my-3 bg-white/[0.06]" />
+  1244→        <ScrollArea className="max-h-[280px]">
+  1245→          <Table>
+  1246→            <TableHeader>
+  1247→              <TableRow className="border-white/[0.06] hover:bg-transparent">
+  1248→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Method</TableHead>
+  1249→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Endpoint</TableHead>
+  1250→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Avg</TableHead>
+  1251→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">p99</TableHead>
+  1252→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">RPS</TableHead>
+  1253→                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Errors</TableHead>
+  1254→              </TableRow>
+  1255→            </TableHeader>
+  1256→            <TableBody>
+  1257→              {ENDPOINT_METRICS.map((m) => (
+  1258→                <motion.tr
+  1259→                  key={`${m.endpoint}-${m.method}`}
+  1260→                  onClick={() => setSelected(m.endpoint)}
+  1261→                  initial={{ opacity: 0 }}
+  1262→                  animate={{ opacity: 1 }}
+  1263→                  className={cn(
+  1264→                    'border-white/[0.04] cursor-pointer transition-colors',
+  1265→                    selected === m.endpoint ? 'bg-emerald-500/[0.04]' : 'hover:bg-white/[0.02]',
+  1266→                  )}
+  1267→                >
+  1268→                  <TableCell>
+  1269→                    <span className={cn('inline-flex rounded border px-1.5 py-0.5 text-[9px] font-mono font-bold', methodBadge(m.method))}>
+  1270→                      {m.method}
+  1271→                    </span>
+  1272→                  </TableCell>
+  1273→                  <TableCell className="font-mono text-[11px] text-white">{m.endpoint}</TableCell>
+  1274→                  <TableCell className={cn('text-right font-mono text-[11px] font-semibold', latencyColor(m.avgLatencyMs))}>
+  1275→                    {m.avgLatencyMs}ms
+  1276→                  </TableCell>
+  1277→                  <TableCell className={cn('text-right font-mono text-[11px]', latencyColor(m.p99LatencyMs))}>
+  1278→                    {m.p99LatencyMs}ms
+  1279→                  </TableCell>
+  1280→                  <TableCell className="text-right font-mono text-[11px] text-white">
+  1281→                    {m.requestsPerSec.toLocaleString()}
+  1282→                  </TableCell>
+  1283→                  <TableCell className={cn('text-right font-mono text-[11px] font-semibold', errorRateColor(m.errorRate))}>
+  1284→                    {m.errorRate.toFixed(2)}%
+  1285→                  </TableCell>
+  1286→                </motion.tr>
+  1287→              ))}
+  1288→            </TableBody>
+  1289→          </Table>
+  1290→        </ScrollArea>
+  1291→      </CardContent>
+  1292→    </Card>
+  1293→  );
+  1294→}
+  1295→
+  1296→// ─── Main component ────────────────────────────────────────────────────────────
+  1297→
+  1298→export default function GlobalPerformance() {
+  1299→  return (
+  1300→    <div className="min-h-screen bg-background text-foreground">
+  1301→      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+  1302→        {/* ─── Header ─── */}
+  1303→        <motion.div
+  1304→          initial={{ opacity: 0, y: -8 }}
+  1305→          animate={{ opacity: 1, y: 0 }}
+  1306→          transition={{ duration: 0.4 }}
+  1307→          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+  1308→        >
+  1309→          <div className="flex items-center gap-3">
+  1310→            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+  1311→              <Gauge className="h-5 w-5 text-emerald-400" />
+  1312→            </div>
+  1313→            <div>
+  1314→              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+  1315→                Global Performance<sup className="text-[10px] text-emerald-400">™</sup>
+  1316→              </h1>
+  1317→              <p className="text-xs text-muted-foreground sm:text-sm">
+  1318→                Enterprise-grade scalability architecture powering 100K+ organizations worldwide.
+  1319→              </p>
+  1320→            </div>
+  1321→          </div>
+  1322→          <div className="flex flex-wrap items-center gap-2">
+  1323→            <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+  1324→              <ShieldCheck className="mr-1 h-3 w-3" /> Enterprise-Grade
+  1325→            </Badge>
+  1326→            <Badge className="border-teal-500/30 bg-teal-500/10 text-teal-300">
+  1327→              <Activity className="mr-1 h-3 w-3" /> 99.99% Uptime
+  1328→            </Badge>
+  1329→            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+  1330→              <Globe2 className="mr-1 h-3 w-3" /> 12 CDN Regions
+  1331→            </Badge>
+  1332→          </div>
+  1333→        </motion.div>
+  1334→
+  1335→        <Separator className="my-5 bg-white/[0.06]" />
+  1336→
+  1337→        {/* ─── Real-Time Metrics Dashboard ─── */}
+  1338→        <RealTimeMetricsDashboard />
+  1339→
+  1340→        {/* ─── Scale Metrics ─── */}
+  1341→        <div className="mt-6">
+  1342→          <div className="mb-3 flex items-center gap-2">
+  1343→            <TrendingUp className="h-4 w-4 text-emerald-400" />
+  1344→            <h2 className="text-sm font-semibold text-white">Scale Metrics</h2>
+  1345→            <span className="text-[11px] text-muted-foreground">— production-proven at global scale</span>
+  1346→          </div>
+  1347→          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+  1348→            {SCALE_METRICS.map((m, i) => (
+  1349→              <motion.div
+  1350→                key={m.label}
+  1351→                initial={{ opacity: 0, y: 10 }}
+  1352→                animate={{ opacity: 1, y: 0 }}
+  1353→                transition={{ duration: 0.35, delay: i * 0.04 }}
+  1354→                className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+  1355→              >
+  1356→                <div className={cn('absolute -right-5 -top-5 h-16 w-16 rounded-full blur-2xl opacity-40', m.ring)} />
+  1357→                <div className="flex items-start justify-between gap-2">
+  1358→                  <div className="min-w-0">
+  1359→                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{m.label}</p>
+  1360→                    <p className={cn('mt-1 text-lg font-semibold tracking-tight', m.accent)}>{m.value}</p>
+  1361→                    <p className="mt-0.5 text-[10px] text-muted-foreground truncate">{m.sub}</p>
+  1362→                  </div>
+  1363→                  <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08]', m.accent)}>
+  1364→                    <m.icon className="h-4 w-4" />
+  1365→                  </div>
+  1366→                </div>
+  1367→              </motion.div>
+  1368→            ))}
+  1369→          </div>
+  1370→        </div>
+  1371→
+  1372→        {/* ─── Architecture Visualization ─── */}
+  1373→        <div className="mt-6">
+  1374→          <div className="mb-3 flex items-center gap-2">
+  1375→            <Server className="h-4 w-4 text-teal-400" />
+  1376→            <h2 className="text-sm font-semibold text-white">Architecture</h2>
+  1377→            <span className="text-[11px] text-muted-foreground">— layered, microservices, multi-region</span>
+  1378→          </div>
+  1379→          <Card className="border-white/[0.06] bg-white/[0.02]">
+  1380→            <CardContent className="p-4 sm:p-5">
+  1381→              <div className="space-y-3">
+  1382→                {ARCH_LAYERS.map((layer, li) => (
+  1383→                  <motion.div
+  1384→                    key={layer.name}
+  1385→                    initial={{ opacity: 0, x: -8 }}
+  1386→                    animate={{ opacity: 1, x: 0 }}
+  1387→                    transition={{ duration: 0.4, delay: li * 0.08 }}
+  1388→                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+  1389→                  >
+  1390→                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  1391→                      <div className="flex items-center gap-2.5">
+  1392→                        <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08]', layer.accent, layer.ring.replace('/30', '/20'))}>
+  1393→                          <layer.icon className="h-4 w-4" />
+  1394→                        </div>
+  1395→                        <div>
+  1396→                          <p className={cn('text-sm font-semibold', layer.accent)}>{layer.name}</p>
+  1397→                          <p className="text-[10px] text-muted-foreground">{layer.subtitle}</p>
+  1398→                        </div>
+  1399→                      </div>
+  1400→                      <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground self-start sm:self-auto">
+  1401→                        Layer {li + 1}
+  1402→                      </Badge>
+  1403→                    </div>
+  1404→                    <div className="mt-3 flex flex-wrap gap-2">
+  1405→                      {layer.nodes.map((n) => (
+  1406→                        <motion.div
+  1407→                          key={n.name}
+  1408→                          whileHover={{ scale: 1.04 }}
+  1409→                          className={cn(
+  1410→                            'inline-flex items-center gap-2 rounded-lg border bg-white/[0.03] px-2.5 py-1.5',
+  1411→                            'border-white/[0.08] hover:border-white/[0.16] transition-colors',
+  1412→                          )}
+  1413→                        >
+  1414→                          <n.icon className={cn('h-3.5 w-3.5', layer.accent)} />
+  1415→                          <div className="flex flex-col leading-tight">
+  1416→                            <span className="text-[11px] font-medium text-white">{n.name}</span>
+  1417→                            {n.meta && <span className="text-[9px] text-muted-foreground">{n.meta}</span>}
+  1418→                          </div>
+  1419→                        </motion.div>
+  1420→                      ))}
+  1421→                    </div>
+  1422→                  </motion.div>
+  1423→                ))}
+  1424→              </div>
+  1425→
+  1426→              {/* Connection flow indicator */}
+  1427→              <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground">
+  1428→                <span>Request flow</span>
+  1429→                <span className="text-emerald-400">↓</span>
+  1430→                <span>Edge</span>
+  1431→                <span className="text-emerald-400">→</span>
+  1432→                <span>Gateway</span>
+  1433→                <span className="text-emerald-400">→</span>
+  1434→                <span>Service</span>
+  1435→                <span className="text-emerald-400">→</span>
+  1436→                <span>Data</span>
+  1437→              </div>
+  1438→            </CardContent>
+  1439→          </Card>
+  1440→        </div>
+  1441→
+  1442→        {/* ─── Endpoint Deep-Dive + Scaling Indicators ─── */}
+  1443→        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+  1444→          <div className="lg:col-span-2">
+  1445→            <EndpointPerformanceDeepDive />
+  1446→          </div>
+  1447→          <Card className="border-white/[0.06] bg-white/[0.02]">
+  1448→            <CardHeader className="pb-3">
+  1449→              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+  1450→                <Repeat className="h-4 w-4 text-emerald-400" />
+  1451→                Scaling Indicators
+  1452→              </CardTitle>
+  1453→            </CardHeader>
+  1454→            <CardContent>
+  1455→              <ScrollArea className="max-h-[640px]">
+  1456→                <div className="space-y-3">
+  1457→                  {SCALING_INDICATORS.map((s, i) => (
+  1458→                    <motion.div
+  1459→                      key={s.label}
+  1460→                      initial={{ opacity: 0, x: -6 }}
+  1461→                      animate={{ opacity: 1, x: 0 }}
+  1462→                      transition={{ duration: 0.3, delay: i * 0.04 }}
+  1463→                      className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3"
+  1464→                    >
+  1465→                      <div className="flex items-center justify-between">
+  1466→                        <div className="flex items-center gap-2">
+  1467→                          <div className={cn('flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08]', s.accent)}>
+  1468→                            <s.icon className="h-3.5 w-3.5" />
+  1469→                          </div>
+  1470→                          <span className="text-[12px] font-medium text-white">{s.label}</span>
+  1471→                        </div>
+  1472→                        <span className={cn('text-[11px] font-semibold', s.accent)}>{s.value}</span>
+  1473→                      </div>
+  1474→                      <p className="mt-1.5 text-[10px] text-muted-foreground">{s.description}</p>
+  1475→                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+  1476→                        <motion.div
+  1477→                          initial={{ width: 0 }}
+  1478→                          animate={{ width: `${s.pct}%` }}
+  1479→                          transition={{ duration: 0.6, delay: i * 0.05 }}
+  1480→                          className={cn('h-full rounded-full', s.ring.replace('/30', '/70'))}
+  1481→                        />
+  1482→                      </div>
+  1483→                    </motion.div>
+  1484→                  ))}
+  1485→                </div>
+  1486→              </ScrollArea>
+  1487→            </CardContent>
+  1488→          </Card>
+  1489→        </div>
+  1490→
+  1491→        {/* ─── CDN Performance Table ─── */}
+  1492→        <div className="mt-6">
+  1493→          <CdnPerformanceTable />
+  1494→        </div>
+  1495→
+  1496→        {/* ─── Capacity Planner + Cost Optimization ─── */}
+  1497→        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+  1498→          <CapacityPlanner />
+  1499→          <CostOptimization />
+  1500→        </div>
+  1501→
+  1502→        {/* ─── Incident History + DR Status ─── */}
+  1503→        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+  1504→          <IncidentHistory />
+  1505→          <DisasterRecoveryStatus />
+  1506→        </div>
+  1507→
+  1508→        {/* ─── Footer ─── */}
+  1509→        <div className="mt-6 flex items-center justify-between text-[11px] text-muted-foreground">
+  1510→          <span className="flex items-center gap-1.5">
+  1511→            <ActivityIcon className="h-3 w-3" /> Built to Scale. Engineered to Last.
+  1512→          </span>
+  1513→          <span className="text-emerald-300">All systems operational</span>
+  1514→        </div>
+  1515→      </div>
+  1516→    </div>
+  1517→  );
+  1518→}
+  1519→

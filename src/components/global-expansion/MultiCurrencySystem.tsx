@@ -25,6 +25,7 @@ import {
   Coins, ArrowRightLeft, TrendingUp, TrendingDown, Activity,
   Gauge, Sparkles, LineChart, Radio, DollarSign, Banknote,
   Shield, PieChart, Grid3x3, Wallet, Scale, AlertTriangle,
+  Layers, CalendarClock, Receipt, Landmark,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -51,9 +52,13 @@ import {
 } from '@/components/ui/tooltip';
 import {
   CURRENCIES, EXCHANGE_RATE_HISTORY, convertCurrency, fmtPct, fmtUSD,
-  FX_EXPOSURES, BANK_BALANCES,
+  FX_EXPOSURES, BANK_BALANCES, getCountry,
   type Currency, type FXExposure,
 } from '@/lib/global/data';
+import {
+  FX_HEDGES, FX_FORWARD_CURVE, AR_AP_AGING, CASH_POOL,
+  type FXHedge, type FXForwardPoint, type ARAPAging, type CashPoolPosition,
+} from '@/lib/global/data-enterprise';
 
 // ─── Currency Card ──────────────────────────────────────────────────────────────
 
@@ -1218,10 +1223,353 @@ function FxGainLossAttribution() {
   );
 }
 
+// ─── FX Hedge Portfolio (Enterprise) ───────────────────────────────────────────
+
+const INSTRUMENT_STYLE: Record<FXHedge['instrument'], string> = {
+  Forward: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Option: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  NDF: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  'Cross-Currency Swap': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+};
+
+const HEDGE_STATUS_STYLE: Record<FXHedge['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  matured: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function FXHedgePortfolio() {
+  const totalNotional = FX_HEDGES.reduce((s, h) => s + h.notionalUSD, 0);
+  const activeHedges = FX_HEDGES.filter((h) => h.status === 'active');
+  const avgRatio = activeHedges.length ? activeHedges.reduce((s, h) => s + h.hedgeRatio, 0) / activeHedges.length : 0;
+  const avgEff = activeHedges.length ? activeHedges.reduce((s, h) => s + h.effectiveness, 0) / activeHedges.length : 0;
+
+  const kpis = [
+    { label: 'Total Notional', value: fmtUSD(totalNotional), sub: `${FX_HEDGES.length} instruments`, icon: Layers, accent: 'emerald' as const },
+    { label: 'Active Hedges', value: `${activeHedges.length}`, sub: `${FX_HEDGES.length - activeHedges.length} matured/pending`, icon: Shield, accent: 'teal' as const },
+    { label: 'Avg Hedge Ratio', value: fmtPct(avgRatio), sub: 'weighted across active', icon: Scale, accent: 'cyan' as const },
+    { label: 'Avg Effectiveness', value: fmtPct(avgEff), sub: 'hedge accounting test', icon: Gauge, accent: 'violet' as const },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <motion.div key={k.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2">
+              <k.icon className="h-4 w-4 text-emerald-400" />
+              <span className="text-[11px] uppercase tracking-wider text-zinc-400">{k.label}</span>
+            </div>
+            <div className="mt-2 text-xl font-semibold text-zinc-50">{k.value}</div>
+            <div className="mt-1 text-[10px] text-zinc-500">{k.sub}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase text-zinc-500">Instrument</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Pair</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Dir</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Notional USD</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Maturity</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Premium</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Hedge %</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Effect %</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Counterparty</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {FX_HEDGES.map((h) => (
+                <TableRow key={h.id} className="border-white/[0.04] hover:bg-white/[0.02]">
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[10px] ${INSTRUMENT_STYLE[h.instrument]}`}>{h.instrument}</Badge>
+                  </TableCell>
+                  <TableCell className="text-[11px] font-medium text-zinc-200">{h.pair}</TableCell>
+                  <TableCell className="text-[11px]">
+                    <span className={h.direction === 'Buy' ? 'text-emerald-300' : 'text-amber-300'}>{h.direction}</span>
+                  </TableCell>
+                  <TableCell className="text-[11px] text-right font-mono text-zinc-200">{fmtUSD(h.notionalUSD)}</TableCell>
+                  <TableCell className="text-[11px] text-right font-mono text-zinc-400">{h.rate.toFixed(4)}</TableCell>
+                  <TableCell className="text-[11px] text-zinc-400">{h.maturity}</TableCell>
+                  <TableCell className="text-[11px] text-right font-mono text-zinc-400">{h.premium > 0 ? fmtUSD(h.premium) : '—'}</TableCell>
+                  <TableCell className="text-[11px] text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Progress value={h.hedgeRatio} className="h-1.5 w-10" />
+                      <span className="font-mono text-zinc-300 w-8">{h.hedgeRatio}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-[11px] text-right font-mono">
+                    <span className={h.effectiveness >= 95 ? 'text-emerald-300' : h.effectiveness >= 90 ? 'text-amber-300' : 'text-zinc-400'}>
+                      {h.effectiveness > 0 ? `${h.effectiveness}%` : '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-[11px] text-zinc-400">{h.counterparty}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[10px] ${HEDGE_STATUS_STYLE[h.status]}`}>{h.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FX Forward Curve (Enterprise) ─────────────────────────────────────────────
+
+const TREND_ICON: Record<FXForwardPoint['trend'], string> = {
+  up: 'text-emerald-300',
+  down: 'text-amber-300',
+  flat: 'text-zinc-400',
+};
+
+function FXForwardCurveTable() {
+  const maxRate = Math.max(...FX_FORWARD_CURVE.map((f) => f.fwd1Y));
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <div className="border-b border-white/[0.06] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <LineChart className="h-4 w-4 text-teal-400" />
+            <span className="text-xs font-semibold text-zinc-200">FX Forward Curve — Spot vs 1M / 3M / 6M / 1Y</span>
+          </div>
+          <p className="mt-1 text-[10px] text-zinc-500">Forward points indicate interest rate differentials between currency pairs.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase text-zinc-500">Pair</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Spot</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">1M Fwd</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">3M Fwd</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">6M Fwd</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">1Y Fwd</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Trend</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Curve Shape</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {FX_FORWARD_CURVE.map((f) => {
+                const spotPct = (f.spot / maxRate) * 100;
+                const y1Pct = (f.fwd1Y / maxRate) * 100;
+                return (
+                  <TableRow key={f.pair} className="border-white/[0.04] hover:bg-white/[0.02]">
+                    <TableCell className="text-[11px] font-semibold text-zinc-100">{f.pair}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-200">{f.spot.toFixed(4)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-400">{f.fwd1M.toFixed(4)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-400">{f.fwd3M.toFixed(4)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-400">{f.fwd6M.toFixed(4)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-emerald-300">{f.fwd1Y.toFixed(4)}</TableCell>
+                    <TableCell>
+                      <span className={`text-[11px] ${TREND_ICON[f.trend]}`}>
+                        {f.trend === 'up' ? '▲' : f.trend === 'down' ? '▼' : '▬'} {f.trend}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <div className="h-2 rounded-sm bg-emerald-500/60" style={{ width: `${spotPct * 0.4}px` }} />
+                        <div className="h-2 rounded-sm bg-teal-500/60" style={{ width: `${(y1Pct - spotPct) * 0.4}px` }} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── AR/AP Aging by Country (Enterprise) ───────────────────────────────────────
+
+function AgingCell({ amount, bucket }: { amount: number; bucket: 'current' | '30' | '60' | '90' }) {
+  const colors: Record<typeof bucket, string> = {
+    current: 'text-emerald-300',
+    '30': 'text-amber-300',
+    '60': 'text-orange-300',
+    '90': 'text-red-300',
+  };
+  return <span className={`font-mono ${colors[bucket]}`}>{fmtUSD(amount)}</span>;
+}
+
+function ARAPAgingTable() {
+  const totalAR = AR_AP_AGING.reduce((s, a) => s + a.receivablesTotal, 0);
+  const totalAP = AR_AP_AGING.reduce((s, a) => s + a.payablesTotal, 0);
+  const wDSO = AR_AP_AGING.reduce((s, a) => s + a.dso, 0) / AR_AP_AGING.length;
+  const wDPO = AR_AP_AGING.reduce((s, a) => s + a.dpo, 0) / AR_AP_AGING.length;
+
+  const kpis = [
+    { label: 'Total Receivables', value: fmtUSD(totalAR), sub: 'across 10 countries', icon: Receipt, accent: 'emerald' as const },
+    { label: 'Total Payables', value: fmtUSD(totalAP), sub: 'across 10 countries', icon: Receipt, accent: 'teal' as const },
+    { label: 'Weighted DSO', value: `${wDSO.toFixed(0)} days`, sub: 'days sales outstanding', icon: CalendarClock, accent: 'cyan' as const },
+    { label: 'Weighted DPO', value: `${wDPO.toFixed(0)} days`, sub: 'days payable outstanding', icon: CalendarClock, accent: 'violet' as const },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <motion.div key={k.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2">
+              <k.icon className="h-4 w-4 text-emerald-400" />
+              <span className="text-[11px] uppercase tracking-wider text-zinc-400">{k.label}</span>
+            </div>
+            <div className="mt-2 text-xl font-semibold text-zinc-50">{k.value}</div>
+            <div className="mt-1 text-[10px] text-zinc-500">{k.sub}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase text-zinc-500">Country</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AR Current</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AR 30d</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AR 60d</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AR 90d+</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AR Total</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">AP Total</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">DSO</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">DPO</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {AR_AP_AGING.map((a) => {
+                const c = getCountry(a.countryCode);
+                return (
+                  <TableRow key={a.countryCode} className="border-white/[0.04] hover:bg-white/[0.02]">
+                    <TableCell className="text-[11px] font-medium text-zinc-200">
+                      <span className="mr-1.5">{c.flag}</span>{c.name}
+                    </TableCell>
+                    <TableCell className="text-[11px] text-right"><AgingCell amount={a.receivablesCurrent} bucket="current" /></TableCell>
+                    <TableCell className="text-[11px] text-right"><AgingCell amount={a.receivables30} bucket="30" /></TableCell>
+                    <TableCell className="text-[11px] text-right"><AgingCell amount={a.receivables60} bucket="60" /></TableCell>
+                    <TableCell className="text-[11px] text-right"><AgingCell amount={a.receivables90} bucket="90" /></TableCell>
+                    <TableCell className="text-[11px] text-right font-mono font-semibold text-zinc-100">{fmtUSD(a.receivablesTotal)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-400">{fmtUSD(a.payablesTotal)}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono">
+                      <span className={a.dso > 45 ? 'text-amber-300' : 'text-emerald-300'}>{a.dso}d</span>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-right font-mono">
+                      <span className={a.dpo < 45 ? 'text-amber-300' : 'text-emerald-300'}>{a.dpo}d</span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cash Pool Positions (Enterprise) ──────────────────────────────────────────
+
+const SWEEP_STYLE: Record<CashPoolPosition['sweepStatus'], string> = {
+  swept: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  manual: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+};
+
+function CashPoolTable() {
+  const totalPool = CASH_POOL.reduce((s, c) => s + c.balanceUSD, 0);
+  const participants = CASH_POOL.filter((c) => c.accountType === 'Participant').length;
+  const sweptCount = CASH_POOL.filter((c) => c.sweepStatus === 'swept').length;
+  const avgRate = CASH_POOL.reduce((s, c) => s + c.interestRate, 0) / CASH_POOL.length;
+
+  const kpis = [
+    { label: 'Total Pool USD', value: fmtUSD(totalPool), sub: `${CASH_POOL.length} accounts`, icon: Landmark, accent: 'emerald' as const },
+    { label: 'Participants', value: `${participants}`, sub: '1 header account', icon: Layers, accent: 'teal' as const },
+    { label: 'Avg Interest', value: `${avgRate.toFixed(2)}%`, sub: 'across all accounts', icon: Gauge, accent: 'cyan' as const },
+    { label: 'Sweep Automation', value: `${((sweptCount / CASH_POOL.length) * 100).toFixed(0)}%`, sub: `${sweptCount}/${CASH_POOL.length} auto-swept`, icon: Activity, accent: 'violet' as const },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <motion.div key={k.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2">
+              <k.icon className="h-4 w-4 text-emerald-400" />
+              <span className="text-[11px] uppercase tracking-wider text-zinc-400">{k.label}</span>
+            </div>
+            <div className="mt-2 text-xl font-semibold text-zinc-50">{k.value}</div>
+            <div className="mt-1 text-[10px] text-zinc-500">{k.sub}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase text-zinc-500">Entity</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Country</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Type</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Balance</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Currency</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Balance USD</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Sweep</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500 text-right">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase text-zinc-500">Last Sweep</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CASH_POOL.map((c) => {
+                const country = getCountry(c.countryCode);
+                const isHeader = c.accountType === 'Header';
+                return (
+                  <TableRow key={c.id} className={`border-white/[0.04] hover:bg-white/[0.02] ${isHeader ? 'bg-emerald-500/[0.04]' : ''}`}>
+                    <TableCell className="text-[11px] font-medium text-zinc-200">{c.entity}</TableCell>
+                    <TableCell className="text-[11px]"><span className="mr-1">{country.flag}</span>{country.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[10px] ${isHeader ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400'}`}>
+                        {c.accountType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-300">{c.balance.toLocaleString('en-US')}</TableCell>
+                    <TableCell className="text-[11px] text-zinc-400">{c.currency}</TableCell>
+                    <TableCell className="text-[11px] text-right font-mono font-semibold text-zinc-100">{fmtUSD(c.balanceUSD)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[10px] ${SWEEP_STYLE[c.sweepStatus]}`}>{c.sweepStatus}</Badge>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-right font-mono text-zinc-400">{c.interestRate.toFixed(2)}%</TableCell>
+                    <TableCell className="text-[11px] text-zinc-500">{c.lastSweep}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export default function MultiCurrencySystem() {
-  const [sectionTab, setSectionTab] = useState<'exposure' | 'hedge' | 'heatmap' | 'cash' | 'attrib'>('exposure');
+  const [sectionTab, setSectionTab] = useState<'exposure' | 'hedge' | 'heatmap' | 'cash' | 'attrib' | 'hedges' | 'curve' | 'aging' | 'pool'>('exposure');
 
   const supportedCount = CURRENCIES.filter((c) => c.supported).length;
   const positiveCount = CURRENCIES.filter((c) => c.change24h > 0).length;
@@ -1340,6 +1688,18 @@ export default function MultiCurrencySystem() {
                   <TabsTrigger value="attrib" className="text-[11px]">
                     <PieChart className="mr-1 h-3 w-3" /> Gain/Loss
                   </TabsTrigger>
+                  <TabsTrigger value="hedges" className="text-[11px]">
+                    <Layers className="mr-1 h-3 w-3" /> Hedge Portfolio
+                  </TabsTrigger>
+                  <TabsTrigger value="curve" className="text-[11px]">
+                    <LineChart className="mr-1 h-3 w-3" /> Forward Curve
+                  </TabsTrigger>
+                  <TabsTrigger value="aging" className="text-[11px]">
+                    <Receipt className="mr-1 h-3 w-3" /> AR/AP Aging
+                  </TabsTrigger>
+                  <TabsTrigger value="pool" className="text-[11px]">
+                    <Landmark className="mr-1 h-3 w-3" /> Cash Pool
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1358,6 +1718,18 @@ export default function MultiCurrencySystem() {
               <TabsContent value="attrib" className="mt-0">
                 <FxGainLossAttribution />
               </TabsContent>
+              <TabsContent value="hedges" className="mt-0">
+                <FXHedgePortfolio />
+              </TabsContent>
+              <TabsContent value="curve" className="mt-0">
+                <FXForwardCurveTable />
+              </TabsContent>
+              <TabsContent value="aging" className="mt-0">
+                <ARAPAgingTable />
+              </TabsContent>
+              <TabsContent value="pool" className="mt-0">
+                <CashPoolTable />
+              </TabsContent>
             </Tabs>
           </TooltipProvider>
         </section>
@@ -1366,7 +1738,7 @@ export default function MultiCurrencySystem() {
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 border-t border-white/[0.06] pt-4 text-[10px] text-zinc-500 sm:flex-row">
           <div className="flex items-center gap-2">
             <Gauge className="h-3 w-3 text-emerald-400" />
-            Multi-Currency System™ · Phase 14 · {supportedCount} live rates · {FX_EXPOSURES.length} exposures · {EXCHANGE_RATE_HISTORY.length}-month history
+            Multi-Currency System™ · Phase 14 · {supportedCount} live rates · {FX_EXPOSURES.length} exposures · {EXCHANGE_RATE_HISTORY.length}-month history · {FX_HEDGES.length} hedges · {CASH_POOL.length} cash pool accounts · {AR_AP_AGING.length} aging jurisdictions
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="h-3 w-3 text-teal-400" /> Founder &amp; Owner: Prince Singh

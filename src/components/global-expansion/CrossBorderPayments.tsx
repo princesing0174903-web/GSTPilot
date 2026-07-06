@@ -33,7 +33,7 @@ import {
   CheckCircle2, Clock, XCircle, Lock, Unlock, Zap,
   ShieldCheck, Building2, Banknote, Calculator,
   GitBranch, FileCheck, AlertCircle, ChevronRight, X,
-  type LucideIcon,
+  Truck, Gauge, ShieldAlert, type LucideIcon,
 } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -58,6 +58,10 @@ import {
   fmtUSD, statusColor, getCountry,
   type CrossBorderPayment, type PaymentStage,
 } from '@/lib/global/data';
+import {
+  PAYMENT_RAILS, SLA_CONTRACTS, CUSTOMS_DECLARATIONS,
+  type PaymentRail, type SLAContract, type CustomsDeclaration,
+} from '@/lib/global/data-enterprise';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -1012,6 +1016,422 @@ function ReconciliationQueue() {
   );
 }
 
+// ─── Payment Rail Analytics ────────────────────────────────────────────────────
+
+const RAIL_COLOR_CLASSES: Record<string, string> = {
+  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  teal: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  violet: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function railSuccessColor(rate: number): string {
+  if (rate >= 99.5) return 'bg-emerald-500/70';
+  if (rate >= 99) return 'bg-teal-500/70';
+  if (rate >= 98) return 'bg-amber-500/70';
+  return 'bg-rose-500/70';
+}
+
+function PaymentRailAnalytics() {
+  const totalVolume = PAYMENT_RAILS.reduce((s, r) => s + r.monthlyVolume, 0);
+  const totalTxns = PAYMENT_RAILS.reduce((s, r) => s + r.monthlyTxns, 0);
+  const fastest = [...PAYMENT_RAILS].sort((a, b) => a.avgSettlementHrs - b.avgSettlementHrs)[0];
+  const highestSuccess = [...PAYMENT_RAILS].sort((a, b) => b.successRate - a.successRate)[0];
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Gauge className="h-4 w-4 text-cyan-400" />
+            Payment Rail Analytics
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {PAYMENT_RAILS.length} rails · live operations
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Monthly Volume</p>
+            <p className="text-sm font-semibold text-white">{fmtCompactUSD(totalVolume)}</p>
+            <p className="text-[9px] text-muted-foreground">across all rails</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Total Monthly Txns</p>
+            <p className="text-sm font-semibold text-white">{totalTxns.toLocaleString('en-US')}</p>
+            <p className="text-[9px] text-muted-foreground">{PAYMENT_RAILS.length} active rails</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Fastest Rail</p>
+            <p className="text-sm font-semibold text-white truncate">{fastest.rail}</p>
+            <p className="text-[9px] text-muted-foreground">{fastest.avgSettlementHrs < 1 ? `${(fastest.avgSettlementHrs * 60).toFixed(0)}m` : `${fastest.avgSettlementHrs}h`} settlement</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">Highest Success Rate</p>
+            <p className="text-sm font-semibold text-white">{highestSuccess.successRate}%</p>
+            <p className="text-[9px] text-muted-foreground truncate">{highestSuccess.rail}</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[480px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Rail</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Settlement</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Success Rate</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Avg Fee</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Monthly Volume</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Txns</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Regions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {PAYMENT_RAILS.map((r: PaymentRail, i: number) => (
+                <motion.tr
+                  key={r.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.02 }}
+                  className="border-white/[0.04] hover:bg-white/[0.02]"
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-md border text-[10px] font-bold',
+                        RAIL_COLOR_CLASSES[r.color] ?? 'border-white/[0.08] bg-white/[0.03] text-white',
+                      )}>
+                        {r.rail.slice(0, 2)}
+                      </span>
+                      <span className="text-[11px] font-medium text-white">{r.rail}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] text-cyan-300">
+                    {r.avgSettlementHrs < 1 ? `${(r.avgSettlementHrs * 60).toFixed(0)}m` : `${r.avgSettlementHrs}h`}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/[0.04]">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${r.successRate}%` }}
+                          transition={{ duration: 0.5, delay: i * 0.03 }}
+                          className={cn('h-full rounded-full', railSuccessColor(r.successRate))}
+                        />
+                      </div>
+                      <span className="font-mono text-[11px] text-white">{r.successRate}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] text-rose-300">
+                    {r.avgFee < 1 ? `${(r.avgFee * 100).toFixed(1)}¢` : `$${r.avgFee.toFixed(2)}`}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                    {fmtCompactUSD(r.monthlyVolume)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] text-white">
+                    {r.monthlyTxns.toLocaleString('en-US')}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {r.regions.map((region) => (
+                        <span key={region} className="inline-flex rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                          {region}
+                        </span>
+                      ))}
+                    </div>
+                  </TableCell>
+                </motion.tr>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── SLA Monitoring Dashboard ──────────────────────────────────────────────────
+
+const SLA_TIER_COLOR: Record<SLAContract['tier'], string> = {
+  Strategic: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  Enterprise: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Growth: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  Starter: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+};
+
+const SLA_STATUS_COLOR: Record<SLAContract['status'], string> = {
+  meeting: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'at-risk': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  breached: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function SLAMonitoringDashboard() {
+  const totalValue = SLA_CONTRACTS.reduce((s, c) => s + c.monthlyValue, 0);
+  const avgUptime = SLA_CONTRACTS.reduce((s, c) => s + c.currentUptime, 0) / SLA_CONTRACTS.length;
+  const breached = SLA_CONTRACTS.filter((c) => c.status === 'breached').length;
+  const atRisk = SLA_CONTRACTS.filter((c) => c.status === 'at-risk').length;
+
+  const uptimeColor = (current: number, sla: number) => {
+    if (current >= sla) return 'text-emerald-300';
+    if (current >= sla - 0.05) return 'text-amber-300';
+    return 'text-rose-300';
+  };
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <ShieldAlert className="h-4 w-4 text-violet-400" />
+            SLA Monitoring Dashboard
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {SLA_CONTRACTS.length} enterprise contracts
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Contract Value</p>
+            <p className="text-sm font-semibold text-white">{fmtCompactUSD(totalValue)}</p>
+            <p className="text-[9px] text-muted-foreground">monthly recurring</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Avg Uptime</p>
+            <p className="text-sm font-semibold text-white">{avgUptime.toFixed(3)}%</p>
+            <p className="text-[9px] text-muted-foreground">across all contracts</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">At-Risk Contracts</p>
+            <p className="text-sm font-semibold text-amber-300">{atRisk}</p>
+            <p className="text-[9px] text-muted-foreground">approaching SLA breach</p>
+          </div>
+          <div className={cn(
+            'rounded-lg border p-2.5',
+            breached > 0
+              ? 'border-rose-500/30 bg-rose-500/[0.04]'
+              : 'border-cyan-500/20 bg-cyan-500/[0.04]',
+          )}>
+            <p className={cn('text-[10px] uppercase tracking-wider', breached > 0 ? 'text-rose-300' : 'text-cyan-300')}>Breached Contracts</p>
+            <p className={cn('text-sm font-semibold', breached > 0 ? 'text-rose-300' : 'text-white')}>{breached}</p>
+            <p className="text-[9px] text-muted-foreground">require immediate action</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[480px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Tier</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Uptime (SLA/Actual)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Response (SLA/Actual)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Resolution (SLA/Actual)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Monthly Value</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {SLA_CONTRACTS.map((c: SLAContract, i: number) => (
+                <motion.tr
+                  key={c.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.02 }}
+                  className="border-white/[0.04] hover:bg-white/[0.02]"
+                >
+                  <TableCell className="text-[11px] font-medium text-white">{c.customer}</TableCell>
+                  <TableCell>
+                    <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', SLA_TIER_COLOR[c.tier])}>
+                      {c.tier}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-[10px] text-muted-foreground">{c.uptimeSLA}% SLA</div>
+                    <div className={cn('font-mono text-[11px] font-semibold', uptimeColor(c.currentUptime, c.uptimeSLA))}>
+                      {c.currentUptime}%
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-[10px] text-muted-foreground">{c.responseSLA}m SLA</div>
+                    <div className={cn('font-mono text-[11px]', c.avgResponse <= c.responseSLA ? 'text-emerald-300' : 'text-rose-300')}>
+                      {c.avgResponse}m
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-[10px] text-muted-foreground">{c.resolutionSLA}m SLA</div>
+                    <div className={cn('font-mono text-[11px]', c.avgResolution <= c.resolutionSLA ? 'text-emerald-300' : 'text-rose-300')}>
+                      {c.avgResolution}m
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                    {fmtCompactUSD(c.monthlyValue)}
+                  </TableCell>
+                  <TableCell>
+                    <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', SLA_STATUS_COLOR[c.status])}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full',
+                        c.status === 'meeting' && 'bg-emerald-400',
+                        c.status === 'at-risk' && 'bg-amber-400',
+                        c.status === 'breached' && 'bg-rose-400',
+                      )} />
+                      {c.status}
+                    </span>
+                  </TableCell>
+                </motion.tr>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Customs & Trade Finance ───────────────────────────────────────────────────
+
+const CUSTOMS_TYPE_COLOR: Record<CustomsDeclaration['type'], string> = {
+  Import: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  Export: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+};
+
+const CUSTOMS_STATUS_COLOR: Record<CustomsDeclaration['status'], string> = {
+  cleared: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  filed: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  held: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function CustomsTradeFinance() {
+  const totalDeclared = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.declaredValueUSD, 0);
+  const totalDuty = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.dutyPaid, 0);
+  const totalGstVat = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.gstVatPaid, 0);
+  const heldCount = CUSTOMS_DECLARATIONS.filter((c) => c.status === 'held').length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Truck className="h-4 w-4 text-amber-400" />
+            Customs & Trade Finance
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {CUSTOMS_DECLARATIONS.length} active declarations
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Declared Value</p>
+            <p className="text-sm font-semibold text-white">{fmtCompactUSD(totalDeclared)}</p>
+            <p className="text-[9px] text-muted-foreground">across all declarations</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">Total Duty Paid</p>
+            <p className="text-sm font-semibold text-white">{fmtCompactUSD(totalDuty)}</p>
+            <p className="text-[9px] text-muted-foreground">import / export duties</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Total GST/VAT Paid</p>
+            <p className="text-sm font-semibold text-white">{fmtCompactUSD(totalGstVat)}</p>
+            <p className="text-[9px] text-muted-foreground">destination country taxes</p>
+          </div>
+          <div className={cn(
+            'rounded-lg border p-2.5',
+            heldCount > 0 ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-cyan-500/20 bg-cyan-500/[0.04]',
+          )}>
+            <p className={cn('text-[10px] uppercase tracking-wider', heldCount > 0 ? 'text-rose-300' : 'text-cyan-300')}>Held at Customs</p>
+            <p className={cn('text-sm font-semibold', heldCount > 0 ? 'text-rose-300' : 'text-white')}>{heldCount}</p>
+            <p className="text-[9px] text-muted-foreground">requires review</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[480px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Reference</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Type</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Route</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">HS Code</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Description</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Declared USD</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Duty Paid</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">GST/VAT</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Port</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CUSTOMS_DECLARATIONS.map((c: CustomsDeclaration, i: number) => {
+                const from = getCountry(c.originCountry);
+                const to = getCountry(c.destinationCountry);
+                return (
+                  <motion.tr
+                    key={c.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell className="font-mono text-[11px] text-white">{c.reference}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', CUSTOMS_TYPE_COLOR[c.type])}>
+                        {c.type}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base leading-none" title={from.name}>{from.flag}</span>
+                        <ArrowLeftRight className="h-3 w-3 text-emerald-400" />
+                        <span className="text-base leading-none" title={to.name}>{to.flag}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-cyan-300">{c.hsCode}</TableCell>
+                    <TableCell className="text-[11px] text-white/90 max-w-[180px] truncate" title={c.description}>
+                      {c.description}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                      {fmtUSD(c.declaredValueUSD)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-amber-300">
+                      {c.dutyPaid > 0 ? fmtUSD(c.dutyPaid) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-violet-300">
+                      {c.gstVatPaid > 0 ? fmtUSD(c.gstVatPaid) : '—'}
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">{c.port}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', CUSTOMS_STATUS_COLOR[c.status])}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full',
+                          c.status === 'cleared' && 'bg-emerald-400',
+                          c.status === 'filed' && 'bg-teal-400',
+                          c.status === 'pending' && 'bg-amber-400',
+                          c.status === 'held' && 'bg-rose-400',
+                        )} />
+                        {c.status}
+                      </span>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function CrossBorderPayments() {
@@ -1360,6 +1780,21 @@ export default function CrossBorderPayments() {
         {/* ─── Reconciliation Queue ─── */}
         <div className="mt-6">
           <ReconciliationQueue />
+        </div>
+
+        {/* ─── Payment Rail Analytics ─── */}
+        <div className="mt-6">
+          <PaymentRailAnalytics />
+        </div>
+
+        {/* ─── SLA Monitoring Dashboard ─── */}
+        <div className="mt-6">
+          <SLAMonitoringDashboard />
+        </div>
+
+        {/* ─── Customs & Trade Finance ─── */}
+        <div className="mt-6">
+          <CustomsTradeFinance />
         </div>
 
         {/* ─── Footer note ─── */}

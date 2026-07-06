@@ -43,6 +43,8 @@ import {
   PiggyBank, Save, Cloud, RefreshCw,
   Activity as ActivityIcon, Wifi, ArrowUpRight, ArrowDownRight,
   Sparkles,
+  Package, Truck, ShieldAlert, Coins, LineChart,
+  BarChart3, Boxes, TrendingDown, ArrowRight,
 } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -56,7 +58,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Slider } from '@/components/ui/slider';
-import { CDN_REGIONS, ENDPOINT_METRICS } from '@/lib/global/data';
+import { CDN_REGIONS, ENDPOINT_METRICS, getCountry } from '@/lib/global/data';
+import {
+  SUPPLY_CHAIN_RISKS, FX_HEDGES, REVENUE_SEGMENTS,
+  type SupplyChainRisk, type FXHedge, type RevenueSegment,
+} from '@/lib/global/data-enterprise';
 import { cn } from '@/lib/utils';
 
 // ─── Static scale & architecture data ──────────────────────────────────────────
@@ -1285,6 +1291,566 @@ function EndpointPerformanceDeepDive() {
                   </TableCell>
                 </motion.tr>
               ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Supply Chain Risk Monitor ─────────────────────────────────────────────────
+
+const SCR_STATUS_COLOR: Record<SupplyChainRisk['status'], string> = {
+  low: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  high: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  critical: 'border-rose-500/40 bg-rose-500/20 text-rose-300',
+};
+
+function riskScoreColor(score: number): string {
+  if (score >= 70) return 'bg-rose-500/70';
+  if (score >= 50) return 'bg-amber-500/70';
+  if (score >= 30) return 'bg-teal-500/70';
+  return 'bg-emerald-500/70';
+}
+
+function riskScoreText(score: number): string {
+  if (score >= 70) return 'text-rose-300';
+  if (score >= 50) return 'text-amber-300';
+  if (score >= 30) return 'text-teal-300';
+  return 'text-emerald-300';
+}
+
+function SupplyChainRiskMonitor() {
+  const avgRisk = SUPPLY_CHAIN_RISKS.reduce((s, r) => s + r.riskScore, 0) / SUPPLY_CHAIN_RISKS.length;
+  const criticalCount = SUPPLY_CHAIN_RISKS.filter((r) => r.status === 'critical' || r.status === 'high').length;
+  const singleSource = SUPPLY_CHAIN_RISKS.filter((r) => r.singleSource).length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Package className="h-4 w-4 text-amber-400" />
+            Supply Chain Risk Monitor
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {SUPPLY_CHAIN_RISKS.length} vendors · continuous monitoring
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">Avg Risk Score</p>
+            <p className="text-sm font-semibold text-white">{avgRisk.toFixed(1)}/100</p>
+            <p className="text-[9px] text-muted-foreground">across all vendors</p>
+          </div>
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-rose-300">High / Critical Vendors</p>
+            <p className="text-sm font-semibold text-rose-300">{criticalCount}</p>
+            <p className="text-[9px] text-muted-foreground">require active mitigation</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Single-Source Vendors</p>
+            <p className="text-sm font-semibold text-white">{singleSource}</p>
+            <p className="text-[9px] text-muted-foreground">sole-supplier exposure</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[520px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Vendor</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Country</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Category</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Risk Score</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Lead Time</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">On-Time %</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Single-Source</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Alts</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Last Incident</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Mitigation</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {SUPPLY_CHAIN_RISKS.map((r: SupplyChainRisk, i: number) => {
+                const country = getCountry(r.vendorCountry);
+                return (
+                  <motion.tr
+                    key={r.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell className="text-[11px] font-medium text-white">{r.vendor}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base leading-none" title={country.name}>{country.flag}</span>
+                        <span className="text-[10px] text-muted-foreground">{country.code}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {r.category}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.04]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${r.riskScore}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.03 }}
+                            className={cn('h-full rounded-full', riskScoreColor(r.riskScore))}
+                          />
+                        </div>
+                        <span className={cn('font-mono text-[11px] font-semibold', riskScoreText(r.riskScore))}>{r.riskScore}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-cyan-300">{r.leadTimeDays}d</TableCell>
+                    <TableCell className={cn(
+                      'text-right font-mono text-[11px]',
+                      r.onTimeRate >= 98 ? 'text-emerald-300' : r.onTimeRate >= 95 ? 'text-amber-300' : 'text-rose-300',
+                    )}>
+                      {r.onTimeRate}%
+                    </TableCell>
+                    <TableCell>
+                      {r.singleSource ? (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-300">
+                          <ShieldAlert className="h-2.5 w-2.5" /> Sole
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> Multi
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-white">{r.alternatives}</TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground">{r.lastIncident}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', SCR_STATUS_COLOR[r.status])}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full',
+                          r.status === 'low' && 'bg-emerald-400',
+                          r.status === 'medium' && 'bg-amber-400',
+                          r.status === 'high' && 'bg-rose-400',
+                          r.status === 'critical' && 'bg-rose-400 animate-pulse',
+                        )} />
+                        {r.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[10px] text-muted-foreground max-w-[220px]">{r.mitigation}</TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── FX Hedging Performance ────────────────────────────────────────────────────
+
+const FX_INSTRUMENT_COLOR: Record<FXHedge['instrument'], string> = {
+  Forward: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Option: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  NDF: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'Cross-Currency Swap': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+};
+
+const FX_STATUS_COLOR: Record<FXHedge['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  matured: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function FXHedgingPerformance() {
+  const totalNotional = FX_HEDGES.reduce((s, h) => s + h.notionalUSD, 0);
+  const activeHedges = FX_HEDGES.filter((h) => h.status === 'active');
+  const activeCount = activeHedges.length;
+  const avgRatio = activeHedges.length > 0
+    ? activeHedges.reduce((s, h) => s + h.hedgeRatio, 0) / activeHedges.length
+    : 0;
+  const effectiveHedges = activeHedges.filter((h) => h.effectiveness > 0);
+  const avgEffectiveness = effectiveHedges.length > 0
+    ? effectiveHedges.reduce((s, h) => s + h.effectiveness, 0) / effectiveHedges.length
+    : 0;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Coins className="h-4 w-4 text-cyan-400" />
+            FX Hedging Performance
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {FX_HEDGES.length} hedges · treasury desk
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Notional (USD)</p>
+            <p className="text-sm font-semibold text-white">{fmtUSDShort(totalNotional)}</p>
+            <p className="text-[9px] text-muted-foreground">across all hedges</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Avg Hedge Ratio</p>
+            <p className="text-sm font-semibold text-white">{avgRatio.toFixed(1)}%</p>
+            <p className="text-[9px] text-muted-foreground">active hedges only</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Avg Effectiveness</p>
+            <p className="text-sm font-semibold text-white">{avgEffectiveness.toFixed(1)}%</p>
+            <p className="text-[9px] text-muted-foreground">hedge accounting test</p>
+          </div>
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-cyan-300">Active Hedges</p>
+            <p className="text-sm font-semibold text-white">{activeCount}/{FX_HEDGES.length}</p>
+            <p className="text-[9px] text-muted-foreground">currently open positions</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[520px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Instrument</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Pair</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Direction</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Notional USD</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Maturity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Premium</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Hedge Ratio</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Effectiveness</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Counterparty</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {FX_HEDGES.map((h: FXHedge, i: number) => (
+                <motion.tr
+                  key={h.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.02 }}
+                  className="border-white/[0.04] hover:bg-white/[0.02]"
+                >
+                  <TableCell>
+                    <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', FX_INSTRUMENT_COLOR[h.instrument])}>
+                      {h.instrument}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-[11px] font-semibold text-white">{h.pair}</TableCell>
+                  <TableCell>
+                    <span className={cn(
+                      'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
+                      h.direction === 'Buy'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+                    )}>
+                      {h.direction === 'Buy' ? <ArrowDownRight className="h-2.5 w-2.5" /> : <ArrowUpRight className="h-2.5 w-2.5" />}
+                      {h.direction}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                    {fmtUSDShort(h.notionalUSD)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[11px] text-cyan-300">{h.rate.toFixed(4)}</TableCell>
+                  <TableCell className="font-mono text-[11px] text-muted-foreground">{h.maturity}</TableCell>
+                  <TableCell className="text-right font-mono text-[11px] text-rose-300">
+                    {h.premium > 0 ? fmtUSDShort(h.premium) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    {h.hedgeRatio > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-14 overflow-hidden rounded-full bg-white/[0.04]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${h.hedgeRatio}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.03 }}
+                            className="h-full rounded-full bg-teal-500/70"
+                          />
+                        </div>
+                        <span className="font-mono text-[11px] text-white">{h.hedgeRatio}%</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {h.effectiveness > 0 ? (
+                      <span className={cn(
+                        'font-mono text-[11px]',
+                        h.effectiveness >= 95 ? 'text-emerald-300' : h.effectiveness >= 90 ? 'text-amber-300' : 'text-rose-300',
+                      )}>
+                        {h.effectiveness}%
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-[11px] text-white/90">{h.counterparty}</TableCell>
+                  <TableCell>
+                    <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', FX_STATUS_COLOR[h.status])}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full',
+                        h.status === 'active' && 'bg-emerald-400',
+                        h.status === 'matured' && 'bg-slate-400',
+                        h.status === 'pending' && 'bg-amber-400',
+                      )} />
+                      {h.status}
+                    </span>
+                  </TableCell>
+                </motion.tr>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Revenue Performance by Segment ────────────────────────────────────────────
+
+const REVENUE_COLOR_CLASSES: Record<string, { tile: string; bar: string; text: string }> = {
+  emerald: { tile: 'border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-300', bar: 'bg-emerald-500/70', text: 'text-emerald-300' },
+  teal: { tile: 'border-teal-500/20 bg-teal-500/[0.04] text-teal-300', bar: 'bg-teal-500/70', text: 'text-teal-300' },
+  cyan: { tile: 'border-cyan-500/20 bg-cyan-500/[0.04] text-cyan-300', bar: 'bg-cyan-500/70', text: 'text-cyan-300' },
+  violet: { tile: 'border-violet-500/20 bg-violet-500/[0.04] text-violet-300', bar: 'bg-violet-500/70', text: 'text-violet-300' },
+  amber: { tile: 'border-amber-500/20 bg-amber-500/[0.04] text-amber-300', bar: 'bg-amber-500/70', text: 'text-amber-300' },
+  rose: { tile: 'border-rose-500/20 bg-rose-500/[0.04] text-rose-300', bar: 'bg-rose-500/70', text: 'text-rose-300' },
+};
+
+function RevenuePerformanceBySegment() {
+  const totalFY = REVENUE_SEGMENTS.reduce((s, r) => s + r.fyTotal, 0);
+  const totalQ1 = REVENUE_SEGMENTS.reduce((s, r) => s + r.q1, 0);
+  const totalQ2 = REVENUE_SEGMENTS.reduce((s, r) => s + r.q2, 0);
+  const totalQ3 = REVENUE_SEGMENTS.reduce((s, r) => s + r.q3, 0);
+  const totalQ4 = REVENUE_SEGMENTS.reduce((s, r) => s + r.q4, 0);
+  const avgGrowth = REVENUE_SEGMENTS.reduce((s, r) => s + r.yoyGrowth, 0) / REVENUE_SEGMENTS.length;
+  const avgMargin = REVENUE_SEGMENTS.reduce((s, r) => s + r.grossMargin, 0) / REVENUE_SEGMENTS.length;
+  const maxQuarter = Math.max(totalQ1, totalQ2, totalQ3, totalQ4);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <BarChart3 className="h-4 w-4 text-emerald-400" />
+            Revenue Performance by Segment
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {REVENUE_SEGMENTS.length} segments · FY24 actuals
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">FY24 Total Revenue</p>
+            <p className="text-sm font-semibold text-white">{fmtUSDShort(totalFY)}</p>
+            <p className="text-[9px] text-muted-foreground">all segments combined</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Avg YoY Growth</p>
+            <p className="text-sm font-semibold text-white">+{avgGrowth.toFixed(0)}%</p>
+            <p className="text-[9px] text-muted-foreground">segment-weighted average</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Avg Gross Margin</p>
+            <p className="text-sm font-semibold text-white">{avgMargin.toFixed(0)}%</p>
+            <p className="text-[9px] text-muted-foreground">across all segments</p>
+          </div>
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-cyan-300">Best Quarter</p>
+            <p className="text-sm font-semibold text-white">Q4 · {fmtUSDShort(totalQ4)}</p>
+            <p className="text-[9px] text-muted-foreground">peak seasonal performance</p>
+          </div>
+        </div>
+
+        {/* Quarterly Trend Visualization */}
+        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+          <div className="mb-3 flex items-center gap-2">
+            <LineChart className="h-3.5 w-3.5 text-emerald-400" />
+            <p className="text-xs font-semibold text-white">Quarterly Revenue Trend</p>
+            <span className="text-[10px] text-muted-foreground">— CSS-based progression per segment</span>
+          </div>
+          <div className="space-y-2">
+            {REVENUE_SEGMENTS.map((s: RevenueSegment, i: number) => {
+              const max = Math.max(s.q1, s.q2, s.q3, s.q4);
+              const colors = REVENUE_COLOR_CLASSES[s.color] ?? REVENUE_COLOR_CLASSES.emerald;
+              return (
+                <motion.div
+                  key={s.segment}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.05 }}
+                  className="rounded-md border border-white/[0.04] bg-white/[0.02] p-2"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cn('h-2 w-2 rounded-full', colors.bar.replace('/70', ''))} />
+                      <span className="text-[11px] font-medium text-white truncate">{s.segment}</span>
+                    </div>
+                    <span className={cn('text-[10px] font-mono font-semibold', colors.text)}>
+                      {fmtUSDShort(s.fyTotal)} · +{s.yoyGrowth}%
+                    </span>
+                  </div>
+                  {/* Quarterly bars */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: 'Q1', val: s.q1 },
+                      { label: 'Q2', val: s.q2 },
+                      { label: 'Q3', val: s.q3 },
+                      { label: 'Q4', val: s.q4 },
+                    ].map((q, qi) => (
+                      <div key={q.label} className="space-y-0.5">
+                        <div className="h-8 w-full rounded-sm bg-white/[0.03] relative overflow-hidden flex items-end">
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: `${(q.val / max) * 100}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.05 + qi * 0.04 }}
+                            className={cn('w-full rounded-sm', colors.bar)}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                          <span>{q.label}</span>
+                          <span className="font-mono">{fmtUSDShort(q.val)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Aggregate quarterly trend */}
+          <div className="mt-3 pt-3 border-t border-white/[0.06]">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-white">Aggregate Quarterly Revenue</span>
+              <span className="text-[10px] text-muted-foreground">total across all segments</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Q1', val: totalQ1 },
+                { label: 'Q2', val: totalQ2 },
+                { label: 'Q3', val: totalQ3 },
+                { label: 'Q4', val: totalQ4 },
+              ].map((q, qi) => (
+                <div key={q.label} className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{q.label}</p>
+                  <p className="text-sm font-semibold text-emerald-300 font-mono">{fmtUSDShort(q.val)}</p>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(q.val / maxQuarter) * 100}%` }}
+                      transition={{ duration: 0.5, delay: qi * 0.06 }}
+                      className="h-full rounded-full bg-emerald-500/70"
+                    />
+                  </div>
+                  <p className="mt-1 text-[9px] text-muted-foreground">{((q.val / maxQuarter) * 100).toFixed(0)}% of peak quarter</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed table */}
+        <ScrollArea className="max-h-[420px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Segment</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Q1</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Q2</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Q3</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Q4</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">FY Total</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">YoY Growth</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Gross Margin</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {REVENUE_SEGMENTS.map((s: RevenueSegment, i: number) => {
+                const colors = REVENUE_COLOR_CLASSES[s.color] ?? REVENUE_COLOR_CLASSES.emerald;
+                return (
+                  <motion.tr
+                    key={s.segment}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className={cn('h-2 w-2 rounded-full', colors.bar.replace('/70', ''))} />
+                        <span className="text-[11px] font-medium text-white">{s.segment}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-white/90">{fmtUSDShort(s.q1)}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-white/90">{fmtUSDShort(s.q2)}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-white/90">{fmtUSDShort(s.q3)}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-white/90">{fmtUSDShort(s.q4)}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">{fmtUSDShort(s.fyTotal)}</TableCell>
+                    <TableCell>
+                      <span className={cn(
+                        'inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
+                        s.yoyGrowth >= 50
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          : s.yoyGrowth >= 20
+                            ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                            : 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+                      )}>
+                        <TrendingUp className="h-2.5 w-2.5" /> +{s.yoyGrowth}%
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.04]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${s.grossMargin}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.03 }}
+                            className={cn('h-full rounded-full', colors.bar)}
+                          />
+                        </div>
+                        <span className="font-mono text-[11px] text-white">{s.grossMargin}%</span>
+                      </div>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+              {/* Totals row */}
+              <TableRow className="border-emerald-500/20 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.06]">
+                <TableCell className="text-[11px] font-semibold text-emerald-300">📊 Total / Average</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-white/90">{fmtUSDShort(totalQ1)}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-white/90">{fmtUSDShort(totalQ2)}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-white/90">{fmtUSDShort(totalQ3)}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-white/90">{fmtUSDShort(totalQ4)}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">{fmtUSDShort(totalFY)}</TableCell>
+                <TableCell>
+                  <span className="inline-flex items-center gap-0.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                    <TrendingUp className="h-2.5 w-2.5" /> +{avgGrowth.toFixed(0)}%
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-[11px] font-semibold text-emerald-300">{avgMargin.toFixed(0)}% avg</span>
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </ScrollArea>

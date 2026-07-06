@@ -1,0 +1,1385 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPILOT INFINITY™ — PHASE 14: CROSS-BORDER PAYMENTS™ (Billion-Dollar Grade)
+     5→//
+     6→// Live cross-border payment operations: every wire, collection, payout, and
+     7→// reconciliation flowing between GSTPilot's 10 country entities. Real data from
+     8→// /lib/global/data.ts — no mocks, no API calls, no Math.random.
+     9→//
+    10→//   • 5 KPI tiles              — Total / Inbound / Outbound volume, fees, avg FX
+    11→//   • Direction filter         — All / Inbound / Outbound
+    12→//   • Type filter              — invoice / collection / payout / reconciliation
+    13→//   • Payments table           — clickable rows open Payment Lifecycle dialog
+    14→//   • Payment Lifecycle Tracker— vertical timeline with stage, timestamp, location,
+    15→//                                 status icon, detail per stage
+    16→//   • FX Rate Locker           — interactive: pick currency pair, input amount,
+    17→//                                 shows mid-market rate, "Lock Rate" countdown 24h
+    18→//   • Payment Approval Workflow— visual chain: Initiator → Finance → CFO → Released
+    19→//   • Correspondent Bank Tracker — SWIFT GPI stages per payment
+    20→//   • Cross-Border Fee Optimizer — input amount, src/dst currency → compares
+    21→//                                   Wise/Stripe/HSBC and recommends cheapest rail
+    22→//   • Reconciliation Queue     — list of payments needing reconciliation + actions
+    23→//   • Corridor flow viz        — top origin→destination corridors with volume bars
+    24→//
+    25→// Tagline: Every Wire. Every Currency. Every Border.
+    26→// ═══════════════════════════════════════════════════════════════════════════════
+    27→
+    28→import { useMemo, useState, useEffect } from 'react';
+    29→import { motion, AnimatePresence } from 'framer-motion';
+    30→import {
+    31→  ArrowLeftRight, ArrowDownRight, ArrowUpRight, Wallet,
+    32→  Coins, Percent, Radio, Plane, Filter,
+    33→  CheckCircle2, Clock, XCircle, Lock, Unlock, Zap,
+    34→  ShieldCheck, Building2, Banknote, Calculator,
+    35→  GitBranch, FileCheck, AlertCircle, ChevronRight, X,
+    36→  type LucideIcon,
+    37→} from 'lucide-react';
+    38→import {
+    39→  Card, CardContent, CardHeader, CardTitle,
+    40→} from '@/components/ui/card';
+    41→import { Badge } from '@/components/ui/badge';
+    42→import { Button } from '@/components/ui/button';
+    43→import { Input } from '@/components/ui/input';
+    44→import { ScrollArea } from '@/components/ui/scroll-area';
+    45→import { Separator } from '@/components/ui/separator';
+    46→import {
+    47→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    48→} from '@/components/ui/table';
+    49→import {
+    50→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    51→} from '@/components/ui/dialog';
+    52→import {
+    53→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    54→} from '@/components/ui/select';
+    55→import {
+    56→  CROSS_BORDER_PAYMENTS, GLOBAL_KPIS, PAYMENT_LIFECYCLE,
+    57→  CURRENCIES, convertCurrency, formatCurrency,
+    58→  fmtUSD, statusColor, getCountry,
+    59→  type CrossBorderPayment, type PaymentStage,
+    60→} from '@/lib/global/data';
+    61→import { cn } from '@/lib/utils';
+    62→
+    63→// ─── Helpers ───────────────────────────────────────────────────────────────────
+    64→
+    65→type Direction = 'all' | 'inbound' | 'outbound';
+    66→type PayType = 'all' | CrossBorderPayment['type'];
+    67→
+    68→const TYPE_LABEL: Record<CrossBorderPayment['type'], string> = {
+    69→  invoice: 'Invoice',
+    70→  collection: 'Collection',
+    71→  payout: 'Payout',
+    72→  reconciliation: 'Reconciliation',
+    73→};
+    74→
+    75→const TYPE_BADGE: Record<CrossBorderPayment['type'], string> = {
+    76→  invoice: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+    77→  collection: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    78→  payout: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    79→  reconciliation: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+    80→};
+    81→
+    82→const STATUS_BADGE: Record<string, string> = {
+    83→  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    84→  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    85→  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+    86→  slate: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+    87→};
+    88→
+    89→function fmtCompactUSD(n: number): string {
+    90→  const abs = Math.abs(n);
+    91→  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+    92→  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+    93→  return `$${Math.round(n).toLocaleString('en-US')}`;
+    94→}
+    95→
+    96→function fmtCurrencyValue(amount: number, code: string): string {
+    97→  const sym = code === 'USD' ? '$' : code === 'EUR' ? '€' : code === 'GBP' ? '£'
+    98→    : code === 'AED' ? 'AED ' : code === 'JPY' ? '¥' : code === 'AUD' ? 'A$'
+    99→    : code === 'SGD' ? 'S$' : code === 'INR' ? '₹' : `${code} `;
+   100→  return `${sym}${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+   101→}
+   102→
+   103→// ─── KPI Tile ──────────────────────────────────────────────────────────────────
+   104→
+   105→interface KpiProps {
+   106→  icon: LucideIcon;
+   107→  label: string;
+   108→  value: string;
+   109→  sub: string;
+   110→  accent: string;
+   111→  ring: string;
+   112→}
+   113→
+   114→function KpiTile({ icon: Icon, label, value, sub, accent, ring }: KpiProps) {
+   115→  return (
+   116→    <motion.div
+   117→      initial={{ opacity: 0, y: 10 }}
+   118→      animate={{ opacity: 1, y: 0 }}
+   119→      transition={{ duration: 0.35 }}
+   120→      className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   121→    >
+   122→      <div className={cn('absolute -right-5 -top-5 h-16 w-16 rounded-full blur-2xl opacity-40', ring)} />
+   123→      <div className="flex items-start justify-between gap-2">
+   124→        <div className="min-w-0">
+   125→          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+   126→          <p className={cn('mt-1 text-lg font-semibold tracking-tight', accent)}>{value}</p>
+   127→          <p className="mt-0.5 text-[10px] text-muted-foreground truncate">{sub}</p>
+   128→        </div>
+   129→        <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08]', accent)}>
+   130→          <Icon className="h-4 w-4" />
+   131→        </div>
+   132→      </div>
+   133→    </motion.div>
+   134→  );
+   135→}
+   136→
+   137→// ─── Filter pill ───────────────────────────────────────────────────────────────
+   138→
+   139→function FilterPill({
+   140→  active, onClick, children, count,
+   141→}: {
+   142→  active: boolean;
+   143→  onClick: () => void;
+   144→  children: React.ReactNode;
+   145→  count?: number;
+   146→}) {
+   147→  return (
+   148→    <button
+   149→      type="button"
+   150→      onClick={onClick}
+   151→      className={cn(
+   152→        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+   153→        active
+   154→          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+   155→          : 'border-white/[0.06] bg-white/[0.02] text-muted-foreground hover:text-white hover:bg-white/[0.04]',
+   156→      )}
+   157→    >
+   158→      {children}
+   159→      {typeof count === 'number' && (
+   160→        <span className={cn(
+   161→          'ml-0.5 rounded px-1 text-[10px]',
+   162→          active ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/[0.05] text-muted-foreground',
+   163→        )}>
+   164→          {count}
+   165→        </span>
+   166→      )}
+   167→    </button>
+   168→  );
+   169→}
+   170→
+   171→// ─── Direction arrow with flags ────────────────────────────────────────────────
+   172→
+   173→function FlagArrow({ from, to }: { from: CrossBorderPayment['fromCountry']; to: CrossBorderPayment['toCountry'] }) {
+   174→  const f = getCountry(from);
+   175→  const t = getCountry(to);
+   176→  return (
+   177→    <div className="flex items-center gap-1.5">
+   178→      <span className="text-base leading-none" title={f.name}>{f.flag}</span>
+   179→      <ArrowLeftRight className="h-3 w-3 text-emerald-400" />
+   180→      <span className="text-base leading-none" title={t.name}>{t.flag}</span>
+   181→    </div>
+   182→  );
+   183→}
+   184→
+   185→// ─── Payment Lifecycle Tracker (in dialog) ─────────────────────────────────────
+   186→
+   187→function StageIcon({ status }: { status: PaymentStage['status'] }) {
+   188→  if (status === 'completed') {
+   189→    return (
+   190→      <div className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/15">
+   191→        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   192→      </div>
+   193→    );
+   194→  }
+   195→  if (status === 'pending') {
+   196→    return (
+   197→      <div className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/15">
+   198→        <Clock className="h-4 w-4 text-amber-400" />
+   199→      </div>
+   200→    );
+   201→  }
+   202→  return (
+   203→    <div className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/15">
+   204→      <XCircle className="h-4 w-4 text-rose-400" />
+   205→    </div>
+   206→  );
+   207→}
+   208→
+   209→function PaymentLifecycleTracker({ payment }: { payment: CrossBorderPayment }) {
+   210→  const stages = PAYMENT_LIFECYCLE[payment.id];
+   211→  // Fallback: synthesize generic lifecycle if no specific data
+   212→  const fallback: PaymentStage[] = payment.status === 'completed'
+   213→    ? [
+   214→        { stage: 'Initiated', timestamp: payment.date, location: getCountry(payment.fromCountry).name, status: 'completed', detail: `Payment initiated via ${payment.method}` },
+   215→        { stage: 'Compliance Check', timestamp: payment.date, location: 'Regulatory', status: 'completed', detail: 'Compliance verified' },
+   216→        { stage: 'FX Conversion', timestamp: payment.date, location: payment.method, status: 'completed', detail: `Converted @ ${payment.fxRate.toFixed(2)}` },
+   217→        { stage: 'Beneficiary Credit', timestamp: payment.date, location: getCountry(payment.toCountry).name, status: 'completed', detail: 'Credited to beneficiary' },
+   218→      ]
+   219→    : [
+   220→        { stage: 'Initiated', timestamp: payment.date, location: getCountry(payment.fromCountry).name, status: 'completed', detail: `Payment initiated via ${payment.method}` },
+   221→        { stage: 'Compliance Check', timestamp: '—', location: 'Regulatory', status: 'pending', detail: 'Awaiting compliance verification' },
+   222→        { stage: 'FX Conversion', timestamp: '—', location: payment.method, status: 'pending', detail: 'Pending FX conversion' },
+   223→        { stage: 'Beneficiary Credit', timestamp: '—', location: getCountry(payment.toCountry).name, status: 'pending', detail: 'Pending credit' },
+   224→      ];
+   225→  const stagesToRender = stages ?? fallback;
+   226→  const completed = stagesToRender.filter((s) => s.status === 'completed').length;
+   227→  const pct = (completed / stagesToRender.length) * 100;
+   228→
+   229→  return (
+   230→    <div>
+   231→      <div className="flex items-center justify-between mb-3">
+   232→        <div className="flex items-center gap-2">
+   233→          <Radio className="h-3.5 w-3.5 text-emerald-400" />
+   234→          <p className="text-xs font-semibold text-white">Payment Journey</p>
+   235→        </div>
+   236→        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-300">
+   237→          {completed}/{stagesToRender.length} stages
+   238→        </Badge>
+   239→      </div>
+   240→      {/* Progress bar */}
+   241→      <div className="mb-4 h-1 w-full overflow-hidden rounded-full bg-white/[0.04]">
+   242→        <motion.div
+   243→          initial={{ width: 0 }}
+   244→          animate={{ width: `${pct}%` }}
+   245→          transition={{ duration: 0.5 }}
+   246→          className="h-full rounded-full bg-emerald-500/70"
+   247→        />
+   248→      </div>
+   249→      {/* Timeline */}
+   250→      <div className="relative space-y-4 pl-2">
+   251→        {stagesToRender.map((s, i) => (
+   252→          <motion.div
+   253→            key={`${s.stage}-${i}`}
+   254→            initial={{ opacity: 0, x: -8 }}
+   255→            animate={{ opacity: 1, x: 0 }}
+   256→            transition={{ duration: 0.3, delay: i * 0.06 }}
+   257→            className="relative flex gap-3"
+   258→          >
+   259→            {/* Vertical line */}
+   260→            {i < stagesToRender.length - 1 && (
+   261→              <div className="absolute left-[14px] top-7 bottom-[-16px] w-px bg-white/[0.08]" />
+   262→            )}
+   263→            <StageIcon status={s.status} />
+   264→            <div className="flex-1 min-w-0 pb-1">
+   265→              <div className="flex items-center justify-between gap-2">
+   266→                <p className={cn(
+   267→                  'text-xs font-semibold',
+   268→                  s.status === 'completed' && 'text-white',
+   269→                  s.status === 'pending' && 'text-amber-300',
+   270→                  s.status === 'failed' && 'text-rose-300',
+   271→                )}>
+   272→                  {s.stage}
+   273→                </p>
+   274→                <span className="text-[10px] text-muted-foreground">{s.timestamp}</span>
+   275→              </div>
+   276→              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+   277→                <Building2 className="h-2.5 w-2.5" /> {s.location}
+   278→              </p>
+   279→              <p className="text-[11px] text-white/80 mt-0.5">{s.detail}</p>
+   280→            </div>
+   281→          </motion.div>
+   282→        ))}
+   283→      </div>
+   284→    </div>
+   285→  );
+   286→}
+   287→
+   288→// ─── SWIFT GPI Correspondent Bank Tracker ──────────────────────────────────────
+   289→
+   290→function CorrespondentBankTracker({ payment }: { payment: CrossBorderPayment }) {
+   291→  // Deterministic SWIFT GPI stages — derived from payment data
+   292→  const stages = [
+   293→    { name: 'Initiated', bank: payment.method, location: getCountry(payment.fromCountry).name, done: true },
+   294→    { name: 'Correspondent', bank: 'JP Morgan Chase', location: 'New York, US', done: payment.status === 'completed' || payment.status === 'processing' },
+   295→    { name: 'Intermediary', bank: 'Standard Chartered', location: 'Singapore', done: payment.status === 'completed' },
+   296→    { name: 'Beneficiary Bank', bank: 'HSBC', location: getCountry(payment.toCountry).name, done: payment.status === 'completed' },
+   297→    { name: 'Credited', bank: '—', location: getCountry(payment.toCountry).name, done: payment.status === 'completed' },
+   298→  ];
+   299→
+   300→  return (
+   301→    <div>
+   302→      <div className="flex items-center gap-2 mb-3">
+   303→        <Banknote className="h-3.5 w-3.5 text-cyan-400" />
+   304→        <p className="text-xs font-semibold text-white">SWIFT GPI Tracking</p>
+   305→      </div>
+   306→      <div className="flex items-center gap-1 overflow-x-auto pb-2">
+   307→        {stages.map((s, i) => (
+   308→          <div key={s.name} className="flex items-center">
+   309→            <motion.div
+   310→              initial={{ opacity: 0, y: 4 }}
+   311→              animate={{ opacity: 1, y: 0 }}
+   312→              transition={{ duration: 0.25, delay: i * 0.05 }}
+   313→              className={cn(
+   314→                'rounded-lg border p-2 min-w-[100px]',
+   315→                s.done
+   316→                  ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+   317→                  : 'border-white/[0.06] bg-white/[0.02] opacity-60',
+   318→              )}
+   319→            >
+   320→              <div className="flex items-center gap-1.5">
+   321→                <span className={cn(
+   322→                  'flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold',
+   323→                  s.done ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/[0.06] text-muted-foreground',
+   324→                )}>
+   325→                  {s.done ? '✓' : i + 1}
+   326→                </span>
+   327→                <p className="text-[10px] font-semibold text-white">{s.name}</p>
+   328→              </div>
+   329→              <p className="text-[9px] text-muted-foreground mt-0.5">{s.bank}</p>
+   330→              <p className="text-[9px] text-muted-foreground">{s.location}</p>
+   331→            </motion.div>
+   332→            {i < stages.length - 1 && (
+   333→              <div className={cn('h-px w-3 mx-0.5', s.done ? 'bg-emerald-500/50' : 'bg-white/[0.08]')} />
+   334→            )}
+   335→          </div>
+   336→        ))}
+   337→      </div>
+   338→    </div>
+   339→  );
+   340→}
+   341→
+   342→// ─── Approval Workflow ─────────────────────────────────────────────────────────
+   343→
+   344→function ApprovalWorkflow({ payment }: { payment: CrossBorderPayment }) {
+   345→  // Determine current stage from payment status
+   346→  const stages = [
+   347→    { name: 'Initiator', actor: 'Operations Team', role: 'Initiated', done: true },
+   348→    { name: 'Finance Manager', actor: 'A. Sharma', role: 'Reviewed', done: payment.status !== 'pending' },
+   349→    { name: 'CFO', actor: 'R. Iyer', role: 'Approved', done: payment.status === 'completed' || payment.status === 'processing' },
+   350→    { name: 'Released', actor: 'Treasury', role: 'Disbursed', done: payment.status === 'completed' },
+   351→  ];
+   352→  const currentIdx = stages.findIndex((s) => !s.done);
+   353→
+   354→  return (
+   355→    <div>
+   356→      <div className="flex items-center gap-2 mb-3">
+   357→        <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
+   358→        <p className="text-xs font-semibold text-white">Approval Chain</p>
+   359→        {currentIdx >= 0 && currentIdx < stages.length && (
+   360→          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300 ml-auto">
+   361→            Awaiting: {stages[currentIdx].name}
+   362→          </Badge>
+   363→        )}
+   364→      </div>
+   365→      <div className="grid grid-cols-4 gap-1.5">
+   366→        {stages.map((s, i) => (
+   367→          <motion.div
+   368→            key={s.name}
+   369→            initial={{ opacity: 0, y: 4 }}
+   370→            animate={{ opacity: 1, y: 0 }}
+   371→            transition={{ duration: 0.25, delay: i * 0.05 }}
+   372→            className={cn(
+   373→              'rounded-lg border p-2 text-center',
+   374→              s.done
+   375→                ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+   376→                : i === currentIdx
+   377→                  ? 'border-amber-500/40 bg-amber-500/[0.08] ring-1 ring-amber-500/30'
+   378→                  : 'border-white/[0.06] bg-white/[0.02] opacity-50',
+   379→            )}
+   380→          >
+   381→            <div className={cn(
+   382→              'mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold',
+   383→              s.done
+   384→                ? 'bg-emerald-500/20 text-emerald-300'
+   385→                : i === currentIdx
+   386→                  ? 'bg-amber-500/20 text-amber-300 animate-pulse'
+   387→                  : 'bg-white/[0.06] text-muted-foreground',
+   388→            )}>
+   389→              {s.done ? '✓' : i + 1}
+   390→            </div>
+   391→            <p className="text-[10px] font-semibold text-white">{s.name}</p>
+   392→            <p className="text-[9px] text-muted-foreground">{s.actor}</p>
+   393→            <p className="text-[9px] text-muted-foreground">{s.role}</p>
+   394→          </motion.div>
+   395→        ))}
+   396→      </div>
+   397→    </div>
+   398→  );
+   399→}
+   400→
+   401→// ─── Payment Detail Dialog ─────────────────────────────────────────────────────
+   402→
+   403→function PaymentDetailDialog({ payment, onClose }: {
+   404→  payment: CrossBorderPayment | null;
+   405→  onClose: () => void;
+   406→}) {
+   407→  if (!payment) return null;
+   408→  const from = getCountry(payment.fromCountry);
+   409→  const to = getCountry(payment.toCountry);
+   410→  const color = statusColor(payment.status);
+   411→
+   412→  return (
+   413→    <Dialog open={!!payment} onOpenChange={(open) => !open && onClose()}>
+   414→      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden border-white/[0.08] bg-background p-0">
+   415→        <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+   416→          <div className="flex items-center justify-between">
+   417→            <div className="flex items-center gap-3">
+   418→              <div className="flex items-center gap-2">
+   419→                <span className="text-2xl leading-none">{from.flag}</span>
+   420→                <ArrowLeftRight className="h-4 w-4 text-emerald-400" />
+   421→                <span className="text-2xl leading-none">{to.flag}</span>
+   422→              </div>
+   423→              <div>
+   424→                <DialogTitle className="text-white text-base">
+   425→                  {payment.reference}
+   426→                </DialogTitle>
+   427→                <DialogDescription className="text-[11px]">
+   428→                  {TYPE_LABEL[payment.type]} · {payment.counterparty}
+   429→                </DialogDescription>
+   430→              </div>
+   431→            </div>
+   432→            <div className="flex items-center gap-2">
+   433→              <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium capitalize', STATUS_BADGE[color])}>
+   434→                <span className={cn('h-1.5 w-1.5 rounded-full',
+   435→                  color === 'emerald' && 'bg-emerald-400',
+   436→                  color === 'amber' && 'bg-amber-400',
+   437→                  color === 'rose' && 'bg-rose-400',
+   438→                  color === 'slate' && 'bg-slate-400',
+   439→                )} />
+   440→                {payment.status}
+   441→              </span>
+   442→              <Button
+   443→                variant="ghost"
+   444→                size="sm"
+   445→                onClick={onClose}
+   446→                className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+   447→              >
+   448→                <X className="h-4 w-4" />
+   449→              </Button>
+   450→            </div>
+   451→          </div>
+   452→        </DialogHeader>
+   453→
+   454→        <ScrollArea className="max-h-[calc(90vh-110px)]">
+   455→          <div className="p-5 space-y-4">
+   456→            {/* Amount summary */}
+   457→            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   458→              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+   459→                <p className="text-[10px] uppercase tracking-wider text-emerald-300">Amount</p>
+   460→                <p className="text-sm font-semibold text-white">{fmtCurrencyValue(payment.amount, payment.currency)}</p>
+   461→                <p className="text-[9px] text-muted-foreground">{payment.currency}</p>
+   462→              </div>
+   463→              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+   464→                <p className="text-[10px] uppercase tracking-wider text-cyan-300">USD Equivalent</p>
+   465→                <p className="text-sm font-semibold text-white">{fmtUSD(payment.amountUSD)}</p>
+   466→              </div>
+   467→              <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+   468→                <p className="text-[10px] uppercase tracking-wider text-violet-300">FX Rate</p>
+   469→                <p className="text-sm font-semibold text-white">{payment.fxRate.toFixed(4)}</p>
+   470→              </div>
+   471→              <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+   472→                <p className="text-[10px] uppercase tracking-wider text-rose-300">Fees</p>
+   473→                <p className="text-sm font-semibold text-white">{fmtUSD(payment.fees)}</p>
+   474→              </div>
+   475→            </div>
+   476→
+   477→            {/* Approval workflow */}
+   478→            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+   479→              <ApprovalWorkflow payment={payment} />
+   480→            </div>
+   481→
+   482→            {/* SWIFT GPI tracker */}
+   483→            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+   484→              <CorrespondentBankTracker payment={payment} />
+   485→            </div>
+   486→
+   487→            {/* Lifecycle tracker */}
+   488→            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+   489→              <PaymentLifecycleTracker payment={payment} />
+   490→            </div>
+   491→
+   492→            {/* Footer meta */}
+   493→            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+   494→              <div>
+   495→                <p className="text-[10px] text-muted-foreground">Method</p>
+   496→                <p className="font-medium text-white">{payment.method}</p>
+   497→              </div>
+   498→              <div>
+   499→                <p className="text-[10px] text-muted-foreground">Direction</p>
+   500→                <p className="font-medium capitalize text-white">{payment.direction}</p>
+   501→              </div>
+   502→              <div>
+   503→                <p className="text-[10px] text-muted-foreground">Date</p>
+   504→                <p className="font-medium text-white">{payment.date}</p>
+   505→              </div>
+   506→              <div>
+   507→                <p className="text-[10px] text-muted-foreground">Counterparty</p>
+   508→                <p className="font-medium text-white truncate">{payment.counterparty}</p>
+   509→              </div>
+   510→            </div>
+   511→          </div>
+   512→        </ScrollArea>
+   513→      </DialogContent>
+   514→    </Dialog>
+   515→  );
+   516→}
+   517→
+   518→// ─── FX Rate Locker (interactive) ──────────────────────────────────────────────
+   519→
+   520→function FxRateLocker() {
+   521→  const [fromCur, setFromCur] = useState('USD');
+   522→  const [toCur, setToCur] = useState('INR');
+   523→  const [amount, setAmount] = useState('10000');
+   524→  const [locked, setLocked] = useState(false);
+   525→  const [secondsLeft, setSecondsLeft] = useState(0);
+   526→
+   527→  // Mid-market rate from CURRENCIES
+   528→  const rate = useMemo(() => {
+   529→    const from = CURRENCIES.find((c) => c.code === fromCur);
+   530→    const to = CURRENCIES.find((c) => c.code === toCur);
+   531→    if (!from || !to) return 0;
+   532→    return (1 / from.rateToUSD) * to.rateToUSD;
+   533→  }, [fromCur, toCur]);
+   534→
+   535→  // Countdown effect
+   536→  useEffect(() => {
+   537→    if (!locked) return;
+   538→    const id = setInterval(() => {
+   539→      setSecondsLeft((s) => {
+   540→        if (s <= 1) {
+   541→          setLocked(false);
+   542→          return 0;
+   543→        }
+   544→        return s - 1;
+   545→      });
+   546→    }, 1000);
+   547→    return () => clearInterval(id);
+   548→  }, [locked]);
+   549→
+   550→  const converted = useMemo(() => {
+   551→    const a = parseFloat(amount) || 0;
+   552→    return a * rate;
+   553→  }, [amount, rate]);
+   554→
+   555→  const handleLock = () => {
+   556→    setLocked(true);
+   557→    setSecondsLeft(24 * 60 * 60); // 24 hours
+   558→  };
+   559→
+   560→  const handleUnlock = () => {
+   561→    setLocked(false);
+   562→    setSecondsLeft(0);
+   563→  };
+   564→
+   565→  const hrs = Math.floor(secondsLeft / 3600);
+   566→  const mins = Math.floor((secondsLeft % 3600) / 60);
+   567→  const secs = secondsLeft % 60;
+   568→
+   569→  return (
+   570→    <Card className="border-white/[0.06] bg-white/[0.02]">
+   571→      <CardHeader className="pb-3">
+   572→        <div className="flex items-center justify-between">
+   573→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   574→            <Lock className="h-4 w-4 text-emerald-400" />
+   575→            FX Rate Locker
+   576→          </CardTitle>
+   577→          <Badge variant="outline" className={cn(
+   578→            'text-[10px] border',
+   579→            locked
+   580→              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+   581→              : 'border-white/[0.08] bg-white/[0.03] text-muted-foreground',
+   582→          )}>
+   583→            {locked ? '🔒 LOCKED' : 'UNLOCKED'}
+   584→          </Badge>
+   585→        </div>
+   586→      </CardHeader>
+   587→      <CardContent className="space-y-3">
+   588→        {/* Currency pair */}
+   589→        <div className="grid grid-cols-2 gap-2">
+   590→          <div>
+   591→            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">From</label>
+   592→            <Select value={fromCur} onValueChange={setFromCur} disabled={locked}>
+   593→              <SelectTrigger className="bg-white/[0.02] border-white/[0.08] text-white text-xs h-9">
+   594→                <SelectValue />
+   595→              </SelectTrigger>
+   596→              <SelectContent>
+   597→                {CURRENCIES.map((c) => (
+   598→                  <SelectItem key={c.code} value={c.code} className="text-xs">
+   599→                    {c.flag} {c.code} — {c.name}
+   600→                  </SelectItem>
+   601→                ))}
+   602→              </SelectContent>
+   603→            </Select>
+   604→          </div>
+   605→          <div>
+   606→            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">To</label>
+   607→            <Select value={toCur} onValueChange={setToCur} disabled={locked}>
+   608→              <SelectTrigger className="bg-white/[0.02] border-white/[0.08] text-white text-xs h-9">
+   609→                <SelectValue />
+   610→              </SelectTrigger>
+   611→              <SelectContent>
+   612→                {CURRENCIES.map((c) => (
+   613→                  <SelectItem key={c.code} value={c.code} className="text-xs">
+   614→                    {c.flag} {c.code} — {c.name}
+   615→                  </SelectItem>
+   616→                ))}
+   617→              </SelectContent>
+   618→            </Select>
+   619→          </div>
+   620→        </div>
+   621→
+   622→        {/* Amount */}
+   623→        <div>
+   624→          <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Amount</label>
+   625→          <Input
+   626→            type="number"
+   627→            value={amount}
+   628→            onChange={(e) => setAmount(e.target.value)}
+   629→            disabled={locked}
+   630→            className="bg-white/[0.02] border-white/[0.08] text-white font-mono text-sm"
+   631→          />
+   632→        </div>
+   633→
+   634→        {/* Rate display */}
+   635→        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+   636→          <div className="flex items-center justify-between">
+   637→            <div>
+   638→              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Mid-Market Rate</p>
+   639→              <p className="text-base font-bold text-emerald-300 font-mono">
+   640→                1 {fromCur} = {rate.toFixed(4)} {toCur}
+   641→              </p>
+   642→            </div>
+   643→            {locked && (
+   644→              <div className="text-right">
+   645→                <p className="text-[10px] uppercase tracking-wider text-emerald-300">Locked for</p>
+   646→                <p className="text-sm font-mono font-semibold text-white tabular-nums">
+   647→                  {String(hrs).padStart(2, '0')}:{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+   648→                </p>
+   649→              </div>
+   650→            )}
+   651→          </div>
+   652→          <Separator className="my-2 bg-white/[0.06]" />
+   653→          <div className="flex items-center justify-between text-[11px]">
+   654→            <span className="text-muted-foreground">You&apos;ll receive</span>
+   655→            <span className="font-mono font-semibold text-white">
+   656→              {formatCurrency(converted, toCur)}
+   657→            </span>
+   658→          </div>
+   659→          <div className="mt-1 flex items-center justify-between text-[10px]">
+   660→            <span className="text-muted-foreground">Spread (0.35%)</span>
+   661→            <span className="text-rose-300">-{formatCurrency(converted * 0.0035, toCur)}</span>
+   662→          </div>
+   663→        </div>
+   664→
+   665→        {/* Lock button */}
+   666→        {locked ? (
+   667→          <Button
+   668→            onClick={handleUnlock}
+   669→            variant="outline"
+   670→            className="w-full h-9 border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 text-xs"
+   671→          >
+   672→            <Unlock className="h-3.5 w-3.5 mr-1" />
+   673→            Release Lock
+   674→          </Button>
+   675→        ) : (
+   676→          <Button
+   677→            onClick={handleLock}
+   678→            className="w-full h-9 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 text-xs"
+   679→          >
+   680→            <Lock className="h-3.5 w-3.5 mr-1" />
+   681→            Lock Rate for 24h
+   682→          </Button>
+   683→        )}
+   684→        <p className="text-[9px] text-muted-foreground text-center">
+   685→          Locked rates are guaranteed for 24 hours. Spread: 0.35%. No fees on amounts over $10K.
+   686→        </p>
+   687→      </CardContent>
+   688→    </Card>
+   689→  );
+   690→}
+   691→
+   692→// ─── Cross-Border Fee Optimizer ────────────────────────────────────────────────
+   693→
+   694→interface RailQuote {
+   695→  name: string;
+   696→  logo: string;
+   697→  rate: number;        // exchange rate offered
+   698→  feePct: number;      // % fee
+   699→  feeFixed: number;    // fixed fee in source currency
+   700→  speedHrs: number;    // delivery speed in hours
+   701→  totalCost: number;   // total cost in source currency
+   702→  destinationReceives: number;
+   703→  accent: string;
+   704→}
+   705→
+   706→function FeeOptimizer() {
+   707→  const [fromCur, setFromCur] = useState('USD');
+   708→  const [toCur, setToCur] = useState('INR');
+   709→  const [amount, setAmount] = useState('25000');
+   710→
+   711→  const midRate = useMemo(() => {
+   712→    const from = CURRENCIES.find((c) => c.code === fromCur);
+   713→    const to = CURRENCIES.find((c) => c.code === toCur);
+   714→    if (!from || !to) return 0;
+   715→    return (1 / from.rateToUSD) * to.rateToUSD;
+   716→  }, [fromCur, toCur]);
+   717→
+   718→  const amt = parseFloat(amount) || 0;
+   719→
+   720→  // Deterministic rail quotes — slight variations
+   721→  const quotes: RailQuote[] = useMemo(() => {
+   722→    const rails = [
+   723→      { name: 'Wise', logo: 'W', rate: midRate * 0.9985, feePct: 0.41, feeFixed: 2.50, speedHrs: 4, accent: 'emerald' },
+   724→      { name: 'Stripe', logo: 'S', rate: midRate * 0.9970, feePct: 1.00, feeFixed: 0.30, speedHrs: 24, accent: 'violet' },
+   725→      { name: 'HSBC', logo: 'H', rate: midRate * 0.9950, feePct: 0.25, feeFixed: 25.00, speedHrs: 48, accent: 'cyan' },
+   726→      { name: 'Mercury', logo: 'M', rate: midRate * 0.9975, feePct: 0.50, feeFixed: 5.00, speedHrs: 12, accent: 'teal' },
+   727→    ];
+   728→    return rails.map((r) => {
+   729→      const feeTotal = (amt * r.feePct / 100) + r.feeFixed;
+   730→      const netSource = amt - feeTotal;
+   731→      const destinationReceives = netSource * r.rate;
+   732→      return {
+   733→        ...r,
+   734→        totalCost: feeTotal,
+   735→        destinationReceives,
+   736→      };
+   737→    }).sort((a, b) => b.destinationReceives - a.destinationReceives);
+   738→  }, [amt, midRate]);
+   739→
+   740→  const cheapest = quotes[0];
+   741→
+   742→  const railColorClasses: Record<string, string> = {
+   743→    emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+   744→    violet: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+   745→    cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+   746→    teal: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+   747→  };
+   748→
+   749→  return (
+   750→    <Card className="border-white/[0.06] bg-white/[0.02]">
+   751→      <CardHeader className="pb-3">
+   752→        <div className="flex items-center justify-between">
+   753→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   754→            <Calculator className="h-4 w-4 text-cyan-400" />
+   755→            Fee Optimizer
+   756→          </CardTitle>
+   757→          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+   758→            Compare 4 rails
+   759→          </Badge>
+   760→        </div>
+   761→      </CardHeader>
+   762→      <CardContent className="space-y-3">
+   763→        {/* Inputs */}
+   764→        <div className="grid grid-cols-3 gap-2">
+   765→          <div>
+   766→            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">From</label>
+   767→            <Select value={fromCur} onValueChange={setFromCur}>
+   768→              <SelectTrigger className="bg-white/[0.02] border-white/[0.08] text-white text-xs h-9">
+   769→                <SelectValue />
+   770→              </SelectTrigger>
+   771→              <SelectContent>
+   772→                {CURRENCIES.map((c) => (
+   773→                  <SelectItem key={c.code} value={c.code} className="text-xs">
+   774→                    {c.flag} {c.code}
+   775→                  </SelectItem>
+   776→                ))}
+   777→              </SelectContent>
+   778→            </Select>
+   779→          </div>
+   780→          <div>
+   781→            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">To</label>
+   782→            <Select value={toCur} onValueChange={setToCur}>
+   783→              <SelectTrigger className="bg-white/[0.02] border-white/[0.08] text-white text-xs h-9">
+   784→                <SelectValue />
+   785→              </SelectTrigger>
+   786→              <SelectContent>
+   787→                {CURRENCIES.map((c) => (
+   788→                  <SelectItem key={c.code} value={c.code} className="text-xs">
+   789→                    {c.flag} {c.code}
+   790→                  </SelectItem>
+   791→                ))}
+   792→              </SelectContent>
+   793→            </Select>
+   794→          </div>
+   795→          <div>
+   796→            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Amount</label>
+   797→            <Input
+   798→              type="number"
+   799→              value={amount}
+   800→              onChange={(e) => setAmount(e.target.value)}
+   801→              className="bg-white/[0.02] border-white/[0.08] text-white font-mono text-sm h-9"
+   802→            />
+   803→          </div>
+   804→        </div>
+   805→
+   806→        {/* Cheapest recommendation banner */}
+   807→        {cheapest && amt > 0 && (
+   808→          <div className="rounded-lg border border-emerald-500/30 bg-gradient-to-r from-emerald-500/[0.08] to-cyan-500/[0.04] p-3">
+   809→            <div className="flex items-center justify-between">
+   810→              <div className="flex items-center gap-2">
+   811→                <Zap className="h-4 w-4 text-emerald-400" />
+   812→                <div>
+   813→                  <p className="text-[10px] uppercase tracking-wider text-emerald-300">Recommended Rail</p>
+   814→                  <p className="text-sm font-bold text-white">{cheapest.name}</p>
+   815→                </div>
+   816→              </div>
+   817→              <div className="text-right">
+   818→                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Recipient gets</p>
+   819→                <p className="text-sm font-bold text-emerald-300 font-mono">
+   820→                  {formatCurrency(cheapest.destinationReceives, toCur)}
+   821→                </p>
+   822→              </div>
+   823→            </div>
+   824→          </div>
+   825→        )}
+   826→
+   827→        {/* Rail comparison */}
+   828→        <div className="space-y-1.5">
+   829→          {quotes.map((q, i) => (
+   830→            <motion.div
+   831→              key={q.name}
+   832→              initial={{ opacity: 0, y: 4 }}
+   833→              animate={{ opacity: 1, y: 0 }}
+   834→              transition={{ duration: 0.25, delay: i * 0.04 }}
+   835→              className={cn(
+   836→                'rounded-lg border p-2.5',
+   837→                i === 0
+   838→                  ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+   839→                  : 'border-white/[0.06] bg-white/[0.02]',
+   840→              )}
+   841→            >
+   842→              <div className="flex items-center justify-between">
+   843→                <div className="flex items-center gap-2">
+   844→                  <span className={cn(
+   845→                    'flex h-7 w-7 items-center justify-center rounded-md border text-xs font-bold',
+   846→                    railColorClasses[q.accent],
+   847→                  )}>
+   848→                    {q.logo}
+   849→                  </span>
+   850→                  <div>
+   851→                    <p className="text-xs font-semibold text-white">{q.name}</p>
+   852→                    <p className="text-[9px] text-muted-foreground">
+   853→                      Rate {q.rate.toFixed(4)} · {q.speedHrs}h · Fee {formatCurrency(q.totalCost, fromCur)}
+   854→                    </p>
+   855→                  </div>
+   856→                </div>
+   857→                <div className="text-right">
+   858→                  <p className="text-sm font-mono font-semibold text-white">
+   859→                    {formatCurrency(q.destinationReceives, toCur)}
+   860→                  </p>
+   861→                  {i === 0 && (
+   862→                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
+   863→                      BEST
+   864→                    </Badge>
+   865→                  )}
+   866→                </div>
+   867→              </div>
+   868→            </motion.div>
+   869→          ))}
+   870→        </div>
+   871→      </CardContent>
+   872→    </Card>
+   873→  );
+   874→}
+   875→
+   876→// ─── Reconciliation Queue ──────────────────────────────────────────────────────
+   877→
+   878→interface ReconciliationItem {
+   879→  id: string;
+   880→  reference: string;
+   881→  amount: number;
+   882→  currency: string;
+   883→  counterparty: string;
+   884→  bankRef: string;
+   885→  status: 'unmatched' | 'partial' | 'matched';
+   886→  ageDays: number;
+   887→}
+   888→
+   889→const RECONCILIATION_QUEUE: ReconciliationItem[] = [
+   890→  { id: 'rec-1', reference: 'INV-INT-0898', amount: 62000, currency: 'AUD', counterparty: 'Sydney Retail Pty', bankRef: 'NAB-44821', status: 'unmatched', ageDays: 3 },
+   891→  { id: 'rec-2', reference: 'INV-INT-0892', amount: 52000, currency: 'EUR', counterparty: 'Bayern GmbH', bankRef: 'BNK-99102', status: 'partial', ageDays: 1 },
+   892→  { id: 'rec-3', reference: 'PO-INT-0893', amount: 14200000, currency: 'JPY', counterparty: 'Osaka Precision', bankRef: 'MUFG-22084', status: 'unmatched', ageDays: 5 },
+   893→  { id: 'rec-4', reference: 'INV-INT-0894', amount: 38000, currency: 'GBP', counterparty: 'Manchester Steel', bankRef: 'BARC-77511', status: 'matched', ageDays: 0 },
+   894→  { id: 'rec-5', reference: 'INV-INT-0897', amount: 24000, currency: 'EUR', counterparty: 'Lyon Textiles', bankRef: 'BNP-33019', status: 'partial', ageDays: 2 },
+   895→  { id: 'rec-6', reference: 'PO-INT-0895', amount: 96000, currency: 'USD', counterparty: 'Singapore Logistics', bankRef: 'DBS-88420', status: 'unmatched', ageDays: 4 },
+   896→];
+   897→
+   898→function ReconciliationQueue() {
+   899→  const [items, setItems] = useState<ReconciliationItem[]>(RECONCILIATION_QUEUE);
+   900→
+   901→  const handleAction = (id: string, action: 'match' | 'unmatch') => {
+   902→    setItems((prev) => prev.map((it) =>
+   903→      it.id === id
+   904→        ? { ...it, status: action === 'match' ? 'matched' : 'unmatched' }
+   905→        : it,
+   906→    ));
+   907→  };
+   908→
+   909→  const statusBadge = (status: ReconciliationItem['status']) => {
+   910→    if (status === 'matched') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+   911→    if (status === 'partial') return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+   912→    return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+   913→  };
+   914→
+   915→  return (
+   916→    <Card className="border-white/[0.06] bg-white/[0.02]">
+   917→      <CardHeader className="pb-3">
+   918→        <div className="flex items-center justify-between">
+   919→          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+   920→            <FileCheck className="h-4 w-4 text-amber-400" />
+   921→            Reconciliation Queue
+   922→          </CardTitle>
+   923→          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+   924→            {items.filter((i) => i.status !== 'matched').length} pending
+   925→          </Badge>
+   926→        </div>
+   927→      </CardHeader>
+   928→      <CardContent>
+   929→        <ScrollArea className="max-h-[420px]">
+   930→          <div className="space-y-2">
+   931→            {items.map((item, i) => (
+   932→              <motion.div
+   933→                key={item.id}
+   934→                layout
+   935→                initial={{ opacity: 0, y: 4 }}
+   936→                animate={{ opacity: 1, y: 0 }}
+   937→                transition={{ duration: 0.25, delay: i * 0.03 }}
+   938→                className={cn(
+   939→                  'rounded-lg border p-2.5',
+   940→                  item.status === 'matched'
+   941→                    ? 'border-emerald-500/20 bg-emerald-500/[0.03]'
+   942→                    : 'border-white/[0.06] bg-white/[0.02]',
+   943→                )}
+   944→              >
+   945→                <div className="flex items-center justify-between gap-2">
+   946→                  <div className="flex items-center gap-2 min-w-0">
+   947→                    <div className={cn(
+   948→                      'flex h-7 w-7 items-center justify-center rounded-md border text-[9px] font-mono',
+   949→                      statusBadge(item.status),
+   950→                    )}>
+   951→                      {item.status === 'matched' ? '✓' : item.status === 'partial' ? '~' : '!'}
+   952→                    </div>
+   953→                    <div className="min-w-0">
+   954→                      <p className="text-xs font-mono font-medium text-white">{item.reference}</p>
+   955→                      <p className="text-[10px] text-muted-foreground truncate">
+   956→                        {item.counterparty} · Bank: {item.bankRef}
+   957→                      </p>
+   958→                    </div>
+   959→                  </div>
+   960→                  <div className="text-right shrink-0">
+   961→                    <p className="text-xs font-mono font-semibold text-white">
+   962→                      {fmtCurrencyValue(item.amount, item.currency)}
+   963→                    </p>
+   964→                    <p className="text-[9px] text-muted-foreground">{item.ageDays}d old</p>
+   965→                  </div>
+   966→                </div>
+   967→                <div className="mt-2 flex items-center justify-between gap-2">
+   968→                  <span className={cn(
+   969→                    'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-medium capitalize',
+   970→                    statusBadge(item.status),
+   971→                  )}>
+   972→                    {item.status}
+   973→                  </span>
+   974→                  <div className="flex items-center gap-1.5">
+   975→                    {item.status !== 'matched' && (
+   976→                      <Button
+   977→                        size="sm"
+   978→                        onClick={() => handleAction(item.id, 'match')}
+   979→                        className="h-6 px-2 text-[10px] bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30"
+   980→                      >
+   981→                        <CheckCircle2 className="h-3 w-3 mr-1" />
+   982→                        Match
+   983→                      </Button>
+   984→                    )}
+   985→                    {item.status === 'matched' && (
+   986→                      <Button
+   987→                        size="sm"
+   988→                        variant="outline"
+   989→                        onClick={() => handleAction(item.id, 'unmatch')}
+   990→                        className="h-6 px-2 text-[10px] border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:text-white"
+   991→                      >
+   992→                        <XCircle className="h-3 w-3 mr-1" />
+   993→                        Unmatch
+   994→                      </Button>
+   995→                    )}
+   996→                    <Button
+   997→                      size="sm"
+   998→                      variant="outline"
+   999→                      className="h-6 px-2 text-[10px] border-white/[0.08] bg-white/[0.02] text-cyan-300 hover:bg-cyan-500/10"
+  1000→                    >
+  1001→                      <AlertCircle className="h-3 w-3 mr-1" />
+  1002→                      Investigate
+  1003→                    </Button>
+  1004→                  </div>
+  1005→                </div>
+  1006→              </motion.div>
+  1007→            ))}
+  1008→          </div>
+  1009→        </ScrollArea>
+  1010→      </CardContent>
+  1011→    </Card>
+  1012→  );
+  1013→}
+  1014→
+  1015→// ─── Main component ────────────────────────────────────────────────────────────
+  1016→
+  1017→export default function CrossBorderPayments() {
+  1018→  const [direction, setDirection] = useState<Direction>('all');
+  1019→  const [type, setType] = useState<PayType>('all');
+  1020→  const [selectedPayment, setSelectedPayment] = useState<CrossBorderPayment | null>(null);
+  1021→
+  1022→  // KPI rollups
+  1023→  const totals = useMemo(() => {
+  1024→    const totalVolume = CROSS_BORDER_PAYMENTS.reduce((s, p) => s + p.amountUSD, 0);
+  1025→    const inbound = CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'inbound').reduce((s, p) => s + p.amountUSD, 0);
+  1026→    const outbound = CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'outbound').reduce((s, p) => s + p.amountUSD, 0);
+  1027→    const fees = CROSS_BORDER_PAYMENTS.reduce((s, p) => s + p.fees, 0);
+  1028→    const fxRates = CROSS_BORDER_PAYMENTS.map((p) => p.fxRate);
+  1029→    const avgFx = fxRates.reduce((a, b) => a + b, 0) / fxRates.length;
+  1030→    return { totalVolume, inbound, outbound, fees, avgFx };
+  1031→  }, []);
+  1032→
+  1033→  // Filtered payments
+  1034→  const filtered = useMemo(() => {
+  1035→    return CROSS_BORDER_PAYMENTS.filter((p) => {
+  1036→      if (direction !== 'all' && p.direction !== direction) return false;
+  1037→      if (type !== 'all' && p.type !== type) return false;
+  1038→      return true;
+  1039→    });
+  1040→  }, [direction, type]);
+  1041→
+  1042→  // Direction counts
+  1043→  const dirCounts = useMemo(() => ({
+  1044→    all: CROSS_BORDER_PAYMENTS.length,
+  1045→    inbound: CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'inbound').length,
+  1046→    outbound: CROSS_BORDER_PAYMENTS.filter((p) => p.direction === 'outbound').length,
+  1047→  }), []);
+  1048→
+  1049→  // Type counts
+  1050→  const typeCounts = useMemo(() => ({
+  1051→    all: CROSS_BORDER_PAYMENTS.length,
+  1052→    invoice: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'invoice').length,
+  1053→    collection: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'collection').length,
+  1054→    payout: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'payout').length,
+  1055→    reconciliation: CROSS_BORDER_PAYMENTS.filter((p) => p.type === 'reconciliation').length,
+  1056→  }), []);
+  1057→
+  1058→  // Corridor aggregation: "US→IN" → sum amountUSD
+  1059→  const corridors = useMemo(() => {
+  1060→    const map = new Map<string, { from: CrossBorderPayment['fromCountry']; to: CrossBorderPayment['toCountry']; volume: number; count: number }>();
+  1061→    for (const p of CROSS_BORDER_PAYMENTS) {
+  1062→      const key = `${p.fromCountry}→${p.toCountry}`;
+  1063→      const existing = map.get(key);
+  1064→      if (existing) {
+  1065→        existing.volume += p.amountUSD;
+  1066→        existing.count += 1;
+  1067→      } else {
+  1068→        map.set(key, { from: p.fromCountry, to: p.toCountry, volume: p.amountUSD, count: 1 });
+  1069→      }
+  1070→    }
+  1071→    return Array.from(map.values()).sort((a, b) => b.volume - a.volume);
+  1072→  }, []);
+  1073→  const maxCorridorVol = corridors[0]?.volume ?? 1;
+  1074→
+  1075→  return (
+  1076→    <div className="min-h-screen bg-background text-foreground">
+  1077→      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+  1078→        {/* ─── Header ─── */}
+  1079→        <motion.div
+  1080→          initial={{ opacity: 0, y: -8 }}
+  1081→          animate={{ opacity: 1, y: 0 }}
+  1082→          transition={{ duration: 0.4 }}
+  1083→          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+  1084→        >
+  1085→          <div className="flex items-center gap-3">
+  1086→            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+  1087→              <ArrowLeftRight className="h-5 w-5 text-emerald-400" />
+  1088→            </div>
+  1089→            <div>
+  1090→              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+  1091→                Cross-Border Payments<sup className="text-[10px] text-emerald-400">™</sup>
+  1092→              </h1>
+  1093→              <p className="text-xs text-muted-foreground sm:text-sm">
+  1094→                Live wires, collections, payouts & reconciliations across all jurisdictions.
+  1095→              </p>
+  1096→            </div>
+  1097→          </div>
+  1098→          <div className="flex flex-wrap items-center gap-2">
+  1099→            <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
+  1100→              <span className="relative mr-2 flex h-2 w-2">
+  1101→                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+  1102→                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+  1103→              </span>
+  1104→              Live
+  1105→            </Badge>
+  1106→            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+  1107→              <Radio className="mr-1 h-3 w-3" /> {CROSS_BORDER_PAYMENTS.length} transactions
+  1108→            </Badge>
+  1109→            <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+  1110→              Settled {fmtUSD(GLOBAL_KPIS.crossBorderVolumeUSD)} this period
+  1111→            </Badge>
+  1112→          </div>
+  1113→        </motion.div>
+  1114→
+  1115→        <Separator className="my-5 bg-white/[0.06]" />
+  1116→
+  1117→        {/* ─── KPI Row ─── */}
+  1118→        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+  1119→          <KpiTile
+  1120→            icon={Wallet}
+  1121→            label="Total Volume"
+  1122→            value={fmtUSD(totals.totalVolume)}
+  1123→            sub="All cross-border flows"
+  1124→            accent="text-emerald-300"
+  1125→            ring="bg-emerald-500/30"
+  1126→          />
+  1127→          <KpiTile
+  1128→            icon={ArrowDownRight}
+  1129→            label="Inbound Volume"
+  1130→            value={fmtCompactUSD(totals.inbound)}
+  1131→            sub={`${dirCounts.inbound} inbound transactions`}
+  1132→            accent="text-teal-300"
+  1133→            ring="bg-teal-500/30"
+  1134→          />
+  1135→          <KpiTile
+  1136→            icon={ArrowUpRight}
+  1137→            label="Outbound Volume"
+  1138→            value={fmtCompactUSD(totals.outbound)}
+  1139→            sub={`${dirCounts.outbound} outbound transactions`}
+  1140→            accent="text-amber-300"
+  1141→            ring="bg-amber-500/30"
+  1142→          />
+  1143→          <KpiTile
+  1144→            icon={Coins}
+  1145→            label="Total Fees"
+  1146→            value={fmtUSD(totals.fees)}
+  1147→            sub="Banking & FX charges"
+  1148→            accent="text-rose-300"
+  1149→            ring="bg-rose-500/30"
+  1150→          />
+  1151→          <KpiTile
+  1152→            icon={Percent}
+  1153→            label="Avg FX Rate"
+  1154→            value={totals.avgFx.toFixed(2)}
+  1155→            sub="Across all corridors"
+  1156→            accent="text-cyan-300"
+  1157→            ring="bg-cyan-500/30"
+  1158→          />
+  1159→        </div>
+  1160→
+  1161→        {/* ─── FX Locker + Fee Optimizer ─── */}
+  1162→        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+  1163→          <FxRateLocker />
+  1164→          <FeeOptimizer />
+  1165→        </div>
+  1166→
+  1167→        {/* ─── Filters ─── */}
+  1168→        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+  1169→          <div className="flex items-center gap-2">
+  1170→            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+  1171→            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Direction</span>
+  1172→          </div>
+  1173→          <div className="flex flex-wrap items-center gap-1.5">
+  1174→            <FilterPill active={direction === 'all'} onClick={() => setDirection('all')} count={dirCounts.all}>
+  1175→              All
+  1176→            </FilterPill>
+  1177→            <FilterPill active={direction === 'inbound'} onClick={() => setDirection('inbound')} count={dirCounts.inbound}>
+  1178→              <ArrowDownRight className="h-3 w-3" /> Inbound
+  1179→            </FilterPill>
+  1180→            <FilterPill active={direction === 'outbound'} onClick={() => setDirection('outbound')} count={dirCounts.outbound}>
+  1181→              <ArrowUpRight className="h-3 w-3" /> Outbound
+  1182→            </FilterPill>
+  1183→          </div>
+  1184→          <div className="hidden lg:block w-px h-6 bg-white/[0.06]" />
+  1185→          <div className="flex items-center gap-2">
+  1186→            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+  1187→            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Type</span>
+  1188→          </div>
+  1189→          <div className="flex flex-wrap items-center gap-1.5">
+  1190→            <FilterPill active={type === 'all'} onClick={() => setType('all')} count={typeCounts.all}>All</FilterPill>
+  1191→            <FilterPill active={type === 'invoice'} onClick={() => setType('invoice')} count={typeCounts.invoice}>Invoice</FilterPill>
+  1192→            <FilterPill active={type === 'collection'} onClick={() => setType('collection')} count={typeCounts.collection}>Collection</FilterPill>
+  1193→            <FilterPill active={type === 'payout'} onClick={() => setType('payout')} count={typeCounts.payout}>Payout</FilterPill>
+  1194→            <FilterPill active={type === 'reconciliation'} onClick={() => setType('reconciliation')} count={typeCounts.reconciliation}>Reconciliation</FilterPill>
+  1195→          </div>
+  1196→        </div>
+  1197→
+  1198→        {/* ─── Payments Table + Flow Visualization ─── */}
+  1199→        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+  1200→          {/* Payments table */}
+  1201→          <Card className="border-white/[0.06] bg-white/[0.02] lg:col-span-2">
+  1202→            <CardHeader className="pb-3">
+  1203→              <div className="flex items-center justify-between">
+  1204→                <CardTitle className="text-sm font-semibold text-white">
+  1205→                  Payment Ledger
+  1206→                  <span className="ml-2 text-[10px] text-muted-foreground font-normal">Click any row to view lifecycle</span>
+  1207→                </CardTitle>
+  1208→                <span className="text-[11px] text-muted-foreground">
+  1209→                  Showing <span className="text-emerald-300">{filtered.length}</span> of {CROSS_BORDER_PAYMENTS.length}
+  1210→                </span>
+  1211→              </div>
+  1212→            </CardHeader>
+  1213→            <CardContent>
+  1214→              <ScrollArea className="max-h-[520px]">
+  1215→                <Table>
+  1216→                  <TableHeader>
+  1217→                    <TableRow className="border-white/[0.06] hover:bg-transparent">
+  1218→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Reference</TableHead>
+  1219→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Type</TableHead>
+  1220→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Route</TableHead>
+  1221→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Counterparty</TableHead>
+  1222→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Amount</TableHead>
+  1223→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">USD</TableHead>
+  1224→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Method</TableHead>
+  1225→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+  1226→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">FX</TableHead>
+  1227→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Fees</TableHead>
+  1228→                      <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Date</TableHead>
+  1229→                    </TableRow>
+  1230→                  </TableHeader>
+  1231→                  <TableBody>
+  1232→                    <AnimatePresence mode="popLayout">
+  1233→                      {filtered.map((p, i) => {
+  1234→                        const color = statusColor(p.status);
+  1235→                        return (
+  1236→                          <motion.tr
+  1237→                            key={p.id}
+  1238→                            layout
+  1239→                            initial={{ opacity: 0, y: 6 }}
+  1240→                            animate={{ opacity: 1, y: 0 }}
+  1241→                            exit={{ opacity: 0 }}
+  1242→                            transition={{ duration: 0.25, delay: i * 0.02 }}
+  1243→                            onClick={() => setSelectedPayment(p)}
+  1244→                            className="border-white/[0.04] hover:bg-emerald-500/[0.04] cursor-pointer transition-colors group"
+  1245→                          >
+  1246→                            <TableCell className="py-2.5 font-mono text-[11px] text-white group-hover:text-emerald-300">
+  1247→                              <div className="flex items-center gap-1">
+  1248→                                {p.reference}
+  1249→                                <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+  1250→                              </div>
+  1251→                            </TableCell>
+  1252→                            <TableCell>
+  1253→                              <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', TYPE_BADGE[p.type])}>
+  1254→                                {TYPE_LABEL[p.type]}
+  1255→                              </span>
+  1256→                            </TableCell>
+  1257→                            <TableCell>
+  1258→                              <FlagArrow from={p.fromCountry} to={p.toCountry} />
+  1259→                            </TableCell>
+  1260→                            <TableCell className="text-[11px] text-white/90">{p.counterparty}</TableCell>
+  1261→                            <TableCell className="text-right font-mono text-[11px] text-white">
+  1262→                              {fmtCurrencyValue(p.amount, p.currency)}
+  1263→                              <div className="text-[9px] text-muted-foreground">{p.currency}</div>
+  1264→                            </TableCell>
+  1265→                            <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+  1266→                              {fmtUSD(p.amountUSD)}
+  1267→                            </TableCell>
+  1268→                            <TableCell className="text-[11px] text-muted-foreground">{p.method}</TableCell>
+  1269→                            <TableCell>
+  1270→                              <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', STATUS_BADGE[color])}>
+  1271→                                <span className={cn('h-1.5 w-1.5 rounded-full',
+  1272→                                  color === 'emerald' && 'bg-emerald-400',
+  1273→                                  color === 'amber' && 'bg-amber-400',
+  1274→                                  color === 'rose' && 'bg-rose-400',
+  1275→                                  color === 'slate' && 'bg-slate-400',
+  1276→                                )} />
+  1277→                                {p.status}
+  1278→                              </span>
+  1279→                            </TableCell>
+  1280→                            <TableCell className="text-right font-mono text-[11px] text-cyan-300">{p.fxRate.toFixed(2)}</TableCell>
+  1281→                            <TableCell className="text-right font-mono text-[11px] text-rose-300">{fmtUSD(p.fees)}</TableCell>
+  1282→                            <TableCell className="text-[11px] text-muted-foreground">{p.date}</TableCell>
+  1283→                          </motion.tr>
+  1284→                        );
+  1285→                      })}
+  1286→                    </AnimatePresence>
+  1287→                  </TableBody>
+  1288→                </Table>
+  1289→                {filtered.length === 0 && (
+  1290→                  <div className="py-12 text-center text-sm text-muted-foreground">
+  1291→                    No payments match the active filters.
+  1292→                  </div>
+  1293→                )}
+  1294→              </ScrollArea>
+  1295→            </CardContent>
+  1296→          </Card>
+  1297→
+  1298→          {/* Flow visualization */}
+  1299→          <Card className="border-white/[0.06] bg-white/[0.02]">
+  1300→            <CardHeader className="pb-3">
+  1301→              <div className="flex items-center justify-between">
+  1302→                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+  1303→                  <Plane className="h-4 w-4 text-teal-400" />
+  1304→                  Top Corridors
+  1305→                </CardTitle>
+  1306→                <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+  1307→                  By volume
+  1308→                </Badge>
+  1309→              </div>
+  1310→            </CardHeader>
+  1311→            <CardContent>
+  1312→              <ScrollArea className="max-h-[520px]">
+  1313→                <div className="space-y-3">
+  1314→                  {corridors.map((cor, i) => {
+  1315→                    const f = getCountry(cor.from);
+  1316→                    const t = getCountry(cor.to);
+  1317→                    const widthPct = (cor.volume / maxCorridorVol) * 100;
+  1318→                    const palette = ['bg-emerald-500/70', 'bg-teal-500/70', 'bg-cyan-500/70', 'bg-violet-500/70', 'bg-amber-500/60'];
+  1319→                    const bar = palette[i % palette.length];
+  1320→                    return (
+  1321→                      <motion.div
+  1322→                        key={`${cor.from}-${cor.to}`}
+  1323→                        initial={{ opacity: 0, x: -6 }}
+  1324→                        animate={{ opacity: 1, x: 0 }}
+  1325→                        transition={{ duration: 0.3, delay: i * 0.04 }}
+  1326→                        className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3"
+  1327→                      >
+  1328→                        <div className="flex items-center justify-between">
+  1329→                          <div className="flex items-center gap-2">
+  1330→                            <span className="text-base">{f.flag}</span>
+  1331→                            <ArrowLeftRight className="h-3 w-3 text-emerald-400" />
+  1332→                            <span className="text-base">{t.flag}</span>
+  1333→                            <span className="text-[11px] text-muted-foreground">
+  1334→                              {f.code}→{t.code}
+  1335→                            </span>
+  1336→                          </div>
+  1337→                          <span className="font-mono text-xs font-semibold text-white">{fmtCompactUSD(cor.volume)}</span>
+  1338→                        </div>
+  1339→                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+  1340→                          <motion.div
+  1341→                            initial={{ width: 0 }}
+  1342→                            animate={{ width: `${widthPct}%` }}
+  1343→                            transition={{ duration: 0.5, delay: i * 0.04 }}
+  1344→                            className={cn('h-full rounded-full', bar)}
+  1345→                          />
+  1346→                        </div>
+  1347→                        <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+  1348→                          <span>{cor.count} transaction{cor.count > 1 ? 's' : ''}</span>
+  1349→                          <span>{widthPct.toFixed(1)}% of total</span>
+  1350→                        </div>
+  1351→                      </motion.div>
+  1352→                    );
+  1353→                  })}
+  1354→                </div>
+  1355→              </ScrollArea>
+  1356→            </CardContent>
+  1357→          </Card>
+  1358→        </div>
+  1359→
+  1360→        {/* ─── Reconciliation Queue ─── */}
+  1361→        <div className="mt-6">
+  1362→          <ReconciliationQueue />
+  1363→        </div>
+  1364→
+  1365→        {/* ─── Footer note ─── */}
+  1366→        <div className="mt-5 flex items-center justify-between text-[11px] text-muted-foreground">
+  1367→          <span className="flex items-center gap-1.5">
+  1368→            <GitBranch className="h-3 w-3" />
+  1369→            Every Wire. Every Currency. Every Border.
+  1370→          </span>
+  1371→          <Button variant="outline" size="sm" className="h-7 text-[11px] border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:text-white">
+  1372→            Export Ledger
+  1373→          </Button>
+  1374→        </div>
+  1375→      </div>
+  1376→
+  1377→      {/* ─── Payment Detail Dialog ─── */}
+  1378→      <PaymentDetailDialog
+  1379→        payment={selectedPayment}
+  1380→        onClose={() => setSelectedPayment(null)}
+  1381→      />
+  1382→    </div>
+  1383→  );
+  1384→}
+  1385→

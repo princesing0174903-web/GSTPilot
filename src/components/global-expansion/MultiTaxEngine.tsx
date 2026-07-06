@@ -26,6 +26,7 @@ import {
   CheckCircle2, Sparkles, ArrowRight, Layers, Coins, Scale,
   TrendingUp, TrendingDown, Lightbulb, FileText, AlarmClock,
   Network, Brain, Percent, PiggyBank, Workflow,
+  Award, Banknote, Briefcase, BarChart3, Globe2,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -55,6 +56,11 @@ import {
   TAX_POSITIONS, FILING_DEADLINES, DTAA_MATRIX,
   type Country, type CountryCode, type TaxSystem,
 } from '@/lib/global/data';
+import {
+  TAX_CREDITS, GLOBAL_PAYROLL,
+  CONSOLIDATED_ASSETS, CONSOLIDATED_LIABILITIES,
+  type TaxCredit, type GlobalPayrollEntry, type ConsolidatedBalance,
+} from '@/lib/global/data-enterprise';
 
 // ─── Tax system accents (NO indigo/blue) ───────────────────────────────────────
 
@@ -1308,10 +1314,497 @@ function OptimizationRecommendations() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Tax Credits & Incentives Dashboard
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CREDIT_TYPE_STYLE: Record<TaxCredit['type'], { ring: string; text: string; bar: string }> = {
+  'R&D Credit': { ring: 'border-emerald-500/30 bg-emerald-500/10', text: 'text-emerald-300', bar: 'bg-emerald-500' },
+  'Investment Allowance': { ring: 'border-teal-500/30 bg-teal-500/10', text: 'text-teal-300', bar: 'bg-teal-400' },
+  'Export Incentive': { ring: 'border-cyan-500/30 bg-cyan-500/10', text: 'text-cyan-300', bar: 'bg-cyan-400' },
+  'SEZ Benefit': { ring: 'border-violet-500/30 bg-violet-500/10', text: 'text-violet-300', bar: 'bg-violet-400' },
+  'Regional Benefit': { ring: 'border-amber-500/30 bg-amber-500/10', text: 'text-amber-300', bar: 'bg-amber-400' },
+};
+
+const CREDIT_STATUS_BADGE: Record<TaxCredit['status'], string> = {
+  claimed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  expiring: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  expired: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+};
+
+function fmtCompactUSD(n: number): string {
+  if (Math.abs(n) >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function TaxCreditsDashboard() {
+  const totalEligible = TAX_CREDITS.reduce((s, c) => s + c.eligibleAmount, 0);
+  const totalClaimed = TAX_CREDITS.reduce((s, c) => s + c.claimedAmount, 0);
+  const totalRemaining = TAX_CREDITS.reduce((s, c) => s + c.remaining, 0);
+  const totalSavings = TAX_CREDITS.reduce((s, c) => s + c.savingUSD, 0);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Award className="h-4 w-4 text-amber-400" />
+              Tax Credits &amp; Incentives Dashboard
+              <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-300">
+                {TAX_CREDITS.length} credits
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              R&amp;D credits, investment allowances, export incentives &amp; SEZ benefits — eligibility, claims &amp; realized savings.
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Summary KPIs */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Eligible</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalEligible)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Claimed</div>
+            <div className="text-sm font-semibold text-teal-300">{fmtCompactUSD(totalClaimed)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Remaining</div>
+            <div className="text-sm font-semibold text-amber-300">{fmtCompactUSD(totalRemaining)}</div>
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Savings</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalSavings)}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {TAX_CREDITS.map((c, i) => {
+            const country = getCountry(c.countryCode);
+            const style = CREDIT_TYPE_STYLE[c.type];
+            const utilization = (c.claimedAmount / c.eligibleAmount) * 100;
+            return (
+              <motion.div
+                key={c.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.03 }}
+                className={`rounded-xl border p-3 ${style.ring}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-black/30 text-sm">
+                      {country?.flag ?? '🏳️'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-zinc-100">{c.name}</div>
+                      <div className="text-[9px] text-zinc-500">{c.countryCode} · {c.type}</div>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className={`text-[9px] uppercase shrink-0 ${CREDIT_STATUS_BADGE[c.status]}`}>
+                    {c.status}
+                  </Badge>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md bg-black/30 py-1.5">
+                    <div className="text-[8px] uppercase tracking-wide text-zinc-500">Eligible</div>
+                    <div className={`mt-0.5 text-[11px] font-semibold ${style.text}`}>{fmtCompactUSD(c.eligibleAmount)}</div>
+                  </div>
+                  <div className="rounded-md bg-black/30 py-1.5">
+                    <div className="text-[8px] uppercase tracking-wide text-zinc-500">Claimed</div>
+                    <div className="mt-0.5 text-[11px] font-semibold text-zinc-200">{fmtCompactUSD(c.claimedAmount)}</div>
+                  </div>
+                  <div className="rounded-md bg-black/30 py-1.5">
+                    <div className="text-[8px] uppercase tracking-wide text-zinc-500">Remaining</div>
+                    <div className="mt-0.5 text-[11px] font-semibold text-amber-300">{fmtCompactUSD(c.remaining)}</div>
+                  </div>
+                </div>
+
+                {/* Utilization progress */}
+                <div className="mt-2.5">
+                  <div className="mb-1 flex items-center justify-between text-[9px] text-zinc-500">
+                    <span>Utilization</span>
+                    <span className="text-zinc-300">{utilization.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${utilization}%` }}
+                      transition={{ duration: 0.5, delay: i * 0.04 }}
+                      className={`h-full ${style.bar}`}
+                    />
+                  </div>
+                </div>
+
+                <Separator className="my-2.5 bg-white/[0.06]" />
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="inline-flex items-center gap-1 text-zinc-500">
+                    <AlarmClock className="h-3 w-3" /> Exp: {c.expiry}
+                  </span>
+                  <span className={`inline-flex items-center gap-1 font-semibold ${style.text}`}>
+                    <TrendingDown className="h-3 w-3" /> Save {fmtCompactUSD(c.savingUSD)}
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Global Payroll Tax Summary
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PAYROLL_STATUS_BADGE: Record<GlobalPayrollEntry['status'], string> = {
+  processed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  review: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function GlobalPayrollSummary() {
+  const totalHeadcount = GLOBAL_PAYROLL.reduce((s, p) => s + p.headcount, 0);
+  const totalGross = GLOBAL_PAYROLL.reduce((s, p) => s + p.grossPayrollUSD, 0);
+  const totalEmployer = GLOBAL_PAYROLL.reduce((s, p) => s + p.employerTax, 0);
+  const totalEmployee = GLOBAL_PAYROLL.reduce((s, p) => s + p.employeeTax, 0);
+  const totalNet = GLOBAL_PAYROLL.reduce((s, p) => s + p.netPayroll, 0);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="h-4 w-4 text-cyan-400" />
+          Global Payroll Tax Summary
+          <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+            {GLOBAL_PAYROLL.length} entities
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Payroll tax posture across every entity — employer &amp; employee contributions, gross-to-net breakdown &amp; status.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {/* Summary KPIs */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Headcount</div>
+            <div className="text-sm font-semibold text-violet-300">{totalHeadcount.toLocaleString()}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Gross Payroll</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalGross)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Employer Tax</div>
+            <div className="text-sm font-semibold text-amber-300">{fmtCompactUSD(totalEmployer)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Employee Tax</div>
+            <div className="text-sm font-semibold text-rose-300">{fmtCompactUSD(totalEmployee)}</div>
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Net Payroll</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalNet)}</div>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[560px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Entity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Country</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">HC</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Gross (USD)</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Employer Tax</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Employee Tax</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Net Payroll</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Avg Salary</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {GLOBAL_PAYROLL.map((p, i) => {
+                const country = getCountry(p.countryCode);
+                return (
+                  <motion.tr
+                    key={`${p.entity}-${i}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08] bg-black/30 text-sm">
+                          {country?.flag ?? '🏳️'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-zinc-100">{p.entity}</div>
+                          <div className="text-[9px] text-zinc-500">{p.currency}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{p.countryCode}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-violet-300">{p.headcount}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-emerald-300">{fmtCompactUSD(p.grossPayrollUSD)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-amber-300">{fmtCompactUSD(p.employerTax)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-rose-300">{fmtCompactUSD(p.employeeTax)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-zinc-200">{fmtCompactUSD(p.netPayroll)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-teal-300">{fmtUSD(p.avgSalary)}/mo</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] uppercase ${PAYROLL_STATUS_BADGE[p.status]}`}>
+                        {p.status}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Consolidated Tax Position
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ConsolidatedTaxPosition() {
+  const totalAssets = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.totalUSD, 0);
+  const totalLiabilities = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.totalUSD, 0);
+  const netPosition = totalAssets - totalLiabilities;
+
+  // Determine max category total for bar scaling
+  const maxAssetCat = Math.max(...CONSOLIDATED_ASSETS.map((a) => a.totalUSD));
+  const maxLiabCat = Math.max(...CONSOLIDATED_LIABILITIES.map((l) => l.totalUSD));
+  const maxCat = Math.max(maxAssetCat, maxLiabCat);
+
+  // Multi-currency totals
+  const totalsByCurrency = useMemo(() => {
+    const inrA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.inr, 0);
+    const usdA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.usd, 0);
+    const eurA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.eur, 0);
+    const gbpA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.gbp, 0);
+    const otherA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.other, 0);
+    const inrL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.inr, 0);
+    const usdL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.usd, 0);
+    const eurL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.eur, 0);
+    const gbpL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.gbp, 0);
+    const otherL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.other, 0);
+    return {
+      assets: { inr: inrA, usd: usdA, eur: eurA, gbp: gbpA, other: otherA },
+      liabilities: { inr: inrL, usd: usdL, eur: eurL, gbp: gbpL, other: otherL },
+    };
+  }, []);
+
+  function renderRow(item: ConsolidatedBalance, i: number, isAsset: boolean) {
+    const widthPct = (item.totalUSD / maxCat) * 100;
+    const accentText = isAsset ? 'text-emerald-300' : 'text-amber-300';
+    const barColor = isAsset ? 'bg-emerald-500' : 'bg-amber-400';
+    return (
+      <motion.tr
+        key={`${item.category}-${isAsset ? 'a' : 'l'}`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2, delay: i * 0.02 }}
+        className="border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+      >
+        <TableCell className="py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-zinc-200">{item.category}</span>
+            <div className="h-2 flex-1 max-w-[180px] overflow-hidden rounded-full bg-white/5">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${widthPct}%` }}
+                transition={{ duration: 0.5, delay: i * 0.03 }}
+                className={`h-full ${barColor}`}
+              />
+            </div>
+          </div>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-400">{fmtCompactUSD(item.inr)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-300">{fmtCompactUSD(item.usd)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-400">{fmtCompactUSD(item.eur)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-400">{fmtCompactUSD(item.gbp)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-400">{fmtCompactUSD(item.other)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className={`font-mono text-[11px] font-semibold ${accentText}`}>{fmtCompactUSD(item.totalUSD)}</span>
+        </TableCell>
+        <TableCell className="text-right">
+          <span className="font-mono text-[10px] text-zinc-500">{item.pctOfTotal.toFixed(1)}%</span>
+        </TableCell>
+      </motion.tr>
+    );
+  }
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BarChart3 className="h-4 w-4 text-violet-400" />
+          Consolidated Tax Position
+          <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+            Multi-currency
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Consolidated balance sheet across all entities — assets vs liabilities by category, multi-currency breakdown (INR/USD/EUR/GBP/Other).
+        </p>
+      </CardHeader>
+      <CardContent>
+        {/* Net Position Summary */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Assets</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalAssets)}</div>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Liabilities</div>
+            <div className="text-sm font-semibold text-amber-300">{fmtCompactUSD(totalLiabilities)}</div>
+          </div>
+          <div className={`rounded-lg border p-2.5 ${netPosition >= 0 ? 'border-teal-500/20 bg-teal-500/[0.05]' : 'border-rose-500/20 bg-rose-500/[0.05]'}`}>
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Net Position</div>
+            <div className={`text-sm font-semibold ${netPosition >= 0 ? 'text-teal-300' : 'text-rose-300'}`}>{fmtCompactUSD(netPosition)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Equity Ratio</div>
+            <div className="text-sm font-semibold text-violet-300">{((netPosition / totalAssets) * 100).toFixed(1)}%</div>
+          </div>
+        </div>
+
+        {/* Assets Table */}
+        <div className="mb-2 mt-3 flex items-center gap-2">
+          <Briefcase className="h-3.5 w-3.5 text-emerald-400" />
+          <h3 className="text-xs font-semibold text-zinc-200">Consolidated Assets</h3>
+          <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+            {CONSOLIDATED_ASSETS.length} categories
+          </Badge>
+        </div>
+        <ScrollArea className="max-h-[300px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Category</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">INR</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">EUR</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">GBP</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Other</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Total USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">% of Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CONSOLIDATED_ASSETS.map((a, i) => renderRow(a, i, true))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+
+        {/* Liabilities Table */}
+        <div className="mb-2 mt-4 flex items-center gap-2">
+          <Banknote className="h-3.5 w-3.5 text-amber-400" />
+          <h3 className="text-xs font-semibold text-zinc-200">Consolidated Liabilities</h3>
+          <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-300">
+            {CONSOLIDATED_LIABILITIES.length} categories
+          </Badge>
+        </div>
+        <ScrollArea className="max-h-[300px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Category</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">INR</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">EUR</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">GBP</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Other</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Total USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">% of Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CONSOLIDATED_LIABILITIES.map((l, i) => renderRow(l, i, false))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+
+        {/* Multi-currency totals footer */}
+        <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/20 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">Multi-Currency Totals</div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div>
+              <div className="text-[9px] text-zinc-500">INR (Assets)</div>
+              <div className="text-[11px] font-mono text-emerald-300">{fmtCompactUSD(totalsByCurrency.assets.inr)}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5">INR (Liab.): {fmtCompactUSD(totalsByCurrency.liabilities.inr)}</div>
+            </div>
+            <div>
+              <div className="text-[9px] text-zinc-500">USD (Assets)</div>
+              <div className="text-[11px] font-mono text-emerald-300">{fmtCompactUSD(totalsByCurrency.assets.usd)}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5">USD (Liab.): {fmtCompactUSD(totalsByCurrency.liabilities.usd)}</div>
+            </div>
+            <div>
+              <div className="text-[9px] text-zinc-500">EUR (Assets)</div>
+              <div className="text-[11px] font-mono text-emerald-300">{fmtCompactUSD(totalsByCurrency.assets.eur)}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5">EUR (Liab.): {fmtCompactUSD(totalsByCurrency.liabilities.eur)}</div>
+            </div>
+            <div>
+              <div className="text-[9px] text-zinc-500">GBP (Assets)</div>
+              <div className="text-[11px] font-mono text-emerald-300">{fmtCompactUSD(totalsByCurrency.assets.gbp)}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5">GBP (Liab.): {fmtCompactUSD(totalsByCurrency.liabilities.gbp)}</div>
+            </div>
+            <div>
+              <div className="text-[9px] text-zinc-500">Other (Assets)</div>
+              <div className="text-[11px] font-mono text-emerald-300">{fmtCompactUSD(totalsByCurrency.assets.other)}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5">Other (Liab.): {fmtCompactUSD(totalsByCurrency.liabilities.other)}</div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export default function MultiTaxEngine() {
-  const [sectionTab, setSectionTab] = useState<'simulator' | 'tp' | 'loss' | 'calendar' | 'recs'>('simulator');
+  const [sectionTab, setSectionTab] = useState<'simulator' | 'tp' | 'loss' | 'calendar' | 'recs' | 'credits' | 'payroll' | 'consolidated'>('simulator');
 
   return (
     <div className="min-h-screen w-full bg-zinc-950 text-zinc-100">
@@ -1397,6 +1890,15 @@ export default function MultiTaxEngine() {
                   <TabsTrigger value="recs" className="text-[11px]">
                     <Brain className="mr-1 h-3 w-3" /> Optimization
                   </TabsTrigger>
+                  <TabsTrigger value="credits" className="text-[11px]">
+                    <Award className="mr-1 h-3 w-3" /> Tax Credits
+                  </TabsTrigger>
+                  <TabsTrigger value="payroll" className="text-[11px]">
+                    <Users className="mr-1 h-3 w-3" /> Global Payroll
+                  </TabsTrigger>
+                  <TabsTrigger value="consolidated" className="text-[11px]">
+                    <BarChart3 className="mr-1 h-3 w-3" /> Consolidated
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1415,6 +1917,15 @@ export default function MultiTaxEngine() {
               <TabsContent value="recs" className="mt-0">
                 <OptimizationRecommendations />
               </TabsContent>
+              <TabsContent value="credits" className="mt-0">
+                <TaxCreditsDashboard />
+              </TabsContent>
+              <TabsContent value="payroll" className="mt-0">
+                <GlobalPayrollSummary />
+              </TabsContent>
+              <TabsContent value="consolidated" className="mt-0">
+                <ConsolidatedTaxPosition />
+              </TabsContent>
             </Tabs>
           </TooltipProvider>
         </section>
@@ -1423,7 +1934,7 @@ export default function MultiTaxEngine() {
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 border-t border-white/[0.06] pt-4 text-[10px] text-zinc-500 sm:flex-row">
           <div className="flex items-center gap-2">
             <Gauge className="h-3 w-3 text-emerald-400" />
-            Multi-Tax Engine™ · Phase 14 · {TAX_SYSTEMS.length} systems · {COUNTRIES.length} jurisdictions · {TAX_RECS.length} recommendations
+            Multi-Tax Engine™ · Phase 14 · {TAX_SYSTEMS.length} systems · {COUNTRIES.length} jurisdictions · {TAX_RECS.length} recommendations · {TAX_CREDITS.length} tax credits · {GLOBAL_PAYROLL.length} payroll entities
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="h-3 w-3 text-teal-400" /> Founder &amp; Owner: Prince Singh

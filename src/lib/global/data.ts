@@ -882,7 +882,7 @@ export const DTAA_MATRIX: DTAAEntry[] = [
 
 export interface RegulatoryChange {
   id: string;
-  country: CountryCode;
+  country: CountryCode | 'EU';
   title: string;
   description: string;
   category: string;
@@ -896,7 +896,7 @@ export const REGULATORY_CHANGES: RegulatoryChange[] = [
   { id: 'rc-1', country: 'AE', title: 'UAE Corporate Tax Law', description: '9% federal corporate tax on profits exceeding AED 375,000', category: 'Corporate Tax', effectiveDate: '2024-06-01', impact: 'high', actionRequired: true, daysToComply: 12 },
   { id: 'rc-2', country: 'IN', title: 'GST E-invoicing threshold reduction', description: 'Mandatory e-invoicing for turnover ≥ ₹5 Cr (from ₹100 Cr)', category: 'GST', effectiveDate: '2024-08-01', impact: 'medium', actionRequired: true, daysToComply: 5 },
   { id: 'rc-3', country: 'GB', title: 'MTD for ITSA phased rollout', description: 'Making Tax Digital for Income Tax Self Assessment begins', category: 'Income Tax', effectiveDate: '2026-04-06', impact: 'medium', actionRequired: false, daysToComply: 580 },
-  { id: 'rc-4', country: 'EU', title: 'ViDA (VAT in the Digital Age)', description: 'Real-time digital VAT reporting & single VAT registration', category: 'VAT', effectiveDate: '2025-01-01', impact: 'high', actionRequired: true, daysToComply: 92 } as RegulatoryChange,
+  { id: 'rc-4', country: 'EU', title: 'ViDA (VAT in the Digital Age)', description: 'Real-time digital VAT reporting & single VAT registration', category: 'VAT', effectiveDate: '2025-01-01', impact: 'high', actionRequired: true, daysToComply: 92 },
   { id: 'rc-5', country: 'US', title: 'Beneficial Ownership Information (BOI) Report', description: 'FinCEN BOI reporting required for all LLCs & corps', category: 'Reporting', effectiveDate: '2024-01-01', impact: 'high', actionRequired: true, daysToComply: 3 },
   { id: 'rc-6', country: 'JP', title: 'Qualified Invoice System (QIS)', description: 'New e-invoicing regime — qualified invoices required for input credit', category: 'Consumption Tax', effectiveDate: '2023-10-01', impact: 'high', actionRequired: true, daysToComply: 0 },
 ];

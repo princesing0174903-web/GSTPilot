@@ -34,6 +34,9 @@ import {
   Crown, Gauge, Activity, ArrowUpRight, ArrowDownRight,
   ChevronDown, ChevronRight, X, Building2, CalendarClock,
   Banknote, Layers, PieChart, Flame, Droplets, type LucideIcon,
+  Building, Users, HandCoins, Landmark, ShieldCheck as ShieldIcon,
+  FileCheck, Briefcase, Handshake, PiggyBank, BarChart3, FileText,
+  TrendingUp as TrendUp, Receipt, Timer, ClipboardCheck,
 } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -42,6 +45,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -52,6 +58,11 @@ import {
   convertCurrency, fmtUSD, fmtPct, getCountry,
   type Country, type CountryCode,
 } from '@/lib/global/data';
+import {
+  REVENUE_SEGMENTS, ENTERPRISE_KPIS,
+  CONSOLIDATED_ASSETS, CONSOLIDATED_LIABILITIES,
+  type RevenueSegment, type ConsolidatedBalance,
+} from '@/lib/global/data-enterprise';
 import { cn } from '@/lib/utils';
 
 // ─── Region model ──────────────────────────────────────────────────────────────
@@ -1126,6 +1137,402 @@ function BankBalancesStrip() {
   );
 }
 
+// ─── Revenue Segments Breakdown ───────────────────────────────────────────────
+
+const SEGMENT_BAR_COLOR: Record<string, string> = {
+  emerald: 'bg-emerald-500',
+  teal: 'bg-teal-500',
+  cyan: 'bg-cyan-500',
+  violet: 'bg-violet-500',
+  amber: 'bg-amber-500',
+  rose: 'bg-rose-500',
+};
+
+const SEGMENT_BADGE_COLOR: Record<string, string> = {
+  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  teal: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  violet: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function RevenueSegmentsBreakdown() {
+  const totalFY = useMemo(
+    () => REVENUE_SEGMENTS.reduce((s, r) => s + r.fyTotal, 0),
+    [],
+  );
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <PieChart className="h-4 w-4 text-violet-400" />
+            Revenue Segments Breakdown
+          </CardTitle>
+          <Badge variant="outline" className="border-violet-500/30 bg-violet-500/10 text-[10px] text-violet-300">
+            FY Total: {fmtCompactUSD(totalFY)}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Stacked bar chart */}
+        <div className="mb-4">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">Composition</div>
+          <div className="h-6 rounded-md overflow-hidden flex bg-black/40">
+            {REVENUE_SEGMENTS.map((s, i) => {
+              const pct = (s.fyTotal / totalFY) * 100;
+              const color = SEGMENT_BAR_COLOR[s.color] ?? 'bg-zinc-500';
+              return (
+                <motion.div
+                  key={s.segment}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, delay: i * 0.05 }}
+                  className={cn('h-full', color)}
+                  title={`${s.segment}: ${pct.toFixed(1)}%`}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-2 flex items-center gap-2 flex-wrap text-[10px]">
+            {REVENUE_SEGMENTS.map((s) => (
+              <span key={s.segment} className="flex items-center gap-1 text-zinc-400">
+                <span className={cn('inline-block h-2 w-2 rounded-sm', SEGMENT_BAR_COLOR[s.color] ?? 'bg-zinc-500')} />
+                <span className="truncate max-w-[140px]">{s.segment}</span>
+                <span className="text-zinc-500 tabular-nums">{((s.fyTotal / totalFY) * 100).toFixed(1)}%</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <Separator className="my-3 bg-white/[0.06]" />
+
+        {/* Segments table */}
+        <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+          <ScrollArea className="max-h-[400px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Segment</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Q1</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Q2</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Q3</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Q4</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">FY Total</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">YoY</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-32">Gross Margin</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {REVENUE_SEGMENTS.map((s) => {
+                  const color = SEGMENT_BADGE_COLOR[s.color] ?? 'border-white/[0.06] bg-white/[0.02] text-zinc-300';
+                  const bar = SEGMENT_BAR_COLOR[s.color] ?? 'bg-zinc-500';
+                  const isGrowthPositive = s.yoyGrowth >= 0;
+                  return (
+                    <TableRow key={s.segment} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn('inline-block h-2 w-2 rounded-sm', bar)} />
+                          <span className="text-[12px] font-medium text-zinc-100">{s.segment}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(s.q1)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(s.q2)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(s.q3)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(s.q4)}</TableCell>
+                      <TableCell className="text-[11px] text-zinc-100 text-right tabular-nums font-semibold">
+                        {fmtCompactUSD(s.fyTotal)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className={`text-[9px] ${isGrowthPositive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-400'}`}>
+                          {isGrowthPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
+                          {isGrowthPositive ? '+' : ''}{s.yoyGrowth}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-black/40 overflow-hidden min-w-[60px]">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${s.grossMargin}%` }}
+                              transition={{ duration: 0.6 }}
+                              className={cn('h-full', bar)}
+                            />
+                          </div>
+                          <span className="text-[10px] text-zinc-300 tabular-nums w-8 text-right">{s.grossMargin}%</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* Totals row */}
+                <TableRow className="border-emerald-500/20 bg-emerald-500/[0.04]">
+                  <TableCell className="text-[11px] font-semibold text-emerald-300">Total FY</TableCell>
+                  <TableCell colSpan={4} />
+                  <TableCell className="text-[12px] font-bold text-emerald-300 text-right tabular-nums">
+                    {fmtCompactUSD(totalFY)}
+                  </TableCell>
+                  <TableCell colSpan={2} className="text-[10px] text-zinc-500 text-right">
+                    {REVENUE_SEGMENTS.length} segments · blended
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Enterprise KPI Grid ───────────────────────────────────────────────────────
+
+interface EnterpriseKpi {
+  label: string;
+  value: string;
+  sub: string;
+  icon: LucideIcon;
+  accent: string;
+  ring: string;
+}
+
+function EnterpriseKpiGrid() {
+  const kpis: EnterpriseKpi[] = [
+    { label: 'Total Entities', value: String(ENTERPRISE_KPIS.totalEntities), sub: 'Across 10 countries', icon: Building, accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    { label: 'Total Headcount', value: ENTERPRISE_KPIS.totalHeadcount.toLocaleString('en-US'), sub: 'Consolidated FTE', icon: Users, accent: 'text-teal-300', ring: 'bg-teal-500/30' },
+    { label: 'Total Revenue', value: fmtCompactUSD(ENTERPRISE_KPIS.totalRevenueUSD), sub: 'USD-equivalent', icon: TrendingUp, accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    { label: 'Total Assets', value: fmtCompactUSD(ENTERPRISE_KPIS.totalAssetsUSD), sub: 'Consolidated', icon: Landmark, accent: 'text-cyan-300', ring: 'bg-cyan-500/30' },
+    { label: 'Total Equity', value: fmtCompactUSD(ENTERPRISE_KPIS.totalEquityUSD), sub: 'Shareholder funds', icon: Wallet, accent: 'text-violet-300', ring: 'bg-violet-500/30' },
+    { label: 'Hedge Notional', value: fmtCompactUSD(ENTERPRISE_KPIS.totalHedgeNotionalUSD), sub: 'FX hedging book', icon: ShieldCheck, accent: 'text-amber-300', ring: 'bg-amber-500/30' },
+    { label: 'Intercompany Loans', value: fmtCompactUSD(ENTERPRISE_KPIS.totalIntercompanyLoansUSD), sub: 'Net financing', icon: HandCoins, accent: 'text-rose-300', ring: 'bg-rose-500/30' },
+    { label: 'Tax Credits', value: fmtCompactUSD(ENTERPRISE_KPIS.totalTaxCreditsUSD), sub: 'R&D + SEZ + export', icon: FileCheck, accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    { label: 'Insurance Coverage', value: fmtCompactUSD(ENTERPRISE_KPIS.totalInsuranceCoverageUSD), sub: 'D&O + Cyber + Property', icon: ShieldCheck, accent: 'text-teal-300', ring: 'bg-teal-500/30' },
+    { label: 'Cash Pool', value: fmtCompactUSD(ENTERPRISE_KPIS.totalCashPoolUSD), sub: 'Singapore Treasury header', icon: PiggyBank, accent: 'text-cyan-300', ring: 'bg-cyan-500/30' },
+    { label: 'Net Income', value: fmtCompactUSD(ENTERPRISE_KPIS.consolidatedNetIncomeUSD), sub: 'Consolidated FY', icon: BarChart3, accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    { label: 'Effective Tax Rate', value: `${ENTERPRISE_KPIS.effectiveTaxRate}%`, sub: 'Blended global', icon: Scale, accent: 'text-amber-300', ring: 'bg-amber-500/30' },
+    { label: 'Weighted DSO', value: `${ENTERPRISE_KPIS.weightedDSO} days`, sub: 'Days Sales Outstanding', icon: Timer, accent: 'text-violet-300', ring: 'bg-violet-500/30' },
+    { label: 'Weighted DPO', value: `${ENTERPRISE_KPIS.weightedDPO} days`, sub: 'Days Payable Outstanding', icon: Receipt, accent: 'text-cyan-300', ring: 'bg-cyan-500/30' },
+    { label: 'Hedging Effectiveness', value: `${ENTERPRISE_KPIS.hedgingEffectiveness}%`, sub: 'Hedge accounting test', icon: Gauge, accent: 'text-emerald-300', ring: 'bg-emerald-500/30' },
+    { label: 'Audit Findings', value: String(ENTERPRISE_KPIS.auditFindings), sub: 'Open / monitoring', icon: ClipboardCheck, accent: 'text-amber-300', ring: 'bg-amber-500/30' },
+    { label: 'Pending Reports', value: String(ENTERPRISE_KPIS.pendingRegulatoryReports), sub: 'Regulatory filings', icon: FileText, accent: 'text-rose-300', ring: 'bg-rose-500/30' },
+  ];
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Gauge className="h-4 w-4 text-emerald-400" />
+            Enterprise KPI Grid
+          </CardTitle>
+          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-300">
+            {kpis.length} consolidated KPIs
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+          {kpis.map((k, i) => {
+            const Icon = k.icon;
+            return (
+              <motion.div
+                key={k.label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.02 }}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 hover:border-white/[0.14] transition-all"
+              >
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className={cn('flex h-6 w-6 items-center justify-center rounded-md', k.ring)}>
+                    <Icon className={cn('h-3 w-3', k.accent)} />
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider text-zinc-500 leading-tight">{k.label}</span>
+                </div>
+                <div className={cn('text-sm font-semibold tabular-nums truncate', k.accent)} title={k.value}>{k.value}</div>
+                <div className="text-[9px] text-zinc-500 truncate" title={k.sub}>{k.sub}</div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Consolidated Balance Sheet ────────────────────────────────────────────────
+
+const ASSET_CATEGORY_COLOR: Record<string, string> = {
+  'Cash & Equivalents': 'border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-300',
+  'Accounts Receivable': 'border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-300',
+  'Inventory': 'border-teal-500/20 bg-teal-500/[0.04] text-teal-300',
+  'Prepaid Expenses': 'border-teal-500/20 bg-teal-500/[0.04] text-teal-300',
+  'Property, Plant & Equipment': 'border-cyan-500/20 bg-cyan-500/[0.04] text-cyan-300',
+  'Intangible Assets': 'border-cyan-500/20 bg-cyan-500/[0.04] text-cyan-300',
+  'Intercompany Receivables': 'border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-300',
+  'Deferred Tax Assets': 'border-teal-500/20 bg-teal-500/[0.04] text-teal-300',
+};
+
+const LIABILITY_CATEGORY_COLOR: Record<string, string> = {
+  'Accounts Payable': 'border-amber-500/20 bg-amber-500/[0.04] text-amber-300',
+  'Accrued Expenses': 'border-amber-500/20 bg-amber-500/[0.04] text-amber-300',
+  'Deferred Revenue': 'border-rose-500/20 bg-rose-500/[0.04] text-rose-300',
+  'Short-Term Debt': 'border-rose-500/20 bg-rose-500/[0.04] text-rose-300',
+  'Intercompany Payables': 'border-amber-500/20 bg-amber-500/[0.04] text-amber-300',
+  'Long-Term Debt': 'border-rose-500/20 bg-rose-500/[0.04] text-rose-300',
+  'Deferred Tax Liabilities': 'border-amber-500/20 bg-amber-500/[0.04] text-amber-300',
+  'Lease Liabilities': 'border-rose-500/20 bg-rose-500/[0.04] text-rose-300',
+};
+
+function BalanceSheetTable({
+  title,
+  data,
+  accentText,
+  type,
+}: {
+  title: string;
+  data: ConsolidatedBalance[];
+  accentText: string;
+  type: 'asset' | 'liability';
+}) {
+  const totalUSD = data.reduce((s, d) => s + d.totalUSD, 0);
+  const grandTotalInr = data.reduce((s, d) => s + d.inr, 0);
+  const grandTotalUsd = data.reduce((s, d) => s + d.usd, 0);
+  const grandTotalEur = data.reduce((s, d) => s + d.eur, 0);
+  const grandTotalGbp = data.reduce((s, d) => s + d.gbp, 0);
+  const grandTotalOther = data.reduce((s, d) => s + d.other, 0);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <span className={cn('inline-block h-2 w-2 rounded-full', type === 'asset' ? 'bg-emerald-400' : 'bg-rose-400')} />
+            {title}
+          </CardTitle>
+          <Badge variant="outline" className={`text-[10px] ${type === 'asset' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
+            Total: {fmtCompactUSD(totalUSD)}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+          <ScrollArea className="max-h-[460px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Category</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">INR</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">USD</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">EUR</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">GBP</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Other</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 text-right">Total USD</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-16 text-right">% of Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((row) => {
+                  const color = type === 'asset'
+                    ? (ASSET_CATEGORY_COLOR[row.category] ?? 'border-white/[0.06] bg-white/[0.02] text-zinc-300')
+                    : (LIABILITY_CATEGORY_COLOR[row.category] ?? 'border-white/[0.06] bg-white/[0.02] text-zinc-300');
+                  return (
+                    <TableRow key={row.category} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                      <TableCell>
+                        <span className={`text-[11px] font-medium px-2 py-1 rounded-md border ${color}`}>{row.category}</span>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-zinc-400 text-right tabular-nums">{(row.inr / 100000).toFixed(1)}L</TableCell>
+                      <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(row.usd)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-400 text-right tabular-nums">{fmtCompactUSD(row.eur)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-400 text-right tabular-nums">{fmtCompactUSD(row.gbp)}</TableCell>
+                      <TableCell className="text-[10px] text-zinc-500 text-right tabular-nums">{fmtCompactUSD(row.other)}</TableCell>
+                      <TableCell className="text-[11px] text-zinc-100 text-right tabular-nums font-semibold">{fmtCompactUSD(row.totalUSD)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <div className="h-1.5 w-10 rounded-full bg-black/40 overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${row.pctOfTotal * 2}%` }}
+                              transition={{ duration: 0.5 }}
+                              className={cn('h-full', type === 'asset' ? 'bg-emerald-500' : 'bg-rose-500')}
+                            />
+                          </div>
+                          <span className={cn('text-[10px] tabular-nums w-8 text-right', accentText)}>{row.pctOfTotal.toFixed(1)}%</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* Totals row */}
+                <TableRow className={type === 'asset' ? 'border-emerald-500/20 bg-emerald-500/[0.06]' : 'border-rose-500/20 bg-rose-500/[0.06]'}>
+                  <TableCell className="text-[11px] font-semibold text-zinc-100">Total</TableCell>
+                  <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{(grandTotalInr / 100000).toFixed(1)}L</TableCell>
+                  <TableCell className={cn('text-[11px] text-right tabular-nums font-bold', accentText)}>{fmtCompactUSD(grandTotalUsd)}</TableCell>
+                  <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(grandTotalEur)}</TableCell>
+                  <TableCell className="text-[10px] text-zinc-300 text-right tabular-nums">{fmtCompactUSD(grandTotalGbp)}</TableCell>
+                  <TableCell className="text-[10px] text-zinc-400 text-right tabular-nums">{fmtCompactUSD(grandTotalOther)}</TableCell>
+                  <TableCell className={cn('text-[12px] text-right tabular-nums font-bold', accentText)}>{fmtCompactUSD(totalUSD)}</TableCell>
+                  <TableCell className={cn('text-[10px] text-right tabular-nums', accentText)}>100.0%</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConsolidatedBalanceSheet() {
+  const totalAssets = CONSOLIDATED_ASSETS.reduce((s, d) => s + d.totalUSD, 0);
+  const totalLiabilities = CONSOLIDATED_LIABILITIES.reduce((s, d) => s + d.totalUSD, 0);
+  const equity = totalAssets - totalLiabilities;
+
+  return (
+    <div className="space-y-4">
+      {/* Balance summary */}
+      <Card className="border-white/[0.06] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Landmark className="h-4 w-4 text-cyan-400" />
+              Consolidated Balance Sheet
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                Assets: {fmtCompactUSD(totalAssets)}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] border-rose-500/30 bg-rose-500/10 text-rose-300">
+                Liabilities: {fmtCompactUSD(totalLiabilities)}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+                Net Equity: {fmtCompactUSD(equity)}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BalanceSheetTable
+          title="Consolidated Assets"
+          data={CONSOLIDATED_ASSETS}
+          accentText="text-emerald-300"
+          type="asset"
+        />
+        <BalanceSheetTable
+          title="Consolidated Liabilities"
+          data={CONSOLIDATED_LIABILITIES}
+          accentText="text-rose-300"
+          type="liability"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function GlobalDashboard() {
@@ -1461,6 +1868,21 @@ export default function GlobalDashboard() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* ─── Revenue Segments Breakdown ─── */}
+        <div className="mt-6">
+          <RevenueSegmentsBreakdown />
+        </div>
+
+        {/* ─── Enterprise KPI Grid ─── */}
+        <div className="mt-6">
+          <EnterpriseKpiGrid />
+        </div>
+
+        {/* ─── Consolidated Balance Sheet ─── */}
+        <div className="mt-6">
+          <ConsolidatedBalanceSheet />
+        </div>
 
         {/* ─── Footer ─── */}
         <div className="mt-6 flex items-center justify-between text-[11px] text-muted-foreground">

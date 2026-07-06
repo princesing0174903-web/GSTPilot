@@ -36,6 +36,9 @@ import {
   Clock, Loader2, FileStack, type LucideIcon,
   Wand2, Globe2, Layers, ShieldCheck, ChevronRight, ChevronLeft,
   TrendingUp, Award, Building2, Scale, Briefcase, X, Cpu,
+  Gavel, Leaf, Recycle, Droplets, Users, HeartHandshake,
+  ShieldAlert, AlertTriangle, ArrowRight, ArrowUpRight, ArrowDownRight,
+  CalendarDays, Landmark, FileCheck2, ThumbsUp, ThumbsDown, MinusCircle,
 } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -57,8 +60,13 @@ import {
 } from '@/components/ui/select';
 import {
   GLOBAL_REPORTS, REPORT_TEMPLATES, COUNTRIES,
-  statusColor, type GlobalReport, type ReportTemplate,
+  statusColor, getCountry,
+  type GlobalReport, type ReportTemplate,
 } from '@/lib/global/data';
+import {
+  REGULATORY_REPORTS, BOARD_RESOLUTIONS, INSURANCE_POLICIES, ESG_METRICS,
+  type RegulatoryReport, type BoardResolution, type InsurancePolicy, type ESGMetric,
+} from '@/lib/global/data-enterprise';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -1174,6 +1182,531 @@ function BoardReadyExport({ onSelectTemplate }: {
   );
 }
 
+// ─── Regulatory Report Calendar ────────────────────────────────────────────────
+
+const REG_STATUS_COLOR: Record<RegulatoryReport['status'], string> = {
+  filed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'not-started': 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+  overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+const REG_COMPLEXITY_COLOR: Record<RegulatoryReport['complexity'], string> = {
+  low: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  high: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function countdownBadge(days: number): { label: string; cls: string } {
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, cls: 'border-rose-500/30 bg-rose-500/10 text-rose-300' };
+  if (days < 7) return { label: `${days}d left`, cls: 'border-rose-500/30 bg-rose-500/10 text-rose-300' };
+  if (days <= 30) return { label: `${days}d left`, cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300' };
+  return { label: `${days}d left`, cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' };
+}
+
+function RegulatoryReportCalendar() {
+  const sorted = useMemo(
+    () => [...REGULATORY_REPORTS].sort((a, b) => a.daysRemaining - b.daysRemaining),
+    [],
+  );
+
+  const total = REGULATORY_REPORTS.length;
+  const filed = REGULATORY_REPORTS.filter((r) => r.status === 'filed').length;
+  const inProgress = REGULATORY_REPORTS.filter((r) => r.status === 'in-progress').length;
+  const overdue = REGULATORY_REPORTS.filter((r) => r.status === 'overdue' || r.daysRemaining < 0).length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <CalendarDays className="h-4 w-4 text-emerald-400" />
+            Regulatory Report Calendar
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {REGULATORY_REPORTS.length} filings · sorted by due date
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Reports</p>
+            <p className="text-sm font-semibold text-white">{total}</p>
+            <p className="text-[9px] text-muted-foreground">across all jurisdictions</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Filed</p>
+            <p className="text-sm font-semibold text-white">{filed}</p>
+            <p className="text-[9px] text-muted-foreground">completed on time</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">In-Progress</p>
+            <p className="text-sm font-semibold text-white">{inProgress}</p>
+            <p className="text-[9px] text-muted-foreground">being prepared</p>
+          </div>
+          <div className={cn(
+            'rounded-lg border p-2.5',
+            overdue > 0 ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-cyan-500/20 bg-cyan-500/[0.04]',
+          )}>
+            <p className={cn('text-[10px] uppercase tracking-wider', overdue > 0 ? 'text-rose-300' : 'text-cyan-300')}>Overdue / Critical</p>
+            <p className={cn('text-sm font-semibold', overdue > 0 ? 'text-rose-300' : 'text-white')}>{overdue}</p>
+            <p className="text-[9px] text-muted-foreground">due in &lt;7d or past due</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[520px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Report</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Jurisdiction</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Frequency</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Next Due</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Countdown</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Owner</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Complexity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Penalty Risk</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((r: RegulatoryReport, i: number) => {
+                const country = getCountry(r.countryCode);
+                const cd = countdownBadge(r.daysRemaining);
+                return (
+                  <motion.tr
+                    key={r.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.015 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none" title={country.name}>{country.flag}</span>
+                        <span className="text-[11px] font-medium text-white">{r.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-white/90">{r.jurisdiction}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {r.frequency}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-white/90">{r.nextDue}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold', cd.cls)}>
+                        {cd.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">{r.responsible}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', REG_COMPLEXITY_COLOR[r.complexity])}>
+                        {r.complexity}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-rose-300/90 font-mono">{r.penaltyRisk}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', REG_STATUS_COLOR[r.status])}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full',
+                          r.status === 'filed' && 'bg-emerald-400',
+                          r.status === 'in-progress' && 'bg-amber-400',
+                          r.status === 'not-started' && 'bg-slate-400',
+                          r.status === 'overdue' && 'bg-rose-400',
+                        )} />
+                        {r.status}
+                      </span>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Board Pack & Governance Reports ───────────────────────────────────────────
+
+const BOARD_TYPE_COLOR: Record<BoardResolution['type'], string> = {
+  Financial: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Strategic: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  Governance: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  Compliance: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+const BOARD_STATUS_COLOR: Record<BoardResolution['status'], string> = {
+  passed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  tabled: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+};
+
+const INSURANCE_TYPE_COLOR: Record<InsurancePolicy['type'], string> = {
+  'D&O': 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  Cyber: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  Property: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  'Business Interruption': 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  'Trade Credit': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'Professional Indemnity': 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+};
+
+const INSURANCE_STATUS_COLOR: Record<InsurancePolicy['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  renewing: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  expiring: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+function BoardPackGovernance() {
+  const totalCoverage = INSURANCE_POLICIES.reduce((s, p) => s + p.coverage, 0);
+  const totalPremium = INSURANCE_POLICIES.reduce((s, p) => s + p.premium, 0);
+  const passedResolutions = BOARD_RESOLUTIONS.filter((r) => r.status === 'passed').length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Gavel className="h-4 w-4 text-violet-400" />
+            Board Pack & Governance Reports
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {BOARD_RESOLUTIONS.length} resolutions · {INSURANCE_POLICIES.length} policies
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Summary KPIs */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Resolutions Passed</p>
+            <p className="text-sm font-semibold text-white">{passedResolutions}/{BOARD_RESOLUTIONS.length}</p>
+            <p className="text-[9px] text-muted-foreground">all-time board decisions</p>
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Insurance Coverage</p>
+            <p className="text-sm font-semibold text-white">${(totalCoverage / 1_000_000).toFixed(1)}M</p>
+            <p className="text-[9px] text-muted-foreground">across all policies</p>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300">Annual Premiums</p>
+            <p className="text-sm font-semibold text-white">${(totalPremium / 1000).toFixed(0)}K</p>
+            <p className="text-[9px] text-muted-foreground">aggregate yearly cost</p>
+          </div>
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-cyan-300">Active Policies</p>
+            <p className="text-sm font-semibold text-white">{INSURANCE_POLICIES.filter((p) => p.status === 'active').length}</p>
+            <p className="text-[9px] text-muted-foreground">renewing / active total</p>
+          </div>
+        </div>
+
+        {/* Board Resolutions Table */}
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Landmark className="h-3.5 w-3.5 text-violet-400" />
+            <p className="text-xs font-semibold text-white">Board Resolutions</p>
+            <span className="text-[10px] text-muted-foreground">— chronological record of board decisions</span>
+          </div>
+          <ScrollArea className="max-h-[320px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Title</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Date</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Type</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Votes (For/Against/Abstain)</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Summary</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {BOARD_RESOLUTIONS.map((r: BoardResolution, i: number) => (
+                  <motion.tr
+                    key={r.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell className="text-[11px] font-medium text-white max-w-[220px]">{r.title}</TableCell>
+                    <TableCell className="font-mono text-[11px] text-white/90">{r.date}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', BOARD_TYPE_COLOR[r.type])}>
+                        {r.type}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="inline-flex items-center gap-0.5 text-emerald-300">
+                          <ThumbsUp className="h-3 w-3" /> {r.votesFor}
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 text-rose-300">
+                          <ThumbsDown className="h-3 w-3" /> {r.votesAgainst}
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 text-slate-300">
+                          <MinusCircle className="h-3 w-3" /> {r.abstentions}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', BOARD_STATUS_COLOR[r.status])}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full',
+                          r.status === 'passed' && 'bg-emerald-400',
+                          r.status === 'pending' && 'bg-amber-400',
+                          r.status === 'tabled' && 'bg-slate-400',
+                        )} />
+                        {r.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground max-w-[280px]">{r.summary}</TableCell>
+                  </motion.tr>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+
+        {/* Insurance Coverage Table */}
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+            <p className="text-xs font-semibold text-white">Insurance Coverage Portfolio</p>
+            <span className="text-[10px] text-muted-foreground">— risk transfer across the enterprise</span>
+          </div>
+          <ScrollArea className="max-h-[320px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Policy</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Type</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Coverage</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Premium</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Deductible</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Insurer</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Renewal</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {INSURANCE_POLICIES.map((p: InsurancePolicy, i: number) => (
+                  <motion.tr
+                    key={p.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell className="text-[11px] font-medium text-white">{p.name}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium', INSURANCE_TYPE_COLOR[p.type])}>
+                        {p.type}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                      ${(p.coverage / 1_000_000).toFixed(1)}M
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-amber-300">
+                      ${(p.premium / 1000).toFixed(0)}K
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-rose-300">
+                      ${(p.deductible / 1000).toFixed(0)}K
+                    </TableCell>
+                    <TableCell className="text-[11px] text-white/90">{p.insurer}</TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground">{p.renewalDate}</TableCell>
+                    <TableCell>
+                      <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium capitalize', INSURANCE_STATUS_COLOR[p.status])}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full',
+                          p.status === 'active' && 'bg-emerald-400',
+                          p.status === 'renewing' && 'bg-amber-400',
+                          p.status === 'expiring' && 'bg-rose-400',
+                        )} />
+                        {p.status}
+                      </span>
+                    </TableCell>
+                  </motion.tr>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── ESG & Sustainability Reports ──────────────────────────────────────────────
+
+function ESGSustainabilityReports() {
+  const totals = useMemo(() => {
+    return ESG_METRICS.reduce((acc, e) => ({
+      scope1: acc.scope1 + e.scope1Emissions,
+      scope2: acc.scope2 + e.scope2Emissions,
+      scope3: acc.scope3 + e.scope3Emissions,
+      renewable: acc.renewable + e.renewableEnergyPct,
+      water: acc.water + e.waterUsage,
+      waste: acc.waste + e.wasteRecycledPct,
+      diversity: acc.diversity + e.diversityScore,
+      satisfaction: acc.satisfaction + e.employeeSatisfaction,
+      community: acc.community + e.communityInvestment,
+    }), {
+      scope1: 0, scope2: 0, scope3: 0, renewable: 0, water: 0,
+      waste: 0, diversity: 0, satisfaction: 0, community: 0,
+    });
+  }, []);
+
+  const count = ESG_METRICS.length;
+  const totalEmissions = totals.scope1 + totals.scope2 + totals.scope3;
+
+  const renewableColor = (pct: number) => {
+    if (pct >= 60) return 'text-emerald-300';
+    if (pct >= 35) return 'text-amber-300';
+    return 'text-rose-300';
+  };
+  const diversityColor = (score: number) => {
+    if (score >= 75) return 'text-emerald-300';
+    if (score >= 65) return 'text-amber-300';
+    return 'text-rose-300';
+  };
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Leaf className="h-4 w-4 text-emerald-400" />
+            ESG & Sustainability Reports
+          </CardTitle>
+          <Badge variant="outline" className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground">
+            {ESG_METRICS.length} country entities · annualized
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300">Total Scope 1+2+3 Emissions</p>
+            <p className="text-sm font-semibold text-white">{(totalEmissions / 1000).toFixed(1)}K tCO₂e</p>
+            <p className="text-[9px] text-muted-foreground">across all entities</p>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-teal-300">Avg Renewable Energy</p>
+            <p className="text-sm font-semibold text-white">{(totals.renewable / count).toFixed(1)}%</p>
+            <p className="text-[9px] text-muted-foreground">entity-weighted average</p>
+          </div>
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-cyan-300">Avg Waste Recycled</p>
+            <p className="text-sm font-semibold text-white">{(totals.waste / count).toFixed(1)}%</p>
+            <p className="text-[9px] text-muted-foreground">across all entities</p>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-violet-300">Community Investment</p>
+            <p className="text-sm font-semibold text-white">${(totals.community / 1000).toFixed(0)}K</p>
+            <p className="text-[9px] text-muted-foreground">total annual giving</p>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[520px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Country</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Scope 1 (tCO₂e)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Scope 2 (tCO₂e)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Scope 3 (tCO₂e)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Renewable %</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Water (m³)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Waste Recycled</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Diversity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Satisfaction</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Community $</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ESG_METRICS.map((e: ESGMetric, i: number) => {
+                const country = getCountry(e.countryCode);
+                return (
+                  <motion.tr
+                    key={e.countryCode}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.02]"
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none" title={country.name}>{country.flag}</span>
+                        <span className="text-[11px] font-medium text-white">{country.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-rose-300">{e.scope1Emissions.toLocaleString('en-US')}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-amber-300">{e.scope2Emissions.toLocaleString('en-US')}</TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-rose-300/80">{e.scope3Emissions.toLocaleString('en-US')}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-white/[0.04]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${e.renewableEnergyPct}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.03 }}
+                            className={cn('h-full rounded-full',
+                              e.renewableEnergyPct >= 60 ? 'bg-emerald-500/70' : e.renewableEnergyPct >= 35 ? 'bg-amber-500/70' : 'bg-rose-500/70',
+                            )}
+                          />
+                        </div>
+                        <span className={cn('font-mono text-[11px]', renewableColor(e.renewableEnergyPct))}>{e.renewableEnergyPct}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] text-cyan-300">{e.waterUsage.toLocaleString('en-US')}</TableCell>
+                    <TableCell>
+                      <span className={cn('font-mono text-[11px]', e.wasteRecycledPct >= 85 ? 'text-emerald-300' : e.wasteRecycledPct >= 75 ? 'text-amber-300' : 'text-rose-300')}>
+                        {e.wasteRecycledPct}%
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn('font-mono text-[11px]', diversityColor(e.diversityScore))}>{e.diversityScore}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[11px] text-violet-300">{e.employeeSatisfaction}%</span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">
+                      ${(e.communityInvestment / 1000).toFixed(0)}K
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+              {/* Totals row */}
+              <TableRow className="border-emerald-500/20 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.06]">
+                <TableCell className="text-[11px] font-semibold text-emerald-300">🌍 Totals / Averages</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-rose-300">{totals.scope1.toLocaleString('en-US')}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-amber-300">{totals.scope2.toLocaleString('en-US')}</TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-rose-300/80">{totals.scope3.toLocaleString('en-US')}</TableCell>
+                <TableCell>
+                  <span className="font-mono text-[11px] font-semibold text-emerald-300">{(totals.renewable / count).toFixed(1)}% avg</span>
+                </TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-cyan-300">{totals.water.toLocaleString('en-US')}</TableCell>
+                <TableCell>
+                  <span className="font-mono text-[11px] font-semibold text-emerald-300">{(totals.waste / count).toFixed(1)}% avg</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-[11px] font-semibold text-emerald-300">{(totals.diversity / count).toFixed(0)} avg</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-[11px] font-semibold text-violet-300">{(totals.satisfaction / count).toFixed(1)}% avg</span>
+                </TableCell>
+                <TableCell className="text-right font-mono text-[11px] font-semibold text-emerald-300">${(totals.community / 1000).toFixed(0)}K</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function InternationalReports() {
@@ -1508,6 +2041,21 @@ export default function InternationalReports() {
             </ScrollArea>
           </CardContent>
         </Card>
+
+        {/* ─── Regulatory Report Calendar ─── */}
+        <div className="mt-6">
+          <RegulatoryReportCalendar />
+        </div>
+
+        {/* ─── Board Pack & Governance Reports ─── */}
+        <div className="mt-6">
+          <BoardPackGovernance />
+        </div>
+
+        {/* ─── ESG & Sustainability Reports ─── */}
+        <div className="mt-6">
+          <ESGSustainabilityReports />
+        </div>
 
         {/* ─── Footer ─── */}
         <div className="mt-5 flex items-center justify-between text-[11px] text-muted-foreground">

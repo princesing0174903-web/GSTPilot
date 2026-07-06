@@ -25,6 +25,7 @@ import {
   MapPin, Boxes, TrendingUp, Globe2, type LucideIcon,
   Star, Network, Calculator, PackageX, FileCheck2, FileClock, FileWarning,
   ChevronUp, ChevronDown, Ship, ShieldCheck, AlertTriangle, DollarSign,
+  Users, AlertOctagon, Anchor, Gauge,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -43,6 +44,10 @@ import {
   formatCurrency, convertCurrency, fmtUSD,
   type Warehouse, type InternationalPO, type Vendor, type CountryCode,
 } from '@/lib/global/data';
+import {
+  CUSTOMS_DECLARATIONS, GLOBAL_PAYROLL, SUPPLY_CHAIN_RISKS,
+  type CustomsDeclaration, type GlobalPayrollEntry, type SupplyChainRisk,
+} from '@/lib/global/data-enterprise';
 
 // ─── Style Maps ────────────────────────────────────────────────────────────────
 
@@ -1379,10 +1384,397 @@ function CustomsTracker() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Customs Declarations Log
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CUSTOMS_TYPE_BADGE: Record<CustomsDeclaration['type'], string> = {
+  Import: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  Export: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+};
+
+const CUSTOMS_STATUS_BADGE: Record<CustomsDeclaration['status'], string> = {
+  cleared: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  filed: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  held: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  pending: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+};
+
+function CustomsDeclarationsLog() {
+  const stats = useMemo(() => {
+    const totalDuty = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.dutyPaid, 0);
+    const totalGst = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.gstVatPaid, 0);
+    const totalValue = CUSTOMS_DECLARATIONS.reduce((s, c) => s + c.declaredValueUSD, 0);
+    const cleared = CUSTOMS_DECLARATIONS.filter((c) => c.status === 'cleared').length;
+    return { totalDuty, totalGst, totalValue, cleared };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatTile icon={Anchor} label="Declarations" value={String(CUSTOMS_DECLARATIONS.length)} sub={`${stats.cleared} cleared`} accent="emerald" />
+        <StatTile icon={DollarSign} label="Declared Value" value={fmtUSD(stats.totalValue)} sub="Total shipments" accent="teal" />
+        <StatTile icon={Package} label="Duty Paid" value={fmtUSD(stats.totalDuty)} sub="Import duties" accent="amber" />
+        <StatTile icon={FileText} label="GST/VAT Paid" value={fmtUSD(stats.totalGst)} sub="Border taxes" accent="cyan" />
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <ScrollArea className="max-h-[600px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Reference</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Type</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Route</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">HS Code</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Description</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Declared USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Duty %</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Duty Paid</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">GST/VAT</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Port</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Incoterm</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {CUSTOMS_DECLARATIONS.map((c, i) => {
+                  const origin = getCountry(c.originCountry);
+                  const dest = getCountry(c.destinationCountry);
+                  return (
+                    <motion.tr
+                      key={c.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: i * 0.02 }}
+                      className={`border-white/[0.04] hover:bg-white/[0.03] ${
+                        c.status === 'held' ? 'bg-amber-500/[0.04]' : ''
+                      }`}
+                    >
+                      <TableCell className="py-2.5">
+                        <span className="font-mono text-[11px] text-emerald-300">{c.reference}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] ${CUSTOMS_TYPE_BADGE[c.type]}`}>
+                          {c.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-[11px]">
+                          <span title={origin?.name} className="text-base leading-none">{origin?.flag}</span>
+                          <ArrowRight className="h-3 w-3 text-zinc-500" />
+                          <span title={dest?.name} className="text-base leading-none">{dest?.flag}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-[10px] text-cyan-300">{c.hsCode}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[11px] text-zinc-300 truncate max-w-[160px] inline-block">{c.description}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-200">{fmtUSD(c.declaredValueUSD)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-amber-300">{c.dutyRate.toFixed(1)}%</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-rose-300">{c.dutyPaid > 0 ? fmtUSD(c.dutyPaid) : '—'}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-violet-300">{c.gstVatPaid > 0 ? fmtUSD(c.gstVatPaid) : '—'}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] capitalize ${CUSTOMS_STATUS_BADGE[c.status]}`}>
+                          {c.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-zinc-400">{c.port}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-400">
+                          {c.incoterm}
+                        </Badge>
+                      </TableCell>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Global Payroll Module
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PAYROLL_STATUS_BADGE: Record<GlobalPayrollEntry['status'], string> = {
+  processed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  review: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function GlobalPayrollModule() {
+  const stats = useMemo(() => {
+    const totalHeadcount = GLOBAL_PAYROLL.reduce((s, p) => s + p.headcount, 0);
+    const totalGross = GLOBAL_PAYROLL.reduce((s, p) => s + p.grossPayrollUSD, 0);
+    const totalEmployerTax = GLOBAL_PAYROLL.reduce((s, p) => s + p.employerTax, 0);
+    const pending = GLOBAL_PAYROLL.filter((p) => p.status === 'pending' || p.status === 'review').length;
+    return { totalHeadcount, totalGross, totalEmployerTax, pending };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatTile icon={Users} label="Total Headcount" value={stats.totalHeadcount.toLocaleString('en-US')} sub={`${GLOBAL_PAYROLL.length} entities`} accent="emerald" />
+        <StatTile icon={DollarSign} label="Gross Payroll" value={fmtUSD(stats.totalGross)} sub="Monthly USD" accent="teal" />
+        <StatTile icon={FileText} label="Employer Tax" value={fmtUSD(stats.totalEmployerTax)} sub="Monthly burden" accent="amber" />
+        <StatTile icon={AlertOctagon} label="Pending/Review" value={String(stats.pending)} sub="Awaiting processing" accent="rose" />
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <ScrollArea className="max-h-[600px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Entity</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Headcount</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Gross (Local)</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Gross USD</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Employer Tax</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Employee Tax</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Net Payroll</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Avg Salary</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Pay Date</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {GLOBAL_PAYROLL.map((p, i) => {
+                  const country = getCountry(p.countryCode);
+                  return (
+                    <motion.tr
+                      key={`${p.entity}-${i}`}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: i * 0.02 }}
+                      className="border-white/[0.04] hover:bg-white/[0.03]"
+                    >
+                      <TableCell className="py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{country?.flag ?? '🏳️'}</span>
+                          <span className="text-[11px] font-medium text-zinc-200 truncate max-w-[180px]">{p.entity}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-200">{p.headcount}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-300">
+                          {p.grossPayroll.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                          <span className="ml-1 text-[10px] text-cyan-300">{p.currency}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono font-semibold text-emerald-300">{fmtUSD(p.grossPayrollUSD)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-amber-300">{fmtUSD(p.employerTax)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-rose-300">{fmtUSD(p.employeeTax)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-teal-300">{fmtUSD(p.netPayroll)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-300">{fmtUSD(p.avgSalary)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] font-mono text-zinc-400">{p.payDate}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] capitalize ${PAYROLL_STATUS_BADGE[p.status]}`}>
+                          {p.status}
+                        </Badge>
+                      </TableCell>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Supply Chain Risk Monitor
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SCR_STATUS_BADGE: Record<SupplyChainRisk['status'], string> = {
+  low: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  high: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+  critical: 'border-rose-500/50 bg-rose-500/20 text-rose-300',
+};
+
+function scrBarColor(score: number): string {
+  if (score <= 30) return 'bg-emerald-500';
+  if (score <= 50) return 'bg-teal-400';
+  if (score <= 65) return 'bg-amber-400';
+  return 'bg-rose-500';
+}
+
+function SupplyChainRiskMonitor() {
+  const stats = useMemo(() => {
+    const avgScore = SUPPLY_CHAIN_RISKS.reduce((s, v) => s + v.riskScore, 0) / SUPPLY_CHAIN_RISKS.length;
+    const critical = SUPPLY_CHAIN_RISKS.filter((v) => v.status === 'high' || v.status === 'critical').length;
+    const singleSource = SUPPLY_CHAIN_RISKS.filter((v) => v.singleSource).length;
+    return { avgScore, critical, singleSource };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatTile icon={Gauge} label="Avg Risk Score" value={stats.avgScore.toFixed(1)} sub="Across all vendors" accent="amber" />
+        <StatTile icon={AlertOctagon} label="Critical/High" value={String(stats.critical)} sub="Action required" accent="rose" />
+        <StatTile icon={AlertTriangle} label="Single-Source" value={String(stats.singleSource)} sub="No alternate vendor" accent="violet" />
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+        <ScrollArea className="max-h-[640px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Vendor</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Category</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-[140px]">Risk Score</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Lead Time</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">On-Time %</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Single Source</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Alts</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Last Incident</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Mitigation</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {SUPPLY_CHAIN_RISKS.map((v, i) => {
+                  const country = getCountry(v.vendorCountry);
+                  return (
+                    <motion.tr
+                      key={v.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: i * 0.02 }}
+                      className={`border-white/[0.04] hover:bg-white/[0.03] ${
+                        v.status === 'critical' ? 'bg-rose-500/[0.05]' : v.status === 'high' ? 'bg-rose-500/[0.03]' : ''
+                      }`}
+                    >
+                      <TableCell className="py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{country?.flag ?? '🏳️'}</span>
+                          <span className="text-[11px] font-medium text-zinc-200 truncate max-w-[160px]">{v.vendor}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-400">
+                          {v.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-20 rounded-full bg-black/40 overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${v.riskScore}%` }}
+                              transition={{ duration: 0.5, delay: i * 0.04 }}
+                              className={`h-full ${scrBarColor(v.riskScore)}`}
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono text-zinc-200 tabular-nums">{v.riskScore}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-300">{v.leadTimeDays}d</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className={`text-[11px] font-mono ${
+                          v.onTimeRate >= 99 ? 'text-emerald-300' : v.onTimeRate >= 95 ? 'text-teal-300' : 'text-amber-300'
+                        }`}>
+                          {v.onTimeRate.toFixed(1)}%
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {v.singleSource ? (
+                          <Badge variant="outline" className="text-[9px] border-rose-500/30 bg-rose-500/10 text-rose-300">
+                            Sole-source
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                            Multi-source
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-zinc-300">{v.alternatives}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] font-mono text-zinc-400">{v.lastIncident}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] capitalize ${SCR_STATUS_BADGE[v.status]}`}>
+                          {v.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-zinc-400 truncate max-w-[240px] inline-block">{v.mitigation}</span>
+                      </TableCell>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function InternationalERP() {
-  const [tab, setTab] = useState<'warehouses' | 'pos' | 'invoices' | 'supply' | 'vendors' | 'landed' | 'aging' | 'customs'>('warehouses');
+  const [tab, setTab] = useState<'warehouses' | 'pos' | 'invoices' | 'supply' | 'vendors' | 'landed' | 'aging' | 'customs' | 'decl-log' | 'payroll' | 'scr-risk'>('warehouses');
 
   const totalCapacity = useMemo(
     () => WAREHOUSES.reduce((s, w) => s + w.capacity, 0),
@@ -1503,6 +1895,24 @@ export default function InternationalERP() {
             >
               <FileCheck2 className="h-3.5 w-3.5" />Customs
             </TabsTrigger>
+            <TabsTrigger
+              value="decl-log"
+              className="data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-300 data-[state=active]:border-emerald-500/30"
+            >
+              <Anchor className="h-3.5 w-3.5" />Declarations Log
+            </TabsTrigger>
+            <TabsTrigger
+              value="payroll"
+              className="data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-300 data-[state=active]:border-emerald-500/30"
+            >
+              <Users className="h-3.5 w-3.5" />Global Payroll
+            </TabsTrigger>
+            <TabsTrigger
+              value="scr-risk"
+              className="data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-300 data-[state=active]:border-emerald-500/30"
+            >
+              <AlertOctagon className="h-3.5 w-3.5" />Supply Risk
+            </TabsTrigger>
           </TabsList>
         </ScrollArea>
 
@@ -1549,6 +1959,18 @@ export default function InternationalERP() {
 
         <TabsContent value="customs" className="mt-4">
           <CustomsTracker />
+        </TabsContent>
+
+        <TabsContent value="decl-log" className="mt-4">
+          <CustomsDeclarationsLog />
+        </TabsContent>
+
+        <TabsContent value="payroll" className="mt-4">
+          <GlobalPayrollModule />
+        </TabsContent>
+
+        <TabsContent value="scr-risk" className="mt-4">
+          <SupplyChainRiskMonitor />
         </TabsContent>
       </Tabs>
     </div>

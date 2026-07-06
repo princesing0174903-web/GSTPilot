@@ -29,6 +29,8 @@ import {
   Banknote, Scale, Sparkles, ChevronRight, PieChart, Gauge,
   Table2, AlarmClock, FileText, Network, AlertTriangle, Clock,
   TrendingUp, TrendingDown, ArrowRight, CheckCircle2, Info,
+  Shuffle, ArrowLeftRight, HandCoins, ScrollText, Gavel, Briefcase,
+  FileCheck, Percent, Users,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -60,6 +62,11 @@ import {
   type Country, type CountryCode, type FilingDeadline, type TaxPosition,
   type DTAAEntry, type RegulatoryChange,
 } from '@/lib/global/data';
+import {
+  INTERNATIONAL_ENTITIES, TRANSFER_PRICING, INTERCOMPANY_LOANS, TRADE_TREATIES,
+  type InternationalEntity, type TransferPricingTxn,
+  type IntercompanyLoan, type TradeTreaty,
+} from '@/lib/global/data-enterprise';
 
 // ─── Tax system badge palette (NO indigo/blue) ─────────────────────────────────
 
@@ -1034,12 +1041,769 @@ function RegulatoryChanges() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE SECTIONS — International Entities Registry
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ENTITY_STATUS_BADGE: Record<InternationalEntity['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  dormant: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function fmtCompactUSD(n: number): string {
+  if (Math.abs(n) >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function EntitiesRegistry() {
+  const [selected, setSelected] = useState<InternationalEntity | null>(null);
+  const [filter, setFilter] = useState<'ALL' | CountryCode>('ALL');
+
+  const filtered = useMemo(
+    () => (filter === 'ALL' ? INTERNATIONAL_ENTITIES : INTERNATIONAL_ENTITIES.filter((e) => e.countryCode === filter)),
+    [filter],
+  );
+
+  const totals = useMemo(() => {
+    const revenue = INTERNATIONAL_ENTITIES.reduce((s, e) => s + e.revenue, 0);
+    const netIncome = INTERNATIONAL_ENTITIES.reduce((s, e) => s + e.netIncome, 0);
+    const assets = INTERNATIONAL_ENTITIES.reduce((s, e) => s + e.assets, 0);
+    const headcount = INTERNATIONAL_ENTITIES.reduce((s, e) => s + e.headcount, 0);
+    return { revenue, netIncome, assets, headcount };
+  }, []);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Briefcase className="h-4 w-4 text-emerald-400" />
+              International Entities Registry
+              <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                {INTERNATIONAL_ENTITIES.length} entities
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Subsidiary companies across all jurisdictions — ownership, financials, headcount &amp; segment. Click any row for full details.
+            </p>
+          </div>
+          <Select value={filter} onValueChange={(v) => setFilter(v as 'ALL' | CountryCode)}>
+            <SelectTrigger className="w-[180px] border-white/10 bg-white/[0.02] text-zinc-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 bg-zinc-950 text-zinc-200">
+              <SelectItem value="ALL">All Countries</SelectItem>
+              {[...new Set(INTERNATIONAL_ENTITIES.map((e) => e.countryCode))].map((cc) => {
+                const c = getCountry(cc);
+                return (
+                  <SelectItem key={cc} value={cc}>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{c?.flag}</span><span>{c?.name}</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Summary KPIs */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Revenue</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totals.revenue)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Net Income</div>
+            <div className={`text-sm font-semibold ${totals.netIncome >= 0 ? 'text-teal-300' : 'text-rose-300'}`}>{fmtCompactUSD(totals.netIncome)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Assets</div>
+            <div className="text-sm font-semibold text-cyan-300">{fmtCompactUSD(totals.assets)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Headcount</div>
+            <div className="text-sm font-semibold text-violet-300">{totals.headcount.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[560px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Entity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Country</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Own %</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Incorp.</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Revenue</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Net Income</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Assets</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Equity</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">HC</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Segment</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((e, i) => {
+                const country = getCountry(e.countryCode);
+                return (
+                  <motion.tr
+                    key={e.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    onClick={() => setSelected(e)}
+                    className="cursor-pointer border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08] bg-black/30 text-sm">
+                          {country?.flag ?? '🏳️'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-zinc-100">{e.name}</div>
+                          <div className="text-[9px] text-zinc-500">{e.entity} · {e.taxId}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{e.countryCode}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-semibold text-emerald-300">{e.ownership}%</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{e.incorporationDate}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-emerald-300">{fmtCompactUSD(e.revenue)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono text-[11px] ${e.netIncome >= 0 ? 'text-teal-300' : 'text-rose-300'}`}>
+                        {fmtCompactUSD(e.netIncome)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-zinc-300">{fmtCompactUSD(e.assets)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-cyan-300">{fmtCompactUSD(e.equity)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-violet-300">{e.headcount}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-300">
+                        {e.segment}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+
+      {/* Entity detail dialog */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="max-w-2xl border-white/[0.08] bg-zinc-950/95 backdrop-blur-xl text-zinc-100">
+          <AnimatePresence>
+            {selected && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <DialogHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-white/[0.08] bg-black/30 text-2xl">
+                      {getCountry(selected.countryCode)?.flag ?? '🏳️'}
+                    </div>
+                    <div>
+                      <DialogTitle className="text-lg text-zinc-50 flex items-center gap-2">
+                        {selected.name}
+                        <Badge variant="outline" className={`text-[9px] uppercase ${ENTITY_STATUS_BADGE[selected.status]}`}>
+                          {selected.status}
+                        </Badge>
+                      </DialogTitle>
+                      <DialogDescription className="text-[11px] text-zinc-500">
+                        {selected.entity} · {selected.countryCode} · {selected.currency} · {selected.segment}
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <RuleTile icon={Percent} label="Ownership" value={`${selected.ownership}%`} accent="emerald" />
+                    <RuleTile icon={Calendar} label="Incorporated" value={selected.incorporationDate} accent="teal" />
+                    <RuleTile icon={Users} label="Headcount" value={selected.headcount.toLocaleString()} accent="cyan" />
+                    <RuleTile icon={FileCheck} label="Tax ID" value={selected.taxId} accent="violet" />
+                  </div>
+
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-emerald-300 mb-2">Full Financial Snapshot (USD)</div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <FinCell label="Revenue" value={fmtUSD(selected.revenue)} color="text-emerald-300" />
+                      <FinCell label="Expenses" value={fmtUSD(selected.expenses)} color="text-zinc-300" />
+                      <FinCell label="Net Income" value={fmtUSD(selected.netIncome)} color={selected.netIncome >= 0 ? 'text-teal-300' : 'text-rose-300'} />
+                      <FinCell label="Assets" value={fmtUSD(selected.assets)} color="text-cyan-300" />
+                      <FinCell label="Liabilities" value={fmtUSD(selected.liabilities)} color="text-amber-300" />
+                      <FinCell label="Equity" value={fmtUSD(selected.equity)} color="text-violet-300" />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">Balance Sheet Structure</div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-400">Liabilities / Assets</span>
+                          <span className="text-zinc-300">{((selected.liabilities / selected.assets) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(selected.liabilities / selected.assets) * 100}%` }}
+                            transition={{ duration: 0.5 }}
+                            className="h-full bg-amber-400"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-400">Equity / Assets</span>
+                          <span className="text-zinc-300">{((selected.equity / selected.assets) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(selected.equity / selected.assets) * 100}%` }}
+                            transition={{ duration: 0.5, delay: 0.1 }}
+                            className="h-full bg-emerald-400"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-400">Net Margin</span>
+                          <span className={selected.netIncome >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                            {selected.revenue > 0 ? `${((selected.netIncome / selected.revenue) * 100).toFixed(1)}%` : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(Math.abs((selected.netIncome / Math.max(selected.revenue, 1)) * 100), 100)}%` }}
+                            transition={{ duration: 0.5, delay: 0.2 }}
+                            className={`h-full ${selected.netIncome >= 0 ? 'bg-teal-400' : 'bg-rose-400'}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelected(null)}
+                    className="border-white/10 bg-white/[0.02] text-zinc-300 hover:text-white hover:bg-white/[0.05]"
+                  >
+                    Close
+                  </Button>
+                  <Button size="sm" className="bg-emerald-500 text-emerald-950 hover:bg-emerald-400">
+                    <PieChart className="mr-1.5 h-3.5 w-3.5" /> Open Entity Ledger
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE SECTIONS — Transfer Pricing Matrix
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TP_RISK_STYLE: Record<TransferPricingTxn['riskLevel'], { ring: string; text: string; dot: string; label: string }> = {
+  low: { ring: 'border-emerald-500/30 bg-emerald-500/10', text: 'text-emerald-300', dot: 'bg-emerald-400', label: 'Low' },
+  medium: { ring: 'border-amber-500/30 bg-amber-500/10', text: 'text-amber-300', dot: 'bg-amber-400', label: 'Medium' },
+  high: { ring: 'border-rose-500/30 bg-rose-500/10', text: 'text-rose-300', dot: 'bg-rose-400', label: 'High' },
+};
+
+const TP_DOC_STYLE: Record<TransferPricingTxn['documentation'], string> = {
+  Current: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Expiring: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  Overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+const TP_METHOD_COLOR: Record<TransferPricingTxn['method'], string> = {
+  CUP: 'text-emerald-300',
+  'Resale Price': 'text-teal-300',
+  'Cost Plus': 'text-cyan-300',
+  TNMM: 'text-violet-300',
+  'Profit Split': 'text-amber-300',
+};
+
+function TransferPricingMatrix() {
+  const [riskFilter, setRiskFilter] = useState<'ALL' | TransferPricingTxn['riskLevel']>('ALL');
+
+  const filtered = useMemo(
+    () => (riskFilter === 'ALL' ? TRANSFER_PRICING : TRANSFER_PRICING.filter((t) => t.riskLevel === riskFilter)),
+    [riskFilter],
+  );
+
+  const totalUSD = TRANSFER_PRICING.reduce((s, t) => s + t.amountUSD, 0);
+  const highRisk = TRANSFER_PRICING.filter((t) => t.riskLevel === 'high').length;
+  const overdue = TRANSFER_PRICING.filter((t) => t.documentation === 'Overdue').length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shuffle className="h-4 w-4 text-teal-400" />
+              Transfer Pricing Matrix
+              <Badge variant="outline" className="text-[9px] border-teal-500/30 bg-teal-500/10 text-teal-300">
+                {TRANSFER_PRICING.length} transactions
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Inter-company transactions with arm&apos;s length analysis, OECD methods, documentation status &amp; risk scoring.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(['ALL', 'low', 'medium', 'high'] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRiskFilter(r)}
+                className={`rounded-md border px-2 py-1 text-[10px] uppercase tracking-wider transition-colors ${
+                  riskFilter === r
+                    ? 'border-white/20 bg-white/[0.06] text-zinc-100'
+                    : 'border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {r === 'ALL' ? 'All' : r}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Risk summary */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Volume</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalUSD)}</div>
+          </div>
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">High Risk</div>
+            <div className="text-sm font-semibold text-rose-300">{highRisk} txns</div>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Overdue Docs</div>
+            <div className="text-sm font-semibold text-amber-300">{overdue}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Methods</div>
+            <div className="text-sm font-semibold text-violet-300">{new Set(TRANSFER_PRICING.map((t) => t.method)).size}</div>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[560px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">From → To</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Type</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Amount (USD)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Method</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Markup</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Arm&apos;s Length</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Docs</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Risk</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((t, i) => {
+                const fromCountry = getCountry(t.fromCountry);
+                const toCountry = getCountry(t.toCountry);
+                const risk = TP_RISK_STYLE[t.riskLevel];
+                return (
+                  <motion.tr
+                    key={t.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className={`border-white/[0.04] hover:bg-white/[0.03] transition-colors ${t.riskLevel === 'high' ? 'bg-rose-500/[0.03]' : ''}`}
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{fromCountry?.flag}</span>
+                        <span className="text-[10px] font-mono text-zinc-500">{t.fromCountry}</span>
+                        <ArrowRight className="h-3 w-3 text-zinc-600" />
+                        <span className="text-base">{toCountry?.flag}</span>
+                        <span className="text-[10px] font-mono text-zinc-500">{t.toCountry}</span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-zinc-400 truncate max-w-[240px]">
+                        {t.fromEntity.split(' ').slice(0, 2).join(' ')} → {t.toEntity.split(' ').slice(0, 2).join(' ')}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-300">
+                        {t.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-emerald-300">{fmtUSD(t.amountUSD)}</span>
+                      <div className="text-[9px] text-zinc-500">{t.currency} {t.amount.toLocaleString()}</div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-[10px] font-mono font-medium ${TP_METHOD_COLOR[t.method]}`}>{t.method}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[10px] text-zinc-300">
+                        {t.markupPct > 0 ? `${t.markupPct}%` : '—'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{t.armLengthRange}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${TP_DOC_STYLE[t.documentation]}`}>
+                        {t.documentation}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] uppercase ${risk.ring} ${risk.text}`}>
+                        <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${risk.dot}`} />
+                        {risk.label}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE SECTIONS — Intercompany Loans Ledger
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const LOAN_STATUS_BADGE: Record<IntercompanyLoan['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  repaid: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+  restructured: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function IntercompanyLoansLedger() {
+  const totalPrincipal = INTERCOMPANY_LOANS.reduce((s, l) => s + l.principalUSD, 0);
+  const totalOutstanding = INTERCOMPANY_LOANS.reduce((s, l) => s + l.outstanding, 0);
+  const totalInterestAnnual = INTERCOMPANY_LOANS.reduce((s, l) => s + (l.outstanding * l.interestRate / 100), 0);
+  const avgRate = INTERCOMPANY_LOANS.reduce((s, l) => s + l.interestRate, 0) / INTERCOMPANY_LOANS.length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HandCoins className="h-4 w-4 text-amber-400" />
+          Intercompany Loans Ledger
+          <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-300">
+            {INTERCOMPANY_LOANS.length} loans
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Treasury-funded inter-entity loans with interest rates, terms, outstanding balances &amp; payment schedule.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {/* Summary */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Total Principal</div>
+            <div className="text-sm font-semibold text-emerald-300">{fmtCompactUSD(totalPrincipal)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Outstanding</div>
+            <div className="text-sm font-semibold text-amber-300">{fmtCompactUSD(totalOutstanding)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Annual Interest</div>
+            <div className="text-sm font-semibold text-rose-300">{fmtCompactUSD(totalInterestAnnual)}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Avg Rate</div>
+            <div className="text-sm font-semibold text-violet-300">{fmtPct(avgRate)}</div>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[560px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Lender → Borrower</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Principal</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Term</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Outstanding</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Next Payment</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {INTERCOMPANY_LOANS.map((l, i) => {
+                const lenderCountry = getCountry(l.lenderCountry);
+                const borrowerCountry = getCountry(l.borrowerCountry);
+                const utilization = (l.outstanding / l.principalUSD) * 100;
+                return (
+                  <motion.tr
+                    key={l.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{lenderCountry?.flag}</span>
+                        <span className="text-[10px] font-mono text-zinc-500">{l.lenderCountry}</span>
+                        <ArrowRight className="h-3 w-3 text-zinc-600" />
+                        <span className="text-base">{borrowerCountry?.flag}</span>
+                        <span className="text-[10px] font-mono text-zinc-500">{l.borrowerCountry}</span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-zinc-400 truncate max-w-[280px]">
+                        {l.lender.split(' ').slice(0, 3).join(' ')} → {l.borrower.split(' ').slice(0, 3).join(' ')}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="font-mono text-[11px] text-emerald-300">{fmtCompactUSD(l.principalUSD)}</div>
+                      <div className="text-[9px] text-zinc-500">{l.currency}</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-[11px] text-violet-300">{fmtPct(l.interestRate)}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{l.term}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="font-mono text-[11px] text-amber-300">{fmtCompactUSD(l.outstanding)}</div>
+                      <div className="mt-1 h-1 w-16 ml-auto overflow-hidden rounded-full bg-white/5">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${utilization}%` }}
+                          transition={{ duration: 0.4, delay: i * 0.03 }}
+                          className="h-full bg-amber-400"
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-400">{l.nextPayment}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] uppercase ${LOAN_STATUS_BADGE[l.status]}`}>
+                        {l.status}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE SECTIONS — Trade Treaties & DTAA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TREATY_TYPE_STYLE: Record<TradeTreaty['type'], { ring: string; text: string; icon: LucideIcon }> = {
+  DTAA: { ring: 'border-emerald-500/30 bg-emerald-500/10', text: 'text-emerald-300', icon: ScrollText },
+  FTA: { ring: 'border-teal-500/30 bg-teal-500/10', text: 'text-teal-300', icon: ArrowLeftRight },
+  PTA: { ring: 'border-cyan-500/30 bg-cyan-500/10', text: 'text-cyan-300', icon: HandCoins },
+  Investment: { ring: 'border-violet-500/30 bg-violet-500/10', text: 'text-violet-300', icon: Briefcase },
+};
+
+const TREATY_STATUS_BADGE: Record<TradeTreaty['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  'under-review': 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  pending: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+};
+
+function TradeTreatiesTable() {
+  const [typeFilter, setTypeFilter] = useState<'ALL' | TradeTreaty['type']>('ALL');
+
+  const filtered = useMemo(
+    () => (typeFilter === 'ALL' ? TRADE_TREATIES : TRADE_TREATIES.filter((t) => t.type === typeFilter)),
+    [typeFilter],
+  );
+
+  const activeCount = TRADE_TREATIES.filter((t) => t.status === 'active').length;
+  const zeroWhCount = TRADE_TREATIES.filter((t) => t.withholdingDividend === 0 && t.withholdingInterest === 0 && t.withholdingRoyalty === 0).length;
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Gavel className="h-4 w-4 text-violet-400" />
+              Trade Treaties &amp; DTAA
+              <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+                {TRADE_TREATIES.length} treaties
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Double taxation, free trade &amp; investment treaties — withholding rates, capital gains treatment &amp; PE thresholds.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(['ALL', 'DTAA', 'FTA', 'PTA', 'Investment'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={`rounded-md border px-2 py-1 text-[10px] uppercase tracking-wider transition-colors ${
+                  typeFilter === t
+                    ? 'border-white/20 bg-white/[0.06] text-zinc-100'
+                    : 'border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {t === 'ALL' ? 'All' : t}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Summary */}
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Active Treaties</div>
+            <div className="text-sm font-semibold text-emerald-300">{activeCount}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Treaty Types</div>
+            <div className="text-sm font-semibold text-teal-300">{new Set(TRADE_TREATIES.map((t) => t.type)).size}</div>
+          </div>
+          <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.05] p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Zero-WHT Treaties</div>
+            <div className="text-sm font-semibold text-teal-300">{zeroWhCount}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-zinc-500">Under Review</div>
+            <div className="text-sm font-semibold text-amber-300">{TRADE_TREATIES.filter((t) => t.status === 'under-review').length}</div>
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[560px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Treaty</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Type</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Countries</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Div WHT</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Int WHT</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Roy WHT</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Cap Gains</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">PE Threshold</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((t, i) => {
+                const typeStyle = TREATY_TYPE_STYLE[t.type];
+                const TypeIcon = typeStyle.icon;
+                const isZero = t.withholdingDividend === 0 && t.withholdingInterest === 0 && t.withholdingRoyalty === 0;
+                return (
+                  <motion.tr
+                    key={t.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className={`border-white/[0.04] hover:bg-white/[0.03] transition-colors ${isZero ? 'bg-emerald-500/[0.03]' : ''}`}
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="text-xs font-medium text-zinc-100">{t.name}</div>
+                      <div className="text-[9px] text-zinc-500">Effective: {t.effectiveDate}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] uppercase ${typeStyle.ring} ${typeStyle.text}`}>
+                        <TypeIcon className="mr-1 h-2.5 w-2.5" /> {t.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {t.countries.map((cc) => (
+                          <span key={cc} className="inline-flex items-center gap-0.5 rounded border border-white/[0.08] bg-black/20 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                            <span>{getCountry(cc)?.flag ?? '🏳️'}</span>
+                            <span className="font-mono">{cc}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono text-[11px] ${t.withholdingDividend === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {t.withholdingDividend}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono text-[11px] ${t.withholdingInterest === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {t.withholdingInterest}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono text-[11px] ${t.withholdingRoyalty === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {t.withholdingRoyalty}%
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[10px] text-zinc-400">{t.capitalGains}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-[10px] text-zinc-300">{t.permanentEstablishment}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] uppercase ${TREATY_STATUS_BADGE[t.status]}`}>
+                        {t.status}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 export default function MultiCountryAccounting() {
   const [filter, setFilter] = useState<'ALL' | CountryCode>('ALL');
   const [selected, setSelected] = useState<Country | null>(null);
-  const [sectionTab, setSectionTab] = useState<'matrix' | 'calendar' | 'positions' | 'dtaa' | 'regulatory'>('matrix');
+  const [sectionTab, setSectionTab] = useState<'matrix' | 'calendar' | 'positions' | 'dtaa' | 'regulatory' | 'entities' | 'tp' | 'loans' | 'treaties'>('matrix');
 
   const filtered = useMemo(
     () => (filter === 'ALL' ? COUNTRIES : COUNTRIES.filter((c) => c.code === filter)),
@@ -1188,6 +1952,18 @@ export default function MultiCountryAccounting() {
                   <TabsTrigger value="regulatory" className="text-[11px]">
                     <AlertTriangle className="mr-1 h-3 w-3" /> Regulatory
                   </TabsTrigger>
+                  <TabsTrigger value="entities" className="text-[11px]">
+                    <Briefcase className="mr-1 h-3 w-3" /> Entities
+                  </TabsTrigger>
+                  <TabsTrigger value="tp" className="text-[11px]">
+                    <Shuffle className="mr-1 h-3 w-3" /> Transfer Pricing
+                  </TabsTrigger>
+                  <TabsTrigger value="loans" className="text-[11px]">
+                    <HandCoins className="mr-1 h-3 w-3" /> IC Loans
+                  </TabsTrigger>
+                  <TabsTrigger value="treaties" className="text-[11px]">
+                    <Gavel className="mr-1 h-3 w-3" /> Treaties
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1206,6 +1982,18 @@ export default function MultiCountryAccounting() {
               <TabsContent value="regulatory" className="mt-0">
                 <RegulatoryChanges />
               </TabsContent>
+              <TabsContent value="entities" className="mt-0">
+                <EntitiesRegistry />
+              </TabsContent>
+              <TabsContent value="tp" className="mt-0">
+                <TransferPricingMatrix />
+              </TabsContent>
+              <TabsContent value="loans" className="mt-0">
+                <IntercompanyLoansLedger />
+              </TabsContent>
+              <TabsContent value="treaties" className="mt-0">
+                <TradeTreatiesTable />
+              </TabsContent>
             </Tabs>
           </TooltipProvider>
         </section>
@@ -1214,7 +2002,7 @@ export default function MultiCountryAccounting() {
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 border-t border-white/[0.06] pt-4 text-[10px] text-zinc-500 sm:flex-row">
           <div className="flex items-center gap-2">
             <Gauge className="h-3 w-3 text-emerald-400" />
-            Multi-Country Accounting™ · Phase 14 · {COUNTRIES.length} jurisdictions · {FILING_DEADLINES.length} filings · {DTAA_MATRIX.length} DTAA pairs
+            Multi-Country Accounting™ · Phase 14 · {COUNTRIES.length} jurisdictions · {FILING_DEADLINES.length} filings · {DTAA_MATRIX.length} DTAA pairs · {INTERNATIONAL_ENTITIES.length} entities · {TRADE_TREATIES.length} treaties
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="h-3 w-3 text-teal-400" /> Founder &amp; Owner: Prince Singh

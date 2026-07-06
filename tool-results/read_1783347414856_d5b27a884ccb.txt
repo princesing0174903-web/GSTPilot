@@ -1,0 +1,302 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT INFINITY™ — PHASE 14: ENTERPRISE DATA EXPANSION (Billion-Dollar Tier)
+     3→//
+     4→// Supplementary enterprise-grade data layer for Global Expansion modules.
+     5→// Adds: international entities, transfer pricing, global payroll, FX hedging,
+     6→// audit trail, country risk, intercompany loans, trade treaties, customs,
+     7→// consolidated financials, global AR/AP, tax credits, insurance, ESG, cash
+     8→// pooling, board governance, revenue breakdown, FX forward curve, SLA monitoring.
+     9→//
+    10→// NO API calls. NO Math.random. Deterministic & typed.
+    11→// ═══════════════════════════════════════════════════════════════════════════════
+    12→
+    13→import type { CountryCode } from './data';
+    14→
+    15→// ─── International Entities (Subsidiaries) ─────────────────────────────────────
+    16→
+    17→export interface InternationalEntity {
+    18→  id: string;
+    19→  name: string;
+    20→  countryCode: CountryCode;
+    21→  entity: string;          // Pte Ltd / LLC / GmbH / Ltd / SARL / KK
+    22→  ownership: number;       // %
+    23→  incorporationDate: string;
+    24→  taxId: string;
+    25→  revenue: number;         // USD
+    26→  expenses: number;        // USD
+    27→  netIncome: number;       // USD
+    28→  assets: number;          // USD
+    29→  liabilities: number;     // USD
+    30→  equity: number;          // USD
+    31→  headcount: number;
+    32→  currency: string;
+    33→  status: 'active' | 'dormant' | 'pending';
+    34→  segment: string;
+    35→}
+    36→
+    37→export const INTERNATIONAL_ENTITIES: InternationalEntity[] = [
+    38→  { id: 'ent-in-1', name: 'GSTPilot India Pvt Ltd', countryCode: 'IN', entity: 'Pvt Ltd', ownership: 100, incorporationDate: '2019-03-15', taxId: 'GSTIN-27ABCDE1234F1Z5', revenue: 2840000, expenses: 1980000, netIncome: 860000, assets: 4200000, liabilities: 1680000, equity: 2520000, headcount: 342, currency: 'INR', status: 'active', segment: 'Core SaaS' },
+    39→  { id: 'ent-in-2', name: 'GSTPilot R&D India Pvt Ltd', countryCode: 'IN', entity: 'Pvt Ltd', ownership: 100, incorporationDate: '2021-07-01', taxId: 'GSTIN-27FGHIJ5678K1Z2', revenue: 0, expenses: 420000, netIncome: -420000, assets: 180000, liabilities: 60000, equity: 120000, headcount: 86, currency: 'INR', status: 'active', segment: 'R&D' },
+    40→  { id: 'ent-us-1', name: 'GSTPilot Inc (Delaware)', countryCode: 'US', entity: 'LLC', ownership: 100, incorporationDate: '2020-01-20', taxId: 'EIN 88-1234567', revenue: 1240000, expenses: 892000, netIncome: 348000, assets: 2100000, liabilities: 740000, equity: 1360000, headcount: 128, currency: 'USD', status: 'active', segment: 'Core SaaS' },
+    41→  { id: 'ent-us-2', name: 'GSTPilot Payments LLC', countryCode: 'US', entity: 'LLC', ownership: 100, incorporationDate: '2022-09-14', taxId: 'EIN 88-7654321', revenue: 380000, expenses: 240000, netIncome: 140000, assets: 680000, liabilities: 220000, equity: 460000, headcount: 34, currency: 'USD', status: 'active', segment: 'Payments' },
+    42→  { id: 'ent-gb-1', name: 'GSTPilot UK Ltd', countryCode: 'GB', entity: 'Ltd', ownership: 100, incorporationDate: '2020-06-12', taxId: 'CRN 12894756', revenue: 480000, expenses: 356000, netIncome: 124000, assets: 920000, liabilities: 340000, equity: 580000, headcount: 64, currency: 'GBP', status: 'active', segment: 'Core SaaS' },
+    43→  { id: 'ent-sg-1', name: 'GSTPilot Asia Pte Ltd', countryCode: 'SG', entity: 'Pte Ltd', ownership: 100, incorporationDate: '2021-02-08', taxId: 'UEN 202103847K', revenue: 610000, expenses: 427000, netIncome: 183000, assets: 1180000, liabilities: 380000, equity: 800000, headcount: 92, currency: 'SGD', status: 'active', segment: 'APAC HQ' },
+    44→  { id: 'ent-ae-1', name: 'GSTPilot FZ-LLC', countryCode: 'AE', entity: 'FZ-LLC', ownership: 100, incorporationDate: '2022-03-01', taxId: 'TRN 100123456700003', revenue: 520000, expenses: 364000, netIncome: 156000, assets: 840000, liabilities: 260000, equity: 580000, headcount: 48, currency: 'AED', status: 'active', segment: 'MENA HQ' },
+    45→  { id: 'ent-de-1', name: 'GSTPilot GmbH', countryCode: 'DE', entity: 'GmbH', ownership: 100, incorporationDate: '2021-11-15', taxId: 'HRB 156842 B', revenue: 720000, expenses: 548000, netIncome: 172000, assets: 1340000, liabilities: 520000, equity: 820000, headcount: 76, currency: 'EUR', status: 'active', segment: 'EU HQ' },
+    46→  { id: 'ent-fr-1', name: 'GSTPilot SARL', countryCode: 'FR', entity: 'SARL', ownership: 100, incorporationDate: '2022-05-20', taxId: 'SIRET 89342156700018', revenue: 540000, expenses: 412000, netIncome: 128000, assets: 680000, liabilities: 280000, equity: 400000, headcount: 52, currency: 'EUR', status: 'active', segment: 'EU Sales' },
+    47→  { id: 'ent-au-1', name: 'GSTPilot Pty Ltd', countryCode: 'AU', entity: 'Pty Ltd', ownership: 100, incorporationDate: '2021-09-10', taxId: 'ACN 654321987', revenue: 380000, expenses: 274000, netIncome: 106000, assets: 540000, liabilities: 180000, equity: 360000, headcount: 38, currency: 'AUD', status: 'active', segment: 'ANZ Sales' },
+    48→  { id: 'ent-ca-1', name: 'GSTPilot Canada Inc', countryCode: 'CA', entity: 'Inc', ownership: 100, incorporationDate: '2022-01-18', taxId: 'BN 876543210 RC0001', revenue: 640000, expenses: 458000, netIncome: 182000, assets: 720000, liabilities: 240000, equity: 480000, headcount: 44, currency: 'CAD', status: 'active', segment: 'NA Sales' },
+    49→  { id: 'ent-jp-1', name: 'GSTPilot K.K.', countryCode: 'JP', entity: 'K.K.', ownership: 100, incorporationDate: '2023-04-03', taxId: '法人番号 8-1234-5678901', revenue: 680000, expenses: 480000, netIncome: 200000, assets: 860000, liabilities: 320000, equity: 540000, headcount: 36, currency: 'JPY', status: 'active', segment: 'JP Sales' },
+    50→  { id: 'ent-in-3', name: 'GSTPilot Infrastructure India', countryCode: 'IN', entity: 'Pvt Ltd', ownership: 100, incorporationDate: '2023-06-01', taxId: 'GSTIN-27KLMNOP9012Q1Z8', revenue: 0, expenses: 180000, netIncome: -180000, assets: 320000, liabilities: 80000, equity: 240000, headcount: 24, currency: 'INR', status: 'active', segment: 'Infrastructure' },
+    51→  { id: 'ent-sg-2', name: 'GSTPilot Treasury Pte Ltd', countryCode: 'SG', entity: 'Pte Ltd', ownership: 100, incorporationDate: '2023-08-15', taxId: 'UEN 202318923H', revenue: 24000, expenses: 86000, netIncome: -62000, assets: 2400000, liabilities: 1800000, equity: 600000, headcount: 8, currency: 'SGD', status: 'active', segment: 'Treasury' },
+    52→  { id: 'ent-us-3', name: 'GSTPilot AI Labs Inc', countryCode: 'US', entity: 'Inc', ownership: 100, incorporationDate: '2023-10-01', taxId: 'EIN 88-9876543', revenue: 0, expenses: 320000, netIncome: -320000, assets: 140000, liabilities: 40000, equity: 100000, headcount: 28, currency: 'USD', status: 'active', segment: 'AI Research' },
+    53→];
+    54→
+    55→// ─── Transfer Pricing ─────────────────────────────────────────────────────────
+    56→
+    57→export interface TransferPricingTxn {
+    58→  id: string;
+    59→  fromEntity: string;
+    60→  toEntity: string;
+    61→  fromCountry: CountryCode;
+    62→  toCountry: CountryCode;
+    63→  type: 'Royalty' | 'Service Fee' | 'Management Fee' | 'Intercompany Sale' | 'Cost Share' | 'Loan Interest';
+    64→  amount: number;
+    65→  currency: string;
+    66→  amountUSD: number;
+    67→  method: 'CUP' | 'Resale Price' | 'Cost Plus' | 'TNMM' | 'Profit Split';
+    68→  markupPct: number;
+    69→  armLengthRange: string;
+    70→  documentation: 'Current' | 'Expiring' | 'Overdue';
+    71→  riskLevel: 'low' | 'medium' | 'high';
+    72→}
+    73→
+    74→export const TRANSFER_PRICING: TransferPricingTxn[] = [
+    75→  { id: 'tp-1', fromEntity: 'GSTPilot India Pvt Ltd', toEntity: 'GSTPilot Inc (Delaware)', fromCountry: 'IN', toCountry: 'US', type: 'Royalty', amount: 18000000, currency: 'INR', amountUSD: 216000, method: 'CUP', markupPct: 0, armLengthRange: '$200K–$240K', documentation: 'Current', riskLevel: 'low' },
+    76→  { id: 'tp-2', fromEntity: 'GSTPilot Inc (Delaware)', toEntity: 'GSTPilot India Pvt Ltd', fromCountry: 'US', toCountry: 'IN', type: 'Service Fee', amount: 340000, currency: 'USD', amountUSD: 340000, method: 'Cost Plus', markupPct: 12, armLengthRange: '$320K–$360K', documentation: 'Current', riskLevel: 'low' },
+    77→  { id: 'tp-3', fromEntity: 'GSTPilot Asia Pte Ltd', toEntity: 'GSTPilot India Pvt Ltd', fromCountry: 'SG', toCountry: 'IN', type: 'Management Fee', amount: 420000, currency: 'SGD', amountUSD: 311000, method: 'TNMM', markupPct: 8, armLengthRange: '$290K–$330K', documentation: 'Current', riskLevel: 'medium' },
+    78→  { id: 'tp-4', fromEntity: 'GSTPilot GmbH', toEntity: 'GSTPilot SARL', fromCountry: 'DE', toCountry: 'FR', type: 'Intercompany Sale', amount: 280000, currency: 'EUR', amountUSD: 302000, method: 'Resale Price', markupPct: 15, armLengthRange: '$285K–$320K', documentation: 'Current', riskLevel: 'low' },
+    79→  { id: 'tp-5', fromEntity: 'GSTPilot R&D India Pvt Ltd', toEntity: 'GSTPilot Inc (Delaware)', fromCountry: 'IN', toCountry: 'US', type: 'Cost Share', amount: 12000000, currency: 'INR', amountUSD: 144000, method: 'Profit Split', markupPct: 0, armLengthRange: '$130K–$160K', documentation: 'Expiring', riskLevel: 'medium' },
+    80→  { id: 'tp-6', fromEntity: 'GSTPilot FZ-LLC', toEntity: 'GSTPilot Asia Pte Ltd', fromCountry: 'AE', toCountry: 'SG', type: 'Service Fee', amount: 680000, currency: 'AED', amountUSD: 184000, method: 'Cost Plus', markupPct: 10, armLengthRange: '$170K–$200K', documentation: 'Current', riskLevel: 'low' },
+    81→  { id: 'tp-7', fromEntity: 'GSTPilot UK Ltd', toEntity: 'GSTPilot India Pvt Ltd', fromCountry: 'GB', toCountry: 'IN', type: 'Intercompany Sale', amount: 240000, currency: 'GBP', amountUSD: 305000, method: 'CUP', markupPct: 0, armLengthRange: '$290K–$320K', documentation: 'Current', riskLevel: 'low' },
+    82→  { id: 'tp-8', fromEntity: 'GSTPilot K.K.', toEntity: 'GSTPilot Asia Pte Ltd', fromCountry: 'JP', toCountry: 'SG', type: 'Management Fee', amount: 18000000, currency: 'JPY', amountUSD: 121000, method: 'TNMM', markupPct: 7, armLengthRange: '$110K–$135K', documentation: 'Overdue', riskLevel: 'high' },
+    83→  { id: 'tp-9', fromEntity: 'GSTPilot Pty Ltd', toEntity: 'GSTPilot Asia Pte Ltd', fromCountry: 'AU', toCountry: 'SG', type: 'Service Fee', amount: 280000, currency: 'AUD', amountUSD: 185000, method: 'Cost Plus', markupPct: 11, armLengthRange: '$175K–$195K', documentation: 'Current', riskLevel: 'low' },
+    84→  { id: 'tp-10', fromEntity: 'GSTPilot Canada Inc', toEntity: 'GSTPilot Inc (Delaware)', fromCountry: 'CA', toCountry: 'US', type: 'Intercompany Sale', amount: 540000, currency: 'CAD', amountUSD: 394000, method: 'Resale Price', markupPct: 14, armLengthRange: '$375K–$415K', documentation: 'Current', riskLevel: 'low' },
+    85→  { id: 'tp-11', fromEntity: 'GSTPilot Treasury Pte Ltd', toEntity: 'GSTPilot FZ-LLC', fromCountry: 'SG', toCountry: 'AE', type: 'Loan Interest', amount: 96000, currency: 'SGD', amountUSD: 71000, method: 'CUP', markupPct: 0, armLengthRange: '$65K–$78K', documentation: 'Current', riskLevel: 'low' },
+    86→  { id: 'tp-12', fromEntity: 'GSTPilot AI Labs Inc', toEntity: 'GSTPilot R&D India Pvt Ltd', fromCountry: 'US', toCountry: 'IN', type: 'Cost Share', amount: 220000, currency: 'USD', amountUSD: 220000, method: 'Profit Split', markupPct: 0, armLengthRange: '$200K–$250K', documentation: 'Expiring', riskLevel: 'medium' },
+    87→];
+    88→
+    89→// ─── Global Payroll ───────────────────────────────────────────────────────────
+    90→
+    91→export interface GlobalPayrollEntry {
+    92→  countryCode: CountryCode;
+    93→  entity: string;
+    94→  headcount: number;
+    95→  grossPayroll: number;      // local currency / month
+    96→  currency: string;
+    97→  grossPayrollUSD: number;
+    98→  employerTax: number;       // USD
+    99→  employeeTax: number;       // USD
+   100→  netPayroll: number;        // USD
+   101→  avgSalary: number;         // USD
+   102→  payDate: string;
+   103→  status: 'processed' | 'pending' | 'review';
+   104→}
+   105→
+   106→export const GLOBAL_PAYROLL: GlobalPayrollEntry[] = [
+   107→  { countryCode: 'IN', entity: 'GSTPilot India Pvt Ltd', headcount: 342, grossPayroll: 42800000, currency: 'INR', grossPayrollUSD: 514000, employerTax: 61700, employeeTax: 56540, netPayroll: 395760, avgSalary: 1502, payDate: '2024-09-30', status: 'processed' },
+   108→  { countryCode: 'IN', entity: 'GSTPilot R&D India Pvt Ltd', headcount: 86, grossPayroll: 12800000, currency: 'INR', grossPayrollUSD: 154000, employerTax: 18480, employeeTax: 16940, netPayroll: 118580, avgSalary: 1791, payDate: '2024-09-30', status: 'processed' },
+   109→  { countryCode: 'US', entity: 'GSTPilot Inc (Delaware)', headcount: 128, grossPayroll: 840000, currency: 'USD', grossPayrollUSD: 840000, employerTax: 128520, employeeTax: 161280, netPayroll: 550200, avgSalary: 6563, payDate: '2024-09-30', status: 'processed' },
+   110→  { countryCode: 'US', entity: 'GSTPilot Payments LLC', headcount: 34, grossPayroll: 248000, currency: 'USD', grossPayrollUSD: 248000, employerTax: 37940, employeeTax: 47620, netPayroll: 162440, avgSalary: 7294, payDate: '2024-09-30', status: 'processed' },
+   111→  { countryCode: 'US', entity: 'GSTPilot AI Labs Inc', headcount: 28, grossPayroll: 320000, currency: 'USD', grossPayrollUSD: 320000, employerTax: 48960, employeeTax: 61440, netPayroll: 209600, avgSalary: 11429, payDate: '2024-09-30', status: 'pending' },
+   112→  { countryCode: 'GB', entity: 'GSTPilot UK Ltd', headcount: 64, grossPayroll: 320000, currency: 'GBP', grossPayrollUSD: 406000, employerTax: 56030, employeeTax: 91400, netPayroll: 258570, avgSalary: 6344, payDate: '2024-09-28', status: 'processed' },
+   113→  { countryCode: 'SG', entity: 'GSTPilot Asia Pte Ltd', headcount: 92, grossPayroll: 680000, currency: 'SGD', grossPayrollUSD: 503000, employerTax: 85510, employeeTax: 50300, netPayroll: 367190, avgSalary: 5467, payDate: '2024-09-25', status: 'processed' },
+   114→  { countryCode: 'AE', entity: 'GSTPilot FZ-LLC', headcount: 48, grossPayroll: 720000, currency: 'AED', grossPayrollUSD: 194000, employerTax: 0, employeeTax: 0, netPayroll: 194000, avgSalary: 4042, payDate: '2024-09-28', status: 'processed' },
+   115→  { countryCode: 'DE', entity: 'GSTPilot GmbH', headcount: 76, grossPayroll: 560000, currency: 'EUR', grossPayrollUSD: 605000, employerTax: 119200, employeeTax: 152460, netPayroll: 333340, avgSalary: 7961, payDate: '2024-09-28', status: 'processed' },
+   116→  { countryCode: 'FR', entity: 'GSTPilot SARL', headcount: 52, grossPayroll: 340000, currency: 'EUR', grossPayrollUSD: 367000, employerTax: 80740, employeeTax: 102760, netPayroll: 183500, avgSalary: 7058, payDate: '2024-09-28', status: 'review' },
+   117→  { countryCode: 'AU', entity: 'GSTPilot Pty Ltd', headcount: 38, grossPayroll: 340000, currency: 'AUD', grossPayrollUSD: 224000, employerTax: 24640, employeeTax: 47490, netPayroll: 151870, avgSalary: 5895, payDate: '2024-09-26', status: 'processed' },
+   118→  { countryCode: 'CA', entity: 'GSTPilot Canada Inc', headcount: 44, grossPayroll: 380000, currency: 'CAD', grossPayrollUSD: 277000, employerTax: 39330, employeeTax: 55400, netPayroll: 182270, avgSalary: 6295, payDate: '2024-09-28', status: 'processed' },
+   119→  { countryCode: 'JP', entity: 'GSTPilot K.K.', headcount: 36, grossPayroll: 58000000, currency: 'JPY', grossPayrollUSD: 389000, employerTax: 63800, employeeTax: 54460, netPayroll: 270740, avgSalary: 10806, payDate: '2024-09-25', status: 'processed' },
+   120→  { countryCode: 'IN', entity: 'GSTPilot Infrastructure India', headcount: 24, grossPayroll: 2800000, currency: 'INR', grossPayrollUSD: 33600, employerTax: 4030, employeeTax: 3700, netPayroll: 25870, avgSalary: 1400, payDate: '2024-09-30', status: 'processed' },
+   121→  { countryCode: 'SG', entity: 'GSTPilot Treasury Pte Ltd', headcount: 8, grossPayroll: 96000, currency: 'SGD', grossPayrollUSD: 71000, employerTax: 12070, employeeTax: 7100, netPayroll: 51830, avgSalary: 8875, payDate: '2024-09-25', status: 'processed' },
+   122→];
+   123→
+   124→// ─── FX Hedging ───────────────────────────────────────────────────────────────
+   125→
+   126→export interface FXHedge {
+   127→  id: string;
+   128→  instrument: 'Forward' | 'Option' | 'NDF' | 'Cross-Currency Swap';
+   129→  pair: string;
+   130→  direction: 'Buy' | 'Sell';
+   131→  notional: number;
+   132→  notionalUSD: number;
+   133→  rate: number;
+   134→  maturity: string;
+   135→  premium: number;
+   136→  status: 'active' | 'matured' | 'pending';
+   137→  hedgeRatio: number;
+   138→  effectiveness: number;
+   139→  counterparty: string;
+   140→}
+   141→
+   142→export const FX_HEDGES: FXHedge[] = [
+   143→  { id: 'fxh-1', instrument: 'Forward', pair: 'EUR/USD', direction: 'Sell', notional: 480000, notionalUSD: 518400, rate: 1.0850, maturity: '2025-03-31', premium: 0, status: 'active', hedgeRatio: 72, effectiveness: 98.4, counterparty: 'HSBC' },
+   144→  { id: 'fxh-2', instrument: 'Forward', pair: 'GBP/USD', direction: 'Sell', notional: 320000, notionalUSD: 406400, rate: 1.2700, maturity: '2024-12-31', premium: 0, status: 'active', hedgeRatio: 68, effectiveness: 96.8, counterparty: 'Citibank' },
+   145→  { id: 'fxh-3', instrument: 'Option', pair: 'JPY/USD', direction: 'Buy', notional: 14200000, notionalUSD: 95140, rate: 0.0067, maturity: '2025-06-30', premium: 2840, status: 'active', hedgeRatio: 55, effectiveness: 91.2, counterparty: 'MUFG' },
+   146→  { id: 'fxh-4', instrument: 'Forward', pair: 'AUD/USD', direction: 'Sell', notional: 280000, notionalUSD: 184800, rate: 0.6600, maturity: '2024-12-31', premium: 0, status: 'active', hedgeRatio: 60, effectiveness: 94.5, counterparty: 'HSBC' },
+   147→  { id: 'fxh-5', instrument: 'Forward', pair: 'SGD/USD', direction: 'Sell', notional: 540000, notionalUSD: 399600, rate: 0.7400, maturity: '2025-03-31', premium: 0, status: 'active', hedgeRatio: 65, effectiveness: 95.7, counterparty: 'DBS' },
+   148→  { id: 'fxh-6', instrument: 'NDF', pair: 'INR/USD', direction: 'Buy', notional: 28000000, notionalUSD: 336000, rate: 83.20, maturity: '2025-01-31', premium: 0, status: 'active', hedgeRatio: 48, effectiveness: 89.3, counterparty: 'HSBC' },
+   149→  { id: 'fxh-7', instrument: 'Option', pair: 'EUR/USD', direction: 'Buy', notional: 240000, notionalUSD: 259200, rate: 1.0900, maturity: '2025-09-30', premium: 4200, status: 'pending', hedgeRatio: 0, effectiveness: 0, counterparty: 'Deutsche Bank' },
+   150→  { id: 'fxh-8', instrument: 'Cross-Currency Swap', pair: 'USD/SGD', direction: 'Sell', notional: 1200000, notionalUSD: 1200000, rate: 0.7400, maturity: '2026-03-31', premium: 0, status: 'active', hedgeRatio: 82, effectiveness: 99.1, counterparty: 'HSBC' },
+   151→  { id: 'fxh-9', instrument: 'Forward', pair: 'CAD/USD', direction: 'Sell', notional: 420000, notionalUSD: 306600, rate: 0.7300, maturity: '2024-12-31', premium: 0, status: 'active', hedgeRatio: 58, effectiveness: 93.8, counterparty: 'RBC' },
+   152→  { id: 'fxh-10', instrument: 'Forward', pair: 'AED/USD', direction: 'Sell', notional: 680000, notionalUSD: 183600, rate: 0.2723, maturity: '2025-03-31', premium: 0, status: 'matured', hedgeRatio: 0, effectiveness: 97.2, counterparty: 'Emirates NBD' },
+   153→];
+   154→
+   155→// ─── Global Audit Trail ───────────────────────────────────────────────────────
+   156→
+   157→export interface AuditEntry {
+   158→  id: string;
+   159→  timestamp: string;
+   160→  actor: string;
+   161→  action: string;
+   162→  module: string;
+   163→  countryCode: CountryCode | 'GLOBAL';
+   164→  entityType: string;
+   165→  entityId: string;
+   166→  severity: 'info' | 'warning' | 'critical';
+   167→  ipAddress: string;
+   168→  detail: string;
+   169→}
+   170→
+   171→export const AUDIT_TRAIL: AuditEntry[] = [
+   172→  { id: 'aud-1', timestamp: '2024-10-04 14:32:18', actor: 'priya.sharma@gstpilot.in', action: 'APPROVE_CROSS_BORDER', module: 'Cross-Border Payments', countryCode: 'IN', entityType: 'Payment', entityId: 'cbp-3', severity: 'info', ipAddress: '103.21.244.18', detail: 'Approved JPY 14,200,000 outbound payment to Osaka Precision' },
+   173→  { id: 'aud-2', timestamp: '2024-10-04 13:18:42', actor: 'james.wilson@gstpilot.com', action: 'FILE_GST_RETURN', module: 'Compliance', countryCode: 'IN', entityType: 'Return', entityId: 'GSTR-3B-Sep-2024', severity: 'info', ipAddress: '49.36.82.104', detail: 'Filed GSTR-3B for September 2024 — tax liability ₹15.2Cr' },
+   174→  { id: 'aud-3', timestamp: '2024-10-04 11:45:09', actor: 'system', action: 'FX_RATE_UPDATE', module: 'Multi-Currency', countryCode: 'GLOBAL', entityType: 'Rate', entityId: 'EUR-USD-2024-10-04', severity: 'info', ipAddress: 'internal', detail: 'EUR/USD rate updated to 1.0850 (prev: 1.0836)' },
+   175→  { id: 'aud-4', timestamp: '2024-10-04 10:22:33', actor: 'marie.dupont@gstpilot.fr', action: 'CREATE_INVOICE', module: 'Invoicing', countryCode: 'FR', entityType: 'Invoice', entityId: 'INV-FR-2024-0892', severity: 'info', ipAddress: '82.64.32.18', detail: 'Created invoice €52,000 to Bayern GmbH' },
+   176→  { id: 'aud-5', timestamp: '2024-10-04 09:14:51', actor: 'system', action: 'COMPLIANCE_ALERT', module: 'Compliance', countryCode: 'CA', entityType: 'Framework', entityId: 'ca-gst-hst', severity: 'warning', ipAddress: 'internal', detail: 'Canada GST/HST filing window opens in 14 days — status: attention' },
+   177→  { id: 'aud-6', timestamp: '2024-10-03 18:42:07', actor: 'raj.kumar@gstpilot.in', action: 'TRANSFER_PRICING_REVIEW', module: 'Transfer Pricing', countryCode: 'IN', entityType: 'Transaction', entityId: 'tp-8', severity: 'warning', ipAddress: '103.21.244.18', detail: 'TP documentation for JP→SG management fee flagged as overdue' },
+   178→  { id: 'aud-7', timestamp: '2024-10-03 16:30:22', actor: 'sarah.chen@gstpilot.sg', action: 'APPROVE_HEDGE', module: 'FX Hedging', countryCode: 'SG', entityType: 'Hedge', entityId: 'fxh-1', severity: 'info', ipAddress: '119.73.144.82', detail: 'Approved EUR/USD forward €480K at 1.0850 maturing 2025-03-31' },
+   179→  { id: 'aud-8', timestamp: '2024-10-03 15:18:44', actor: 'david.mueller@gstpilot.de', action: 'VAT_OSS_FILING', module: 'Compliance', countryCode: 'DE', entityType: 'Return', entityId: 'OSS-Q3-2024', severity: 'info', ipAddress: '91.64.32.108', detail: 'Filed EU VAT OSS return for Q3 2024 — 14 member states' },
+   180→  { id: 'aud-9', timestamp: '2024-10-03 14:02:19', actor: 'system', action: 'FAILED_LOGIN_BLOCK', module: 'Security', countryCode: 'GLOBAL', entityType: 'Session', entityId: 'sess-8932', severity: 'critical', ipAddress: '185.220.101.42', detail: 'Blocked login attempt — 5 failed tries from TOR exit node' },
+   181→  { id: 'aud-10', timestamp: '2024-10-03 12:45:33', actor: 'yuki.tanaka@gstpilot.jp', action: 'CUSTOMS_DECLARATION', module: 'Trade', countryCode: 'JP', entityType: 'Customs', entityId: 'CUS-2024-0891', severity: 'info', ipAddress: '126.243.82.14', detail: 'Filed customs declaration for Osaka→Singapore shipment' },
+   182→  { id: 'aud-11', timestamp: '2024-10-03 11:20:08', actor: 'olivia.brown@gstpilot.au', action: 'PAYROLL_RUN', module: 'Payroll', countryCode: 'AU', entityType: 'Payroll', entityId: 'PAY-AU-Sep-2024', severity: 'info', ipAddress: '203.219.84.16', detail: 'Processed September payroll — 38 employees, AUD 340K gross' },
+   183→  { id: 'aud-12', timestamp: '2024-10-03 10:08:41', actor: 'system', action: 'BANK_RECONCILIATION', module: 'Banking', countryCode: 'IN', entityType: 'Reconciliation', entityId: 'RECON-IN-Sep-2024', severity: 'info', ipAddress: 'internal', detail: 'Auto-reconciled 2,847 transactions across 4 bank accounts' },
+   184→];
+   185→
+   186→// ─── Country Risk Assessment ──────────────────────────────────────────────────
+   187→
+   188→export interface CountryRisk {
+   189→  countryCode: CountryCode;
+   190→  politicalRisk: number;      // 0-100 (lower = better)
+   191→  economicRisk: number;
+   192→  currencyRisk: number;
+   193→  complianceRisk: number;
+   194→  operationalRisk: number;
+   195→  sovereignRating: string;    // S&P style
+   196→  currencyPeg: string;
+   197→  capitalControls: 'None' | 'Low' | 'Moderate' | 'High';
+   198→  sanctionsStatus: 'Clear' | 'Monitored' | 'Restricted';
+   199→  riskFactors: string[];
+   200→  mitigationActions: string[];
+   201→}
+   202→
+   203→export const COUNTRY_RISKS: CountryRisk[] = [
+   204→  { countryCode: 'IN', politicalRisk: 28, economicRisk: 32, currencyRisk: 38, complianceRisk: 22, operationalRisk: 26, sovereignRating: 'BBB-', currencyPeg: 'Float', capitalControls: 'Moderate', sanctionsStatus: 'Clear', riskFactors: ['INR volatility vs USD', 'GST rate changes', 'FEMA compliance'], mitigationActions: ['INR NDF hedge 48%', 'Automated GSTR filing', 'FEMA pre-approval for >$25K'] },
+   205→  { countryCode: 'US', politicalRisk: 18, economicRisk: 15, currencyRisk: 5, complianceRisk: 20, operationalRisk: 14, sovereignRating: 'AA+', currencyPeg: 'Reserve', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['State sales tax nexus complexity', 'SOX compliance', 'FATCA reporting'], mitigationActions: ['Economic nexus engine', 'SOX quarterly audit', 'FATCA auto-filing'] },
+   206→  { countryCode: 'GB', politicalRisk: 24, economicRisk: 22, currencyRisk: 28, complianceRisk: 18, operationalRisk: 16, sovereignRating: 'AA', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['Post-Brexit trade rules', 'GBP volatility', 'VAT MTD'], mitigationActions: ['GBP forward hedge 68%', 'MTD-compatible filing', 'Customs declaration automation'] },
+   207→  { countryCode: 'SG', politicalRisk: 8, economicRisk: 12, currencyRisk: 14, complianceRisk: 8, operationalRisk: 10, sovereignRating: 'AAA', currencyPeg: 'Managed', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['MAS regulatory changes', 'SGD managed float'], mitigationActions: ['MAS compliance monitoring', 'SGD forward hedge 65%'] },
+   208→  { countryCode: 'AE', politicalRisk: 15, economicRisk: 18, currencyRisk: 8, complianceRisk: 20, operationalRisk: 14, sovereignRating: 'AA-', currencyPeg: 'USD Peg', capitalControls: 'Low', sanctionsStatus: 'Monitored', riskFactors: ['New 9% corporate tax', 'VAT compliance', 'Sanctions screening (dual-use)'], mitigationActions: ['FTA registration complete', 'VAT auto-filing', 'Enhanced sanctions screening'] },
+   209→  { countryCode: 'DE', politicalRisk: 16, economicRisk: 20, currencyRisk: 12, complianceRisk: 16, operationalRisk: 14, sovereignRating: 'AAA', currencyPeg: 'EUR', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['EU sanctions compliance', 'Supply chain act', 'Energy costs'], mitigationActions: ['EU sanctions screening', 'Supply chain audit', 'Energy cost hedging'] },
+   210→  { countryCode: 'FR', politicalRisk: 26, economicRisk: 24, currencyRisk: 12, complianceRisk: 22, operationalRisk: 18, sovereignRating: 'AA-', currencyPeg: 'EUR', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['Labor law complexity', 'Pension reform impact', 'Strikes'], mitigationActions: ['Legal counsel retainer', 'Payroll compliance automation', 'Business continuity plan'] },
+   211→  { countryCode: 'AU', politicalRisk: 14, economicRisk: 16, currencyRisk: 22, complianceRisk: 12, operationalRisk: 12, sovereignRating: 'AAA', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['AUD commodity correlation', 'STP reporting', 'ASIC fees'], mitigationActions: ['AUD forward hedge 60%', 'STP automation', 'ASIC fee tracking'] },
+   212→  { countryCode: 'CA', politicalRisk: 16, economicRisk: 18, currencyRisk: 20, complianceRisk: 18, operationalRisk: 14, sovereignRating: 'AA+', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['CAD oil correlation', 'Provincial tax complexity', 'FINTRAC reporting'], mitigationActions: ['CAD forward hedge 58%', 'Provincial tax engine', 'FINTRAC auto-filing'] },
+   213→  { countryCode: 'JP', politicalRisk: 12, economicRisk: 22, currencyRisk: 30, complianceRisk: 16, operationalRisk: 14, sovereignRating: 'A+', currencyPeg: 'Float', capitalControls: 'None', sanctionsStatus: 'Clear', riskFactors: ['JPY volatility', 'Consumption tax invoice system', 'Aging workforce'], mitigationActions: ['JPY option hedge 55%', 'Qualified invoice system', 'Talent retention program'] },
+   214→];
+   215→
+   216→// ─── Intercompany Loans ───────────────────────────────────────────────────────
+   217→
+   218→export interface IntercompanyLoan {
+   219→  id: string;
+   220→  lender: string;
+   221→  borrower: string;
+   222→  lenderCountry: CountryCode;
+   223→  borrowerCountry: CountryCode;
+   224→  principal: number;
+   225→  currency: string;
+   226→  principalUSD: number;
+   227→  interestRate: number;
+   228→  term: string;
+   229→  outstanding: number;
+   230→  nextPayment: string;
+   231→  status: 'active' | 'repaid' | 'restructured';
+   232→}
+   233→
+   234→export const INTERCOMPANY_LOANS: IntercompanyLoan[] = [
+   235→  { id: 'icl-1', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot India Pvt Ltd', lenderCountry: 'SG', borrowerCountry: 'IN', principal: 800000, currency: 'USD', principalUSD: 800000, interestRate: 4.5, term: '3 years', outstanding: 640000, nextPayment: '2024-12-31', status: 'active' },
+   236→  { id: 'icl-2', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot AI Labs Inc', lenderCountry: 'US', borrowerCountry: 'US', principal: 500000, currency: 'USD', principalUSD: 500000, interestRate: 5.0, term: '2 years', outstanding: 420000, nextPayment: '2024-12-31', status: 'active' },
+   237→  { id: 'icl-3', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot FZ-LLC', lenderCountry: 'SG', borrowerCountry: 'AE', principal: 1200000, currency: 'USD', principalUSD: 1200000, interestRate: 4.25, term: '5 years', outstanding: 1080000, nextPayment: '2025-03-31', status: 'active' },
+   238→  { id: 'icl-4', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot UK Ltd', lenderCountry: 'US', borrowerCountry: 'GB', principal: 400000, currency: 'USD', principalUSD: 400000, interestRate: 4.75, term: '3 years', outstanding: 280000, nextPayment: '2024-12-31', status: 'active' },
+   239→  { id: 'icl-5', lender: 'GSTPilot Asia Pte Ltd', borrower: 'GSTPilot K.K.', lenderCountry: 'SG', borrowerCountry: 'JP', principal: 600000, currency: 'USD', principalUSD: 600000, interestRate: 4.5, term: '4 years', outstanding: 480000, nextPayment: '2025-01-31', status: 'active' },
+   240→  { id: 'icl-6', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot SARL', lenderCountry: 'US', borrowerCountry: 'FR', principal: 300000, currency: 'EUR', principalUSD: 324000, interestRate: 4.0, term: '3 years', outstanding: 210000, nextPayment: '2024-12-31', status: 'active' },
+   241→  { id: 'icl-7', lender: 'GSTPilot Treasury Pte Ltd', borrower: 'GSTPilot Pty Ltd', lenderCountry: 'SG', borrowerCountry: 'AU', principal: 250000, currency: 'AUD', principalUSD: 165000, interestRate: 4.5, term: '2 years', outstanding: 140000, nextPayment: '2025-03-31', status: 'active' },
+   242→  { id: 'icl-8', lender: 'GSTPilot Inc (Delaware)', borrower: 'GSTPilot Canada Inc', lenderCountry: 'US', borrowerCountry: 'CA', principal: 350000, currency: 'CAD', principalUSD: 256000, interestRate: 4.5, term: '3 years', outstanding: 260000, nextPayment: '2024-12-31', status: 'active' },
+   243→];
+   244→
+   245→// ─── Trade Treaties & Tax Agreements ──────────────────────────────────────────
+   246→
+   247→export interface TradeTreaty {
+   248→  id: string;
+   249→  name: string;
+   250→  type: 'DTAA' | 'FTA' | 'PTA' | 'Investment';
+   251→  countries: CountryCode[];
+   252→  effectiveDate: string;
+   253→  withholdingDividend: number;
+   254→  withholdingInterest: number;
+   255→  withholdingRoyalty: number;
+   256→  capitalGains: string;
+   257→  permanentEstablishment: string;
+   258→  status: 'active' | 'under-review' | 'pending';
+   259→}
+   260→
+   261→export const TRADE_TREATIES: TradeTreaty[] = [
+   262→  { id: 'tr-1', name: 'India–Singapore DTAA (CECA)', type: 'DTAA', countries: ['IN', 'SG'], effectiveDate: '2005-08-01', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Source-based (transition)', permanentEstablishment: '183 days', status: 'active' },
+   263→  { id: 'tr-2', name: 'India–USA DTAA', type: 'DTAA', countries: ['IN', 'US'], effectiveDate: '1991-01-01', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+   264→  { id: 'tr-3', name: 'India–UK DTAA', type: 'DTAA', countries: ['IN', 'GB'], effectiveDate: '1994-10-25', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+   265→  { id: 'tr-4', name: 'India–UAE DTAA', type: 'DTAA', countries: ['IN', 'AE'], effectiveDate: '1993-05-23', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'under-review' },
+   266→  { id: 'tr-5', name: 'India–Japan DTAA', type: 'DTAA', countries: ['IN', 'JP'], effectiveDate: '1960-04-01', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+   267→  { id: 'tr-6', name: 'India–Australia DTAA (CECA)', type: 'DTAA', countries: ['IN', 'AU'], effectiveDate: '1991-10-30', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Source-based', permanentEstablishment: '183 days', status: 'active' },
+   268→  { id: 'tr-7', name: 'India–Canada DTAA', type: 'DTAA', countries: ['IN', 'CA'], effectiveDate: '1997-05-13', withholdingDividend: 15, withholdingInterest: 15, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '90 days', status: 'active' },
+   269→  { id: 'tr-8', name: 'India–Germany DTAA', type: 'DTAA', countries: ['IN', 'DE'], effectiveDate: '1996-10-26', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+   270→  { id: 'tr-9', name: 'India–France DTAA', type: 'DTAA', countries: ['IN', 'FR'], effectiveDate: '1994-08-29', withholdingDividend: 10, withholdingInterest: 10, withholdingRoyalty: 10, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+   271→  { id: 'tr-10', name: 'Singapore–Japan EPA', type: 'FTA', countries: ['SG', 'JP'], effectiveDate: '2002-11-30', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '180 days', status: 'active' },
+   272→  { id: 'tr-11', name: 'US–UK DTAA', type: 'DTAA', countries: ['US', 'GB'], effectiveDate: '2003-03-31', withholdingDividend: 5, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+   273→  { id: 'tr-12', name: 'EU–Japan EPA', type: 'FTA', countries: ['DE', 'FR', 'JP'], effectiveDate: '2019-02-01', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+   274→  { id: 'tr-13', name: 'UAE–Singapore DTAA', type: 'DTAA', countries: ['AE', 'SG'], effectiveDate: '2015-09-01', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+   275→  { id: 'tr-14', name: 'Australia–Japan JAEPA', type: 'FTA', countries: ['AU', 'JP'], effectiveDate: '2015-01-15', withholdingDividend: 0, withholdingInterest: 0, withholdingRoyalty: 0, capitalGains: 'Resident-based', permanentEstablishment: '183 days', status: 'active' },
+   276→];
+   277→
+   278→// ─── Global Customs Declarations ──────────────────────────────────────────────
+   279→
+   280→export interface CustomsDeclaration {
+   281→  id: string;
+   282→  reference: string;
+   283→  type: 'Import' | 'Export';
+   284→  originCountry: CountryCode;
+   285→  destinationCountry: CountryCode;
+   286→  hsCode: string;
+   287→  description: string;
+   288→  declaredValue: number;
+   289→  currency: string;
+   290→  declaredValueUSD: number;
+   291→  dutyRate: number;
+   292→  dutyPaid: number;
+   293→  gstVatPaid: number;
+   294→  status: 'filed' | 'cleared' | 'held' | 'pending';
+   295→  port: string;
+   296→  filingDate: string;
+   297→  incoterm: string;
+   298→}
+   299→
+   300→export const CUSTOMS_DECLARATIONS: CustomsDeclaration[] = [
+
+[showing lines 1-300 of 764; use offset=301 with limit to continue reading]

@@ -27,6 +27,7 @@ import {
   Landmark, CreditCard, Globe2, ShieldCheck, Plus, CheckCircle2,
   Plug, Activity, Wallet, Route, TrendingDown, TrendingUp,
   FileText, PieChart, Server, RefreshCw, AlertCircle,
+  Layers, HandCoins, History, ShieldAlert, Info, AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -52,6 +53,10 @@ import {
   BANK_INTEGRATIONS, fmtUSD, getCountry, BANK_BALANCES,
   type BankIntegration, type CountryCode, type BankBalance,
 } from '@/lib/global/data';
+import {
+  CASH_POOL, INTERCOMPANY_LOANS, AUDIT_TRAIL,
+  type CashPoolPosition, type IntercompanyLoan, type AuditEntry,
+} from '@/lib/global/data-enterprise';
 
 // ─── Status palette ─────────────────────────────────────────────────────────────
 
@@ -1163,13 +1168,423 @@ function ReconciliationStatus() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Cash Pool Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SWEEP_BADGE: Record<CashPoolPosition['sweepStatus'], string> = {
+  swept: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  manual: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+const SWEEP_DOT: Record<CashPoolPosition['sweepStatus'], string> = {
+  swept: 'bg-emerald-400',
+  pending: 'bg-amber-400',
+  manual: 'bg-rose-400',
+};
+
+function CashPoolManagement() {
+  const totals = useMemo(() => {
+    const totalPool = CASH_POOL.reduce((s, c) => s + c.balanceUSD, 0);
+    const participants = CASH_POOL.filter((c) => c.accountType === 'Participant').length;
+    const avgRate = CASH_POOL.reduce((s, c) => s + c.interestRate, 0) / CASH_POOL.length;
+    const sweptCount = CASH_POOL.filter((c) => c.sweepStatus === 'swept').length;
+    const automationPct = (sweptCount / CASH_POOL.length) * 100;
+    return { totalPool, participants, avgRate, automationPct };
+  }, []);
+
+  const kpiTiles: { icon: LucideIcon; label: string; value: string; sub: string; accent: 'emerald' | 'teal' | 'cyan' | 'violet' }[] = [
+    { icon: Layers, label: 'Total Pool USD', value: fmtUSD(totals.totalPool), sub: 'Across all positions', accent: 'emerald' },
+    { icon: Building2, label: 'Participants', value: String(totals.participants), sub: 'Sweeping into SG header', accent: 'teal' },
+    { icon: Percent, label: 'Avg Interest Rate', value: `${totals.avgRate.toFixed(2)}%`, sub: 'Weighted deposit yield', accent: 'cyan' },
+    { icon: RefreshCw, label: 'Sweep Automation', value: `${totals.automationPct.toFixed(0)}%`, sub: 'Auto-swept daily', accent: 'violet' },
+  ];
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Layers className="h-4 w-4 text-emerald-400" />
+              Cash Pool Management
+              <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                {CASH_POOL.length} positions
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Multi-entity notional cash pool — daily sweeps into Singapore Treasury Header account.
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {kpiTiles.map((t) => <KpiTile key={t.label} {...t} />)}
+        </div>
+
+        <ScrollArea className="max-h-[460px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Entity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Account</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Balance</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Balance (USD)</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Sweep</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Last Sweep</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {CASH_POOL.map((p, i) => {
+                  const isHeader = p.accountType === 'Header';
+                  return (
+                    <motion.tr
+                      key={p.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: i * 0.02 }}
+                      className={`border-white/[0.04] hover:bg-white/[0.03] ${
+                        isHeader ? 'bg-emerald-500/[0.04] ring-1 ring-inset ring-emerald-500/20' : ''
+                      }`}
+                    >
+                      <TableCell className="py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{flagFor(p.countryCode)}</span>
+                          <span className={`text-xs font-medium ${isHeader ? 'text-emerald-200' : 'text-zinc-200'}`}>
+                            {p.entity}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            isHeader
+                              ? 'text-[9px] border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                              : 'text-[9px] border-white/10 bg-white/[0.02] text-zinc-300'
+                          }
+                        >
+                          {p.accountType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[11px] font-mono text-zinc-300">
+                          {p.currency === 'JPY' || p.currency === 'INR'
+                            ? p.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                            : p.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="ml-1 text-[10px] text-cyan-300">{p.currency}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono font-semibold text-emerald-300">{fmtUSD(p.balanceUSD)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[9px] ${SWEEP_BADGE[p.sweepStatus]}`}>
+                          <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${SWEEP_DOT[p.sweepStatus]}`} />
+                          {p.sweepStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-[11px] font-mono text-teal-300">{p.interestRate.toFixed(2)}%</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-zinc-500 font-mono">{p.lastSweep}</span>
+                      </TableCell>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+
+        <div className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] p-2.5">
+          <span className="text-[11px] text-zinc-400">
+            Total pool · {CASH_POOL.length} positions · header SG Treasury sweep
+          </span>
+          <span className="text-sm font-bold text-emerald-300">{fmtUSD(totals.totalPool)}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Intercompany Loans Dashboard
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const LOAN_STATUS_BADGE: Record<IntercompanyLoan['status'], string> = {
+  active: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  repaid: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+  restructured: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+function IntercompanyLoansDashboard() {
+  const stats = useMemo(() => {
+    const totalOutstanding = INTERCOMPANY_LOANS.reduce((s, l) => s + l.outstanding, 0);
+    const weightedRate =
+      INTERCOMPANY_LOANS.reduce((s, l) => s + l.interestRate * l.outstanding, 0) /
+      Math.max(1, INTERCOMPANY_LOANS.reduce((s, l) => s + l.outstanding, 0));
+    const nextDates = INTERCOMPANY_LOANS.map((l) => l.nextPayment).sort();
+    return { totalOutstanding, weightedRate, nextPayment: nextDates[0] };
+  }, []);
+
+  const kpiTiles: { icon: LucideIcon; label: string; value: string; sub: string; accent: 'emerald' | 'teal' | 'cyan' | 'violet' }[] = [
+    { icon: HandCoins, label: 'Total Outstanding', value: fmtUSD(stats.totalOutstanding), sub: `${INTERCOMPANY_LOANS.length} active loans`, accent: 'emerald' },
+    { icon: Percent, label: 'Weighted Avg Rate', value: `${stats.weightedRate.toFixed(2)}%`, sub: 'Outstanding-weighted', accent: 'teal' },
+    { icon: RefreshCw, label: 'Next Payment', value: stats.nextPayment, sub: 'Upcoming principal + interest', accent: 'cyan' },
+    { icon: Building2, label: 'Lender Entities', value: String(new Set(INTERCOMPANY_LOANS.map((l) => l.lender)).size), sub: 'Treasury hub structure', accent: 'violet' },
+  ];
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HandCoins className="h-4 w-4 text-teal-400" />
+          Intercompany Loans Dashboard
+          <Badge variant="outline" className="text-[9px] border-teal-500/30 bg-teal-500/10 text-teal-300">
+            {INTERCOMPANY_LOANS.length} loans
+          </Badge>
+        </CardTitle>
+        <p className="text-[11px] text-zinc-500">
+          Arm's-length intercompany financing — Treasury Pte Ltd is the global lending hub.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {kpiTiles.map((t) => <KpiTile key={t.label} {...t} />)}
+        </div>
+
+        <ScrollArea className="max-h-[480px] pr-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Lender → Borrower</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Principal</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Outstanding</TableHead>
+                <TableHead className="text-right text-[10px] uppercase tracking-wider text-zinc-500">Rate</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Term</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Next Payment</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence>
+                {INTERCOMPANY_LOANS.map((l, i) => (
+                  <motion.tr
+                    key={l.id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    className="border-white/[0.04] hover:bg-white/[0.03]"
+                  >
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <span className="text-base leading-none">{flagFor(l.lenderCountry)}</span>
+                        <span className="text-zinc-200 font-medium truncate max-w-[140px]">{l.lender}</span>
+                        <ArrowRightLeft className="h-3 w-3 text-zinc-500 mx-0.5" />
+                        <span className="text-base leading-none">{flagFor(l.borrowerCountry)}</span>
+                        <span className="text-zinc-300 truncate max-w-[140px]">{l.borrower}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="text-[11px] font-mono text-zinc-300">
+                        {l.principal.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        <span className="ml-1 text-[10px] text-cyan-300">{l.currency}</span>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono">{fmtUSD(l.principalUSD)}</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono font-semibold text-emerald-300">{fmtUSD(l.outstanding)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-[11px] font-mono text-teal-300">{l.interestRate.toFixed(2)}%</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[11px] text-zinc-300">{l.term}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[10px] text-zinc-400 font-mono">{l.nextPayment}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] capitalize ${LOAN_STATUS_BADGE[l.status]}`}>
+                        {l.status}
+                      </Badge>
+                    </TableCell>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTERPRISE — Global Audit Trail
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SEVERITY_BORDER: Record<AuditEntry['severity'], string> = {
+  info: 'border-l-cyan-500/60',
+  warning: 'border-l-amber-500/70',
+  critical: 'border-l-rose-500/80',
+};
+
+const SEVERITY_DOT: Record<AuditEntry['severity'], string> = {
+  info: 'bg-cyan-400',
+  warning: 'bg-amber-400',
+  critical: 'bg-rose-500',
+};
+
+const SEVERITY_BADGE: Record<AuditEntry['severity'], string> = {
+  info: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  critical: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+const SEVERITY_ICON: Record<AuditEntry['severity'], LucideIcon> = {
+  info: Info,
+  warning: AlertTriangle,
+  critical: ShieldAlert,
+};
+
+function GlobalAuditTrail() {
+  const [severityFilter, setSeverityFilter] = useState<'all' | AuditEntry['severity']>('all');
+
+  const filtered = useMemo(() => {
+    if (severityFilter === 'all') return AUDIT_TRAIL;
+    return AUDIT_TRAIL.filter((e) => e.severity === severityFilter);
+  }, [severityFilter]);
+
+  const counts = useMemo(() => ({
+    info: AUDIT_TRAIL.filter((e) => e.severity === 'info').length,
+    warning: AUDIT_TRAIL.filter((e) => e.severity === 'warning').length,
+    critical: AUDIT_TRAIL.filter((e) => e.severity === 'critical').length,
+  }), []);
+
+  return (
+    <Card className="border-white/[0.06] bg-white/[0.02]">
+      <CardHeader className="pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4 text-violet-400" />
+              Global Audit Trail
+              <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+                {AUDIT_TRAIL.length} entries
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-zinc-500">
+              Immutable activity log across banking, compliance, FX, payroll &amp; security modules.
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            {(['all', 'info', 'warning', 'critical'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSeverityFilter(s)}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all ${
+                  severityFilter === s
+                    ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30'
+                    : 'bg-white/[0.02] text-zinc-400 border border-white/[0.06] hover:text-zinc-200'
+                }`}
+              >
+                {s}
+                <span className="ml-1 text-zinc-500">
+                  {s === 'all' ? AUDIT_TRAIL.length : counts[s as AuditEntry['severity']]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="max-h-[560px] pr-2">
+          <div className="space-y-1.5">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((entry, i) => {
+                const SevIcon = SEVERITY_ICON[entry.severity];
+                return (
+                  <motion.div
+                    key={entry.id}
+                    layout
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.02 }}
+                    className={`rounded-lg border border-white/[0.06] border-l-2 ${SEVERITY_BORDER[entry.severity]} bg-white/[0.02] p-3 hover:bg-white/[0.04] transition-colors`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${SEVERITY_BADGE[entry.severity]}`}>
+                        <SevIcon className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className="font-mono text-zinc-500">{entry.timestamp}</span>
+                          <Badge variant="outline" className={`text-[9px] ${SEVERITY_BADGE[entry.severity]}`}>
+                            <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${SEVERITY_DOT[entry.severity]}`} />
+                            {entry.severity}
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                            {entry.action}
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] border-white/10 bg-white/[0.02] text-zinc-400">
+                            {entry.module}
+                          </Badge>
+                          {entry.countryCode === 'GLOBAL' ? (
+                            <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+                              🌐 GLOBAL
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[9px] border-teal-500/30 bg-teal-500/10 text-teal-300">
+                              {flagFor(entry.countryCode as CountryCode)} {entry.countryCode}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-1.5 text-[12px] text-zinc-200">{entry.detail}</div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+                          <span>
+                            <span className="text-zinc-600">Actor:</span>{' '}
+                            <span className="font-mono text-zinc-300">{entry.actor}</span>
+                          </span>
+                          <span>
+                            <span className="text-zinc-600">Entity:</span>{' '}
+                            <span className="font-mono text-zinc-300">{entry.entityType} · {entry.entityId}</span>
+                          </span>
+                          <span>
+                            <span className="text-zinc-600">IP:</span>{' '}
+                            <span className="font-mono text-zinc-300">{entry.ipAddress}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 
 type FilterTab = 'all' | 'connected' | 'available' | 'coming-soon';
 
 export default function InternationalBanking() {
   const [tab, setTab] = useState<FilterTab>('all');
-  const [sectionTab, setSectionTab] = useState<'cash' | 'accounts' | 'routing' | 'fees' | 'recon'>('cash');
+  const [sectionTab, setSectionTab] = useState<'cash' | 'accounts' | 'routing' | 'fees' | 'recon' | 'pool' | 'loans' | 'audit'>('cash');
 
   const filtered = useMemo(() => {
     if (tab === 'all') return BANK_INTEGRATIONS;
@@ -1339,6 +1754,15 @@ export default function InternationalBanking() {
                   <TabsTrigger value="recon" className="text-[11px]">
                     <FileText className="mr-1 h-3 w-3" /> Reconciliation
                   </TabsTrigger>
+                  <TabsTrigger value="pool" className="text-[11px]">
+                    <Layers className="mr-1 h-3 w-3" /> Cash Pool
+                  </TabsTrigger>
+                  <TabsTrigger value="loans" className="text-[11px]">
+                    <HandCoins className="mr-1 h-3 w-3" /> Intercompany Loans
+                  </TabsTrigger>
+                  <TabsTrigger value="audit" className="text-[11px]">
+                    <History className="mr-1 h-3 w-3" /> Audit Trail
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1356,6 +1780,15 @@ export default function InternationalBanking() {
               </TabsContent>
               <TabsContent value="recon" className="mt-0">
                 <ReconciliationStatus />
+              </TabsContent>
+              <TabsContent value="pool" className="mt-0">
+                <CashPoolManagement />
+              </TabsContent>
+              <TabsContent value="loans" className="mt-0">
+                <IntercompanyLoansDashboard />
+              </TabsContent>
+              <TabsContent value="audit" className="mt-0">
+                <GlobalAuditTrail />
               </TabsContent>
             </Tabs>
           </TooltipProvider>

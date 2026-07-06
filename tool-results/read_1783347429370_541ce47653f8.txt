@@ -1,0 +1,1040 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPILOT INFINITY™ — PHASE 14: MULTI-LANGUAGE PLATFORM™ (BILLION-DOLLAR GRADE)
+     5→//
+     6→// Internationalization hub for GSTPilot — 8 languages, RTL support, live preview,
+     7→// translation management, QA dashboard, RTL preview, cultural adaptation guide &
+     8→// translator workflow. All values derived from @/lib/global/data. No API calls.
+     9→//
+    10→//   • Header with 8 Languages badge
+    11→//   • Language cards grid (8 languages) — flag, native name, code, RTL, coverage
+    12→//   • Live Preview panel — sample dashboard card translated in active language
+    13→//   • Translation Management table (TRANSLATION_QA) — selectable language column
+    14→//   • Localization QA Dashboard — coverage %, missing/review-needed counts
+    15→//   • RTL Preview Panel — mirrored layout when Arabic is active
+    16→//   • Cultural Adaptation Guide — date/number/currency/address format examples
+    17→//   • Translator Workflow — Kanban-style board with sample translation tasks
+    18→//   • Stats: total languages, avg coverage, RTL count
+    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→
+    21→import { useMemo, useState } from 'react';
+    22→import { motion, AnimatePresence } from 'framer-motion';
+    23→import {
+    24→  Languages, Globe2, Sparkles, Type, ArrowLeft, ArrowRight,
+    25→  LayoutDashboard, DollarSign, ShieldCheck, MapPin, CheckCircle2,
+    26→  type LucideIcon,
+    27→  Table2, ClipboardCheck, FlipHorizontal2, CalendarDays, Hash,
+    28→  Banknote, MapPinned, KanbanSquare, AlertCircle, Clock,
+    29→  Search, Filter, Edit3, MessageSquare,
+    30→} from 'lucide-react';
+    31→import { Badge } from '@/components/ui/badge';
+    32→import { Separator } from '@/components/ui/separator';
+    33→import { ScrollArea } from '@/components/ui/scroll-area';
+    34→import { Input } from '@/components/ui/input';
+    35→import {
+    36→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    37→} from '@/components/ui/select';
+    38→import {
+    39→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    40→} from '@/components/ui/table';
+    41→import { LANGUAGES, TRANSLATION_QA, type Language, type TranslationKey } from '@/lib/global/data';
+    42→
+    43→// ─── Mock Translation Map (for Live Preview) ──────────────────────────────────
+    44→
+    45→interface SampleCard {
+    46→  icon: LucideIcon;
+    47→  key: 'dashboard' | 'revenue' | 'compliance' | 'countries';
+    48→  value: string;
+    49→  accent: 'emerald' | 'teal' | 'cyan' | 'violet';
+    50→}
+    51→
+    52→const SAMPLE_CARDS: SampleCard[] = [
+    53→  { icon: LayoutDashboard, key: 'dashboard', value: 'GSTPilot', accent: 'teal' },
+    54→  { icon: DollarSign, key: 'revenue', value: '$5.68M', accent: 'emerald' },
+    55→  { icon: ShieldCheck, key: 'compliance', value: '91%', accent: 'cyan' },
+    56→  { icon: MapPin, key: 'countries', value: '10', accent: 'violet' },
+    57→];
+    58→
+    59→const TRANSLATIONS: Record<string, Record<SampleCard['key'], string>> = {
+    60→  en: { dashboard: 'Dashboard', revenue: 'Total Revenue', compliance: 'Compliance Score', countries: 'Active Countries' },
+    61→  hi: { dashboard: 'डैशबोर्ड', revenue: 'कुल राजस्व', compliance: 'अनुपालन स्कोर', countries: 'सक्रिय देश' },
+    62→  fr: { dashboard: 'Tableau de bord', revenue: 'Revenu Total', compliance: 'Score de Conformité', countries: 'Pays Actifs' },
+    63→  de: { dashboard: 'Übersicht', revenue: 'Gesamtumsatz', compliance: 'Compliance-Wert', countries: 'Aktive Länder' },
+    64→  es: { dashboard: 'Panel', revenue: 'Ingresos Totales', compliance: 'Puntuación de Cumplimiento', countries: 'Países Activos' },
+    65→  ar: { dashboard: 'لوحة التحكم', revenue: 'إجمالي الإيرادات', compliance: 'نتيجة الامتثال', countries: 'الدول النشطة' },
+    66→  ja: { dashboard: 'ダッシュボード', revenue: '総収益', compliance: 'コンプライアンススコア', countries: '稼働国' },
+    67→  zh: { dashboard: '仪表板', revenue: '总收入', compliance: '合规评分', countries: '活跃国家' },
+    68→};
+    69→
+    70→// ─── Style Maps ────────────────────────────────────────────────────────────────
+    71→
+    72→const ACCENT_RING: Record<'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose', string> = {
+    73→  emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    74→  teal: 'text-teal-300 bg-teal-500/10 border-teal-500/20',
+    75→  cyan: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20',
+    76→  violet: 'text-violet-300 bg-violet-500/10 border-violet-500/20',
+    77→  amber: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
+    78→  rose: 'text-rose-300 bg-rose-500/10 border-rose-500/20',
+    79→};
+    80→
+    81→const TRANSLATION_STATUS_STYLE: Record<'translated' | 'review' | 'missing', { badge: string; dot: string; label: string }> = {
+    82→  translated: { badge: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400', label: 'Translated' },
+    83→  review: { badge: 'border-amber-500/30 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400', label: 'Review' },
+    84→  missing: { badge: 'border-rose-500/30 bg-rose-500/10 text-rose-400', dot: 'bg-rose-400', label: 'Missing' },
+    85→};
+    86→
+    87→// ─── Cultural Adaptation Guide data ────────────────────────────────────────────
+    88→
+    89→interface CulturalRegion {
+    90→  code: string;
+    91→  region: string;
+    92→  flag: string;
+    93→  languages: string[];
+    94→  dateFormat: string;
+    95→  dateExample: string;
+    96→  numberFormat: string;
+    97→  numberExample: string;
+    98→  currencyFormat: string;
+    99→  currencyExample: string;
+   100→  firstDayOfWeek: string;
+   101→  addressFormat: string;
+   102→  addressExample: string;
+   103→}
+   104→
+   105→const CULTURAL_REGIONS: CulturalRegion[] = [
+   106→  {
+   107→    code: 'IN', region: 'India', flag: '🇮🇳', languages: ['hi', 'en'],
+   108→    dateFormat: 'DD/MM/YYYY', dateExample: '03/10/2024',
+   109→    numberFormat: '##,##,###.## (lakh/crore)', numberExample: '12,34,567.89',
+   110→    currencyFormat: '₹ ##,##,###', currencyExample: '₹ 84,72,000',
+   111→    firstDayOfWeek: 'Sunday',
+   112→    addressFormat: 'Name → Premise → Street → Area → City → PIN → State',
+   113→    addressExample: 'A-203, Trade Tower, BKC, Bandra E, Mumbai 400051, MH',
+   114→  },
+   115→  {
+   116→    code: 'US', region: 'United States', flag: '🇺🇸', languages: ['en'],
+   117→    dateFormat: 'MM/DD/YYYY', dateExample: '10/03/2024',
+   118→    numberFormat: '#,###,###.##', numberExample: '1,234,567.89',
+   119→    currencyFormat: '$ #,###,###.##', currencyExample: '$1,240,000.00',
+   120→    firstDayOfWeek: 'Sunday',
+   121→    addressFormat: 'Name → Number Street → Suite → City, ST ZIP',
+   122→    addressExample: '300 Newark Ave, Suite 410, Newark, NJ 07102',
+   123→  },
+   124→  {
+   125→    code: 'EU', region: 'European Union', flag: '🇪🇺', languages: ['fr', 'de'],
+   126→    dateFormat: 'DD.MM.YYYY', dateExample: '03.10.2024',
+   127→    numberFormat: '#.###.##0,##', numberExample: '1.234.567,89',
+   128→    currencyFormat: '##.##0,00 €', currencyExample: '580.000,00 €',
+   129→    firstDayOfWeek: 'Monday',
+   130→    addressFormat: 'Name → Street Number → ZIP City → Country',
+   131→    addressExample: 'Frankfurter Str. 12, 60311 Frankfurt, DE',
+   132→  },
+   133→  {
+   134→    code: 'GB', region: 'United Kingdom', flag: '🇬🇧', languages: ['en'],
+   135→    dateFormat: 'DD/MM/YYYY', dateExample: '03/10/2024',
+   136→    numberFormat: '#,###,###.##', numberExample: '1,234,567.89',
+   137→    currencyFormat: '£ #,###,###.##', currencyExample: '£680,000.00',
+   138→    firstDayOfWeek: 'Monday',
+   139→    addressFormat: 'Name → Number Street → City → POSTCODE',
+   140→    addressExample: '27 London Bridge St, London SE1 9SG',
+   141→  },
+   142→  {
+   143→    code: 'AE', region: 'UAE (Arabic)', flag: '🇦🇪', languages: ['ar'],
+   144→    dateFormat: 'DD/MM/YYYY (Hijri optional)', dateExample: '٠٣/١٠/٢٠٢٤',
+   145→    numberFormat: '#,###,###.## (Arabic-Indic digits)', numberExample: '١٬٢٣٤٬٥٦٧٫٨٩',
+   146→    currencyFormat: 'د.إ ##,###', currencyExample: 'د.إ ١٬٨٠٬٠٠٠',
+   147→    firstDayOfWeek: 'Sunday',
+   148→    addressFormat: 'Name → Building → Street → Area → Emirate (RTL)',
+   149→    addressExample: 'مبنى ٣، شارع الشيخ زايد، دبي',
+   150→  },
+   151→  {
+   152→    code: 'JP', region: 'Japan', flag: '🇯🇵', languages: ['ja'],
+   153→    dateFormat: 'YYYY年MM月DD日 (和暦)', dateExample: '令和6年10月3日',
+   154→    numberFormat: '#,###,### (万/億 units)', numberExample: '123万4567',
+   155→    currencyFormat: '¥#,###', currencyExample: '¥98,000,000',
+   156→    firstDayOfWeek: 'Sunday',
+   157→    addressFormat: '〒ZIP → Prefecture → City → Street → Number (big-to-small)',
+   158→    addressExample: '〒100-0001 東京都千代田区千代田1-1',
+   159→  },
+   160→];
+   161→
+   162→// ─── Translator Workflow (Kanban mock) ─────────────────────────────────────────
+   163→
+   164→interface TranslationTask {
+   165→  id: string;
+   166→  key: string;
+   167→  source: string;
+   168→  targetLang: string;
+   169→  targetFlag: string;
+   170→  status: 'todo' | 'review' | 'approved';
+   171→  priority: 'high' | 'medium' | 'low';
+   172→  assignee: string;
+   173→  wordCount: number;
+   174→}
+   175→
+   176→const TRANSLATION_TASKS: TranslationTask[] = [
+   177→  { id: 't-1', key: 'reports.transferPricing', source: 'Transfer Pricing Report', targetLang: 'ar', targetFlag: '🇦🇪', status: 'todo', priority: 'high', assignee: 'Layla Hassan', wordCount: 24 },
+   178→  { id: 't-2', key: 'audit.trail', source: 'Audit Trail', targetLang: 'ja', targetFlag: '🇯🇵', status: 'todo', priority: 'medium', assignee: 'Yuki Tanaka', wordCount: 8 },
+   179→  { id: 't-3', key: 'compliance.gdpr', source: 'GDPR Data Protection Notice', targetLang: 'zh', targetFlag: '🇨🇳', status: 'todo', priority: 'high', assignee: 'Wei Chen', wordCount: 142 },
+   180→  { id: 't-4', key: 'nav.crossBorder', source: 'Cross-Border Payments', targetLang: 'ar', targetFlag: '🇦🇪', status: 'review', priority: 'medium', assignee: 'Layla Hassan', wordCount: 18 },
+   181→  { id: 't-5', key: 'invoices.export', source: 'Export Invoice Template', targetLang: 'de', targetFlag: '🇩🇪', status: 'review', priority: 'low', assignee: 'Markus Webb', wordCount: 64 },
+   182→  { id: 't-6', key: 'nav.compliance', source: 'Compliance', targetLang: 'ja', targetFlag: '🇯🇵', status: 'review', priority: 'medium', assignee: 'Yuki Tanaka', wordCount: 6 },
+   183→  { id: 't-7', key: 'nav.dashboard', source: 'Dashboard', targetLang: 'fr', targetFlag: '🇫🇷', status: 'approved', priority: 'low', assignee: 'Camille Dubois', wordCount: 4 },
+   184→  { id: 't-8', key: 'tax.vat', source: 'VAT Return Summary', targetLang: 'es', targetFlag: '🇪🇸', status: 'approved', priority: 'medium', assignee: 'Carlos Ruiz', wordCount: 22 },
+   185→  { id: 't-9', key: 'tax.gst', source: 'GST Filing', targetLang: 'hi', targetFlag: '🇮🇳', status: 'approved', priority: 'high', assignee: 'Priya Menon', wordCount: 12 },
+   186→];
+   187→
+   188→// ─── Language Card ─────────────────────────────────────────────────────────────
+   189→
+   190→function LanguageCard({
+   191→  lang, active, onSelect, index,
+   192→}: {
+   193→  lang: Language;
+   194→  active: boolean;
+   195→  onSelect: () => void;
+   196→  index: number;
+   197→}) {
+   198→  const accentBar =
+   199→    lang.coverage >= 90 ? 'bg-emerald-500' :
+   200→    lang.coverage >= 80 ? 'bg-teal-400' :
+   201→    'bg-amber-400';
+   202→
+   203→  return (
+   204→    <motion.button
+   205→      type="button"
+   206→      onClick={onSelect}
+   207→      initial={{ opacity: 0, y: 14 }}
+   208→      animate={{ opacity: 1, y: 0 }}
+   209→      transition={{ duration: 0.35, delay: index * 0.04 }}
+   210→      whileHover={{ y: -2 }}
+   211→      className={`text-left rounded-xl border p-4 backdrop-blur-sm transition-all ${
+   212→        active
+   213→          ? 'border-emerald-500/40 bg-emerald-500/[0.06] ring-1 ring-emerald-500/30'
+   214→          : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.14]'
+   215→      }`}
+   216→    >
+   217→      <div className="flex items-start justify-between gap-2">
+   218→        <div className="flex items-center gap-2 min-w-0">
+   219→          <span className="text-2xl leading-none">{lang.flag}</span>
+   220→          <div className="min-w-0">
+   221→            <div className="text-base font-semibold text-zinc-50 leading-tight truncate" dir={lang.rtl ? 'rtl' : 'ltr'}>
+   222→              {lang.nativeName}
+   223→            </div>
+   224→            <div className="text-[11px] text-zinc-400">{lang.name} · <span className="font-mono text-zinc-500">{lang.code}</span></div>
+   225→          </div>
+   226→        </div>
+   227→        {active && (
+   228→          <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shrink-0">
+   229→            <CheckCircle2 className="h-3 w-3" />Active
+   230→          </Badge>
+   231→        )}
+   232→      </div>
+   233→
+   234→      <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+   235→        {lang.rtl && (
+   236→          <Badge variant="outline" className="text-[9px] border-violet-500/30 bg-violet-500/10 text-violet-300">
+   237→            <ArrowLeft className="h-2.5 w-2.5" />RTL
+   238→          </Badge>
+   239→        )}
+   240→        <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+   241→          {lang.supported ? 'Supported' : 'Beta'}
+   242→        </Badge>
+   243→      </div>
+   244→
+   245→      <div className="mt-3">
+   246→        <div className="flex items-center justify-between text-[10px] mb-1">
+   247→          <span className="text-zinc-500 uppercase tracking-wider">Coverage</span>
+   248→          <span className="text-zinc-200 font-medium tabular-nums">{lang.coverage}%</span>
+   249→        </div>
+   250→        <div className="h-1.5 rounded-full bg-black/40 overflow-hidden">
+   251→          <motion.div
+   252→            initial={{ width: 0 }}
+   253→            animate={{ width: `${lang.coverage}%` }}
+   254→            transition={{ duration: 0.6, delay: index * 0.04, ease: 'easeOut' }}
+   255→            className={`h-full ${accentBar}`}
+   256→          />
+   257→        </div>
+   258→      </div>
+   259→    </motion.button>
+   260→  );
+   261→}
+   262→
+   263→// ─── Live Preview ──────────────────────────────────────────────────────────────
+   264→
+   265→function LivePreview({ lang }: { lang: Language }) {
+   266→  const t = TRANSLATIONS[lang.code] ?? TRANSLATIONS.en;
+   267→  const dir = lang.rtl ? 'rtl' : 'ltr';
+   268→  const Arrow = lang.rtl ? ArrowLeft : ArrowRight;
+   269→
+   270→  return (
+   271→    <motion.div
+   272→      key={lang.code}
+   273→      initial={{ opacity: 0, y: 10 }}
+   274→      animate={{ opacity: 1, y: 0 }}
+   275→      transition={{ duration: 0.35 }}
+   276→      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5"
+   277→      dir={dir}
+   278→    >
+   279→      <div className="flex items-center justify-between gap-2 mb-4" dir={dir}>
+   280→        <div className="flex items-center gap-2">
+   281→          <span className="text-xl leading-none">{lang.flag}</span>
+   282→          <div>
+   283→            <div className="text-xs uppercase tracking-wider text-zinc-500" dir="ltr">
+   284→              Live Preview · {lang.code.toUpperCase()}
+   285→            </div>
+   286→            <div className="text-sm font-semibold text-zinc-100">{lang.nativeName}</div>
+   287→          </div>
+   288→        </div>
+   289→        <Badge variant="outline" className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+   290→          <Arrow className="h-3 w-3" />{lang.rtl ? 'RTL' : 'LTR'}
+   291→        </Badge>
+   292→      </div>
+   293→
+   294→      <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] to-transparent p-4">
+   295→        <div className="flex items-center gap-2 mb-3" dir={dir}>
+   296→          <LayoutDashboard className="h-4 w-4 text-emerald-400" />
+   297→          <span className="text-sm font-semibold text-zinc-100">{t.dashboard}</span>
+   298→        </div>
+   299→        <div className="grid grid-cols-2 gap-3" dir={dir}>
+   300→          {SAMPLE_CARDS.slice(1).map((c) => (
+   301→            <div key={c.key} className="rounded-lg bg-black/30 px-3 py-2.5">
+   302→              <div className="flex items-center gap-1.5 mb-1">
+   303→                <div className={`flex h-6 w-6 items-center justify-center rounded-md border ${ACCENT_RING[c.accent]}`}>
+   304→                  <c.icon className="h-3 w-3" />
+   305→                </div>
+   306→                <span className="text-[9px] uppercase tracking-wider text-zinc-500">{t[c.key]}</span>
+   307→              </div>
+   308→              <div className="text-lg font-bold text-zinc-50 tabular-nums">{c.value}</div>
+   309→            </div>
+   310→          ))}
+   311→        </div>
+   312→      </div>
+   313→
+   314→      <div className="mt-4 flex items-center gap-2 text-[11px] text-zinc-400" dir={dir}>
+   315→        <Type className="h-3 w-3 text-emerald-400" />
+   316→        <span dir="ltr">
+   317→          Native rendering with {lang.coverage}% UI coverage · {lang.rtl ? 'right-to-left layout' : 'left-to-right layout'}
+   318→        </span>
+   319→      </div>
+   320→    </motion.div>
+   321→  );
+   322→}
+   323→
+   324→// ─── RTL Preview Panel ─────────────────────────────────────────────────────────
+   325→
+   326→function RTLPreviewPanel({ lang }: { lang: Language }) {
+   327→  const isRTL = lang.rtl;
+   328→  const t = TRANSLATIONS[lang.code] ?? TRANSLATIONS.en;
+   329→  const dir = isRTL ? 'rtl' : 'ltr';
+   330→
+   331→  return (
+   332→    <motion.div
+   333→      initial={{ opacity: 0, y: 10 }}
+   334→      animate={{ opacity: 1, y: 0 }}
+   335→      transition={{ duration: 0.4 }}
+   336→      className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] to-transparent p-5"
+   337→    >
+   338→      <div className="flex items-center justify-between gap-2 mb-3">
+   339→        <div className="flex items-center gap-2">
+   340→          <div className="flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/30 bg-violet-500/10 text-violet-300">
+   341→            <FlipHorizontal2 className="h-4 w-4" />
+   342→          </div>
+   343→          <div>
+   344→            <h2 className="text-sm font-semibold text-zinc-100">RTL / Directional Preview</h2>
+   345→            <p className="text-[11px] text-zinc-500">Layout adapts to {isRTL ? 'right-to-left' : 'left-to-right'} reading order</p>
+   346→          </div>
+   347→        </div>
+   348→        <Badge variant="outline" className={`text-[10px] ${isRTL ? 'border-violet-500/30 bg-violet-500/10 text-violet-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+   349→          dir = {dir}
+   350→        </Badge>
+   351→      </div>
+   352→
+   353→      {/* Mock UI in active direction */}
+   354→      <div
+   355→        className="rounded-lg border border-white/[0.08] bg-black/30 p-4"
+   356→        dir={dir}
+   357→      >
+   358→        {/* Mock nav row */}
+   359→        <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-white/[0.06]" dir={dir}>
+   360→          <div className="flex items-center gap-2">
+   361→            <div className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+   362→              <LayoutDashboard className="h-3.5 w-3.5" />
+   363→            </div>
+   364→            <span className="text-xs font-semibold text-zinc-100">{t.dashboard}</span>
+   365→          </div>
+   366→          <div className="flex items-center gap-1.5">
+   367→            <Badge variant="outline" className="text-[9px] border-cyan-500/30 bg-cyan-500/10 text-cyan-300">{lang.code.toUpperCase()}</Badge>
+   368→            <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">RTL</Badge>
+   369→          </div>
+   370→        </div>
+   371→
+   372→        {/* Mock content */}
+   373→        <div className="space-y-2" dir={dir}>
+   374→          <div className="flex items-center justify-between text-[11px]">
+   375→            <span className="text-zinc-400 flex items-center gap-1.5">
+   376→              <DollarSign className="h-3 w-3 text-emerald-400" />
+   377→              {t.revenue}
+   378→            </span>
+   379→            <span className="text-zinc-100 font-semibold tabular-nums">$5.68M</span>
+   380→          </div>
+   381→          <div className="flex items-center justify-between text-[11px]">
+   382→            <span className="text-zinc-400 flex items-center gap-1.5">
+   383→              <ShieldCheck className="h-3 w-3 text-cyan-400" />
+   384→              {t.compliance}
+   385→            </span>
+   386→            <span className="text-zinc-100 font-semibold tabular-nums">91%</span>
+   387→          </div>
+   388→          <div className="flex items-center justify-between text-[11px]">
+   389→            <span className="text-zinc-400 flex items-center gap-1.5">
+   390→              <MapPin className="h-3 w-3 text-violet-400" />
+   391→              {t.countries}
+   392→            </span>
+   393→            <span className="text-zinc-100 font-semibold tabular-nums">10</span>
+   394→          </div>
+   395→        </div>
+   396→
+   397→        {/* Mock button row */}
+   398→        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.06]" dir={dir}>
+   399→          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 px-2.5 py-1 text-[10px]">
+   400→            <CheckCircle2 className="h-3 w-3" />
+   401→            <span>Submit</span>
+   402→          </div>
+   403→          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] text-zinc-300 px-2.5 py-1 text-[10px]">
+   404→            <ArrowRight className="h-3 w-3" />
+   405→            <span>Next</span>
+   406→          </div>
+   407→          <div className="ml-auto text-[9px] text-zinc-500" dir="ltr">
+   408→            ← mirrored icon direction
+   409→          </div>
+   410→        </div>
+   411→      </div>
+   412→
+   413→      {/* Adaptation checklist */}
+   414→      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+   415→        <div className={`flex items-center gap-1.5 rounded-md border p-1.5 ${isRTL ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300' : 'border-white/[0.06] bg-white/[0.02] text-zinc-500'}`}>
+   416→          <CheckCircle2 className="h-3 w-3" />
+   417→          <span>Text direction {isRTL ? 'flipped' : 'default'}</span>
+   418→        </div>
+   419→        <div className={`flex items-center gap-1.5 rounded-md border p-1.5 ${isRTL ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300' : 'border-white/[0.06] bg-white/[0.02] text-zinc-500'}`}>
+   420→          <CheckCircle2 className="h-3 w-3" />
+   421→          <span>Icon flow {isRTL ? 'reversed' : 'default'}</span>
+   422→        </div>
+   423→        <div className={`flex items-center gap-1.5 rounded-md border p-1.5 ${isRTL ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300' : 'border-white/[0.06] bg-white/[0.02] text-zinc-500'}`}>
+   424→          <CheckCircle2 className="h-3 w-3" />
+   425→          <span>Padding/margins {isRTL ? 'swapped' : 'default'}</span>
+   426→        </div>
+   427→        <div className={`flex items-center gap-1.5 rounded-md border p-1.5 ${isRTL ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300' : 'border-white/[0.06] bg-white/[0.02] text-zinc-500'}`}>
+   428→          <CheckCircle2 className="h-3 w-3" />
+   429→          <span>Numbers stay LTR</span>
+   430→        </div>
+   431→      </div>
+   432→    </motion.div>
+   433→  );
+   434→}
+   435→
+   436→// ─── Translation Management Table ──────────────────────────────────────────────
+   437→
+   438→function TranslationManagement() {
+   439→  const [selectedLang, setSelectedLang] = useState<string>('ar');
+   440→  const [search, setSearch] = useState<string>('');
+   441→  const [statusFilter, setStatusFilter] = useState<'all' | 'translated' | 'review' | 'missing'>('all');
+   442→
+   443→  const filtered = useMemo(() => {
+   444→    return TRANSLATION_QA.filter((k) => {
+   445→      if (search) {
+   446→        const q = search.toLowerCase();
+   447→        if (!k.key.toLowerCase().includes(q) && !k.english.toLowerCase().includes(q)) return false;
+   448→      }
+   449→      if (statusFilter !== 'all') {
+   450→        const st = k.status[selectedLang];
+   451→        if (!st || st !== statusFilter) return false;
+   452→      }
+   453→      return true;
+   454→    });
+   455→  }, [selectedLang, search, statusFilter]);
+   456→
+   457→  const selectedLangObj = LANGUAGES.find((l) => l.code === selectedLang) ?? LANGUAGES[0];
+   458→
+   459→  return (
+   460→    <motion.div
+   461→      initial={{ opacity: 0, y: 10 }}
+   462→      animate={{ opacity: 1, y: 0 }}
+   463→      transition={{ duration: 0.4 }}
+   464→      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   465→    >
+   466→      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+   467→        <div className="flex items-center gap-2">
+   468→          <div className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+   469→            <Table2 className="h-4 w-4" />
+   470→          </div>
+   471→          <div>
+   472→            <h2 className="text-sm font-semibold text-zinc-100">Translation Management</h2>
+   473→            <p className="text-[11px] text-zinc-500">
+   474→              {TRANSLATION_QA.length} keys · viewing {selectedLangObj.flag} {selectedLangObj.nativeName}
+   475→            </p>
+   476→          </div>
+   477→        </div>
+   478→        <div className="flex items-center gap-2 flex-wrap">
+   479→          <div className="relative">
+   480→            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
+   481→            <Input
+   482→              type="text"
+   483→              placeholder="Search keys…"
+   484→              value={search}
+   485→              onChange={(e) => setSearch(e.target.value)}
+   486→              className="bg-black/40 border-white/[0.06] text-zinc-100 text-xs h-8 pl-7 w-32"
+   487→            />
+   488→          </div>
+   489→          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+   490→            <SelectTrigger className="bg-black/40 border-white/[0.06] text-zinc-100 text-xs h-8 w-28">
+   491→              <Filter className="h-3 w-3 mr-1" />
+   492→              <SelectValue />
+   493→            </SelectTrigger>
+   494→            <SelectContent className="bg-zinc-900 border-white/[0.08]">
+   495→              <SelectItem value="all" className="text-zinc-100 text-xs">All Status</SelectItem>
+   496→              <SelectItem value="translated" className="text-zinc-100 text-xs">Translated</SelectItem>
+   497→              <SelectItem value="review" className="text-zinc-100 text-xs">Review</SelectItem>
+   498→              <SelectItem value="missing" className="text-zinc-100 text-xs">Missing</SelectItem>
+   499→            </SelectContent>
+   500→          </Select>
+   501→          <Select value={selectedLang} onValueChange={setSelectedLang}>
+   502→            <SelectTrigger className="bg-black/40 border-white/[0.06] text-zinc-100 text-xs h-8 w-32">
+   503→              <SelectValue />
+   504→            </SelectTrigger>
+   505→            <SelectContent className="bg-zinc-900 border-white/[0.08]">
+   506→              {LANGUAGES.filter((l) => l.code !== 'en').map((l) => (
+   507→                <SelectItem key={l.code} value={l.code} className="text-zinc-100 text-xs">
+   508→                  {l.flag} {l.nativeName}
+   509→                </SelectItem>
+   510→              ))}
+   511→            </SelectContent>
+   512→          </Select>
+   513→        </div>
+   514→      </div>
+   515→
+   516→      <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+   517→        <ScrollArea className="max-h-[440px]">
+   518→          <Table>
+   519→            <TableHeader>
+   520→              <TableRow className="border-white/[0.06] hover:bg-transparent">
+   521→                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-40">Translation Key</TableHead>
+   522→                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">English Source</TableHead>
+   523→                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">
+   524→                  <div className="flex items-center gap-1">
+   525→                    <span className="text-base leading-none">{selectedLangObj.flag}</span>
+   526→                    <span>{selectedLangObj.nativeName}</span>
+   527→                  </div>
+   528→                </TableHead>
+   529→                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24">Status</TableHead>
+   530→              </TableRow>
+   531→            </TableHeader>
+   532→            <TableBody>
+   533→              {filtered.length === 0 ? (
+   534→                <TableRow>
+   535→                  <TableCell colSpan={4} className="text-center text-[11px] text-zinc-500 py-8">
+   536→                    No translation keys match the current filter.
+   537→                  </TableCell>
+   538→                </TableRow>
+   539→              ) : (
+   540→                filtered.map((k: TranslationKey) => {
+   541→                  const status = k.status[selectedLang];
+   542→                  const translated = k.translated[selectedLang];
+   543→                  const sty = status ? TRANSLATION_STATUS_STYLE[status] : TRANSLATION_STATUS_STYLE.missing;
+   544→                  return (
+   545→                    <TableRow key={k.key} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+   546→                      <TableCell className="font-mono text-[10px] text-emerald-300">{k.key}</TableCell>
+   547→                      <TableCell className="text-[11px] text-zinc-200">{k.english}</TableCell>
+   548→                      <TableCell className="text-[11px] text-zinc-100" dir={selectedLangObj.rtl ? 'rtl' : 'ltr'}>
+   549→                        {translated ?? <span className="text-zinc-600 italic">— not translated —</span>}
+   550→                      </TableCell>
+   551→                      <TableCell>
+   552→                        <Badge variant="outline" className={`text-[9px] ${sty.badge}`}>
+   553→                          <span className={`inline-block h-1.5 w-1.5 rounded-full ${sty.dot}`} />
+   554→                          {sty.label}
+   555→                        </Badge>
+   556→                      </TableCell>
+   557→                    </TableRow>
+   558→                  );
+   559→                })
+   560→              )}
+   561→            </TableBody>
+   562→          </Table>
+   563→        </ScrollArea>
+   564→      </div>
+   565→
+   566→      <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
+   567→        <span>Showing {filtered.length} of {TRANSLATION_QA.length} keys</span>
+   568→        <span>Click column header to sort · Select language to view column</span>
+   569→      </div>
+   570→    </motion.div>
+   571→  );
+   572→}
+   573→
+   574→// ─── Localization QA Dashboard ─────────────────────────────────────────────────
+   575→
+   576→function LocalizationQADashboard() {
+   577→  const stats = useMemo(() => {
+   578→    return LANGUAGES.filter((l) => l.code !== 'en').map((l) => {
+   579→      const keys = TRANSLATION_QA.length;
+   580→      let translated = 0, review = 0, missing = 0;
+   581→      for (const k of TRANSLATION_QA) {
+   582→        const st = k.status[l.code];
+   583→        if (st === 'translated') translated += 1;
+   584→        else if (st === 'review') review += 1;
+   585→        else missing += 1;
+   586→      }
+   587→      const coveragePct = (translated / keys) * 100;
+   588→      return { lang: l, keys, translated, review, missing, coveragePct };
+   589→    });
+   590→  }, []);
+   591→
+   592→  return (
+   593→    <motion.div
+   594→      initial={{ opacity: 0, y: 10 }}
+   595→      animate={{ opacity: 1, y: 0 }}
+   596→      transition={{ duration: 0.4 }}
+   597→      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   598→    >
+   599→      <div className="flex items-center gap-2 mb-3">
+   600→        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-teal-500/20 bg-teal-500/10 text-teal-300">
+   601→          <ClipboardCheck className="h-4 w-4" />
+   602→        </div>
+   603→        <div>
+   604→          <h2 className="text-sm font-semibold text-zinc-100">Localization QA Dashboard</h2>
+   605→          <p className="text-[11px] text-zinc-500">Coverage %, missing translations & review-needed counts per language</p>
+   606→        </div>
+   607→      </div>
+   608→
+   609→      <div className="space-y-2">
+   610→        {stats.map((s, i) => {
+   611→          const barColor =
+   612→            s.coveragePct >= 90 ? 'bg-emerald-500' :
+   613→            s.coveragePct >= 70 ? 'bg-teal-400' :
+   614→            s.coveragePct >= 50 ? 'bg-amber-400' :
+   615→            'bg-rose-500';
+   616→          return (
+   617→            <motion.div
+   618→              key={s.lang.code}
+   619→              initial={{ opacity: 0, x: -8 }}
+   620→              animate={{ opacity: 1, x: 0 }}
+   621→              transition={{ duration: 0.3, delay: i * 0.04 }}
+   622→              className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+   623→            >
+   624→              <div className="flex items-center gap-2 mb-2">
+   625→                <span className="text-base">{s.lang.flag}</span>
+   626→                <span className="text-xs font-semibold text-zinc-100 flex-1">{s.lang.nativeName}</span>
+   627→                <Badge variant="outline" className={`text-[9px] ${s.coveragePct >= 90 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : s.coveragePct >= 70 ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-400'}`}>
+   628→                  {s.coveragePct.toFixed(0)}%
+   629→                </Badge>
+   630→              </div>
+   631→              <div className="h-2 rounded-full bg-black/40 overflow-hidden flex">
+   632→                <motion.div
+   633→                  initial={{ width: 0 }}
+   634→                  animate={{ width: `${(s.translated / s.keys) * 100}%` }}
+   635→                  transition={{ duration: 0.6, delay: i * 0.04 }}
+   636→                  className="h-full bg-emerald-500"
+   637→                />
+   638→                <motion.div
+   639→                  initial={{ width: 0 }}
+   640→                  animate={{ width: `${(s.review / s.keys) * 100}%` }}
+   641→                  transition={{ duration: 0.6, delay: i * 0.04 + 0.1 }}
+   642→                  className="h-full bg-amber-400"
+   643→                />
+   644→                <motion.div
+   645→                  initial={{ width: 0 }}
+   646→                  animate={{ width: `${(s.missing / s.keys) * 100}%` }}
+   647→                  transition={{ duration: 0.6, delay: i * 0.04 + 0.2 }}
+   648→                  className="h-full bg-rose-500"
+   649→                />
+   650→              </div>
+   651→              <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+   652→                <span className="flex items-center gap-1 text-emerald-300">
+   653→                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+   654→                  {s.translated} translated
+   655→                </span>
+   656→                <span className="flex items-center gap-1 text-amber-300">
+   657→                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+   658→                  {s.review} review
+   659→                </span>
+   660→                <span className="flex items-center gap-1 text-rose-400">
+   661→                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-400" />
+   662→                  {s.missing} missing
+   663→                </span>
+   664→                <span className="ml-auto text-zinc-500">of {s.keys} keys</span>
+   665→              </div>
+   666→            </motion.div>
+   667→          );
+   668→        })}
+   669→      </div>
+   670→
+   671→      {/* Legend */}
+   672→      <div className="mt-3 flex items-center gap-3 text-[10px] text-zinc-500">
+   673→        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />Translated</span>
+   674→        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />Needs Review</span>
+   675→        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-400" />Missing</span>
+   676→      </div>
+   677→    </motion.div>
+   678→  );
+   679→}
+   680→
+   681→// ─── Cultural Adaptation Guide ─────────────────────────────────────────────────
+   682→
+   683→const CULTURAL_ICONS: { key: keyof Omit<CulturalRegion, 'code' | 'region' | 'flag' | 'languages'>; label: string; icon: LucideIcon; accent: 'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose' }[] = [
+   684→  { key: 'dateExample', label: 'Date Format', icon: CalendarDays, accent: 'emerald' },
+   685→  { key: 'numberExample', label: 'Number Format', icon: Hash, accent: 'teal' },
+   686→  { key: 'currencyExample', label: 'Currency Format', icon: Banknote, accent: 'cyan' },
+   687→  { key: 'firstDayOfWeek', label: 'First Day of Week', icon: CalendarDays, accent: 'violet' },
+   688→  { key: 'addressExample', label: 'Address Format', icon: MapPinned, accent: 'amber' },
+   689→];
+   690→
+   691→function CulturalAdaptationGuide() {
+   692→  const [selected, setSelected] = useState<CulturalRegion>(CULTURAL_REGIONS[0]);
+   693→
+   694→  return (
+   695→    <motion.div
+   696→      initial={{ opacity: 0, y: 10 }}
+   697→      animate={{ opacity: 1, y: 0 }}
+   698→      transition={{ duration: 0.4 }}
+   699→      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   700→    >
+   701→      <div className="flex items-center gap-2 mb-3">
+   702→        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-amber-500/20 bg-amber-500/10 text-amber-300">
+   703→          <Globe2 className="h-4 w-4" />
+   704→        </div>
+   705→        <div>
+   706→          <h2 className="text-sm font-semibold text-zinc-100">Cultural Adaptation Guide</h2>
+   707→          <p className="text-[11px] text-zinc-500">Region-specific formatting for dates, numbers, currency & addresses</p>
+   708→        </div>
+   709→      </div>
+   710→
+   711→      {/* Region selector */}
+   712→      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+   713→        {CULTURAL_REGIONS.map((r) => (
+   714→          <button
+   715→            key={r.code}
+   716→            type="button"
+   717→            onClick={() => setSelected(r)}
+   718→            className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all ${
+   719→              selected.code === r.code
+   720→                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+   721→                : 'border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:text-zinc-200'
+   722→            }`}
+   723→          >
+   724→            {r.flag} {r.region}
+   725→          </button>
+   726→        ))}
+   727→      </div>
+   728→
+   729→      {/* Selected region detail */}
+   730→      <div className="rounded-lg border border-white/[0.06] bg-black/30 p-4">
+   731→        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
+   732→          <span className="text-2xl">{selected.flag}</span>
+   733→          <div>
+   734→            <div className="text-sm font-semibold text-zinc-100">{selected.region}</div>
+   735→            <div className="text-[10px] text-zinc-500">
+   736→              Languages: {selected.languages.map((l) => l.toUpperCase()).join(' · ')}
+   737→            </div>
+   738→          </div>
+   739→        </div>
+   740→
+   741→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   742→          {CULTURAL_ICONS.map((item, i) => {
+   743→            const Icon = item.icon;
+   744→            return (
+   745→              <motion.div
+   746→                key={item.key}
+   747→                initial={{ opacity: 0, y: 8 }}
+   748→                animate={{ opacity: 1, y: 0 }}
+   749→                transition={{ duration: 0.3, delay: i * 0.05 }}
+   750→                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+   751→              >
+   752→                <div className="flex items-center gap-1.5 mb-1.5">
+   753→                  <div className={`flex h-6 w-6 items-center justify-center rounded-md border ${ACCENT_RING[item.accent]}`}>
+   754→                    <Icon className="h-3 w-3" />
+   755→                  </div>
+   756→                  <span className="text-[10px] uppercase tracking-wider text-zinc-500">{item.label}</span>
+   757→                </div>
+   758→                {item.key === 'firstDayOfWeek' ? (
+   759→                  <div className="text-[11px] font-mono text-zinc-100">{selected[item.key]}</div>
+   760→                ) : (
+   761→                  <>
+   762→                    <div className="text-[11px] text-zinc-500 mb-0.5">
+   763→                      {item.key === 'dateExample' ? selected.dateFormat :
+   764→                       item.key === 'numberExample' ? selected.numberFormat :
+   765→                       item.key === 'currencyExample' ? selected.currencyFormat :
+   766→                       selected.addressFormat}
+   767→                    </div>
+   768→                    <div className="text-[12px] font-mono text-zinc-100 break-all" dir={selected.code === 'AE' ? 'rtl' : 'ltr'}>
+   769→                      {selected[item.key]}
+   770→                    </div>
+   771→                  </>
+   772→                )}
+   773→              </motion.div>
+   774→            );
+   775→          })}
+   776→        </div>
+   777→      </div>
+   778→    </motion.div>
+   779→  );
+   780→}
+   781→
+   782→// ─── Translator Workflow (Kanban) ──────────────────────────────────────────────
+   783→
+   784→const TASK_PRIORITY_STYLE: Record<TranslationTask['priority'], string> = {
+   785→  high: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+   786→  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+   787→  low: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+   788→};
+   789→
+   790→const KANBAN_COLUMNS: { key: TranslationTask['status']; label: string; accent: 'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose'; icon: LucideIcon }[] = [
+   791→  { key: 'todo', label: 'To Translate', accent: 'rose', icon: Edit3 },
+   792→  { key: 'review', label: 'In Review', accent: 'amber', icon: Clock },
+   793→  { key: 'approved', label: 'Approved', accent: 'emerald', icon: CheckCircle2 },
+   794→];
+   795→
+   796→function TranslatorWorkflow() {
+   797→  const grouped = useMemo(() => {
+   798→    const g: Record<TranslationTask['status'], TranslationTask[]> = { todo: [], review: [], approved: [] };
+   799→    for (const t of TRANSLATION_TASKS) g[t.status].push(t);
+   800→    return g;
+   801→  }, []);
+   802→
+   803→  const totalWords = TRANSLATION_TASKS.reduce((s, t) => s + t.wordCount, 0);
+   804→  const completedWords = TRANSLATION_TASKS.filter((t) => t.status === 'approved').reduce((s, t) => s + t.wordCount, 0);
+   805→  const completionPct = (completedWords / totalWords) * 100;
+   806→
+   807→  return (
+   808→    <motion.div
+   809→      initial={{ opacity: 0, y: 10 }}
+   810→      animate={{ opacity: 1, y: 0 }}
+   811→      transition={{ duration: 0.4 }}
+   812→      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   813→    >
+   814→      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+   815→        <div className="flex items-center gap-2">
+   816→          <div className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+   817→            <KanbanSquare className="h-4 w-4" />
+   818→          </div>
+   819→          <div>
+   820→            <h2 className="text-sm font-semibold text-zinc-100">Translator Workflow</h2>
+   821→            <p className="text-[11px] text-zinc-500">
+   822→              {TRANSLATION_TASKS.length} tasks · {completedWords}/{totalWords} words completed ({completionPct.toFixed(0)}%)
+   823→            </p>
+   824→          </div>
+   825→        </div>
+   826→        <div className="flex items-center gap-1.5">
+   827→          {KANBAN_COLUMNS.map((c) => (
+   828→            <Badge key={c.key} variant="outline" className={`text-[9px] ${TASK_PRIORITY_STYLE[c.key === 'todo' ? 'high' : c.key === 'review' ? 'medium' : 'low']}`}>
+   829→              <c.icon className="h-2.5 w-2.5" />
+   830→              {grouped[c.key].length} {c.label}
+   831→            </Badge>
+   832→          ))}
+   833→        </div>
+   834→      </div>
+   835→
+   836→      {/* Kanban board */}
+   837→      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+   838→        {KANBAN_COLUMNS.map((col, colIdx) => {
+   839→          const Icon = col.icon;
+   840→          const tasks = grouped[col.key];
+   841→          return (
+   842→            <motion.div
+   843→              key={col.key}
+   844→              initial={{ opacity: 0, y: 10 }}
+   845→              animate={{ opacity: 1, y: 0 }}
+   846→              transition={{ duration: 0.3, delay: colIdx * 0.1 }}
+   847→              className="rounded-lg border border-white/[0.06] bg-black/30 p-3 min-h-[200px]"
+   848→            >
+   849→              <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/[0.06]">
+   850→                <div className="flex items-center gap-1.5">
+   851→                  <Icon className={`h-3.5 w-3.5 ${col.accent === 'rose' ? 'text-rose-300' : col.accent === 'amber' ? 'text-amber-300' : 'text-emerald-300'}`} />
+   852→                  <span className="text-[11px] font-semibold text-zinc-100">{col.label}</span>
+   853→                </div>
+   854→                <span className="text-[10px] text-zinc-500 tabular-nums">{tasks.length}</span>
+   855→              </div>
+   856→              <div className="space-y-1.5">
+   857→                {tasks.length === 0 ? (
+   858→                  <div className="text-center text-[10px] text-zinc-600 italic py-4">No tasks</div>
+   859→                ) : (
+   860→                  tasks.map((t, i) => (
+   861→                    <motion.div
+   862→                      key={t.id}
+   863→                      initial={{ opacity: 0, scale: 0.95 }}
+   864→                      animate={{ opacity: 1, scale: 1 }}
+   865→                      transition={{ duration: 0.25, delay: i * 0.05 }}
+   866→                      className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2.5 hover:border-white/[0.14] transition-all"
+   867→                    >
+   868→                      <div className="flex items-start justify-between gap-1.5 mb-1">
+   869→                        <span className="font-mono text-[9px] text-emerald-300 truncate">{t.key}</span>
+   870→                        <Badge variant="outline" className={`text-[8px] capitalize shrink-0 ${TASK_PRIORITY_STYLE[t.priority]}`}>
+   871→                          {t.priority}
+   872→                        </Badge>
+   873→                      </div>
+   874→                      <div className="text-[11px] text-zinc-100 mb-1.5">{t.source}</div>
+   875→                      <div className="flex items-center gap-1.5 text-[9px] text-zinc-500">
+   876→                        <span className="text-base leading-none">{t.targetFlag}</span>
+   877→                        <span className="uppercase">{t.targetLang}</span>
+   878→                        <span className="ml-auto">{t.wordCount}w</span>
+   879→                      </div>
+   880→                      <Separator className="my-1.5 bg-white/[0.06]" />
+   881→                      <div className="flex items-center gap-1.5 text-[9px] text-zinc-400">
+   882→                        <MessageSquare className="h-2.5 w-2.5" />
+   883→                        <span className="truncate">{t.assignee}</span>
+   884→                      </div>
+   885→                    </motion.div>
+   886→                  ))
+   887→                )}
+   888→              </div>
+   889→            </motion.div>
+   890→          );
+   891→        })}
+   892→      </div>
+   893→
+   894→      <div className="mt-3 flex items-center gap-2 text-[10px] text-zinc-500">
+   895→        <AlertCircle className="h-3 w-3 text-cyan-400" />
+   896→        <span>Drag-and-drop workflow simulated — tasks move left-to-right through approval pipeline</span>
+   897→      </div>
+   898→    </motion.div>
+   899→  );
+   900→}
+   901→
+   902→// ─── Main Component ────────────────────────────────────────────────────────────
+   903→
+   904→export default function MultiLanguagePlatform() {
+   905→  const [activeCode, setActiveCode] = useState<string>('en');
+   906→  const activeLang = useMemo(
+   907→    () => LANGUAGES.find((l) => l.code === activeCode) ?? LANGUAGES[0],
+   908→    [activeCode],
+   909→  );
+   910→
+   911→  const stats = useMemo(() => {
+   912→    const total = LANGUAGES.length;
+   913→    const avgCoverage = Math.round(
+   914→      LANGUAGES.reduce((s, l) => s + l.coverage, 0) / total,
+   915→    );
+   916→    const rtlCount = LANGUAGES.filter((l) => l.rtl).length;
+   917→    return { total, avgCoverage, rtlCount };
+   918→  }, []);
+   919→
+   920→  const STAT_TILES: {
+   921→    icon: LucideIcon;
+   922→    label: string;
+   923→    value: string;
+   924→    sub: string;
+   925→    accent: 'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose';
+   926→  }[] = [
+   927→    { icon: Languages, label: 'Total Languages', value: String(stats.total), sub: 'Live localizations', accent: 'teal' },
+   928→    { icon: Globe2, label: 'Avg Coverage', value: `${stats.avgCoverage}%`, sub: 'UI strings translated', accent: 'emerald' },
+   929→    { icon: ArrowLeft, label: 'RTL Languages', value: String(stats.rtlCount), sub: 'Right-to-left layouts', accent: 'violet' },
+   930→    { icon: Type, label: 'Active', value: activeLang.nativeName, sub: `${activeLang.code.toUpperCase()} · ${activeLang.coverage}%`, accent: 'cyan' },
+   931→  ];
+   932→
+   933→  return (
+   934→    <div className="space-y-6">
+   935→      {/* header */}
+   936→      <motion.div
+   937→        initial={{ opacity: 0, y: 8 }}
+   938→        animate={{ opacity: 1, y: 0 }}
+   939→        transition={{ duration: 0.4 }}
+   940→      >
+   941→        <div className="flex items-center gap-2 flex-wrap">
+   942→          <Languages className="h-5 w-5 text-teal-400" />
+   943→          <h1 className="text-xl font-semibold text-zinc-50">
+   944→            Multi-Language Platform
+   945→            <sup className="text-[10px] text-teal-400 ml-0.5">™</sup>
+   946→          </h1>
+   947→          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px]">
+   948→            <Sparkles className="h-3 w-3" />8 Languages
+   949→          </Badge>
+   950→        </div>
+   951→        <p className="mt-1.5 text-xs text-zinc-400 max-w-2xl">
+   952→          Full internationalization stack — 8 native languages with RTL support, real-time UI string
+   953→          coverage, translation management, QA dashboard, cultural adaptation & translator workflow.
+   954→        </p>
+   955→      </motion.div>
+   956→
+   957→      {/* Stats */}
+   958→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   959→        {STAT_TILES.map((s, i) => (
+   960→          <motion.div
+   961→            key={s.label}
+   962→            initial={{ opacity: 0, y: 10 }}
+   963→            animate={{ opacity: 1, y: 0 }}
+   964→            transition={{ duration: 0.3, delay: i * 0.05 }}
+   965→            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+   966→          >
+   967→            <div className="flex items-center gap-2">
+   968→              <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${ACCENT_RING[s.accent]}`}>
+   969→                <s.icon className="h-4 w-4" />
+   970→              </div>
+   971→              <span className="text-[10px] uppercase tracking-wider text-zinc-400">{s.label}</span>
+   972→            </div>
+   973→            <div className="mt-2 text-lg font-semibold text-zinc-50 truncate" title={s.value}>{s.value}</div>
+   974→            <div className="text-[10px] text-zinc-500 truncate">{s.sub}</div>
+   975→          </motion.div>
+   976→        ))}
+   977→      </div>
+   978→
+   979→      {/* Main grid: languages + preview */}
+   980→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   981→        {/* Languages */}
+   982→        <div className="lg:col-span-2">
+   983→          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+   984→            <div className="flex items-center justify-between mb-3">
+   985→              <h2 className="text-sm font-semibold text-zinc-100">Supported Languages</h2>
+   986→              <span className="text-[10px] text-zinc-500">Click to preview →</span>
+   987→            </div>
+   988→            <Separator className="mb-4 bg-white/[0.06]" />
+   989→            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+   990→              <AnimatePresence mode="popLayout">
+   991→                {LANGUAGES.map((l, i) => (
+   992→                  <LanguageCard
+   993→                    key={l.code}
+   994→                    lang={l}
+   995→                    active={l.code === activeCode}
+   996→                    onSelect={() => setActiveCode(l.code)}
+   997→                    index={i}
+   998→                  />
+   999→                ))}
+  1000→              </AnimatePresence>
+  1001→            </div>
+  1002→          </div>
+  1003→        </div>
+  1004→
+  1005→        {/* Live Preview */}
+  1006→        <div className="lg:col-span-1">
+  1007→          <div className="sticky top-4 space-y-3">
+  1008→            <LivePreview lang={activeLang} />
+  1009→          </div>
+  1010→        </div>
+  1011→      </div>
+  1012→
+  1013→      {/* RTL Preview Panel */}
+  1014→      <RTLPreviewPanel lang={activeLang} />
+  1015→
+  1016→      {/* Translation Management + QA Dashboard */}
+  1017→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  1018→        <div className="lg:col-span-2">
+  1019→          <TranslationManagement />
+  1020→        </div>
+  1021→        <div className="lg:col-span-1">
+  1022→          <LocalizationQADashboard />
+  1023→        </div>
+  1024→      </div>
+  1025→
+  1026→      {/* Cultural Adaptation Guide */}
+  1027→      <CulturalAdaptationGuide />
+  1028→
+  1029→      {/* Translator Workflow */}
+  1030→      <TranslatorWorkflow />
+  1031→
+  1032→      {/* Footer */}
+  1033→      <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">
+  1034→        <Languages className="h-3 w-3" />
+  1035→        <span>GSTPilot Infinity™ Multi-Language Platform — {LANGUAGES.length} languages · {TRANSLATION_QA.length} tracked translation keys · {stats.rtlCount} RTL</span>
+  1036→      </div>
+  1037→    </div>
+  1038→  );
+  1039→}
+  1040→

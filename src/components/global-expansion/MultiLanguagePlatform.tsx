@@ -18,7 +18,7 @@
 //   • Stats: total languages, avg coverage, RTL count
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Languages, Globe2, Sparkles, Type, ArrowLeft, ArrowRight,
@@ -27,6 +27,9 @@ import {
   Table2, ClipboardCheck, FlipHorizontal2, CalendarDays, Hash,
   Banknote, MapPinned, KanbanSquare, AlertCircle, Clock,
   Search, Filter, Edit3, MessageSquare,
+  Database, Leaf, Users, Droplets, Recycle, HeartHandshake, Vote,
+  ChevronDown, ChevronRight, Gavel, ThumbsUp,
+  ThumbsDown, MinusCircle, Crown, Sun,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -38,7 +41,11 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { LANGUAGES, TRANSLATION_QA, type Language, type TranslationKey } from '@/lib/global/data';
+import { LANGUAGES, TRANSLATION_QA, getCountry, type Language, type TranslationKey, type CountryCode } from '@/lib/global/data';
+import {
+  TRANSLATION_MEMORY, ESG_METRICS, BOARD_MEMBERS, BOARD_RESOLUTIONS,
+  type ESGMetric, type BoardMember, type BoardResolution,
+} from '@/lib/global/data-enterprise';
 
 // ─── Mock Translation Map (for Live Preview) ──────────────────────────────────
 
@@ -899,6 +906,523 @@ function TranslatorWorkflow() {
   );
 }
 
+// ─── Translation Memory & Glossary ─────────────────────────────────────────────
+
+const TM_DOMAIN_STYLE: Record<string, string> = {
+  Finance: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Tax: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  Regulatory: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  Compliance: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+  Trade: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+};
+
+function qualityBadge(q: number): string {
+  if (q >= 98) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300';
+  if (q >= 94) return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+  return 'border-rose-500/30 bg-rose-500/10 text-rose-400';
+}
+
+const TM_LANG_FLAGS: Record<string, string> = {
+  hi: '🇮🇳', fr: '🇫🇷', de: '🇩🇪', ar: '🇦🇪', ja: '🇯🇵', zh: '🇨🇳', es: '🇪🇸',
+};
+
+function TranslationMemoryGlossary() {
+  const [expanded, setExpanded] = useState<string | null>(TRANSLATION_MEMORY[0]?.id ?? null);
+
+  const kpis = useMemo(() => {
+    const total = TRANSLATION_MEMORY.length;
+    const totalUsage = TRANSLATION_MEMORY.reduce((s, t) => s + t.usageCount, 0);
+    const allQualities: number[] = [];
+    for (const t of TRANSLATION_MEMORY) {
+      for (const lang of Object.keys(t.translations)) {
+        allQualities.push(t.translations[lang].quality);
+      }
+    }
+    const avgQuality = allQualities.length
+      ? allQualities.reduce((s, q) => s + q, 0) / allQualities.length
+      : 0;
+    return { total, totalUsage, avgQuality };
+  }, []);
+
+  const fmtUsage = (n: number): string => {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return String(n);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+          <Database className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Translation Memory & Glossary</h2>
+          <p className="text-[11px] text-zinc-500">
+            {TRANSLATION_MEMORY.length} entries · 7-language canonical glossary with QA scores & reviewers
+          </p>
+        </div>
+      </div>
+
+      {/* KPI tiles */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total TM Entries</div>
+          <div className="text-lg font-semibold text-zinc-50 tabular-nums">{kpis.total}</div>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total Usage</div>
+          <div className="text-lg font-semibold text-emerald-300 tabular-nums">{fmtUsage(kpis.totalUsage)}</div>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Avg Quality</div>
+          <div className="text-lg font-semibold text-teal-300 tabular-nums">{kpis.avgQuality.toFixed(1)}</div>
+        </div>
+      </div>
+
+      {/* TM Table */}
+      <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/[0.06] hover:bg-transparent">
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-8" />
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Source Text</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24">Domain</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24 text-right">Usage</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-28">Last Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {TRANSLATION_MEMORY.map((entry) => {
+              const isExpanded = expanded === entry.id;
+              const domainStyle = TM_DOMAIN_STYLE[entry.domain] ?? 'border-white/[0.06] bg-white/[0.02] text-zinc-300';
+              return (
+                <Fragment key={entry.id}>
+                  <TableRow
+                    className="border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer"
+                    onClick={() => setExpanded(isExpanded ? null : entry.id)}
+                  >
+                    <TableCell className="text-zinc-500">
+                      {isExpanded
+                        ? <ChevronDown className="h-3.5 w-3.5" />
+                        : <ChevronRight className="h-3.5 w-3.5" />}
+                    </TableCell>
+                    <TableCell className="text-[12px] font-medium text-zinc-100">{entry.sourceText}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${domainStyle}`}>{entry.domain}</Badge>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-zinc-300 text-right tabular-nums">
+                      {fmtUsage(entry.usageCount)}
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-500 font-mono">{entry.lastUpdated}</TableCell>
+                  </TableRow>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <TableRow className="border-white/[0.04] bg-black/30">
+                        <TableCell colSpan={5} className="p-0">
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="p-3"
+                          >
+                            <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
+                              Translations across 7 languages
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {Object.entries(entry.translations).map(([langCode, t]) => (
+                                <div
+                                  key={langCode}
+                                  className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2.5"
+                                  dir={langCode === 'ar' ? 'rtl' : 'ltr'}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-base leading-none">{TM_LANG_FLAGS[langCode] ?? '🏳️'}</span>
+                                      <span className="text-[10px] uppercase tracking-wider text-zinc-400">{langCode}</span>
+                                    </div>
+                                    <Badge variant="outline" className={`text-[9px] ${qualityBadge(t.quality)}`}>
+                                      {t.quality}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-[12px] text-zinc-100 mb-1.5 leading-snug">{t.text}</div>
+                                  <div className="flex items-center gap-1 text-[9px] text-zinc-500">
+                                    <CheckCircle2 className="h-2.5 w-2.5" />
+                                    <span className="truncate">Reviewed by {t.reviewer}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </AnimatePresence>
+                </Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
+        <span>Click a row to expand 7-language translations</span>
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />≥98</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />94-97</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-400" />&lt;94</span>
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── ESG & Sustainability Dashboard ────────────────────────────────────────────
+
+function ESGDashboard() {
+  const summary = useMemo(() => {
+    const scope1 = ESG_METRICS.reduce((s, e) => s + e.scope1Emissions, 0);
+    const scope2 = ESG_METRICS.reduce((s, e) => s + e.scope2Emissions, 0);
+    const scope3 = ESG_METRICS.reduce((s, e) => s + e.scope3Emissions, 0);
+    const avgRenewable = ESG_METRICS.reduce((s, e) => s + e.renewableEnergyPct, 0) / ESG_METRICS.length;
+    const avgSatisfaction = ESG_METRICS.reduce((s, e) => s + e.employeeSatisfaction, 0) / ESG_METRICS.length;
+    return { scope1, scope2, scope3, avgRenewable, avgSatisfaction };
+  }, []);
+
+  const maxScope = Math.max(...ESG_METRICS.map((e) => e.scope1Emissions + e.scope2Emissions + e.scope3Emissions));
+
+  const fmtTCO2 = (n: number): string => {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return n.toLocaleString('en-US');
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] to-transparent p-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+          <Leaf className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">ESG & Sustainability Dashboard</h2>
+          <p className="text-[11px] text-zinc-500">
+            Carbon emissions, renewable energy, water & community investment across {ESG_METRICS.length} countries
+          </p>
+        </div>
+      </div>
+
+      {/* Summary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Scope 1 + 2 (tCO₂e)</div>
+          <div className="text-base font-semibold text-rose-300 tabular-nums">{fmtTCO2(summary.scope1 + summary.scope2)}</div>
+        </div>
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Scope 3 (tCO₂e)</div>
+          <div className="text-base font-semibold text-amber-300 tabular-nums">{fmtTCO2(summary.scope3)}</div>
+        </div>
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Avg Renewable %</div>
+          <div className="text-base font-semibold text-emerald-300 tabular-nums">{summary.avgRenewable.toFixed(1)}%</div>
+        </div>
+        <div className="rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Avg Satisfaction</div>
+          <div className="text-base font-semibold text-teal-300 tabular-nums">{summary.avgSatisfaction.toFixed(1)}/100</div>
+        </div>
+      </div>
+
+      {/* ESG Cards grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+        {ESG_METRICS.map((m, i) => {
+          const c = getCountry(m.countryCode as CountryCode);
+          const totalEmissions = m.scope1Emissions + m.scope2Emissions + m.scope3Emissions;
+          const s1Pct = (m.scope1Emissions / totalEmissions) * 100;
+          const s2Pct = (m.scope2Emissions / totalEmissions) * 100;
+          const s3Pct = (m.scope3Emissions / totalEmissions) * 100;
+          const totalBarPct = (totalEmissions / maxScope) * 100;
+          const renewableColor = m.renewableEnergyPct >= 60 ? 'text-emerald-300' : m.renewableEnergyPct >= 40 ? 'text-amber-300' : 'text-rose-300';
+          return (
+            <motion.div
+              key={m.countryCode}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 hover:border-emerald-500/30 transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base leading-none">{c?.flag ?? '🏳️'}</span>
+                  <span className="text-[11px] font-semibold text-zinc-100">{c?.code ?? m.countryCode}</span>
+                </div>
+                <Badge variant="outline" className={`text-[9px] ${renewableColor} border-current/30 bg-current/10`}>
+                  <Sun className="h-2.5 w-2.5" />
+                  {m.renewableEnergyPct}%
+                </Badge>
+              </div>
+
+              {/* Emissions stacked bar */}
+              <div className="text-[9px] uppercase tracking-wider text-zinc-500 mb-1">Emissions (tCO₂e)</div>
+              <div className="h-2 rounded-full bg-black/40 overflow-hidden flex" title={`Scope 1: ${m.scope1Emissions} · Scope 2: ${m.scope2Emissions} · Scope 3: ${m.scope3Emissions}`}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(s1Pct * totalBarPct) / 100}%` }}
+                  transition={{ duration: 0.6, delay: i * 0.04 }}
+                  className="h-full bg-rose-500"
+                />
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(s2Pct * totalBarPct) / 100}%` }}
+                  transition={{ duration: 0.6, delay: i * 0.04 + 0.05 }}
+                  className="h-full bg-amber-400"
+                />
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(s3Pct * totalBarPct) / 100}%` }}
+                  transition={{ duration: 0.6, delay: i * 0.04 + 0.1 }}
+                  className="h-full bg-teal-400"
+                />
+              </div>
+              <div className="text-[10px] text-zinc-400 mt-0.5 tabular-nums">{fmtTCO2(totalEmissions)}</div>
+
+              {/* Mini stat grid */}
+              <div className="mt-2 grid grid-cols-2 gap-1 text-[9px]">
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <Droplets className="h-2.5 w-2.5 text-cyan-400" />
+                  <span className="tabular-nums">{(m.waterUsage / 1000).toFixed(1)}K m³</span>
+                </div>
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <Recycle className="h-2.5 w-2.5 text-emerald-400" />
+                  <span className="tabular-nums">{m.wasteRecycledPct}%</span>
+                </div>
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <Users className="h-2.5 w-2.5 text-violet-400" />
+                  <span className="tabular-nums">{m.diversityScore}/100</span>
+                </div>
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <HeartHandshake className="h-2.5 w-2.5 text-rose-400" />
+                  <span className="tabular-nums">{m.employeeSatisfaction}%</span>
+                </div>
+              </div>
+
+              <Separator className="my-2 bg-white/[0.06]" />
+
+              <div className="flex items-center gap-1 text-[10px] text-emerald-300">
+                <HeartHandshake className="h-2.5 w-2.5" />
+                <span className="tabular-nums">${(m.communityInvestment / 1000).toFixed(0)}K community</span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3 text-[10px] text-zinc-500">
+        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />Scope 1</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />Scope 2</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />Scope 3</span>
+        <span className="ml-auto">Net-zero target: 2030 (Scope 1+2) · 2040 (Scope 3)</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Board & Governance ────────────────────────────────────────────────────────
+
+const BOARD_TYPE_STYLE: Record<BoardResolution['type'], string> = {
+  Financial: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  Strategic: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
+  Governance: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  Compliance: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+};
+
+const BOARD_STATUS_STYLE: Record<BoardResolution['status'], string> = {
+  passed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  tabled: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function BoardGovernance() {
+  const avgAttendance = useMemo(
+    () => BOARD_MEMBERS.reduce((s, m) => s + m.attendance, 0) / BOARD_MEMBERS.length,
+    [],
+  );
+  const totalShares = useMemo(
+    () => BOARD_MEMBERS.reduce((s, m) => s + m.shares, 0),
+    [],
+  );
+  const independentCount = BOARD_MEMBERS.filter((m) => m.independent).length;
+  const passedCount = BOARD_RESOLUTIONS.filter((r) => r.status === 'passed').length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.04] to-transparent p-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/30 bg-violet-500/10 text-violet-300">
+          <Gavel className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Board & Governance</h2>
+          <p className="text-[11px] text-zinc-500">
+            {BOARD_MEMBERS.length} directors · {independentCount} independent · {BOARD_RESOLUTIONS.length} resolutions ({passedCount} passed)
+          </p>
+        </div>
+      </div>
+
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Avg Attendance</div>
+          <div className="text-base font-semibold text-emerald-300 tabular-nums">{avgAttendance.toFixed(0)}%</div>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Total Director Shares</div>
+          <div className="text-base font-semibold text-teal-300 tabular-nums">{(totalShares / 1000).toFixed(0)}K</div>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Independent</div>
+          <div className="text-base font-semibold text-cyan-300 tabular-nums">{((independentCount / BOARD_MEMBERS.length) * 100).toFixed(0)}%</div>
+        </div>
+      </div>
+
+      {/* Board Members Table */}
+      <div className="rounded-lg border border-white/[0.06] overflow-hidden mb-3">
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.06] bg-white/[0.02]">
+          <Crown className="h-3 w-3 text-amber-300" />
+          <span className="text-[11px] font-semibold text-zinc-100">Board Members</span>
+        </div>
+        <ScrollArea className="max-h-[320px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Director</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Role</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Indep.</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Committees</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20 text-right">Attend.</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Since</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20 text-right">Shares</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {BOARD_MEMBERS.map((m) => {
+                const c = getCountry(m.countryCode as CountryCode);
+                return (
+                  <TableRow key={m.id} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none">{c?.flag ?? '🏳️'}</span>
+                        <div>
+                          <div className="text-[12px] font-medium text-zinc-100">{m.name}</div>
+                          <div className="text-[9px] text-zinc-500">{m.nationality}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-zinc-200">{m.role}</TableCell>
+                    <TableCell>
+                      {m.independent ? (
+                        <Badge variant="outline" className="text-[9px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                          <CheckCircle2 className="h-2.5 w-2.5" />Yes
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] border-white/[0.08] bg-white/[0.02] text-zinc-500">
+                          Exec
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {m.committees.map((cm) => (
+                          <span key={cm} className="text-[9px] px-1.5 py-0.5 rounded border border-white/[0.06] bg-white/[0.02] text-zinc-400">
+                            {cm}
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`text-[11px] font-semibold tabular-nums ${
+                        m.attendance >= 95 ? 'text-emerald-300' :
+                        m.attendance >= 90 ? 'text-teal-300' :
+                        'text-amber-300'
+                      }`}>{m.attendance}%</span>
+                    </TableCell>
+                    <TableCell className="text-[10px] text-zinc-400 font-mono">{m.since}</TableCell>
+                    <TableCell className="text-[11px] text-zinc-200 text-right tabular-nums">
+                      {(m.shares / 1000).toFixed(0)}K
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+
+      {/* Board Resolutions Table */}
+      <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.06] bg-white/[0.02]">
+          <Vote className="h-3 w-3 text-violet-300" />
+          <span className="text-[11px] font-semibold text-zinc-100">Board Resolutions</span>
+        </div>
+        <ScrollArea className="max-h-[320px]">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/[0.06] hover:bg-transparent">
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500">Resolution</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24">Date</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-24">Type</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-20">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider text-zinc-500 w-32">Vote Tally</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {BOARD_RESOLUTIONS.map((r) => (
+                <TableRow key={r.id} className="border-white/[0.04] hover:bg-white/[0.03] transition-colors align-top">
+                  <TableCell>
+                    <div className="text-[11px] font-medium text-zinc-100">{r.title}</div>
+                    <div className="text-[10px] text-zinc-500 mt-0.5 leading-snug">{r.summary}</div>
+                  </TableCell>
+                  <TableCell className="text-[10px] text-zinc-400 font-mono">{r.date}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[9px] ${BOARD_TYPE_STYLE[r.type]}`}>{r.type}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[9px] capitalize ${BOARD_STATUS_STYLE[r.status]}`}>{r.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="flex items-center gap-0.5 text-emerald-300">
+                        <ThumbsUp className="h-2.5 w-2.5" />{r.votesFor}
+                      </span>
+                      <span className="flex items-center gap-0.5 text-rose-400">
+                        <ThumbsDown className="h-2.5 w-2.5" />{r.votesAgainst}
+                      </span>
+                      <span className="flex items-center gap-0.5 text-zinc-500">
+                        <MinusCircle className="h-2.5 w-2.5" />{r.abstentions}
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function MultiLanguagePlatform() {
@@ -1028,6 +1552,15 @@ export default function MultiLanguagePlatform() {
 
       {/* Translator Workflow */}
       <TranslatorWorkflow />
+
+      {/* Translation Memory & Glossary */}
+      <TranslationMemoryGlossary />
+
+      {/* ESG & Sustainability Dashboard */}
+      <ESGDashboard />
+
+      {/* Board & Governance */}
+      <BoardGovernance />
 
       {/* Footer */}
       <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">

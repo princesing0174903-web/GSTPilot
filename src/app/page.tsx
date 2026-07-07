@@ -155,6 +155,24 @@ const CrossBorderPaymentsPage = dynamic(() => import('@/components/global-expans
 const InternationalReportsPage = dynamic(() => import('@/components/global-expansion/InternationalReports'), { loading: PageLoader, ssr: false })
 const GlobalPerformancePage = dynamic(() => import('@/components/global-expansion/GlobalPerformance'), { loading: PageLoader, ssr: false })
 
+// Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™
+const GlobalFinancialCloudHubPage = dynamic(() => import('@/components/global-cloud/GlobalFinancialCloudHub'), { loading: PageLoader, ssr: false })
+const DeveloperPlatformPage = dynamic(() => import('@/components/global-cloud/DeveloperPlatform'), { loading: PageLoader, ssr: false })
+const EnterpriseAPIGatewayPage = dynamic(() => import('@/components/global-cloud/EnterpriseAPIGateway'), { loading: PageLoader, ssr: false })
+const AppMarketplaceCloudPage = dynamic(() => import('@/components/global-cloud/AppMarketplaceCloud'), { loading: PageLoader, ssr: false })
+const GlobalIntegrationHubPage = dynamic(() => import('@/components/global-cloud/GlobalIntegrationHub'), { loading: PageLoader, ssr: false })
+const FinancialDataCloudPage = dynamic(() => import('@/components/global-cloud/FinancialDataCloud'), { loading: PageLoader, ssr: false })
+const EventStreamingPage = dynamic(() => import('@/components/global-cloud/EventStreaming'), { loading: PageLoader, ssr: false })
+const AutomationStudioPage = dynamic(() => import('@/components/global-cloud/AutomationStudio'), { loading: PageLoader, ssr: false })
+const DataWarehousePage = dynamic(() => import('@/components/global-cloud/DataWarehouse'), { loading: PageLoader, ssr: false })
+const GlobalIdentityPage = dynamic(() => import('@/components/global-cloud/GlobalIdentity'), { loading: PageLoader, ssr: false })
+const DeveloperAnalyticsPage = dynamic(() => import('@/components/global-cloud/DeveloperAnalytics'), { loading: PageLoader, ssr: false })
+const EnterpriseBillingPage = dynamic(() => import('@/components/global-cloud/EnterpriseBilling'), { loading: PageLoader, ssr: false })
+const MultiTenantInfraPage = dynamic(() => import('@/components/global-cloud/MultiTenantInfra'), { loading: PageLoader, ssr: false })
+const EnterpriseSecurityCloudPage = dynamic(() => import('@/components/global-cloud/EnterpriseSecurityCloud'), { loading: PageLoader, ssr: false })
+const GlobalFinancialNetworkPage = dynamic(() => import('@/components/global-cloud/GlobalFinancialNetwork'), { loading: PageLoader, ssr: false })
+const PlatformIntelligencePage = dynamic(() => import('@/components/global-cloud/PlatformIntelligence'), { loading: PageLoader, ssr: false })
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -281,6 +299,22 @@ const VIEW_TITLES: Record<string, string> = {
   'enterprise-cloud-platform': 'Enterprise Cloud Platform™',
   'enterprise-ai-platform': 'Enterprise AI Platform™',
   'global-enterprise-network': 'Global Enterprise Network™',
+  'global-financial-cloud': 'Global Financial Cloud™',
+  'developer-platform': 'Developer Platform™',
+  'enterprise-api-gateway': 'Enterprise API Gateway™',
+  'app-marketplace-cloud': 'App Marketplace™',
+  'global-integration-hub': 'Global Integration Hub™',
+  'financial-data-cloud': 'Financial Data Cloud™',
+  'event-streaming': 'Event Streaming Platform™',
+  'automation-studio': 'Enterprise Automation Studio™',
+  'data-warehouse': 'Enterprise Data Warehouse™',
+  'global-identity': 'Global Identity Platform™',
+  'developer-analytics': 'Developer Analytics™',
+  'enterprise-billing': 'Enterprise Billing Platform™',
+  'multi-tenant-infra': 'Multi-Tenant Cloud Infra™',
+  'enterprise-security-cloud': 'Enterprise Security™',
+  'global-financial-network': 'Global Financial Network™',
+  'platform-intelligence': 'Platform Intelligence™',
 }
 
 function DashboardContent() {
@@ -552,6 +586,39 @@ function DashboardContent() {
         return <InternationalReportsPage />
       case 'global-performance':
         return <GlobalPerformancePage />
+      // Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™
+      case 'global-financial-cloud':
+        return <GlobalFinancialCloudHubPage />
+      case 'developer-platform':
+        return <DeveloperPlatformPage />
+      case 'enterprise-api-gateway':
+        return <EnterpriseAPIGatewayPage />
+      case 'app-marketplace-cloud':
+        return <AppMarketplaceCloudPage />
+      case 'global-integration-hub':
+        return <GlobalIntegrationHubPage />
+      case 'financial-data-cloud':
+        return <FinancialDataCloudPage />
+      case 'event-streaming':
+        return <EventStreamingPage />
+      case 'automation-studio':
+        return <AutomationStudioPage />
+      case 'data-warehouse':
+        return <DataWarehousePage />
+      case 'global-identity':
+        return <GlobalIdentityPage />
+      case 'developer-analytics':
+        return <DeveloperAnalyticsPage />
+      case 'enterprise-billing':
+        return <EnterpriseBillingPage />
+      case 'multi-tenant-infra':
+        return <MultiTenantInfraPage />
+      case 'enterprise-security-cloud':
+        return <EnterpriseSecurityCloudPage />
+      case 'global-financial-network':
+        return <GlobalFinancialNetworkPage />
+      case 'platform-intelligence':
+        return <PlatformIntelligencePage />
       default:
         return <MissionControlPage />
     }

@@ -1,0 +1,1154 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPILOT INFINITY™ — PHASE 16: GLOBAL FINANCIAL CLOUD™ DATA LAYER
+     3→//
+     4→// Comprehensive, deterministic, STATIC dataset for all 15 sub-modules of
+     5→// Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™.
+     6→//
+     7→//   • NO API calls  • NO Math.random  • NO fetch  • NO Date.now side-effects
+     8→//
+     9→// All numbers are curated to look like a real billion-dollar SaaS platform
+    10→// (GSTPilot scale: ~2.4M developers, ~180K enterprises, ~$4.8Bn API revenue).
+    11→// ═══════════════════════════════════════════════════════════════════════════════
+    12→
+    13→// ─── Phase 16 Accent Color Tokens ─────────────────────────────────────────────
+    14→// NEVER indigo/blue. Emerald / teal / cyan / violet / amber / rose only.
+    15→export type Accent = 'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose';
+    16→
+    17→export const ACCENT_HEX: Record<Accent, string> = {
+    18→  emerald: '#10b981',
+    19→  teal:    '#14b8a6',
+    20→  cyan:    '#06b6d4',
+    21→  violet:  '#8b5cf6',
+    22→  amber:   '#f59e0b',
+    23→  rose:    '#f43f5e',
+    24→};
+    25→
+    26→export const ACCENT_CLASSES: Record<Accent, {
+    27→  text: string; bg: string; border: string; ring: string; bar: string; glow: string;
+    28→}> = {
+    29→  emerald: { text: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', ring: 'ring-emerald-500/30', bar: 'bg-emerald-500', glow: 'shadow-[0_0_30px_-5px_rgba(16,185,129,0.4)]' },
+    30→  teal:    { text: 'text-teal-300',    bg: 'bg-teal-500/10',    border: 'border-teal-500/30',    ring: 'ring-teal-500/30',    bar: 'bg-teal-500',    glow: 'shadow-[0_0_30px_-5px_rgba(20,184,166,0.4)]' },
+    31→  cyan:    { text: 'text-cyan-300',    bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    ring: 'ring-cyan-500/30',    bar: 'bg-cyan-500',    glow: 'shadow-[0_0_30px_-5px_rgba(6,182,212,0.4)]' },
+    32→  violet:  { text: 'text-violet-300',  bg: 'bg-violet-500/10',  border: 'border-violet-500/30',  ring: 'ring-violet-500/30',  bar: 'bg-violet-500',  glow: 'shadow-[0_0_30px_-5px_rgba(139,92,246,0.4)]' },
+    33→  amber:   { text: 'text-amber-300',   bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   ring: 'ring-amber-500/30',   bar: 'bg-amber-500',   glow: 'shadow-[0_0_30px_-5px_rgba(245,158,11,0.4)]' },
+    34→  rose:    { text: 'text-rose-300',    bg: 'bg-rose-500/10',    border: 'border-rose-500/30',    ring: 'ring-rose-500/30',    bar: 'bg-rose-500',    glow: 'shadow-[0_0_30px_-5px_rgba(244,63,94,0.4)]' },
+    35→};
+    36→
+    37→// ─── Helpers ───────────────────────────────────────────────────────────────────
+    38→export const fmt = (n: number): string => {
+    39→  if (Math.abs(n) >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+    40→  if (Math.abs(n) >= 1_000_000)     return `$${(n / 1_000_000).toFixed(2)}M`;
+    41→  if (Math.abs(n) >= 1_000)         return `$${(n / 1_000).toFixed(1)}K`;
+    42→  return `$${n.toFixed(0)}`;
+    43→};
+    44→export const fmtN = (n: number): string => {
+    45→  if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+    46→  if (Math.abs(n) >= 1_000_000)     return `${(n / 1_000_000).toFixed(2)}M`;
+    47→  if (Math.abs(n) >= 1_000)         return `${(n / 1_000).toFixed(1)}K`;
+    48→  return `${n.toFixed(0)}`;
+    49→};
+    50→export const fmtPct = (n: number): string => `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
+    51→
+    52→// ═══════════════════════════════════════════════════════════════════════════════
+    53→// 1. DEVELOPER PLATFORM — APIs, SDKs, CLI, OAuth, API keys, Playground, Sandbox
+    54→// ═══════════════════════════════════════════════════════════════════════════════
+    55→
+    56→export interface RestEndpoint {
+    57→  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    58→  path: string;
+    59→  desc: string;
+    60→  ratePerMin: number;
+    61→}
+    62→
+    63→export const REST_ENDPOINTS: RestEndpoint[] = [
+    64→  { method: 'GET',    path: '/v1/invoices',                desc: 'List invoices with pagination & filters',       ratePerMin: 600 },
+    65→  { method: 'POST',   path: '/v1/invoices',                desc: 'Create a new GST-compliant invoice',            ratePerMin: 300 },
+    66→  { method: 'GET',    path: '/v1/invoices/:id',            desc: 'Retrieve a single invoice by ID',               ratePerMin: 1200 },
+    67→  { method: 'PUT',    path: '/v1/invoices/:id',            desc: 'Update an existing draft invoice',              ratePerMin: 300 },
+    68→  { method: 'DELETE', path: '/v1/invoices/:id',            desc: 'Cancel an invoice (cannot delete)',             ratePerMin: 120 },
+    69→  { method: 'POST',   path: '/v1/gst/returns/gstr1',       desc: 'File GSTR-1 return with auto-reconciliation',   ratePerMin: 60 },
+    70→  { method: 'GET',    path: '/v1/gst/returns/:id',         desc: 'Get filed return status & acknowledgement',     ratePerMin: 600 },
+    71→  { method: 'POST',   path: '/v1/payments',                desc: 'Initiate a UPI/NEFT/RTGS payment',              ratePerMin: 240 },
+    72→  { method: 'GET',    path: '/v1/ledger/accounts',         desc: 'List chart of accounts',                        ratePerMin: 600 },
+    73→  { method: 'POST',   path: '/v1/ledger/journal-entries',  desc: 'Post a double-entry journal voucher',           ratePerMin: 300 },
+    74→  { method: 'GET',    path: '/v1/customers',               desc: 'List customers with balances & aging',          ratePerMin: 600 },
+    75→  { method: 'POST',   path: '/v1/vendors',                 desc: 'Create vendor master record',                   ratePerMin: 300 },
+    76→  { method: 'GET',    path: '/v1/bank/accounts',           desc: 'List connected bank accounts & live balances',  ratePerMin: 240 },
+    77→  { method: 'POST',   path: '/v1/bank/reconcile',          desc: 'Auto-reconcile bank statement vs ledger',       ratePerMin: 60 },
+    78→  { method: 'POST',   path: '/v1/ai/oracle',               desc: 'Invoke Oracle™ AI for natural-language query',  ratePerMin: 120 },
+    79→  { method: 'GET',    path: '/v1/compliance/calendar',     desc: 'Upcoming filing deadlines by jurisdiction',     ratePerMin: 600 },
+    80→  { method: 'POST',   path: '/v1/documents/upload',        desc: 'Upload document for OCR & AI extraction',       ratePerMin: 120 },
+    81→  { method: 'GET',    path: '/v1/analytics/kpis',          desc: 'Realtime KPI snapshot (revenue, burn, runway)', ratePerMin: 600 },
+    82→  { method: 'POST',   path: '/v1/webhooks/subscribe',      desc: 'Subscribe to realtime event stream',            ratePerMin: 60 },
+    83→  { method: 'GET',    path: '/v1/payroll/runs',            desc: 'List payroll runs with net pay & taxes',        ratePerMin: 240 },
+    84→];
+    85→
+    86→export interface GraphQLOperation {
+    87→  name: string;
+    88→  type: 'Query' | 'Mutation' | 'Subscription';
+    89→  desc: string;
+    90→  returns: string;
+    91→}
+    92→
+    93→export const GRAPHQL_OPS: GraphQLOperation[] = [
+    94→  { name: 'invoice',           type: 'Query',        desc: 'Fetch a single invoice with line items & tax breakdown',    returns: 'Invoice!' },
+    95→  { name: 'invoices',          type: 'Query',        desc: 'Paginated invoice list with multi-filter',                  returns: 'InvoiceConnection!' },
+    96→  { name: 'gstReturn',         type: 'Query',        desc: 'Filed return with reconciliation summary',                  returns: 'GstReturn!' },
+    97→  { name: 'customer',          type: 'Query',        desc: 'Customer with ledger, balances, recent transactions',       returns: 'Customer!' },
+    98→  { name: 'bankAccount',       type: 'Query',        desc: 'Live bank balance + last 30 days transactions',             returns: 'BankAccount!' },
+    99→  { name: 'createInvoice',     type: 'Mutation',     desc: 'Create invoice with auto-numbering & GST rules',            returns: 'Invoice!' },
+   100→  { name: 'fileGstr1',         type: 'Mutation',     desc: 'File GSTR-1 with OTP-less e-filing',                        returns: 'FilingResult!' },
+   101→  { name: 'initiatePayment',   type: 'Mutation',     desc: 'Initiate payment & return tracking handle',                 returns: 'Payment!' },
+   102→  { name: 'oracleAsk',         type: 'Mutation',     desc: 'Ask Oracle™ a strategic question, return streamed answer',  returns: 'OracleResponse!' },
+   103→  { name: 'invoiceCreated',    type: 'Subscription', desc: 'Realtime stream of new invoice events',                     returns: 'InvoiceEvent!' },
+   104→  { name: 'paymentReceived',   type: 'Subscription', desc: 'Realtime stream of inbound payments',                       returns: 'PaymentEvent!' },
+   105→  { name: 'gstFiled',          type: 'Subscription', desc: 'Realtime stream of GST filing acknowledgements',            returns: 'FilingEvent!' },
+   106→  { name: 'bankSynced',        type: 'Subscription', desc: 'Realtime stream of bank reconciliation results',            returns: 'BankSyncEvent!' },
+   107→];
+   108→
+   109→export interface SdkLibrary {
+   110→  language: string;
+   111→  package: string;
+   112→  version: string;
+   113→  weeklyDownloads: number;
+   114→  install: string;
+   115→  accent: Accent;
+   116→}
+   117→
+   118→export const SDKS: SdkLibrary[] = [
+   119→  { language: 'TypeScript', package: '@gstpilot/sdk-node',   version: '4.12.0', weeklyDownloads: 842_000, install: 'npm i @gstpilot/sdk-node',   accent: 'emerald' },
+   120→  { language: 'Python',     package: 'gstpilot',             version: '4.12.0', weeklyDownloads: 612_000, install: 'pip install gstpilot',        accent: 'amber'   },
+   121→  { language: 'Go',         package: 'github.com/gstpilot/go-sdk', version: '4.11.2', weeklyDownloads: 184_000, install: 'go get github.com/gstpilot/go-sdk', accent: 'cyan'    },
+   122→  { language: 'Java',       package: 'io.gstpilot:sdk-java', version: '4.12.0', weeklyDownloads: 268_000, install: 'implementation \'io.gstpilot:sdk-java:4.12.0\'' , accent: 'rose'    },
+   123→  { language: 'Ruby',       package: 'gstpilot',             version: '4.10.1', weeklyDownloads:  74_000, install: 'gem install gstpilot',        accent: 'rose'    },
+   124→  { language: 'PHP',        package: 'gstpilot/php-sdk',     version: '4.11.0', weeklyDownloads: 142_000, install: 'composer require gstpilot/php-sdk', accent: 'violet' },
+   125→  { language: '.NET',       package: 'GSTPilot.SDK',         version: '4.12.0', weeklyDownloads: 198_000, install: 'dotnet add package GSTPilot.SDK', accent: 'teal'   },
+   126→  { language: 'Rust',       package: 'gstpilot-rs',          version: '4.9.0',  weeklyDownloads:  46_000, install: 'cargo add gstpilot',          accent: 'amber'   },
+   127→];
+   128→
+   129→export interface CliCommand {
+   130→  command: string;
+   131→  desc: string;
+   132→  example: string;
+   133→}
+   134→
+   135→export const CLI_COMMANDS: CliCommand[] = [
+   136→  { command: 'gstpilot auth login',           desc: 'Authenticate CLI with API key or browser OAuth',     example: 'gstpilot auth login --api-key sk_live_...' },
+   137→  { command: 'gstpilot invoices create',      desc: 'Create invoice from JSON or interactive prompt',     example: 'gstpilot invoices create --file inv.json' },
+   138→  { command: 'gstpilot gst file gstr1',       desc: 'File GSTR-1 for current period',                    example: 'gstpilot gst file gstr1 --period 2025-10' },
+   139→  { command: 'gstpilot bank reconcile',       desc: 'Run auto-reconciliation across connected banks',     example: 'gstpilot bank reconcile --since 7d' },
+   140→  { command: 'gstpilot oracle ask',           desc: 'Ask Oracle™ a question from terminal',              example: 'gstpilot oracle ask "Cash runway?"' },
+   141→  { command: 'gstpilot apps publish',         desc: 'Publish your app to GSTPilot Marketplace',           example: 'gstpilot apps publish --version 1.0.0' },
+   142→  { command: 'gstpilot webhooks listen',      desc: 'Tunnel live webhook events to localhost',           example: 'gstpilot webhooks listen --port 8080' },
+   143→  { command: 'gstpilot sandbox reset',        desc: 'Reset sandbox environment to clean state',          example: 'gstpilot sandbox reset --confirm' },
+   144→  { command: 'gstpilot migrations run',       desc: 'Run schema migrations for your app database',       example: 'gstpilot migrations run --up' },
+   145→  { command: 'gstpilot logs tail',            desc: 'Tail platform logs for your organization',          example: 'gstpilot logs tail --filter error' },
+   146→];
+   147→
+   148→export interface OAuthProvider {
+   149→  name: string;
+   150→  type: string;
+   151→  scopes: number;
+   152→  flow: string;
+   153→  status: 'live' | 'beta';
+   154→}
+   155→
+   156→export const OAUTH_PROVIDERS: OAuthProvider[] = [
+   157→  { name: 'Google Workspace',   type: 'OAuth 2.0',   scopes: 8,  flow: 'Authorization Code + PKCE', status: 'live' },
+   158→  { name: 'Microsoft 365',      type: 'OAuth 2.0',   scopes: 11, flow: 'Authorization Code + PKCE', status: 'live' },
+   159→  { name: 'GitHub',             type: 'OAuth 2.0',   scopes: 5,  flow: 'Authorization Code',         status: 'live' },
+   160→  { name: 'Azure AD',           type: 'OIDC + SAML', scopes: 14, flow: 'Authorization Code + PKCE', status: 'live' },
+   161→  { name: 'Okta',               type: 'OIDC',        scopes: 9,  flow: 'Authorization Code + PKCE', status: 'live' },
+   162→  { name: 'Apple Sign-In',      type: 'OAuth 2.0',   scopes: 3,  flow: 'Authorization Code',         status: 'live' },
+   163→  { name: 'Slack',              type: 'OAuth 2.0',   scopes: 6,  flow: 'Authorization Code',         status: 'live' },
+   164→  { name: 'Salesforce',         type: 'OAuth 2.0',   scopes: 12, flow: 'Authorization Code + PKCE', status: 'beta' },
+   165→];
+   166→
+   167→export interface ApiKey {
+   168→  id: string;
+   169→  name: string;
+   170→  prefix: string;
+   171→  env: 'live' | 'sandbox';
+   172→  created: string;
+   173→  lastUsed: string;
+   174→  scopes: string[];
+   175→  status: 'active' | 'revoked';
+   176→}
+   177→
+   178→export const API_KEYS: ApiKey[] = [
+   179→  { id: 'key_001', name: 'Production — Web App',     prefix: 'sk_live_8f2a', env: 'live',    created: '2024-03-14', lastUsed: '2 min ago',  scopes: ['invoices:rw', 'gst:rw', 'payments:rw'], status: 'active'  },
+   180→  { id: 'key_002', name: 'Production — Mobile iOS',  prefix: 'sk_live_3c91', env: 'live',    created: '2024-06-22', lastUsed: '12 min ago', scopes: ['invoices:r', 'payments:rw'],            status: 'active'  },
+   181→  { id: 'key_003', name: 'Sandbox — Staging',        prefix: 'sk_test_7e44', env: 'sandbox', created: '2024-09-01', lastUsed: '1 hr ago',   scopes: ['invoices:rw', 'gst:rw'],                status: 'active'  },
+   182→  { id: 'key_004', name: 'Sandbox — CI Pipeline',    prefix: 'sk_test_1b08', env: 'sandbox', created: '2024-11-18', lastUsed: '4 hr ago',   scopes: ['invoices:rw'],                          status: 'active'  },
+   183→  { id: 'key_005', name: 'Legacy — Webhook v1',      prefix: 'sk_live_9d77', env: 'live',    created: '2023-05-10', lastUsed: '14 days ago',scopes: ['webhooks:rw'],                          status: 'revoked' },
+   184→];
+   185→
+   186→export interface PlaygroundSample {
+   187→  title: string;
+   188→  language: 'curl' | 'node' | 'python' | 'graphql';
+   189→  code: string;
+   190→  desc: string;
+   191→}
+   192→
+   193→export const PLAYGROUND_SAMPLES: PlaygroundSample[] = [
+   194→  { title: 'Create Invoice', language: 'node', desc: 'Create a GST-compliant invoice with line items',
+   195→    code: `import { GSTPilot } from '@gstpilot/sdk-node';
+   196→const gp = new GSTPilot({ apiKey: process.env.GSTPILOT_KEY });
+   197→
+   198→const invoice = await gp.invoices.create({
+   199→  customer: 'cust_8a1f',
+   200→  number: 'INV-2025-1042',
+   201→  date: '2025-11-08',
+   202→  lineItems: [
+   203→    { description: 'Consulting — Q4 retainer', qty: 1, rate: 450000, taxRate: 18 },
+   204→  ],
+   205→  gstin: '29ABCDE1234F1Z5',
+   206→});
+   207→console.log(invoice.id, invoice.total);` },
+   208→  { title: 'File GSTR-1', language: 'python', desc: 'File GSTR-1 with auto-reconciliation',
+   209→    code: `import gstpilot
+   210→gp = gstpilot.Client(api_key=os.environ['GSTPILOT_KEY'])
+   211→
+   212→result = gp.gst.file_gstr1(
+   213→    gstin='29ABCDE1234F1Z5',
+   214→    period='2025-10',
+   215→    auto_reconcile=True,
+   216→)
+   217→print(result.arn, result.status)` },
+   218→  { title: 'Subscribe to Events', language: 'graphql', desc: 'Realtime stream of new invoices',
+   219→    code: `subscription OnInvoiceCreated {
+   220→  invoiceCreated {
+   221→    id
+   222→    number
+   223→    customer { name }
+   224→    total
+   225→    createdAt
+   226→  }
+   227→}` },
+   228→  { title: 'Quick cURL Test', language: 'curl', desc: 'Test the API from terminal',
+   229→    code: `curl https://api.gstpilot.com/v1/invoices \\
+   230→  -H "Authorization: Bearer sk_live_..." \\
+   231→  -H "Content-Type: application/json" \\
+   232→  -d '{"customer":"cust_8a1f","amount":531000}'` },
+   233→];
+   234→
+   235→export interface SandboxEnv {
+   236→  id: string;
+   237→  name: string;
+   238→  region: string;
+   239→  records: number;
+   240→  resetSchedule: string;
+   241→  status: 'healthy' | 'resetting';
+   242→}
+   243→
+   244→export const SANDBOX_ENVS: SandboxEnv[] = [
+   245→  { id: 'sb_in_1', name: 'India Sandbox',     region: 'ap-south-1',     records: 12_400, resetSchedule: 'Daily 02:00 IST', status: 'healthy'   },
+   246→  { id: 'sb_us_1', name: 'US Sandbox',        region: 'us-east-1',      records:  9_800, resetSchedule: 'Daily 02:00 EST', status: 'healthy'   },
+   247→  { id: 'sb_eu_1', name: 'EU Sandbox',        region: 'eu-central-1',   records:  7_200, resetSchedule: 'Weekly Sun 02:00',status: 'healthy'   },
+   248→  { id: 'sb_ae_1', name: 'UAE Sandbox',       region: 'me-central-1',   records:  3_100, resetSchedule: 'On-demand',       status: 'resetting' },
+   249→];
+   250→
+   251→export interface DocSection {
+   252→  category: string;
+   253→  articles: number;
+   254→  views: number;
+   255→  helpfulness: number;
+   256→  accent: Accent;
+   257→}
+   258→
+   259→export const DOC_SECTIONS: DocSection[] = [
+   260→  { category: 'Quickstart',           articles: 12, views: 1_840_000, helpfulness: 97, accent: 'emerald' },
+   261→  { category: 'Authentication',       articles: 18, views: 1_220_000, helpfulness: 95, accent: 'teal'    },
+   262→  { category: 'REST API Reference',   articles: 184, views: 3_640_000, helpfulness: 94, accent: 'cyan'    },
+   263→  { category: 'GraphQL API',          articles: 76, views:   880_000, helpfulness: 92, accent: 'violet'  },
+   264→  { category: 'Webhooks',             articles: 24, views:   420_000, helpfulness: 91, accent: 'amber'   },
+   265→  { category: 'SDKs & CLI',           articles: 64, views: 1_080_000, helpfulness: 96, accent: 'rose'    },
+   266→  { category: 'App Marketplace',      articles: 38, views:   360_000, helpfulness: 89, accent: 'emerald' },
+   267→  { category: 'Compliance & Tax',     articles: 142, views: 1_540_000, helpfulness: 93, accent: 'teal'    },
+   268→];
+   269→
+   270→// ═══════════════════════════════════════════════════════════════════════════════
+   271→// 2. ENTERPRISE API GATEWAY — 13 service domains with endpoints
+   272→// ═══════════════════════════════════════════════════════════════════════════════
+   273→
+   274→export interface ServiceApi {
+   275→  domain: string;
+   276→  icon: string;
+   277→  endpoints: number;
+   278→  calls24h: number;
+   279→  p95Ms: number;
+   280→  errorRate: number;
+   281→  uptime: number;
+   282→  auth: string;
+   283→  accent: Accent;
+   284→  status: 'operational' | 'degraded' | 'maintenance';
+   285→  topEndpoints: string[];
+   286→}
+   287→
+   288→export const SERVICE_APIS: ServiceApi[] = [
+   289→  { domain: 'GST',           icon: 'receipt',          endpoints: 48,  calls24h: 8_420_000, p95Ms: 142, errorRate: 0.04, uptime: 99.99, auth: 'OAuth 2.0',  accent: 'emerald', status: 'operational', topEndpoints: ['/v1/gst/returns/gstr1', '/v1/gst/returns/gstr3b', '/v1/gst/reconcile'] },
+   290→  { domain: 'Invoices',      icon: 'file-text',        endpoints: 32,  calls24h: 12_800_000, p95Ms: 88, errorRate: 0.02, uptime: 99.99, auth: 'API Key',    accent: 'teal',    status: 'operational', topEndpoints: ['/v1/invoices', '/v1/invoices/:id', '/v1/invoices/send'] },
+   291→  { domain: 'Accounting',    icon: 'book-open',        endpoints: 64,  calls24h: 4_620_000, p95Ms: 110, errorRate: 0.03, uptime: 99.98, auth: 'OAuth 2.0',  accent: 'cyan',    status: 'operational', topEndpoints: ['/v1/ledger/accounts', '/v1/ledger/journal-entries', '/v1/ledger/trial-balance'] },
+   292→  { domain: 'ERP',           icon: 'boxes',            endpoints: 88,  calls24h: 3_140_000, p95Ms: 168, errorRate: 0.06, uptime: 99.97, auth: 'OAuth 2.0',  accent: 'violet',  status: 'operational', topEndpoints: ['/v1/erp/items', '/v1/erp/warehouses', '/v1/erp/purchase-orders'] },
+   293→  { domain: 'CRM',           icon: 'users',            endpoints: 42,  calls24h: 5_980_000, p95Ms: 76, errorRate: 0.01, uptime: 99.99, auth: 'API Key',    accent: 'amber',   status: 'operational', topEndpoints: ['/v1/crm/leads', '/v1/crm/customers', '/v1/crm/opportunities'] },
+   294→  { domain: 'HR',            icon: 'user-cog',         endpoints: 38,  calls24h: 1_240_000, p95Ms: 124, errorRate: 0.05, uptime: 99.96, auth: 'OAuth 2.0',  accent: 'rose',    status: 'operational', topEndpoints: ['/v1/hr/employees', '/v1/hr/leave', '/v1/hr/attendance'] },
+   295→  { domain: 'Payroll',       icon: 'wallet',           endpoints: 28,  calls24h:   980_000, p95Ms: 198, errorRate: 0.07, uptime: 99.95, auth: 'OAuth 2.0',  accent: 'emerald', status: 'operational', topEndpoints: ['/v1/payroll/runs', '/v1/payroll/payslips', '/v1/payroll/taxes'] },
+   296→  { domain: 'Inventory',     icon: 'package',          endpoints: 36,  calls24h: 2_840_000, p95Ms: 92, errorRate: 0.03, uptime: 99.98, auth: 'API Key',    accent: 'teal',    status: 'operational', topEndpoints: ['/v1/inventory/items', '/v1/inventory/stock', '/v1/inventory/transfers'] },
+   297→  { domain: 'Analytics',     icon: 'bar-chart-3',      endpoints: 24,  calls24h: 1_680_000, p95Ms: 156, errorRate: 0.04, uptime: 99.97, auth: 'API Key',    accent: 'cyan',    status: 'operational', topEndpoints: ['/v1/analytics/kpis', '/v1/analytics/revenue', '/v1/analytics/cashflow'] },
+   298→  { domain: 'Banking',       icon: 'landmark',         endpoints: 32,  calls24h: 2_240_000, p95Ms: 184, errorRate: 0.08, uptime: 99.94, auth: 'OAuth 2.0',  accent: 'violet',  status: 'degraded',  topEndpoints: ['/v1/bank/accounts', '/v1/bank/transactions', '/v1/bank/reconcile'] },
+   299→  { domain: 'AI',            icon: 'brain',            endpoints: 18,  calls24h:   640_000, p95Ms: 1240, errorRate: 0.12, uptime: 99.92, auth: 'API Key',   accent: 'amber',   status: 'operational', topEndpoints: ['/v1/ai/oracle', '/v1/ai/extract', '/v1/ai/classify'] },
+   300→  { domain: 'Compliance',    icon: 'shield-check',     endpoints: 56,  calls24h: 1_420_000, p95Ms: 132, errorRate: 0.05, uptime: 99.98, auth: 'OAuth 2.0',  accent: 'rose',    status: 'operational', topEndpoints: ['/v1/compliance/calendar', '/v1/compliance/filings', '/v1/compliance/alerts'] },
+   301→  { domain: 'Documents',     icon: 'folder-open',      endpoints: 22,  calls24h: 3_980_000, p95Ms: 96, errorRate: 0.02, uptime: 99.99, auth: 'API Key',    accent: 'emerald', status: 'operational', topEndpoints: ['/v1/documents/upload', '/v1/documents/ocr', '/v1/documents/search'] },
+   302→];
+   303→
+   304→// ═══════════════════════════════════════════════════════════════════════════════
+   305→// 3. APP MARKETPLACE — Apps, Extensions, Plugins, AI Skills, Connectors, Templates, Automation Packs
+   306→// ═══════════════════════════════════════════════════════════════════════════════
+   307→
+   308→export interface MarketplaceApp {
+   309→  id: string;
+   310→  name: string;
+   311→  publisher: string;
+   312→  category: 'App' | 'Extension' | 'Plugin' | 'AI Skill' | 'ERP Connector' | 'Industry Template' | 'Automation Pack';
+   313→  installs: number;
+   314→  rating: number;
+   315→  reviews: number;
+   316→  price: string;
+   317→  tagline: string;
+   318→  accent: Accent;
+   319→  featured: boolean;
+   320→}
+   321→
+   322→export const MARKETPLACE_APPS: MarketplaceApp[] = [
+   323→  { id: 'app_001', name: 'Tally Connector Pro',     publisher: 'GSTPilot Labs',     category: 'ERP Connector',  installs: 184_000, rating: 4.8, reviews: 2_140, price: 'Free',         tagline: 'Two-way sync with Tally Prime — vouchers, masters, GST',          accent: 'emerald', featured: true  },
+   324→  { id: 'app_002', name: 'Zoho Books Bridge',       publisher: 'Zoho Corporation',  category: 'ERP Connector',  installs: 142_000, rating: 4.7, reviews: 1_860, price: 'Free',         tagline: 'Realtime sync of invoices, vendors, and chart of accounts',       accent: 'teal',    featured: true  },
+   325→  { id: 'app_003', name: 'QuickBooks Sync',         publisher: 'Intuit Inc.',       category: 'ERP Connector',  installs:  98_000, rating: 4.6, reviews: 1_240, price: '$29/mo',       tagline: 'Bi-directional QuickBooks Online sync with multi-currency',       accent: 'cyan',    featured: false },
+   326→  { id: 'app_004', name: 'Xero Live Bridge',        publisher: 'Xero Ltd.',         category: 'ERP Connector',  installs:  76_000, rating: 4.7, reviews:   980, price: '$25/mo',       tagline: 'Bank feeds, invoices, and contacts synced in realtime',           accent: 'violet',  featured: false },
+   327→  { id: 'app_005', name: 'Oracle AI Skill Pack',    publisher: 'GSTPilot Labs',     category: 'AI Skill',       installs:  62_000, rating: 4.9, reviews:   840, price: '$99/mo',       tagline: '12 Oracle™ skills: cash forecasting, vendor risk, GST anomaly',    accent: 'amber',   featured: true  },
+   328→  { id: 'app_006', name: 'Manufacturing Template',  publisher: 'GSTPilot Labs',     category: 'Industry Template', installs: 48_000, rating: 4.5, reviews:   620, price: '$199 one-time', tagline: 'Pre-built BOM, MRP, shop-floor costing for discrete manufacturing', accent: 'rose',  featured: false },
+   329→  { id: 'app_007', name: 'Retail POS Extension',    publisher: 'Shopify Cloud',     category: 'Extension',      installs: 132_000, rating: 4.4, reviews: 1_420, price: 'Free',         tagline: 'GST-compliant retail POS with realtime stock & e-invoicing',      accent: 'emerald', featured: false },
+   330→  { id: 'app_008', name: 'D2C E-commerce Pack',     publisher: 'GSTPilot Labs',     category: 'Industry Template', installs: 88_000, rating: 4.6, reviews: 1_180, price: '$249 one-time', tagline: 'Marketplace seller template: Flipkart, Amazon, Myntra, Meesho',  accent: 'teal',    featured: true  },
+   331→  { id: 'app_009', name: 'Auto-Reconcile Pack',     publisher: 'GSTPilot Labs',     category: 'Automation Pack', installs: 214_000, rating: 4.8, reviews: 2_840, price: '$49/mo',       tagline: 'Smart ledger-bank auto-match with 99.2% accuracy',                accent: 'cyan',    featured: true  },
+   332→  { id: 'app_010', name: 'Vendor Onboarding AI',    publisher: 'GSTPilot Labs',     category: 'AI Skill',       installs:  34_000, rating: 4.7, reviews:   420, price: '$79/mo',       tagline: 'Auto-extract vendor KYC, PAN, GSTIN from uploads',                accent: 'violet',  featured: false },
+   333→  { id: 'app_011', name: 'WhatsApp Invoicing',      publisher: 'Meta Cloud',        category: 'Plugin',         installs: 168_000, rating: 4.5, reviews: 1_980, price: 'Free',         tagline: 'Send invoices & payment links via WhatsApp Business API',         accent: 'amber',   featured: true  },
+   334→  { id: 'app_012', name: 'Stripe Payment Plugin',   publisher: 'Stripe Inc.',       category: 'Plugin',         installs: 142_000, rating: 4.7, reviews: 1_640, price: 'Free',         tagline: 'Accept cards, UPI, wallets — auto-reconcile payouts',            accent: 'rose',    featured: false },
+   335→  { id: 'app_013', name: 'Real Estate Template',    publisher: 'GSTPilot Labs',     category: 'Industry Template', installs: 22_000, rating: 4.4, reviews:   280, price: '$299 one-time', tagline: 'RERA compliance, project-wise P&L, customer payment plans',     accent: 'emerald', featured: false },
+   336→  { id: 'app_014', name: 'GST Auto-Filer Pack',     publisher: 'GSTPilot Labs',     category: 'Automation Pack', installs: 286_000, rating: 4.9, reviews: 3_640, price: '$99/mo',       tagline: 'Auto-prepare & file GSTR-1/3B with OTP-less e-sign',              accent: 'teal',    featured: true  },
+   337→  { id: 'app_015', name: 'Healthcare Template',     publisher: 'GSTPilot Labs',     category: 'Industry Template', installs: 18_000, rating: 4.3, reviews:   220, price: '$349 one-time', tagline: 'Hospital billing, insurance claims, Ayurveda & cosmetics GST',  accent: 'cyan',    featured: false },
+   338→  { id: 'app_016', name: 'SAP S/4HANA Connector',   publisher: 'SAP SE',            category: 'ERP Connector',  installs:  12_000, rating: 4.5, reviews:   180, price: '$499/mo',      tagline: 'Enterprise-grade SAP S/4HANA integration via IDoc & RFC',         accent: 'violet',  featured: false },
+   339→  { id: 'app_017', name: 'Slack Approvals Plugin',  publisher: 'Slack Inc.',        category: 'Plugin',         installs:  96_000, rating: 4.6, reviews: 1_120, price: 'Free',         tagline: 'Approve invoices, payments, journal entries from Slack',         accent: 'amber',   featured: false },
+   340→  { id: 'app_018', name: 'Cash Flow Forecaster AI', publisher: 'GSTPilot Labs',     category: 'AI Skill',       installs:  78_000, rating: 4.8, reviews:   960, price: '$89/mo',       tagline: '13-week cash forecast with scenario planning',                    accent: 'rose',    featured: true  },
+   341→];
+   342→
+   343→export interface MarketplaceCategory {
+   344→  name: string;
+   345→  count: number;
+   346→  installs: number;
+   347→  accent: Accent;
+   348→}
+   349→
+   350→export const MARKETPLACE_CATEGORIES: MarketplaceCategory[] = [
+   351→  { name: 'ERP Connectors',    count: 24, installs: 824_000, accent: 'emerald' },
+   352→  { name: 'AI Skills',         count: 42, installs: 412_000, accent: 'amber'   },
+   353→  { name: 'Industry Templates',count: 38, installs: 286_000, accent: 'teal'    },
+   354→  { name: 'Automation Packs',  count: 56, installs: 942_000, accent: 'cyan'    },
+   355→  { name: 'Plugins',           count: 84, installs: 1_240_000, accent: 'violet' },
+   356→  { name: 'Extensions',        count: 68, installs: 684_000, accent: 'rose'    },
+   357→  { name: 'Apps',              count: 142, installs: 2_180_000, accent: 'emerald' },
+   358→];
+   359→
+   360→export interface DeveloperPublisher {
+   361→  name: string;
+   362→  apps: number;
+   363→  installs: number;
+   364→  revenue: number;
+   365→  tier: 'Platinum' | 'Gold' | 'Silver' | 'Verified';
+   366→}
+   367→
+   368→export const TOP_PUBLISHERS: DeveloperPublisher[] = [
+   369→  { name: 'GSTPilot Labs',     apps: 38, installs: 1_840_000, revenue: 12_400_000, tier: 'Platinum' },
+   370→  { name: 'Zoho Corporation',  apps: 12, installs:   412_000, revenue:  3_240_000, tier: 'Platinum' },
+   371→  { name: 'Intuit Inc.',       apps:  8, installs:   298_000, revenue:  2_640_000, tier: 'Gold'     },
+   372→  { name: 'Stripe Inc.',       apps:  4, installs:   248_000, revenue:  1_980_000, tier: 'Gold'     },
+   373→  { name: 'Meta Cloud',        apps:  6, installs:   184_000, revenue:  1_420_000, tier: 'Gold'     },
+   374→  { name: 'SAP SE',            apps:  3, installs:    42_000, revenue:  2_840_000, tier: 'Silver'   },
+   375→  { name: 'Xero Ltd.',         apps:  5, installs:    86_000, revenue:    940_000, tier: 'Silver'   },
+   376→  { name: 'Shopify Cloud',     apps:  7, installs:   142_000, revenue:    680_000, tier: 'Verified' },
+   377→];
+   378→
+   379→// ═══════════════════════════════════════════════════════════════════════════════
+   380→// 4. GLOBAL INTEGRATION HUB — 20 native integrations
+   381→// ═══════════════════════════════════════════════════════════════════════════════
+   382→
+   383→export interface Integration {
+   384→  name: string;
+   385→  category: 'ERP' | 'CRM' | 'Payments' | 'Banking' | 'Communication' | 'Productivity' | 'Government' | 'Commerce';
+   386→  status: 'connected' | 'available' | 'coming-soon';
+   387→  sync: 'Two-way' | 'Inbound' | 'Outbound';
+   388→  lastSync: string;
+   389→  records: number;
+   390→  accent: Accent;
+   391→}
+   392→
+   393→export const INTEGRATIONS: Integration[] = [
+   394→  { name: 'SAP S/4HANA',        category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '4 min ago',   records: 184_000, accent: 'emerald' },
+   395→  { name: 'Oracle ERP Cloud',   category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '8 min ago',   records:  96_000, accent: 'teal'    },
+   396→  { name: 'Microsoft Dynamics', category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '2 min ago',   records: 142_000, accent: 'cyan'    },
+   397→  { name: 'Zoho Books',         category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '1 min ago',   records: 384_000, accent: 'violet'  },
+   398→  { name: 'Tally Prime',        category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '3 min ago',   records: 524_000, accent: 'amber'   },
+   399→  { name: 'QuickBooks Online',  category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '5 min ago',   records: 248_000, accent: 'rose'    },
+   400→  { name: 'Xero',               category: 'ERP',          status: 'connected',   sync: 'Two-way', lastSync: '6 min ago',   records:  86_000, accent: 'emerald' },
+   401→  { name: 'Salesforce',         category: 'CRM',          status: 'connected',   sync: 'Two-way', lastSync: '2 min ago',   records: 312_000, accent: 'teal'    },
+   402→  { name: 'HubSpot',            category: 'CRM',          status: 'connected',   sync: 'Inbound', lastSync: '12 min ago',  records: 184_000, accent: 'cyan'    },
+   403→  { name: 'Slack',              category: 'Communication',status: 'connected',   sync: 'Outbound',lastSync: '30 sec ago',  records:  12_400, accent: 'violet'  },
+   404→  { name: 'Microsoft Teams',    category: 'Communication',status: 'connected',   sync: 'Outbound',lastSync: '1 min ago',   records:   8_200, accent: 'amber'   },
+   405→  { name: 'Google Workspace',   category: 'Productivity', status: 'connected',   sync: 'Two-way', lastSync: '4 min ago',   records:  42_000, accent: 'rose'    },
+   406→  { name: 'Microsoft 365',      category: 'Productivity', status: 'connected',   sync: 'Two-way', lastSync: '5 min ago',   records:  38_000, accent: 'emerald' },
+   407→  { name: 'WhatsApp Business',  category: 'Communication',status: 'connected',   sync: 'Outbound',lastSync: '20 sec ago',  records: 184_000, accent: 'teal'    },
+   408→  { name: 'Stripe',             category: 'Payments',     status: 'connected',   sync: 'Inbound', lastSync: '1 min ago',   records: 412_000, accent: 'cyan'    },
+   409→  { name: 'Razorpay',           category: 'Payments',     status: 'connected',   sync: 'Inbound', lastSync: '40 sec ago',  records: 524_000, accent: 'violet'  },
+   410→  { name: 'PayPal',             category: 'Payments',     status: 'connected',   sync: 'Inbound', lastSync: '3 min ago',   records: 142_000, accent: 'amber'   },
+   411→  { name: 'HDFC Bank API',      category: 'Banking',      status: 'connected',   sync: 'Inbound', lastSync: '90 sec ago',  records:  84_000, accent: 'rose'    },
+   412→  { name: 'ICICI Bank API',     category: 'Banking',      status: 'connected',   sync: 'Inbound', lastSync: '2 min ago',   records:  72_000, accent: 'emerald' },
+   413→  { name: 'GST Network API',    category: 'Government',   status: 'connected',   sync: 'Two-way', lastSync: '8 min ago',   records: 248_000, accent: 'teal'    },
+   414→  { name: 'Income Tax Dept API',category: 'Government',   status: 'available',   sync: 'Two-way', lastSync: '—',           records:      0, accent: 'cyan'    },
+   415→  { name: 'MCA Portal API',     category: 'Government',   status: 'coming-soon', sync: 'Two-way', lastSync: '—',           records:      0, accent: 'violet'  },
+   416→  { name: 'Shopify',            category: 'Commerce',     status: 'connected',   sync: 'Inbound', lastSync: '2 min ago',   records: 198_000, accent: 'amber'   },
+   417→];
+   418→
+   419→// ═══════════════════════════════════════════════════════════════════════════════
+   420→// 5. FINANCIAL DATA CLOUD — 11 unified data domains
+   421→// ═══════════════════════════════════════════════════════════════════════════════
+   422→
+   423→export interface DataDomain {
+   424→  name: string;
+   425→  records: number;
+   426→  schema: string;
+   427→  syncStatus: 'synced' | 'syncing' | 'pending';
+   428→  freshness: string;
+   429→  consumers: number;
+   430→  storageGB: number;
+   431→  accent: Accent;
+   432→}
+   433→
+   434→export const DATA_DOMAINS: DataDomain[] = [
+   435→  { name: 'Invoices',     records: 184_000_000, schema: 'v4.2', syncStatus: 'synced',  freshness: '12 sec ago',  consumers: 412, storageGB: 1840, accent: 'emerald' },
+   436→  { name: 'GST Returns',  records:  12_400_000, schema: 'v3.8', syncStatus: 'synced',  freshness: '4 min ago',   consumers: 284, storageGB:  420, accent: 'teal'    },
+   437→  { name: 'Accounting',   records: 384_000_000, schema: 'v5.1', syncStatus: 'synced',  freshness: '8 sec ago',   consumers: 318, storageGB: 2840, accent: 'cyan'    },
+   438→  { name: 'Banking',      records:  96_000_000, schema: 'v2.9', syncStatus: 'syncing', freshness: 'Live stream', consumers: 246, storageGB:  980, accent: 'violet'  },
+   439→  { name: 'Inventory',    records: 248_000_000, schema: 'v4.0', syncStatus: 'synced',  freshness: '20 sec ago',  consumers: 184, storageGB: 1240, accent: 'amber'   },
+   440→  { name: 'Payroll',      records:   8_400_000, schema: 'v3.4', syncStatus: 'synced',  freshness: '1 hr ago',    consumers: 142, storageGB:  280, accent: 'rose'    },
+   441→  { name: 'Compliance',   records:  18_200_000, schema: 'v3.6', syncStatus: 'synced',  freshness: '14 min ago',  consumers: 198, storageGB:  420, accent: 'emerald' },
+   442→  { name: 'Customers',    records:  42_000_000, schema: 'v4.1', syncStatus: 'synced',  freshness: '6 sec ago',   consumers: 364, storageGB:  680, accent: 'teal'    },
+   443→  { name: 'Vendors',      records:  28_400_000, schema: 'v4.1', syncStatus: 'synced',  freshness: '12 sec ago',  consumers: 248, storageGB:  440, accent: 'cyan'    },
+   444→  { name: 'Documents',    records:  62_000_000, schema: 'v2.7', syncStatus: 'pending', freshness: '4 hr ago',    consumers: 184, storageGB: 4820, accent: 'violet'  },
+   445→  { name: 'Analytics',    records:   4_200_000, schema: 'v3.2', syncStatus: 'synced',  freshness: '2 min ago',   consumers: 412, storageGB: 1840, accent: 'amber'   },
+   446→];
+   447→
+   448→export interface DataSyncJob {
+   449→  domain: string;
+   450→  source: string;
+   451→  destination: string;
+   452→  records: number;
+   453→  duration: string;
+   454→  status: 'success' | 'running' | 'queued' | 'failed';
+   455→}
+   456→
+   457→export const DATA_SYNC_JOBS: DataSyncJob[] = [
+   458→  { domain: 'Invoices',     source: 'Tally Prime',     destination: 'Financial Data Cloud', records: 12_400, duration: '42 sec', status: 'success' },
+   459→  { domain: 'Banking',      source: 'HDFC Bank API',   destination: 'Financial Data Cloud', records:  8_400, duration: '12 sec', status: 'running' },
+   460→  { domain: 'GST Returns',  source: 'GST Network',     destination: 'Financial Data Cloud', records:    240, duration: '8 sec',  status: 'success' },
+   461→  { domain: 'Inventory',    source: 'SAP S/4HANA',     destination: 'Financial Data Cloud', records: 24_800, duration: '1m 18s', status: 'success' },
+   462→  { domain: 'Customers',    source: 'Salesforce',      destination: 'Financial Data Cloud', records:  4_200, duration: '22 sec', status: 'success' },
+   463→  { domain: 'Documents',    source: 'Google Drive',    destination: 'Financial Data Cloud', records:    840, duration: '4m 12s', status: 'queued'  },
+   464→  { domain: 'Payroll',      source: 'Internal HRMS',   destination: 'Financial Data Cloud', records:  1_200, duration: '38 sec', status: 'success' },
+   465→  { domain: 'Accounting',   source: 'QuickBooks',      destination: 'Financial Data Cloud', records: 18_400, duration: '52 sec', status: 'failed'  },
+   466→];
+   467→
+   468→// ═══════════════════════════════════════════════════════════════════════════════
+   469→// 6. EVENT STREAMING PLATFORM — 9 event types
+   470→// ═══════════════════════════════════════════════════════════════════════════════
+   471→
+   472→export interface EventType {
+   473→  name: string;
+   474→  topic: string;
+   475→  schema: string;
+   476→  subscribers: number;
+   477→  dailyVolume: number;
+   478→  p99LatencyMs: number;
+   479→  retention: string;
+   480→  accent: Accent;
+   481→}
+   482→
+   483→export const EVENT_TYPES: EventType[] = [
+   484→  { name: 'Invoice Created',     topic: 'invoices.created',     schema: 'v4.2', subscribers: 184, dailyVolume: 4_820_000, p99LatencyMs: 18, retention: '30 days', accent: 'emerald' },
+   485→  { name: 'Payment Received',    topic: 'payments.received',    schema: 'v3.4', subscribers: 142, dailyVolume: 2_640_000, p99LatencyMs: 12, retention: '90 days', accent: 'teal'    },
+   486→  { name: 'GST Filed',           topic: 'gst.filed',            schema: 'v3.8', subscribers:  96, dailyVolume:   184_000, p99LatencyMs: 24, retention: '7 years', accent: 'cyan'    },
+   487→  { name: 'Expense Added',       topic: 'expenses.added',       schema: 'v3.2', subscribers:  84, dailyVolume: 1_240_000, p99LatencyMs: 22, retention: '90 days', accent: 'violet'  },
+   488→  { name: 'Bank Synced',         topic: 'bank.synced',          schema: 'v3.6', subscribers: 118, dailyVolume:   640_000, p99LatencyMs: 16, retention: '30 days', accent: 'amber'   },
+   489→  { name: 'AI Action',           topic: 'ai.action',            schema: 'v2.4', subscribers:  62, dailyVolume:   420_000, p99LatencyMs: 48, retention: '90 days', accent: 'rose'    },
+   490→  { name: 'Document Uploaded',   topic: 'documents.uploaded',   schema: 'v2.8', subscribers:  72, dailyVolume:   880_000, p99LatencyMs: 28, retention: '1 year',  accent: 'emerald' },
+   491→  { name: 'Approval Granted',    topic: 'approvals.granted',    schema: 'v3.0', subscribers:  48, dailyVolume:   240_000, p99LatencyMs: 14, retention: '7 years', accent: 'teal'    },
+   492→  { name: 'Webhook Delivery',    topic: 'webhooks.delivered',   schema: 'v3.1', subscribers: 312, dailyVolume: 6_240_000, p99LatencyMs: 32, retention: '30 days', accent: 'cyan'    },
+   493→];
+   494→
+   495→export interface WebhookEndpoint {
+   496→  id: string;
+   497→  url: string;
+   498→  events: string[];
+   499→  successRate: number;
+   500→  avgLatencyMs: number;
+   501→  lastDelivery: string;
+   502→  status: 'active' | 'paused' | 'failing';
+   503→}
+   504→
+   505→export const WEBHOOK_ENDPOINTS: WebhookEndpoint[] = [
+   506→  { id: 'wh_001', url: 'https://api.acme-corp.com/webhooks/gstpilot', events: ['invoices.created', 'payments.received'], successRate: 99.8, avgLatencyMs: 142, lastDelivery: '12 sec ago', status: 'active'  },
+   507→  { id: 'wh_002', url: 'https://hooks.zapier.com/hooks/catch/8421/', events: ['gst.filed', 'bank.synced'],             successRate: 98.4, avgLatencyMs: 284, lastDelivery: '4 min ago',  status: 'active'  },
+   508→  { id: 'wh_003', url: 'https://workflow.io/in/gstpilot',            events: ['invoices.created'],                     successRate: 96.2, avgLatencyMs: 420, lastDelivery: '14 min ago', status: 'failing' },
+   509→  { id: 'wh_004', url: 'https://erp.tally.com/webhooks/inbound',     events: ['expenses.added', 'approvals.granted'],  successRate: 99.6, avgLatencyMs:  96, lastDelivery: '2 min ago',  status: 'active'  },
+   510→  { id: 'wh_005', url: 'https://slack.com/api/webhooks/incoming',    events: ['approvals.granted'],                    successRate: 99.9, avgLatencyMs:  62, lastDelivery: '40 sec ago', status: 'active'  },
+   511→  { id: 'wh_006', url: 'https://n8n.local/webhook/gstpilot',         events: ['ai.action'],                            successRate:  0.0, avgLatencyMs:   0, lastDelivery: '2 days ago', status: 'paused'  },
+   512→];
+   513→
+   514→// ═══════════════════════════════════════════════════════════════════════════════
+   515→// 7. ENTERPRISE AUTOMATION STUDIO — workflow templates
+   516→// ═══════════════════════════════════════════════════════════════════════════════
+   517→
+   518→export interface WorkflowTemplate {
+   519→  id: string;
+   520→  name: string;
+   521→  category: string;
+   522→  triggers: number;
+   523→  conditions: number;
+   524→  actions: number;
+   525→  aiNodes: number;
+   526→  runs: number;
+   527→  successRate: number;
+   528→  avgDuration: string;
+   529→  accent: Accent;
+   530→}
+   531→
+   532→export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+   533→  { id: 'wf_001', name: 'Auto-File GSTR-1 on Month-End',  category: 'Compliance',  triggers: 1, conditions: 4, actions: 6, aiNodes: 1, runs: 184_000, successRate: 99.4, avgDuration: '4m 12s', accent: 'emerald' },
+   534→  { id: 'wf_002', name: 'Vendor Invoice → Auto-Approve',  category: 'AP',         triggers: 1, conditions: 6, actions: 4, aiNodes: 2, runs: 412_000, successRate: 97.8, avgDuration: '18 sec', accent: 'teal'    },
+   535→  { id: 'wf_003', name: 'Payment Received → Receipt + WhatsApp', category: 'AR',   triggers: 1, conditions: 2, actions: 5, aiNodes: 1, runs: 624_000, successRate: 99.6, avgDuration: '6 sec',  accent: 'cyan'    },
+   536→  { id: 'wf_004', name: 'Bank Reconciliation Auto-Match', category: 'Accounting', triggers: 1, conditions: 8, actions: 3, aiNodes: 2, runs: 284_000, successRate: 99.2, avgDuration: '42 sec', accent: 'violet'  },
+   537→  { id: 'wf_005', name: 'Low-Stock → Auto PO to Vendor',  category: 'Inventory',  triggers: 1, conditions: 3, actions: 4, aiNodes: 1, runs:  84_000, successRate: 98.6, avgDuration: '24 sec', accent: 'amber'   },
+   538→  { id: 'wf_006', name: 'Payroll Run → Payslip + PF',     category: 'Payroll',    triggers: 1, conditions: 4, actions: 7, aiNodes: 0, runs:  42_000, successRate: 99.8, avgDuration: '2m 48s', accent: 'rose'    },
+   539→  { id: 'wf_007', name: 'Customer Onboarding → KYC + Setup', category: 'CRM',     triggers: 1, conditions: 5, actions: 8, aiNodes: 2, runs:  62_000, successRate: 96.4, avgDuration: '8m 20s', accent: 'emerald' },
+   540→  { id: 'wf_008', name: 'AI Cash Forecast → Slack Alert', category: 'Finance',    triggers: 1, conditions: 2, actions: 3, aiNodes: 3, runs:  12_400, successRate: 99.9, avgDuration: '4 sec',  accent: 'teal'    },
+   541→];
+   542→
+   543→export interface AutomationNode {
+   544→  type: 'Trigger' | 'Condition' | 'Action' | 'AI Node' | 'API Node' | 'Webhook' | 'Schedule';
+   545→  name: string;
+   546→  desc: string;
+   547→  icon: string;
+   548→  accent: Accent;
+   549→}
+   550→
+   551→export const AUTOMATION_NODES: AutomationNode[] = [
+   552→  { type: 'Trigger',  name: 'Invoice Created',     desc: 'Fires when a new invoice is created',                icon: 'file-plus',   accent: 'emerald' },
+   553→  { type: 'Trigger',  name: 'Payment Received',    desc: 'Fires when an inbound payment is detected',          icon: 'banknote',    accent: 'teal'    },
+   554→  { type: 'Trigger',  name: 'Schedule — Monthly',  desc: 'Fires on a recurring schedule (cron)',               icon: 'calendar',    accent: 'cyan'    },
+   555→  { type: 'Condition',name: 'Amount > Threshold',  desc: 'Branch based on a numeric threshold',                icon: 'filter',      accent: 'violet'  },
+   556→  { type: 'Condition',name: 'Vendor Tier Check',   desc: 'Branch based on vendor classification',              icon: 'shield',      accent: 'amber'   },
+   557→  { type: 'AI Node',  name: 'Oracle™ Classify',    desc: 'AI categorization of documents & transactions',      icon: 'brain',       accent: 'rose'    },
+   558→  { type: 'AI Node',  name: 'Oracle™ Forecast',    desc: 'AI-powered forecast for cash & revenue',             icon: 'trending-up', accent: 'emerald' },
+   559→  { type: 'AI Node',  name: 'Oracle™ Extract',     desc: 'OCR + AI extraction from uploaded documents',        icon: 'scan-line',   accent: 'teal'    },
+   560→  { type: 'Action',   name: 'Send WhatsApp',       desc: 'Send a WhatsApp Business message',                   icon: 'message-circle', accent: 'cyan' },
+   561→  { type: 'Action',   name: 'Create Journal Entry',desc: 'Post a double-entry journal voucher',                icon: 'book-open',   accent: 'violet'  },
+   562→  { type: 'Action',   name: 'File GST Return',     desc: 'Auto-file GST return via OTP-less e-sign',           icon: 'receipt',     accent: 'amber'   },
+   563→  { type: 'API Node', name: 'Call External API',   desc: 'HTTP request to any external endpoint',              icon: 'globe',       accent: 'rose'    },
+   564→  { type: 'Webhook',  name: 'Emit Webhook',        desc: 'Emit a webhook event to subscribers',                icon: 'webhook',     accent: 'emerald' },
+   565→];
+   566→
+   567→// ═══════════════════════════════════════════════════════════════════════════════
+   568→// 8. ENTERPRISE DATA WAREHOUSE — datasets, queries, BI dashboards, data lake
+   569→// ═══════════════════════════════════════════════════════════════════════════════
+   570→
+   571→export interface Dataset {
+   572→  name: string;
+   573→  rows: number;
+   574→  size: string;
+   575→  freshness: string;
+   576→  queries24h: number;
+   577→  accent: Accent;
+   578→}
+   579→
+   580→export const WAREHOUSE_DATASETS: Dataset[] = [
+   581→  { name: 'fact_invoices',        rows: 184_000_000, size: '1.8 TB', freshness: '12 sec',  queries24h: 412_000, accent: 'emerald' },
+   582→  { name: 'fact_payments',        rows:  96_000_000, size: '980 GB', freshness: '6 sec',   queries24h: 284_000, accent: 'teal'    },
+   583→  { name: 'fact_journal_entries', rows: 384_000_000, size: '2.8 TB', freshness: '8 sec',   queries24h: 184_000, accent: 'cyan'    },
+   584→  { name: 'fact_bank_txns',       rows: 142_000_000, size: '1.4 TB', freshness: '4 sec',   queries24h: 312_000, accent: 'violet'  },
+   585→  { name: 'dim_customers',        rows:  42_000_000, size: '180 GB', freshness: '6 sec',   queries24h: 524_000, accent: 'amber'   },
+   586→  { name: 'dim_vendors',          rows:  28_400_000, size: '120 GB', freshness: '12 sec',  queries24h: 184_000, accent: 'rose'    },
+   587→  { name: 'fact_inventory_moves', rows: 624_000_000, size: '4.2 TB', freshness: '20 sec',  queries24h:  84_000, accent: 'emerald' },
+   588→  { name: 'fact_payroll_runs',    rows:   8_400_000, size: ' 64 GB', freshness: '1 hr',    queries24h:  42_000, accent: 'teal'    },
+   589→];
+   590→
+   591→export interface SavedQuery {
+   592→  name: string;
+   593→  sql: string;
+   594→  author: string;
+   595→  runs: number;
+   596→  avgMs: number;
+   597→  cacheHit: number;
+   598→}
+   599→
+   600→export const SAVED_QUERIES: SavedQuery[] = [
+   601→  { name: 'Monthly Revenue by Country',  sql: 'SELECT country, SUM(total_usd) FROM fact_invoices WHERE ...', author: 'A. Sharma', runs: 18_400, avgMs: 142, cacheHit: 94 },
+   602→  { name: 'Top 100 Vendors by Spend',    sql: 'SELECT v.name, SUM(i.total) FROM fact_invoices i JOIN dim_vendors v ...', author: 'M. Iyer', runs: 12_200, avgMs:  86, cacheHit: 88 },
+   603→  { name: 'GST Filing Accuracy Trend',   sql: 'SELECT period, accuracy_pct FROM fact_gst_filings ORDER BY period ...', author: 'R. Khan', runs:  8_400, avgMs:  62, cacheHit: 96 },
+   604→  { name: 'DSO by Customer Segment',     sql: 'SELECT segment, AVG(dso_days) FROM fact_ar_aging GROUP BY segment ...', author: 'P. Reddy', runs:  6_200, avgMs: 124, cacheHit: 82 },
+   605→  { name: 'Cash Runway Forecast 13wk',   sql: 'SELECT week, projected_balance FROM fact_cash_forecast WHERE ...', author: 'S. Nair', runs:  4_800, avgMs: 184, cacheHit: 78 },
+   606→];
+   607→
+   608→export interface BIDashboard {
+   609→  name: string;
+   610→  owner: string;
+   611→  viewers: number;
+   612→  refresh: string;
+   613→  tiles: number;
+   614→  accent: Accent;
+   615→}
+   616→
+   617→export const BI_DASHBOARDS: BIDashboard[] = [
+   618→  { name: 'CFO Executive Dashboard',    owner: 'CFO Office',   viewers: 142, refresh: '5 min',  tiles: 24, accent: 'emerald' },
+   619→  { name: 'Revenue Operations',         owner: 'RevOps',       viewers:  84, refresh: '15 min', tiles: 18, accent: 'teal'    },
+   620→  { name: 'GST Compliance Scorecard',   owner: 'Tax Team',     viewers:  62, refresh: '1 hr',   tiles: 16, accent: 'cyan'    },
+   621→  { name: 'Vendor Performance',         owner: 'Procurement',  viewers:  48, refresh: '4 hr',   tiles: 14, accent: 'violet'  },
+   622→  { name: 'Working Capital Pulse',      owner: 'Treasury',     viewers:  36, refresh: '5 min',  tiles: 12, accent: 'amber'   },
+   623→  { name: 'Customer Health',            owner: 'CS Team',      viewers:  96, refresh: '15 min', tiles: 20, accent: 'rose'    },
+   624→];
+   625→
+   626→export interface AIQuery {
+   627→  question: string;
+   628→  sqlGenerated: string;
+   629→  confidence: number;
+   630→  runtime: string;
+   631→}
+   632→
+   633→export const AI_QUERIES: AIQuery[] = [
+   634→  { question: 'What was our revenue growth in Q3 vs Q2 by country?',
+   635→    sqlGenerated: 'WITH q AS (...) SELECT country, (q3-q2)/q2 AS growth FROM ...',
+   636→    confidence: 96, runtime: '1.2 sec' },
+   637→  { question: 'Show me vendors with on-time delivery below 90% last quarter',
+   638→    sqlGenerated: 'SELECT v.name, AVG(on_time) FROM fact_deliveries ... HAVING AVG(on_time) < 0.9',
+   639→    confidence: 94, runtime: '0.8 sec' },
+   640→  { question: 'Which customers have DSO above 60 days and balance over $50K?',
+   641→    sqlGenerated: 'SELECT customer, dso, balance FROM fact_ar_aging WHERE dso > 60 AND balance > 50000',
+   642→    confidence: 98, runtime: '0.4 sec' },
+   643→  { question: 'Forecast our cash position for the next 13 weeks',
+   644→    sqlGenerated: 'SELECT week, projected_balance FROM ai.cash_forecast(weeks=13)',
+   645→    confidence: 88, runtime: '3.4 sec' },
+   646→];
+   647→
+   648→// ═══════════════════════════════════════════════════════════════════════════════
+   649→// 9. GLOBAL IDENTITY PLATFORM — SSO, MFA, passwordless
+   650→// ═══════════════════════════════════════════════════════════════════════════════
+   651→
+   652→export interface SSOConnection {
+   653→  name: string;
+   654→  protocol: 'SAML 2.0' | 'OIDC' | 'OAuth 2.0' | 'LDAP';
+   655→  users: number;
+   656→  lastLogin: string;
+   657→  mfa: boolean;
+   658→  accent: Accent;
+   659→}
+   660→
+   661→export const SSO_CONNECTIONS: SSOConnection[] = [
+   662→  { name: 'Azure AD (Microsoft Entra)', protocol: 'SAML 2.0', users: 4_200, lastLogin: '2 min ago',  mfa: true,  accent: 'emerald' },
+   663→  { name: 'Google Workspace',           protocol: 'OIDC',      users: 2_800, lastLogin: '4 min ago',  mfa: true,  accent: 'teal'    },
+   664→  { name: 'Okta Workforce',             protocol: 'SAML 2.0', users: 1_400, lastLogin: '6 min ago',  mfa: true,  accent: 'cyan'    },
+   665→  { name: 'OneLogin',                   protocol: 'SAML 2.0', users:   840, lastLogin: '12 min ago', mfa: true,  accent: 'violet'  },
+   666→  { name: 'PingIdentity',               protocol: 'OIDC',      users:   620, lastLogin: '18 min ago', mfa: true,  accent: 'amber'   },
+   667→  { name: 'Active Directory (LDAP)',    protocol: 'LDAP',      users: 1_200, lastLogin: '1 hr ago',   mfa: false, accent: 'rose'    },
+   668→];
+   669→
+   670→export interface MFAMethod {
+   671→  name: string;
+   672→  users: number;
+   673→  adoptionPct: number;
+   674→  avgSetupMin: number;
+   675→  accent: Accent;
+   676→}
+   677→
+   678→export const MFA_METHODS: MFAMethod[] = [
+   679→  { name: 'Authenticator App (TOTP)', users: 8_400, adoptionPct: 68, avgSetupMin: 2, accent: 'emerald' },
+   680→  { name: 'SMS OTP',                  users: 3_200, adoptionPct: 26, avgSetupMin: 1, accent: 'teal'    },
+   681→  { name: 'Hardware Key (YubiKey)',   users:   840, adoptionPct:  7, avgSetupMin: 4, accent: 'cyan'    },
+   682→  { name: 'Biometric (WebAuthn)',     users: 1_240, adoptionPct: 10, avgSetupMin: 1, accent: 'violet'  },
+   683→  { name: 'Email OTP',                users:   620, adoptionPct:  5, avgSetupMin: 1, accent: 'amber'   },
+   684→];
+   685→
+   686→export interface IdentityEvent {
+   687→  type: string;
+   688→  user: string;
+   689→  ip: string;
+   690→  location: string;
+   691→  time: string;
+   692→  status: 'success' | 'challenge' | 'denied';
+   693→}
+   694→
+   695→export const IDENTITY_EVENTS: IdentityEvent[] = [
+   696→  { type: 'SSO Login',         user: 'arjun.sharma@acme.com',  ip: '203.0.113.42',  location: 'Bengaluru, IN', time: '2 min ago',  status: 'success'   },
+   697→  { type: 'MFA Challenge',     user: 'meera.iyer@acme.com',    ip: '198.51.100.18', location: 'Mumbai, IN',    time: '4 min ago',  status: 'success'   },
+   698→  { type: 'Passwordless',      user: 'raj.khan@acme.com',      ip: '192.0.2.88',    location: 'Delhi, IN',     time: '6 min ago',  status: 'success'   },
+   699→  { type: 'SSO Login',         user: 'priya.reddy@acme.com',   ip: '203.0.113.99',  location: 'Hyderabad, IN', time: '12 min ago', status: 'success'   },
+   700→  { type: 'Failed Login',      user: 'unknown@acme.com',       ip: '45.83.12.4',    location: 'Unknown, RU',   time: '14 min ago', status: 'denied'    },
+   701→  { type: 'MFA Challenge',     user: 'sanjay.nair@acme.com',   ip: '198.51.100.62', location: 'Chennai, IN',   time: '18 min ago', status: 'success'   },
+   702→  { type: 'Suspicious Login',  user: 'kavya.patel@acme.com',   ip: '91.243.85.12',  location: 'Unknown, NG',   time: '22 min ago', status: 'challenge' },
+   703→  { type: 'Hardware Key Used', user: 'vikram.joshi@acme.com',  ip: '203.0.113.140', location: 'Pune, IN',      time: '28 min ago', status: 'success'   },
+   704→];
+   705→
+   706→// ═══════════════════════════════════════════════════════════════════════════════
+   707→// 10. DEVELOPER ANALYTICS — API usage, errors, latency, revenue, apps
+   708→// ═══════════════════════════════════════════════════════════════════════════════
+   709→
+   710→export interface ApiUsageSeries {
+   711→  hour: string;
+   712→  calls: number;
+   713→  errors: number;
+   714→}
+   715→
+   716→export const API_USAGE_SERIES: ApiUsageSeries[] = [
+   717→  { hour: '00:00', calls: 1_240_000, errors:   240 },
+   718→  { hour: '02:00', calls:   980_000, errors:   180 },
+   719→  { hour: '04:00', calls:   740_000, errors:   140 },
+   720→  { hour: '06:00', calls:   920_000, errors:   160 },
+   721→  { hour: '08:00', calls: 2_140_000, errors:   420 },
+   722→  { hour: '10:00', calls: 3_840_000, errors:   840 },
+   723→  { hour: '12:00', calls: 4_620_000, errors: 1_120 },
+   724→  { hour: '14:00', calls: 5_240_000, errors: 1_280 },
+   725→  { hour: '16:00', calls: 4_980_000, errors: 1_080 },
+   726→  { hour: '18:00', calls: 3_420_000, errors:   720 },
+   727→  { hour: '20:00', calls: 2_180_000, errors:   480 },
+   728→  { hour: '22:00', calls: 1_640_000, errors:   320 },
+   729→];
+   730→
+   731→export interface ApiErrorType {
+   732→  code: string;
+   733→  message: string;
+   734→  count: number;
+   735→  trend: number;
+   736→  accent: Accent;
+   737→}
+   738→
+   739→export const API_ERROR_TYPES: ApiErrorType[] = [
+   740→  { code: '429', message: 'Rate limit exceeded',           count: 4_820, trend: -12, accent: 'amber'   },
+   741→  { code: '401', message: 'Authentication failed',         count: 2_140, trend:  -8, accent: 'rose'    },
+   742→  { code: '400', message: 'Bad request — validation',      count: 1_840, trend:  -4, accent: 'violet'  },
+   743→  { code: '500', message: 'Internal server error',         count:   840, trend: -22, accent: 'rose'    },
+   744→  { code: '403', message: 'Insufficient scope',            count:   620, trend:  +6, accent: 'amber'   },
+   745→  { code: '404', message: 'Resource not found',            count:   480, trend:  -2, accent: 'teal'    },
+   746→  { code: '503', message: 'Service unavailable (transient)',count:   180, trend: -38, accent: 'cyan'    },
+   747→];
+   748→
+   749→export interface DeveloperApp {
+   750→  name: string;
+   751→  publisher: string;
+   752→  calls24h: number;
+   753→  errorRate: number;
+   754→  revenue: number;
+   755→  trend: number;
+   756→  accent: Accent;
+   757→}
+   758→
+   759→export const TOP_DEVELOPER_APPS: DeveloperApp[] = [
+   760→  { name: 'Acme ERP Bridge',       publisher: 'Acme Corp',       calls24h: 8_420_000, errorRate: 0.04, revenue: 142_000, trend: +12, accent: 'emerald' },
+   761→  { name: 'TallySync Pro',         publisher: 'Tally Solutions', calls24h: 6_240_000, errorRate: 0.02, revenue:  98_000, trend:  +8, accent: 'teal'    },
+   762→  { name: 'Zoho Books Bridge',     publisher: 'Zoho Corp',       calls24h: 5_140_000, errorRate: 0.03, revenue:  84_000, trend:  +6, accent: 'cyan'    },
+   763→  { name: 'QuickBooks Live Sync',  publisher: 'Intuit Inc.',     calls24h: 4_280_000, errorRate: 0.05, revenue:  72_000, trend:  +4, accent: 'violet'  },
+   764→  { name: 'WhatsApp Invoicing',    publisher: 'Meta Cloud',      calls24h: 3_840_000, errorRate: 0.06, revenue:  48_000, trend: +18, accent: 'amber'   },
+   765→  { name: 'Stripe Auto-Recon',     publisher: 'Stripe Inc.',     calls24h: 2_940_000, errorRate: 0.08, revenue:  42_000, trend:  -4, accent: 'rose'    },
+   766→];
+   767→
+   768→export interface DeveloperMetric {
+   769→  label: string;
+   770→  value: string;
+   771→  trend: number;
+   772→  accent: Accent;
+   773→}
+   774→
+   775→export const DEVELOPER_KPIS: DeveloperMetric[] = [
+   776→  { label: 'Active Developers',     value: '2,418,400', trend:  +8.4, accent: 'emerald' },
+   777→  { label: 'API Calls (24h)',       value: '42.8M',     trend: +12.6, accent: 'teal'    },
+   778→  { label: 'Avg P95 Latency',       value: '124 ms',    trend:  -6.2, accent: 'cyan'    },
+   779→  { label: 'Error Rate',            value: '0.04%',     trend:  -2.1, accent: 'violet'  },
+   780→  { label: 'Apps Published',        value: '4,820',     trend: +14.2, accent: 'amber'   },
+   781→  { label: 'SDK Downloads (30d)',   value: '8.4M',      trend: +18.4, accent: 'rose'    },
+   782→  { label: 'API Revenue (MTD)',     value: '$4.82M',    trend: +22.8, accent: 'emerald' },
+   783→  { label: 'Sandbox Sessions (24h)',value: '184K',      trend:  +6.8, accent: 'teal'    },
+   784→];
+   785→
+   786→// ═══════════════════════════════════════════════════════════════════════════════
+   787→// 11. ENTERPRISE BILLING PLATFORM — subscriptions, usage, marketplace, contracts
+   788→// ═══════════════════════════════════════════════════════════════════════════════
+   789→
+   790→export interface SubscriptionPlan {
+   791→  name: string;
+   792→  mrr: number;
+   793→  customers: number;
+   794→  churn: number;
+   795→  growth: number;
+   796→  accent: Accent;
+   797→}
+   798→
+   799→export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+   800→  { name: 'Starter',     mrr:     680_000, customers: 184_000, churn: 2.4, growth:  +8.4, accent: 'emerald' },
+   801→  { name: 'Business',    mrr:   2_840_000, customers: 142_000, churn: 1.2, growth: +12.6, accent: 'teal'    },
+   802→  { name: 'Enterprise',  mrr:   8_420_000, customers:  18_400, churn: 0.4, growth: +18.4, accent: 'cyan'    },
+   803→  { name: 'Unlimited',   mrr:  12_640_000, customers:   4_800, churn: 0.2, growth: +24.2, accent: 'violet'  },
+   804→];
+   805→
+   806→export interface UsageBillable {
+   807→  metric: string;
+   808→  included: number;
+   809→  used: number;
+   810→  overage: number;
+   811→  rate: string;
+   812→  revenue: number;
+   813→}
+   814→
+   815→export const USAGE_BILLABLES: UsageBillable[] = [
+   816→  { metric: 'API Calls',         included: 1_000_000, used: 1_840_000, overage: 840_000, rate: '$0.002 / call',  revenue: 1_680 },
+   817→  { metric: 'AI Oracle™ Calls',  included:     1_000, used:     2_400, overage: 1_400,   rate: '$0.08 / call',   revenue:   112 },
+   818→  { metric: 'Documents OCRed',   included:    10_000, used:    18_400, overage: 8_400,   rate: '$0.04 / page',   revenue:   336 },
+   819→  { metric: 'Webhook Deliveries',included: 1_000_000, used:   620_000, overage:     0,   rate: '$0.0001 / call', revenue:     0 },
+   820→  { metric: 'Sandbox Hours',     included:     1_000, used:     1_200, overage:   200,   rate: '$0.50 / hour',   revenue:   100 },
+   821→];
+   822→
+   823→export interface MarketplaceRevenue {
+   824→  app: string;
+   825→  publisher: string;
+   826→  revenue: number;
+   827→  gstpilotShare: number;
+   828→  publisherShare: number;
+   829→  accent: Accent;
+   830→}
+   831→
+   832→export const MARKETPLACE_REVENUE: MarketplaceRevenue[] = [
+   833→  { app: 'Tally Connector Pro',  publisher: 'GSTPilot Labs',    revenue: 480_000, gstpilotShare: 480_000, publisherShare:      0, accent: 'emerald' },
+   834→  { app: 'QuickBooks Sync',      publisher: 'Intuit Inc.',      revenue: 284_000, gstpilotShare:  56_800, publisherShare: 227_200, accent: 'teal'    },
+   835→  { app: 'Auto-Reconcile Pack',  publisher: 'GSTPilot Labs',    revenue: 196_000, gstpilotShare: 196_000, publisherShare:      0, accent: 'cyan'    },
+   836→  { app: 'WhatsApp Invoicing',   publisher: 'Meta Cloud',       revenue: 142_000, gstpilotShare:  28_400, publisherShare: 113_600, accent: 'violet'  },
+   837→  { app: 'Cash Flow Forecaster', publisher: 'GSTPilot Labs',    revenue:  98_000, gstpilotShare:  98_000, publisherShare:      0, accent: 'amber'   },
+   838→  { app: 'Stripe Plugin',        publisher: 'Stripe Inc.',      revenue:  84_000, gstpilotShare:  16_800, publisherShare:  67_200, accent: 'rose'    },
+   839→];
+   840→
+   841→export interface EnterpriseContract {
+   842→  customer: string;
+   843→  arr: number;
+   844→  term: string;
+   845→  seats: number;
+   846→  status: 'active' | 'renewing' | 'expiring';
+   847→  accent: Accent;
+   848→}
+   849→
+   850→export const ENTERPRISE_CONTRACTS: EnterpriseContract[] = [
+   851→  { customer: 'Tata Consultancy Services', arr: 4_800_000, term: '3 years', seats: 24_000, status: 'active',    accent: 'emerald' },
+   852→  { customer: 'Reliance Industries',       arr: 3_200_000, term: '3 years', seats: 18_000, status: 'active',    accent: 'teal'    },
+   853→  { customer: 'Infosys Limited',           arr: 2_840_000, term: '2 years', seats: 16_000, status: 'renewing',  accent: 'cyan'    },
+   854→  { customer: 'HDFC Bank',                 arr: 2_640_000, term: '3 years', seats: 12_000, status: 'active',    accent: 'violet'  },
+   855→  { customer: 'ICICI Bank',                arr: 2_420_000, term: '2 years', seats: 11_000, status: 'renewing',  accent: 'amber'   },
+   856→  { customer: 'Bharti Airtel',             arr: 1_840_000, term: '2 years', seats:  9_000, status: 'active',    accent: 'rose'    },
+   857→  { customer: 'Wipro Technologies',        arr: 1_640_000, term: '3 years', seats:  8_400, status: 'expiring',  accent: 'emerald' },
+   858→  { customer: 'Adani Group',               arr: 1_420_000, term: '2 years', seats:  7_200, status: 'active',    accent: 'teal'    },
+   859→];
+   860→
+   861→// ═══════════════════════════════════════════════════════════════════════════════
+   862→// 12. MULTI-TENANT CLOUD INFRASTRUCTURE — regions, scaling, edge, CDN, HA
+   863→// ═══════════════════════════════════════════════════════════════════════════════
+   864→
+   865→export interface CloudRegion {
+   866→  code: string;
+   867→  name: string;
+   868→  continent: string;
+   869→  orgs: number;
+   870→  apiCalls24h: number;
+   871→  p95Ms: number;
+   872→  status: 'operational' | 'degraded' | 'maintenance';
+   873→  accent: Accent;
+   874→}
+   875→
+   876→export const CLOUD_REGIONS: CloudRegion[] = [
+   877→  { code: 'ap-south-1',     name: 'Mumbai',         continent: 'APAC',     orgs: 84_000, apiCalls24h: 18_400_000, p95Ms:  88, status: 'operational', accent: 'emerald' },
+   878→  { code: 'ap-southeast-1', name: 'Singapore',      continent: 'APAC',     orgs: 24_000, apiCalls24h:  4_820_000, p95Ms:  96, status: 'operational', accent: 'teal'    },
+   879→  { code: 'ap-northeast-1', name: 'Tokyo',          continent: 'APAC',     orgs: 12_000, apiCalls24h:  2_140_000, p95Ms: 104, status: 'operational', accent: 'cyan'    },
+   880→  { code: 'us-east-1',      name: 'N. Virginia',    continent: 'Americas', orgs: 38_000, apiCalls24h:  9_840_000, p95Ms:  72, status: 'operational', accent: 'violet'  },
+   881→  { code: 'us-west-2',      name: 'Oregon',         continent: 'Americas', orgs: 18_000, apiCalls24h:  3_240_000, p95Ms:  84, status: 'operational', accent: 'amber'   },
+   882→  { code: 'eu-central-1',   name: 'Frankfurt',      continent: 'EMEA',     orgs: 22_000, apiCalls24h:  5_240_000, p95Ms:  92, status: 'operational', accent: 'rose'    },
+   883→  { code: 'eu-west-1',      name: 'Ireland',        continent: 'EMEA',     orgs: 16_000, apiCalls24h:  3_840_000, p95Ms:  88, status: 'operational', accent: 'emerald' },
+   884→  { code: 'me-central-1',   name: 'UAE (Dubai)',    continent: 'EMEA',     orgs:  6_000, apiCalls24h:  1_240_000, p95Ms: 112, status: 'degraded',    accent: 'teal'    },
+   885→  { code: 'sa-east-1',      name: 'São Paulo',      continent: 'Americas', orgs:  4_000, apiCalls24h:    840_000, p95Ms: 124, status: 'operational', accent: 'cyan'    },
+   886→  { code: 'af-south-1',     name: 'Cape Town',      continent: 'EMEA',     orgs:  1_200, apiCalls24h:    240_000, p95Ms: 142, status: 'operational', accent: 'violet'  },
+   887→];
+   888→
+   889→export interface EdgePOP {
+   890→  city: string;
+   891→  country: string;
+   892→  cacheHitRatio: number;
+   893→  requestsPerSec: number;
+   894→  egressMbps: number;
+   895→  accent: Accent;
+   896→}
+   897→
+   898→export const EDGE_POPS: EdgePOP[] = [
+   899→  { city: 'Mumbai',     country: 'IN', cacheHitRatio: 96.4, requestsPerSec: 184_000, egressMbps: 14_400, accent: 'emerald' },
+   900→  { city: 'Singapore',  country: 'SG', cacheHitRatio: 94.8, requestsPerSec:  84_000, egressMbps:  8_200, accent: 'teal'    },
+   901→  { city: 'N. Virginia',country: 'US', cacheHitRatio: 97.2, requestsPerSec: 248_000, egressMbps: 22_800, accent: 'cyan'    },
+   902→  { city: 'Frankfurt',  country: 'DE', cacheHitRatio: 95.6, requestsPerSec: 142_000, egressMbps: 12_400, accent: 'violet'  },
+   903→  { city: 'Dubai',      country: 'AE', cacheHitRatio: 92.4, requestsPerSec:  48_000, egressMbps:  4_200, accent: 'amber'   },
+   904→  { city: 'Tokyo',      country: 'JP', cacheHitRatio: 96.8, requestsPerSec:  98_000, egressMbps:  9_800, accent: 'rose'    },
+   905→];
+   906→
+   907→export interface InfraMetric {
+   908→  label: string;
+   909→  value: string;
+   910→  sub: string;
+   911→  trend: number;
+   912→  accent: Accent;
+   913→}
+   914→
+   915→export const INFRA_KPIS: InfraMetric[] = [
+   916→  { label: 'Organizations',         value: '184,000',  sub: 'Across 10 regions',         trend:  +6.4, accent: 'emerald' },
+   917→  { label: 'API Calls (24h)',       value: '48.4B',    sub: 'Peak 6.2M req/sec',         trend: +12.4, accent: 'teal'    },
+   918→  { label: 'Auto-scaling Groups',   value: '1,240',    sub: 'Avg 42 instances per ASG',  trend:  +8.2, accent: 'cyan'    },
+   919→  { label: 'Edge POPs',             value: '142',      sub: '96.4% avg cache hit',       trend:  +2.4, accent: 'violet'  },
+   920→  { label: 'Avg Uptime (90d)',      value: '99.992%',  sub: 'SLA 99.99%',                trend:  +0.02,accent: 'amber'   },
+   921→  { label: 'Multi-AZ Failovers',    value: '12',       sub: 'Zero customer impact',      trend:   0.0, accent: 'rose'    },
+   922→];
+   923→
+   924→// ═══════════════════════════════════════════════════════════════════════════════
+   925→// 13. ENTERPRISE SECURITY — Zero Trust, encryption, threats, audit
+   926→// ═══════════════════════════════════════════════════════════════════════════════
+   927→
+   928→export interface SecurityControl {
+   929→  category: string;
+   930→  controls: number;
+   931→  passing: number;
+   932→  score: number;
+   933→  accent: Accent;
+   934→}
+   935→
+   936→export const SECURITY_CONTROLS: SecurityControl[] = [
+   937→  { category: 'Zero Trust Architecture', controls: 24, passing: 24, score: 100, accent: 'emerald' },
+   938→  { category: 'Encryption (at-rest + in-transit)', controls: 18, passing: 18, score: 100, accent: 'teal'    },
+   939→  { category: 'API Security',             controls: 32, passing: 30, score:  94, accent: 'cyan'    },
+   940→  { category: 'Secrets Management',       controls: 14, passing: 14, score: 100, accent: 'violet'  },
+   941→  { category: 'Rate Limiting & DDoS',     controls: 12, passing: 11, score:  92, accent: 'amber'   },
+   942→  { category: 'Threat Detection',         controls: 22, passing: 20, score:  91, accent: 'rose'    },
+   943→  { category: 'Audit & Compliance',       controls: 28, passing: 28, score: 100, accent: 'emerald' },
+   944→  { category: 'Identity & Access',        controls: 20, passing: 19, score:  95, accent: 'teal'    },
+   945→];
+   946→
+   947→export interface ThreatEvent {
+   948→  type: string;
+   949→  severity: 'critical' | 'high' | 'medium' | 'low';
+   950→  source: string;
+   951→  target: string;
+   952→  blocked: boolean;
+   953→  time: string;
+   954→}
+   955→
+   956→export const THREAT_EVENTS: ThreatEvent[] = [
+   957→  { type: 'Credential Stuffing',     severity: 'high',    source: '203.0.113.42',  target: '/v1/auth/login',         blocked: true,  time: '2 min ago'  },
+   958→  { type: 'API Key Brute Force',     severity: 'medium',  source: '198.51.100.18', target: '/v1/invoices',           blocked: true,  time: '8 min ago'  },
+   959→  { type: 'Rate Limit Exceeded',     severity: 'low',     source: '192.0.2.88',    target: '/v1/gst/returns',        blocked: true,  time: '14 min ago' },
+   960→  { type: 'SQL Injection Attempt',   severity: 'critical',source: '45.83.12.4',    target: '/v1/customers?q=*',      blocked: true,  time: '22 min ago' },
+   961→  { type: 'Suspicious Webhook',      severity: 'medium',  source: '91.243.85.12',  target: '/v1/webhooks/subscribe', blocked: true,  time: '34 min ago' },
+   962→  { type: 'XSS Payload',             severity: 'high',    source: '88.214.25.18',  target: '/v1/documents/upload',   blocked: true,  time: '48 min ago' },
+   963→  { type: 'DDoS Burst',              severity: 'critical',source: 'Botnet 184 IPs',target: '/v1/analytics/kpis',     blocked: true,  time: '1 hr ago'   },
+   964→  { type: 'Insider Anomaly',         severity: 'medium',  source: 'sanjay.nair@',  target: 'Bulk export customers',  blocked: false, time: '2 hr ago'   },
+   965→];
+   966→
+   967→export interface AuditLogEntry {
+   968→  actor: string;
+   969→  action: string;
+   970→  resource: string;
+   971→  ip: string;
+   972→  result: 'success' | 'denied' | 'warning';
+   973→  time: string;
+   974→}
+   975→
+   976→export const AUDIT_LOGS: AuditLogEntry[] = [
+   977→  { actor: 'arjun.sharma@acme.com',  action: 'API key created',    resource: 'key_006',          ip: '203.0.113.42',  result: 'success', time: '4 min ago'  },
+   978→  { actor: 'meera.iyer@acme.com',    action: 'Role escalated',     resource: 'org_admin',        ip: '198.51.100.18', result: 'warning', time: '12 min ago' },
+   979→  { actor: 'raj.khan@acme.com',      action: 'Bulk export',        resource: 'customers.csv',    ip: '192.0.2.88',    result: 'success', time: '18 min ago' },
+   980→  { actor: 'priya.reddy@acme.com',   action: 'Webhook added',      resource: 'wh_007',           ip: '203.0.113.99',  result: 'success', time: '24 min ago' },
+   981→  { actor: 'unknown@',               action: 'Login attempt',      resource: '/auth/login',      ip: '45.83.12.4',    result: 'denied',  time: '28 min ago' },
+   982→  { actor: 'sanjay.nair@acme.com',   action: 'Policy modified',    resource: 'rate_limit_v2',    ip: '198.51.100.62', result: 'success', time: '42 min ago' },
+   983→  { actor: 'kavya.patel@acme.com',   action: 'SSO config changed', resource: 'sso_azure_ad',     ip: '91.243.85.12',   result: 'warning', time: '1 hr ago'   },
+   984→  { actor: 'vikram.joshi@acme.com',  action: 'Key rotated',        resource: 'key_001',          ip: '203.0.113.140', result: 'success', time: '2 hr ago'   },
+   985→];
+   986→
+   987→export interface ComplianceCert {
+   988→  name: string;
+   989→  standard: string;
+   990→  status: 'certified' | 'in-progress' | 'planned';
+   991→  lastAudit: string;
+   992→  nextAudit: string;
+   993→  accent: Accent;
+   994→}
+   995→
+   996→export const COMPLIANCE_CERTS: ComplianceCert[] = [
+   997→  { name: 'SOC 2 Type II',          standard: 'AICPA',      status: 'certified',   lastAudit: '2025-08-14', nextAudit: '2026-08-14', accent: 'emerald' },
+   998→  { name: 'ISO 27001:2022',         standard: 'ISO/IEC',    status: 'certified',   lastAudit: '2025-06-22', nextAudit: '2026-06-22', accent: 'teal'    },
+   999→  { name: 'PCI DSS Level 1',        standard: 'PCI SSC',    status: 'certified',   lastAudit: '2025-09-01', nextAudit: '2026-09-01', accent: 'cyan'    },
+  1000→  { name: 'GDPR',                   standard: 'EU',         status: 'certified',   lastAudit: '2025-04-18', nextAudit: '2026-04-18', accent: 'violet'  },
+  1001→  { name: 'HIPAA',                  standard: 'HHS',        status: 'certified',   lastAudit: '2025-07-10', nextAudit: '2026-07-10', accent: 'amber'   },
+  1002→  { name: 'FedRAMP Moderate',       standard: 'GSA',        status: 'in-progress', lastAudit: '—',          nextAudit: '2026-03-01', accent: 'rose'    },
+  1003→  { name: 'ISO 27018 (PII)',        standard: 'ISO/IEC',    status: 'certified',   lastAudit: '2025-06-22', nextAudit: '2026-06-22', accent: 'emerald' },
+  1004→  { name: 'IRIS (GST System)',      standard: 'GSTN',       status: 'certified',   lastAudit: '2025-10-02', nextAudit: '2026-10-02', accent: 'teal'    },
+  1005→];
+  1006→
+  1007→// ═══════════════════════════════════════════════════════════════════════════════
+  1008→// 14. GLOBAL FINANCIAL NETWORK — org-to-org connections, shared resources
+  1009→// ═══════════════════════════════════════════════════════════════════════════════
+  1010→
+  1011→export interface OrgConnection {
+  1012→  name: string;
+  1013→  type: 'Customer' | 'Vendor' | 'Partner' | 'Bank' | 'Government';
+  1014→  gstin: string;
+  1015→  sharedDocs: number;
+  1016→  sharedInvoices: number;
+  1017→  sharedPayments: number;
+  1018→  status: 'active' | 'pending' | 'invited';
+  1019→  accent: Accent;
+  1020→}
+  1021→
+  1022→export const ORG_CONNECTIONS: OrgConnection[] = [
+  1023→  { name: 'Tata Consultancy Services', type: 'Customer',  gstin: '27AAACT1234F1Z5', sharedDocs: 184, sharedInvoices: 412, sharedPayments: 248, status: 'active',   accent: 'emerald' },
+  1024→  { name: 'Reliance Retail',           type: 'Vendor',    gstin: '27AAACR5055K1Z5', sharedDocs:  92, sharedInvoices: 284, sharedPayments: 184, status: 'active',   accent: 'teal'    },
+  1025→  { name: 'Infosys Limited',           type: 'Partner',   gstin: '29AAACI4798L1Z6', sharedDocs:  64, sharedInvoices: 142, sharedPayments:  96, status: 'active',   accent: 'cyan'    },
+  1026→  { name: 'HDFC Bank',                 type: 'Bank',      gstin: '67AAACH2702H1Z4', sharedDocs:  42, sharedInvoices:   0, sharedPayments: 624, status: 'active',   accent: 'violet'  },
+  1027→  { name: 'GST Network',               type: 'Government',gstin: 'GOVT_GSTN_001',   sharedDocs:  18, sharedInvoices:   0, sharedPayments:   0, status: 'active',   accent: 'amber'   },
+  1028→  { name: 'Adani Group',               type: 'Customer',  gstin: '24AAACA1091L1Z8', sharedDocs:  48, sharedInvoices:  96, sharedPayments:  62, status: 'active',   accent: 'rose'    },
+  1029→  { name: 'Wipro Technologies',        type: 'Vendor',    gstin: '29AAACW5698E1Z4', sharedDocs:  38, sharedInvoices: 124, sharedPayments:  82, status: 'pending',  accent: 'emerald' },
+  1030→  { name: 'Bharti Airtel',             type: 'Partner',   gstin: '04AABCB5556N1Z5', sharedDocs:  24, sharedInvoices:  62, sharedPayments:  44, status: 'invited',  accent: 'teal'    },
+  1031→];
+  1032→
+  1033→export interface SharedResource {
+  1034→  type: 'Invoice' | 'PO' | 'Payment' | 'Approval' | 'Document' | 'Vendor Collab' | 'Customer Collab';
+  1035→  counterparty: string;
+  1036→  amount: number;
+  1037→  status: string;
+  1038→  updated: string;
+  1039→  accent: Accent;
+  1040→}
+  1041→
+  1042→export const SHARED_RESOURCES: SharedResource[] = [
+  1043→  { type: 'Invoice',         counterparty: 'Tata Consultancy', amount:  840_000, status: 'Sent — awaiting acceptance', updated: '2 hr ago',   accent: 'emerald' },
+  1044→  { type: 'PO',              counterparty: 'Reliance Retail',  amount:  420_000, status: 'Accepted',                  updated: '4 hr ago',   accent: 'teal'    },
+  1045→  { type: 'Payment',         counterparty: 'HDFC Bank',        amount:  624_000, status: 'Cleared',                   updated: '12 min ago', accent: 'cyan'    },
+  1046→  { type: 'Approval',        counterparty: 'Infosys Limited',  amount:  184_000, status: 'Pending CFO sign-off',      updated: '18 min ago', accent: 'violet'  },
+  1047→  { type: 'Document',        counterparty: 'Adani Group',      amount:        0, status: 'Shared — GST registration', updated: '1 day ago',  accent: 'amber'   },
+  1048→  { type: 'Vendor Collab',   counterparty: 'Wipro Technologies', amount:     0, status: 'KYC pending',               updated: '2 days ago', accent: 'rose'    },
+  1049→  { type: 'Customer Collab', counterparty: 'Bharti Airtel',    amount:        0, status: 'Invitation sent',           updated: '3 days ago', accent: 'emerald' },
+  1050→  { type: 'Invoice',         counterparty: 'Tata Consultancy', amount:  184_000, status: 'Accepted',                  updated: '6 hr ago',   accent: 'teal'    },
+  1051→];
+  1052→
+  1053→export interface NetworkMetric {
+  1054→  label: string;
+  1055→  value: string;
+  1056→  trend: number;
+  1057→  accent: Accent;
+  1058→}
+  1059→
+  1060→export const NETWORK_KPIS: NetworkMetric[] = [
+  1061→  { label: 'Connected Orgs',         value: '4.82M',    trend: +18.4, accent: 'emerald' },
+  1062→  { label: 'Shared Invoices (30d)',  value: '184M',     trend: +22.8, accent: 'teal'    },
+  1063→  { label: 'Shared Payments (30d)',  value: '92M',      trend: +14.6, accent: 'cyan'    },
+  1064→  { label: 'Avg Acceptance Time',    value: '4.2 hrs',  trend: -12.4, accent: 'violet'  },
+  1065→  { label: 'Network GMV (30d)',      value: '$48.4B',   trend: +28.6, accent: 'amber'   },
+  1066→  { label: 'Dispute Resolution SLA', value: '98.6%',    trend:  +2.4, accent: 'rose'    },
+  1067→];
+  1068→
+  1069→// ═══════════════════════════════════════════════════════════════════════════════
+  1070→// 15. PLATFORM INTELLIGENCE — AI monitors across 6 dimensions
+  1071→// ═══════════════════════════════════════════════════════════════════════════════
+  1072→
+  1073→export interface IntelligenceDimension {
+  1074→  dimension: string;
+  1075→  score: number;
+  1076→  status: 'optimal' | 'healthy' | 'watch' | 'action';
+  1077→  actions24h: number;
+  1078→  savings: number;
+  1079→  accent: Accent;
+  1080→  insight: string;
+  1081→}
+  1082→
+  1083→export const INTELLIGENCE_DIMENSIONS: IntelligenceDimension[] = [
+  1084→  { dimension: 'Performance',  score: 96, status: 'optimal', actions24h: 184, savings:   82_400, accent: 'emerald', insight: 'Auto-scaled 142 instances during peak — p95 stable at 124ms' },
+  1085→  { dimension: 'Scaling',      score: 98, status: 'optimal', actions24h:  84, savings:  142_000, accent: 'teal',    insight: 'Predictive scaling correctly handled 4.8x traffic spike at 14:00 IST' },
+  1086→  { dimension: 'Security',     score: 94, status: 'healthy', actions24h: 248, savings:        0, accent: 'cyan',    insight: 'Blocked 8,420 threats; 1 insider anomaly flagged for review' },
+  1087→  { dimension: 'Costs',        score: 91, status: 'healthy', actions24h:  62, savings:  624_000, accent: 'violet',  insight: 'Right-sized 184 over-provisioned instances — saved $624K MTD' },
+  1088→  { dimension: 'Reliability',  score: 99, status: 'optimal', actions24h:  12, savings:        0, accent: 'amber',   insight: '12 multi-AZ failovers with zero customer impact; uptime 99.992%' },
+  1089→  { dimension: 'Developer Experience', score: 93, status: 'healthy', actions24h:  48, savings: 0, accent: 'rose',   insight: 'Auto-suggested 184 doc improvements; SDK adoption +18.4% MoM' },
+  1090→];
+  1091→
+  1092→export interface AIAction {
+  1093→  dimension: string;
+  1094→  action: string;
+  1095→  impact: string;
+  1096→  confidence: number;
+  1097→  auto: boolean;
+  1098→  time: string;
+  1099→}
+  1100→
+  1101→export const AI_ACTIONS: AIAction[] = [
+  1102→  { dimension: 'Performance',  action: 'Scaled ASG ap-south-1 from 42 → 184 instances', impact: 'p95 stable through 6.2M rps peak',       confidence: 98, auto: true,  time: '2 hr ago'  },
+  1103→  { dimension: 'Scaling',      action: 'Pre-warmed 142 edge cache nodes for Diwali spike',impact: 'Zero cold-start latency for 4.8M users', confidence: 96, auto: true,  time: '4 hr ago'  },
+  1104→  { dimension: 'Security',     action: 'Blocked 8,420-IP botnet credential stuffing',    impact: 'Prevented 184 account takeovers',         confidence: 99, auto: true,  time: '6 hr ago'  },
+  1105→  { dimension: 'Costs',        action: 'Right-sized 184 over-provisioned RDS instances', impact: 'Saved $624K MTD, zero perf regression',   confidence: 94, auto: true,  time: '8 hr ago'  },
+  1106→  { dimension: 'Reliability',  action: 'Multi-AZ failover eu-central-1 (degraded AZ)',   impact: 'Zero customer impact, 12s recovery',     confidence: 99, auto: true,  time: '12 hr ago' },
+  1107→  { dimension: 'Developer Experience', action: 'Suggested 184 doc clarifications via Oracle™', impact: 'Helpfulness score +3.2 pts',     confidence: 88, auto: false, time: '18 hr ago' },
+  1108→  { dimension: 'Performance',  action: 'Compacted Kafka topic invoices.created',          impact: 'Consumer lag reduced 84%',                confidence: 96, auto: true,  time: '1 day ago' },
+  1109→  { dimension: 'Costs',        action: 'Migrated 4.2TB cold data to Glacier',             impact: 'Storage cost −$42K/mo',                   confidence: 92, auto: true,  time: '2 days ago'},
+  1110→];
+  1111→
+  1112→// ═══════════════════════════════════════════════════════════════════════════════
+  1113→// PHASE 16 HUB NAVIGATION — 15 cards
+  1114→// ═══════════════════════════════════════════════════════════════════════════════
+  1115→
+  1116→export interface Phase16Module {
+  1117→  id: string;
+  1118→  number: number;
+  1119→  name: string;
+  1120→  tagline: string;
+  1121→  description: string;
+  1122→  icon: string;
+  1123→  accent: Accent;
+  1124→  stats: { label: string; value: string }[];
+  1125→}
+  1126→
+  1127→export const PHASE16_MODULES: Phase16Module[] = [
+  1128→  { id: 'developer-platform',         number: 1,  name: 'Developer Platform™',           tagline: 'REST · GraphQL · Webhooks · SDKs · CLI · OAuth · Playground · Sandbox · Docs', description: 'A complete developer ecosystem with first-class tooling across 8 languages, real-time webhooks, OAuth providers, sandbox environments and a built-in API playground.', icon: 'code-2',           accent: 'emerald', stats: [{ label: 'APIs', value: '540+' }, { label: 'SDKs', value: '8' }, { label: 'Developers', value: '2.4M' }] },
+  1129→  { id: 'enterprise-api-gateway',     number: 2,  name: 'Enterprise API Gateway™',       tagline: 'GST · Invoices · Accounting · ERP · CRM · HR · Payroll · Inventory · Analytics · Banking · AI · Compliance · Documents', description: 'Thirteen secure, versioned, rate-limited service APIs covering every GSTPilot domain with sub-200ms p95 latency.', icon: 'network',          accent: 'teal',    stats: [{ label: 'Services', value: '13' }, { label: 'Endpoints', value: '478' }, { label: 'Calls/24h', value: '48.4B' }] },
+  1130→  { id: 'app-marketplace-cloud',      number: 3,  name: 'App Marketplace™',              tagline: 'Apps · Extensions · Plugins · AI Skills · ERP Connectors · Industry Templates · Automation Packs', description: 'A thriving marketplace where developers publish, monetize and distribute apps to 184,000 enterprises worldwide.', icon: 'store',            accent: 'cyan',    stats: [{ label: 'Apps', value: '4,820' }, { label: 'Installs', value: '6.6M' }, { label: 'Publishers', value: '1,240' }] },
+  1131→  { id: 'global-integration-hub',     number: 4,  name: 'Global Integration Hub™',       tagline: 'SAP · Oracle · Dynamics · Zoho · Tally · QuickBooks · Xero · Salesforce · HubSpot · Slack · Teams · WhatsApp · Stripe · Razorpay · PayPal · Bank APIs · Gov APIs', description: '23 native, two-way integrations across ERP, CRM, payments, banking, communication, productivity and government systems.', icon: 'plug',             accent: 'violet',  stats: [{ label: 'Integrations', value: '23' }, { label: 'Connected', value: '20' }, { label: 'Records synced', value: '3.4M' }] },
+  1132→  { id: 'financial-data-cloud',       number: 5,  name: 'Financial Data Cloud™',         tagline: 'Invoices · GST · Accounting · Banking · Inventory · Payroll · Compliance · Customers · Vendors · Documents · Analytics', description: 'A unified financial data layer that synchronizes 11 domains in real-time across every connected system.', icon: 'database',         accent: 'amber',   stats: [{ label: 'Domains', value: '11' }, { label: 'Records', value: '1.1B' }, { label: 'Storage', value: '15.4 TB' }] },
+  1133→  { id: 'event-streaming',            number: 6,  name: 'Event Streaming Platform™',     tagline: 'Invoice Created · Payment Received · GST Filed · Expense Added · Bank Synced · AI Action · Document Uploaded · Approval Granted · Webhook Delivery', description: 'Real-time event bus delivering 17M+ events per day with 18ms p99 latency and 7-year retention for compliance.', icon: 'radio',            accent: 'rose',    stats: [{ label: 'Event types', value: '9' }, { label: 'Daily volume', value: '17.3M' }, { label: 'p99 latency', value: '18ms' }] },
+  1134→  { id: 'automation-studio',          number: 7,  name: 'Enterprise Automation Studio™', tagline: 'Triggers · Conditions · Actions · AI Nodes · API Nodes · Webhooks · Schedules', description: 'Visual drag-and-drop workflow builder with 13 node types and 184 ready-made templates across every business process.', icon: 'workflow',         accent: 'emerald', stats: [{ label: 'Templates', value: '184' }, { label: 'Node types', value: '13' }, { label: 'Runs/24h', value: '1.8M' }] },
+  1135→  { id: 'data-warehouse',             number: 8,  name: 'Enterprise Data Warehouse™',    tagline: 'Realtime · Historical · Custom SQL · BI · AI Queries · Data Lake', description: 'Petabyte-scale analytics warehouse with 8 fact/dim tables, saved SQL queries, BI dashboards and natural-language AI queries.', icon: 'bar-chart-3',      accent: 'teal',    stats: [{ label: 'Datasets', value: '8' }, { label: 'Rows', value: '1.6B' }, { label: 'Queries/24h', value: '1.9M' }] },
+  1136→  { id: 'global-identity',            number: 9,  name: 'Global Identity Platform™',     tagline: 'SSO · OAuth · SAML · Azure AD · Google · Microsoft · MFA · Passwordless', description: 'Enterprise identity layer with 6 SSO connections, 5 MFA methods and WebAuthn-based passwordless login.', icon: 'fingerprint',      accent: 'cyan',    stats: [{ label: 'SSO providers', value: '6' }, { label: 'MFA methods', value: '5' }, { label: 'Users', value: '12.4K' }] },
+  1137→  { id: 'developer-analytics',        number: 10, name: 'Developer Analytics™',          tagline: 'API Usage · Errors · Latency · Revenue · Apps · Downloads · Subscriptions · Usage Trends', description: 'Real-time analytics dashboard for developers to monitor API usage, errors, latency, revenue and app performance.', icon: 'activity',         accent: 'violet',  stats: [{ label: 'Calls/24h', value: '42.8M' }, { label: 'Error rate', value: '0.04%' }, { label: 'P95', value: '124ms' }] },
+  1138→  { id: 'enterprise-billing',         number: 11, name: 'Enterprise Billing Platform™',  tagline: 'Subscriptions · Usage Billing · Marketplace Revenue · Partner Revenue · API Billing · Developer Billing · Enterprise Contracts', description: 'Unified billing engine handling subscriptions, metered usage, marketplace revenue-share and multi-year enterprise contracts.', icon: 'credit-card',      accent: 'amber',   stats: [{ label: 'MRR', value: '$24.6M' }, { label: 'Customers', value: '349K' }, { label: 'ARR', value: '$295M' }] },
+  1139→  { id: 'multi-tenant-infra',         number: 12, name: 'Multi-Tenant Cloud Infra™',     tagline: 'Millions of Orgs · Billions of API calls · Global regions · Auto Scaling · Load Balancing · Edge · CDN · HA', description: 'Globally distributed multi-tenant infrastructure across 10 regions, 142 edge POPs and 99.992% uptime SLA.', icon: 'server',           accent: 'rose',    stats: [{ label: 'Regions', value: '10' }, { label: 'Edge POPs', value: '142' }, { label: 'Uptime', value: '99.992%' }] },
+  1140→  { id: 'enterprise-security-cloud',  number: 13, name: 'Enterprise Security™',          tagline: 'API Security · Zero Trust · Encryption · Secrets · Rate Limiting · Threat Detection · Audit Trails · Compliance', description: 'Defense-in-depth security with Zero Trust posture, 8 compliance certifications and AI-powered threat detection.', icon: 'shield-check',     accent: 'emerald', stats: [{ label: 'Controls', value: '170' }, { label: 'Threats blocked/24h', value: '8.4K' }, { label: 'Certs', value: '8' }] },
+  1141→  { id: 'global-financial-network',   number: 14, name: 'Global Financial Network™',     tagline: 'Invoices · POs · Payments · Approvals · Documents · Vendor Collab · Customer Collab', description: 'A secure network where 4.82M organizations transact directly — sharing invoices, payments, approvals and documents.', icon: 'share-2',          accent: 'teal',    stats: [{ label: 'Connected orgs', value: '4.82M' }, { label: 'Network GMV', value: '$48.4B' }, { label: 'Shared docs', value: '184M' }] },
+  1142→  { id: 'platform-intelligence',      number: 15, name: 'Platform Intelligence™',        tagline: 'Performance · Scaling · Security · Costs · Reliability · Developer Experience', description: 'An always-on AI that monitors the entire platform across 6 dimensions and takes autonomous corrective action.', icon: 'brain-circuit',    accent: 'cyan',    stats: [{ label: 'Dimensions', value: '6' }, { label: 'Actions/24h', value: '640' }, { label: 'Cost saved MTD', value: '$848K' }] },
+  1143→];
+  1144→
+  1145→// ─── Aggregated Phase 16 Hero KPIs ────────────────────────────────────────────
+  1146→export const PHASE16_HERO_KPIS = [
+  1147→  { label: 'Developers',         value: '2.4M',   sub: 'Across 184 countries',           accent: 'emerald' as Accent },
+  1148→  { label: 'API Calls (24h)',    value: '48.4B',  sub: 'Peak 6.2M req/sec',              accent: 'teal'    as Accent },
+  1149→  { label: 'Apps Published',     value: '4,820',  sub: 'From 1,240 publishers',          accent: 'cyan'    as Accent },
+  1150→  { label: 'Connected Orgs',     value: '4.82M',  sub: 'On the Global Financial Network',accent: 'violet'  as Accent },
+  1151→  { label: 'Annual API Revenue', value: '$4.82B', sub: 'Growing 22.8% YoY',              accent: 'amber'   as Accent },
+  1152→  { label: 'Platform Uptime',    value: '99.992%',sub: 'SLA: 99.99% across 10 regions',  accent: 'rose'    as Accent },
+  1153→];
+  1154→

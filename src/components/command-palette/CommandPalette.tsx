@@ -46,6 +46,17 @@ import {
   FileBarChart,
   Server,
   Calculator,
+  Code2,
+  Store,
+  Plug,
+  Database,
+  Radio,
+  Workflow,
+  Fingerprint,
+  CreditCard,
+  Share2,
+  BrainCircuit,
+  Boxes,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -688,6 +699,183 @@ export default function CommandPalette() {
           addToRecent('cmd-open-global-performance', 'Open Global Performance™', 'command');
         },
         group: 'Phase 14 — Global',
+      },
+      // ─── Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ───
+      {
+        id: 'cmd-open-global-financial-cloud',
+        label: 'Open Global Financial Cloud™ Hub',
+        description: 'The 15 pillars of the open platform — APIs, Marketplace, Integrations, Data, Events',
+        icon: Cloud,
+        action: () => {
+          setCurrentView('global-financial-cloud');
+          addToRecent('cmd-open-global-financial-cloud', 'Open Global Financial Cloud™ Hub', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-developer-platform',
+        label: 'Open Developer Platform™',
+        description: 'REST, GraphQL, Webhooks, 8 SDKs, CLI, OAuth, API keys, Playground, Sandbox, Docs',
+        icon: Code2,
+        action: () => {
+          setCurrentView('developer-platform');
+          addToRecent('cmd-open-developer-platform', 'Open Developer Platform™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-enterprise-api-gateway',
+        label: 'Open Enterprise API Gateway™',
+        description: '13 secure service APIs: GST, Invoices, Accounting, ERP, CRM, HR, Payroll, Banking, AI',
+        icon: Network,
+        action: () => {
+          setCurrentView('enterprise-api-gateway');
+          addToRecent('cmd-open-enterprise-api-gateway', 'Open Enterprise API Gateway™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-app-marketplace-cloud',
+        label: 'Open App Marketplace™',
+        description: 'Apps, Extensions, Plugins, AI Skills, ERP Connectors, Industry Templates, Automation Packs',
+        icon: Store,
+        action: () => {
+          setCurrentView('app-marketplace-cloud');
+          addToRecent('cmd-open-app-marketplace-cloud', 'Open App Marketplace™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-global-integration-hub',
+        label: 'Open Global Integration Hub™',
+        description: 'SAP, Oracle, Dynamics, Zoho, Tally, QuickBooks, Xero, Salesforce, Slack, Stripe, Bank APIs',
+        icon: Plug,
+        action: () => {
+          setCurrentView('global-integration-hub');
+          addToRecent('cmd-open-global-integration-hub', 'Open Global Integration Hub™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-financial-data-cloud',
+        label: 'Open Financial Data Cloud™',
+        description: 'Unified financial data layer syncing 11 domains in real-time across every connected system',
+        icon: Database,
+        action: () => {
+          setCurrentView('financial-data-cloud');
+          addToRecent('cmd-open-financial-data-cloud', 'Open Financial Data Cloud™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-event-streaming',
+        label: 'Open Event Streaming Platform™',
+        description: 'Realtime events: Invoice Created, Payment Received, GST Filed, Bank Synced, Webhook Delivery',
+        icon: Radio,
+        action: () => {
+          setCurrentView('event-streaming');
+          addToRecent('cmd-open-event-streaming', 'Open Event Streaming Platform™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-automation-studio',
+        label: 'Open Enterprise Automation Studio™',
+        description: 'Visual drag-and-drop workflow builder with triggers, conditions, AI nodes, API nodes, schedules',
+        icon: Workflow,
+        action: () => {
+          setCurrentView('automation-studio');
+          addToRecent('cmd-open-automation-studio', 'Open Enterprise Automation Studio™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-data-warehouse',
+        label: 'Open Enterprise Data Warehouse™',
+        description: 'Petabyte-scale analytics: realtime, historical, custom SQL, BI dashboards, AI queries, data lake',
+        icon: BarChart3,
+        action: () => {
+          setCurrentView('data-warehouse');
+          addToRecent('cmd-open-data-warehouse', 'Open Enterprise Data Warehouse™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-global-identity',
+        label: 'Open Global Identity Platform™',
+        description: 'Enterprise SSO, OAuth, SAML, Azure AD, Google, Microsoft, MFA, passwordless WebAuthn',
+        icon: Fingerprint,
+        action: () => {
+          setCurrentView('global-identity');
+          addToRecent('cmd-open-global-identity', 'Open Global Identity Platform™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-developer-analytics',
+        label: 'Open Developer Analytics™',
+        description: 'API usage, errors, latency, revenue, apps, downloads, subscriptions, usage trends',
+        icon: Activity,
+        action: () => {
+          setCurrentView('developer-analytics');
+          addToRecent('cmd-open-developer-analytics', 'Open Developer Analytics™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-enterprise-billing',
+        label: 'Open Enterprise Billing Platform™',
+        description: 'Subscriptions, usage billing, marketplace revenue, partner revenue, API billing, enterprise contracts',
+        icon: CreditCard,
+        action: () => {
+          setCurrentView('enterprise-billing');
+          addToRecent('cmd-open-enterprise-billing', 'Open Enterprise Billing Platform™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-multi-tenant-infra',
+        label: 'Open Multi-Tenant Cloud Infra™',
+        description: 'Millions of orgs, billions of API calls, 10 regions, auto-scaling, load balancing, edge, CDN, HA',
+        icon: Server,
+        action: () => {
+          setCurrentView('multi-tenant-infra');
+          addToRecent('cmd-open-multi-tenant-infra', 'Open Multi-Tenant Cloud Infra™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-enterprise-security-cloud',
+        label: 'Open Enterprise Security™',
+        description: 'API security, Zero Trust, encryption, secrets, rate limiting, threat detection, audit, compliance',
+        icon: ShieldCheck,
+        action: () => {
+          setCurrentView('enterprise-security-cloud');
+          addToRecent('cmd-open-enterprise-security-cloud', 'Open Enterprise Security™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-global-financial-network',
+        label: 'Open Global Financial Network™',
+        description: 'Secure org-to-org network: invoices, POs, payments, approvals, documents, vendor & customer collab',
+        icon: Share2,
+        action: () => {
+          setCurrentView('global-financial-network');
+          addToRecent('cmd-open-global-financial-network', 'Open Global Financial Network™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
+      },
+      {
+        id: 'cmd-open-platform-intelligence',
+        label: 'Open Platform Intelligence™',
+        description: 'AI monitors performance, scaling, security, costs, reliability, developer experience',
+        icon: BrainCircuit,
+        action: () => {
+          setCurrentView('platform-intelligence');
+          addToRecent('cmd-open-platform-intelligence', 'Open Platform Intelligence™', 'command');
+        },
+        group: 'Phase 16 — Cloud',
       },
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]

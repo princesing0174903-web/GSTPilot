@@ -180,7 +180,24 @@ export type AppView =
   | 'global-dashboard'
   | 'cross-border-payments'
   | 'international-reports'
-  | 'global-performance';
+  | 'global-performance'
+  // Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™
+  | 'global-financial-cloud'
+  | 'developer-platform'
+  | 'enterprise-api-gateway'
+  | 'app-marketplace-cloud'
+  | 'global-integration-hub'
+  | 'financial-data-cloud'
+  | 'event-streaming'
+  | 'automation-studio'
+  | 'data-warehouse'
+  | 'global-identity'
+  | 'developer-analytics'
+  | 'enterprise-billing'
+  | 'multi-tenant-infra'
+  | 'enterprise-security-cloud'
+  | 'global-financial-network'
+  | 'platform-intelligence';
 
 export interface ReturnPrepContext {
   clientId: string | null;

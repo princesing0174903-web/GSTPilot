@@ -99,7 +99,7 @@ export default function BlurText({
           transition={{
             duration: 0.7,
             times: [0, 0.5, 1],
-            ease: 'easeOut',
+            ease: 'easeOut' as const,
             delay: (i * 100) / 1000,
           }}
         >

@@ -428,7 +428,7 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
         transition={{ delay: 1, duration: 1 }}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/40"
       >
-        <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}>
+        <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' as const }}>
           <ChevronDown className="h-5 w-5" />
         </motion.div>
       </motion.div>
@@ -942,7 +942,7 @@ function DashboardShowcaseSection() {
           <div style={{ perspective: '2000px' }}>
             <motion.div
               animate={{ y: [0, -8, 0], rotateX: 2 }}
-              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' as const }}
               style={{ transformOrigin: 'center center' }}
             >
               <div className="overflow-hidden rounded-3xl glass-surface-strong p-3 shadow-premium sm:p-4">

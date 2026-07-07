@@ -258,7 +258,7 @@ function LanguageCard({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${lang.coverage}%` }}
-            transition={{ duration: 0.6, delay: index * 0.04, ease: 'easeOut' }}
+            transition={{ duration: 0.6, delay: index * 0.04, ease: 'easeOut' as const }}
             className={`h-full ${accentBar}`}
           />
         </div>

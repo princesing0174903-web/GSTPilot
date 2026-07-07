@@ -16,7 +16,7 @@
 // This file is SERVER-ONLY (it will hold real HTTP client code + secrets).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { IGSTProvider, GSTSession } from '../provider';
+import type { IGSTProvider, GSTSession, FileReturnInput, FileReturnResult } from '../provider';
 import type {
   ConnectResult,
   GSTLedger,
@@ -184,5 +184,30 @@ export class FutureOfficialGSTProvider implements IGSTProvider {
     // Once implemented, ping the GSTN health endpoint.
     // For now, return false so the scheduler doesn't try to use this provider.
     return false;
+  }
+
+  /**
+   * POST /taxpayerapi/v1.0/returns/gstr1 → file GSTR-1.
+   * POST /taxpayerapi/v1.0/returns/gstr3b → file GSTR-3B.
+   *
+   * CRITICAL: This method MUST return a real ARN from GSTN. It must NEVER
+   * generate a fake/simulated ARN. The return is only marked "filed" when
+   * GSTN returns a real acknowledgment number.
+   *
+   * Implementation steps when going live:
+   * 1. Encrypt the payload with the app key (AES-256)
+   * 2. POST to the GSTN filing endpoint with the auth token
+   * 3. Parse the response for the ARN (acknowledgment number)
+   * 4. Return { arn, acknowledgedAt, status }
+   * 5. If GSTN returns an error, throw — the caller must NOT mark as filed
+   */
+  async fileReturn(
+    session: GSTSession,
+    input: FileReturnInput,
+  ): Promise<FileReturnResult> {
+    void this.getConfig();
+    void session;
+    void input;
+    throw new NotImplementedError('GSTN fileReturn');
   }
 }

@@ -1,0 +1,468 @@
+     1→src/lib/agi/core.ts:    totalDecisions: () => safeCount(() => db.globalEntity.count()),
+     2→src/lib/agi/core.ts-    lastSync: async () => {
+     3→src/lib/agi/core.ts-      const r = await safeFirst(() => db.globalAuditLog.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }));
+     4→src/lib/agi/core.ts-      return r?.createdAt ?? null;
+     5→src/lib/agi/core.ts-    },
+     6→src/lib/agi/core.ts-  },
+     7→src/lib/agi/core.ts-  {
+     8→src/lib/agi/core.ts-    capability: 'ai_software_factory',
+     9→src/lib/agi/core.ts-    label: 'AI Software Factory™',
+    10→src/lib/agi/core.ts-    role: 'Self-building software — projects, builds, deployments',
+    11→src/lib/agi/core.ts-    signalsLastHour: () => safeCount(() => db.devBuild.count({ where: { createdAt: { gte: oneHourAgo() } } })),
+    12→src/lib/agi/core.ts-    totalDecisions: () => safeCount(() => db.devProject.count()),
+    13→src/lib/agi/core.ts-    lastSync: async () => {
+    14→src/lib/agi/core.ts-      const r = await safeFirst(() => db.devBuild.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }));
+    15→src/lib/agi/core.ts-      return r?.createdAt ?? null;
+    16→src/lib/agi/core.ts-    },
+    17→--
+    18→src/lib/global-enterprise/expansion.ts:      db.globalEntity.findMany({
+    19→src/lib/global-enterprise/expansion.ts-        where: { ...(firmId ? { firmId } : {}), status: { not: 'divested' } },
+    20→src/lib/global-enterprise/expansion.ts-        include: { country: true },
+    21→src/lib/global-enterprise/expansion.ts-      }),
+    22→src/lib/global-enterprise/expansion.ts-      db.bankAccount.findMany({
+    23→src/lib/global-enterprise/expansion.ts-        where: { isActive: true },
+    24→src/lib/global-enterprise/expansion.ts-        select: { countryIso: true, entityId: true },
+    25→src/lib/global-enterprise/expansion.ts-      }),
+    26→src/lib/global-enterprise/expansion.ts-      getConsolidationReport(currentPeriod(), firmId).catch(() => null),
+    27→src/lib/global-enterprise/expansion.ts-    ]);
+    28→src/lib/global-enterprise/expansion.ts-
+    29→src/lib/global-enterprise/expansion.ts-    const countryMap = new Map<string, { iso: string; name: string; region: string; entityCount: number; bankAccountCount: number; revenueBase: number }>();
+    30→src/lib/global-enterprise/expansion.ts-    for (const e of entities) {
+    31→src/lib/global-enterprise/expansion.ts-      const existing = countryMap.get(e.countryIso) ?? {
+    32→src/lib/global-enterprise/expansion.ts-        iso: e.countryIso,
+    33→src/lib/global-enterprise/expansion.ts-        name: e.country?.name ?? e.countryIso,
+    34→--
+    35→src/lib/global-enterprise/executives.ts:    const entities = await db.globalEntity.findMany({
+    36→src/lib/global-enterprise/executives.ts-      where: { consolidated: true, ...(firmId ? { firmId } : {}), status: { not: 'divested' } },
+    37→src/lib/global-enterprise/executives.ts-      take: 50,
+    38→src/lib/global-enterprise/executives.ts-    });
+    39→src/lib/global-enterprise/executives.ts-    let totalTaxBase = consolidation.totalTax;
+    40→src/lib/global-enterprise/executives.ts-    const taxByType = new Map<string, number>();
+    41→src/lib/global-enterprise/executives.ts-    taxByType.set('indirect', consolidation.totalTax);
+    42→src/lib/global-enterprise/executives.ts-    // Estimate tax breakdown from REAL consolidation entries (tax metric)
+    43→src/lib/global-enterprise/executives.ts-    try {
+    44→src/lib/global-enterprise/executives.ts-      const taxEntries = await db.consolidationEntry.findMany({
+    45→src/lib/global-enterprise/executives.ts-        where: { entityId: { in: entities.map((e) => e.id) }, period, metric: 'tax' },
+    46→src/lib/global-enterprise/executives.ts-        select: { valueBase: true, entityId: true },
+    47→src/lib/global-enterprise/executives.ts-      });
+    48→src/lib/global-enterprise/executives.ts-      const entityCountryMap = new Map(entities.map((e) => [e.id, e.countryIso]));
+    49→src/lib/global-enterprise/executives.ts-      for (const t of taxEntries) {
+    50→src/lib/global-enterprise/executives.ts-        const iso = entityCountryMap.get(t.entityId) ?? 'IN';
+    51→--
+    52→src/lib/global-enterprise/entities.ts:  const row = await db.globalEntity.findUnique({ where: { id: entityId } });
+    53→src/lib/global-enterprise/entities.ts-  if (!row) return null;
+    54→src/lib/global-enterprise/entities.ts-  return {
+    55→src/lib/global-enterprise/entities.ts-    id: row.id,
+    56→src/lib/global-enterprise/entities.ts-    firmId: row.firmId ?? undefined,
+    57→src/lib/global-enterprise/entities.ts-    parentEntityId: row.parentEntityId ?? undefined,
+    58→src/lib/global-enterprise/entities.ts-    legalName: row.legalName,
+    59→src/lib/global-enterprise/entities.ts-    tradeName: row.tradeName ?? undefined,
+    60→src/lib/global-enterprise/entities.ts-    entityKind: row.entityKind as EntityRecord['entityKind'],
+    61→src/lib/global-enterprise/entities.ts-    countryIso: row.countryIso,
+    62→src/lib/global-enterprise/entities.ts-    registrationNo: row.registrationNo ?? undefined,
+    63→src/lib/global-enterprise/entities.ts-    taxId: row.taxId ?? undefined,
+    64→src/lib/global-enterprise/entities.ts-    address: row.address ?? undefined,
+    65→src/lib/global-enterprise/entities.ts-    baseCurrency: row.baseCurrency,
+    66→src/lib/global-enterprise/entities.ts-    consolidated: row.consolidated,
+    67→src/lib/global-enterprise/entities.ts-    ownershipPct: row.ownershipPct,
+    68→--
+    69→src/lib/global-enterprise/entities.ts:  const updated = await db.globalEntity.update({
+    70→src/lib/global-enterprise/entities.ts-    where: { id: entityId },
+    71→src/lib/global-enterprise/entities.ts-    data: {
+    72→src/lib/global-enterprise/entities.ts-      ...(updates.legalName ? { legalName: updates.legalName } : {}),
+    73→src/lib/global-enterprise/entities.ts-      ...(updates.tradeName !== undefined ? { tradeName: updates.tradeName ?? null } : {}),
+    74→src/lib/global-enterprise/entities.ts-      ...(updates.entityKind ? { entityKind: updates.entityKind } : {}),
+    75→src/lib/global-enterprise/entities.ts-      ...(updates.countryIso ? { countryIso: updates.countryIso.toUpperCase() } : {}),
+    76→src/lib/global-enterprise/entities.ts-      ...(updates.registrationNo !== undefined ? { registrationNo: updates.registrationNo ?? null } : {}),
+    77→src/lib/global-enterprise/entities.ts-      ...(updates.taxId !== undefined ? { taxId: updates.taxId ?? null } : {}),
+    78→src/lib/global-enterprise/entities.ts-      ...(updates.address !== undefined ? { address: updates.address ?? null } : {}),
+    79→src/lib/global-enterprise/entities.ts-      ...(updates.baseCurrency ? { baseCurrency: updates.baseCurrency.toUpperCase() } : {}),
+    80→src/lib/global-enterprise/entities.ts-      ...(updates.consolidated !== undefined ? { consolidated: updates.consolidated } : {}),
+    81→src/lib/global-enterprise/entities.ts-      ...(updates.ownershipPct !== undefined ? { ownershipPct: updates.ownershipPct } : {}),
+    82→src/lib/global-enterprise/entities.ts-      ...(updates.status ? { status: updates.status } : {}),
+    83→src/lib/global-enterprise/entities.ts-      ...(updates.parentEntityId !== undefined ? { parentEntityId: updates.parentEntityId ?? null } : {}),
+    84→src/lib/global-enterprise/entities.ts-      ...(updates.metadata ? { metadata: JSON.stringify(updates.metadata) } : {}),
+    85→--
+    86→src/lib/global-enterprise/entities.ts:  const entities = await db.globalEntity.findMany({
+    87→src/lib/global-enterprise/entities.ts-    where: { ...(firmId ? { firmId } : {}) },
+    88→src/lib/global-enterprise/entities.ts-    include: { country: true },
+    89→src/lib/global-enterprise/entities.ts-  });
+    90→src/lib/global-enterprise/entities.ts-  const totalBankAccounts = await db.bankAccount.count({ where: { isActive: true } });
+    91→src/lib/global-enterprise/entities.ts-
+    92→src/lib/global-enterprise/entities.ts-  const kindMap = new Map<string, number>();
+    93→src/lib/global-enterprise/entities.ts-  const countryMap = new Map<string, { countryIso: string; countryName: string; count: number }>();
+    94→src/lib/global-enterprise/entities.ts-  const statusMap = new Map<string, number>();
+    95→src/lib/global-enterprise/entities.ts-  let consolidatedCount = 0;
+    96→src/lib/global-enterprise/entities.ts-  let ownershipSum = 0;
+    97→src/lib/global-enterprise/entities.ts-
+    98→src/lib/global-enterprise/entities.ts-  for (const e of entities) {
+    99→src/lib/global-enterprise/entities.ts-    kindMap.set(e.entityKind, (kindMap.get(e.entityKind) ?? 0) + 1);
+   100→src/lib/global-enterprise/entities.ts-    const existing = countryMap.get(e.countryIso) ?? {
+   101→src/lib/global-enterprise/entities.ts-      countryIso: e.countryIso,
+   102→--
+   103→src/lib/global-enterprise/banking.ts:  const entities = entityIds.length > 0 ? await db.globalEntity.findMany({ where: { id: { in: entityIds } } }) : [];
+   104→src/lib/global-enterprise/banking.ts-  const entityNameMap = new Map(entities.map((e) => [e.id, e.legalName]));
+   105→src/lib/global-enterprise/banking.ts-
+   106→src/lib/global-enterprise/banking.ts-  const byCurrency: TreasurySummary['byCurrency'] = multiCur.byCurrency.map((b) => ({
+   107→src/lib/global-enterprise/banking.ts-    currency: b.currency,
+   108→src/lib/global-enterprise/banking.ts-    accountCount: accounts.filter((a) => a.accountCurrency.toUpperCase() === b.currency).length,
+   109→src/lib/global-enterprise/banking.ts-    totalLocal: b.localAmount,
+   110→src/lib/global-enterprise/banking.ts-    totalBase: b.baseAmount,
+   111→src/lib/global-enterprise/banking.ts-    pctOfTotal: b.pctOfTotal,
+   112→src/lib/global-enterprise/banking.ts-  }));
+   113→src/lib/global-enterprise/banking.ts-
+   114→src/lib/global-enterprise/banking.ts-  const byCountry: TreasurySummary['byCountry'] = Array.from(byCountryMap.entries())
+   115→src/lib/global-enterprise/banking.ts-    .map(([iso, v]) => ({
+   116→src/lib/global-enterprise/banking.ts-      countryIso: iso,
+   117→src/lib/global-enterprise/banking.ts-      accountCount: v.count,
+   118→src/lib/global-enterprise/banking.ts-      totalBase: v.totalBase,
+   119→--
+   120→src/lib/global-enterprise/consolidation.ts:  const created = await db.globalEntity.create({
+   121→src/lib/global-enterprise/consolidation.ts-    data: {
+   122→src/lib/global-enterprise/consolidation.ts-      firmId: input.firmId ?? null,
+   123→src/lib/global-enterprise/consolidation.ts-      parentEntityId: input.parentEntityId ?? null,
+   124→src/lib/global-enterprise/consolidation.ts-      legalName: input.legalName,
+   125→src/lib/global-enterprise/consolidation.ts-      tradeName: input.tradeName ?? null,
+   126→src/lib/global-enterprise/consolidation.ts-      entityKind: input.entityKind,
+   127→src/lib/global-enterprise/consolidation.ts-      countryIso: input.countryIso.toUpperCase(),
+   128→src/lib/global-enterprise/consolidation.ts-      registrationNo: input.registrationNo ?? null,
+   129→src/lib/global-enterprise/consolidation.ts-      taxId: input.taxId ?? null,
+   130→src/lib/global-enterprise/consolidation.ts-      address: input.address ?? null,
+   131→src/lib/global-enterprise/consolidation.ts-      baseCurrency: input.baseCurrency.toUpperCase(),
+   132→src/lib/global-enterprise/consolidation.ts-      consolidated: input.consolidated,
+   133→src/lib/global-enterprise/consolidation.ts-      ownershipPct: input.ownershipPct,
+   134→src/lib/global-enterprise/consolidation.ts-      status: input.status,
+   135→src/lib/global-enterprise/consolidation.ts-      metadata: JSON.stringify(input.metadata ?? {}),
+   136→--
+   137→src/lib/global-enterprise/consolidation.ts:  const rows = await db.globalEntity.findMany({
+   138→src/lib/global-enterprise/consolidation.ts-    where: {
+   139→src/lib/global-enterprise/consolidation.ts-      ...(firmId ? { firmId } : {}),
+   140→src/lib/global-enterprise/consolidation.ts-      ...(countryIso ? { countryIso: countryIso.toUpperCase() } : {}),
+   141→src/lib/global-enterprise/consolidation.ts-      status: { not: 'divested' },
+   142→src/lib/global-enterprise/consolidation.ts-    },
+   143→src/lib/global-enterprise/consolidation.ts-    orderBy: { createdAt: 'desc' },
+   144→src/lib/global-enterprise/consolidation.ts-  });
+   145→src/lib/global-enterprise/consolidation.ts-  return rows.map((r) => ({
+   146→src/lib/global-enterprise/consolidation.ts-    id: r.id,
+   147→src/lib/global-enterprise/consolidation.ts-    firmId: r.firmId ?? undefined,
+   148→src/lib/global-enterprise/consolidation.ts-    parentEntityId: r.parentEntityId ?? undefined,
+   149→src/lib/global-enterprise/consolidation.ts-    legalName: r.legalName,
+   150→src/lib/global-enterprise/consolidation.ts-    tradeName: r.tradeName ?? undefined,
+   151→src/lib/global-enterprise/consolidation.ts-    entityKind: r.entityKind as EntityRecord['entityKind'],
+   152→src/lib/global-enterprise/consolidation.ts-    countryIso: r.countryIso,
+   153→--
+   154→src/lib/global-enterprise/consolidation.ts:  const entity = await db.globalEntity.findUnique({ where: { id: input.entityId } });
+   155→src/lib/global-enterprise/consolidation.ts-  if (!entity) throw new Error(`Entity not found: ${input.entityId}`);
+   156→src/lib/global-enterprise/consolidation.ts-  const base = await convertToBase(input.valueLocal, entity.baseCurrency);
+   157→src/lib/global-enterprise/consolidation.ts-  // Check existing
+   158→src/lib/global-enterprise/consolidation.ts-  const existing = await db.consolidationEntry.findFirst({
+   159→src/lib/global-enterprise/consolidation.ts-    where: { entityId: input.entityId, period: input.period, metric: input.metric },
+   160→src/lib/global-enterprise/consolidation.ts-  });
+   161→src/lib/global-enterprise/consolidation.ts-  if (existing) {
+   162→src/lib/global-enterprise/consolidation.ts-    await db.consolidationEntry.update({
+   163→src/lib/global-enterprise/consolidation.ts-      where: { id: existing.id },
+   164→src/lib/global-enterprise/consolidation.ts-      data: {
+   165→src/lib/global-enterprise/consolidation.ts-        valueLocal: input.valueLocal,
+   166→src/lib/global-enterprise/consolidation.ts-        valueBase: base.baseAmount,
+   167→src/lib/global-enterprise/consolidation.ts-        sourceType: input.sourceType ?? 'api',
+   168→src/lib/global-enterprise/consolidation.ts-        sourceRef: input.sourceRef ?? null,
+   169→src/lib/global-enterprise/consolidation.ts-        fxRateUsed: base.rate,
+   170→--
+   171→src/lib/global-enterprise/consolidation.ts:  const entity = await db.globalEntity.findUnique({ where: { id: entityId } });
+   172→src/lib/global-enterprise/consolidation.ts-  if (!entity) {
+   173→src/lib/global-enterprise/consolidation.ts-    return { revenueLocal: 0, expenseLocal: 0, taxLocal: 0, payrollLocal: 0, cashInflowLocal: 0, cashOutflowLocal: 0, cashBalanceLocal: 0, assetsLocal: 0, liabilitiesLocal: 0 };
+   174→src/lib/global-enterprise/consolidation.ts-  }
+   175→src/lib/global-enterprise/consolidation.ts-
+   176→src/lib/global-enterprise/consolidation.ts-  // Try to match the entity to a Client via taxId (GSTIN) or tradeName
+   177→src/lib/global-enterprise/consolidation.ts-  let client: { id: string } | null = null;
+   178→src/lib/global-enterprise/consolidation.ts-  if (entity.taxId) {
+   179→src/lib/global-enterprise/consolidation.ts-    client = await db.client.findUnique({ where: { gstin: entity.taxId }, select: { id: true } });
+   180→src/lib/global-enterprise/consolidation.ts-  }
+   181→src/lib/global-enterprise/consolidation.ts-  if (!client && entity.tradeName) {
+   182→src/lib/global-enterprise/consolidation.ts-    client = await db.client.findFirst({ where: { tradeName: entity.tradeName }, select: { id: true } });
+   183→src/lib/global-enterprise/consolidation.ts-  }
+   184→src/lib/global-enterprise/consolidation.ts-  if (!client && entity.legalName) {
+   185→src/lib/global-enterprise/consolidation.ts-    client = await db.client.findFirst({ where: { legalName: entity.legalName }, select: { id: true } });
+   186→src/lib/global-enterprise/consolidation.ts-  }
+   187→--
+   188→src/lib/global-enterprise/consolidation.ts:  const entities = await db.globalEntity.findMany({
+   189→src/lib/global-enterprise/consolidation.ts-    where: { consolidated: true, ...(firmId ? { firmId } : {}), status: { not: 'divested' } },
+   190→src/lib/global-enterprise/consolidation.ts-  });
+   191→src/lib/global-enterprise/consolidation.ts-
+   192→src/lib/global-enterprise/consolidation.ts-  // For each entity, ensure metrics are persisted from Prisma, then load consolidation entries
+   193→src/lib/global-enterprise/consolidation.ts-  await Promise.all(entities.map((e) => persistEntityMetricsForPeriod(e.id, targetPeriod).catch(() => null)));
+   194→src/lib/global-enterprise/consolidation.ts-
+   195→src/lib/global-enterprise/consolidation.ts-  const entries = await db.consolidationEntry.findMany({
+   196→src/lib/global-enterprise/consolidation.ts-    where: { entityId: { in: entities.map((e) => e.id) }, period: targetPeriod },
+   197→src/lib/global-enterprise/consolidation.ts-  });
+   198→src/lib/global-enterprise/consolidation.ts-
+   199→src/lib/global-enterprise/consolidation.ts-  // Build byMetric totals (in base INR), applying ownership %
+   200→src/lib/global-enterprise/consolidation.ts-  const entityOwnership = new Map(entities.map((e) => [e.id, e.ownershipPct]));
+   201→src/lib/global-enterprise/consolidation.ts-  const entityCountry = new Map(entities.map((e) => [e.id, e.countryIso]));
+   202→src/lib/global-enterprise/consolidation.ts-  const entityCurrency = new Map(entities.map((e) => [e.id, e.baseCurrency]));
+   203→src/lib/global-enterprise/consolidation.ts-  const entityName = new Map(entities.map((e) => [e.id, e.legalName]));
+   204→--
+   205→src/lib/global-enterprise/consolidation.ts:  const entities = entityIds.length > 0 ? await db.globalEntity.findMany({ where: { id: { in: entityIds } } }) : [];
+   206→src/lib/global-enterprise/consolidation.ts-  const entityMeta = new Map(entities.map((e) => [e.id, { name: e.legalName, countryIso: e.countryIso, currency: e.baseCurrency }]));
+   207→src/lib/global-enterprise/consolidation.ts-  return rows.map((r) => {
+   208→src/lib/global-enterprise/consolidation.ts-    const meta = entityMeta.get(r.entityId);
+   209→src/lib/global-enterprise/consolidation.ts-    return {
+   210→src/lib/global-enterprise/consolidation.ts-      entityId: r.entityId,
+   211→src/lib/global-enterprise/consolidation.ts-      entityName: meta?.name ?? r.entityId,
+   212→src/lib/global-enterprise/consolidation.ts-      countryIso: meta?.countryIso ?? '??',
+   213→src/lib/global-enterprise/consolidation.ts-      currency: meta?.currency ?? 'INR',
+   214→src/lib/global-enterprise/consolidation.ts-      period: r.period,
+   215→src/lib/global-enterprise/consolidation.ts-      metric: r.metric as ConsolidationMetric,
+   216→src/lib/global-enterprise/consolidation.ts-      valueLocal: r.valueLocal,
+   217→src/lib/global-enterprise/consolidation.ts-      valueBase: r.valueBase,
+   218→src/lib/global-enterprise/consolidation.ts-      fxRateUsed: r.fxRateUsed,
+   219→src/lib/global-enterprise/consolidation.ts-      fxRateAsOf: r.fxRateAsOf,
+   220→src/lib/global-enterprise/consolidation.ts-    };
+   221→--
+   222→src/lib/command-network/engine.ts:  global_enterprise: () => safeCount(() => db.globalEntity.count({ where: { updatedAt: { gte: hourAgo() } } })),
+   223→src/lib/command-network/engine.ts-  compliance_cloud: () => safeCount(() => db.complianceRisk.count({ where: { updatedAt: { gte: hourAgo() } } })),
+   224→src/lib/command-network/engine.ts-  execution_cloud: () => safeCount(() => db.executionJob.count({ where: { createdAt: { gte: hourAgo() } } })),
+   225→src/lib/command-network/engine.ts-  data_intelligence: () => safeCount(() => db.dataCatalogEntry.count({ where: { updatedAt: { gte: hourAgo() } } })),
+   226→src/lib/command-network/engine.ts-  business_graph: () => safeCount(() => db.executionTimeline.count({ where: { timestamp: { gte: hourAgo() } } })),
+   227→src/lib/command-network/engine.ts-  knowledge_graph: () => safeCount(() => db.dataKnowledgeSynthesis.count({ where: { generatedAt: { gte: hourAgo() } } })),
+   228→src/lib/command-network/engine.ts-  digital_twin: () => safeCount(() => db.autonomousSimulation.count({ where: { createdAt: { gte: hourAgo() } } })),
+   229→src/lib/command-network/engine.ts-  marketplace: () => safeCount(() => db.dataConnection.count({ where: { updatedAt: { gte: hourAgo() } } })),
+   230→src/lib/command-network/engine.ts-  ai_software_factory: () => safeCount(() => db.devBuild.count({ where: { createdAt: { gte: hourAgo() } } })),
+   231→src/lib/command-network/engine.ts-};
+   232→src/lib/command-network/engine.ts-
+   233→src/lib/command-network/engine.ts-function hourAgo(): Date {
+   234→src/lib/command-network/engine.ts-  return new Date(Date.now() - 60 * 60 * 1000);
+   235→src/lib/command-network/engine.ts-}
+   236→src/lib/command-network/engine.ts-
+   237→src/lib/command-network/engine.ts-/**
+   238→--
+   239→src/lib/command-network/dashboard.ts:        safeCount(() => db.globalEntity.count({ where: { status: 'active' } })),
+   240→src/lib/command-network/dashboard.ts-        safeCount(() => db.country.count({ where: { isActive: true } })),
+   241→src/lib/command-network/dashboard.ts-      ]);
+   242→src/lib/command-network/dashboard.ts-
+   243→src/lib/command-network/dashboard.ts-      // ── Global Command Center live cards ───────────────────────────────────
+   244→src/lib/command-network/dashboard.ts-      const cashPositionINR = liveState?.cash ?? 0;
+   245→src/lib/command-network/dashboard.ts-      const revenueMTD = liveState?.revenue ?? 0;
+   246→src/lib/command-network/dashboard.ts-      const complianceScore = twin?.state?.compliance ?? 0;
+   247→src/lib/command-network/dashboard.ts-      const executionHealth = analytics.executionEfficiency;
+   248→src/lib/command-network/dashboard.ts-      const systemHealth = observabilitySummary.healthScore;
+   249→src/lib/command-network/dashboard.ts-      const organizationHealth = clamp100(
+   250→src/lib/command-network/dashboard.ts-        Math.round(
+   251→src/lib/command-network/dashboard.ts-          (executionHealth + systemHealth + complianceScore + analytics.globalPerformance) / 4,
+   252→src/lib/command-network/dashboard.ts-        ),
+   253→src/lib/command-network/dashboard.ts-      );
+   254→src/lib/command-network/dashboard.ts-
+   255→--
+   256→src/lib/command-network/operations-map.ts:    const entities = await safeFindMany(() => db.globalEntity.findMany({
+   257→src/lib/command-network/operations-map.ts-      where: { status: 'active' },
+   258→src/lib/command-network/operations-map.ts-      select: { id: true, legalName: true, tradeName: true, countryIso: true, entityKind: true },
+   259→src/lib/command-network/operations-map.ts-    }));
+   260→src/lib/command-network/operations-map.ts-    const countries = await safeFindMany(() => db.country.findMany({
+   261→src/lib/command-network/operations-map.ts-      where: { isActive: true },
+   262→src/lib/command-network/operations-map.ts-      select: { isoCode: true, name: true, region: true },
+   263→src/lib/command-network/operations-map.ts-    }));
+   264→src/lib/command-network/operations-map.ts-
+   265→src/lib/command-network/operations-map.ts-    // group entities by country
+   266→src/lib/command-network/operations-map.ts-    const byCountry: Record<string, typeof entities> = {};
+   267→src/lib/command-network/operations-map.ts-    for (const e of entities) {
+   268→src/lib/command-network/operations-map.ts-      if (!byCountry[e.countryIso]) byCountry[e.countryIso] = [];
+   269→src/lib/command-network/operations-map.ts-      byCountry[e.countryIso].push(e);
+   270→src/lib/command-network/operations-map.ts-    }
+   271→src/lib/command-network/operations-map.ts-
+   272→--
+   273→src/lib/command-network/coordination.ts:          db.globalEntity.count({ where: { status: 'active' } }),
+   274→src/lib/command-network/coordination.ts:          db.globalEntity.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+   275→src/lib/command-network/coordination.ts-        ]);
+   276→src/lib/command-network/coordination.ts-        return { activeWorkflows: 0, lastSyncAt: last?.updatedAt.toISOString() ?? null, pendingApprovals: 0, openTasks: count };
+   277→src/lib/command-network/coordination.ts-      }
+   278→src/lib/command-network/coordination.ts-      default:
+   279→src/lib/command-network/coordination.ts-        return { activeWorkflows: 0, lastSyncAt: null, pendingApprovals: 0, openTasks: 0 };
+   280→src/lib/command-network/coordination.ts-    }
+   281→src/lib/command-network/coordination.ts-  } catch {
+   282→src/lib/command-network/coordination.ts-    return { activeWorkflows: 0, lastSyncAt: null, pendingApprovals: 0, openTasks: 0 };
+   283→src/lib/command-network/coordination.ts-  }
+   284→src/lib/command-network/coordination.ts-}
+   285→--
+   286→src/lib/command-network/observability.ts:    const entityCount = await safeCount(() => db.globalEntity.count({ where: { status: 'active' } }));
+   287→src/lib/command-network/observability.ts-    signals.push({
+   288→src/lib/command-network/observability.ts-      id: 'obs-org-1', target: 'organization', targetId: 'global', label: 'Global Entity Count',
+   289→src/lib/command-network/observability.ts-      status: entityCount > 0 ? 'healthy' : 'warning',
+   290→src/lib/command-network/observability.ts-      metricName: 'count', metricValue: entityCount, metricUnit: 'count', threshold: 1,
+   291→src/lib/command-network/observability.ts-      message: entityCount > 0 ? `${entityCount} active legal entities consolidated.` : 'No active entities — setup required.',
+   292→src/lib/command-network/observability.ts-      observedAt: now.toISOString(),
+   293→src/lib/command-network/observability.ts-    });
+   294→src/lib/command-network/observability.ts-
+   295→src/lib/command-network/observability.ts-    // ── Department health (from coordination) ─────────────────────────────────
+   296→src/lib/command-network/observability.ts-    const depts = ['crm', 'ai_cfo', 'gst', 'payroll', 'banking', 'ai_hr', 'compliance_cloud'];
+   297→src/lib/command-network/observability.ts-    for (const dept of depts) {
+   298→src/lib/command-network/observability.ts-      const pendingTasks = await safeCount(() => db.executionTask.count({ where: { status: 'queued' } }));
+   299→src/lib/command-network/observability.ts-      signals.push({
+   300→src/lib/command-network/observability.ts-        id: `obs-dept-${dept}`, target: 'department', targetId: dept, label: `${dept} queue depth`,
+   301→src/lib/command-network/observability.ts-        status: pendingTasks < 10 ? 'healthy' : pendingTasks < 50 ? 'warning' : 'critical',
+   302→--
+   303→src/lib/command-network/observability.ts:    const countryGroups = await safeFindMany(() => db.globalEntity.groupBy({ by: ['countryIso'], _count: true }));
+   304→src/lib/command-network/observability.ts-    for (const c of countryGroups.slice(0, 10)) {
+   305→src/lib/command-network/observability.ts-      signals.push({
+   306→src/lib/command-network/observability.ts-        id: `obs-country-${c.countryIso}`, target: 'country', targetId: c.countryIso, label: `Country ${c.countryIso}`,
+   307→src/lib/command-network/observability.ts-        status: 'healthy',
+   308→src/lib/command-network/observability.ts-        metricName: 'entity_count', metricValue: c._count, metricUnit: 'count', threshold: 0,
+   309→src/lib/command-network/observability.ts-        message: `${c._count} entities in ${c.countryIso}.`,
+   310→src/lib/command-network/observability.ts-        observedAt: now.toISOString(),
+   311→src/lib/command-network/observability.ts-      });
+   312→src/lib/command-network/observability.ts-    }
+   313→src/lib/command-network/observability.ts-
+   314→src/lib/command-network/observability.ts-    // ── Worker health (from ExecutionTask running) ────────────────────────────
+   315→src/lib/command-network/observability.ts-    const runningWorkers = await safeCount(() => db.executionTask.count({ where: { status: 'running' } }));
+   316→src/lib/command-network/observability.ts-    signals.push({
+   317→src/lib/command-network/observability.ts-      id: 'obs-workers', target: 'worker', targetId: 'pool', label: 'Active Workers',
+   318→src/lib/command-network/observability.ts-      status: runningWorkers < 20 ? 'healthy' : 'warning',
+   319→--
+   320→src/lib/data-intelligence/search.ts:    db.globalEntity.findMany({ take: MAX_PER_TYPE }),
+   321→src/lib/data-intelligence/search.ts-  );
+   322→src/lib/data-intelligence/search.ts-  for (const g of entities) {
+   323→src/lib/data-intelligence/search.ts-    const searchText = lowerBlob([
+   324→src/lib/data-intelligence/search.ts-      g.legalName,
+   325→src/lib/data-intelligence/search.ts-      g.tradeName,
+   326→src/lib/data-intelligence/search.ts-      g.entityKind,
+   327→src/lib/data-intelligence/search.ts-      g.countryIso,
+   328→src/lib/data-intelligence/search.ts-      g.registrationNo,
+   329→src/lib/data-intelligence/search.ts-      g.taxId,
+   330→src/lib/data-intelligence/search.ts-      g.baseCurrency,
+   331→src/lib/data-intelligence/search.ts-      g.status,
+   332→src/lib/data-intelligence/search.ts-    ]);
+   333→src/lib/data-intelligence/search.ts-    await upsertIndexRow({
+   334→src/lib/data-intelligence/search.ts-      recordKey: `entity-${g.id}`,
+   335→src/lib/data-intelligence/search.ts-      recordType: 'report',
+   336→--
+   337→src/lib/data-intelligence/analytics.ts:        db.globalEntity.findMany({ select: { countryIso: true, entityKind: true } }),
+   338→src/lib/data-intelligence/analytics.ts-      ),
+   339→src/lib/data-intelligence/analytics.ts-    ),
+   340→src/lib/data-intelligence/analytics.ts-    safeCount(() => db.country.count()),
+   341→src/lib/data-intelligence/analytics.ts-  ]);
+   342→src/lib/data-intelligence/analytics.ts-
+   343→src/lib/data-intelligence/analytics.ts-  const entityCount = entities.length;
+   344→src/lib/data-intelligence/analytics.ts-  const byCountry = countBy(entities, e => e.countryIso ?? 'unknown');
+   345→src/lib/data-intelligence/analytics.ts-
+   346→src/lib/data-intelligence/analytics.ts-  const metrics = { entities: entityCount, countries };
+   347→src/lib/data-intelligence/analytics.ts-  const dimensionBreakdown = { country: byCountry };
+   348→src/lib/data-intelligence/analytics.ts-  const trendDelta = await snapshotDelta('organization', period, entityCount);
+   349→src/lib/data-intelligence/analytics.ts-  const narrative = `Organization: ${entityCount} entities across ${countries} countries.`;
+   350→src/lib/data-intelligence/analytics.ts-
+   351→src/lib/data-intelligence/analytics.ts-  return createSnapshot('organization', period, metrics, dimensionBreakdown, trendDelta, narrative);
+   352→src/lib/data-intelligence/analytics.ts-}
+   353→--
+   354→src/lib/data-intelligence/analytics.ts:        db.globalEntity.findMany({ select: { countryIso: true } }),
+   355→src/lib/data-intelligence/analytics.ts-      ),
+   356→src/lib/data-intelligence/analytics.ts-    ),
+   357→src/lib/data-intelligence/analytics.ts-    safeCount(() => db.country.count()),
+   358→src/lib/data-intelligence/analytics.ts-  ]);
+   359→src/lib/data-intelligence/analytics.ts-
+   360→src/lib/data-intelligence/analytics.ts-  const withOperations = entities.length;
+   361→src/lib/data-intelligence/analytics.ts-  const byCountryIso: Record<string, number> = {};
+   362→src/lib/data-intelligence/analytics.ts-  for (const e of entities) {
+   363→src/lib/data-intelligence/analytics.ts-    const iso = e.countryIso ?? 'unknown';
+   364→src/lib/data-intelligence/analytics.ts-    byCountryIso[iso] = (byCountryIso[iso] ?? 0) + 1;
+   365→src/lib/data-intelligence/analytics.ts-  }
+   366→src/lib/data-intelligence/analytics.ts-
+   367→src/lib/data-intelligence/analytics.ts-  const metrics = { countries, withOperations };
+   368→src/lib/data-intelligence/analytics.ts-  const dimensionBreakdown = { countryIso: byCountryIso };
+   369→src/lib/data-intelligence/analytics.ts-  const trendDelta = await snapshotDelta('country', period, withOperations);
+   370→--
+   371→src/lib/data-intelligence/synthesis.ts:  const entityCount = await safeCount(() => db.globalEntity.count());
+   372→src/lib/data-intelligence/synthesis.ts-
+   373→src/lib/data-intelligence/synthesis.ts-  const summary = `Knowledge graph: ${nodeCount} node(s) connected by ${edgeCount} edge(s) across ${
+   374→src/lib/data-intelligence/synthesis.ts-    Object.keys(relationCounts).length
+   375→src/lib/data-intelligence/synthesis.ts-  } relation type(s). Top relation types: ${Object.entries(relationCounts)
+   376→src/lib/data-intelligence/synthesis.ts-    .sort((a, b) => b[1] - a[1])
+   377→src/lib/data-intelligence/synthesis.ts-    .slice(0, 3)
+   378→src/lib/data-intelligence/synthesis.ts-    .map(([r, n]) => `${r}: ${n}`)
+   379→src/lib/data-intelligence/synthesis.ts-    .join(', ') || 'none'}. ${entityCount} global enterprise entit(y/ies) tracked. Most connected nodes: ${
+   380→src/lib/data-intelligence/synthesis.ts-    topConnected.join('; ') || 'none'
+   381→src/lib/data-intelligence/synthesis.ts-  }.`;
+   382→src/lib/data-intelligence/synthesis.ts-
+   383→src/lib/data-intelligence/synthesis.ts-  const keyPoints = [
+   384→src/lib/data-intelligence/synthesis.ts-    `Knowledge nodes: ${nodeCount}`,
+   385→src/lib/data-intelligence/synthesis.ts-    `Knowledge edges: ${edgeCount}`,
+   386→src/lib/data-intelligence/synthesis.ts-    `Relation types: ${JSON.stringify(relationCounts)}`,
+   387→--
+   388→src/lib/data-intelligence/catalog.ts:        safeCount(() => db.globalEntity.count()),
+   389→src/lib/data-intelligence/catalog.ts:        safeFindMany(() => db.globalEntity.findMany({ take: 3, orderBy: { updatedAt: 'desc' } })),
+   390→src/lib/data-intelligence/catalog.ts:        safeAggregate(() => db.globalEntity.aggregate({ _max: { updatedAt: true, createdAt: true } })),
+   391→src/lib/data-intelligence/catalog.ts-      ]);
+   392→src/lib/data-intelligence/catalog.ts-      const last = agg?._max?.updatedAt ?? agg?._max?.createdAt ?? null;
+   393→src/lib/data-intelligence/catalog.ts-      return buildScanResult(count, samples, last);
+   394→src/lib/data-intelligence/catalog.ts-    },
+   395→src/lib/data-intelligence/catalog.ts-  },
+   396→src/lib/data-intelligence/catalog.ts-  {
+   397→src/lib/data-intelligence/catalog.ts-    datasetKey: 'countries',
+   398→src/lib/data-intelligence/catalog.ts-    datasetName: 'Countries',
+   399→src/lib/data-intelligence/catalog.ts-    domain: 'operations',
+   400→src/lib/data-intelligence/catalog.ts-    sourceType: 'table',
+   401→src/lib/data-intelligence/catalog.ts-    sourceSystem: 'prisma',
+   402→src/lib/data-intelligence/catalog.ts-    sensitivity: 'public',
+   403→src/lib/data-intelligence/catalog.ts-    description: 'Country reference data — tax systems, currencies, languages, fiscal calendars.',
+   404→src/lib/data-intelligence/catalog.ts-    scan: async () => {
+   405→src/lib/data-intelligence/catalog.ts-      const [count, samples, agg] = await Promise.all([
+   406→--
+   407→src/app/api/command/organizations/route.ts:      safeFindMany(() => db.globalEntity.findMany({
+   408→src/app/api/command/organizations/route.ts-        where: { status: 'active' },
+   409→src/app/api/command/organizations/route.ts-        select: { id: true, legalName: true, tradeName: true, countryIso: true, entityKind: true, baseCurrency: true },
+   410→src/app/api/command/organizations/route.ts-        take: 50,
+   411→src/app/api/command/organizations/route.ts-      })),
+   412→src/app/api/command/organizations/route.ts-    ]);
+   413→src/app/api/command/organizations/route.ts-    return NextResponse.json({ ok: true, coordination, legalEntities: entities });
+   414→src/app/api/command/organizations/route.ts-  } catch (err) {
+   415→src/app/api/command/organizations/route.ts-    console.error('[command/organizations] Error:', err);
+   416→src/app/api/command/organizations/route.ts-    const message =
+   417→src/app/api/command/organizations/route.ts-      err instanceof Error ? err.message : 'Failed to load organizations';
+   418→src/app/api/command/organizations/route.ts-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+   419→src/app/api/command/organizations/route.ts-  }
+   420→src/app/api/command/organizations/route.ts-}
+   421→--
+   422→src/app/api/global/countries/route.ts:          entityCount = await db.globalEntity.count({ where: { countryIso: country.isoCode, status: { not: 'divested' } } });
+   423→src/app/api/global/countries/route.ts-          bankAccountCount = await db.bankAccount.count({ where: { countryIso: country.isoCode, isActive: true } });
+   424→src/app/api/global/countries/route.ts-        } catch { /* DB optional */ }
+   425→src/app/api/global/countries/route.ts-        return {
+   426→src/app/api/global/countries/route.ts-          country,
+   427→src/app/api/global/countries/route.ts-          entityCount,
+   428→src/app/api/global/countries/route.ts-          bankAccountCount,
+   429→src/app/api/global/countries/route.ts-          ...(includeRules ? { taxRules, complianceDeadlines, payrollStructure } : {}),
+   430→src/app/api/global/countries/route.ts-        };
+   431→src/app/api/global/countries/route.ts-      }
+   432→src/app/api/global/countries/route.ts-
+   433→src/app/api/global/countries/route.ts-      // List all
+   434→src/app/api/global/countries/route.ts-      const countries = listCountries();
+   435→src/app/api/global/countries/route.ts-      const enriched = await Promise.all(
+   436→src/app/api/global/countries/route.ts-        countries.map(async (c) => {
+   437→src/app/api/global/countries/route.ts-          let entityCount = 0;
+   438→--
+   439→src/app/api/global/countries/route.ts:            entityCount = await db.globalEntity.count({ where: { countryIso: c.isoCode, status: { not: 'divested' } } });
+   440→src/app/api/global/countries/route.ts-          } catch { /* ignore */ }
+   441→src/app/api/global/countries/route.ts-          return { ...c, entityCount };
+   442→src/app/api/global/countries/route.ts-        })
+   443→src/app/api/global/countries/route.ts-      );
+   444→src/app/api/global/countries/route.ts-      return {
+   445→src/app/api/global/countries/route.ts-        totalCountries: enriched.length,
+   446→src/app/api/global/countries/route.ts-        countries: enriched,
+   447→src/app/api/global/countries/route.ts-      };
+   448→src/app/api/global/countries/route.ts-    },
+   449→src/app/api/global/countries/route.ts-  });
+   450→src/app/api/global/countries/route.ts-}
+   451→--
+   452→src/app/api/global/consolidate/route.ts:      const entities = await db.globalEntity.findMany({
+   453→src/app/api/global/consolidate/route.ts-        where: { consolidated: true, ...(firmId ? { firmId } : {}), status: { not: 'divested' } },
+   454→src/app/api/global/consolidate/route.ts-        select: { id: true },
+   455→src/app/api/global/consolidate/route.ts-      });
+   456→src/app/api/global/consolidate/route.ts-      const persistedCount = await Promise.all(
+   457→src/app/api/global/consolidate/route.ts-        entities.map(async (e) => {
+   458→src/app/api/global/consolidate/route.ts-          try {
+   459→src/app/api/global/consolidate/route.ts-            await persistEntityMetricsForPeriod(e.id, period);
+   460→src/app/api/global/consolidate/route.ts-            return true;
+   461→src/app/api/global/consolidate/route.ts-          } catch {
+   462→src/app/api/global/consolidate/route.ts-            return false;
+   463→src/app/api/global/consolidate/route.ts-          }
+   464→src/app/api/global/consolidate/route.ts-        })
+   465→src/app/api/global/consolidate/route.ts-      );
+   466→src/app/api/global/consolidate/route.ts-      const successCount = persistedCount.filter(Boolean).length;
+   467→src/app/api/global/consolidate/route.ts-      cacheInvalidate('consolidation-report');
+   468→

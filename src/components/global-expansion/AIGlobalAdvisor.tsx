@@ -212,7 +212,7 @@ function InsightCard({ insight, index }: { insight: AIAdvisorInsight; index: num
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' as const }}
       whileHover={{ y: -2 }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.14] transition-all flex flex-col"
     >

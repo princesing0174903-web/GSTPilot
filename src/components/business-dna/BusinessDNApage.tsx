@@ -335,7 +335,7 @@ function ScoreCard({ score, index }: { score: DnaScore; index: number }) {
     <motion.div
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="glass-surface rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)] transition-shadow"
     >
       <div className="flex items-center justify-center gap-1.5 mb-4">
@@ -456,7 +456,7 @@ function DnaSummary({ scores }: { scores: DnaScore[] }) {
     <motion.div
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.48, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: 0.48, ease: 'easeOut' as const }}
       className="glass-surface rounded-2xl p-6 sm:p-8"
     >
       <div className="flex items-start gap-4">
@@ -525,7 +525,7 @@ function EmptyState({ onAddClient }: { onAddClient: () => void }) {
     <motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.5, ease: 'easeOut' as const }}
       className="glass-surface rounded-2xl p-12 flex flex-col items-center text-center gap-4"
     >
       <div className="relative">
@@ -614,7 +614,7 @@ export default function BusinessDNApage() {
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          transition={{ duration: 0.5, ease: 'easeOut' as const }}
           className="mb-8 sm:mb-10"
         >
           <div className="flex items-center gap-2.5">

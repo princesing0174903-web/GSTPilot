@@ -70,10 +70,17 @@ import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useOrgMembers } from '@/hooks/use-firestore'
 import { db, storage, auth } from '@/lib/firebase'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updatePassword } from 'firebase/auth'
+import {
+  inviteMember,
+  updateMemberRole,
+  removeMember,
+} from '@/lib/auth/organizations'
+import type { OrgRole } from '@/lib/auth/types'
 
 // ─── Permission-error detection (graceful degradation) ──────────────────
 // Mirrors the helper in src/hooks/use-firestore.ts so the Settings page can
@@ -144,8 +151,16 @@ const SECTIONS: NavSection[] = [
 ]
 
 // ─── Team Member Type ───────────────────────────────────────────────────
+// The Settings UI surfaces a simplified 4-role taxonomy (Admin / Manager /
+// Staff / Viewer). The Firestore `organization_members` collection stores the
+// richer `OrgRole` enum (owner / admin / accountant / employee / auditor /
+// viewer). The two helpers below translate between the two representations so
+// the UI keeps its existing labels while the persistence layer uses the
+// canonical org-role vocabulary.
 interface TeamMember {
   id: string
+  /** Firestore Auth uid — used as the key for role/status mutations. */
+  userId: string
   name: string
   email: string
   role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
@@ -153,11 +168,58 @@ interface TeamMember {
   initials: string
 }
 
-const INITIAL_TEAM: TeamMember[] = [
-  { id: '1', name: 'Rajesh Kumar', email: 'rajesh@gstpilot.ai', role: 'Admin', status: 'Active', initials: 'RK' },
-  { id: '2', name: 'Priya Sharma', email: 'priya@gstpilot.ai', role: 'Manager', status: 'Active', initials: 'PS' },
-  { id: '3', name: 'Amit Patel', email: 'amit@gstpilot.ai', role: 'Staff', status: 'Active', initials: 'AP' },
-]
+/**
+ * Map the Firestore `OrgRole` enum to the four UI role labels. The org owner
+ * and admin both surface as "Admin" so the existing UI rule (hide Edit/Remove
+ * for Admin rows) protects the owner from accidental demotion.
+ */
+function orgRoleToUiRole(role: string): TeamMember['role'] {
+  switch (role) {
+    case 'owner':
+    case 'admin':
+      return 'Admin'
+    case 'accountant':
+      return 'Manager'
+    case 'employee':
+      return 'Staff'
+    case 'auditor':
+    case 'viewer':
+    default:
+      return 'Viewer'
+  }
+}
+
+/** Map a UI role label back to the Firestore `OrgRole` enum for persistence. */
+function uiRoleToOrgRole(role: TeamMember['role']): OrgRole {
+  switch (role) {
+    case 'Admin':
+      return 'admin'
+    case 'Manager':
+      return 'accountant'
+    case 'Staff':
+      return 'employee'
+    case 'Viewer':
+    default:
+      return 'viewer'
+  }
+}
+
+/** Map the Firestore `MemberStatus` to the two-state UI label. */
+function memberStatusToUi(status: string): TeamMember['status'] {
+  return status === 'invited' ? 'Invited' : 'Active'
+}
+
+/** Derive 2-letter initials for the avatar fallback. */
+function getInitials(name: string, email: string): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase()
+    }
+    return parts[0].slice(0, 2).toUpperCase()
+  }
+  return (email.split('@')[0] || '?').slice(0, 2).toUpperCase()
+}
 
 // ─── Session Type ───────────────────────────────────────────────────────
 interface Session {
@@ -312,7 +374,7 @@ function getPasswordStrength(password: string): { score: number; label: string; 
 // ─── Section Content Animation Variants ─────────────────────────────────
 const contentVariants = {
   hidden: { opacity: 0, x: 12 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
   exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
 }
 
@@ -365,7 +427,30 @@ export default function SettingsPage() {
   const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
 
   // ── Team State ──────────────────────────────────────────────────────
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(INITIAL_TEAM)
+  // The roster is sourced from a real-time Firestore subscription on the
+  // `organization_members` collection (org-scoped). We map the canonical
+  // `OrganizationMemberDoc` shape to the simplified `TeamMember` UI type —
+  // no local seed data, no optimistic inserts that can drift from Firestore.
+  // Invite / role-change / remove mutate Firestore directly; the onSnapshot
+  // listener recomputes `teamMembers` automatically when the write lands.
+  const {
+    data: memberDocs,
+    loading: membersLoading,
+    error: membersError,
+  } = useOrgMembers()
+  const teamMembers: TeamMember[] = memberDocs
+    .filter(m => m.status === 'active' || m.status === 'invited')
+    .map(m => ({
+      id: m.id,
+      userId: m.userId,
+      name: m.userDisplayName || m.userEmail.split('@')[0] || 'Member',
+      email: m.userEmail,
+      role: orgRoleToUiRole(m.role),
+      status: memberStatusToUi(m.status),
+      initials: getInitials(m.userDisplayName, m.userEmail),
+    }))
+  const membersFetchError = membersError
+
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
@@ -620,38 +705,38 @@ export default function SettingsPage() {
 
   const handleInviteMember = async () => {
     if (!inviteEmail.trim()) return
+    // Preview mode — gracefully no-op. The invite would fail Firestore rules
+    // (no real org to write to), so we surface the same friendly message used
+    // by the other Settings save handlers instead of attempting the write.
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      return
+    }
     setInviting(true)
     try {
-      const res = await fetch('/api/team-members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: inviteEmail.trim(),
-          role: inviteRole.toLowerCase(),
-          permissions: [
-            inviteRole === 'Manager' ? 'read' : 'read',
-            inviteRole === 'Manager' ? 'update' : 'create',
-            ...(inviteRole === 'Manager' ? ['file'] : []),
-          ],
-          invitedBy: user?.id,
-        }),
+      const email = inviteEmail.trim()
+      // Pre-auth invite: the invitee has no Firebase Auth UID yet, so we
+      // synthesize a deterministic placeholder (`pending-<email>`) that the
+      // backend can later reconcile with a real UID when the user signs up.
+      // The Firestore `inviteMember()` helper de-dupes on the resulting doc
+      // id `${orgId}_${userId}`, preventing double-invites of the same email.
+      const pendingUserId = `pending-${email.toLowerCase()}`
+      const { member, error } = await inviteMember({
+        organizationId: orgId,
+        invitedBy: user?.id ?? null,
+        userId: pendingUserId,
+        userEmail: email,
+        userDisplayName: email.split('@')[0],
+        role: uiRoleToOrgRole(inviteRole),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data?.error ?? 'Failed to send invite')
+      if (error || !member) {
+        throw new Error(error ?? 'Failed to send invite')
       }
-      // Optimistically add the invited member to the visible list
-      const initials = inviteEmail.split('@')[0].slice(0, 2).toUpperCase()
-      const newMember: TeamMember = {
-        id: data?.teamMember?.id ?? Date.now().toString(),
-        name: data?.teamMember?.name ?? inviteEmail.split('@')[0],
-        email: inviteEmail,
-        role: inviteRole,
-        status: 'Invited',
-        initials,
-      }
-      setTeamMembers(prev => [...prev, newMember])
-      toast.success(`Invitation sent to ${inviteEmail}`)
+      // No optimistic local insert — the `useOrgMembers()` onSnapshot
+      // subscription will surface the new membership row automatically when
+      // the Firestore write lands, keeping local state in lockstep with the
+      // canonical source of truth.
+      toast.success(`Invitation sent to ${email}`)
       setInviteEmail('')
       setInviteRole('Staff')
       setShowInviteDialog(false)
@@ -664,15 +749,18 @@ export default function SettingsPage() {
 
   const handleRemoveMember = async () => {
     if (!memberToRemove) return
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      setShowRemoveDialog(false)
+      setMemberToRemove(null)
+      return
+    }
     try {
-      const res = await fetch(`/api/team-members/${memberToRemove.id}?removedBy=${encodeURIComponent(user?.id ?? '')}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error ?? 'Failed to remove member')
-      }
-      setTeamMembers(prev => prev.filter(m => m.id !== memberToRemove.id))
+      const { error } = await removeMember(orgId, memberToRemove.userId)
+      if (error) throw new Error(error)
+      // Soft-delete flips `status` → 'removed' in Firestore. The
+      // `useOrgMembers()` listener filters removed rows out of `teamMembers`
+      // on the next snapshot, so no local mutation is needed.
       toast.success(`${memberToRemove.name} removed from team`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to remove member')
@@ -685,22 +773,18 @@ export default function SettingsPage() {
   const handleUpdateRole = async (memberId: string, role: string) => {
     const member = teamMembers.find(m => m.id === memberId)
     if (!member) return
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      toast.info(PREVIEW_MODE_MSG)
+      setEditingMemberId(null)
+      setEditRole('')
+      return
+    }
     try {
-      const res = await fetch(`/api/team-members/${memberId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: role.toLowerCase(),
-          updatedBy: user?.id,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error ?? 'Failed to update role')
-      }
-      setTeamMembers(prev => prev.map(m =>
-        m.id === memberId ? { ...m, role: role as TeamMember['role'] } : m
-      ))
+      const uiRole = role as TeamMember['role']
+      const { error } = await updateMemberRole(orgId, member.userId, uiRoleToOrgRole(uiRole))
+      if (error) throw new Error(error)
+      // The role change lands via the onSnapshot subscription — no local
+      // state mutation, so the badge only flips once Firestore confirms.
       toast.success(`${member.name}'s role updated to ${role}`)
       setEditingMemberId(null)
       setEditRole('')

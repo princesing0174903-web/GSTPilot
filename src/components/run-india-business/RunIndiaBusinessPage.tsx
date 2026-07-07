@@ -226,7 +226,7 @@ function FloatingParticles({ active }: { active: boolean }) {
             duration: p.duration,
             delay: p.delay,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
           }}
           className="absolute rounded-full"
           style={{
@@ -259,7 +259,7 @@ function ScanLine({ active }: { active: boolean }) {
           initial={{ top: 0, opacity: 0 }}
           animate={{ top: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'linear' as const }}
           className="absolute left-0 right-0 h-[2px] z-20 pointer-events-none"
           style={{
             background: 'linear-gradient(90deg, transparent, rgba(52,211,153,0.6), rgba(52,211,153,0.8), rgba(52,211,153,0.6), transparent)',
@@ -567,7 +567,7 @@ export default function RunIndiaBusinessPage() {
             {/* Rotating Ring */}
             <motion.div
               animate={{ rotate: isActive ? 360 : 0 }}
-              transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+              transition={{ duration: 8, repeat: Infinity, ease: 'linear' as const }}
               className="absolute inset-[-20px] rounded-full pointer-events-none"
               style={{
                 background: `conic-gradient(from 0deg, 
@@ -585,7 +585,7 @@ export default function RunIndiaBusinessPage() {
                   scale: [1, 1.3, 1],
                   opacity: [0.3, 0.1, 0.3],
                 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' as const }}
                 className="absolute inset-[-40px] rounded-full pointer-events-none"
                 style={{
                   background: isRunning
@@ -604,7 +604,7 @@ export default function RunIndiaBusinessPage() {
                   '0 0 40px rgba(52,211,153,0.2), 0 0 80px rgba(52,211,153,0.1)',
                 ],
               } : {}}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' as const }}
               className="absolute inset-[-6px] rounded-full pointer-events-none"
               style={{
                 background: isActive
@@ -650,7 +650,7 @@ export default function RunIndiaBusinessPage() {
                 <>
                   <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const }}
                   >
                     <Rocket className="h-12 w-12 text-white" />
                   </motion.div>
@@ -1007,7 +1007,7 @@ export default function RunIndiaBusinessPage() {
                             ) : status === 'running' ? (
                               <motion.div
                                 animate={{ rotate: 360 }}
-                                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                                transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const }}
                               >
                                 <Icon className="h-4.5 w-4.5 text-amber-400" />
                               </motion.div>

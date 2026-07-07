@@ -420,7 +420,7 @@ function UsageByTypeChart() {
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${item.pct}%` }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
+              transition={{ duration: 0.8, ease: 'easeOut' as const }}
               className="h-full rounded-full"
               style={{ backgroundColor: item.color }}
             />
@@ -499,7 +499,7 @@ function UsageBarChart() {
               <motion.div
                 initial={{ height: 0 }}
                 animate={{ height: '100%' }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
+                transition={{ duration: 0.6, ease: 'easeOut' as const }}
                 className="absolute bottom-0 w-full rounded-t-sm"
                 style={{ backgroundColor: item.cost > 0 ? '#10b981' : '#d1d5db' }}
               />

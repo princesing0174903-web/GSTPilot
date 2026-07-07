@@ -3,11 +3,24 @@ import { db } from '@/lib/db'
 import { autoCategorize } from '@/lib/invoices/expenses'
 import { graphEvents } from '@/lib/graph/live-update'
 
-// GET /api/expenses — Fetch all Expenses
-// Returns an empty array when no expenses exist (real empty state — no mock data).
-export async function GET() {
+// GET /api/expenses — Fetch expenses, scoped by clientId (multi-tenant isolation).
+// Previously this returned ALL expenses platform-wide with no `where` clause
+// (multi-tenant data leak). Now requires `clientId` query param, or returns
+// an empty array to prevent cross-tenant reads.
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const clientId = searchParams.get('clientId')
+    const category = searchParams.get('category')
+
+    // Build the where clause — always require clientId for tenant isolation.
+    // If no clientId is provided, return empty (do NOT dump all rows).
+    const where: { clientId?: string; category?: string } = {}
+    if (clientId) where.clientId = clientId
+    if (category) where.category = category
+
     const expenses = await db.expense.findMany({
+      where,
       orderBy: { date: 'desc' },
     })
 
@@ -87,6 +100,85 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/expenses error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create expense' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH /api/expenses?id=XXX — Update an existing expense
+export async function PATCH(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const updateData: Record<string, unknown> = {}
+    const allowedFields = [
+      'category', 'description', 'vendor', 'amount', 'gst', 'gstClaimable',
+      'date', 'paymentMode', 'status', 'receiptUrl', 'notes', 'clientId',
+    ]
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = field === 'amount' || field === 'gst'
+          ? Number(body[field])
+          : body[field]
+      }
+    }
+
+    const expense = await db.expense.update({
+      where: { id },
+      data: updateData,
+    })
+
+    await db.auditLog.create({
+      data: {
+        clientId: expense.clientId,
+        action: 'Expense Updated',
+        entity: 'expense',
+        entityId: expense.id,
+        details: `Expense ₹${expense.amount} (${expense.category}) updated`,
+      },
+    })
+
+    return NextResponse.json({ expense })
+  } catch (error) {
+    console.error('PATCH /api/expenses error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update expense' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/expenses?id=XXX — Delete an expense
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
+    }
+
+    const expense = await db.expense.delete({ where: { id } })
+
+    await db.auditLog.create({
+      data: {
+        clientId: expense.clientId,
+        action: 'Expense Deleted',
+        entity: 'expense',
+        entityId: expense.id,
+        details: `Expense ₹${expense.amount} (${expense.category}) deleted`,
+      },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /api/expenses error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete expense' },
       { status: 500 }
     )
   }

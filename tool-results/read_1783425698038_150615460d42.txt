@@ -1,0 +1,576 @@
+     1→     1→=== marketSignal ===
+     2→     2→src/lib/intelligence/orchestrator.ts:      db.marketSignal.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
+     3→     3→src/lib/intelligence/orchestrator.ts-    ])
+     4→     4→src/lib/intelligence/orchestrator.ts-
+     5→     5→src/lib/intelligence/orchestrator.ts-    // 3. Subsystem summaries (run in parallel)
+     6→     6→src/lib/intelligence/orchestrator.ts-    const [benchmarkReport, marketReport, predictions, recommendations, knowledgeReport, feedReport] = await Promise.all([
+     7→     7→src/lib/intelligence/orchestrator.ts-      orgFingerprintHash
+     8→     8→src/lib/intelligence/orchestrator.ts-        ? compareOrgToIndustry(orgFingerprintHash, industry)
+     9→     9→src/lib/intelligence/orchestrator.ts-        : Promise.resolve(null),
+    10→    10→src/lib/intelligence/orchestrator.ts-      getMarketIntelligenceReport(),
+    11→    11→src/lib/intelligence/orchestrator.ts-      orgFingerprintHash
+    12→    12→src/lib/intelligence/orchestrator.ts-        ? generateOrgPredictions(orgFingerprintHash, industry)
+    13→    13→src/lib/intelligence/orchestrator.ts-        : Promise.resolve([]),
+    14→    14→src/lib/intelligence/orchestrator.ts-      generateRecommendations(orgFingerprintHash, industry),
+    15→    15→src/lib/intelligence/orchestrator.ts-      getKnowledgeGraphReport(20),
+    16→    16→src/lib/intelligence/orchestrator.ts-      generateInsightFeed(industry, orgFingerprintHash),
+    17→    17→src/lib/intelligence/orchestrator.ts-    ])
+    18→    18→src/lib/intelligence/orchestrator.ts-
+    19→    19→src/lib/intelligence/orchestrator.ts-    // 4. Build summaries
+    20→    20→src/lib/intelligence/orchestrator.ts-    const benchmarkSummary = benchmarkReport
+    21→    21→--
+    22→    22→src/lib/intelligence/market-intelligence.ts:  const existing = await db.marketSignal.findFirst({
+    23→    23→src/lib/intelligence/market-intelligence.ts-    where: { effectiveDate: today },
+    24→    24→src/lib/intelligence/market-intelligence.ts-    select: { id: true },
+    25→    25→src/lib/intelligence/market-intelligence.ts-  })
+    26→    26→src/lib/intelligence/market-intelligence.ts-  if (existing) return 0 // already persisted today
+    27→    27→src/lib/intelligence/market-intelligence.ts-
+    28→    28→src/lib/intelligence/market-intelligence.ts-  for (const signal of CANONICAL_SIGNALS) {
+    29→    29→src/lib/intelligence/market-intelligence.ts:    await db.marketSignal.create({
+    30→    30→src/lib/intelligence/market-intelligence.ts-      data: {
+    31→    31→src/lib/intelligence/market-intelligence.ts-        category: signal.category,
+    32→    32→src/lib/intelligence/market-intelligence.ts-        headline: signal.headline,
+    33→    33→src/lib/intelligence/market-intelligence.ts-        summary: signal.summary,
+    34→    34→src/lib/intelligence/market-intelligence.ts-        impact: signal.impact,
+    35→    35→src/lib/intelligence/market-intelligence.ts-        impactScore: signal.impactScore,
+    36→    36→src/lib/intelligence/market-intelligence.ts-        affectedIndustries: JSON.stringify(signal.affectedIndustries),
+    37→    37→src/lib/intelligence/market-intelligence.ts-        affectedRegions: JSON.stringify(signal.affectedRegions),
+    38→    38→src/lib/intelligence/market-intelligence.ts-        source: signal.source,
+    39→    39→src/lib/intelligence/market-intelligence.ts-        effectiveDate: signal.effectiveDate,
+    40→    40→src/lib/intelligence/market-intelligence.ts-      },
+    41→    41→src/lib/intelligence/market-intelligence.ts-    })
+    42→    42→src/lib/intelligence/market-intelligence.ts-  }
+    43→    43→src/lib/intelligence/market-intelligence.ts-  return CANONICAL_SIGNALS.length
+    44→    44→src/lib/intelligence/market-intelligence.ts-}
+    45→    45→src/lib/intelligence/market-intelligence.ts-
+    46→    46→src/lib/intelligence/market-intelligence.ts-// ─── Augment With Internal Pattern Signals ───────────────────────────────────
+    47→    47→src/lib/intelligence/market-intelligence.ts-
+    48→    48→--
+    49→    49→src/lib/intelligence/market-intelligence.ts:  const persisted = await db.marketSignal.findMany({
+    50→    50→src/lib/intelligence/market-intelligence.ts-    where: { createdAt: { gte: since } },
+    51→    51→src/lib/intelligence/market-intelligence.ts-    orderBy: { impactScore: 'desc' },
+    52→    52→
+    53→    53→=== marketplaceConnector ===
+    54→    54→src/lib/marketplace/seed.ts:        const connector = await db.marketplaceConnector.findUnique({ where: { slug: p.slug } })
+    55→    55→src/lib/marketplace/seed.ts-        if (!connector) continue
+    56→    56→src/lib/marketplace/seed.ts-        const installed = await db.installedIntegration.create({
+    57→    57→src/lib/marketplace/seed.ts-          data: {
+    58→    58→src/lib/marketplace/seed.ts-            tenantId,
+    59→    59→src/lib/marketplace/seed.ts-            connectorId: connector.id,
+    60→    60→src/lib/marketplace/seed.ts-            connectorSlug: p.slug,
+    61→    61→src/lib/marketplace/seed.ts-            displayName: connector.displayName,
+    62→    62→src/lib/marketplace/seed.ts-            status: 'connected',
+    63→    63→src/lib/marketplace/seed.ts-            health: 'healthy',
+    64→    64→src/lib/marketplace/seed.ts-            authType: connector.authType,
+    65→    65→src/lib/marketplace/seed.ts-            connectedAccountId: p.account,
+    66→    66→src/lib/marketplace/seed.ts-            scopes: JSON.stringify(p.scopes),
+    67→    67→src/lib/marketplace/seed.ts-            config: JSON.stringify({ autoSync: true, conflictResolution: 'latest_wins' }),
+    68→    68→src/lib/marketplace/seed.ts-            lastSyncAt: new Date(Date.now() - Math.floor(Math.random() * 3600000)),
+    69→    69→src/lib/marketplace/seed.ts-            syncFrequency: '15m',
+    70→    70→src/lib/marketplace/seed.ts-          },
+    71→    71→src/lib/marketplace/seed.ts-        })
+    72→    72→src/lib/marketplace/seed.ts-        // Seed an initial log
+    73→    73→--
+    74→    74→src/lib/marketplace/ai-connector.ts:  const connector = await db.marketplaceConnector.findUnique({
+    75→    75→src/lib/marketplace/ai-connector.ts-    where: { slug: match.connectorSlug },
+    76→    76→src/lib/marketplace/ai-connector.ts-    select: { displayName: true },
+    77→    77→src/lib/marketplace/ai-connector.ts-  })
+    78→    78→src/lib/marketplace/ai-connector.ts-
+    79→    79→src/lib/marketplace/ai-connector.ts-  return {
+    80→    80→src/lib/marketplace/ai-connector.ts-    matched: true,
+    81→    81→src/lib/marketplace/ai-connector.ts-    connectorSlug: match.connectorSlug,
+    82→    82→src/lib/marketplace/ai-connector.ts-    connectorName: connector?.displayName ?? match.connectorSlug,
+    83→    83→src/lib/marketplace/ai-connector.ts-    action: match.action,
+    84→    84→src/lib/marketplace/ai-connector.ts-    description: match.description,
+    85→    85→src/lib/marketplace/ai-connector.ts-    requiresInstall: !installed,
+    86→    86→src/lib/marketplace/ai-connector.ts-    confidence: installed ? 0.95 : 0.7,
+    87→    87→src/lib/marketplace/ai-connector.ts-  }
+    88→    88→src/lib/marketplace/ai-connector.ts-}
+    89→    89→src/lib/marketplace/ai-connector.ts-
+    90→    90→src/lib/marketplace/ai-connector.ts-/** Execute a matched connector intent. Returns the execution result. */
+    91→    91→src/lib/marketplace/ai-connector.ts-export async function executeConnectorIntent(
+    92→    92→src/lib/marketplace/ai-connector.ts-  command: string,
+    93→    93→--
+    94→    94→src/lib/marketplace/analytics.ts:    db.marketplaceConnector.count(),
+    95→    95→src/lib/marketplace/analytics.ts:    db.marketplaceConnector.count({ where: { healthStatus: 'operational' } }),
+    96→    96→src/lib/marketplace/analytics.ts:    db.marketplaceConnector.count({ where: { healthStatus: 'degraded' } }),
+    97→    97→src/lib/marketplace/analytics.ts:    db.marketplaceConnector.count({ where: { healthStatus: 'down' } }),
+    98→    98→src/lib/marketplace/analytics.ts-    db.installedIntegration.findMany({ where: { tenantId }, include: { connector: { select: { displayName: true, logo: true, healthStatus: true, slug: true } } } }),
+    99→    99→src/lib/marketplace/analytics.ts-    db.integrationEvent.count({ where: { tenantId, publishedAt: { gte: new Date(Date.now() - 3600000) } } }),
+   100→   100→src/lib/marketplace/analytics.ts-    db.syncJob.count({ where: { installedIntegration: { tenantId }, startedAt: { gte: new Date(Date.now() - 3600000) } } }),
+   101→   101→src/lib/marketplace/analytics.ts-    db.syncJob.count({ where: { installedIntegration: { tenantId }, startedAt: { gte: new Date(Date.now() - 3600000) }, status: 'failed' } }),
+   102→   102→src/lib/marketplace/analytics.ts-  ])
+   103→   103→src/lib/marketplace/analytics.ts-
+   104→   104→
+   105→   105→=== masterDataRecord ===
+   106→   106→src/lib/data-intelligence/master-data.ts:    db.masterDataRecord.findFirst({
+   107→   107→src/lib/data-intelligence/master-data.ts-      where: { entityType: input.entityType, entityKey: input.entityKey },
+   108→   108→src/lib/data-intelligence/master-data.ts-    }),
+   109→   109→src/lib/data-intelligence/master-data.ts-  );
+   110→   110→src/lib/data-intelligence/master-data.ts-  const attributesJson = JSON.stringify(input.attributes);
+   111→   111→src/lib/data-intelligence/master-data.ts-  const sourceIdsJson = JSON.stringify(input.sourceIds);
+   112→   112→src/lib/data-intelligence/master-data.ts-
+   113→   113→src/lib/data-intelligence/master-data.ts-  if (existing) {
+   114→   114→src/lib/data-intelligence/master-data.ts:    const updated = await db.masterDataRecord.update({
+   115→   115→src/lib/data-intelligence/master-data.ts-      where: { id: existing.id },
+   116→   116→src/lib/data-intelligence/master-data.ts-      data: {
+   117→   117→src/lib/data-intelligence/master-data.ts-        displayName: input.displayName,
+   118→   118→src/lib/data-intelligence/master-data.ts-        attributes: attributesJson,
+   119→   119→src/lib/data-intelligence/master-data.ts-        sourceIds: sourceIdsJson,
+   120→   120→src/lib/data-intelligence/master-data.ts-        confidenceScore: 100,
+   121→   121→src/lib/data-intelligence/master-data.ts-        duplicateCount: input.duplicateCount,
+   122→   122→src/lib/data-intelligence/master-data.ts-        status: 'active',
+   123→   123→src/lib/data-intelligence/master-data.ts-        lastVerifiedAt: input.lastVerifiedAt,
+   124→   124→src/lib/data-intelligence/master-data.ts-      },
+   125→   125→src/lib/data-intelligence/master-data.ts-    });
+   126→   126→src/lib/data-intelligence/master-data.ts-    return mapMasterDataRecord(updated);
+   127→   127→src/lib/data-intelligence/master-data.ts-  }
+   128→   128→src/lib/data-intelligence/master-data.ts-
+   129→   129→src/lib/data-intelligence/master-data.ts:  const created = await db.masterDataRecord.create({
+   130→   130→src/lib/data-intelligence/master-data.ts-    data: {
+   131→   131→src/lib/data-intelligence/master-data.ts-      entityType: input.entityType,
+   132→   132→src/lib/data-intelligence/master-data.ts-      entityKey: input.entityKey,
+   133→   133→src/lib/data-intelligence/master-data.ts-      displayName: input.displayName,
+   134→   134→src/lib/data-intelligence/master-data.ts-      attributes: attributesJson,
+   135→   135→src/lib/data-intelligence/master-data.ts-      sourceIds: sourceIdsJson,
+   136→   136→src/lib/data-intelligence/master-data.ts-      confidenceScore: 100,
+   137→   137→src/lib/data-intelligence/master-data.ts-      duplicateCount: input.duplicateCount,
+   138→   138→src/lib/data-intelligence/master-data.ts-      status: 'active',
+   139→   139→src/lib/data-intelligence/master-data.ts-      lastVerifiedAt: input.lastVerifiedAt,
+   140→   140→src/lib/data-intelligence/master-data.ts-    },
+   141→   141→src/lib/data-intelligence/master-data.ts-  });
+   142→   142→src/lib/data-intelligence/master-data.ts-  return mapMasterDataRecord(created);
+   143→   143→src/lib/data-intelligence/master-data.ts-}
+   144→   144→src/lib/data-intelligence/master-data.ts-
+   145→   145→src/lib/data-intelligence/master-data.ts-// ─── 1. buildMasterData ───────────────────────────────────────────────────────
+   146→   146→src/lib/data-intelligence/master-data.ts-
+   147→   147→src/lib/data-intelligence/master-data.ts-/**
+   148→   148→--
+   149→   149→src/lib/data-intelligence/master-data.ts:      db.masterDataRecord.findMany({
+   150→   150→src/lib/data-intelligence/master-data.ts-        where: entityType ? { entityType } : undefined,
+   151→   151→src/lib/data-intelligence/master-data.ts-        orderBy: [{ entityType: 'asc' }, { displayName: 'asc' }],
+   152→   152→src/lib/data-intelligence/master-data.ts-        take: 5000,
+   153→   153→src/lib/data-intelligence/master-data.ts-      }),
+   154→   154→src/lib/data-intelligence/master-data.ts-    );
+   155→   155→src/lib/data-intelligence/master-data.ts-    return rows.map(mapMasterDataRecord);
+   156→   156→
+   157→   157→=== memoryEmbedding ===
+   158→   158→src/lib/business-memory.ts:    db.memoryEmbedding.deleteMany({ where: { userEmail } }),
+   159→   159→src/lib/business-memory.ts-  ])
+   160→   160→src/lib/business-memory.ts-}
+   161→   161→
+   162→   162→=== oracleAction ===
+   163→   163→src/lib/oracle/actions.ts:  const row = await db.oracleAction.create({
+   164→   164→src/lib/oracle/actions.ts-    data: {
+   165→   165→src/lib/oracle/actions.ts-      type: intent.type,
+   166→   166→src/lib/oracle/actions.ts-      title: intent.title,
+   167→   167→src/lib/oracle/actions.ts-      description: intent.description,
+   168→   168→src/lib/oracle/actions.ts-      status: 'created',
+   169→   169→src/lib/oracle/actions.ts-      payload: JSON.stringify(intent.payload),
+   170→   170→src/lib/oracle/actions.ts-      messageId,
+   171→   171→src/lib/oracle/actions.ts-    },
+   172→   172→src/lib/oracle/actions.ts-  });
+   173→   173→src/lib/oracle/actions.ts-
+   174→   174→src/lib/oracle/actions.ts-  try {
+   175→   175→src/lib/oracle/actions.ts-    switch (intent.type) {
+   176→   176→src/lib/oracle/actions.ts-      case 'reminder': {
+   177→   177→src/lib/oracle/actions.ts-        const dueDate = (intent.payload.dueDate as string | undefined) ?? undefined;
+   178→   178→src/lib/oracle/actions.ts-        await db.notification.create({
+   179→   179→src/lib/oracle/actions.ts-          data: {
+   180→   180→src/lib/oracle/actions.ts-            type: 'reminder',
+   181→   181→src/lib/oracle/actions.ts-            category: 'compliance',
+   182→   182→--
+   183→   183→src/lib/oracle/actions.ts:    await db.oracleAction.update({
+   184→   184→src/lib/oracle/actions.ts-      where: { id: row.id },
+   185→   185→src/lib/oracle/actions.ts-      data: { status: 'executed' },
+   186→   186→src/lib/oracle/actions.ts-    });
+   187→   187→src/lib/oracle/actions.ts-    return { id: row.id, type: intent.type, title: intent.title, status: 'executed' };
+   188→   188→src/lib/oracle/actions.ts-  } catch {
+   189→   189→src/lib/oracle/actions.ts:    await db.oracleAction.update({
+   190→   190→src/lib/oracle/actions.ts-      where: { id: row.id },
+   191→   191→src/lib/oracle/actions.ts-      data: { status: 'failed' },
+   192→   192→src/lib/oracle/actions.ts-    });
+   193→   193→src/lib/oracle/actions.ts-    return { id: row.id, type: intent.type, title: intent.title, status: 'failed' };
+   194→   194→src/lib/oracle/actions.ts-  }
+   195→   195→src/lib/oracle/actions.ts-}
+   196→   196→--
+   197→   197→src/app/api/oracle/actions/route.ts:    const rows = await db.oracleAction.findMany({
+   198→   198→src/app/api/oracle/actions/route.ts-      orderBy: { createdAt: 'desc' },
+   199→   199→src/app/api/oracle/actions/route.ts-      take: limit,
+   200→   200→src/app/api/oracle/actions/route.ts-    });
+   201→   201→src/app/api/oracle/actions/route.ts-    return NextResponse.json({
+   202→   202→src/app/api/oracle/actions/route.ts-      ok: true,
+   203→   203→src/app/api/oracle/actions/route.ts-      actions: rows.map((r) => ({
+   204→   204→src/app/api/oracle/actions/route.ts-        id: r.id,
+   205→   205→src/app/api/oracle/actions/route.ts-        type: r.type,
+   206→   206→src/app/api/oracle/actions/route.ts-        title: r.title,
+   207→   207→src/app/api/oracle/actions/route.ts-        description: r.description,
+   208→   208→src/app/api/oracle/actions/route.ts-        status: r.status,
+   209→   209→src/app/api/oracle/actions/route.ts-        payload: r.payload ? JSON.parse(r.payload) : {},
+   210→   210→src/app/api/oracle/actions/route.ts-        createdAt: r.createdAt.toISOString(),
+   211→   211→src/app/api/oracle/actions/route.ts-      })),
+   212→   212→src/app/api/oracle/actions/route.ts-    });
+   213→   213→
+   214→   214→=== oracleAuditLog ===
+   215→   215→src/lib/oracle-core/security.ts:    await db.oracleAuditLog.create({
+   216→   216→src/lib/oracle-core/security.ts-      data: {
+   217→   217→src/lib/oracle-core/security.ts-        firmId: input.firmId || FIRM_ID,
+   218→   218→src/lib/oracle-core/security.ts-        userId: input.userId ?? null,
+   219→   219→src/lib/oracle-core/security.ts-        action: input.action,
+   220→   220→src/lib/oracle-core/security.ts-        endpoint: input.endpoint,
+   221→   221→src/lib/oracle-core/security.ts-        method: input.method,
+   222→   222→src/lib/oracle-core/security.ts-        statusCode: input.statusCode,
+   223→   223→src/lib/oracle-core/security.ts-        durationMs: input.durationMs ?? 0,
+   224→   224→src/lib/oracle-core/security.ts-        requestBody: sanitized ? JSON.stringify(sanitized) : null,
+   225→   225→src/lib/oracle-core/security.ts-        responseHash: input.responseHash ?? null,
+   226→   226→src/lib/oracle-core/security.ts-        rbacRole: input.rbacRole ?? null,
+   227→   227→src/lib/oracle-core/security.ts-        rateLimited: input.rateLimited ?? false,
+   228→   228→src/lib/oracle-core/security.ts-        errorMessage: input.errorMessage ?? null,
+   229→   229→src/lib/oracle-core/security.ts-      },
+   230→   230→src/lib/oracle-core/security.ts-    });
+   231→   231→src/lib/oracle-core/security.ts-  } catch (e) {
+   232→   232→src/lib/oracle-core/security.ts-    console.warn('[Oracle Security] failed to persist audit log:', e);
+   233→   233→src/lib/oracle-core/security.ts-  }
+   234→   234→--
+   235→   235→src/lib/oracle-core/security.ts:      db.oracleAuditLog.count({ where: { createdAt: { gte: since } } }),
+   236→   236→src/lib/oracle-core/security.ts:      db.oracleAuditLog.count({
+   237→   237→src/lib/oracle-core/security.ts-        where: { createdAt: { gte: since }, rateLimited: true },
+   238→   238→src/lib/oracle-core/security.ts-      }),
+   239→   239→src/lib/oracle-core/security.ts:      db.oracleAuditLog.count({
+   240→   240→src/lib/oracle-core/security.ts-        where: { createdAt: { gte: since }, rbacRole: { not: null } },
+   241→   241→src/lib/oracle-core/security.ts-      }),
+   242→   242→src/lib/oracle-core/security.ts:      db.oracleAuditLog.count({
+   243→   243→src/lib/oracle-core/security.ts-        where: { createdAt: { gte: since }, statusCode: { gte: 400 } },
+   244→   244→src/lib/oracle-core/security.ts-      }),
+   245→   245→src/lib/oracle-core/security.ts-    ]);
+   246→   246→src/lib/oracle-core/security.ts-    return {
+   247→   247→src/lib/oracle-core/security.ts-      totalCalls,
+   248→   248→src/lib/oracle-core/security.ts-      rateLimited,
+   249→   249→src/lib/oracle-core/security.ts-      rbacEnforced,
+   250→   250→src/lib/oracle-core/security.ts-      auditLogged: totalCalls,
+   251→   251→src/lib/oracle-core/security.ts-      errors,
+   252→   252→src/lib/oracle-core/security.ts-    };
+   253→   253→src/lib/oracle-core/security.ts-  } catch (e) {
+   254→   254→src/lib/oracle-core/security.ts-    console.warn('[Oracle Security] getSecurityStats failed:', e);
+   255→   255→src/lib/oracle-core/security.ts-    return {
+   256→   256→src/lib/oracle-core/security.ts-      totalCalls: 0,
+   257→   257→src/lib/oracle-core/security.ts-      rateLimited: 0,
+   258→   258→src/lib/oracle-core/security.ts-      rbacEnforced: 0,
+   259→   259→src/lib/oracle-core/security.ts-      auditLogged: 0,
+   260→   260→src/lib/oracle-core/security.ts-      errors: 0,
+   261→   261→--
+   262→   262→src/lib/oracle-core/security.ts:    const rows = await db.oracleAuditLog.findMany({
+   263→   263→src/lib/oracle-core/security.ts-      orderBy: { createdAt: 'desc' },
+   264→   264→src/lib/oracle-core/security.ts-      take: Math.min(limit, 500),
+   265→   265→
+   266→   266→=== oracleConversation ===
+   267→   267→src/lib/oracle-core/conversation.ts:  const created = await db.oracleConversation.create({
+   268→   268→src/lib/oracle-core/conversation.ts-    data: {
+   269→   269→src/lib/oracle-core/conversation.ts-      firmId,
+   270→   270→src/lib/oracle-core/conversation.ts-      userId: input.userId ?? null,
+   271→   271→src/lib/oracle-core/conversation.ts-      topic: input.topic,
+   272→   272→src/lib/oracle-core/conversation.ts-      trigger: input.trigger,
+   273→   273→src/lib/oracle-core/conversation.ts-      participants: JSON.stringify(participants),
+   274→   274→src/lib/oracle-core/conversation.ts-      turns: JSON.stringify([]),
+   275→   275→src/lib/oracle-core/conversation.ts-      status: 'active',
+   276→   276→src/lib/oracle-core/conversation.ts-    },
+   277→   277→src/lib/oracle-core/conversation.ts-  });
+   278→   278→src/lib/oracle-core/conversation.ts-  return serialize(created);
+   279→   279→src/lib/oracle-core/conversation.ts-}
+   280→   280→src/lib/oracle-core/conversation.ts-
+   281→   281→src/lib/oracle-core/conversation.ts-/** Append a turn to an existing conversation. */
+   282→   282→src/lib/oracle-core/conversation.ts-export async function addTurn(
+   283→   283→src/lib/oracle-core/conversation.ts-  conversationId: string,
+   284→   284→src/lib/oracle-core/conversation.ts-  turn: Omit<ConversationTurn, 'at'>,
+   285→   285→src/lib/oracle-core/conversation.ts-): Promise<Conversation> {
+   286→   286→src/lib/oracle-core/conversation.ts:  const existing = await db.oracleConversation.findUnique({ where: { id: conversationId } });
+   287→   287→src/lib/oracle-core/conversation.ts-  if (!existing) {
+   288→   288→src/lib/oracle-core/conversation.ts-    throw new Error(`Conversation ${conversationId} not found`);
+   289→   289→src/lib/oracle-core/conversation.ts-  }
+   290→   290→src/lib/oracle-core/conversation.ts-  const turns = safeParseJSON<ConversationTurn[]>(existing.turns, []);
+   291→   291→src/lib/oracle-core/conversation.ts-  turns.push({ ...turn, at: new Date().toISOString() });
+   292→   292→src/lib/oracle-core/conversation.ts-
+   293→   293→src/lib/oracle-core/conversation.ts:  const updated = await db.oracleConversation.update({
+   294→   294→src/lib/oracle-core/conversation.ts-    where: { id: conversationId },
+   295→   295→src/lib/oracle-core/conversation.ts-    data: { turns: JSON.stringify(turns) },
+   296→   296→src/lib/oracle-core/conversation.ts-  });
+   297→   297→src/lib/oracle-core/conversation.ts-  return serialize(updated);
+   298→   298→src/lib/oracle-core/conversation.ts-}
+   299→   299→src/lib/oracle-core/conversation.ts-
+   300→   300→src/lib/oracle-core/conversation.ts-export interface RunConversationOptions {
+   301→   301→src/lib/oracle-core/conversation.ts-  firmId?: string;
+   302→   302→src/lib/oracle-core/conversation.ts-  userId?: string | null;
+   303→   303→src/lib/oracle-core/conversation.ts-  participants?: AIModuleId[];
+   304→   304→src/lib/oracle-core/conversation.ts-  maxTurns?: number;
+   305→   305→src/lib/oracle-core/conversation.ts-  trigger?: Conversation['trigger'];
+   306→   306→src/lib/oracle-core/conversation.ts-}
+   307→   307→src/lib/oracle-core/conversation.ts-
+   308→   308→src/lib/oracle-core/conversation.ts-/** Run a full executive conversation on a topic. Each executive contributes a
+   309→   309→src/lib/oracle-core/conversation.ts- *  1-2 sentence perspective grounded in real data from its module entry point.
+   310→   310→src/lib/oracle-core/conversation.ts- *  After all turns, Oracle synthesizes a deterministic consensus and writes a
+   311→   311→src/lib/oracle-core/conversation.ts- *  memory record. NEVER throws — failures become empty "passes". */
+   312→   312→--
+   313→   313→src/lib/oracle-core/conversation.ts:  const updated = await db.oracleConversation.update({
+   314→   314→src/lib/oracle-core/conversation.ts-    where: { id: conversation.id },
+   315→   315→src/lib/oracle-core/conversation.ts-    data: {
+   316→   316→src/lib/oracle-core/conversation.ts-      consensus,
+   317→   317→
+   318→   318→=== oracleDocument ===
+   319→   319→src/lib/oracle/search.ts:    const rows = await db.oracleDocument.findMany({
+   320→   320→src/lib/oracle/search.ts-      where: {
+   321→   321→src/lib/oracle/search.ts-        OR: [
+   322→   322→src/lib/oracle/search.ts-          { fileName: { contains: q } },
+   323→   323→src/lib/oracle/search.ts-          { docType: { contains: q } },
+   324→   324→src/lib/oracle/search.ts-          { extractedText: { contains: q } },
+   325→   325→src/lib/oracle/search.ts-        ],
+   326→   326→src/lib/oracle/search.ts-      },
+   327→   327→src/lib/oracle/search.ts-      take: 5,
+   328→   328→src/lib/oracle/search.ts-    });
+   329→   329→src/lib/oracle/search.ts-    return rows.map((r) => ({
+   330→   330→src/lib/oracle/search.ts-      type: 'document' as const,
+   331→   331→src/lib/oracle/search.ts-      id: r.id,
+   332→   332→src/lib/oracle/search.ts-      title: r.fileName,
+   333→   333→src/lib/oracle/search.ts-      subtitle: r.docType,
+   334→   334→src/lib/oracle/search.ts-    }));
+   335→   335→src/lib/oracle/search.ts-  } catch {
+   336→   336→src/lib/oracle/search.ts-    return [];
+   337→   337→src/lib/oracle/search.ts-  }
+   338→   338→--
+   339→   339→src/lib/oracle/documents.ts:  const row = await db.oracleDocument.create({
+   340→   340→src/lib/oracle/documents.ts-    data: {
+   341→   341→src/lib/oracle/documents.ts-      fileName,
+   342→   342→src/lib/oracle/documents.ts-      fileType: ext,
+   343→   343→src/lib/oracle/documents.ts-      mimeType: mime,
+   344→   344→src/lib/oracle/documents.ts-      fileSize: sizeBytes,
+   345→   345→src/lib/oracle/documents.ts-      docType,
+   346→   346→src/lib/oracle/documents.ts-      status,
+   347→   347→src/lib/oracle/documents.ts-      extractedText: extractedText.slice(0, 12_000),
+   348→   348→src/lib/oracle/documents.ts-      summary: summary.slice(0, 1_200),
+   349→   349→src/lib/oracle/documents.ts-      metadata: JSON.stringify({ sizeBytes, docType }),
+   350→   350→src/lib/oracle/documents.ts-      dataUri,
+   351→   351→src/lib/oracle/documents.ts-    },
+   352→   352→src/lib/oracle/documents.ts-  });
+   353→   353→src/lib/oracle/documents.ts-
+   354→   354→src/lib/oracle/documents.ts-  return {
+   355→   355→src/lib/oracle/documents.ts-    id: row.id,
+   356→   356→src/lib/oracle/documents.ts-    fileName,
+   357→   357→src/lib/oracle/documents.ts-    docType,
+   358→   358→--
+   359→   359→src/app/api/oracle/documents/route.ts:    const rows = await db.oracleDocument.findMany({
+   360→   360→src/app/api/oracle/documents/route.ts-      orderBy: { createdAt: 'desc' },
+   361→   361→src/app/api/oracle/documents/route.ts-      take: 20,
+   362→   362→src/app/api/oracle/documents/route.ts-      select: {
+   363→   363→src/app/api/oracle/documents/route.ts-        id: true,
+   364→   364→src/app/api/oracle/documents/route.ts-        fileName: true,
+   365→   365→src/app/api/oracle/documents/route.ts-        fileType: true,
+   366→   366→src/app/api/oracle/documents/route.ts-        docType: true,
+   367→   367→src/app/api/oracle/documents/route.ts-        status: true,
+   368→   368→src/app/api/oracle/documents/route.ts-        summary: true,
+   369→   369→
+   370→   370→=== oracleInsight ===
+   371→   371→src/lib/business-memory.ts:    db.oracleInsight.findMany({
+   372→   372→src/lib/business-memory.ts-      where: { userEmail },
+   373→   373→src/lib/business-memory.ts-      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+   374→   374→src/lib/business-memory.ts-    }),
+   375→   375→src/lib/business-memory.ts-  ])
+   376→   376→src/lib/business-memory.ts-
+   377→   377→src/lib/business-memory.ts-  // Hydrate client memories with client names
+   378→   378→src/lib/business-memory.ts-  const clientIds = clientMemoriesRaw.map((cm) => cm.clientId)
+   379→   379→src/lib/business-memory.ts-  const clients =
+   380→   380→src/lib/business-memory.ts-    clientIds.length > 0
+   381→   381→src/lib/business-memory.ts-      ? await db.client.findMany({
+   382→   382→src/lib/business-memory.ts-          where: { id: { in: clientIds } },
+   383→   383→src/lib/business-memory.ts-          select: { id: true, tradeName: true, gstin: true },
+   384→   384→src/lib/business-memory.ts-        })
+   385→   385→src/lib/business-memory.ts-      : []
+   386→   386→src/lib/business-memory.ts-  const clientMap = new Map(clients.map((c) => [c.id, c]))
+   387→   387→src/lib/business-memory.ts-
+   388→   388→src/lib/business-memory.ts-  return {
+   389→   389→src/lib/business-memory.ts-    profile: profile
+   390→   390→--
+   391→   391→src/lib/business-memory.ts:  const insight = await db.oracleInsight.create({
+   392→   392→src/lib/business-memory.ts-    data: { userEmail, source: 'user', ...data },
+   393→   393→src/lib/business-memory.ts-  })
+   394→   394→src/lib/business-memory.ts-  return {
+   395→   395→src/lib/business-memory.ts-    id: insight.id,
+   396→   396→src/lib/business-memory.ts-    category: insight.category,
+   397→   397→src/lib/business-memory.ts-    content: insight.content,
+   398→   398→src/lib/business-memory.ts-    source: insight.source,
+   399→   399→src/lib/business-memory.ts-    pinned: insight.pinned,
+   400→   400→src/lib/business-memory.ts-    createdAt: insight.createdAt.toISOString(),
+   401→   401→src/lib/business-memory.ts-  }
+   402→   402→src/lib/business-memory.ts-}
+   403→   403→src/lib/business-memory.ts-
+   404→   404→src/lib/business-memory.ts-export async function deleteInsight(id: string, userEmail: string): Promise<void> {
+   405→   405→src/lib/business-memory.ts:  await db.oracleInsight.deleteMany({ where: { id, userEmail } })
+   406→   406→src/lib/business-memory.ts-}
+   407→   407→src/lib/business-memory.ts-
+   408→   408→src/lib/business-memory.ts-export async function togglePinInsight(id: string, userEmail: string): Promise<void> {
+   409→   409→src/lib/business-memory.ts:  const insight = await db.oracleInsight.findFirst({ where: { id, userEmail } })
+   410→   410→src/lib/business-memory.ts-  if (insight) {
+   411→   411→src/lib/business-memory.ts:    await db.oracleInsight.update({ where: { id }, data: { pinned: !insight.pinned } })
+   412→   412→src/lib/business-memory.ts-  }
+   413→   413→src/lib/business-memory.ts-}
+   414→   414→src/lib/business-memory.ts-
+   415→   415→src/lib/business-memory.ts-export async function addFinancialMetric(
+   416→   416→src/lib/business-memory.ts-  userEmail: string,
+   417→   417→src/lib/business-memory.ts-  data: { metricType: string; period?: string; value: number; trend?: string; annotation?: string }
+   418→   418→src/lib/business-memory.ts-): Promise<FinancialMetricData> {
+   419→   419→src/lib/business-memory.ts-  const metric = await db.financialMetric.create({
+   420→   420→src/lib/business-memory.ts-    data: { userEmail, ...data },
+   421→   421→
+   422→   422→=== oracleLearning ===
+   423→   423→src/lib/oracle-core/learning.ts:  const created = await db.oracleLearning.create({
+   424→   424→src/lib/oracle-core/learning.ts-    data: {
+   425→   425→src/lib/oracle-core/learning.ts-      firmId,
+   426→   426→src/lib/oracle-core/learning.ts-      category: input.category,
+   427→   427→src/lib/oracle-core/learning.ts-      signal: input.signal,
+   428→   428→src/lib/oracle-core/learning.ts-      evidence: JSON.stringify(input.evidence ?? {}),
+   429→   429→src/lib/oracle-core/learning.ts-      lessonLearned: input.lessonLearned,
+   430→   430→src/lib/oracle-core/learning.ts-      weight: input.weight ?? 1.0,
+   431→   431→src/lib/oracle-core/learning.ts-    },
+   432→   432→src/lib/oracle-core/learning.ts-  });
+   433→   433→src/lib/oracle-core/learning.ts-  return serialize(created);
+   434→   434→src/lib/oracle-core/learning.ts-}
+   435→   435→src/lib/oracle-core/learning.ts-
+   436→   436→src/lib/oracle-core/learning.ts-export interface LearningStats {
+   437→   437→src/lib/oracle-core/learning.ts-  totalLessons: number;
+   438→   438→src/lib/oracle-core/learning.ts-  appliedRecently: number;
+   439→   439→src/lib/oracle-core/learning.ts-  topLessons: LearningRecord[];
+   440→   440→src/lib/oracle-core/learning.ts-}
+   441→   441→src/lib/oracle-core/learning.ts-
+   442→   442→--
+   443→   443→src/lib/oracle-core/learning.ts:    db.oracleLearning.count({ where: { firmId } }),
+   444→   444→src/lib/oracle-core/learning.ts:    db.oracleLearning.count({
+   445→   445→src/lib/oracle-core/learning.ts-      where: { firmId, lastAppliedAt: { gte: since7d } },
+   446→   446→src/lib/oracle-core/learning.ts-    }),
+   447→   447→src/lib/oracle-core/learning.ts:    db.oracleLearning.findMany({
+   448→   448→src/lib/oracle-core/learning.ts-      where: { firmId },
+   449→   449→src/lib/oracle-core/learning.ts-      orderBy: [{ weight: 'desc' }, { createdAt: 'desc' }],
+   450→   450→src/lib/oracle-core/learning.ts-      take: 50,
+   451→   451→src/lib/oracle-core/learning.ts-    }),
+   452→   452→src/lib/oracle-core/learning.ts-  ]);
+   453→   453→src/lib/oracle-core/learning.ts-
+   454→   454→src/lib/oracle-core/learning.ts-  // Score = weight * (successCount / max(appliedCount, 1)); top 5
+   455→   455→src/lib/oracle-core/learning.ts-  const scored = topRows
+   456→   456→src/lib/oracle-core/learning.ts-    .map((r) => ({
+   457→   457→src/lib/oracle-core/learning.ts-      record: serialize(r),
+   458→   458→src/lib/oracle-core/learning.ts-      score: r.weight * (r.appliedCount > 0 ? r.successCount / r.appliedCount : 0),
+   459→   459→src/lib/oracle-core/learning.ts-    }))
+   460→   460→src/lib/oracle-core/learning.ts-    .sort((a, b) => b.score - a.score)
+   461→   461→src/lib/oracle-core/learning.ts-    .slice(0, 5);
+   462→   462→src/lib/oracle-core/learning.ts-
+   463→   463→src/lib/oracle-core/learning.ts-  return {
+   464→   464→src/lib/oracle-core/learning.ts-    totalLessons: total,
+   465→   465→src/lib/oracle-core/learning.ts-    appliedRecently,
+   466→   466→--
+   467→   467→src/lib/oracle-core/learning.ts:  const existing = await db.oracleLearning.findUnique({ where: { id } });
+   468→   468→src/lib/oracle-core/learning.ts-  if (!existing) return;
+   469→   469→src/lib/oracle-core/learning.ts-
+   470→   470→src/lib/oracle-core/learning.ts-  const newAppliedCount = existing.appliedCount + 1;
+   471→   471→src/lib/oracle-core/learning.ts-  const newSuccessCount = existing.successCount + (success ? 1 : 0);
+   472→   472→src/lib/oracle-core/learning.ts-  // Reinforcement: success → +5% (cap 5.0); failure → −5% (floor 0.1).
+   473→   473→
+   474→   474→=== oracleMemory ===
+   475→   475→src/lib/oracle-core/orchestrator.ts:      db.oracleMemory.findMany({
+   476→   476→src/lib/oracle-core/orchestrator.ts-        where: { firmId },
+   477→   477→src/lib/oracle-core/orchestrator.ts-        orderBy: { createdAt: 'desc' },
+   478→   478→src/lib/oracle-core/orchestrator.ts-        take: 10,
+   479→   479→src/lib/oracle-core/orchestrator.ts-        select: { id: true, title: true, source: true, category: true, createdAt: true },
+   480→   480→src/lib/oracle-core/orchestrator.ts-      }),
+   481→   481→src/lib/oracle-core/orchestrator.ts-      db.oracleReasoning.findMany({
+   482→   482→src/lib/oracle-core/orchestrator.ts-        where: { firmId },
+   483→   483→src/lib/oracle-core/orchestrator.ts-        orderBy: { createdAt: 'desc' },
+   484→   484→src/lib/oracle-core/orchestrator.ts-        take: 10,
+   485→   485→src/lib/oracle-core/orchestrator.ts-        select: { id: true, request: true, requestType: true, createdAt: true },
+   486→   486→src/lib/oracle-core/orchestrator.ts-      }),
+   487→   487→src/lib/oracle-core/orchestrator.ts-      db.oracleConversation.findMany({
+   488→   488→src/lib/oracle-core/orchestrator.ts-        where: { firmId },
+   489→   489→src/lib/oracle-core/orchestrator.ts-        orderBy: { createdAt: 'desc' },
+   490→   490→src/lib/oracle-core/orchestrator.ts-        take: 10,
+   491→   491→src/lib/oracle-core/orchestrator.ts-        select: { id: true, topic: true, status: true, createdAt: true },
+   492→   492→src/lib/oracle-core/orchestrator.ts-      }),
+   493→   493→src/lib/oracle-core/orchestrator.ts-      db.oracleInsight.findMany({
+   494→   494→--
+   495→   495→src/lib/oracle-core/memory.ts:  const created = await db.oracleMemory.create({
+   496→   496→src/lib/oracle-core/memory.ts-    data: {
+   497→   497→src/lib/oracle-core/memory.ts-      firmId,
+   498→   498→src/lib/oracle-core/memory.ts-      userId: input.userId ?? null,
+   499→   499→src/lib/oracle-core/memory.ts-      category: input.category,
+   500→   500→src/lib/oracle-core/memory.ts-      entityType: input.entityType ?? null,
+   501→   501→src/lib/oracle-core/memory.ts-      entityId: input.entityId ?? null,
+   502→   502→src/lib/oracle-core/memory.ts-      title: input.title,
+   503→   503→src/lib/oracle-core/memory.ts-      summary: input.summary,
+   504→   504→src/lib/oracle-core/memory.ts-      payload: JSON.stringify(input.payload ?? {}),
+   505→   505→src/lib/oracle-core/memory.ts-      tags: JSON.stringify(input.tags ?? []),
+   506→   506→src/lib/oracle-core/memory.ts-      importance: input.importance ?? 50,
+   507→   507→src/lib/oracle-core/memory.ts-      source: input.source,
+   508→   508→src/lib/oracle-core/memory.ts-      expiresAt: input.expiresAt ?? null,
+   509→   509→src/lib/oracle-core/memory.ts-    },
+   510→   510→src/lib/oracle-core/memory.ts-  });
+   511→   511→src/lib/oracle-core/memory.ts-  return serialize(created);
+   512→   512→src/lib/oracle-core/memory.ts-}
+   513→   513→src/lib/oracle-core/memory.ts-
+   514→   514→--
+   515→   515→src/lib/oracle-core/memory.ts:  const rows = await db.oracleMemory.findMany({
+   516→   516→src/lib/oracle-core/memory.ts-    where,
+   517→   517→src/lib/oracle-core/memory.ts-    orderBy: [{ importance: 'desc' }, { createdAt: 'desc' }],
+   518→   518→src/lib/oracle-core/memory.ts-    take: limit,
+   519→   519→src/lib/oracle-core/memory.ts-  });
+   520→   520→src/lib/oracle-core/memory.ts-
+   521→   521→src/lib/oracle-core/memory.ts-  const records = rows.map(serialize);
+   522→   522→src/lib/oracle-core/memory.ts-  const sources = Array.from(new Set(records.map((r) => r.source)));
+   523→   523→src/lib/oracle-core/memory.ts-  const suggestions = generateSuggestions(records, input.query);
+   524→   524→src/lib/oracle-core/memory.ts-
+   525→   525→
+   526→   526→=== oracleModelCall ===
+   527→   527→src/lib/oracle-core/router.ts:    await db.oracleModelCall.create({
+   528→   528→src/lib/oracle-core/router.ts-      data: {
+   529→   529→src/lib/oracle-core/router.ts-        firmId: input.firmId || FIRM_ID,
+   530→   530→src/lib/oracle-core/router.ts-        userId: input.userId ?? null,
+   531→   531→src/lib/oracle-core/router.ts-        provider: input.provider,
+   532→   532→src/lib/oracle-core/router.ts-        model: input.model,
+   533→   533→src/lib/oracle-core/router.ts-        tier: input.tier,
+   534→   534→src/lib/oracle-core/router.ts-        purpose: input.purpose,
+   535→   535→src/lib/oracle-core/router.ts-        promptTokens: input.promptTokens,
+   536→   536→src/lib/oracle-core/router.ts-        outputTokens: input.outputTokens,
+   537→   537→src/lib/oracle-core/router.ts-        latencyMs: input.latencyMs,
+   538→   538→src/lib/oracle-core/router.ts-        success: input.success,
+   539→   539→src/lib/oracle-core/router.ts-        errorMessage: input.errorMessage ?? null,
+   540→   540→src/lib/oracle-core/router.ts-        costUsd,
+   541→   541→src/lib/oracle-core/router.ts-        reasoningId: input.reasoningId ?? null,
+   542→   542→src/lib/oracle-core/router.ts-      },
+   543→   543→src/lib/oracle-core/router.ts-    });
+   544→   544→src/lib/oracle-core/router.ts-  } catch (e) {
+   545→   545→src/lib/oracle-core/router.ts-    console.warn('[Oracle Router] failed to log model call:', e);
+   546→   546→--
+   547→   547→src/lib/oracle-core/router.ts:    db.oracleModelCall.count({ where: { firmId, createdAt: { gte: since } } }),
+   548→   548→src/lib/oracle-core/router.ts:    db.oracleModelCall.groupBy({
+   549→   549→src/lib/oracle-core/router.ts-      by: ['provider'],
+   550→   550→src/lib/oracle-core/router.ts-      where: { firmId, createdAt: { gte: since } },
+   551→   551→src/lib/oracle-core/router.ts-      _count: { _all: true },
+   552→   552→src/lib/oracle-core/router.ts-    }),
+   553→   553→src/lib/oracle-core/router.ts:    db.oracleModelCall.groupBy({
+   554→   554→src/lib/oracle-core/router.ts-      by: ['tier'],
+   555→   555→src/lib/oracle-core/router.ts-      where: { firmId, createdAt: { gte: since } },
+   556→   556→src/lib/oracle-core/router.ts-      _count: { _all: true },
+   557→   557→src/lib/oracle-core/router.ts-    }),
+   558→   558→src/lib/oracle-core/router.ts:    db.oracleModelCall.count({ where: { firmId, createdAt: { gte: since }, success: true } }),
+   559→   559→src/lib/oracle-core/router.ts:    db.oracleModelCall.aggregate({
+   560→   560→src/lib/oracle-core/router.ts-      where: { firmId, createdAt: { gte: since } },
+   561→   561→src/lib/oracle-core/router.ts-      _avg: { latencyMs: true },
+   562→   562→src/lib/oracle-core/router.ts-    }),
+   563→   563→src/lib/oracle-core/router.ts:    db.oracleModelCall.aggregate({
+   564→   564→src/lib/oracle-core/router.ts-      where: { firmId, createdAt: { gte: since } },
+   565→   565→src/lib/oracle-core/router.ts-      _sum: { costUsd: true },
+   566→   566→src/lib/oracle-core/router.ts-    }),
+   567→   567→src/lib/oracle-core/router.ts:    db.oracleModelCall.count({ where: { firmId, createdAt: { gte: since }, provider: 'zai' } }),
+   568→   568→src/lib/oracle-core/router.ts-  ]);
+   569→   569→src/lib/oracle-core/router.ts-
+   570→   570→src/lib/oracle-core/router.ts-  const byProvider: Record<string, number> = {};
+   571→   571→src/lib/oracle-core/router.ts-  for (const r of byProviderRows) byProvider[r.provider] = r._count._all;
+   572→   572→src/lib/oracle-core/router.ts-  const byTier: Record<string, number> = {};
+   573→   573→src/lib/oracle-core/router.ts-  for (const r of byTierRows) byTier[r.tier] = r._count._all;
+   574→   574→src/lib/oracle-core/router.ts-
+   575→   575→src/lib/oracle-core/router.ts-  return {
+   576→   576→src/lib/oracle-core/router.ts-    totalCalls: total,

@@ -237,7 +237,7 @@ function ScoreRow({ label, value, color, inverted = false }: { label: string; va
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${value}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const }}
           className={`h-full ${color}`}
         />
       </div>

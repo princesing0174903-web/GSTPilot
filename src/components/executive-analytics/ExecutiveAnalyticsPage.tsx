@@ -154,7 +154,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' as const }}
     >
       <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
         {children}
@@ -924,7 +924,7 @@ export default function ExecutiveAnalyticsPage() {
                       className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min(Math.abs(revenueChange) * 3, 100)}%` }}
-                      transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+                      transition={{ duration: 1, delay: 0.6, ease: 'easeOut' as const }}
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">
@@ -962,7 +962,7 @@ export default function ExecutiveAnalyticsPage() {
                       className="h-full bg-gradient-to-r from-teal-400 to-teal-500 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min(Math.abs(clientChange) * 4, 100)}%` }}
-                      transition={{ duration: 1, delay: 0.7, ease: 'easeOut' }}
+                      transition={{ duration: 1, delay: 0.7, ease: 'easeOut' as const }}
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">
@@ -1004,7 +1004,7 @@ export default function ExecutiveAnalyticsPage() {
                       }`}
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min(Math.abs(filingEfficiencyChange) * 5, 100)}%` }}
-                      transition={{ duration: 1, delay: 0.8, ease: 'easeOut' }}
+                      transition={{ duration: 1, delay: 0.8, ease: 'easeOut' as const }}
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">

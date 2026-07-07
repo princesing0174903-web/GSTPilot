@@ -68,7 +68,7 @@ function CurrencyCard({ currency, index }: { currency: Currency; index: number }
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' as const }}
       whileHover={{ y: -3 }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-emerald-500/30 transition-all"
     >
@@ -128,7 +128,7 @@ function CurrencyCard({ currency, index }: { currency: Currency; index: number }
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${Math.min(Math.max(currency.rateToUSD * 100, 4), 100)}%` }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const }}
             className={`h-full ${positive ? 'bg-emerald-500' : 'bg-rose-400'}`}
           />
         </div>
@@ -424,7 +424,7 @@ function ExchangeRateChart() {
                   strokeLinecap="round"
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
-                  transition={{ duration: 1, ease: 'easeInOut' }}
+                  transition={{ duration: 1, ease: 'easeInOut' as const }}
                 />
                 {/* Dots */}
                 {s.values.map((v, i) => {
@@ -503,7 +503,7 @@ function KpiTile({ icon: Icon, label, value, sub, accent }: KpiTileProps) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: 'easeOut' as const }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm"
     >
       <div className="flex items-center gap-2">

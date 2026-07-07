@@ -219,7 +219,7 @@ export function OracleVoiceOverlay({
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          transition={{ duration: 0.4, ease: 'easeOut' as const }}
           className="relative mb-8"
         >
           {/* Outer glow */}
@@ -261,7 +261,7 @@ export function OracleVoiceOverlay({
                 }}
                 transition={{
                   duration: isActive ? 0.08 : 0.3,
-                  ease: 'easeOut',
+                  ease: 'easeOut' as const,
                 }}
                 style={{ opacity: isActive || mode === 'speaking' ? 1 : 0.3 }}
               />

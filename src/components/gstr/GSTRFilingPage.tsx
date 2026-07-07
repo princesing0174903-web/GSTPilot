@@ -161,6 +161,21 @@ interface ExtractedInvoice {
 
 type QuickFileStep = 1 | 2 | 3 | 4;
 
+// Trigger a browser download of `content` as a JSON file named `filename`.
+// Uses the Blob + temporary <a> pattern so no server round-trip is needed.
+function triggerJsonDownload(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Release the object URL on the next tick so the download has time to start.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 // ─── Animation variants ─────────────────────────────────────────────────────────
 
 const staggerContainer = {
@@ -642,10 +657,203 @@ export default function GSTRFilingPage() {
   );
 
   const handleGenerateJSON = useCallback(async () => {
+    if (!currentReturnId) {
+      toast.error('Create a return first before generating JSON.');
+      return;
+    }
     setIsGeneratingJSON(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsGeneratingJSON(false);
-  }, []);
+    try {
+      // Real fetch to refresh/confirm the return record from the server. The
+      // GET /api/returns endpoint is tenant-scoped; if the org context isn't
+      // passed it returns an empty list — in that case we fall back to the
+      // locally-cached filings array so the user still gets a real download.
+      let returnRow: { jsonPayload?: string | null; period?: string; returnType?: string } | undefined;
+      try {
+        const res = await fetch(`/api/returns?id=${encodeURIComponent(currentReturnId)}`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const body = await res.json().catch(() => ({})) as { returns?: Array<{ id: string; jsonPayload?: string | null; period?: string; returnType?: string }> };
+          returnRow = body?.returns?.find((r) => r.id === currentReturnId);
+        }
+      } catch {
+        // Network/parse failure — fall through to local lookup below.
+      }
+      if (!returnRow) {
+        returnRow = filings.find((f) => f.id === currentReturnId) as { jsonPayload?: string | null; period?: string; returnType?: string } | undefined;
+      }
+
+      // If the server already has a stored jsonPayload, offer it as-is.
+      if (returnRow?.jsonPayload && returnRow.jsonPayload.trim().length > 0) {
+        triggerJsonDownload(
+          returnRow.jsonPayload,
+          `GSTR-${returnRow.returnType ?? quickFileReturnType}-${(returnRow.period ?? quickFilePeriod).replace('-', '')}.json`,
+        );
+        toast.success('JSON downloaded', {
+          description: `Used the saved JSON payload for ${returnRow.returnType ?? quickFileReturnType} · ${periodToLabel(returnRow.period ?? quickFilePeriod)}.`,
+        });
+        return;
+      }
+
+      // Otherwise synthesize a real GSTR-1 JSON payload from the extracted
+      // invoices currently shown in the Filing Summary step.
+      const client = clients.find((c) => c.id === quickFileClientId);
+      const gstin = client?.gstin ?? 'UNKNOWN_GSTIN';
+      const periodStr = quickFilePeriod ?? returnRow?.period ?? '';
+      const fp = periodStr.replace('-', ''); // MMYYYY
+      const grossTurnover = Math.round(extractedInvoices.reduce((s, i) => s + i.taxableValue, 0));
+
+      // Group B2B invoices by counterparty GSTIN (ctin).
+      const b2bMap = new Map<string, typeof extractedInvoices>();
+      const b2cl: typeof extractedInvoices = [];
+      const b2cs: typeof extractedInvoices = [];
+      const cdnr: typeof extractedInvoices = [];
+      const cdnur: typeof extractedInvoices = [];
+      const exp: typeof extractedInvoices = [];
+      for (const inv of extractedInvoices) {
+        switch (inv.gstr1Section) {
+          case 'b2b': {
+            const key = inv.buyerGstin || 'UNKNOWN_CTIN';
+            const arr = b2bMap.get(key) ?? [];
+            arr.push(inv);
+            b2bMap.set(key, arr);
+            break;
+          }
+          case 'b2cl':
+            b2cl.push(inv);
+            break;
+          case 'b2cs':
+            b2cs.push(inv);
+            break;
+          case 'cdnr':
+            cdnr.push(inv);
+            break;
+          case 'cdnur':
+            cdnur.push(inv);
+            break;
+          case 'exp':
+            exp.push(inv);
+            break;
+        }
+      }
+
+      const invToItms = (inv: ExtractedInvoice) => {
+        const rate = inv.taxableValue > 0 ? Math.round(((inv.cgst + inv.sgst + inv.igst) / inv.taxableValue) * 100) : 0;
+        return [
+          {
+            num: 1,
+            itm_det: {
+              txval: Math.round(inv.taxableValue),
+              rt: rate,
+              iamt: Math.round(inv.igst),
+              camt: Math.round(inv.cgst),
+              samt: Math.round(inv.sgst),
+              csamt: 0,
+            },
+          },
+        ];
+      };
+
+      const b2b = Array.from(b2bMap.entries()).map(([ctin, invs]) => ({
+        ctin,
+        inv: invs.map((inv) => ({
+          inum: inv.invoiceNumber,
+          idt: inv.invoiceDate,
+          val: Math.round(inv.totalAmount),
+          pos: (inv.buyerGstin || gstin).slice(0, 2),
+          rchrg: 'N',
+          inv_typ: 'R',
+          itms: invToItms(inv),
+        })),
+      }));
+
+      const b2clArr = b2cl.map((inv) => ({
+        inum: inv.invoiceNumber,
+        idt: inv.invoiceDate,
+        val: Math.round(inv.totalAmount),
+        pos: (inv.buyerGstin || gstin).slice(0, 2),
+        typ: 'L',
+        itms: invToItms(inv),
+      }));
+
+      const b2csArr = b2cs.map((inv) => ({
+        typ: 'OE',
+        pos: (inv.buyerGstin || gstin).slice(0, 2),
+        txval: Math.round(inv.taxableValue),
+        iamt: Math.round(inv.igst),
+        camt: Math.round(inv.cgst),
+        samt: Math.round(inv.sgst),
+        csamt: 0,
+      }));
+
+      const cdnrArr = Array.from(
+        cdnr.reduce((m, inv) => {
+          const key = inv.buyerGstin || 'UNKNOWN_CTIN';
+          const arr = m.get(key) ?? [];
+          arr.push(inv);
+          m.set(key, arr);
+          return m;
+        }, new Map<string, typeof extractedInvoices>()).entries(),
+      ).map(([ntcn, invs]) => ({
+        ntcn,
+        nt: invs.map((inv) => ({
+          ntnum: inv.invoiceNumber,
+          nt_dt: inv.invoiceDate,
+          val: Math.round(inv.totalAmount),
+          pos: (inv.buyerGstin || gstin).slice(0, 2),
+          rchrg: 'N',
+          ntty: 'C',
+          itms: invToItms(inv),
+        })),
+      }));
+
+      const cdnurArr = cdnur.map((inv) => ({
+        ntnum: inv.invoiceNumber,
+        nt_dt: inv.invoiceDate,
+        val: Math.round(inv.totalAmount),
+        pos: (inv.buyerGstin || gstin).slice(0, 2),
+        typ: 'B2CL',
+        ntty: 'C',
+        itms: invToItms(inv),
+      }));
+
+      const expArr = exp.map((inv) => ({
+        inum: inv.invoiceNumber,
+        idt: inv.invoiceDate,
+        val: Math.round(inv.totalAmount),
+        typ: 'WPAY',
+        itms: invToItms(inv),
+      }));
+
+      const payload = {
+        gstin,
+        fp,
+        gt: grossTurnover,
+        cur_gt: grossTurnover,
+        b2b,
+        b2cl: b2clArr,
+        b2cs: b2csArr,
+        cdnr: cdnrArr,
+        cdnur: cdnurArr,
+        exp: expArr,
+        nil: { inv: { '0': { txval: 0, ramt: 0 } } },
+      };
+
+      const json = JSON.stringify(payload, null, 2);
+      const filename = `GSTR-${quickFileReturnType}-${fp || 'unknown'}.json`;
+      triggerJsonDownload(json, filename);
+      toast.success('JSON generated & downloaded', {
+        description: `${extractedInvoices.length} invoices · ${periodToLabel(periodStr)}`,
+        duration: 5000,
+      });
+    } catch (err) {
+      toast.error('Failed to generate JSON', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsGeneratingJSON(false);
+    }
+  }, [currentReturnId, filings, clients, quickFileClientId, quickFileReturnType, quickFilePeriod, extractedInvoices]);
 
   const handleFileReturn = useCallback(async () => {
     if (!currentReturnId) {

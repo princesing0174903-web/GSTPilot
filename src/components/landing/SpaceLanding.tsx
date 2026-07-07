@@ -192,7 +192,7 @@ function Hero({ onGetStarted }: { onGetStarted?: () => void }) {
           <motion.div
             initial={fadeUp.initial}
             animate={fadeUp.animate}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.4 }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 0.4 }}
             className="liquid-glass flex items-center gap-2 rounded-full py-1 pl-1 pr-3"
           >
             <span className="rounded-full bg-white px-3 py-1 font-body text-xs font-semibold text-black">
@@ -213,7 +213,7 @@ function Hero({ onGetStarted }: { onGetStarted?: () => void }) {
           <motion.p
             initial={fadeUp.initial}
             animate={fadeUp.animate}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.8 }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 0.8 }}
             className="mt-4 max-w-2xl font-body text-sm font-light leading-tight text-white md:text-base"
           >
             Discover the universe in ways once unimaginable. Our pioneering
@@ -225,7 +225,7 @@ function Hero({ onGetStarted }: { onGetStarted?: () => void }) {
           <motion.div
             initial={fadeUp.initial}
             animate={fadeUp.animate}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 1.1 }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 1.1 }}
             className="mt-6 flex items-center gap-6"
           >
             <button
@@ -245,7 +245,7 @@ function Hero({ onGetStarted }: { onGetStarted?: () => void }) {
           <motion.div
             initial={fadeUp.initial}
             animate={fadeUp.animate}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 1.3 }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 1.3 }}
             className="mt-8 flex items-stretch gap-4"
           >
             <StatCard
@@ -265,7 +265,7 @@ function Hero({ onGetStarted }: { onGetStarted?: () => void }) {
         <motion.div
           initial={fadeUp.initial}
           animate={fadeUp.animate}
-          transition={{ duration: 0.6, ease: 'easeOut', delay: 1.4 }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 1.4 }}
           className="flex flex-col items-center gap-4 pb-8"
         >
           <div className="liquid-glass rounded-full px-3.5 py-1 font-body text-xs font-medium text-white">

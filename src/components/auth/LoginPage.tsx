@@ -66,6 +66,11 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   }
 
   // ── Email/Password Sign In ──
+  // We use `localLoading` only for the Firebase Auth call itself. On success
+  // we do NOT clear localLoading — `isLoading` (from AuthContext, driven by
+  // OrgContext) keeps the "Redirecting…" card visible until the org resolves.
+  // Previously localLoading was cleared in `finally`, causing the success
+  // card to flash off before the dashboard appeared (perceived slow login).
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
@@ -76,15 +81,18 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       const { user, error: authError } = await signInWithEmail(email, password, rememberMe);
       if (authError) {
         setLocalError(authError);
+        setLocalLoading(false);
         return;
       }
       if (user) {
         setSuccessMessage('Login successful! Redirecting...');
         setShowSuccess(true);
+        // Do NOT clear localLoading here. AuthContext.isLoading takes over
+        // and stays true until OrgContext resolves the organization. The
+        // combinedLoading flag keeps the spinner visible the whole time.
       }
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
-    } finally {
       setLocalLoading(false);
     }
   };
@@ -106,15 +114,16 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       const { user, error: authError } = await signUpWithEmail(email, password, name);
       if (authError) {
         setLocalError(authError);
+        setLocalLoading(false);
         return;
       }
       if (user) {
         setSuccessMessage('Account created! Please check your email to verify your account.');
         setShowSuccess(true);
+        // Keep localLoading true — OrgContext.isLoading takes over.
       }
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
-    } finally {
       setLocalLoading(false);
     }
   };
@@ -132,6 +141,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         setLocalLoading(false);
       }
       // If successful via popup: onAuthStateChanged will update the user state
+      // and AuthContext.isLoading takes over. Do NOT clear localLoading.
       // If redirect was triggered: page navigates away, isInitializing will show on return
     } catch {
       setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
@@ -205,7 +215,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           <motion.div
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] as const }}
             className="flex items-center gap-3 mb-12"
           >
             <BrandLogo variant="horizontal" theme="dark" size={48} showTagline animated />
@@ -298,7 +308,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           <motion.div
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] as const }}
             className="lg:hidden flex items-center gap-2.5 mb-8 justify-center"
           >
             <BrandLogo variant="horizontal" theme="dark" size={40} showTagline animated />

@@ -168,7 +168,7 @@ function OrbParticles({ active }: { active: boolean }) {
             duration: p.duration,
             delay: p.delay,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
           }}
         />
       ))}
@@ -254,7 +254,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           transition={{
             duration: 4,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
           }}
         />
 
@@ -272,7 +272,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           transition={{
             duration: 3,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
           }}
         />
 
@@ -294,7 +294,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           transition={{
             duration: 8,
             repeat: isOpen ? 0 : Infinity,
-            ease: 'linear',
+            ease: 'linear' as const,
           }}
         >
           {/* Inner glossy sphere */}
@@ -355,12 +355,12 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
               <motion.div
                 className="absolute inset-0 rounded-full border-2 border-white"
                 animate={{ scale: [1, 1.6], opacity: [0.8, 0] }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' as const }}
               />
               <motion.div
                 className="absolute inset-0 rounded-full border-2 border-white"
                 animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut', delay: 0.4 }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' as const, delay: 0.4 }}
               />
             </>
           )}
@@ -430,7 +430,7 @@ function ThinkingIndicator({ steps }: { steps?: Array<{ label: string; duration:
                     duration: 1,
                     repeat: Infinity,
                     delay: i * 0.2,
-                    ease: 'easeInOut',
+                    ease: 'easeInOut' as const,
                   }}
                 />
               ))}
@@ -1052,7 +1052,7 @@ function CommandCenter({
                       boxShadow: '0 4px 12px rgba(16,185,129,0.4)',
                     }}
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+                    transition={{ duration: 6, repeat: Infinity, ease: 'linear' as const }}
                   />
                   <div className="absolute inset-0.5 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
                     <Brain className="h-4 w-4 text-emerald-600" />

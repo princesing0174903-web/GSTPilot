@@ -111,9 +111,11 @@ function getGreeting(): string {
 }
 
 function getFirstName(name: string | undefined | null): string {
-  if (!name) return 'Prince';
+  // Previously fell back to 'Prince' (developer name) — now uses a neutral
+  // greeting so production users don't see someone else's name.
+  if (!name) return 'there';
   const first = name.trim().split(/\s+/)[0];
-  return first || 'Prince';
+  return first || 'there';
 }
 
 // One-sentence AI insight derived from live metrics.
@@ -181,7 +183,7 @@ function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
       <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]">
@@ -229,7 +231,7 @@ function SectionCard({
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
       <div className="glass-surface rounded-2xl h-full flex flex-col hover-lift">
@@ -290,7 +292,7 @@ function BusinessHealthGauge({
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' as const }}
       className="h-full"
     >
       <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
@@ -322,7 +324,7 @@ function BusinessHealthGauge({
               strokeDasharray={c}
               initial={{ strokeDashoffset: c }}
               animate={{ strokeDashoffset: offset }}
-              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+              transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.3 }}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -354,7 +356,7 @@ function BusinessHealthGauge({
           </p>
           <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Updated just now
+              Live · auto-refreshing
             </span>
           </div>
         </div>
@@ -401,7 +403,7 @@ function ScoreCard({
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
       <div className="glass-surface rounded-2xl p-5 h-full hover-lift">
@@ -423,7 +425,7 @@ function ScoreCard({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${clamped}%` }}
-            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' }}
+            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' as const }}
             className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
           />
         </div>
@@ -473,7 +475,7 @@ function WelcomeEmptyState({
     <motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.5, ease: 'easeOut' as const }}
       className="flex flex-col items-center justify-center text-center py-20 px-4"
     >
       <div className="relative mb-6">
@@ -788,25 +790,31 @@ export default function DashboardPage() {
   // ── Connected services (catalog — reflect real Gmail/WhatsApp/Bank state) ──
   // Phase 8: Gmail + WhatsApp reflect real connection state from
   // useCommunications(). Bank APIs reflects real state from useBanking().
+  // GSTN connection state is derived from the organization's gstin field
+  // (previously faked as `metrics.totalClients > 0` which incorrectly showed
+  // GSTN as "Connected" whenever any client existed).
   // The other entries (E-Invoice, GSTR-2B) remain "not connected" by default
   // until their Phase 9 ERP integrations ship.
+  const orgGstin = organization?.gstin;
   const connectedServices = useMemo(
     () => [
-      { id: 'gstn', name: 'GSTN', initial: 'G', connected: metrics.totalClients > 0 },
+      { id: 'gstn', name: 'GSTN', initial: 'G', connected: Boolean(orgGstin) },
       { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
       { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
       { id: 'bank', name: 'Bank APIs', initial: 'B', connected: bankConnected },
       { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: whatsappConnReal },
       { id: 'gmail', name: 'Gmail', initial: 'M', connected: gmailConnReal },
     ],
-    [metrics.totalClients, bankConnected, whatsappConnReal, gmailConnReal],
+    [orgGstin, bankConnected, whatsappConnReal, gmailConnReal],
   );
 
   // ── Team members from memberships hook ──
+  // Use userDisplayName / userEmail (previously parsed userId as an email
+  // and displayed raw UIDs as names).
   const teamMembers = useMemo(
     () => memberships.slice(0, 6).map((m) => ({
-      id: m.membershipId || m.id,
-      name: m.userId?.split('@')[0] || 'Team member',
+      id: m.id,
+      name: m.userDisplayName || (m.userEmail ? m.userEmail.split('@')[0] : 'Team member'),
       role: m.role || 'staff',
       status: m.status || 'invited',
     })),
@@ -1172,7 +1180,7 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          transition={{ duration: 0.5, ease: 'easeOut' as const }}
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div className="space-y-2 min-w-0">
@@ -1607,7 +1615,7 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
           className="h-full"
         >
           <div className="glass-surface rounded-2xl p-6 hover-lift">
@@ -1675,7 +1683,7 @@ export default function DashboardPage() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' }}
+              transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
             >
               <div className="glass-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">

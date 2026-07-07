@@ -154,7 +154,7 @@ function HealthRing({ score, size = 72, strokeWidth = 5 }: { score: number; size
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1, delay: 0.3, ease: 'easeOut' }}
+          transition={{ duration: 1, delay: 0.3, ease: 'easeOut' as const }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">

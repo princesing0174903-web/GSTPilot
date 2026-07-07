@@ -118,7 +118,7 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
     >
       {children}
     </motion.div>
@@ -172,7 +172,7 @@ function HealthGauge({ score, size = 160 }: { score: number; size?: number }) {
           strokeDasharray={c}
           initial={{ strokeDashoffset: c }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.4, ease: 'easeOut' }}
+          transition={{ duration: 1.4, ease: 'easeOut' as const }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">

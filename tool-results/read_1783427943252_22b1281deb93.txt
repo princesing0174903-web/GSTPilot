@@ -1,0 +1,602 @@
+     1→   600→  const gstHealthScore = gstSummary?.healthScore ?? 0;
+     2→   601→  const gstTotalTransactions = gstSummary?.totalTransactions ?? 0;
+     3→   602→  const gstSalesCount = gstSummary?.salesCount ?? 0;
+     4→   603→  const gstPurchaseCount = gstSummary?.purchaseCount ?? 0;
+     5→   604→
+     6→   605→  // ── Real Banking Foundation™ — org-scoped, real-time, server-calculated ──
+     7→   606→  // Surfaces REAL bank-account data (total balance, available balance, incoming
+     8→   607→  // /outgoing payments, pending reconciliation, transaction counts) computed
+     9→   608→  // from the bank_connections + bank_transactions collections via the banking
+    10→   609→  // provider architecture. Used to AUGMENT the existing KPI / ScoreCard
+    11→   610→  // subtitles with real banking context — same pattern as the GST augmentation
+    12→   611→  // above. The Cash Position KPI still derives its primary value from invoice
+    13→   612→  // `balanceDue` (per the task constraint) — only the subtitle is enriched.
+    14→   613→  const {
+    15→   614→    summary: bankingSummary,
+    16→   615→    loading: bankingLoading,
+    17→   616→    isConnected: bankConnected,
+    18→   617→  } = useBanking();
+    19→   618→
+    20→   619→  // ── Phase 8 — Gmail & WhatsApp Business Automation ──────────────────────
+    21→   620→  // The communications hook provides real-time data on Gmail / WhatsApp
+    22→   621→  // connections + messages + scheduled reminders. The dashboard only USES the
+    23→   622→  // summary (counts) — no new UI components, no redesign. Counts are
+    24→   623→  // conditionally appended to existing subtitles when > 0 (mirrors the GST +
+    25→   624→  // banking augmentation pattern).
+    26→   625→  const {
+    27→   626→    summary: communicationSummary,
+    28→   627→    gmailConnected: gmailConnReal,
+    29→   628→    whatsappConnected: whatsappConnReal,
+    30→   629→  } = useCommunications();
+    31→   630→  const unreadGstNotices = communicationSummary?.unreadGstNotices ?? 0;
+    32→   631→  const unreadWhatsAppMessages = communicationSummary?.unreadWhatsAppMessages ?? 0;
+    33→   632→  const pendingReminders = communicationSummary?.pendingReminders ?? 0;
+    34→   633→  const pendingClientReplies = communicationSummary?.pendingClientReplies ?? 0;
+    35→   634→
+    36→   635→  // Banking-derived values (real data from the Banking Foundation).
+    37→   636→  // All gracefully fall back to 0 when there's no banking data yet (summary
+    38→   637→  // fields default to 0) — matching the same pattern the invoice / GST KPIs
+    39→   638→  // use for missing data. `bankConnected` is also tracked so future
+    40→   639→  // affordances (e.g. a "Bank not connected" hint) can gate on actual
+    41→   640→  // connectivity. `bankAvailable` and `outgoingPayments` are wired in and
+    42→   641→  // available for future subtitle expansion (mirrors the GST pattern where
+    43→   642→  // inputTax / CGST / SGST / IGST were pre-computed for the same reason).
+    44→   643→  const bankBalance = bankingSummary?.totalBalance ?? 0;
+    45→   644→  const bankAvailable = bankingSummary?.availableBalance ?? 0;
+    46→   645→  const incomingPayments = bankingSummary?.incomingPayments ?? 0;
+    47→   646→  const outgoingPayments = bankingSummary?.outgoingPayments ?? 0;
+    48→   647→  const pendingReconciliation = bankingSummary?.pendingReconciliation ?? 0;
+    49→   648→  const bankTxnCount =
+    50→   649→    (bankingSummary?.incomingCount ?? 0) + (bankingSummary?.outgoingCount ?? 0);
+    51→   650→
+    52→   651→  // ── Filing state ──────────────────────────────────────────────────────
+    53→   652→  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
+    54→   653→
+    55→   654→  // ── Client lookup map ─────────────────────────────────────────────────
+    56→   655→  const clientMap = useMemo(() => {
+    57→   656→    const map = new Map<string, FirestoreClient & { id: string }>();
+    58→   657→    for (const c of clients) map.set(c.clientId, c);
+    59→   658→    return map;
+    60→   659→  }, [clients]);
+    61→   660→
+    62→   661→  // ── KPI derivations ───────────────────────────────────────────────────
+    63→   662→  const pendingComplianceCount = useMemo(
+    64→   663→    () => returns.filter((r) => r.status !== 'filed').length,
+    65→   664→    [returns],
+    66→   665→  );
+    67→   666→
+    68→   667→  const pendingInvoices = useMemo(
+    69→   668→    () =>
+    70→   669→      engineInvoices.filter(
+    71→   670→        (i) =>
+    72→   671→          i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
+    73→   672→      ),
+    74→   673→    [engineInvoices],
+    75→   674→  );
+    76→   675→
+    77→   676→  // Real outstanding from the invoice engine — Σ balanceDue of non-draft,
+    78→   677→  // non-cancelled invoices (server-calculated per invoice).
+    79→   678→  const pendingCollection = invoiceStats.totalOutstanding;
+    80→   679→
+    81→   680→  const insight = useMemo(
+    82→   681→    () => buildInsightSentence(metrics, pendingCollection),
+    83→   682→    [metrics, pendingCollection],
+    84→   683→  );
+    85→   684→
+    86→   685→  // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
+    87→   686→  // Prefers the GST Return Engine's real `healthScore` (computed from actual
+    88→   687→  // gst_transactions: output tax vs input tax, ITC utilisation, liability
+    89→   688→  // status) when available — it is the most accurate GST-specific signal.
+    90→   689→  const businessHealthScore = useMemo<number>(() => {
+    91→   690→    if (gstHealthScore > 0) return gstHealthScore;
+    92→   691→    if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
+    93→   692→      return execScores.firmHealth;
+    94→   693→    }
+    95→   694→    if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
+    96→   695→    // Fallback computation — start at 100, subtract weighted penalties
+    97→   696→    let score = 100;
+    98→   697→    score -= metrics.criticalIssues * 6;
+    99→   698→    score -= metrics.warnings * 2;
+   100→   699→    score -= metrics.overdueReturns * 8;
+   101→   700→    score -= metrics.pendingReturns * 2;
+   102→   701→    return Math.max(0, Math.min(100, Math.round(score)));
+   103→   702→  }, [execScores, metrics, gstHealthScore]);
+   104→   703→
+   105→   704→  // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
+   106→   705→  const complianceScore = useMemo<number>(() => {
+   107→   706→    if (execScores && typeof execScores.compliance === 'number' && execScores.compliance > 0) {
+   108→   707→      return execScores.compliance;
+   109→   708→    }
+   110→   709→    const totalReturns = returns.length;
+   111→   710→    if (totalReturns === 0) return 100;
+   112→   711→    const filed = returns.filter((r) => r.status === 'filed').length;
+   113→   712→    return Math.round((filed / totalReturns) * 100);
+   114→   713→  }, [execScores, returns]);
+   115→   714→
+   116→   715→  // ── Collection Score (0-100): match percentage from reconciliation ──
+   117→   716→  const collectionScore = useMemo<number>(() => {
+   118→   717→    if (execScores && typeof execScores.cashFlow === 'number' && execScores.cashFlow > 0) {
+   119→   718→      // Use a blend: cashFlow score and match percentage
+   120→   719→      return Math.round((execScores.cashFlow + metrics.matchPercentage) / 2);
+   121→   720→    }
+   122→   721→    return Math.round(metrics.matchPercentage);
+   123→   722→  }, [execScores, metrics.matchPercentage]);
+   124→   723→
+   125→   724→  // ── Risk Score (0-100): inverse of risk percentage, with critical issues penalty ──
+   126→   725→  const riskScore = useMemo<number>(() => {
+   127→   726→    // riskScore represents risk POSTURE (higher = safer), not raw risk
+   128→   727→    const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
+   129→   728→    const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
+   130→   729→    const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
+   131→   730→    return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
+   132→   731→  }, [metrics]);
+   133→   732→
+   134→   733→  // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
+   135→   734→  const todaysPriorities = useMemo<
+   136→   735→    Array<{ id: string; label: string; category: string; urgency: number; view: AppView }>
+   137→   736→  >(() => {
+   138→   737→    // 1. Use real priority queue data if available
+   139→   738→    if (priorityQueue && priorityQueue.length > 0) {
+   140→   739→      return priorityQueue.slice(0, 5).map((p) => ({
+   141→   740→        id: p.priorityId || p.id,
+   142→   741→        label: p.title || 'Untitled priority',
+   143→   742→        category: p.category || 'general',
+   144→   743→        urgency: p.urgency || 5,
+   145→   744→        view: 'tasks' as AppView,
+   146→   745→      }));
+   147→   746→    }
+   148→   747→    // 2. Fallback: derive from live metrics
+   149→   748→    const list: Array<{ id: string; label: string; category: string; urgency: number; view: AppView }> = [];
+   150→   749→    if (metrics.overdueReturns > 0) {
+   151→   750→      list.push({
+   152→   751→        id: 'fb-overdue',
+   153→   752→        label: `File ${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
+   154→   753→        category: 'filing',
+   155→   754→        urgency: 10,
+   156→   755→        view: 'returns',
+   157→   756→      });
+   158→   757→    }
+   159→   758→    if (metrics.criticalIssues > 0) {
+   160→   759→      list.push({
+   161→   760→        id: 'fb-critical',
+   162→   761→        label: `Resolve ${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+   163→   762→        category: 'reconciliation',
+   164→   763→        urgency: 9,
+   165→   764→        view: 'reconcile',
+   166→   765→      });
+   167→   766→    }
+   168→   767→    if (pendingCollection > 0) {
+   169→   768→      list.push({
+   170→   769→        id: 'fb-collections',
+   171→   770→        label: `Collect ₹${formatINR(pendingCollection)} pending`,
+   172→   771→        category: 'payment',
+   173→   772→        urgency: 7,
+   174→   773→        view: 'invoices',
+   175→   774→      });
+   176→   775→    }
+   177→   776→    if (metrics.extractionsPending > 0) {
+   178→   777→      list.push({
+   179→   778→        id: 'fb-extractions',
+   180→   779→        label: `Review ${metrics.extractionsPending} pending extraction${metrics.extractionsPending > 1 ? 's' : ''}`,
+   181→   780→        category: 'upload',
+   182→   781→        urgency: 5,
+   183→   782→        view: 'invoices',
+   184→   783→      });
+   185→   784→    }
+   186→   785→    return list.slice(0, 5);
+   187→   786→  }, [priorityQueue, metrics, pendingCollection]);
+   188→   787→
+   189→   788→  // ── Connected services (catalog — reflect real Gmail/WhatsApp/Bank state) ──
+   190→   789→  // Phase 8: Gmail + WhatsApp reflect real connection state from
+   191→   790→  // useCommunications(). Bank APIs reflects real state from useBanking().
+   192→   791→  // The other entries (E-Invoice, GSTR-2B) remain "not connected" by default
+   193→   792→  // until their Phase 9 ERP integrations ship.
+   194→   793→  const connectedServices = useMemo(
+   195→   794→    () => [
+   196→   795→      { id: 'gstn', name: 'GSTN', initial: 'G', connected: metrics.totalClients > 0 },
+   197→   796→      { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
+   198→   797→      { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
+   199→   798→      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: bankConnected },
+   200→   799→      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: whatsappConnReal },
+   201→   800→      { id: 'gmail', name: 'Gmail', initial: 'M', connected: gmailConnReal },
+   202→   801→    ],
+   203→   802→    [metrics.totalClients, bankConnected, whatsappConnReal, gmailConnReal],
+   204→   803→  );
+   205→   804→
+   206→   805→  // ── Team members from memberships hook ──
+   207→   806→  const teamMembers = useMemo(
+   208→   807→    () => memberships.slice(0, 6).map((m) => ({
+   209→   808→      id: m.membershipId || m.id,
+   210→   809→      name: m.userId?.split('@')[0] || 'Team member',
+   211→   810→      role: m.role || 'staff',
+   212→   811→      status: m.status || 'invited',
+   213→   812→    })),
+   214→   813→    [memberships],
+   215→   814→  );
+   216→   815→
+   217→   816→  // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
+   218→   817→  const upcomingFilings = useMemo(() => {
+   219→   818→    return returns
+   220→   819→      .filter((r) => r.status !== 'filed')
+   221→   820→      .sort((a, b) => {
+   222→   821→        const aOverdue = isOverdue(a.period) ? 0 : 1;
+   223→   822→        const bOverdue = isOverdue(b.period) ? 0 : 1;
+   224→   823→        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+   225→   824→        return a.period.localeCompare(b.period);
+   226→   825→      })
+   227→   826→      .slice(0, 5);
+   228→   827→  }, [returns]);
+   229→   828→
+   230→   829→  // ── AI Recommendations (local heuristic fallback) ────────────────────────
+   231→   830→  // These locally-computed recommendations are used as a FALLBACK when the
+   232→   831→  // real AI Oracle (ai_memory) has no recommendations yet. The primary source
+   233→   832→  // is the useAIRecommendations() hook above (Phase 7). See the merged
+   234→   833→  // `recommendations` memo below for the priority logic.
+   235→   834→  const localRecommendations = useMemo<Recommendation[]>(() => {
+   236→   835→    const recs: Recommendation[] = [];
+   237→   836→
+   238→   837→    // Overdue returns → file now
+   239→   838→    for (const r of returns) {
+   240→   839→      if (recs.length >= 5) break;
+   241→   840→      if (r.status === 'filed' || !isOverdue(r.period)) continue;
+   242→   841→      const client = clientMap.get(r.clientId);
+   243→   842→      const name = client?.tradeName ?? 'Unknown client';
+   244→   843→      recs.push({
+   245→   844→        id: `rec-overdue-${r.id}`,
+   246→   845→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   247→   846→        title: `File ${r.returnType} for ${name} — overdue`,
+   248→   847→        actionLabel: 'File now',
+   249→   848→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   250→   849→      });
+   251→   850→    }
+   252→   851→
+   253→   852→    // Returns due soon (≤ 7 days)
+   254→   853→    for (const r of returns) {
+   255→   854→      if (recs.length >= 5) break;
+   256→   855→      if (r.status === 'filed' || isOverdue(r.period)) continue;
+   257→   856→      const dueDate = getFilingDueDate(r.returnType, r.period);
+   258→   857→      const days = getDaysRemaining(dueDate);
+   259→   858→      if (days > 7) continue;
+   260→   859→      const client = clientMap.get(r.clientId);
+   261→   860→      const name = client?.tradeName ?? 'Unknown client';
+   262→   861→      recs.push({
+   263→   862→        id: `rec-soon-${r.id}`,
+   264→   863→        icon: <Clock className="h-3.5 w-3.5 accent-text" />,
+   265→   864→        title: `File ${r.returnType} for ${name} — due in ${days} day${days === 1 ? '' : 's'}`,
+   266→   865→        actionLabel: 'Prepare',
+   267→   866→        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+   268→   867→      });
+   269→   868→    }
+   270→   869→
+   271→   870→    // Low health score clients
+   272→   871→    for (const c of clients) {
+   273→   872→      if (recs.length >= 5) break;
+   274→   873→      if (c.healthScore >= 60) continue;
+   275→   874→      recs.push({
+   276→   875→        id: `rec-health-${c.clientId}`,
+   277→   876→        icon: <ShieldCheck className="h-3.5 w-3.5 accent-text" />,
+   278→   877→        title: `${c.tradeName} — health score ${Math.round(c.healthScore)}% needs attention`,
+   279→   878→        actionLabel: 'Open',
+   280→   879→        onAction: () => handleOpenClient(c.clientId),
+   281→   880→      });
+   282→   881→    }
+   283→   882→
+   284→   883→    // Pending collection
+   285→   884→    if (recs.length < 5 && pendingCollection > 0) {
+   286→   885→      recs.push({
+   287→   886→        id: 'rec-collection',
+   288→   887→        icon: <IndianRupee className="h-3.5 w-3.5 accent-text" />,
+   289→   888→        title: `₹${formatINR(pendingCollection)} pending collection across ${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'}`,
+   290→   889→        actionLabel: 'Review',
+   291→   890→        onAction: () => setCurrentView('invoices'),
+   292→   891→      });
+   293→   892→    }
+   294→   893→
+   295→   894→    // Critical issues
+   296→   895→    if (recs.length < 5 && metrics.criticalIssues > 0) {
+   297→   896→      recs.push({
+   298→   897→        id: 'rec-critical',
+   299→   898→        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
+   300→   899→        title: `${metrics.criticalIssues} critical compliance issue${metrics.criticalIssues === 1 ? '' : 's'} need${metrics.criticalIssues === 1 ? 's' : ''} review`,
+   301→   900→        actionLabel: 'Review',
+   302→   901→        onAction: () => setCurrentView('reconcile'),
+   303→   902→      });
+   304→   903→    }
+   305→   904→
+   306→   905→    return recs;
+   307→   906→  }, [returns, clients, clientMap, pendingCollection, pendingInvoices.length, metrics.criticalIssues]);
+   308→   907→
+   309→   908→  // ── Handlers ──────────────────────────────────────────────────────────
+   310→   909→  const handleOpenClient = (clientId: string) => {
+   311→   910→    setSelectedClientId(clientId);
+   312→   911→    setCurrentView('client-workspace');
+   313→   912→  };
+   314→   913→
+   315→   914→  const handleFileReturn = (clientId: string, returnType: string, period: string) => {
+   316→   915→    setSelectedClientId(clientId);
+   317→   916→    setReturnPrepCtx({
+   318→   917→      clientId,
+   319→   918→      returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
+   320→   919→      period,
+   321→   920→    });
+   322→   921→    setCurrentView('return-prep');
+   323→   922→  };
+   324→   923→
+   325→   924→  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
+   326→   925→    if (filingInProgress.has(returnId)) return;
+   327→   926→    setFilingInProgress((prev) => new Set(prev).add(returnId));
+   328→   927→    try {
+   329→   928→      const arn = await fileReturn(returnId);
+   330→   929→      toast.success(`${returnType} Filed Successfully`, {
+   331→   930→        description: `${clientName} — ARN: ${arn}`,
+   332→   931→      });
+   333→   932→    } catch (err) {
+   334→   933→      toast.error('Filing Failed', {
+   335→   934→        description: err instanceof Error ? err.message : 'Unknown error',
+   336→   935→      });
+   337→   936→    } finally {
+   338→   937→      setFilingInProgress((prev) => {
+   339→   938→        const next = new Set(prev);
+   340→   939→        next.delete(returnId);
+   341→   940→        return next;
+   342→   941→      });
+   343→   942→    }
+   344→   943→  };
+   345→   944→
+   346→   945→  // ── AI Oracle™ — map real AI recommendations to the card shape ─────────
+   347→   946→  // Each AI recommendation (from ai_memory via useAIRecommendations) is mapped
+   348→   947→  // to the local Recommendation shape with an icon + navigation handler derived
+   349→   948→  // from its actionType. This keeps the rendered card IDENTICAL to before —
+   350→   949→  // only the data source changed (heuristic → real AI).
+   351→   950→  const iconForAIRec = (type: AIRecommendation['type']): React.ReactNode => {
+   352→   951→    switch (type) {
+   353→   952→      case 'file_gstr3b':
+   354→   953→      case 'file_gstr1':
+   355→   954→      case 'pay_gst':
+   356→   955→        return <FileText className="h-3.5 w-3.5 accent-text" />;
+   357→   956→      case 'follow_up_customer':
+   358→   957→      case 'send_invoice_reminder':
+   359→   958→        return <Users className="h-3.5 w-3.5 accent-text" />;
+   360→   959→      case 'connect_bank':
+   361→   960→        return <IndianRupee className="h-3.5 w-3.5 accent-text" />;
+   362→   961→      case 'connect_gstn':
+   363→   962→        return <ShieldCheck className="h-3.5 w-3.5 accent-text" />;
+   364→   963→      case 'reconcile_bank':
+   365→   964→      case 'review_overdue':
+   366→   965→        return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
+   367→   966→      case 'reduce_expenses':
+   368→   967→        return <TrendingUp className="h-3.5 w-3.5 accent-text" />;
+   369→   968→      case 'improve_cash_flow':
+   370→   969→        return <Activity className="h-3.5 w-3.5 accent-text" />;
+   371→   970→      default:
+   372→   971→        return <Sparkles className="h-3.5 w-3.5 accent-text" />;
+   373→   972→    }
+   374→   973→  };
+   375→   974→
+   376→   975→  const handleAIRecAction = (rec: AIRecommendation) => {
+   377→   976→    switch (rec.actionType) {
+   378→   977→      case 'client-workspace':
+   379→   978→        if (rec.relatedEntityId) {
+   380→   979→          handleOpenClient(rec.relatedEntityId);
+   381→   980→        } else {
+   382→   981→          setCurrentView('clients');
+   383→   982→        }
+   384→   983→        break;
+   385→   984→      case 'return-prep':
+   386→   985→        if (rec.relatedEntityId && rec.relatedEntityType === 'period') {
+   387→   986→          // Navigate to return-prep with the period context if available.
+   388→   987→          setReturnPrepCtx({
+   389→   988→            clientId: rec.relatedEntityId,
+   390→   989→            returnType: rec.type === 'file_gstr3b' ? 'GSTR-3B' : 'GSTR-1',
+   391→   990→            period: rec.relatedEntityId,
+   392→   991→          });
+   393→   992→        }
+   394→   993→        setCurrentView('return-prep');
+   395→   994→        break;
+   396→   995→      case 'invoices':
+   397→   996→        setCurrentView('invoices');
+   398→   997→        break;
+   399→   998→      case 'expenses':
+   400→   999→        setCurrentView('invoices');
+   401→  1000→        break;
+   402→  1001→      case 'reconcile':
+   403→  1002→        setCurrentView('reconcile');
+   404→  1003→        break;
+   405→  1004→      case 'banking':
+   406→  1005→        setCurrentView('banking');
+   407→  1006→        break;
+   408→  1007→      case 'gstn':
+   409→  1008→        setCurrentView('returns');
+   410→  1009→        break;
+   411→  1010→      case 'reports':
+   412→  1011→        setCurrentView('reports');
+   413→  1012→        break;
+   414→  1013→      case 'tasks':
+   415→  1014→        setCurrentView('tasks');
+   416→  1015→        break;
+   417→  1016→      default:
+   418→  1017→        setCurrentView('dashboard');
+   419→  1018→        break;
+   420→  1019→    }
+   421→  1020→  };
+   422→  1021→
+   423→  1022→  const mappedAIRecommendations = useMemo<Recommendation[]>(() => {
+   424→  1023→    return aiRecommendations.slice(0, 5).map((rec) => ({
+   425→  1024→      id: rec.id,
+   426→  1025→      icon: iconForAIRec(rec.type),
+   427→  1026→      title: rec.title,
+   428→  1027→      actionLabel: rec.actionLabel,
+   429→  1028→      onAction: () => handleAIRecAction(rec),
+   430→  1029→    }));
+   431→  1030→  }, [aiRecommendations]);
+   432→  1031→
+   433→  1032→  // ── Merged recommendations — prefer real AI, fall back to local ────────
+   434→  1033→  // When the AI Oracle has generated recommendations (ai_memory populated),
+   435→  1034→  // those take priority. Otherwise the local heuristic recommendations keep
+   436→  1035→  // the card populated so the UI is never empty. The card renders identically
+   437→  1036→  // in both cases — same icon, title, action label, and click behavior.
+   438→  1037→  const recommendations = useMemo<Recommendation[]>(() => {
+   439→  1038→    if (mappedAIRecommendations.length > 0) return mappedAIRecommendations;
+   440→  1039→    return localRecommendations;
+   441→  1040→  }, [mappedAIRecommendations, localRecommendations]);
+   442→  1041→
+   443→  1042→  // ── Background AI analysis trigger (Phase 7) ───────────────────────────
+   444→  1043→  // On mount, if the AI Oracle has no recommendations yet (ai_memory empty),
+   445→  1044→  // trigger a background analysis run to populate it. This is the "auto
+   446→  1045→  // analyse every invoice / payment / GST sync / bank sync" behavior — it
+   447→  1046→  // runs once per mount, guarded by a ref, and is non-blocking (fire-and-
+   448→  1047→  // forget). The real-time subscription in useAIRecommendations will surface
+   449→  1048→  // the generated recommendations as soon as they're persisted.
+   450→  1049→  const bgAnalysisTriggered = useRef(false);
+   451→  1050→  useEffect(() => {
+   452→  1051→    if (bgAnalysisTriggered.current) return;
+   453→  1052→    if (!orgId) return;
+   454→  1053→    if (aiRecsLoading) return;
+   455→  1054→    if (aiRecommendations.length > 0) {
+   456→  1055→      bgAnalysisTriggered.current = true;
+   457→  1056→      return;
+   458→  1057→    }
+   459→  1058→    bgAnalysisTriggered.current = true;
+   460→  1059→    void fetch('/api/ai/analyze/background', {
+   461→  1060→      method: 'POST',
+   462→  1061→      headers: { 'Content-Type': 'application/json' },
+   463→  1062→      body: JSON.stringify({ organizationId: orgId }),
+   464→  1063→    }).catch(() => {
+   465→  1064→      // Non-fatal — the local heuristic recommendations still render.
+   466→  1065→    });
+   467→  1066→  }, [orgId, aiRecsLoading, aiRecommendations.length]);
+   468→  1067→
+   469→  1068→  // ═══════════════════════════════════════════════════════════════════════════
+   470→  1069→  // RENDER
+   471→  1070→  // ═══════════════════════════════════════════════════════════════════════════
+   472→  1071→
+   473→  1072→  // ── Loading ───────────────────────────────────────────────────────────
+   474→  1073→  // Wait for the live dashboard metrics, the real invoice engine, the
+   475→  1074→  // GST Return Engine, AND the Banking Foundation initial subscriptions to
+   476→  1075→  // settle before rendering — otherwise the Revenue / Cash Position KPIs
+   477→  1076→  // would briefly show "—" (invoice engine), the Business Health Score /
+   478→  1077→  // subtitles would miss the real GST signals before the gst_transactions
+   479→  1078→  // snapshot arrives, and the Cash Position / Risk subtitles would miss
+   480→  1079→  // the real bank balance before the bank_transactions snapshot arrives.
+   481→  1080→  if (loading || invoicesLoading || gstLoading || bankingLoading)
+   482→  1081→    return <DashboardSkeleton />;
+   483→  1082→
+   484→  1083→  // ── Error ─────────────────────────────────────────────────────────────
+   485→  1084→  if (error) {
+   486→  1085→    return (
+   487→  1086→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   488→  1087→        <Card className="glass-surface border-red-500/20">
+   489→  1088→          <CardContent className="p-6 text-center">
+   490→  1089→            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+   491→  1090→            <h3 className="font-semibold text-foreground">Failed to load dashboard</h3>
+   492→  1091→            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+   493→  1092→            <Button
+   494→  1093→              variant="outline"
+   495→  1094→              className="mt-4 border-border"
+   496→  1095→              onClick={() => window.location.reload()}
+   497→  1096→            >
+   498→  1097→              Retry
+   499→  1098→            </Button>
+   500→  1099→          </CardContent>
+   501→  1100→        </Card>
+   502→  1101→      </div>
+   503→  1102→    );
+   504→  1103→  }
+   505→  1104→
+   506→  1105→  // ── Empty state — no clients at all ───────────────────────────────────
+   507→  1106→  if (metrics.totalClients === 0) {
+   508→  1107→    return (
+   509→  1108→      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   510→  1109→        <WelcomeEmptyState
+   511→  1110→          onAddClient={() => setCurrentView('clients')}
+   512→  1111→          onUploadDoc={() => setCurrentView('invoices')}
+   513→  1112→        />
+   514→  1113→      </div>
+   515→  1114→    );
+   516→  1115→  }
+   517→  1116→
+   518→  1117→  // ── KPI values ────────────────────────────────────────────────────────
+   519→  1118→  // Revenue KPI: REAL revenue from the invoice engine — Σ grandTotal of
+   520→  1119→  // non-draft, non-cancelled invoices (server-calculated per invoice).
+   521→  1120→  const revenueValue =
+   522→  1121→    invoiceStats.totalRevenue > 0 ? `₹${formatINR(invoiceStats.totalRevenue)}` : '—';
+   523→  1122→  const complianceValue = String(pendingComplianceCount);
+   524→  1123→  // Cash Position KPI: REAL outstanding from the invoice engine — Σ balanceDue
+   525→  1124→  // of non-draft, non-cancelled invoices.
+   526→  1125→  const cashValue =
+   527→  1126→    invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
+   528→  1127→
+   529→  1128→  // ── KPI subtitles — augmented with REAL GST + Banking data ────────────
+   530→  1129→  // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep
+   531→  1130→  // their original layout, colors, and structure — only the subtitle text
+   532→  1131→  // is enriched with real GST-derived and bank-derived values when the
+   533→  1132→  // respective engines have data for the current period. All banking
+   534→  1133→  // augmentations are conditional on the value being > 0 so the original
+   535→  1134→  // subtitle text is preserved verbatim when there's no banking data yet
+   536→  1135→  // (mirrors the GST augmentation pattern).
+   537→  1136→  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}${incomingPayments > 0 ? ` · ₹${formatINR(incomingPayments)} incoming` : ''}`;
+   538→  1137→  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}${unreadGstNotices > 0 ? ` · ${unreadGstNotices} unread notice${unreadGstNotices === 1 ? '' : 's'}` : ''}`;
+   539→  1138→  const cashSubtitle =
+   540→  1139→    pendingInvoices.length > 0
+   541→  1140→      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`
+   542→  1141→      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`;
+   543→  1142→
+   544→  1143→  // ── Score card subtitles — augmented with REAL GST + Banking data ─────
+   545→  1144→  // Compliance / Collection / Risk score cards keep their original layout
+   546→  1145→  // and tone — only the subtitle text is enriched with real GST context
+   547→  1146→  // (output tax + CGST/SGST/IGST breakdown, available ITC + input tax,
+   548→  1147→  // GST liability) and real banking context (pending reconciliation count,
+   549→  1148→  // real bank balance for liquidity) when available.
+   550→  1149→  const complianceScoreSubtitle = metrics.filedReturns > 0
+   551→  1150→    ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
+   552→  1151→    : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
+   553→  1152→  const collectionScoreSubtitle = pendingCollection > 0
+   554→  1153→    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`
+   555→  1154→    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`;
+   556→  1155→  const riskScoreSubtitle = metrics.criticalIssues > 0
+   557→  1156→    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`
+   558→  1157→    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`;
+   559→  1158→
+   560→  1159→  const firstName = getFirstName(user?.name);
+   561→  1160→
+   562→  1161→  return (
+   563→  1162→    <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+   564→  1163→      {/* ── Ambient radial glow at top ── */}
+   565→  1164→      <div
+   566→  1165→        aria-hidden
+   567→  1166→        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
+   568→  1167→      />
+   569→  1168→
+   570→  1169→      {/* ── Content ── */}
+   571→  1170→      <div className="relative space-y-8">
+   572→  1171→        {/* ═══ GREETING + AI INSIGHT ═══ */}
+   573→  1172→        <motion.div
+   574→  1173→          initial={{ opacity: 0, y: -8 }}
+   575→  1174→          animate={{ opacity: 1, y: 0 }}
+   576→  1175→          transition={{ duration: 0.5, ease: 'easeOut' as const }}
+   577→  1176→          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+   578→  1177→        >
+   579→  1178→          <div className="space-y-2 min-w-0">
+   580→  1179→            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+   581→  1180→              {getGreeting()}, {firstName} <span className="inline-block">👋</span>
+   582→  1181→            </h1>
+   583→  1182→            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+   584→  1183→              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />
+   585→  1184→              <span className="leading-relaxed">{insight}</span>
+   586→  1185→            </div>
+   587→  1186→          </div>
+   588→  1187→          <Button
+   589→  1188→            variant="ghost"
+   590→  1189→            size="sm"
+   591→  1190→            onClick={() => setCurrentView('clients')}
+   592→  1191→            className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
+   593→  1192→          >
+   594→  1193→            <Plus className="h-3.5 w-3.5" />
+   595→  1194→            Add Client
+   596→  1195→          </Button>
+   597→  1196→        </motion.div>
+   598→  1197→
+   599→  1198→        {/* ═══ BUSINESS HEALTH SCORE — prominent gauge ═══ */}
+   600→  1199→        <BusinessHealthGauge
+   601→
+   602→[showing lines 600-1199 of 1715; use offset=1200 with limit to continue reading]

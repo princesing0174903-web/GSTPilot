@@ -368,7 +368,7 @@ export default function EventStreaming() {
                             <motion.div
                               initial={{ width: 0 }}
                               animate={{ width: `${widthPct}%` }}
-                              transition={{ duration: 0.6, ease: 'easeOut' }}
+                              transition={{ duration: 0.6, ease: 'easeOut' as const }}
                               className={cn('relative flex h-full items-center justify-end rounded-md', a.bar)}
                             >
                               <span className="px-2 text-[10px] font-semibold text-black/70">

@@ -447,7 +447,7 @@ function VolumeLineChart() {
         strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 1.2, ease: 'easeInOut' }}
+        transition={{ duration: 1.2, ease: 'easeInOut' as const }}
       />
       {VOLUME_30D.map((d, i) => (
         <motion.circle
@@ -530,7 +530,7 @@ function IndustryVolumeBarChart() {
               rx="3"
               initial={{ height: 0, y: padding.top + chartH }}
               animate={{ height: barH, y }}
-              transition={{ delay: i * 0.05, duration: 0.6, ease: 'easeOut' }}
+              transition={{ delay: i * 0.05, duration: 0.6, ease: 'easeOut' as const }}
             />
             <text
               x={x + barW / 2}
@@ -689,7 +689,7 @@ function DiscountTrendChart() {
         strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 1.2, ease: 'easeInOut' }}
+        transition={{ duration: 1.2, ease: 'easeInOut' as const }}
       />
       {DISCOUNT_TREND_12M.map((d, i) => (
         <motion.circle
@@ -772,7 +772,7 @@ function LiveTicker() {
           <motion.div
             className="flex gap-8 whitespace-nowrap"
             animate={{ x: ['0%', '-50%'] }}
-            transition={{ duration: 35, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 35, repeat: Infinity, ease: 'linear' as const }}
           >
             {entries.map((e, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">

@@ -3,11 +3,21 @@ import { db } from '@/lib/db'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
 
-// GET /api/payments — Fetch all Payments (customer collections + vendor settlements)
-// Returns an empty array when no payments exist (real empty state — no mock data).
-export async function GET() {
+// GET /api/payments — Fetch payments, scoped by clientId (multi-tenant isolation).
+// Previously this returned ALL payments platform-wide with no `where` clause
+// (multi-tenant data leak). Now filters by clientId query param.
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const clientId = searchParams.get('clientId')
+    const partyType = searchParams.get('partyType')
+
+    const where: { clientId?: string; partyType?: string } = {}
+    if (clientId) where.clientId = clientId
+    if (partyType) where.partyType = partyType
+
     const payments = await db.payment.findMany({
+      where,
       orderBy: { paymentDate: 'desc' },
     })
 
@@ -147,6 +157,87 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/payments error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to record payment' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH /api/payments?id=XXX — Update a payment (e.g., mark reconciled)
+export async function PATCH(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const updateData: Record<string, unknown> = {}
+    const allowedFields = [
+      'partyName', 'partyType', 'amount', 'paymentDate', 'paymentMode',
+      'referenceNo', 'status', 'reconciled', 'notes', 'clientId', 'invoiceId', 'purchaseBillId',
+    ]
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = field === 'amount'
+          ? Number(body[field])
+          : field === 'reconciled'
+            ? Boolean(body[field])
+            : body[field]
+      }
+    }
+
+    const payment = await db.payment.update({
+      where: { id },
+      data: updateData,
+    })
+
+    await db.auditLog.create({
+      data: {
+        clientId: payment.clientId,
+        action: 'Payment Updated',
+        entity: 'payment',
+        entityId: payment.id,
+        details: `Payment ₹${payment.amount} (${payment.partyName}) updated`,
+      },
+    })
+
+    return NextResponse.json({ payment })
+  } catch (error) {
+    console.error('PATCH /api/payments error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update payment' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/payments?id=XXX — Delete a payment
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
+    }
+
+    const payment = await db.payment.delete({ where: { id } })
+
+    await db.auditLog.create({
+      data: {
+        clientId: payment.clientId,
+        action: 'Payment Deleted',
+        entity: 'payment',
+        entityId: payment.id,
+        details: `Payment ₹${payment.amount} (${payment.partyName}) deleted`,
+      },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('DELETE /api/payments error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete payment' },
       { status: 500 }
     )
   }

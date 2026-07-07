@@ -127,7 +127,7 @@ function PhaseIndicator({ phase }: { phase: OraclePhase }) {
         <motion.span
           className="absolute inline-flex h-full w-full rounded-full bg-emerald-400"
           animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const }}
         />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
       </span>
@@ -138,7 +138,7 @@ function PhaseIndicator({ phase }: { phase: OraclePhase }) {
       <motion.span
         className="inline-block h-3.5 w-[2px] rounded-full bg-accent-start"
         animate={{ opacity: [1, 0, 1] }}
-        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
         aria-hidden
       />
     </motion.div>

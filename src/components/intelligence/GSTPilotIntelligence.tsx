@@ -358,7 +358,7 @@ function ThinkingDots() {
           transition={{
             duration: 0.7,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
             delay,
           }}
         />
@@ -1389,7 +1389,7 @@ export default function GSTPilotIntelligence() {
                 transition={{
                   duration: 8,
                   repeat: Infinity,
-                  ease: 'easeInOut',
+                  ease: 'easeInOut' as const,
                 }}
               />
 
@@ -1398,7 +1398,7 @@ export default function GSTPilotIntelligence() {
                 className="pointer-events-none absolute inset-0 rounded-full border border-white/40"
                 initial={{ opacity: 0, scale: 1 }}
                 whileHover={{ opacity: 0.6, scale: 1.5 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
+                transition={{ duration: 0.4, ease: 'easeOut' as const }}
               />
 
               {/* Inner top-left highlight for the 3D glassy orb feel */}

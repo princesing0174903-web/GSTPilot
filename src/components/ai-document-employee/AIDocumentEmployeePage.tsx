@@ -180,7 +180,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.4, delay, ease: 'easeOut' as const }}
       className={className}
     >
       {children}
@@ -744,7 +744,7 @@ export default function AIDocumentEmployeePage() {
                               className={`h-full rounded-full ${colors[stage]}`}
                               initial={{ width: 0 }}
                               animate={{ width: `${pct}%` }}
-                              transition={{ duration: 0.8, ease: 'easeOut' }}
+                              transition={{ duration: 0.8, ease: 'easeOut' as const }}
                             />
                           </div>
                           <span className="text-[10px] font-semibold text-slate-600 w-6 text-right">{count}</span>

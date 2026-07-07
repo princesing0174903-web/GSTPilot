@@ -119,7 +119,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.4, delay, ease: 'easeOut' as const }}
       className={className}
     >
       {children}
@@ -482,7 +482,7 @@ export default function AIFirmMemoryPage() {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-5"
                   >
                     {isSearching ? (
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' as const }}>
                         <Zap className="h-4 w-4" />
                       </motion.div>
                     ) : (
@@ -522,7 +522,7 @@ export default function AIFirmMemoryPage() {
                       exit={{ opacity: 0 }}
                       className="flex items-center gap-3 p-4 rounded-lg bg-slate-50"
                     >
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' as const }}>
                         <Sparkles className="h-5 w-5 text-emerald-500" />
                       </motion.div>
                       <span className="text-sm text-slate-500">Searching through 646 memories...</span>

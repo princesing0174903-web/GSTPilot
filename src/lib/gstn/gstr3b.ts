@@ -93,12 +93,14 @@ export async function fileGstr3b(gstin: string, period: string): Promise<FilingR
   if (!draft || draft.status !== 'prepared') {
     throw new Error(`No prepared GSTR-3B draft found for ${gstin} / ${period}. Prepare the draft first.`);
   }
-  const ackNo = genAckNo();
+  // ── PRODUCTION SAFETY ──
+  // Do NOT fabricate a fake ARN. Real GSTR-3B filing requires the official
+  // GST portal API with OTP / DSC. We mark the return as "submitted" until
+  // the portal returns a real acknowledgment number.
   await db.gSTReturn.update({
     where: { id: draft.id },
     data: {
-      status: 'filed',
-      ackNo,
+      status: 'submitted',
       filedAt: new Date(),
     },
   });
@@ -106,10 +108,10 @@ export async function fileGstr3b(gstin: string, period: string): Promise<FilingR
     gstin,
     returnType: 'GSTR-3B',
     period,
-    status: 'filed',
-    ackNo,
+    status: 'submitted',
+    ackNo: null,
     filedAt: nowISO(),
-    message: `GSTR-3B for ${period} filed successfully. Tax paid: ₹${draft.totalTax.toLocaleString('en-IN')}. ARN: ${ackNo}.`,
+    message: `GSTR-3B for ${period} has been submitted. Tax payable: ₹${draft.totalTax.toLocaleString('en-IN')}. Complete the filing on the GST portal using your OTP / DSC. The return will be marked "filed" once the portal returns an ARN.`,
   };
 }
 

@@ -297,7 +297,7 @@ export default function WorkflowTracker({
                 className={`h-full rounded-full ${overallProgress >= 70 ? 'bg-emerald-500' : overallProgress >= 40 ? 'bg-amber-400' : 'bg-red-400'}`}
                 initial={{ width: 0 }}
                 animate={{ width: `${overallProgress}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
+                transition={{ duration: 0.8, ease: 'easeOut' as const }}
               />
             </div>
           </div>
@@ -450,7 +450,7 @@ export default function WorkflowTracker({
                             className={`h-full rounded-full ${getProgressColor(stepProgress)}`}
                             initial={{ width: 0 }}
                             animate={{ width: `${stepProgress}%` }}
-                            transition={{ duration: 0.8, delay: idx * 0.1, ease: 'easeOut' }}
+                            transition={{ duration: 0.8, delay: idx * 0.1, ease: 'easeOut' as const }}
                           />
                         </div>
 
@@ -492,7 +492,7 @@ export default function WorkflowTracker({
                     className="h-full rounded-full bg-emerald-500"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.round(Object.values(progress).reduce((a, b) => a + b, 0) / 7)}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
+                    transition={{ duration: 1, ease: 'easeOut' as const }}
                   />
                 </div>
                 <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">

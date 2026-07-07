@@ -291,7 +291,7 @@ function FrameworkCard({ fw, index }: { fw: ComplianceFramework; index: number }
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' as const }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.14] transition-all flex flex-col"
     >
       {/* header */}
@@ -608,7 +608,7 @@ function ComplianceScoreBreakdown() {
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${value}%` }}
-                      transition={{ duration: 0.6, delay: i * 0.1, ease: 'easeOut' }}
+                      transition={{ duration: 0.6, delay: i * 0.1, ease: 'easeOut' as const }}
                       className={`h-full ${barColor}`}
                     />
                   </div>

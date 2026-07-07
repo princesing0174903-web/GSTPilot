@@ -41,7 +41,12 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Convert a raw Firestore snapshot into a typed doc with its `id`. */
+/** Convert a raw Firestore snapshot into a typed doc with its `id`.
+ *  Preserves ALL extended firm-profile fields written by SettingsPage
+ *  (legalName, state, entityType, caRegNumber, officeAddress, gstConfig,
+ *  notifications, branding, integrations). Previously these were stripped,
+ *  causing 13 settings fields to reset to defaults on every refresh.
+ */
 function toOrgDoc(id: string, data: DocumentData): OrganizationDoc {
   return {
     id,
@@ -54,6 +59,16 @@ function toOrgDoc(id: string, data: DocumentData): OrganizationDoc {
     status: data.status ?? 'active',
     createdAt: data.createdAt ?? null,
     updatedAt: data.updatedAt ?? null,
+    // Extended firm-profile fields (preserved on read so settings survive refresh)
+    legalName: data.legalName ?? null,
+    state: data.state ?? null,
+    entityType: data.entityType ?? null,
+    caRegNumber: data.caRegNumber ?? null,
+    officeAddress: data.officeAddress ?? null,
+    gstConfig: data.gstConfig ?? null,
+    notifications: data.notifications ?? null,
+    branding: data.branding ?? null,
+    integrations: data.integrations ?? null,
   };
 }
 

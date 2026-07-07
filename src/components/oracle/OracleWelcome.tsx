@@ -83,7 +83,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] as const }}
         className="relative mb-7 flex flex-col items-center"
       >
         {/* Breathing halo */}
@@ -104,7 +104,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
       <motion.h1
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.5, delay: 0.1, ease: [0.4, 0, 0.2, 1] as const }}
         className="text-center text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
       >
         GSTPilot <span className="accent-text">Oracle</span>
@@ -114,7 +114,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
       <motion.p
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.18, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.5, delay: 0.18, ease: [0.4, 0, 0.2, 1] as const }}
         className="mt-2.5 max-w-xl text-center text-sm text-muted-foreground sm:text-base"
       >
         Your AI Financial Brain — GST · CFO · Compliance · Analytics.
@@ -126,7 +126,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.28, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.5, delay: 0.28, ease: [0.4, 0, 0.2, 1] as const }}
         className="mt-10 grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {CAPABILITIES.map((cap, i) => {
@@ -159,7 +159,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.38, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.5, delay: 0.38, ease: [0.4, 0, 0.2, 1] as const }}
         className="mt-8 w-full max-w-3xl"
       >
         <div className="mb-3 flex items-center gap-2">

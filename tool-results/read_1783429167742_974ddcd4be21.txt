@@ -1,0 +1,1487 @@
+     1→'use client'
+     2→
+     3→import { useState, useMemo, useCallback } from 'react'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     8→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Textarea } from '@/components/ui/textarea'
+    11→import { Label } from '@/components/ui/label'
+    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    13→import { ScrollArea } from '@/components/ui/scroll-area'
+    14→import { Skeleton } from '@/components/ui/skeleton'
+    15→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    16→import { Progress } from '@/components/ui/progress'
+    17→import { Separator } from '@/components/ui/separator'
+    18→import {
+    19→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    20→} from '@/components/ui/table'
+    21→import { motion, AnimatePresence } from 'framer-motion'
+    22→import {
+    23→  Plus, Search, Filter, Briefcase, Phone, Video, MapPin,
+    24→  TrendingUp, DollarSign, Users, Calendar, Clock, ArrowRight,
+    25→  Star, Target, Award, ChevronRight, MoreHorizontal,
+    26→  GripVertical, CheckCircle2, XCircle, AlertCircle,
+    27→  Sparkles, BarChart3, PhoneCall, UserPlus,
+    28→} from 'lucide-react'
+    29→import {
+    30→  useFireLeads, useFireDeals, useFireMeetings,
+    31→} from '@/hooks/use-firestore'
+    32→import {
+    33→  createLead, updateLead, deleteLead, convertLeadToClient,
+    34→  createDeal, updateDeal, deleteDeal,
+    35→  createMeeting, updateMeeting, deleteMeeting,
+    36→} from '@/lib/firestore-service'
+    37→import type { FirestoreLead, FirestoreDeal, FirestoreMeeting, LeadStatus, LeadSource, DealStage, MeetingType, MeetingStatus } from '@/lib/firestore-schema'
+    38→
+    39→// ═══════════════════════════════════════════════════════════════════════════════
+    40→// HELPERS
+    41→// ═══════════════════════════════════════════════════════════════════════════════
+    42→
+    43→function formatINR(n: number): string {
+    44→  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+    45→}
+    46→
+    47→function formatDate(d: string | unknown): string {
+    48→  if (!d) return '—'
+    49→  try {
+    50→    const date = typeof d === 'string' ? new Date(d) : new Date()
+    51→    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    52→  } catch { return '—' }
+    53→}
+    54→
+    55→function formatTime(d: string | unknown): string {
+    56→  if (!d) return ''
+    57→  try {
+    58→    const date = typeof d === 'string' ? new Date(d) : new Date()
+    59→    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    60→  } catch { return '' }
+    61→}
+    62→
+    63→function daysUntil(d: string | unknown): number {
+    64→  if (!d) return 999
+    65→  try {
+    66→    const date = typeof d === 'string' ? new Date(d) : new Date()
+    67→    return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    68→  } catch { return 999 }
+    69→}
+    70→
+    71→function scoreColor(score: number): string {
+    72→  if (score >= 70) return 'text-emerald-600 bg-emerald-50 border-emerald-200'
+    73→  if (score >= 40) return 'text-amber-600 bg-amber-50 border-amber-200'
+    74→  return 'text-red-600 bg-red-50 border-red-200'
+    75→}
+    76→
+    77→function scoreBgGradient(score: number): string {
+    78→  if (score >= 70) return 'from-emerald-500 to-emerald-600'
+    79→  if (score >= 40) return 'from-amber-500 to-amber-600'
+    80→  return 'from-red-500 to-red-600'
+    81→}
+    82→
+    83→// ═══════════════════════════════════════════════════════════════════════════════
+    84→// CONSTANTS
+    85→// ═══════════════════════════════════════════════════════════════════════════════
+    86→
+    87→const PIPELINE_COLUMNS: { status: LeadStatus; label: string; color: string; dotColor: string }[] = [
+    88→  { status: 'new', label: 'New', color: 'bg-slate-50 border-slate-200', dotColor: 'bg-slate-400' },
+    89→  { status: 'contacted', label: 'Contacted', color: 'bg-blue-50 border-blue-200', dotColor: 'bg-blue-500' },
+    90→  { status: 'qualified', label: 'Qualified', color: 'bg-violet-50 border-violet-200', dotColor: 'bg-violet-500' },
+    91→  { status: 'proposal_sent', label: 'Proposal Sent', color: 'bg-amber-50 border-amber-200', dotColor: 'bg-amber-500' },
+    92→  { status: 'negotiation', label: 'Negotiation', color: 'bg-orange-50 border-orange-200', dotColor: 'bg-orange-500' },
+    93→  { status: 'converted', label: 'Converted', color: 'bg-emerald-50 border-emerald-200', dotColor: 'bg-emerald-500' },
+    94→  { status: 'lost', label: 'Lost', color: 'bg-red-50 border-red-200', dotColor: 'bg-red-400' },
+    95→]
+    96→
+    97→const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
+    98→  { value: 'website', label: 'Website' },
+    99→  { value: 'referral', label: 'Referral' },
+   100→  { value: 'advertisement', label: 'Advertisement' },
+   101→  { value: 'cold_call', label: 'Cold Call' },
+   102→  { value: 'event', label: 'Event' },
+   103→  { value: 'social_media', label: 'Social Media' },
+   104→  { value: 'other', label: 'Other' },
+   105→]
+   106→
+   107→const MEETING_TYPE_ICON: Record<MeetingType, React.ReactNode> = {
+   108→  in_person: <MapPin className="h-3.5 w-3.5" />,
+   109→  video_call: <Video className="h-3.5 w-3.5" />,
+   110→  phone_call: <Phone className="h-3.5 w-3.5" />,
+   111→}
+   112→
+   113→const DEAL_STAGE_CONFIG: Record<DealStage, { label: string; color: string; bg: string }> = {
+   114→  proposal: { label: 'Proposal', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+   115→  negotiation: { label: 'Negotiation', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
+   116→  closed_won: { label: 'Closed Won', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+   117→  closed_lost: { label: 'Closed Lost', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
+   118→}
+   119→
+   120→const SAMPLE_LEADS: FirestoreLead[] = [
+   121→  {
+   122→    leadId: 'lead-1', firmId: 'firm-1', contactName: 'Rajesh Sharma', contactEmail: 'rajesh@acme.in',
+   123→    contactPhone: '+91 98765 43210', company: 'Acme Industries Pvt Ltd', gstin: '27AADCA1234F1Z5',
+   124→    source: 'referral', status: 'new', leadScore: 75, estimatedValue: 250000, notes: 'Interested in GST compliance package',
+   125→    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 2 * 86400000).toISOString(),
+   126→    convertedClientId: null, tags: ['manufacturing', 'high-value'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   127→  },
+   128→  {
+   129→    leadId: 'lead-2', firmId: 'firm-1', contactName: 'Anita Desai', contactEmail: 'anita@technowave.in',
+   130→    contactPhone: '+91 87654 32109', company: 'TechnoWave Solutions', gstin: null,
+   131→    source: 'website', status: 'contacted', leadScore: 62, estimatedValue: 180000, notes: 'Responded to email, wants demo',
+   132→    assignedTo: 'Amit Kumar', nextFollowUp: new Date(Date.now() + 1 * 86400000).toISOString(),
+   133→    convertedClientId: null, tags: ['IT', 'SaaS'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   134→  },
+   135→  {
+   136→    leadId: 'lead-3', firmId: 'firm-1', contactName: 'Vikram Mehta', contactEmail: 'vikram@greenearth.in',
+   137→    contactPhone: '+91 76543 21098', company: 'Green Earth Exports', gstin: '27AABCG5678H1Z3',
+   138→    source: 'event', status: 'qualified', leadScore: 88, estimatedValue: 450000, notes: 'Met at CA conference, very interested',
+   139→    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
+   140→    convertedClientId: null, tags: ['export', 'premium'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   141→  },
+   142→  {
+   143→    leadId: 'lead-4', firmId: 'firm-1', contactName: 'Sunita Patel', contactEmail: 'sunita@retailking.in',
+   144→    contactPhone: '+91 65432 10987', company: 'Retail King Mart', gstin: null,
+   145→    source: 'social_media', status: 'proposal_sent', leadScore: 55, estimatedValue: 120000, notes: 'Proposal sent for quarterly filing',
+   146→    assignedTo: 'Amit Kumar', nextFollowUp: new Date(Date.now() + 5 * 86400000).toISOString(),
+   147→    convertedClientId: null, tags: ['retail'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   148→  },
+   149→  {
+   150→    leadId: 'lead-5', firmId: 'firm-1', contactName: 'Deepak Joshi', contactEmail: 'deepak@steelworks.in',
+   151→    contactPhone: '+91 54321 09876', company: 'Steel Works India', gstin: '27AABCS9012K1Z7',
+   152→    source: 'cold_call', status: 'negotiation', leadScore: 91, estimatedValue: 600000, notes: 'Discussing annual retainer, close to signing',
+   153→    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 1 * 86400000).toISOString(),
+   154→    convertedClientId: null, tags: ['manufacturing', 'high-value', 'retainer'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   155→  },
+   156→  {
+   157→    leadId: 'lead-6', firmId: 'firm-1', contactName: 'Meera Krishnan', contactEmail: 'meera@healthfirst.in',
+   158→    contactPhone: '+91 43210 98765', company: 'Health First Pharma', gstin: '27AABCH3456L1Z2',
+   159→    source: 'referral', status: 'converted', leadScore: 95, estimatedValue: 350000, notes: 'Successfully converted to client',
+   160→    assignedTo: 'Amit Kumar', nextFollowUp: null,
+   161→    convertedClientId: 'client-converted-1', tags: ['pharma', 'premium'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   162→  },
+   163→  {
+   164→    leadId: 'lead-7', firmId: 'firm-1', contactName: 'Karan Singh', contactEmail: 'karan@logipro.in',
+   165→    contactPhone: '+91 32109 87654', company: 'LogiPro Transport', gstin: null,
+   166→    source: 'advertisement', status: 'lost', leadScore: 30, estimatedValue: 80000, notes: 'Chose competitor, may revisit next year',
+   167→    assignedTo: 'Priya Patel', nextFollowUp: null,
+   168→    convertedClientId: null, tags: ['logistics'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   169→  },
+   170→]
+   171→
+   172→const SAMPLE_DEALS: FirestoreDeal[] = [
+   173→  {
+   174→    dealId: 'deal-1', firmId: 'firm-1', leadId: 'lead-5', clientId: null,
+   175→    title: 'Steel Works Annual Retainer', description: 'Full GST compliance + monthly filing for FY 2025-26',
+   176→    value: 600000, stage: 'negotiation', probability: 75,
+   177→    expectedCloseDate: new Date(Date.now() + 15 * 86400000).toISOString(), assignedTo: 'Priya Patel',
+   178→    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   179→  },
+   180→  {
+   181→    dealId: 'deal-2', firmId: 'firm-1', leadId: 'lead-3', clientId: null,
+   182→    title: 'Green Earth GST Package', description: 'Export filings + compliance management',
+   183→    value: 450000, stage: 'proposal', probability: 40,
+   184→    expectedCloseDate: new Date(Date.now() + 30 * 86400000).toISOString(), assignedTo: 'Priya Patel',
+   185→    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   186→  },
+   187→  {
+   188→    dealId: 'deal-3', firmId: 'firm-1', leadId: 'lead-6', clientId: 'client-converted-1',
+   189→    title: 'Health First Quarterly Filing', description: 'GSTR-1 + GSTR-3B quarterly filing',
+   190→    value: 350000, stage: 'closed_won', probability: 100,
+   191→    expectedCloseDate: new Date().toISOString(), assignedTo: 'Amit Kumar',
+   192→    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   193→  },
+   194→  {
+   195→    dealId: 'deal-4', firmId: 'firm-1', leadId: null, clientId: null,
+   196→    title: 'Acme Industries Setup', description: 'GST registration + initial compliance setup',
+   197→    value: 250000, stage: 'proposal', probability: 35,
+   198→    expectedCloseDate: new Date(Date.now() + 45 * 86400000).toISOString(), assignedTo: 'Amit Kumar',
+   199→    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   200→  },
+   201→  {
+   202→    dealId: 'deal-5', firmId: 'firm-1', leadId: null, clientId: null,
+   203→    title: 'Retail King Quarterly', description: 'GST filing for retail operations',
+   204→    value: 120000, stage: 'closed_lost', probability: 0,
+   205→    expectedCloseDate: new Date(Date.now() - 5 * 86400000).toISOString(), assignedTo: 'Amit Kumar',
+   206→    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   207→  },
+   208→]
+   209→
+   210→const SAMPLE_MEETINGS: FirestoreMeeting[] = [
+   211→  {
+   212→    meetingId: 'meet-1', firmId: 'firm-1', clientId: null, leadId: 'lead-5',
+   213→    title: 'Steel Works Deal Discussion', description: 'Final negotiation for annual retainer',
+   214→    dateTime: new Date(Date.now() + 1 * 86400000 + 10 * 3600000).toISOString(), duration: 60,
+   215→    type: 'video_call', status: 'scheduled', attendees: ['Priya Patel', 'Deepak Joshi'],
+   216→    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   217→  },
+   218→  {
+   219→    meetingId: 'meet-2', firmId: 'firm-1', clientId: null, leadId: 'lead-3',
+   220→    title: 'Green Earth GST Demo', description: 'Demo of GST compliance workflow',
+   221→    dateTime: new Date(Date.now() + 2 * 86400000 + 14 * 3600000).toISOString(), duration: 45,
+   222→    type: 'in_person', status: 'scheduled', attendees: ['Priya Patel', 'Vikram Mehta'],
+   223→    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   224→  },
+   225→  {
+   226→    meetingId: 'meet-3', firmId: 'firm-1', clientId: 'client-converted-1', leadId: null,
+   227→    title: 'Health First Onboarding', description: 'Onboarding call for GST filing',
+   228→    dateTime: new Date(Date.now() + 3 * 86400000 + 11 * 3600000).toISOString(), duration: 30,
+   229→    type: 'phone_call', status: 'scheduled', attendees: ['Amit Kumar', 'Meera Krishnan'],
+   230→    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   231→  },
+   232→  {
+   233→    meetingId: 'meet-4', firmId: 'firm-1', clientId: null, leadId: 'lead-1',
+   234→    title: 'Acme Industries Follow-up', description: 'Follow up on GST compliance interest',
+   235→    dateTime: new Date(Date.now() + 4 * 86400000 + 15 * 3600000).toISOString(), duration: 30,
+   236→    type: 'video_call', status: 'scheduled', attendees: ['Priya Patel', 'Rajesh Sharma'],
+   237→    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+   238→  },
+   239→]
+   240→
+   241→// ═══════════════════════════════════════════════════════════════════════════════
+   242→// KANBAN LEAD CARD
+   243→// ═══════════════════════════════════════════════════════════════════════════════
+   244→
+   245→function KanbanLeadCard({ lead, onStatusChange, onConvert }: {
+   246→  lead: FirestoreLead & { id: string }
+   247→  onStatusChange: (id: string, status: LeadStatus) => void
+   248→  onConvert: (id: string) => void
+   249→}) {
+   250→  const [isDragging, setIsDragging] = useState(false)
+   251→  const days = daysUntil(lead.nextFollowUp)
+   252→
+   253→  return (
+   254→    <motion.div
+   255→      layout
+   256→      initial={{ opacity: 0, y: 10 }}
+   257→      animate={{ opacity: 1, y: 0 }}
+   258→      exit={{ opacity: 0, y: -10 }}
+   259→      draggable
+   260→      onDragStart={() => setIsDragging(true)}
+   261→      onDragEnd={() => setIsDragging(false)}
+   262→      className={`
+   263→        group cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3.5
+   264→        shadow-sm hover:shadow-md transition-all duration-200
+   265→        ${isDragging ? 'ring-2 ring-emerald-400 ring-offset-2 shadow-lg scale-[1.02]' : ''}
+   266→        dark:bg-gray-900
+   267→      `}
+   268→      onDragOver={(e) => e.preventDefault()}
+   269→    >
+   270→      <div className="flex items-start justify-between gap-2 mb-2">
+   271→        <div className="min-w-0 flex-1">
+   272→          <p className="text-sm font-semibold text-foreground truncate">{lead.contactName}</p>
+   273→          <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
+   274→        </div>
+   275→        <Badge variant="outline" className={`text-[10px] font-bold shrink-0 ${scoreColor(lead.leadScore)}`}>
+   276→          {lead.leadScore}
+   277→        </Badge>
+   278→      </div>
+   279→
+   280→      <div className="flex items-center gap-3 mb-2.5">
+   281→        <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{formatINR(lead.estimatedValue)}</span>
+   282→        {lead.gstin && (
+   283→          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+   284→            GSTIN
+   285→          </Badge>
+   286→        )}
+   287→      </div>
+   288→
+   289→      <div className="flex items-center gap-1.5 mb-2">
+   290→        {lead.tags.slice(0, 2).map(tag => (
+   291→          <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+   292→            {tag}
+   293→          </span>
+   294→        ))}
+   295→        {lead.tags.length > 2 && (
+   296→          <span className="text-[9px] text-muted-foreground">+{lead.tags.length - 2}</span>
+   297→        )}
+   298→      </div>
+   299→
+   300→      <div className="flex items-center justify-between">
+   301→        <div className="flex items-center gap-1.5">
+   302→          <Avatar className="h-5 w-5">
+   303→            <AvatarFallback className="text-[8px] bg-emerald-100 text-emerald-700">
+   304→              {lead.assignedTo?.split(' ').map(w => w[0]).join('') || '?'}
+   305→            </AvatarFallback>
+   306→          </Avatar>
+   307→          <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{lead.assignedTo}</span>
+   308→        </div>
+   309→
+   310→        {lead.nextFollowUp && (
+   311→          <span className={`text-[10px] font-medium ${days <= 1 ? 'text-red-600' : days <= 3 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+   312→            {days <= 0 ? 'Overdue' : days === 1 ? 'Tomorrow' : `${days}d`}
+   313→          </span>
+   314→        )}
+   315→      </div>
+   316→
+   317→      {lead.status !== 'converted' && lead.status !== 'lost' && (
+   318→        <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+   319→          {lead.status === 'negotiation' && (
+   320→            <Button
+   321→              variant="ghost"
+   322→              size="sm"
+   323→              className="h-6 text-[10px] px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+   324→              onClick={() => onConvert(lead.leadId)}
+   325→            >
+   326→              <UserPlus className="h-3 w-3 mr-1" /> Convert
+   327→            </Button>
+   328→          )}
+   329→          {PIPELINE_COLUMNS.findIndex(c => c.status === lead.status) < PIPELINE_COLUMNS.length - 2 && (
+   330→            <Button
+   331→              variant="ghost"
+   332→              size="sm"
+   333→              className="h-6 text-[10px] px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+   334→              onClick={() => {
+   335→                const nextStatuses = PIPELINE_COLUMNS.map(c => c.status)
+   336→                const currentIdx = nextStatuses.indexOf(lead.status)
+   337→                if (currentIdx < nextStatuses.length - 2) {
+   338→                  onStatusChange(lead.leadId, nextStatuses[currentIdx + 1] as LeadStatus)
+   339→                }
+   340→              }}
+   341→            >
+   342→              Next <ChevronRight className="h-3 w-3 ml-0.5" />
+   343→            </Button>
+   344→          )}
+   345→        </div>
+   346→      )}
+   347→    </motion.div>
+   348→  )
+   349→}
+   350→
+   351→// ═══════════════════════════════════════════════════════════════════════════════
+   352→// PIPELINE KANBAN VIEW
+   353→// ═══════════════════════════════════════════════════════════════════════════════
+   354→
+   355→function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: string }>; loading: boolean }) {
+   356→  const [searchTerm, setSearchTerm] = useState('')
+   357→  const [sourceFilter, setSourceFilter] = useState<string>('all')
+   358→  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+   359→  const [convertingId, setConvertingId] = useState<string | null>(null)
+   360→
+   361→  const filteredLeads = useMemo(() => {
+   362→    return leads.filter(lead => {
+   363→      const matchesSearch = !searchTerm ||
+   364→        lead.contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+   365→        lead.company.toLowerCase().includes(searchTerm.toLowerCase())
+   366→      const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter
+   367→      return matchesSearch && matchesSource
+   368→    })
+   369→  }, [leads, searchTerm, sourceFilter])
+   370→
+   371→  const handleStatusChange = useCallback(async (leadId: string, newStatus: LeadStatus) => {
+   372→    try {
+   373→      await updateLead(leadId, { status: newStatus })
+   374→    } catch (err) {
+   375→      console.warn('Failed to update lead status:', err)
+   376→    }
+   377→  }, [])
+   378→
+   379→  const handleConvert = useCallback(async (leadId: string) => {
+   380→    setConvertingId(leadId)
+   381→    try {
+   382→      await convertLeadToClient(leadId)
+   383→    } catch (err) {
+   384→      console.warn('Failed to convert lead:', err)
+   385→    } finally {
+   386→      setConvertingId(null)
+   387→    }
+   388→  }, [])
+   389→
+   390→  const handleDrop = useCallback((leadId: string, newStatus: LeadStatus) => {
+   391→    handleStatusChange(leadId, newStatus)
+   392→    setDragOverColumn(null)
+   393→  }, [handleStatusChange])
+   394→
+   395→  if (loading) {
+   396→    return (
+   397→      <div className="flex gap-4 overflow-x-auto pb-4">
+   398→        {PIPELINE_COLUMNS.map(col => (
+   399→          <div key={col.status} className="min-w-[260px] flex-1">
+   400→            <Skeleton className="h-8 w-32 mb-3" />
+   401→            <div className="space-y-3">
+   402→              {[1, 2, 3].map(i => (
+   403→                <Skeleton key={i} className="h-32 w-full rounded-xl" />
+   404→              ))}
+   405→            </div>
+   406→          </div>
+   407→        ))}
+   408→      </div>
+   409→    )
+   410→  }
+   411→
+   412→  return (
+   413→    <div className="space-y-4">
+   414→      {/* Filter Bar */}
+   415→      <div className="flex flex-wrap items-center gap-3">
+   416→        <div className="relative flex-1 min-w-[200px] max-w-sm">
+   417→          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+   418→          <Input
+   419→            placeholder="Search leads by name or company..."
+   420→            value={searchTerm}
+   421→            onChange={e => setSearchTerm(e.target.value)}
+   422→            className="h-8 pl-8 text-xs"
+   423→          />
+   424→        </div>
+   425→        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+   426→          <SelectTrigger className="h-8 w-[140px] text-xs">
+   427→            <SelectValue placeholder="Source" />
+   428→          </SelectTrigger>
+   429→          <SelectContent>
+   430→            <SelectItem value="all">All Sources</SelectItem>
+   431→            {SOURCE_OPTIONS.map(s => (
+   432→              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   433→            ))}
+   434→          </SelectContent>
+   435→        </Select>
+   436→        <Badge variant="secondary" className="text-xs">
+   437→          {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+   438→        </Badge>
+   439→      </div>
+   440→
+   441→      {/* Kanban Board */}
+   442→      <div className="flex gap-4 overflow-x-auto pb-4">
+   443→        {PIPELINE_COLUMNS.map(col => {
+   444→          const columnLeads = filteredLeads.filter(l => l.status === col.status)
+   445→          const columnValue = columnLeads.reduce((sum, l) => sum + l.estimatedValue, 0)
+   446→
+   447→          return (
+   448→            <div
+   449→              key={col.status}
+   450→              className={`
+   451→                min-w-[260px] flex-1 rounded-xl border-2 transition-colors duration-200
+   452→                ${dragOverColumn === col.status ? 'border-emerald-400 bg-emerald-50/50' : `border-transparent ${col.color}`}
+   453→              `}
+   454→              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(col.status) }}
+   455→              onDragLeave={() => setDragOverColumn(null)}
+   456→              onDrop={(e) => {
+   457→                e.preventDefault()
+   458→                const leadId = e.dataTransfer?.getData('text/plain')
+   459→                if (leadId) handleDrop(leadId, col.status)
+   460→              }}
+   461→            >
+   462→              <div className="px-3 py-2.5 flex items-center justify-between">
+   463→                <div className="flex items-center gap-2">
+   464→                  <span className={`h-2 w-2 rounded-full ${col.dotColor}`} />
+   465→                  <span className="text-xs font-semibold text-foreground">{col.label}</span>
+   466→                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{columnLeads.length}</Badge>
+   467→                </div>
+   468→                <span className="text-[10px] text-muted-foreground">{formatINR(columnValue)}</span>
+   469→              </div>
+   470→
+   471→              <ScrollArea className="h-[calc(100vh-380px)] min-h-[300px]">
+   472→                <div className="px-2 pb-2 space-y-2.5">
+   473→                  <AnimatePresence mode="popLayout">
+   474→                    {columnLeads.map(lead => (
+   475→                      <div
+   476→                        key={lead.leadId}
+   477→                        draggable
+   478→                        onDragStart={(e) => {
+   479→                          e.dataTransfer?.setData('text/plain', lead.leadId)
+   480→                        }}
+   481→                      >
+   482→                        <KanbanLeadCard
+   483→                          lead={lead}
+   484→                          onStatusChange={handleStatusChange}
+   485→                          onConvert={handleConvert}
+   486→                        />
+   487→                      </div>
+   488→                    ))}
+   489→                  </AnimatePresence>
+   490→                  {columnLeads.length === 0 && (
+   491→                    <div className="flex flex-col items-center justify-center py-8 text-center">
+   492→                      <div className={`h-8 w-8 rounded-full flex items-center justify-center mb-2 ${col.color}`}>
+   493→                        <GripVertical className="h-4 w-4 text-muted-foreground/40" />
+   494→                      </div>
+   495→                      <p className="text-[11px] text-muted-foreground">Drop leads here</p>
+   496→                    </div>
+   497→                  )}
+   498→                </div>
+   499→              </ScrollArea>
+   500→            </div>
+   501→          )
+   502→        })}
+   503→      </div>
+   504→    </div>
+   505→  )
+   506→}
+   507→
+   508→// ═══════════════════════════════════════════════════════════════════════════════
+   509→// DEALS TABLE VIEW
+   510→// ═══════════════════════════════════════════════════════════════════════════════
+   511→
+   512→function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { id: string }>; leads: Array<FirestoreLead & { id: string }>; loading: boolean }) {
+   513→  const [sortField, setSortField] = useState<'value' | 'probability' | 'expectedCloseDate'>('value')
+   514→  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+   515→  const [showNewDeal, setShowNewDeal] = useState(false)
+   516→  const [newDeal, setNewDeal] = useState({ title: '', description: '', value: '', stage: 'proposal' as DealStage, probability: '30', expectedCloseDate: '', assignedTo: '', leadId: '' })
+   517→
+   518→  const sortedDeals = useMemo(() => {
+   519→    return [...deals].sort((a, b) => {
+   520→      const dir = sortDir === 'asc' ? 1 : -1
+   521→      if (sortField === 'value' || sortField === 'probability') {
+   522→        return ((a[sortField] as number) - (b[sortField] as number)) * dir
+   523→      }
+   524→      const aDate = typeof a.expectedCloseDate === 'string' ? new Date(a.expectedCloseDate).getTime() : 0
+   525→      const bDate = typeof b.expectedCloseDate === 'string' ? new Date(b.expectedCloseDate).getTime() : 0
+   526→      return (aDate - bDate) * dir
+   527→    })
+   528→  }, [deals, sortField, sortDir])
+   529→
+   530→  const handleSort = (field: typeof sortField) => {
+   531→    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+   532→    else { setSortField(field); setSortDir('desc') }
+   533→  }
+   534→
+   535→  const handleCreateDeal = async () => {
+   536→    try {
+   537→      await createDeal({
+   538→        title: newDeal.title,
+   539→        description: newDeal.description,
+   540→        value: Number(newDeal.value) || 0,
+   541→        stage: newDeal.stage,
+   542→        probability: Number(newDeal.probability) || 30,
+   543→        expectedCloseDate: newDeal.expectedCloseDate ? new Date(newDeal.expectedCloseDate) : null,
+   544→        assignedTo: newDeal.assignedTo,
+   545→        leadId: newDeal.leadId || null,
+   546→        clientId: null,
+   547→      })
+   548→      setShowNewDeal(false)
+   549→      setNewDeal({ title: '', description: '', value: '', stage: 'proposal', probability: '30', expectedCloseDate: '', assignedTo: '', leadId: '' })
+   550→    } catch (err) {
+   551→      console.warn('Failed to create deal:', err)
+   552→    }
+   553→  }
+   554→
+   555→  const getLeadName = (leadId: string | null) => {
+   556→    if (!leadId) return '—'
+   557→    const lead = leads.find(l => l.leadId === leadId)
+   558→    return lead ? lead.company : '—'
+   559→  }
+   560→
+   561→  const totalPipeline = deals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value, 0)
+   562→  const weightedPipeline = deals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value * d.probability / 100, 0)
+   563→
+   564→  if (loading) {
+   565→    return <div className="space-y-3">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+   566→  }
+   567→
+   568→  return (
+   569→    <div className="space-y-4">
+   570→      {/* Summary Cards */}
+   571→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   572→        <Card className="border-0 shadow-sm">
+   573→          <CardContent className="p-4">
+   574→            <div className="flex items-center gap-3">
+   575→              <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center">
+   576→                <DollarSign className="h-4.5 w-4.5 text-emerald-600" />
+   577→              </div>
+   578→              <div>
+   579→                <p className="text-[11px] text-muted-foreground">Total Pipeline</p>
+   580→                <p className="text-lg font-bold text-foreground">{formatINR(totalPipeline)}</p>
+   581→              </div>
+   582→            </div>
+   583→          </CardContent>
+   584→        </Card>
+   585→        <Card className="border-0 shadow-sm">
+   586→          <CardContent className="p-4">
+   587→            <div className="flex items-center gap-3">
+   588→              <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center">
+   589→                <Target className="h-4.5 w-4.5 text-amber-600" />
+   590→              </div>
+   591→              <div>
+   592→                <p className="text-[11px] text-muted-foreground">Weighted Pipeline</p>
+   593→                <p className="text-lg font-bold text-foreground">{formatINR(weightedPipeline)}</p>
+   594→              </div>
+   595→            </div>
+   596→          </CardContent>
+   597→        </Card>
+   598→        <Card className="border-0 shadow-sm">
+   599→          <CardContent className="p-4">
+   600→            <div className="flex items-center gap-3">
+   601→              <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center">
+   602→                <TrendingUp className="h-4.5 w-4.5 text-violet-600" />
+   603→              </div>
+   604→              <div>
+   605→                <p className="text-[11px] text-muted-foreground">Win Rate</p>
+   606→                <p className="text-lg font-bold text-foreground">
+   607→                  {deals.length > 0 ? Math.round(deals.filter(d => d.stage === 'closed_won').length / deals.filter(d => d.stage === 'closed_won' || d.stage === 'closed_lost').length * 100) || 0 : 0}%
+   608→                </p>
+   609→              </div>
+   610→            </div>
+   611→          </CardContent>
+   612→        </Card>
+   613→      </div>
+   614→
+   615→      {/* Deals Table */}
+   616→      <div className="flex items-center justify-between">
+   617→        <h3 className="text-sm font-semibold text-foreground">All Deals</h3>
+   618→        <Button size="sm" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowNewDeal(true)}>
+   619→          <Plus className="h-3.5 w-3.5" /> New Deal
+   620→        </Button>
+   621→      </div>
+   622→
+   623→      <Card className="border shadow-sm">
+   624→        <Table>
+   625→          <TableHeader>
+   626→            <TableRow>
+   627→              <TableHead className="text-xs">Deal</TableHead>
+   628→              <TableHead className="text-xs">Client/Lead</TableHead>
+   629→              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort('value')}>
+   630→                Value {sortField === 'value' && (sortDir === 'asc' ? '↑' : '↓')}
+   631→              </TableHead>
+   632→              <TableHead className="text-xs">Stage</TableHead>
+   633→              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort('probability')}>
+   634→                Prob. {sortField === 'probability' && (sortDir === 'asc' ? '↑' : '↓')}
+   635→              </TableHead>
+   636→              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort('expectedCloseDate')}>
+   637→                Expected Close {sortField === 'expectedCloseDate' && (sortDir === 'asc' ? '↑' : '↓')}
+   638→              </TableHead>
+   639→              <TableHead className="text-xs">Assigned</TableHead>
+   640→            </TableRow>
+   641→          </TableHeader>
+   642→          <TableBody>
+   643→            {sortedDeals.map(deal => {
+   644→              const stageConf = DEAL_STAGE_CONFIG[deal.stage]
+   645→              return (
+   646→                <TableRow key={deal.dealId} className="hover:bg-muted/40">
+   647→                  <TableCell className="text-xs font-medium">{deal.title}</TableCell>
+   648→                  <TableCell className="text-xs text-muted-foreground">{getLeadName(deal.leadId)}</TableCell>
+   649→                  <TableCell className="text-xs font-semibold text-emerald-700">{formatINR(deal.value)}</TableCell>
+   650→                  <TableCell>
+   651→                    <Badge variant="outline" className={`text-[10px] ${stageConf.bg} ${stageConf.color}`}>
+   652→                      {stageConf.label}
+   653→                    </Badge>
+   654→                  </TableCell>
+   655→                  <TableCell className="text-xs">{deal.probability}%</TableCell>
+   656→                  <TableCell className="text-xs text-muted-foreground">{formatDate(deal.expectedCloseDate)}</TableCell>
+   657→                  <TableCell>
+   658→                    <div className="flex items-center gap-1.5">
+   659→                      <Avatar className="h-5 w-5">
+   660→                        <AvatarFallback className="text-[8px] bg-emerald-100 text-emerald-700">
+   661→                          {deal.assignedTo?.split(' ').map(w => w[0]).join('') || '?'}
+   662→                        </AvatarFallback>
+   663→                      </Avatar>
+   664→                      <span className="text-[10px] text-muted-foreground">{deal.assignedTo}</span>
+   665→                    </div>
+   666→                  </TableCell>
+   667→                </TableRow>
+   668→              )
+   669→            })}
+   670→          </TableBody>
+   671→        </Table>
+   672→      </Card>
+   673→
+   674→      {/* New Deal Dialog */}
+   675→      <Dialog open={showNewDeal} onOpenChange={setShowNewDeal}>
+   676→        <DialogContent className="sm:max-w-lg">
+   677→          <DialogHeader>
+   678→            <DialogTitle className="flex items-center gap-2">
+   679→              <Briefcase className="h-5 w-5 text-emerald-600" /> Create New Deal
+   680→            </DialogTitle>
+   681→          </DialogHeader>
+   682→          <div className="grid gap-4 py-4">
+   683→            <div className="grid gap-2">
+   684→              <Label className="text-xs">Deal Title</Label>
+   685→              <Input value={newDeal.title} onChange={e => setNewDeal(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Annual GST Retainer" className="h-9 text-sm" />
+   686→            </div>
+   687→            <div className="grid grid-cols-2 gap-3">
+   688→              <div className="grid gap-2">
+   689→                <Label className="text-xs">Value (₹)</Label>
+   690→                <Input type="number" value={newDeal.value} onChange={e => setNewDeal(p => ({ ...p, value: e.target.value }))} placeholder="500000" className="h-9 text-sm" />
+   691→              </div>
+   692→              <div className="grid gap-2">
+   693→                <Label className="text-xs">Stage</Label>
+   694→                <Select value={newDeal.stage} onValueChange={v => setNewDeal(p => ({ ...p, stage: v as DealStage }))}>
+   695→                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+   696→                  <SelectContent>
+   697→                    <SelectItem value="proposal">Proposal</SelectItem>
+   698→                    <SelectItem value="negotiation">Negotiation</SelectItem>
+   699→                    <SelectItem value="closed_won">Closed Won</SelectItem>
+   700→                    <SelectItem value="closed_lost">Closed Lost</SelectItem>
+   701→                  </SelectContent>
+   702→                </Select>
+   703→              </div>
+   704→            </div>
+   705→            <div className="grid grid-cols-2 gap-3">
+   706→              <div className="grid gap-2">
+   707→                <Label className="text-xs">Probability (%)</Label>
+   708→                <Input type="number" value={newDeal.probability} onChange={e => setNewDeal(p => ({ ...p, probability: e.target.value }))} placeholder="50" className="h-9 text-sm" />
+   709→              </div>
+   710→              <div className="grid gap-2">
+   711→                <Label className="text-xs">Expected Close</Label>
+   712→                <Input type="date" value={newDeal.expectedCloseDate} onChange={e => setNewDeal(p => ({ ...p, expectedCloseDate: e.target.value }))} className="h-9 text-sm" />
+   713→              </div>
+   714→            </div>
+   715→            <div className="grid gap-2">
+   716→              <Label className="text-xs">Assigned To</Label>
+   717→              <Input value={newDeal.assignedTo} onChange={e => setNewDeal(p => ({ ...p, assignedTo: e.target.value }))} placeholder="Team member name" className="h-9 text-sm" />
+   718→            </div>
+   719→            <div className="grid gap-2">
+   720→              <Label className="text-xs">Description</Label>
+   721→              <Textarea value={newDeal.description} onChange={e => setNewDeal(p => ({ ...p, description: e.target.value }))} placeholder="Deal details..." className="text-sm min-h-[60px]" />
+   722→            </div>
+   723→          </div>
+   724→          <DialogFooter>
+   725→            <Button variant="outline" size="sm" onClick={() => setShowNewDeal(false)}>Cancel</Button>
+   726→            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleCreateDeal} disabled={!newDeal.title || !newDeal.value}>
+   727→              Create Deal
+   728→            </Button>
+   729→          </DialogFooter>
+   730→        </DialogContent>
+   731→      </Dialog>
+   732→    </div>
+   733→  )
+   734→}
+   735→
+   736→// ═══════════════════════════════════════════════════════════════════════════════
+   737→// MEETINGS VIEW
+   738→// ═══════════════════════════════════════════════════════════════════════════════
+   739→
+   740→function MeetingsView({ meetings, leads, loading }: { meetings: Array<FirestoreMeeting & { id: string }>; leads: Array<FirestoreLead & { id: string }>; loading: boolean }) {
+   741→  const [showNewMeeting, setShowNewMeeting] = useState(false)
+   742→  const [newMeeting, setNewMeeting] = useState({
+   743→    title: '', description: '', dateTime: '', duration: '30', type: 'video_call' as MeetingType,
+   744→    attendees: '', leadId: '',
+   745→  })
+   746→
+   747→  const upcoming = useMemo(() => {
+   748→    return meetings
+   749→      .filter(m => m.status === 'scheduled')
+   750→      .sort((a, b) => {
+   751→        const aTime = typeof a.dateTime === 'string' ? new Date(a.dateTime).getTime() : 0
+   752→        const bTime = typeof b.dateTime === 'string' ? new Date(b.dateTime).getTime() : 0
+   753→        return aTime - bTime
+   754→      })
+   755→  }, [meetings])
+   756→
+   757→  const handleCreateMeeting = async () => {
+   758→    try {
+   759→      await createMeeting({
+   760→        title: newMeeting.title,
+   761→        description: newMeeting.description,
+   762→        dateTime: newMeeting.dateTime ? new Date(newMeeting.dateTime) : null,
+   763→        duration: Number(newMeeting.duration) || 30,
+   764→        type: newMeeting.type,
+   765→        status: 'scheduled',
+   766→        attendees: newMeeting.attendees.split(',').map(s => s.trim()).filter(Boolean),
+   767→        notes: '',
+   768→        leadId: newMeeting.leadId || null,
+   769→        clientId: null,
+   770→      })
+   771→      setShowNewMeeting(false)
+   772→      setNewMeeting({ title: '', description: '', dateTime: '', duration: '30', type: 'video_call', attendees: '', leadId: '' })
+   773→    } catch (err) {
+   774→      console.warn('Failed to create meeting:', err)
+   775→    }
+   776→  }
+   777→
+   778→  if (loading) {
+   779→    return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}</div>
+   780→  }
+   781→
+   782→  return (
+   783→    <div className="space-y-4">
+   784→      <div className="flex items-center justify-between">
+   785→        <h3 className="text-sm font-semibold text-foreground">Upcoming Meetings</h3>
+   786→        <Button size="sm" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowNewMeeting(true)}>
+   787→          <Plus className="h-3.5 w-3.5" /> Schedule Meeting
+   788→        </Button>
+   789→      </div>
+   790→
+   791→      {upcoming.length === 0 ? (
+   792→        <div className="flex flex-col items-center justify-center py-16 text-center">
+   793→          <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+   794→            <Calendar className="h-6 w-6 text-slate-400" />
+   795→          </div>
+   796→          <p className="text-sm font-medium text-muted-foreground">No meetings scheduled</p>
+   797→          <p className="text-xs text-muted-foreground/60 mt-1">Schedule your first meeting to get started.</p>
+   798→          <Button size="sm" className="mt-4 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowNewMeeting(true)}>
+   799→            <Plus className="h-3.5 w-3.5 mr-1.5" /> Schedule Meeting
+   800→          </Button>
+   801→        </div>
+   802→      ) : (
+   803→        <div className="space-y-3">
+   804→          {upcoming.map(meeting => {
+   805→            const days = daysUntil(meeting.dateTime)
+   806→            const lead = leads.find(l => l.leadId === meeting.leadId)
+   807→            const statusConfig: Record<MeetingStatus, { color: string; bg: string }> = {
+   808→              scheduled: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+   809→              completed: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+   810→              cancelled: { color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
+   811→            }
+   812→            const sConf = statusConfig[meeting.status]
+   813→
+   814→            return (
+   815→              <motion.div
+   816→                key={meeting.meetingId}
+   817→                initial={{ opacity: 0, x: -10 }}
+   818→                animate={{ opacity: 1, x: 0 }}
+   819→                className="flex gap-4 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all dark:bg-gray-900"
+   820→              >
+   821→                {/* Date Badge */}
+   822→                <div className="flex flex-col items-center justify-center min-w-[56px]">
+   823→                  <span className="text-lg font-bold text-foreground">
+   824→                    {typeof meeting.dateTime === 'string' ? new Date(meeting.dateTime).getDate() : '—'}
+   825→                  </span>
+   826→                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">
+   827→                    {typeof meeting.dateTime === 'string' ? new Date(meeting.dateTime).toLocaleDateString('en-IN', { month: 'short' }) : ''}
+   828→                  </span>
+   829→                </div>
+   830→
+   831→                <Separator orientation="vertical" className="h-auto" />
+   832→
+   833→                {/* Meeting Details */}
+   834→                <div className="flex-1 min-w-0">
+   835→                  <div className="flex items-center gap-2 mb-1">
+   836→                    <span className="text-sm font-semibold text-foreground truncate">{meeting.title}</span>
+   837→                    <Badge variant="outline" className={`text-[9px] shrink-0 ${sConf.bg} ${sConf.color}`}>
+   838→                      {meeting.status}
+   839→                    </Badge>
+   840→                  </div>
+   841→                  <p className="text-xs text-muted-foreground mb-2 line-clamp-1">{meeting.description}</p>
+   842→                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+   843→                    <span className="flex items-center gap-1">
+   844→                      <Clock className="h-3 w-3" />
+   845→                      {formatTime(meeting.dateTime)} · {meeting.duration}min
+   846→                    </span>
+   847→                    <span className="flex items-center gap-1">
+   848→                      {MEETING_TYPE_ICON[meeting.type]}
+   849→                      {meeting.type.replace('_', ' ')}
+   850→                    </span>
+   851→                    {lead && (
+   852→                      <span className="flex items-center gap-1">
+   853→                        <Users className="h-3 w-3" />
+   854→                        {lead.company}
+   855→                      </span>
+   856→                    )}
+   857→                  </div>
+   858→                  <div className="flex items-center gap-1.5 mt-2">
+   859→                    {meeting.attendees.map((att, i) => (
+   860→                      <Avatar key={i} className="h-5 w-5 border border-white">
+   861→                        <AvatarFallback className="text-[8px] bg-emerald-100 text-emerald-700">
+   862→                          {att.split(' ').map(w => w[0]).join('')}
+   863→                        </AvatarFallback>
+   864→                      </Avatar>
+   865→                    ))}
+   866→                    <span className="text-[10px] text-muted-foreground ml-1">
+   867→                      {meeting.attendees.join(', ')}
+   868→                    </span>
+   869→                  </div>
+   870→                </div>
+   871→
+   872→                {/* Follow-up urgency */}
+   873→                <div className="flex flex-col items-end justify-center shrink-0">
+   874→                  {days <= 0 ? (
+   875→                    <Badge className="text-[10px] bg-red-500 text-white">Today</Badge>
+   876→                  ) : days === 1 ? (
+   877→                    <Badge className="text-[10px] bg-amber-500 text-white">Tomorrow</Badge>
+   878→                  ) : days <= 7 ? (
+   879→                    <span className="text-[10px] text-muted-foreground">{days} days</span>
+   880→                  ) : null}
+   881→                </div>
+   882→              </motion.div>
+   883→            )
+   884→          })}
+   885→        </div>
+   886→      )}
+   887→
+   888→      {/* New Meeting Dialog */}
+   889→      <Dialog open={showNewMeeting} onOpenChange={setShowNewMeeting}>
+   890→        <DialogContent className="sm:max-w-lg">
+   891→          <DialogHeader>
+   892→            <DialogTitle className="flex items-center gap-2">
+   893→              <Calendar className="h-5 w-5 text-emerald-600" /> Schedule Meeting
+   894→            </DialogTitle>
+   895→          </DialogHeader>
+   896→          <div className="grid gap-4 py-4">
+   897→            <div className="grid gap-2">
+   898→              <Label className="text-xs">Meeting Title</Label>
+   899→              <Input value={newMeeting.title} onChange={e => setNewMeeting(p => ({ ...p, title: e.target.value }))} placeholder="e.g., GST Compliance Discussion" className="h-9 text-sm" />
+   900→            </div>
+   901→            <div className="grid grid-cols-2 gap-3">
+   902→              <div className="grid gap-2">
+   903→                <Label className="text-xs">Date & Time</Label>
+   904→                <Input type="datetime-local" value={newMeeting.dateTime} onChange={e => setNewMeeting(p => ({ ...p, dateTime: e.target.value }))} className="h-9 text-sm" />
+   905→              </div>
+   906→              <div className="grid gap-2">
+   907→                <Label className="text-xs">Duration (min)</Label>
+   908→                <Select value={newMeeting.duration} onValueChange={v => setNewMeeting(p => ({ ...p, duration: v }))}>
+   909→                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+   910→                  <SelectContent>
+   911→                    <SelectItem value="15">15 minutes</SelectItem>
+   912→                    <SelectItem value="30">30 minutes</SelectItem>
+   913→                    <SelectItem value="45">45 minutes</SelectItem>
+   914→                    <SelectItem value="60">1 hour</SelectItem>
+   915→                    <SelectItem value="90">1.5 hours</SelectItem>
+   916→                  </SelectContent>
+   917→                </Select>
+   918→              </div>
+   919→            </div>
+   920→            <div className="grid grid-cols-2 gap-3">
+   921→              <div className="grid gap-2">
+   922→                <Label className="text-xs">Meeting Type</Label>
+   923→                <Select value={newMeeting.type} onValueChange={v => setNewMeeting(p => ({ ...p, type: v as MeetingType }))}>
+   924→                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+   925→                  <SelectContent>
+   926→                    <SelectItem value="video_call">Video Call</SelectItem>
+   927→                    <SelectItem value="phone_call">Phone Call</SelectItem>
+   928→                    <SelectItem value="in_person">In Person</SelectItem>
+   929→                  </SelectContent>
+   930→                </Select>
+   931→              </div>
+   932→              <div className="grid gap-2">
+   933→                <Label className="text-xs">Attendees (comma separated)</Label>
+   934→                <Input value={newMeeting.attendees} onChange={e => setNewMeeting(p => ({ ...p, attendees: e.target.value }))} placeholder="Name1, Name2" className="h-9 text-sm" />
+   935→              </div>
+   936→            </div>
+   937→            <div className="grid gap-2">
+   938→              <Label className="text-xs">Description</Label>
+   939→              <Textarea value={newMeeting.description} onChange={e => setNewMeeting(p => ({ ...p, description: e.target.value }))} placeholder="Meeting agenda..." className="text-sm min-h-[60px]" />
+   940→            </div>
+   941→          </div>
+   942→          <DialogFooter>
+   943→            <Button variant="outline" size="sm" onClick={() => setShowNewMeeting(false)}>Cancel</Button>
+   944→            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleCreateMeeting} disabled={!newMeeting.title || !newMeeting.dateTime}>
+   945→              Schedule
+   946→            </Button>
+   947→          </DialogFooter>
+   948→        </DialogContent>
+   949→      </Dialog>
+   950→    </div>
+   951→  )
+   952→}
+   953→
+   954→// ═══════════════════════════════════════════════════════════════════════════════
+   955→// LEAD SCORING VIEW
+   956→// ═══════════════════════════════════════════════════════════════════════════════
+   957→
+   958→function LeadScoringView({ leads, loading }: { leads: Array<FirestoreLead & { id: string }>; loading: boolean }) {
+   959→  const topLeads = useMemo(() => {
+   960→    return [...leads]
+   961→      .filter(l => l.status !== 'converted' && l.status !== 'lost')
+   962→      .sort((a, b) => b.leadScore - a.leadScore)
+   963→      .slice(0, 5)
+   964→  }, [leads])
+   965→
+   966→  const scoreDistribution = useMemo(() => {
+   967→    const ranges = [
+   968→      { label: 'Hot (70-100)', min: 70, max: 100, color: 'bg-emerald-500', count: 0 },
+   969→      { label: 'Warm (40-69)', min: 40, max: 69, color: 'bg-amber-500', count: 0 },
+   970→      { label: 'Cold (0-39)', min: 0, max: 39, color: 'bg-red-500', count: 0 },
+   971→    ]
+   972→    leads.filter(l => l.status !== 'converted' && l.status !== 'lost').forEach(lead => {
+   973→      const range = ranges.find(r => lead.leadScore >= r.min && lead.leadScore <= r.max)
+   974→      if (range) range.count++
+   975→    })
+   976→    return ranges
+   977→  }, [leads])
+   978→
+   979→  const avgScore = useMemo(() => {
+   980→    const active = leads.filter(l => l.status !== 'converted' && l.status !== 'lost')
+   981→    return active.length > 0 ? Math.round(active.reduce((sum, l) => sum + l.leadScore, 0) / active.length) : 0
+   982→  }, [leads])
+   983→
+   984→  if (loading) {
+   985→    return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
+   986→  }
+   987→
+   988→  return (
+   989→    <div className="space-y-6">
+   990→      {/* Average Score */}
+   991→      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   992→        <Card className="border-0 shadow-sm">
+   993→          <CardContent className="p-6 flex flex-col items-center">
+   994→            <div className={`relative h-32 w-32 rounded-full flex items-center justify-center mb-3`}>
+   995→              <svg className="h-32 w-32 -rotate-90" viewBox="0 0 120 120">
+   996→                <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />
+   997→                <circle
+   998→                  cx="60" cy="60" r="52" fill="none" strokeWidth="8" strokeLinecap="round"
+   999→                  strokeDasharray={`${(avgScore / 100) * 327} 327`}
+  1000→                  className={avgScore >= 70 ? 'text-emerald-500' : avgScore >= 40 ? 'text-amber-500' : 'text-red-500'}
+  1001→                  stroke="currentColor"
+  1002→                />
+  1003→              </svg>
+  1004→              <div className="absolute inset-0 flex items-center justify-center">
+  1005→                <span className="text-3xl font-bold text-foreground">{avgScore}</span>
+  1006→              </div>
+  1007→            </div>
+  1008→            <p className="text-xs font-semibold text-muted-foreground">Average Lead Score</p>
+  1009→          </CardContent>
+  1010→        </Card>
+  1011→
+  1012→        {/* Score Distribution */}
+  1013→        <Card className="border-0 shadow-sm">
+  1014→          <CardHeader className="pb-3 pt-4 px-4">
+  1015→            <CardTitle className="text-xs font-semibold">Score Distribution</CardTitle>
+  1016→          </CardHeader>
+  1017→          <CardContent className="px-4 pb-4 space-y-3">
+  1018→            {scoreDistribution.map(range => {
+  1019→              const total = scoreDistribution.reduce((s, r) => s + r.count, 0) || 1
+  1020→              return (
+  1021→                <div key={range.label} className="space-y-1">
+  1022→                  <div className="flex items-center justify-between">
+  1023→                    <span className="text-[11px] text-muted-foreground">{range.label}</span>
+  1024→                    <span className="text-[11px] font-semibold">{range.count}</span>
+  1025→                  </div>
+  1026→                  <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+  1027→                    <motion.div
+  1028→                      initial={{ width: 0 }}
+  1029→                      animate={{ width: `${(range.count / total) * 100}%` }}
+  1030→                      transition={{ duration: 0.5 }}
+  1031→                      className={`h-full rounded-full ${range.color}`}
+  1032→                    />
+  1033→                  </div>
+  1034→                </div>
+  1035→              )
+  1036→            })}
+  1037→          </CardContent>
+  1038→        </Card>
+  1039→      </div>
+  1040→
+  1041→      {/* Score Breakdown */}
+  1042→      <Card className="border-0 shadow-sm">
+  1043→        <CardHeader className="pb-3 pt-4 px-4">
+  1044→          <CardTitle className="text-xs font-semibold flex items-center gap-2">
+  1045→            <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Score Factors
+  1046→          </CardTitle>
+  1047→        </CardHeader>
+  1048→        <CardContent className="px-4 pb-4">
+  1049→          <div className="grid grid-cols-2 gap-3">
+  1050→            {[
+  1051→              { label: 'Company Size', score: 25, max: 25, desc: 'Based on estimated revenue' },
+  1052→              { label: 'GST Volume', score: 20, max: 25, desc: 'Monthly GST transactions' },
+  1053→              { label: 'Engagement Level', score: 18, max: 25, desc: 'Email & call interactions' },
+  1054→              { label: 'Source Quality', score: 15, max: 25, desc: 'Referral vs cold lead' },
+  1055→            ].map(factor => (
+  1056→              <div key={factor.label} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+  1057→                <div className="flex items-center justify-between mb-1">
+  1058→                  <span className="text-[11px] font-semibold text-foreground">{factor.label}</span>
+  1059→                  <span className="text-[10px] text-muted-foreground">{factor.score}/{factor.max}</span>
+  1060→                </div>
+  1061→                <Progress value={(factor.score / factor.max) * 100} className="h-1.5 mb-1" />
+  1062→                <p className="text-[9px] text-muted-foreground">{factor.desc}</p>
+  1063→              </div>
+  1064→            ))}
+  1065→          </div>
+  1066→        </CardContent>
+  1067→      </Card>
+  1068→
+  1069→      {/* Top Leads */}
+  1070→      <Card className="border-0 shadow-sm">
+  1071→        <CardHeader className="pb-3 pt-4 px-4">
+  1072→          <CardTitle className="text-xs font-semibold flex items-center gap-2">
+  1073→            <Award className="h-3.5 w-3.5 text-amber-500" /> Top Leads
+  1074→          </CardTitle>
+  1075→        </CardHeader>
+  1076→        <CardContent className="px-4 pb-4 space-y-2">
+  1077→          {topLeads.map((lead, idx) => (
+  1078→            <div key={lead.leadId} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/40 transition-colors">
+  1079→              <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-br ${scoreBgGradient(lead.leadScore)}`}>
+  1080→                {idx + 1}
+  1081→              </span>
+  1082→              <div className="flex-1 min-w-0">
+  1083→                <p className="text-xs font-semibold text-foreground truncate">{lead.contactName}</p>
+  1084→                <p className="text-[10px] text-muted-foreground truncate">{lead.company}</p>
+  1085→              </div>
+  1086→              <div className="text-right shrink-0">
+  1087→                <Badge variant="outline" className={`text-[10px] font-bold ${scoreColor(lead.leadScore)}`}>
+  1088→                  {lead.leadScore}
+  1089→                </Badge>
+  1090→                <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">{formatINR(lead.estimatedValue)}</p>
+  1091→              </div>
+  1092→            </div>
+  1093→          ))}
+  1094→          {topLeads.length === 0 && (
+  1095→            <p className="text-xs text-muted-foreground text-center py-4">No active leads to score</p>
+  1096→          )}
+  1097→        </CardContent>
+  1098→      </Card>
+  1099→    </div>
+  1100→  )
+  1101→}
+  1102→
+  1103→// ═══════════════════════════════════════════════════════════════════════════════
+  1104→// REVENUE FORECASTING VIEW
+  1105→// ═══════════════════════════════════════════════════════════════════════════════
+  1106→
+  1107→function RevenueForecastView({ leads, deals, loading }: { leads: Array<FirestoreLead & { id: string }>; deals: Array<FirestoreDeal & { id: string }>; loading: boolean }) {
+  1108→  const stageValues = useMemo(() => {
+  1109→    const stages: Record<string, { label: string; value: number; color: string }> = {
+  1110→      new: { label: 'New', value: 0, color: '#94a3b8' },
+  1111→      contacted: { label: 'Contacted', value: 0, color: '#3b82f6' },
+  1112→      qualified: { label: 'Qualified', value: 0, color: '#8b5cf6' },
+  1113→      proposal_sent: { label: 'Proposal', value: 0, color: '#f59e0b' },
+  1114→      negotiation: { label: 'Negotiation', value: 0, color: '#f97316' },
+  1115→    }
+  1116→    leads.filter(l => l.status !== 'converted' && l.status !== 'lost').forEach(lead => {
+  1117→      if (stages[lead.status]) stages[lead.status].value += lead.estimatedValue
+  1118→    })
+  1119→    return Object.values(stages)
+  1120→  }, [leads])
+  1121→
+  1122→  const maxBarValue = useMemo(() => Math.max(...stageValues.map(s => s.value), 1), [stageValues])
+  1123→
+  1124→  const weightedPipeline = useMemo(() => {
+  1125→    return deals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value * d.probability / 100, 0)
+  1126→  }, [deals])
+  1127→
+  1128→  const totalPipeline = useMemo(() => {
+  1129→    return deals.filter(d => d.stage !== 'closed_lost').reduce((sum, d) => sum + d.value, 0)
+  1130→  }, [deals])
+  1131→
+  1132→  const monthlyTrend = useMemo(() => {
+  1133→    // Compute from real deals — no Math.random fabrication.
+  1134→    // Returns empty array when no deals exist (honest empty state).
+  1135→    if (!deals || deals.length === 0) return []
+  1136→    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+  1137→    return months.map(m => {
+  1138→      const monthDeals = deals.filter((d: any) => {
+  1139→        const dDate = new Date(d.closeDate ?? d.createdAt ?? 0)
+  1140→        return dDate.getMonth() === months.indexOf(m) && (d.status === 'won' || d.status === 'closed')
+  1141→      })
+  1142→      return {
+  1143→        month: m,
+  1144→        converted: monthDeals.length,
+  1145→        value: monthDeals.reduce((s: number, d: any) => s + Number(d.value ?? 0), 0),
+  1146→      }
+  1147→    })
+  1148→  }, [deals])
+  1149→
+  1150→  if (loading) {
+  1151→    return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
+  1152→  }
+  1153→
+  1154→  return (
+  1155→    <div className="space-y-6">
+  1156→      {/* Summary */}
+  1157→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1158→        <Card className="border-0 shadow-sm">
+  1159→          <CardContent className="p-4">
+  1160→            <p className="text-[11px] text-muted-foreground mb-1">Total Pipeline Value</p>
+  1161→            <p className="text-xl font-bold text-foreground">{formatINR(totalPipeline)}</p>
+  1162→          </CardContent>
+  1163→        </Card>
+  1164→        <Card className="border-0 shadow-sm">
+  1165→          <CardContent className="p-4">
+  1166→            <p className="text-[11px] text-muted-foreground mb-1">Weighted Pipeline</p>
+  1167→            <p className="text-xl font-bold text-emerald-600">{formatINR(weightedPipeline)}</p>
+  1168→          </CardContent>
+  1169→        </Card>
+  1170→        <Card className="border-0 shadow-sm">
+  1171→          <CardContent className="p-4">
+  1172→            <p className="text-[11px] text-muted-foreground mb-1">Avg. Deal Size</p>
+  1173→            <p className="text-xl font-bold text-foreground">{formatINR(deals.length > 0 ? totalPipeline / deals.length : 0)}</p>
+  1174→          </CardContent>
+  1175→        </Card>
+  1176→      </div>
+  1177→
+  1178→      {/* Pipeline by Stage (SVG Bar Chart) */}
+  1179→      <Card className="border-0 shadow-sm">
+  1180→        <CardHeader className="pb-3 pt-4 px-4">
+  1181→          <CardTitle className="text-xs font-semibold flex items-center gap-2">
+  1182→            <BarChart3 className="h-3.5 w-3.5 text-emerald-500" /> Pipeline Value by Stage
+  1183→          </CardTitle>
+  1184→        </CardHeader>
+  1185→        <CardContent className="px-4 pb-4">
+  1186→          <div className="space-y-3">
+  1187→            {stageValues.map(stage => (
+  1188→              <div key={stage.label} className="space-y-1">
+  1189→                <div className="flex items-center justify-between">
+  1190→                  <span className="text-[11px] font-medium text-muted-foreground">{stage.label}</span>
+  1191→                  <span className="text-[11px] font-semibold text-foreground">{formatINR(stage.value)}</span>
+  1192→                </div>
+  1193→                <div className="h-6 rounded-lg bg-slate-50 dark:bg-slate-900 overflow-hidden">
+  1194→                  <motion.div
+  1195→                    initial={{ width: 0 }}
+  1196→                    animate={{ width: `${(stage.value / maxBarValue) * 100}%` }}
+  1197→                    transition={{ duration: 0.6, ease: 'easeOut' as const }}
+  1198→                    className="h-full rounded-lg flex items-center px-2"
+  1199→                    style={{ backgroundColor: stage.color, minWidth: stage.value > 0 ? '20px' : '0' }}
+  1200→                  >
+  1201→                    {stage.value > 0 && (
+  1202→                      <span className="text-[9px] font-semibold text-white whitespace-nowrap">
+  1203→                        {formatINR(stage.value)}
+  1204→                      </span>
+  1205→                    )}
+  1206→                  </motion.div>
+  1207→                </div>
+  1208→              </div>
+  1209→            ))}
+  1210→          </div>
+  1211→        </CardContent>
+  1212→      </Card>
+  1213→
+  1214→      {/* Monthly Conversion Trend */}
+  1215→      <Card className="border-0 shadow-sm">
+  1216→        <CardHeader className="pb-3 pt-4 px-4">
+  1217→          <CardTitle className="text-xs font-semibold flex items-center gap-2">
+  1218→            <TrendingUp className="h-3.5 w-3.5 text-emerald-500" /> Monthly Conversion Trend
+  1219→          </CardTitle>
+  1220→        </CardHeader>
+  1221→        <CardContent className="px-4 pb-4">
+  1222→          <div className="flex items-end gap-2 h-40">
+  1223→            {monthlyTrend.map((m, idx) => {
+  1224→              const maxVal = Math.max(...monthlyTrend.map(x => x.value), 1)
+  1225→              const height = (m.value / maxVal) * 100
+  1226→              return (
+  1227→                <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+  1228→                  <span className="text-[9px] font-semibold text-emerald-600">{m.converted}</span>
+  1229→                  <motion.div
+  1230→                    initial={{ height: 0 }}
+  1231→                    animate={{ height: `${height}%` }}
+  1232→                    transition={{ duration: 0.4, delay: idx * 0.08 }}
+  1233→                    className="w-full rounded-t-md bg-gradient-to-t from-emerald-500 to-emerald-400 min-h-[4px]"
+  1234→                  />
+  1235→                  <span className="text-[10px] text-muted-foreground">{m.month}</span>
+  1236→                </div>
+  1237→              )
+  1238→            })}
+  1239→          </div>
+  1240→          <div className="flex items-center justify-center gap-4 mt-3">
+  1241→            <div className="flex items-center gap-1">
+  1242→              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+  1243→              <span className="text-[9px] text-muted-foreground">Conversions</span>
+  1244→            </div>
+  1245→          </div>
+  1246→        </CardContent>
+  1247→      </Card>
+  1248→    </div>
+  1249→  )
+  1250→}
+  1251→
+  1252→// ═══════════════════════════════════════════════════════════════════════════════
+  1253→// ADD LEAD DIALOG
+  1254→// ═══════════════════════════════════════════════════════════════════════════════
+  1255→
+  1256→function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  1257→  const [form, setForm] = useState({
+  1258→    contactName: '', contactEmail: '', contactPhone: '', company: '', gstin: '',
+  1259→    source: 'website' as LeadSource, estimatedValue: '', notes: '', assignedTo: '',
+  1260→    nextFollowUp: '', tags: '',
+  1261→  })
+  1262→  const [saving, setSaving] = useState(false)
+  1263→
+  1264→  const handleSubmit = async () => {
+  1265→    setSaving(true)
+  1266→    try {
+  1267→      await createLead({
+  1268→        contactName: form.contactName,
+  1269→        contactEmail: form.contactEmail,
+  1270→        contactPhone: form.contactPhone,
+  1271→        company: form.company,
+  1272→        gstin: form.gstin || null,
+  1273→        source: form.source,
+  1274→        status: 'new',
+  1275→        leadScore: 50,
+  1276→        estimatedValue: Number(form.estimatedValue) || 0,
+  1277→        notes: form.notes,
+  1278→        assignedTo: form.assignedTo,
+  1279→        nextFollowUp: form.nextFollowUp ? new Date(form.nextFollowUp) : null,
+  1280→        convertedClientId: null,
+  1281→        tags: form.tags.split(',').map(s => s.trim()).filter(Boolean),
+  1282→      })
+  1283→      onOpenChange(false)
+  1284→      setForm({ contactName: '', contactEmail: '', contactPhone: '', company: '', gstin: '', source: 'website', estimatedValue: '', notes: '', assignedTo: '', nextFollowUp: '', tags: '' })
+  1285→    } catch (err) {
+  1286→      console.warn('Failed to create lead:', err)
+  1287→    } finally {
+  1288→      setSaving(false)
+  1289→    }
+  1290→  }
+  1291→
+  1292→  return (
+  1293→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1294→      <DialogContent className="sm:max-w-lg">
+  1295→        <DialogHeader>
+  1296→          <DialogTitle className="flex items-center gap-2">
+  1297→            <UserPlus className="h-5 w-5 text-emerald-600" /> Add New Lead
+  1298→          </DialogTitle>
+  1299→        </DialogHeader>
+  1300→        <div className="grid gap-4 py-4">
+  1301→          <div className="grid grid-cols-2 gap-3">
+  1302→            <div className="grid gap-2">
+  1303→              <Label className="text-xs">Contact Name *</Label>
+  1304→              <Input value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Full name" className="h-9 text-sm" />
+  1305→            </div>
+  1306→            <div className="grid gap-2">
+  1307→              <Label className="text-xs">Company *</Label>
+  1308→              <Input value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))} placeholder="Company name" className="h-9 text-sm" />
+  1309→            </div>
+  1310→          </div>
+  1311→          <div className="grid grid-cols-2 gap-3">
+  1312→            <div className="grid gap-2">
+  1313→              <Label className="text-xs">Email</Label>
+  1314→              <Input type="email" value={form.contactEmail} onChange={e => setForm(p => ({ ...p, contactEmail: e.target.value }))} placeholder="email@company.in" className="h-9 text-sm" />
+  1315→            </div>
+  1316→            <div className="grid gap-2">
+  1317→              <Label className="text-xs">Phone</Label>
+  1318→              <Input value={form.contactPhone} onChange={e => setForm(p => ({ ...p, contactPhone: e.target.value }))} placeholder="+91 98765 43210" className="h-9 text-sm" />
+  1319→            </div>
+  1320→          </div>
+  1321→          <div className="grid grid-cols-2 gap-3">
+  1322→            <div className="grid gap-2">
+  1323→              <Label className="text-xs">Source</Label>
+  1324→              <Select value={form.source} onValueChange={v => setForm(p => ({ ...p, source: v as LeadSource }))}>
+  1325→                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+  1326→                <SelectContent>
+  1327→                  {SOURCE_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+  1328→                </SelectContent>
+  1329→              </Select>
+  1330→            </div>
+  1331→            <div className="grid gap-2">
+  1332→              <Label className="text-xs">Estimated Value (₹)</Label>
+  1333→              <Input type="number" value={form.estimatedValue} onChange={e => setForm(p => ({ ...p, estimatedValue: e.target.value }))} placeholder="250000" className="h-9 text-sm" />
+  1334→            </div>
+  1335→          </div>
+  1336→          <div className="grid grid-cols-2 gap-3">
+  1337→            <div className="grid gap-2">
+  1338→              <Label className="text-xs">GSTIN (optional)</Label>
+  1339→              <Input value={form.gstin} onChange={e => setForm(p => ({ ...p, gstin: e.target.value }))} placeholder="27XXXXX1234F1Z5" className="h-9 text-sm" />
+  1340→            </div>
+  1341→            <div className="grid gap-2">
+  1342→              <Label className="text-xs">Next Follow-up</Label>
+  1343→              <Input type="date" value={form.nextFollowUp} onChange={e => setForm(p => ({ ...p, nextFollowUp: e.target.value }))} className="h-9 text-sm" />
+  1344→            </div>
+  1345→          </div>
+  1346→          <div className="grid gap-2">
+  1347→            <Label className="text-xs">Assigned To</Label>
+  1348→            <Input value={form.assignedTo} onChange={e => setForm(p => ({ ...p, assignedTo: e.target.value }))} placeholder="Team member name" className="h-9 text-sm" />
+  1349→          </div>
+  1350→          <div className="grid gap-2">
+  1351→            <Label className="text-xs">Tags (comma separated)</Label>
+  1352→            <Input value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} placeholder="manufacturing, high-value" className="h-9 text-sm" />
+  1353→          </div>
+  1354→          <div className="grid gap-2">
+  1355→            <Label className="text-xs">Notes</Label>
+  1356→            <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Lead details..." className="text-sm min-h-[60px]" />
+  1357→          </div>
+  1358→        </div>
+  1359→        <DialogFooter>
+  1360→          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+  1361→          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleSubmit} disabled={!form.contactName || !form.company || saving}>
+  1362→            {saving ? 'Adding...' : 'Add Lead'}
+  1363→          </Button>
+  1364→        </DialogFooter>
+  1365→      </DialogContent>
+  1366→    </Dialog>
+  1367→  )
+  1368→}
+  1369→
+  1370→// ═══════════════════════════════════════════════════════════════════════════════
+  1371→// MAIN CRM PAGE
+  1372→// ═══════════════════════════════════════════════════════════════════════════════
+  1373→
+  1374→export default function CRMPage() {
+  1375→  const { data: fireLeads, loading: leadsLoading } = useFireLeads()
+  1376→  const { data: fireDeals, loading: dealsLoading } = useFireDeals()
+  1377→  const { data: fireMeetings, loading: meetingsLoading } = useFireMeetings()
+  1378→  const [showAddLead, setShowAddLead] = useState(false)
+  1379→
+  1380→  // Use Firestore data when available, otherwise use sample data for demo
+  1381→  const leads = fireLeads.length > 0 ? fireLeads as unknown as Array<FirestoreLead & { id: string }> : SAMPLE_LEADS as unknown as Array<FirestoreLead & { id: string }>
+  1382→  const deals = fireDeals.length > 0 ? fireDeals as unknown as Array<FirestoreDeal & { id: string }> : SAMPLE_DEALS as unknown as Array<FirestoreDeal & { id: string }>
+  1383→  const meetings = fireMeetings.length > 0 ? fireMeetings as unknown as Array<FirestoreMeeting & { id: string }> : SAMPLE_MEETINGS as unknown as Array<FirestoreMeeting & { id: string }>
+  1384→
+  1385→  const loading = leadsLoading && dealsLoading && meetingsLoading
+  1386→
+  1387→  // Quick stats
+  1388→  const activeLeads = leads.filter(l => l.status !== 'converted' && l.status !== 'lost')
+  1389→  const totalPipeline = activeLeads.reduce((sum, l) => sum + l.estimatedValue, 0)
+  1390→  const conversionRate = leads.length > 0 ? Math.round(leads.filter(l => l.status === 'converted').length / leads.length * 100) : 0
+  1391→  const scheduledMeetings = meetings.filter(m => m.status === 'scheduled').length
+  1392→
+  1393→  return (
+  1394→    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
+  1395→      {/* Header */}
+  1396→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  1397→        <div>
+  1398→          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+  1399→            <Briefcase className="h-5 w-5 text-emerald-600" />
+  1400→            CRM Pipeline
+  1401→          </h2>
+  1402→          <p className="text-sm text-muted-foreground mt-0.5">Manage leads, deals, and client relationships</p>
+  1403→        </div>
+  1404→        <div className="flex items-center gap-2">
+  1405→          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setShowAddLead(true)}>
+  1406→            <UserPlus className="h-3.5 w-3.5" /> Add Lead
+  1407→          </Button>
+  1408→          <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowAddLead(true)}>
+  1409→            <Plus className="h-3.5 w-3.5" /> Quick Add
+  1410→          </Button>
+  1411→        </div>
+  1412→      </div>
+  1413→
+  1414→      {/* Quick Stats */}
+  1415→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  1416→        {[
+  1417→          { label: 'Active Leads', value: activeLeads.length, icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  1418→          { label: 'Pipeline Value', value: formatINR(totalPipeline), icon: DollarSign, color: 'text-amber-600', bg: 'bg-amber-50' },
+  1419→          { label: 'Conversion Rate', value: `${conversionRate}%`, icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50' },
+  1420→          { label: 'Upcoming Meetings', value: scheduledMeetings, icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-50' },
+  1421→        ].map(stat => (
+  1422→          <motion.div
+  1423→            key={stat.label}
+  1424→            initial={{ opacity: 0, y: 10 }}
+  1425→            animate={{ opacity: 1, y: 0 }}
+  1426→            className="rounded-xl border bg-white p-4 shadow-sm dark:bg-gray-900"
+  1427→          >
+  1428→            <div className="flex items-center gap-3">
+  1429→              <div className={`h-9 w-9 rounded-lg ${stat.bg} flex items-center justify-center`}>
+  1430→                <stat.icon className={`h-4.5 w-4.5 ${stat.color}`} />
+  1431→              </div>
+  1432→              <div>
+  1433→                <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+  1434→                <p className="text-lg font-bold text-foreground">{stat.value}</p>
+  1435→              </div>
+  1436→            </div>
+  1437→          </motion.div>
+  1438→        ))}
+  1439→      </div>
+  1440→
+  1441→      {/* Main Tabs */}
+  1442→      <Tabs defaultValue="pipeline" className="space-y-4">
+  1443→        <TabsList className="h-9 bg-muted/50 p-0.5">
+  1444→          <TabsTrigger value="pipeline" className="text-xs h-8 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+  1445→            Pipeline
+  1446→          </TabsTrigger>
+  1447→          <TabsTrigger value="deals" className="text-xs h-8 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+  1448→            Deals
+  1449→          </TabsTrigger>
+  1450→          <TabsTrigger value="meetings" className="text-xs h-8 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+  1451→            Meetings
+  1452→          </TabsTrigger>
+  1453→          <TabsTrigger value="scoring" className="text-xs h-8 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+  1454→            Scoring
+  1455→          </TabsTrigger>
+  1456→          <TabsTrigger value="forecast" className="text-xs h-8 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+  1457→            Forecast
+  1458→          </TabsTrigger>
+  1459→        </TabsList>
+  1460→
+  1461→        <TabsContent value="pipeline" className="mt-0">
+  1462→          <PipelineView leads={leads} loading={loading} />
+  1463→        </TabsContent>
+  1464→
+  1465→        <TabsContent value="deals" className="mt-0">
+  1466→          <DealsView deals={deals} leads={leads} loading={loading} />
+  1467→        </TabsContent>
+  1468→
+  1469→        <TabsContent value="meetings" className="mt-0">
+  1470→          <MeetingsView meetings={meetings} leads={leads} loading={loading} />
+  1471→        </TabsContent>
+  1472→
+  1473→        <TabsContent value="scoring" className="mt-0">
+  1474→          <LeadScoringView leads={leads} loading={loading} />
+  1475→        </TabsContent>
+  1476→
+  1477→        <TabsContent value="forecast" className="mt-0">
+  1478→          <RevenueForecastView leads={leads} deals={deals} loading={loading} />
+  1479→        </TabsContent>
+  1480→      </Tabs>
+  1481→
+  1482→      {/* Add Lead Dialog */}
+  1483→      <AddLeadDialog open={showAddLead} onOpenChange={setShowAddLead} />
+  1484→    </div>
+  1485→  )
+  1486→}
+  1487→

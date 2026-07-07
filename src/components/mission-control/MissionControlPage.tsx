@@ -291,7 +291,7 @@ function ScoreGauge({ score }: { score: number | null }) {
             strokeDasharray={c}
             initial={{ strokeDashoffset: c }}
             animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+            transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.2 }}
           />
         )}
       </svg>
@@ -377,7 +377,7 @@ function ChecklistCard({
       onClick={onClick}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
       className={`group glass-surface rounded-2xl p-4 text-left hover-lift transition-colors w-full ${
         checked ? 'ring-1 ring-emerald-400/20' : 'hover:bg-white/[0.05]'
       }`}
@@ -436,7 +436,7 @@ function KpiCard({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
       className="glass-surface rounded-3xl p-5 flex flex-col min-h-[160px]"
     >
       <div className="flex items-center gap-2 mb-2">
@@ -480,7 +480,7 @@ function WidgetCard({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
       className={`glass-surface rounded-3xl p-5 flex flex-col ${className ?? ''}`}
     >
       <div className="flex items-center gap-2 mb-4">
@@ -736,7 +736,7 @@ export default function MissionControlPage() {
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
+        transition={{ duration: 0.5, ease: 'easeOut' as const }}
         className="space-y-6"
       >
         {/* Eyebrow + status pill */}
@@ -793,7 +793,7 @@ export default function MissionControlPage() {
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' }}
+        transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' as const }}
       >
         <div className="glass-surface rounded-3xl p-6 md:p-8 flex flex-col items-center justify-center min-h-[260px]">
           {businessScore === null || businessScore === 0 ? (

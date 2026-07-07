@@ -221,7 +221,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' as const }}
     >
       <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
         {children}
@@ -689,7 +689,7 @@ export default function FirmOperationsPage() {
                     className="bg-amber-400 h-full rounded-full"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.min((metrics.avgProcessingTime / 12) * 100, 100)}%` }}
-                    transition={{ duration: 1, delay: 0.5, ease: 'easeOut' }}
+                    transition={{ duration: 1, delay: 0.5, ease: 'easeOut' as const }}
                   />
                 </div>
               </CardContent>
@@ -725,7 +725,7 @@ export default function FirmOperationsPage() {
                     className="bg-teal-400 h-full rounded-full"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.min((metrics.avgFilingTime / 12) * 100, 100)}%` }}
-                    transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+                    transition={{ duration: 1, delay: 0.6, ease: 'easeOut' as const }}
                   />
                 </div>
               </CardContent>

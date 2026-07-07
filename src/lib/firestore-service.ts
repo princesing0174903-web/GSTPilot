@@ -39,9 +39,13 @@ function generateId(): string {
 }
 
 function generateARN(): string {
-  const d = new Date();
-  const ds = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  return `AA${ds.slice(6)}${ds.slice(4, 6)}25${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
+  // DEPRECATED: This function is kept for reference but must NEVER be called.
+  // GSTPilot never simulates successful government filings. A real ARN can
+  // only come from the official GSTN API via the provider's fileReturn method.
+  throw new Error(
+    'generateARN() must never be called. Real ARNs come from GSTN only. ' +
+    'Use the API route /api/gstr-filing/[id]/file which calls the GSTN provider.'
+  );
 }
 
 function currentUserId(): string {
@@ -240,54 +244,36 @@ export async function updateDocumentStatus(docId: string, status: DocumentStatus
   await updateDoc(docRef, { status, ...extras, updatedAt: serverTimestamp() });
 }
 
-/** Simulate document extraction (would be a Cloud Function in production) */
+/** Queue document for extraction.
+ *  In production this would be a Cloud Function trigger. Until that wiring
+ *  exists, we mark the document as "queued" (NOT fabricated as "extracted"
+ *  with random invoice counts / accuracy). The dashboard's
+ *  `documentsProcessed` / `extractionsPending` metrics then reflect reality
+ *  instead of fabricated numbers.
+ */
 function simulateExtraction(docId: string, clientId: string): void {
-  // Mark as processing
+  // Mark as queued — real extraction happens when an OCR/AI pipeline picks it up.
   setTimeout(async () => {
     try {
       const docRef = doc(db, COLLECTIONS.DOCUMENTS, docId);
       await updateDoc(docRef, {
-        status: 'processing',
-        extractionStatus: 'in_progress',
+        status: 'queued',
+        extractionStatus: 'pending',
+        // Do NOT fabricate extractedInvoiceCount / extractionAccuracy here.
+        // Those fields are populated by the real extraction pipeline.
         updatedAt: serverTimestamp(),
       });
 
-      // Simulate extraction time
-      setTimeout(async () => {
-        try {
-          const invoiceCount = Math.floor(Math.random() * 15) + 3;
-          const accuracy = Math.floor(Math.random() * 15) + 85;
-          await updateDoc(docRef, {
-            status: 'extracted',
-            extractionStatus: 'completed',
-            extractedInvoiceCount: invoiceCount,
-            extractionAccuracy: accuracy,
-            updatedAt: serverTimestamp(),
-          });
-
-          addActivity({
-            type: 'document_processed',
-            title: 'Document processed',
-            description: `Extracted ${invoiceCount} invoices with ${accuracy}% accuracy`,
-            clientId,
-            entityType: COLLECTIONS.DOCUMENTS,
-            entityId: docId,
-          });
-
-          addNotification({
-            type: 'extraction_complete',
-            priority: 'normal',
-            title: 'Document extraction complete',
-            message: `${invoiceCount} invoices extracted with ${accuracy}% accuracy.`,
-            entityType: COLLECTIONS.DOCUMENTS,
-            entityId: docId,
-          });
-        } catch (e) {
-          console.warn('[Workflow] Extraction completion failed:', e);
-        }
-      }, 2500 + Math.random() * 2000);
+      addActivity({
+        type: 'document_processed',
+        title: 'Document queued for extraction',
+        description: `Document is waiting to be processed by the extraction pipeline.`,
+        clientId,
+        entityType: COLLECTIONS.DOCUMENTS,
+        entityId: docId,
+      });
     } catch (e) {
-      console.warn('[Workflow] Extraction start failed:', e);
+      console.warn('[Workflow] Extraction queueing failed:', e);
     }
   }, 800);
 }
@@ -329,8 +315,9 @@ export async function createInvoice(data: Omit<FirestoreInvoice, 'invoiceId' | '
   });
 
   // Update draft return for this client's period
+  // NOTE: totalTax is a NUMBER field (see FirestoreInvoice type), not a method.
   if (data.period) {
-    updateDraftReturnForInvoice(firmId || '', data.clientId, data.returnType, data.period, data.totalAmount, data.totalTax());
+    updateDraftReturnForInvoice(firmId || '', data.clientId, data.returnType, data.period, data.totalAmount, typeof data.totalTax === 'number' ? data.totalTax : 0);
   }
 
   return invoiceId;
@@ -458,57 +445,53 @@ export async function updateReturnStatus(returnId: string, status: FilingStatus,
 }
 
 export async function fileReturn(returnId: string): Promise<string> {
-  const returnRef = doc(db, COLLECTIONS.RETURNS, returnId);
-  const returnSnap = await getDoc(returnRef);
-  if (!returnSnap.exists()) throw new Error('Return not found');
-
-  const data = returnSnap.data() as FirestoreReturn;
-  const arn = generateARN();
-  const filedDate = new Date().toISOString().split('T')[0];
-
-  await updateDoc(returnRef, {
-    status: 'filed' as FilingStatus,
-    filedDate,
-    acknowledgmentNumber: arn,
-    updatedAt: serverTimestamp(),
+  // CRITICAL: This function MUST NOT fake the ARN.
+  // GSTPilot never simulates successful government filings.
+  //
+  // The filing is delegated to the server-side API route which:
+  //   1. Checks for an active GSTN connection (Firestore gst_connections)
+  //   2. If no connection: returns 400 "GSTN connection required"
+  //   3. If mock provider: returns 400 "Cannot file in mock mode"
+  //   4. If official provider: calls provider.fileReturn() → real ARN
+  //   5. Only marks as "filed" if a real ARN is returned
+  //
+  // The return status transitions:
+  //   draft → prepared → validated → reviewed → submitted (awaiting GSTN ack)
+  //   submitted → filed (only when real ARN received from GSTN)
+  const response = await fetch(`/api/gstr-filing/${returnId}/file`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
   });
 
-  // Side effects
-  const firmId = data.firmId || currentFirmId();
-  if (firmId) {
-    incrementFirmCounter(firmId, 'filedReturnCount', 1);
-    incrementFirmCounter(firmId, 'totalTaxVolume', data.totalTax);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Filing failed' }));
+    throw new Error(error.error || 'Failed to file return with GSTN');
   }
-  incrementClientCounter(data.clientId, 'pendingReturnCount', -1);
 
-  addActivity({
-    type: 'return_filed',
-    title: 'Return filed',
-    description: `${data.returnType} for ${data.period} filed — ARN: ${arn}`,
-    clientId: data.clientId,
-    entityType: COLLECTIONS.RETURNS,
-    entityId: returnId,
-    metadata: { arn, taxAmount: data.totalTax },
-  });
+  const result = await response.json();
 
-  addNotification({
-    type: 'filing_completed',
-    priority: 'high',
-    title: 'Return filed successfully',
-    message: `${data.returnType} for ${data.period} filed. ARN: ${arn}`,
-    entityType: COLLECTIONS.RETURNS,
-    entityId: returnId,
-  });
+  // If the filing was submitted but not yet acknowledged (no real ARN),
+  // the return is marked as "submitted" — not "filed".
+  if (!result.acknowledgmentNumber) {
+    throw new Error(
+      'Return submitted to GSTN but not yet acknowledged. ' +
+      'The return status is now "submitted" — it will become "filed" when ' +
+      'GSTN returns an acknowledgment number (ARN). Check back after syncing.'
+    );
+  }
 
-  recalculateComplianceScore(data.clientId);
-
-  return arn;
+  return result.acknowledgmentNumber as string;
 }
 
-/** Auto-create draft returns for current period */
+/** Auto-create draft returns for current period.
+ *  Period format MUST be "YYYY-MM" to match gst-utils.ts (getFilingDueDate /
+ *  isOverdue / periodToLabel) and the dashboard's parsePeriod. Writing
+ *  "MM-YYYY" here previously caused "undefined 6" labels and inflated
+ *  overdue counts on the dashboard.
+ */
 async function autoCreateDraftReturns(firmId: string, clientId: string): Promise<void> {
   const now = new Date();
-  const period = `${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const fy = now.getMonth() >= 3 ? `${now.getFullYear()}-${String(now.getFullYear() + 1).slice(2)}` : `${now.getFullYear() - 1}-${String(now.getFullYear()).slice(2)}`;
 
   for (const returnType of ['GSTR-1', 'GSTR-3B'] as const) {
@@ -586,35 +569,26 @@ export async function createReconciliation(data: {
   const reconId = generateId();
   const reconRef = doc(db, COLLECTIONS.RECONCILIATIONS, reconId);
 
-  // Simulate reconciliation results
-  const totalRecords = Math.floor(Math.random() * 50) + 10;
-  const matched = Math.floor(totalRecords * (0.6 + Math.random() * 0.25));
-  const partialMatches = Math.floor((totalRecords - matched) * 0.4);
-  const unmatched = totalRecords - matched - partialMatches;
-  const highRisk = Math.floor(unmatched * 0.3);
-
+  // ── Production reconciliation ──
+  // Do NOT fabricate random mismatch records. Compute real counts from the
+  // books (Firestore invoices for this client+period) and the portal
+  // (GSTR-2B sync records if available). If portal data hasn't been synced
+  // yet, the reconciliation is created with status "pending" and zeroed
+  // counters — the real reconciliation engine (lib/banking/reconcile.ts or
+  // lib/gstn/reconcile.ts) populates the mismatches when it runs.
+  const booksQuery = query(
+    collection(db, COLLECTIONS.INVOICES),
+    where('clientId', '==', data.clientId),
+    where('period', '==', data.period)
+  );
+  const booksSnap = await getDocs(booksQuery);
+  const totalRecords = booksSnap.size;
+  const matched = 0;
+  const partialMatches = 0;
+  const unmatched = 0;
+  const highRisk = 0;
   const mismatches: ReconMismatch[] = [];
-  for (let i = 0; i < unmatched + partialMatches; i++) {
-    const booksAmount = Math.floor(Math.random() * 100000) + 5000;
-    const diff = Math.floor(booksAmount * (Math.random() * 0.15));
-    mismatches.push({
-      invoiceNumber: `INV-${String(i + 1).padStart(4, '0')}`,
-      invoiceDate: new Date().toISOString().split('T')[0],
-      sourceGstin: '27AAACR5055K1ZB',
-      matchedGstin: i < partialMatches ? '27AAACR5055K1ZB' : null,
-      matchStatus: i < partialMatches ? 'partial_match' as MatchStatus : 'missing_in_books' as MatchStatus,
-      matchScore: i < partialMatches ? 70 + Math.floor(Math.random() * 20) : 0,
-      booksAmount,
-      portalAmount: booksAmount + (Math.random() > 0.5 ? diff : -diff),
-      difference: diff,
-      reason: i < partialMatches ? 'Amount mismatch' : 'Invoice not found in GSTR-2B',
-      resolved: false,
-      resolvedBy: null,
-      resolvedAt: null,
-    });
-  }
-
-  const gstDifference = mismatches.reduce((sum, m) => sum + m.difference, 0);
+  const gstDifference = 0;
 
   const reconData: FirestoreReconciliation = {
     reconId,
@@ -622,7 +596,10 @@ export async function createReconciliation(data: {
     clientId: data.clientId,
     period: data.period,
     sources: data.sources,
-    status: 'completed',
+    // Status is "pending" until the real reconciliation engine runs and
+    // populates mismatches. Previously this was hard-coded to "completed"
+    // with fabricated random counts.
+    status: 'pending',
     totalRecords,
     matched,
     unmatched,
@@ -639,24 +616,24 @@ export async function createReconciliation(data: {
 
   addActivity({
     type: 'reconciliation_run',
-    title: 'Reconciliation completed',
-    description: `${data.sources}: ${matched}/${totalRecords} matched, ${unmatched} unmatched`,
+    title: 'Reconciliation queued',
+    description: `${data.sources}: ${totalRecords} book invoices found. Waiting for portal data to reconcile.`,
     clientId: data.clientId,
     entityType: COLLECTIONS.RECONCILIATIONS,
     entityId: reconId,
-    metadata: { matched, unmatched, gstDifference },
+    metadata: { matched, unmatched, gstDifference, totalRecords },
   });
 
-  // Generate AI recommendations for mismatches
-  if (highRisk > 0) {
-    generateAIRecommendations(firmId || '', data.clientId, reconId, mismatches);
-  }
+  // Do NOT auto-generate AI recommendations with random confidence scores.
+  // Real recommendations are generated by the reconciliation engine after
+  // actual mismatches are detected.
+  void generateAIRecommendations; // keep the symbol referenced for tree-shaking
 
   addNotification({
     type: 'mismatch_found',
-    priority: highRisk > 3 ? 'urgent' : 'high',
-    title: 'Reconciliation mismatches found',
-    message: `${unmatched} unmatched and ${partialMatches} partial matches found. ITC difference: ₹${gstDifference.toLocaleString('en-IN')}`,
+    priority: 'normal',
+    title: 'Reconciliation created',
+    message: `Reconciliation queued for ${data.period}. ${totalRecords} book invoices will be matched against portal data.`,
     entityType: COLLECTIONS.RECONCILIATIONS,
     entityId: reconId,
   });
@@ -805,7 +782,7 @@ function generateAIRecommendations(firmId: string, clientId: string, reconId: st
       title: `${recType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} — ${mismatch.invoiceNumber}`,
       description: `ITC difference of ₹${mismatch.difference.toLocaleString('en-IN')} detected for invoice ${mismatch.invoiceNumber}. ${mismatch.reason}.`,
       suggestedAction: getSuggestedAction(recType),
-      confidenceScore: 70 + Math.floor(Math.random() * 25),
+      confidenceScore: 80, // deterministic baseline; real confidence comes from the ML model when available
       riskLevel: mismatch.difference > 50000 ? 'high' as RiskLevel : 'medium' as RiskLevel,
       status: 'active',
       dismissedBy: null,

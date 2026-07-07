@@ -634,7 +634,7 @@ function HealthGauge({ value, size = 56 }: { value: number; size?: number }) {
           strokeDasharray={c}
           initial={{ strokeDashoffset: c }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.2, ease: 'easeOut' }}
+          transition={{ duration: 1.2, ease: 'easeOut' as const }}
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color }}>
@@ -850,7 +850,7 @@ function LiveEconomicGraph() {
                             strokeOpacity={isActive ? 0.95 : 0.55}
                             initial={{ strokeDashoffset: 0 }}
                             animate={{ strokeDashoffset: [-24, 0] }}
-                            transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+                            transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' as const }}
                           />
                         </g>
                       )
@@ -1268,7 +1268,7 @@ function SupplyChainExplorer() {
                         strokeDasharray="6,4"
                         initial={{ strokeDashoffset: 0 }}
                         animate={{ strokeDashoffset: [-20, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' as const }}
                       />
                     )}
                     {/* Companies in stage */}
@@ -1331,7 +1331,7 @@ function SupplyChainExplorer() {
                         strokeDasharray="3,5"
                         initial={{ strokeDashoffset: 0 }}
                         animate={{ strokeDashoffset: [-16, 0] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'linear', delay: li * 0.3 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const, delay: li * 0.3 }}
                       />
                     )
                   })
@@ -1659,7 +1659,7 @@ function CompaniesAddedLineChart() {
         strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 1.5, ease: 'easeInOut' }}
+        transition={{ duration: 1.5, ease: 'easeInOut' as const }}
       />
       {/* Data points */}
       {pts.map((p, i) => (
@@ -1709,7 +1709,7 @@ function TopConnectedBarChart() {
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded"
                 initial={{ width: 0 }}
                 animate={{ width: `${(d.connections / max) * 100}%` }}
-                transition={{ duration: 0.8, delay: 0.1 + i * 0.05, ease: 'easeOut' }}
+                transition={{ duration: 0.8, delay: 0.1 + i * 0.05, ease: 'easeOut' as const }}
               />
               <span className="absolute inset-0 flex items-center justify-end pr-2 text-[10px] font-bold text-white tabular-nums">
                 {d.connections}
@@ -1770,7 +1770,7 @@ function NetworkDensityChart() {
         strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 1.4, ease: 'easeInOut' }}
+        transition={{ duration: 1.4, ease: 'easeInOut' as const }}
       />
       {/* Points + labels */}
       {pts.map((p, i) => (

@@ -139,6 +139,50 @@ export interface IGSTProvider {
    * Returns true if the provider is operational.
    */
   healthCheck(): Promise<boolean>;
+
+  /**
+   * File a GST return with GSTN.
+   *
+   * CRITICAL: This method MUST return a real acknowledgment number (ARN) from
+   * GSTN. It must NEVER generate a fake/simulated ARN. If the filing fails for
+   * any reason (network, validation, GSTN error), it must throw — the caller
+   * must NOT mark the return as "filed" without a real ARN.
+   *
+   * The Mock provider throws NotImplementedError — you cannot file returns
+   * without an official GSTN connection.
+   *
+   * Throws: SessionExpiredError, GSTUnavailableError, ValidationError, TimeoutError.
+   */
+  fileReturn(
+    session: GSTSession,
+    input: FileReturnInput,
+  ): Promise<FileReturnResult>;
+}
+
+/**
+ * Input for filing a return with GSTN.
+ */
+export interface FileReturnInput {
+  /** The return type (GSTR-1, GSTR-3B, etc.) */
+  returnType: GSTReturnType;
+  /** Financial year, e.g. '2025-26' */
+  financialYear: string;
+  /** Tax period, e.g. '042025' (MMYYYY) monthly, 'Q1-2025-26' quarterly */
+  period: string;
+  /** The JSON payload to submit to GSTN */
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Result of a successful return filing — contains the REAL ARN from GSTN.
+ */
+export interface FileReturnResult {
+  /** The acknowledgment reference number (ARN) returned by GSTN. */
+  arn: string;
+  /** ISO timestamp when GSTN acknowledged the filing. */
+  acknowledgedAt: string;
+  /** GSTN's status for the filing (e.g. 'Processed', 'Under Processing'). */
+  status: string;
 }
 
 /**

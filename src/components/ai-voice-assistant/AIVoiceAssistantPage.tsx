@@ -110,7 +110,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+      transition={{ duration: 0.4, delay, ease: 'easeOut' as const }}
       className={className}
     >
       {children}
@@ -155,7 +155,7 @@ function WaveformVisualizer({ isActive }: { isActive: boolean }) {
               duration: animDuration,
               delay: animDelay,
               repeat: Infinity,
-              ease: 'easeInOut',
+              ease: 'easeInOut' as const,
             }}
           />
         );
@@ -361,17 +361,17 @@ export default function AIVoiceAssistantPage() {
                           <motion.div
                             className="absolute inset-0 rounded-full border-2 border-emerald-400"
                             animate={{ scale: [1, 1.5], opacity: [0.6, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' as const }}
                           />
                           <motion.div
                             className="absolute inset-0 rounded-full border-2 border-emerald-400"
                             animate={{ scale: [1, 1.8], opacity: [0.4, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut', delay: 0.3 }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' as const, delay: 0.3 }}
                           />
                           <motion.div
                             className="absolute inset-0 rounded-full border-2 border-emerald-300"
                             animate={{ scale: [1, 2.1], opacity: [0.2, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut', delay: 0.6 }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' as const, delay: 0.6 }}
                           />
                         </>
                       )}

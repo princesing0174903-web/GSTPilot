@@ -444,7 +444,9 @@ export function useFireOrganizations() {
 
 // ─── Memberships ────────────────────────────────────────────────────────────
 // NOTE: The canonical membership collection is `organization_members`. The
-// `memberships` collection is vestigial. Callers should use `useOrg().members`.
+// `memberships` collection is vestigial. Callers should use `useOrg().members`
+// for the one-shot roster loaded by OrgContext, or `useOrgMembers()` below for
+// a real-time subscription with per-collection loading/error state.
 
 export function useFireMemberships(_firmId?: string | null) {
   // Ignore the legacy firmId arg; members come from OrgContext.
@@ -455,6 +457,46 @@ export function useFireMemberships(_firmId?: string | null) {
     loading: false,
     error: null,
   };
+}
+
+/**
+ * Shape of an `organization_members/{orgId}_{uid}` document AFTER `convertDoc`
+ * has run — Firestore Timestamps have been converted to ISO strings (or null).
+ *
+ * Mirrors `OrganizationMemberDoc` from `@/lib/auth/types` but with the
+ * post-conversion timestamp representation.
+ */
+export interface FirestoreOrganizationMember {
+  organizationId: string;
+  userId: string;
+  userEmail: string;
+  userDisplayName: string;
+  userPhotoURL: string | null;
+  role: string; // OrgRole union, kept loose for graceful degradation
+  status: string; // MemberStatus union, kept loose for graceful degradation
+  invitedBy: string | null;
+  invitedAt: string | null;
+  joinedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * Real-time subscription to the current organization's member roster.
+ *
+ * Subscribes to `organization_members` scoped by `organizationId`. Returns
+ * the raw membership rows — callers are responsible for any UI-role mapping
+ * (e.g. translating the Firestore `OrgRole` enum to the role labels shown in
+ * the Settings page).
+ *
+ * In preview mode (no real org), returns an empty array without subscribing —
+ * same graceful-degradation contract as every other hook in this file.
+ */
+export function useOrgMembers() {
+  return useFirestoreCollection<FirestoreOrganizationMember>(
+    COLLECTIONS.ORGANIZATION_MEMBERS,
+    [orderBy('joinedAt', 'asc')],
+  );
 }
 
 // ─── Executive Scores (computed from live data) ─────────────────────────────

@@ -43,6 +43,7 @@ import type {
   UserProfileDoc,
   OrgRole,
   Permission,
+  OrgMembership,
 } from '@/lib/auth/types';
 import { useAuth } from './AuthContext';
 
@@ -57,6 +58,9 @@ interface OrgContextValue {
   membership: OrganizationMemberDoc | null;
   /** All members of the current organization. */
   members: OrganizationMemberDoc[];
+  /** All organizations the user belongs to (each with their role).
+   *  Powers the organization switcher UI. Empty until first load resolves. */
+  organizations: OrgMembership[];
   /** The current user's role within the org (convenience accessor). */
   role: OrgRole | null;
   /** True while the org context is being resolved (initial load). */
@@ -72,8 +76,11 @@ interface OrgContextValue {
 
   /** Reload the entire org context (e.g. after a member is invited). */
   reload: () => Promise<void>;
-  /** Switch the current organization (updates `currentOrganizationId`). */
-  switchOrganization: (orgId: string) => Promise<void>;
+  /** Switch the current organization (updates `currentOrganizationId`).
+   *  Resolves with `{ error }` — `error` is null on success so the caller
+   *  can show its own toast / inline feedback. The error is ALSO surfaced
+   *  via `error` on this context for global handlers. */
+  switchOrganization: (orgId: string) => Promise<{ error: string | null }>;
   /** Mark onboarding complete and set the current org. */
   completeOnboarding: (orgId: string) => Promise<void>;
 
@@ -86,12 +93,13 @@ const OrgContext = createContext<OrgContextValue | undefined>(undefined);
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function OrgProvider({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, clearIsLoading } = useAuth();
 
   const [profile, setProfile] = useState<UserProfileDoc | null>(null);
   const [organization, setOrganization] = useState<OrganizationDoc | null>(null);
   const [membership, setMembership] = useState<OrganizationMemberDoc | null>(null);
   const [members, setMembers] = useState<OrganizationMemberDoc[]>([]);
+  const [organizations, setOrganizations] = useState<OrgMembership[]>([]);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +107,16 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // Track the user we're currently loading for, to avoid redundant fetches
   // when Firebase fires `onIdTokenChanged` multiple times.
   const loadingForRef = useRef<string | null>(null);
+
+  // Whenever loading finishes (success OR preview fallback OR error), clear
+  // the AuthContext `isLoading` flag so the login page's "Redirecting…"
+  // card disappears. Previously `isLoading` stayed true for 3s (safety
+  // timeout) even after the org resolved, making login feel slow.
+  useEffect(() => {
+    if (!loading) {
+      clearIsLoading();
+    }
+  }, [loading, clearIsLoading]);
 
   /**
    * Resolve the full org context for a Firebase user. Idempotent — if a load
@@ -114,27 +132,34 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
 
-    const MAX_RETRIES = 3;
-    const BACKOFF_MS = [500, 1000, 2000];
+    // Reduced from 3 retries @ [500,1000,2000]ms = 3.5s of pure waiting to
+    // 1 retry @ 500ms. Permission-denied / not-found are permanent and don't
+    // benefit from retries; transient network blips recover in <500ms.
+    const MAX_RETRIES = 1;
+    const BACKOFF_MS = [500];
 
     const attemptResolve = async (attempt: number): Promise<'done' | 'retry' | 'fail'> => {
       try {
         const provider =
           fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
 
-        // 1. Fetch / create the user profile.
-        const { profile: userProfile, error: profileError } = await fetchOrCreateUserProfile({
-          uid: fbUser.uid,
-          email: fbUser.email || '',
-          displayName: fbUser.displayName,
-          photoURL: fbUser.photoURL,
-          provider,
-        });
+        // 1. Fetch / create the user profile AND the user's org memberships
+        //    in PARALLEL (previously sequential — saved ~200-500ms on login).
+        const [profileResult, membershipsResult] = await Promise.all([
+          fetchOrCreateUserProfile({
+            uid: fbUser.uid,
+            email: fbUser.email || '',
+            displayName: fbUser.displayName,
+            photoURL: fbUser.photoURL,
+            provider,
+          }),
+          fetchUserOrganizations(fbUser.uid),
+        ]);
+
+        const { profile: userProfile, error: profileError } = profileResult;
+        const { memberships, error: memberError } = membershipsResult;
 
         if (profileError || !userProfile) {
-          // The profile is mandatory for multi-tenancy. Retry on any failure
-          // (transient errors like "offline" are the common case; permanent
-          // errors will fail identically on retry and surface after exhaustion).
           if (attempt < MAX_RETRIES) {
             return 'retry';
           }
@@ -143,26 +168,25 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setOrganization(null);
           setMembership(null);
           setMembers([]);
+          setOrganizations([]);
           return 'fail';
         }
 
         setProfile(userProfile);
+        // Set memberships immediately so the org switcher renders.
+        if (!memberError) {
+          setOrganizations(memberships);
+        }
 
         // 2. Resolve the current organization.
         let orgId = userProfile.currentOrganizationId;
 
-        // If the profile has no current org, look up the user's memberships
-        // and pick the first active one (if any).
-        if (!orgId) {
-          const { memberships, error: memberError } = await fetchUserOrganizations(fbUser.uid);
-          if (memberError && attempt < MAX_RETRIES) {
-            return 'retry';
-          }
-          if (memberships.length > 0) {
-            orgId = memberships[0].organization.id;
-            // Persist the choice so we don't re-resolve next time.
-            await setCurrentOrganizationService(fbUser.uid, orgId);
-          }
+        // If the profile has no current org, fall back to the first active
+        // membership (if any) and persist the choice.
+        if (!orgId && memberships.length > 0) {
+          orgId = memberships[0].organization.id;
+          // Fire-and-forget the persistence — don't block the UI on it.
+          setCurrentOrganizationService(fbUser.uid, orgId).catch(() => {});
         }
 
         if (!orgId) {
@@ -173,25 +197,48 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           return 'done';
         }
 
-        // 3. Fetch org + membership + members in parallel.
-        const [orgResult, memberResult, membersResult] = await Promise.all([
-          fetchOrganization(orgId),
-          fetchMembership(orgId, fbUser.uid),
-          fetchOrganizationMembers(orgId),
-        ]);
+        // 3. We already have the org + membership from fetchUserOrganizations
+        //    (it does the parallel getDocs). Use that data directly instead
+        //    of re-fetching. Previously this did Promise.all([fetchOrganization,
+        //    fetchMembership, fetchOrganizationMembers]) which re-fetched the
+        //    same org + membership — 2 redundant round-trips per login.
+        const membershipFromList = memberships.find(
+          (m) => m.organization.id === orgId
+        );
 
-        if (orgResult.error || !orgResult.organization) {
-          if (attempt < MAX_RETRIES) return 'retry';
-          setError(orgResult.error || 'Organization could not be loaded.');
-          setOrganization(null);
-          setMembership(null);
-          setMembers([]);
-          return 'fail';
+        if (membershipFromList) {
+          setOrganization(membershipFromList.organization);
+          setMembership(membershipFromList.member);
+        } else {
+          // Org in profile but not in memberships list — fetch directly.
+          const [orgResult, memberResult] = await Promise.all([
+            fetchOrganization(orgId),
+            fetchMembership(orgId, fbUser.uid),
+          ]);
+
+          if (orgResult.error || !orgResult.organization) {
+            if (attempt < MAX_RETRIES) return 'retry';
+            setError(orgResult.error || 'Organization could not be loaded.');
+            setOrganization(null);
+            setMembership(null);
+            setMembers([]);
+            setOrganizations([]);
+            return 'fail';
+          }
+
+          setOrganization(orgResult.organization);
+          setMembership(memberResult.member);
         }
 
-        setOrganization(orgResult.organization);
-        setMembership(memberResult.member);
-        setMembers(membersResult.members);
+        // 4. Fetch the full member roster (separate query, not in the
+        //    initial parallel batch, because it's only needed for the team
+        //    management UI — don't block the dashboard on it).
+        fetchOrganizationMembers(orgId).then((membersResult) => {
+          setMembers(membersResult.members);
+        }).catch(() => {
+          // Non-fatal — team list will be empty but the app still works.
+        });
+
         return 'done';
       } catch (err) {
         if (attempt < MAX_RETRIES) return 'retry';
@@ -199,6 +246,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setOrganization(null);
         setMembership(null);
         setMembers([]);
+        setOrganizations([]);
         return 'fail';
       }
     };
@@ -215,7 +263,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // 'fail' — we let the loop exhaust so the preview-mode fallback below
       // can create a demo org when Firestore is unreachable.
       if (attempt < MAX_RETRIES) {
-        const delay = BACKOFF_MS[attempt] || 4000;
+        const delay = BACKOFF_MS[attempt] || 1000;
         console.warn(`[Org] Retrying org context load in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
         await new Promise((r) => setTimeout(r, delay));
       }
@@ -275,6 +323,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       setOrganization(demoOrg);
       setMembership(demoMembership);
       setMembers([demoMembership]);
+      // In preview mode the user only has access to the demo org, so the
+      // switcher will render a single (non-interactive) org name.
+      setOrganizations([{ organization: demoOrg, member: demoMembership }]);
       setIsPreviewMode(true);
       setError(null);
       setLoading(false);
@@ -298,21 +349,24 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   }, [resolveOrgContext]);
 
   /**
-   * Switch the current organization.
+   * Switch the current organization. Returns `{ error }` so the caller can
+   * surface a toast / inline message — the error is ALSO mirrored onto the
+   * context's `error` field for global handlers.
    */
   const switchOrganization = useCallback(
-    async (orgId: string) => {
-      if (!auth.currentUser) return;
+    async (orgId: string): Promise<{ error: string | null }> => {
+      if (!auth.currentUser) return { error: 'Not signed in.' };
       const { error: switchError } = await setCurrentOrganizationService(
         auth.currentUser.uid,
         orgId
       );
       if (switchError) {
         setError(switchError);
-        return;
+        return { error: switchError };
       }
       loadingForRef.current = null;
       await resolveOrgContext(auth.currentUser);
+      return { error: null };
     },
     [resolveOrgContext]
   );
@@ -355,6 +409,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       setOrganization(null);
       setMembership(null);
       setMembers([]);
+      setOrganizations([]);
       setLoading(false);
       setError(null);
       loadingForRef.current = null;
@@ -422,6 +477,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     organization,
     membership,
     members,
+    organizations,
     role,
     loading,
     error,

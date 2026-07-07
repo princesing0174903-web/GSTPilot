@@ -251,7 +251,7 @@ export function BrandLogoPulse({
             'drop-shadow(0 0 20px rgba(59,130,246,0.5))',
           ],
         }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' as const }}
       >
         <Image
           src={BRAND.assets.iconTransparent}
@@ -309,7 +309,7 @@ export function SidebarBrand({
             'drop-shadow(0 0 0px rgba(59,130,246,0))',
           ],
         }}
-        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' as const }}
         className="shrink-0"
       >
         <Image

@@ -130,7 +130,7 @@ function WarehouseCard({ wh, index }: { wh: Warehouse; index: number }) {
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.6, delay: index * 0.04, ease: 'easeOut' }}
+            transition={{ duration: 0.6, delay: index * 0.04, ease: 'easeOut' as const }}
             className={`h-full ${accentBar}`}
           />
         </div>
@@ -507,7 +507,7 @@ function SupplyChainMap() {
                   strokeOpacity={0.35 + intensity * 0.5}
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
-                  transition={{ duration: 1, delay: i * 0.1, ease: 'easeInOut' }}
+                  transition={{ duration: 1, delay: i * 0.1, ease: 'easeInOut' as const }}
                 />
               );
             })}
@@ -1101,7 +1101,7 @@ function InventoryAging() {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                    transition={{ duration: 0.6, ease: 'easeOut' as const }}
                     className={`h-full ${bucket.bar}`}
                   />
                 </div>

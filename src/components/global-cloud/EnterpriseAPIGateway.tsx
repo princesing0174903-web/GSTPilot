@@ -496,7 +496,7 @@ export default function EnterpriseAPIGateway() {
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${widthPct}%` }}
-                            transition={{ duration: 0.6, delay: 0.05 + i * 0.03, ease: 'easeOut' }}
+                            transition={{ duration: 0.6, delay: 0.05 + i * 0.03, ease: 'easeOut' as const }}
                             className={cn(
                               'flex h-full items-center justify-end rounded-md px-2',
                               isHighest ? 'bg-gradient-to-r from-rose-600 to-rose-400' : 'bg-gradient-to-r from-rose-500/80 to-rose-400/60',

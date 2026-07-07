@@ -338,7 +338,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      transition={{ duration: 0.4, ease: 'easeOut' as const }}
       className="glass-surface flex h-full w-full flex-col rounded-3xl"
     >
       {/* ─── Header (click to open full Oracle workspace) ──────────────────── */}

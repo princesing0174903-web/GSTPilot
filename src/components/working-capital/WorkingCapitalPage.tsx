@@ -196,7 +196,7 @@ function ScoreGauge({ score, label, icon: Icon, size = 140 }: {
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset }}
-            transition={{ duration: 1.5, ease: 'easeOut', delay: 0.2 }}
+            transition={{ duration: 1.5, ease: 'easeOut' as const, delay: 0.2 }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">

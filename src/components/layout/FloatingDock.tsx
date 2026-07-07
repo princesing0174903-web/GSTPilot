@@ -87,7 +87,7 @@ export function FloatingDock({
       <motion.div
         initial={{ opacity: 0, y: 24, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] as const, delay: 0.2 }}
         className="pointer-events-auto fixed bottom-5 right-5 z-50 flex items-center gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.06] p-1.5 shadow-2xl shadow-black/30 backdrop-blur-xl dark:bg-black/[0.4]"
       >
         {dockItems.map((item) => {

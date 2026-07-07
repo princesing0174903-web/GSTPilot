@@ -52,6 +52,15 @@ interface AuthContextType {
   markOnboardingComplete: () => void;
   /** Sign in with a demo account (preview mode — no Firebase backend needed). */
   signInDemo: () => void;
+  /** Email/password sign-in. Drives `isLoading` so the login page can show
+   *  a "Redirecting…" state until OrgContext resolves. */
+  signInWithEmail: (email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
+  /** Email/password sign-up. */
+  signUpWithEmail: (name: string, email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
+  /** Google OAuth sign-in. */
+  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null }>;
+  /** Clear the `isLoading` flag (called by OrgContext when the org resolves). */
+  clearIsLoading: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -196,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setNeedsOnboarding(false);
     setError(null);
+    setIsLoading(false);
     cachedUserIdRef.current = null;
     localStorage.removeItem(SESSION_KEY);
   }, []);
@@ -228,6 +238,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsOnboarding(false);
   }, []);
 
+  // ── Sign in with email/password ──
+  // Wraps the underlying Firebase call so we can drive `isLoading` (which
+  // gates the "Redirecting…" card on the login page). Previously `isLoading`
+  // was declared but never set to true, causing the success card to flash
+  // while OrgContext spent 1–5s resolving.
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const { signInWithEmail: firebaseSignIn } = await import('@/lib/auth');
+      const result = await firebaseSignIn(email, password);
+      if (result.error) {
+        setError(result.error);
+      }
+      return result;
+    } catch (err) {
+      setError(friendlyAuthError(err));
+      throw err;
+    } finally {
+      // NOTE: we do NOT flip isLoading=false here. OrgContext will resolve
+      // the org (1–3s) and the app shell appears. We clear isLoading when
+      // OrgContext finishes OR after a 3s safety window below.
+      setTimeout(() => setIsLoading(false), 3000);
+    }
+  }, []);
+
+  // ── Sign up with email/password ──
+  const signUpWithEmail = useCallback(async (name: string, email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const { signUpWithEmail: firebaseSignUp } = await import('@/lib/auth');
+      const result = await firebaseSignUp(name, email, password);
+      if (result.error) {
+        setError(result.error);
+      }
+      return result;
+    } catch (err) {
+      setError(friendlyAuthError(err));
+      throw err;
+    } finally {
+      setTimeout(() => setIsLoading(false), 3000);
+    }
+  }, []);
+
+  // ── Sign in with Google ──
+  const signInWithGoogle = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { signInWithGoogle: googleSignIn } = await import('@/lib/auth');
+      const result = await googleSignIn();
+      if (result.error) {
+        setError(result.error);
+      }
+      return result;
+    } catch (err) {
+      setError(friendlyAuthError(err));
+      throw err;
+    } finally {
+      setTimeout(() => setIsLoading(false), 3000);
+    }
+  }, []);
+
   // ── Sign in with a demo account (preview mode) ──
   // Creates an in-memory demo user + persists to localStorage so the app
   // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox
@@ -246,6 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsOnboarding(false);
     setError(null);
     setIsInitializing(false);
+    setIsLoading(false);
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
     } catch {
@@ -259,6 +331,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // based on the org context state. Default: false until OrgContext says otherwise.
   const needsEmailVerification =
     user !== null && !user.emailVerified && user.provider === 'email';
+
+  // ── Clear isLoading (called by OrgContext when org resolves) ──
+  const clearIsLoading = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -275,6 +352,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUserProfile,
         markOnboardingComplete,
         signInDemo,
+        signInWithEmail,
+        signUpWithEmail,
+        signInWithGoogle,
+        clearIsLoading,
       }}
     >
       {children}

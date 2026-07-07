@@ -105,7 +105,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' as const }}
     >
       <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
         {children}
@@ -171,7 +171,7 @@ function ComparisonBar({
         style={{ backgroundColor: color }}
         initial={{ width: 0 }}
         animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
+        transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' as const }}
       />
     </div>
   );
@@ -776,7 +776,7 @@ export default function AIBenchmarkPage() {
                                 }`}
                                 initial={{ width: 0 }}
                                 animate={{ width: `${client.overallPercentile}%` }}
-                                transition={{ duration: 0.8, delay: 0.1 * index, ease: 'easeOut' }}
+                                transition={{ duration: 0.8, delay: 0.1 * index, ease: 'easeOut' as const }}
                               />
                             </div>
                             <Badge

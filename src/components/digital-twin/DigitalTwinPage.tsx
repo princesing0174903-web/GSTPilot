@@ -130,7 +130,7 @@ const fmtTime = (iso: string) => {
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } }
 const staggerChild = {
   initial: { opacity: 0, y: 16, scale: 0.96 },
-  animate: (i: number) => ({ opacity: 1, y: 0, scale: 1, transition: { delay: i * 0.06, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number] } }),
+  animate: (i: number) => ({ opacity: 1, y: 0, scale: 1, transition: { delay: i * 0.06, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const as [number, number, number, number] } }),
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -284,7 +284,7 @@ function AnimatedGauge({ score, size = 160 }: { score: number; size?: number }) 
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size / 2 + 20} className="overflow-visible">
         <path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke="rgba(148,163,184,0.12)" strokeWidth={10} strokeLinecap="round" />
-        <motion.path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 2, ease: 'easeOut' }} className="drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
+        <motion.path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 2, ease: 'easeOut' as const }} className="drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
         <text x={cx} y={cy - 8} textAnchor="middle" className="fill-white text-3xl font-bold" style={{ fontSize: '28px' }}>{animatedScore}</text>
         <text x={cx} y={cy + 12} textAnchor="middle" className="fill-slate-400 text-xs" style={{ fontSize: '11px' }}>{label}</text>
       </svg>

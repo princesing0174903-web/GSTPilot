@@ -620,7 +620,7 @@ function VolumeBarChart() {
               rx={6} fill="url(#barGrad)"
               initial={{ height: 0, y: padding.top + chartH }}
               animate={{ height: barH, y }}
-              transition={{ duration: 0.8, delay: 0.1 * i, ease: 'easeOut' }}
+              transition={{ duration: 0.8, delay: 0.1 * i, ease: 'easeOut' as const }}
             />
             <text x={x + barWidth / 2} y={y - 8} textAnchor="middle"
               className="fill-emerald-700" fontSize="11" fontWeight="600">
@@ -707,7 +707,7 @@ function MonthlyLineChart({ data, color = '#10b981', ySuffix = 'Cr', yPrefix = '
         strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 1.4, ease: 'easeInOut' }}
+        transition={{ duration: 1.4, ease: 'easeInOut' as const }}
       />
       {/* Points */}
       {points.map((p, i) => (
@@ -908,7 +908,7 @@ function InterestRateTrendChart() {
       <motion.path d={linePath} fill="none" stroke="#0891b2" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.4, ease: 'easeInOut' }} />
+        transition={{ duration: 1.4, ease: 'easeInOut' as const }} />
       {points.map((p, i) => (
         <g key={i}>
           <motion.circle cx={p.x} cy={p.y} r="3" fill="white" stroke="#0891b2" strokeWidth="2"

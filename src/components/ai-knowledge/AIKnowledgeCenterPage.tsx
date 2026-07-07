@@ -110,7 +110,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' as const }}
     >
       <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
         {children}
@@ -138,7 +138,7 @@ function RelevanceBar({ score }: { score: number }) {
           className={`h-full rounded-full ${getColor(score)}`}
           initial={{ width: 0 }}
           animate={{ width: `${score}%` }}
-          transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
+          transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' as const }}
         />
       </div>
       <span className="text-[10px] font-bold text-foreground">{score}%</span>

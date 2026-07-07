@@ -226,7 +226,7 @@ function FloatingParticles({ active }: { active: boolean }) {
             duration: p.duration,
             delay: p.delay,
             repeat: Infinity,
-            ease: 'easeInOut',
+            ease: 'easeInOut' as const,
           }}
           className="absolute rounded-full"
           style={{
@@ -259,7 +259,7 @@ function ScanLine({ active }: { active: boolean }) {
           initial={{ top: 0, opacity: 0 }}
           animate={{ top: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'linear' as const }}
           className="absolute left-0 right-0 h-[2px] z-20 pointer-events-none"
           style={{
             background: 'linear-gradient(90deg, transparent, rgba(52,211,153,0.6), rgba(251,191,36,0.8), rgba(52,211,153,0.6), transparent)',
@@ -694,7 +694,7 @@ export default function RunMyCompanyPage() {
               transition={{
                 duration: isActive ? 4 : 12,
                 repeat: Infinity,
-                ease: 'linear',
+                ease: 'linear' as const,
               }}
               className="absolute inset-[-24px] rounded-full pointer-events-none"
               style={{
@@ -717,7 +717,7 @@ export default function RunMyCompanyPage() {
                 scale: isActive ? [1, 1.3, 1] : [1, 1.15, 1],
                 opacity: isActive ? [0.3, 0.1, 0.3] : [0.18, 0.08, 0.18],
               }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' as const }}
               className="absolute inset-[-40px] rounded-full pointer-events-none"
               style={{
                 background: isRunning
@@ -743,7 +743,7 @@ export default function RunMyCompanyPage() {
                   '0 0 20px rgba(52,211,153,0.15), 0 0 40px rgba(251,191,36,0.1)',
                 ],
               }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' as const }}
               className="absolute inset-[-6px] rounded-full pointer-events-none"
               style={{
                 background: 'transparent',
@@ -788,7 +788,7 @@ export default function RunMyCompanyPage() {
                 <>
                   <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const }}
                   >
                     <Rocket className="h-12 w-12 text-white" />
                   </motion.div>
@@ -1175,7 +1175,7 @@ export default function RunMyCompanyPage() {
                             ) : status === 'running' ? (
                               <motion.div
                                 animate={{ rotate: 360 }}
-                                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                                transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const }}
                               >
                                 <Icon className="h-5 w-5 text-amber-400" />
                               </motion.div>
@@ -1478,7 +1478,7 @@ export default function RunMyCompanyPage() {
                                     <motion.div
                                       initial={{ width: 0 }}
                                       animate={{ width: `${Math.min((metric.current / (metric.previous * 1.2)) * 100, 100)}%` }}
-                                      transition={{ delay: 0.8 + i * 0.07, duration: 0.8, ease: 'easeOut' }}
+                                      transition={{ delay: 0.8 + i * 0.07, duration: 0.8, ease: 'easeOut' as const }}
                                       className={`h-full rounded-full ${isNeutral ? 'bg-slate-500' : isPositive ? 'bg-emerald-500/60' : 'bg-amber-500/60'}`}
                                     />
                                   </div>

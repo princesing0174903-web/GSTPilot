@@ -668,4 +668,16 @@ export class MockGSTProvider implements IGSTProvider {
   async healthCheck(): Promise<boolean> {
     return true;
   }
+
+  async fileReturn(): Promise<never> {
+    // CRITICAL: We must NEVER fake a successful government filing.
+    // The mock provider cannot file returns — it can only simulate read-only
+    // sync operations (returns, notices, ledgers). Filing requires the official
+    // GSTN API with real credentials.
+    throw new Error(
+      'Cannot file GST returns in mock mode. Filing requires an official GSTN connection. ' +
+      'Set GSTN_PROVIDER=official and configure GSTN API credentials to file returns. ' +
+      'GSTPilot never simulates successful government filings.'
+    );
+  }
 }

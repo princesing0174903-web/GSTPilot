@@ -1,0 +1,382 @@
+  4500→- ✅ Falls back to 0/empty gracefully when no data (premium empty states)
+  4501→- ⚠️ In preview mode, all data is empty (no demo data injected)
+  4502→- ⚠️ Greeting defaults to "Prince" when user.name is missing (line 114 of DashboardPage)
+  4503→
+  4504→## 7. SETTINGS — Real Firestore persistence (UI: 90%, Real data: 95%, CRUD: Yes)
+  4505→- ✅ Hydrates from organization doc via useEffect on organization.id (firmName, gstin, state, gstConfig, notifications)
+  4506→- ✅ 4 save handlers: handleSaveFirmProfile, handleSaveGstConfig, handleSaveNotifications, handleChangePassword — all call updateDoc on organizations/{orgId}
+  4507→- ✅ reloadOrg() refreshes context after each save
+  4508→- ✅ Password change via Firebase Auth updatePassword (requires recent login)
+  4509→- ✅ Logo upload via Firebase Storage (uploadBytes + getDownloadURL)
+  4510→- ✅ Preview mode no-ops with friendly toast ("Preview mode — your changes are shown here but not persisted to the cloud")
+  4511→- ✅ Permission-denied detection with friendly message
+  4512→- ⚠️ Initial state has dummy defaults ("Sharma & Associates", "27AAACR5055K1ZB", "ICAI/M/042817") — overwritten by org data on mount, but visible briefly during hydration
+  4513→- ❌ Team management UI exists in settings (invite/edit/remove members) but uses INITIAL_TEAM hardcoded array — not connected to organization_members collection
+  4514→
+  4515→## OVERALL PRODUCTION READINESS SCORECARD
+  4516→
+  4517→| Module | UI | Real Backend | CRUD | Main Gap |
+  4518→|--------|-----|-----|------|----------|
+  4519→| Authentication | 90% | 95% | Yes | No org-switcher UI; hardcoded Firebase config |
+  4520→| GST | 85% | 70% | Yes | No real GSTN filing; ARN is fake; GSTIN verify is simulated |
+  4521→| Banking | 80% | 55% | Partial | No real bank API; mock transactions; manual recon only; no statement import |
+  4522→| CRM | 85% | 80% | Yes | Falls back to SAMPLE_LEADS; limited activity timeline |
+  4523→| Finance/Accounting | 60% | 20% | No | AccountingPage is 100% static; no CoA/JE/Ledger persistence |
+  4524→| Dashboard | 90% | 85% | N/A | Real data but empty in preview; greeting defaults to "Prince" |
+  4525→| Settings | 90% | 95% | Yes | Team UI uses hardcoded INITIAL_TEAM; dummy defaults briefly visible |
+  4526→
+  4527→## CRITICAL FINDINGS FOR PRODUCTION COMPLETION
+  4528→
+  4529→1. **Hardest blocker — Government/Bank API integrations are simulated**: Both GSTN (filing, GSTIN verify, GSTR-2B, e-invoice, e-way bill) and Banking (transaction sync, statement import) use MockProviders. Switching to production requires:
+  4530→   - GSTN: implement FutureOfficialGSTProvider with real OAuth + AES-encrypted API calls to api.gstn.gov.in
+  4531→   - Banking: implement one of 5 future providers (Setu AA / RazorpayX / Perfios / Finvu) with real API credentials
+  4532→   
+  4533→2. **AccountingPage is entirely cosmetic**: 504 lines of hardcoded numbers. To make real:
+  4534→   - Persist chart_of_accounts collection
+  4535→   - Build journal_entries CRUD with double-entry validation
+  4536→   - Generate ledger + trial balance + P&L + balance sheet from real JE data
+  4537→   - Wire to invoices/expenses/payments for auto-JE generation
+  4538→
+  4539→3. **Banking reconciliation is manual-only**: "Auto-reconcile" button just shows a toast — no actual matching algorithm runs. Need: fuzzy-match payment→invoice by amount/date/reference, suggest matches, allow confirm/reject.
+  4540→
+  4541→4. **No bank statement import**: No PDF/CSV/Excel parser for manual statement upload (fallback when bank API unavailable).
+  4542→
+  4543→5. **Multi-tenant org switching has no UI**: switchOrganization() exists but no component calls it. Users belonging to multiple orgs can't switch.
+  4544→
+  4545→6. **Team management in Settings uses hardcoded data**: INITIAL_TEAM array instead of organization_members Firestore collection.
+  4546→
+  4547→7. **Firebase config is hardcoded in source**: src/lib/firebase.ts has apiKey/projectId literal — should be process.env.NEXT_PUBLIC_FIREBASE_* for production.
+  4548→
+  4549→8. **No edge auth in middleware**: src/middleware.ts only sets security headers; all auth is client-side via Firebase SDK. For B2B SaaS, consider verifying ID tokens in middleware for protected routes.
+  4550→
+  4551→## WHAT WORKS WELL (don't break these)
+  4552→- RBAC permission matrix is comprehensive and well-designed
+  4553→- Multi-tenant Firestore rules are properly enforced (isOrgMember + role checks)
+  4554→- Provider pattern for GSTN/Banking is correct abstraction — switching to production is "just" implementing the provider methods
+  4555→- Real-time Firestore hooks (use-firestore.ts) with graceful permission-error degradation
+  4556→- GST calculation engine math is correct (inter-state/intra-state, ITC eligibility, composition scheme, reverse charge)
+  4557→- Invoice engine with atomic invoice-number generation via Firestore transactions
+  4558→- Settings persistence pattern (hydrate from org doc, save back, reload context)
+  4559→
+  4560→---
+  4561→Task ID: audit-firebase
+  4562→Agent: Explore (Firebase audit)
+  4563→Task: Audit Firebase/Firestore integration status
+  4564→
+  4565→Work Log:
+  4566→- Read worklog.md (last 200 lines) for prior-agent context: Phase 16 Global Financial Cloud™ complete, dev server running with watchdog, 0 TS/lint errors, 2,426 pre-existing Prisma type mismatches noted.
+  4567→- Read `src/lib/firebase.ts` (27 lines) — confirmed REAL Firebase config (projectId: gstpilot1, full apiKey/appId/measurementId), all 3 services wired: `auth = getAuth(app)`, `db = getFirestore(app)`, `storage = getStorage(app)`. GoogleAuthProvider configured with email+profile scopes.
+  4568→- Read `src/lib/auth.ts` (183 lines) — REAL Firebase Auth wrappers (signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut, setPersistence with browserLocalPersistence/browserSessionPersistence/inMemoryPersistence). Includes redirect fallback for blocked popups.
+  4569→- Ran live connectivity test: `node -e "initializeApp(cfg); getFirestore..."` against gstpilot1 returned `permission-denied` — proves the Firestore backend exists, rules are enforced, network egress works.
+  4570→- Read `src/contexts/AuthContext.tsx` (310 lines) — uses REAL `onAuthStateChanged(auth, ...)` + `onIdTokenChanged`. Has `signInDemo()` preview-mode fallback (in-memory demo user persisted to localStorage) for when Firebase is unreachable. Exports `useAuth()` hook (used by 30 files).
+  4571→- Read `src/contexts/OrgContext.tsx` (465 lines) — uses REAL `onIdTokenChanged` + calls `fetchOrCreateUserProfile`, `fetchOrganization`, `fetchMembership`, `fetchOrganizationMembers` against Firestore collections `users`, `organizations`, `organization_members`. Retry 3x with [500ms, 1s, 2s] backoff. Falls back to `preview-org` demo org when Firestore is unreachable (sandbox/preview).
+  4572→- Read `src/lib/auth/organizations.ts` (513 lines) — REAL Firestore CRUD for organizations/memberships/user-profiles with `setDoc`, `getDoc`, `getDocs`, `updateDoc`, `deleteDoc`, `addDoc`, `query`, `where`, `orderBy`.
+  4573→- Read `src/lib/firestore-service.ts` (1,734 lines) — REAL Firestore CRUD with side effects (activity logging, counter increments, notifications, compliance score recalc, auto-create draft returns) for: clients, documents, invoices, returns, reconciliations, notifications, activities, AI recommendations, firms, leads, deals, meetings, tasks, bank accounts, bank transactions, GST profiles, GST returns, expenses, payments, AI memory, notices, reports. Uses `setDoc`/`getDoc`/`updateDoc`/`deleteDoc`/`query`/`writeBatch`/`serverTimestamp`/`runTransaction`.
+  4574→- Read `src/hooks/use-firestore.ts` (654 lines) — REAL `onSnapshot` real-time listeners for 25+ collections, ALL scoped by `where('organizationId', '==', organizationId)`. Includes graceful degradation (treats permission-denied as empty data, never surfaces a permission wall). Exports 42 hooks (useFireClients, useFireInvoices, useFireReturns, useFireBankAccounts, useFireBankTransactions, useFireGstReturns, useFireLeads, useFireDeals, useFireTasks, useFireNotices, useFireReports, useLiveDashboardMetrics, useFirmExecutiveScores, etc.).
+  4575→- Verified Firestore hook usage: 42 components import `useFire*` hooks (306 total call sites) — dashboard, clients, invoices, banking, payments, GSTR, returns, reconciliation, notices, reports, tasks, CRM, deadlines, calendar, timeline, executive-war-room, firm-command-center, AIPriorityEngine, AIPredictions, AgentsPage, AIBusinessCopilot, AIOperatingRoom, DataCloud, DataMoat, EventEngine, EmbeddedFinance, WorkingCapital, IndustryBenchmark, NetworkPage, RunIndiaBusiness, Intelligence, MissionControl, etc.
+  4576→- Verified Firestore service direct imports: 15 components import from `@/lib/firestore-service` for mutations (createClient, updateClient, deleteClient, fileReturn, etc.) — BankingPage, NoticeCenterPage, ReportsPage, GSTRFilingPage, PaymentsPage, ReconciliationPage, InvoiceWorkspacePage, TasksPage, ReturnsPage, ReturnPrepWorkspace, DashboardPage, ClientRegistryPage, ClientWorkspacePage, CRMPage.
+  4577→- Read `src/lib/firebase/storage-service.ts` (470 lines) — REAL Firebase Storage uploads (`uploadBytesResumable`), deletes (`deleteObject`), list (`listAll`), metadata, with org-isolated path `organizations/{orgId}/{category}/{timestamp}_{filename}`. Categories: invoices, gst, bank, documents, reports, notices, ai. Max 100 MB.
+  4578→- Read `src/lib/firebase/documents-service.ts` (372 lines) — REAL Firestore document metadata storage with `onSnapshot` real-time subscriptions.
+  4579→- Verified provider services ALL use Firestore client SDK with org-scoped queries:
+  4580→  • `src/lib/invoice-engine/service.ts` (732 lines) — Firestore CRUD with `runTransaction` for atomic invoice numbering
+  4581→  • `src/lib/banking-provider/service.ts` (567 lines) — Firestore CRUD for bank_connections, bank_transactions, bank_sync_jobs
+  4582→  • `src/lib/gstn-provider/service.ts` — Firestore CRUD for gst_connections, gst_transactions, gst_ledgers, gst_sync_jobs
+  4583→  • `src/lib/communication-provider/service.ts` — Firestore CRUD for gmail_connections, whatsapp_connections, gmail_messages, whatsapp_messages, scheduled_messages, communication_sync_jobs
+  4584→  • `src/lib/ai-pipeline/service.ts` — Firestore CRUD for ai_jobs, ai_versions, ai_drafts
+  4585→  • `src/lib/ai-provider/service.ts` — Firestore CRUD for ai_memory collection
+  4586→  • `src/lib/gst-engine/service.ts` — Firestore CRUD for gst_transactions
+  4587→- Read `firestore.rules` (460 lines) — REAL production-grade multi-tenant security. `rules_version = '2'`. Default-deny at the bottom (`allow read, write: if false`). 27 collections with proper role-based access: read requires `isOrgMember(resource.data.organizationId)`, create requires `writeScopedToUserOrg()`, update requires `canMutate()` (owner/admin/accountant/employee) + `orgIdUnchanged()` (prevents cross-tenant moves), delete requires `isOwnerOrAdmin()`. Membership resolved via `exists(/organization_members/{orgId}_{uid})` + status='active'. Self-own rules for `users/{uid}` and `onboarding/{userId}`.
+  4588→- Read `firestore.indexes.json` (70 lines) — REAL composite indexes for 7 collections (organization_members x2, clients, invoices, payments, expenses, tasks, notifications) — all org-scoped by organizationId + createdAt DESC.
+  4589→- Audited API routes (`src/app/api/`): 564 route files total, 509 return JSON via NextResponse.json. 104 routes import `@/lib/db` (Prisma). ZERO routes import from `@/lib/firebase` or `@/lib/firestore-service` (the only "firestore/firebase" mentions in API routes are in comments mentioning "firebase_uid"). API routes use Prisma exclusively for server-side persistence; Firestore is client-SDK only.
+  4590→- Read Prisma schema (`prisma/schema.prisma`, 2,347 lines, 115 models) — confirms Prisma is a parallel persistence layer with its own models (Client, Invoice, GSTRFiling, AuditLog, HealthScore, DataCatalogEntry, ExecutionJob, DevProject, GlobalEntity, CEOMemory, AgentMemory, KnowledgeNode, ComplianceFiling, etc.) — distinct from the Firestore collections.
+  4591→- Read 8 representative API routes:
+  4592→  • `/api/clients` — Prisma `db.client.findMany/create/update/delete` + auditLog + graph event emission
+  4593→  • `/api/invoices` — Prisma `db.invoice.*` with two branches (Invoice Cloud + original GST flow)
+  4594→  • `/api/agi/dashboard` — orchestrator that pulls CEO + Command + AGI data from Prisma via cached helpers
+  4595→  • `/api/ceo/dashboard` — orchestrator that pulls CFO Phase 1 + Digital Twin bundles from Prisma
+  4596→  • `/api/global/dashboard` — Prisma-backed consolidation + compliance + treasury + payroll + executives
+  4597→  • `/api/execution/run` — Prisma `db.executionJob.create` + `db.executionQueue.create` + signature
+  4598→  • `/api/dev/projects` — Software Factory engine (Prisma DevProject)
+  4599→  • `/api/network` — engine with Prisma + deterministic synthetic Indian-business seed data
+  4600→- Inventoried static data files in `src/lib/`:
+  4601→  • `global-cloud/data.ts` (1,153 lines) — Phase 16: REST endpoints, GraphQL ops, SDKs, OAuth providers, marketplace apps, integrations, SSO connections, KPIs, etc. — 100% static
+  4602→  • `global/data.ts` (1,079 lines) — Phase 14: countries, currencies, tax regimes, compliance, payroll
+  4603→  • `global-enterprise/registry.ts` (689 lines) — 50+ country tax/currency/fiscal metadata (reference data, not mock)
+  4604→  • `global/data-enterprise.ts` (763 lines)
+  4605→  • `marketplace-data.ts` (614 lines)
+  4606→  • `enterprise/data.ts` (551 lines) — Phase 13 Enterprise Network
+  4607→  • `workforce/data.ts` (444 lines)
+  4608→  • `business-memory.ts` (632 lines), `oracle-conversations.ts` (311 lines), `demo/preview-data.ts` (144 lines), `constants.ts` (131 lines)
+  4609→  • Total ~6,035 lines of static data across 11+ files; 94+ files export at least one large object array
+  4610→- Verified static-only components: 16 Phase 16 Global Financial Cloud components + 12 Phase 14 Global Expansion components + 11 Phase 13 Enterprise Network components = 39+ components render 100% static data, no Firestore, no Prisma, no fetch calls (e.g., DeveloperPlatform.tsx line 11: "100% static — no fetch, no Math.random").
+  4611→- Auth context confirmed: `useAuth()` used by 30 files, `useOrg()` used by 23 files. LoginPage exposes `signInDemo()` for preview mode. `isPreviewMode` flag consumed by 4 files (use-firestore, OrgContext, WorkloadPage, SettingsPage) to short-circuit Firestore subscriptions.
+  4612→
+  4613→Stage Summary:
+  4614→- **Firebase config**: REAL, not placeholders. Project `gstpilot1` with `apiKey`, `appId`, `measurementId` — verified live (network egress works, returned `permission-denied` which proves the backend + rules exist). All 3 Firebase services wired: `auth` (getAuth), `db` (getFirestore), `storage` (getStorage). GoogleAuthProvider configured with email+profile scopes.
+  4615→- **Firebase services actually wired up**:
+  4616→  ✓ Firebase Authentication — real email/password + Google sign-in via `signInWithEmailAndPassword` / `createUserWithEmailAndPassword` / `signInWithPopup`. Session persistence (local/session/in-memory) is wired. `onAuthStateChanged` + `onIdTokenChanged` listeners drive React state.
+  4617→  ✓ Cloud Firestore — real CRUD via `firestore-service.ts` (1,734 lines, 22 collections) + `use-firestore.ts` (654 lines, 25+ real-time hooks) + 7 provider service modules (invoice-engine, banking-provider, gstn-provider, communication-provider, ai-pipeline, ai-provider, gst-engine).
+  4618→  ✓ Cloud Storage — real `uploadBytesResumable`/`deleteObject`/`listAll`/`getDownloadURL`/`getMetadata` in `storage-service.ts` (470 lines), org-isolated paths.
+  4619→- **Modules using REAL Firestore CRUD (multi-tenant, real-time)**:
+  4620→  • Auth/Org/Membership — users, organizations, organization_members collections
+  4621→  • Clients (CRUD + onSnapshot, org-scoped)
+  4622→  • Invoices (CRUD + atomic numbering via `runTransaction`, real-time subscriptions)
+  4623→  • Documents (metadata CRUD + real-time subs, files in Storage)
+  4624→  • Returns / GSTR filings, Reconciliations
+  4625→  • Banking — bank_connections, bank_transactions, bank_sync_jobs (encrypted blob + org-scoped)
+  4626→  • GST — gst_connections, gst_transactions, gst_ledgers, gst_sync_jobs
+  4627→  • Communication — gmail_connections, whatsapp_connections, gmail_messages, whatsapp_messages, scheduled_messages
+  4628→  • Payments, Expenses, Notices, Reports, Tasks
+  4629→  • CRM — leads, deals, meetings
+  4630→  • AI — ai_memory, ai_jobs, ai_versions, ai_drafts, aiRecommendations, predictions, priorityQueue
+  4631→  • Notifications, Activities
+  4632→  • Storage — file uploads to org-isolated paths
+  4633→- **Modules using REAL Prisma CRUD (server-side API routes, 115 models, 104+ routes)**:
+  4634→  • Core finance (clients, invoices, payments, expenses, returns via `/api/clients`, `/api/invoices`, `/api/returns`, etc.)
+  4635→  • AI engines: AI CEO (`/api/ceo/*`), AGI Infinity (`/api/agi/*`), AI CFO (`/api/ai-cfo`), Data Intelligence Cloud (`/api/data/*`), Global Intelligence Cloud (`/api/intelligence/*`)
+  4636→  • Execution Cloud (`/api/execution/*` — ExecutionJob, ExecutionQueue models)
+  4637→  • AI Software Factory (`/api/dev/*` — DevProject, DevBuild, DevDeployment, DevTestRun, DevRelease)
+  4638→  • Global Enterprise OS (`/api/global/*` — GlobalEntity, Country, ConsolidationReport)
+  4639→  • Network engine (`/api/network/*` — Prisma + deterministic synthetic seed data)
+  4640→  • Autonomous Enterprise (`/api/autonomous/*`), Command Network (`/api/command/*`), Digital Twin (`/api/twin/*`)
+  4641→  • Connectors & integrations (`/api/connectors/*`, `/api/connect/*`, `/api/integrations/*`)
+  4642→  • Banking API routes (`/api/bank/*`, `/api/banking/*`), GSTN routes (`/api/gstn/*`, `/api/gst/*`)
+  4643→  • App marketplace (`/api/apps/*`), Ecosystem (`/api/ecosystem/*`), Connectivity (`/api/connectivity/*`)
+  4644→  • System health, audit logs, firm metrics, dashboard, payroll, TDS, payables, receivables, workflows, approvals, team-members, etc.
+  4645→- **Modules using STATIC data only (no real persistence)**:
+  4646→  • Phase 16 Global Financial Cloud™ — 16 components (Developer Platform, API Gateway, App Marketplace, Integration Hub, Financial Data Cloud, Event Streaming, Automation Studio, Data Warehouse, Global Identity, Developer Analytics, Enterprise Billing, Multi-Tenant Infra, Enterprise Security Cloud, Global Financial Network, Platform Intelligence, Hub) — all import from `@/lib/global-cloud/data.ts`
+  4647→  • Phase 14 Global Expansion™ — 12 components (Global Dashboard, Multi-Country Accounting, Multi-Tax Engine, Multi-Currency System, International Banking, Global Compliance Engine, International ERP, Multi-Language Platform, AI Global Advisor, Cross-Border Payments, International Reports, Global Performance) — all import from `@/lib/global/data.ts`
+  4648→  • Phase 13 Enterprise Collaboration & Command Network — 11 components (WorkflowEngine, AdvancedRBAC, EnterpriseNotifications, ExecutiveCalendar, EnterpriseSearch, EnterpriseAudit, CrossCompanyAnalytics, TeamCollaboration, EnterpriseCommandCenter, MultiCompanyWorkspace, EnterpriseDocuments) — all import from `@/lib/enterprise/data.ts`
+  4649→  • Total: ~39+ components render 100% static data
+  4650→- **Broken / placeholder Firebase code**: NONE FOUND. The Firebase layer is fully implemented and production-ready. The only "fallback" is intentional preview-mode behavior:
+  4651→  • `signInDemo()` in AuthContext — creates an in-memory demo user when Firebase Auth is unreachable (sandbox/preview escape hatch, not a placeholder)
+  4652→  • `preview-org` in OrgContext — synthesizes a demo org when Firestore is unreachable after 3 retries
+  4653→  • `isPreviewMode` short-circuits Firestore subscriptions to return empty data instead of throwing permission errors
+  4654→  • These are documented preview-mode fallbacks, NOT broken code.
+  4655→- **Honest persistence estimate**:
+  4656→  • ~55% of the app uses REAL persistence — split between:
+  4657→    - ~25% REAL Firestore (auth, clients, invoices, documents, banking, GST, communication, payments, expenses, notices, reports, tasks, CRM, AI memory, notifications, activities, returns, reconciliations, file storage) — multi-tenant, real-time, security-rules-enforced
+  4658→    - ~30% REAL Prisma (AI engines, execution cloud, software factory, global enterprise, network, autonomous, command, twin, data intelligence, connectors, integrations, marketplace, ecosystem, observability) — 115 models, 104+ routes
+  4659→  • ~15% uses STATIC data only (Phase 13/14/16 showcase modules — presentation dashboards with curated numbers, not connected to any backend)
+  4660→  • ~30% is MIXED (DashboardPage, BankingPage, Oracle chat) — uses Firestore for live entity data AND Prisma API routes for analytics/aggregations
+  4661→  • **Bottom line**: The CORE BUSINESS (auth, multi-tenancy, clients, invoices, GST, banking, documents, payments, tasks, CRM, AI memory) is genuinely persisted in Firestore with real-time subscriptions and enforced security rules. The AI/ANALYTICS layer (CEO, CFO, AGI, execution, dev factory, intelligence, network, global, autonomous, twin, command) is genuinely persisted in Prisma via 564 API routes. The latest "showcase" phases (13/14/16 — 39 components, ~6,000 lines of static data) are presentation-only with no real persistence and should be the next target for production completion.
+  4662→- **Next actions recommended for production completion mission**:
+  4663→  1. Wire Phase 13/14/16 static-data components to real Prisma models (or new Firestore collections) — highest-leverage gap
+  4664→  2. Reconcile the parallel Firestore/Prisma persistence layers (clients + invoices exist in BOTH) — pick one canonical source or build a sync layer
+  4665→  3. Replace `signInDemo()` / `preview-org` fallbacks with proper error UIs once Firestore is confirmed reachable in production
+  4666→  4. Deploy `firestore.rules` + `firestore.indexes.json` to the live `gstpilot1` project (currently they exist only as local files; verify with `firebase deploy --only firestore:rules`)
+  4667→  5. Address the 2,426 pre-existing Prisma type mismatches noted in worklog (older library/API files reference models not in schema.prisma)
+  4668→
+  4669→---
+  4670→Task ID: schema-fix-group-2
+  4671→Agent: general-purpose
+  4672→Task: Generate 44 Prisma schema models for missing database tables (Group 2)
+  4673→
+  4674→Work Log:
+  4675→- Read `/home/z/my-project/worklog.md` for prior context (AI Software Factory build, ~2,426 Prisma type mismatches identified)
+  4676→- Read `prisma/schema.prisma` (115 existing models) to understand naming + field-type conventions (id @default(cuid()), createdAt @default(now()), updatedAt @updatedAt, String for JSON/enum/array on SQLite, Float for decimals)
+  4677→- For each of the 44 missing models, ran `rg "db\.<model>\b" src/ -A <N>` and inspected every `.create({data})`, `.update({data})`, `.upsert({create,update})`, `.findMany({select,include,where})` call to enumerate required fields and relations
+  4678→- Identified which relations are intra-group 2 (safe to wire as @relation) vs. cross-group (use String FK + `// TODO: relation to <ModelName>` comment per task instructions):
+  4679→  * Intra-group 2 @relation pairs added: ConnectorInstance↔ConnectorCredential (instance.credentials), ConnectorInstance↔ConnectorEvent (event.connector), ConnectorInstance↔ConnectorLog (log.connector), ConnectorInstance↔ConnectorSyncJob (job.connector), Country↔GlobalEntity (entity.country, FK on countryIso→isoCode)
+  4680→  * Cross-group FKs marked as TODO: ConnectorLog.installedIntegrationId, ConnectorAnalytic.installedIntegrationId, ConnectorReview.connectorSlug, ConsolidationEntry.entityId, GlobalEntity.parentEntityId (self-ref), DriveFile.connectionId, EnterpriseRole.members (back-ref to TenantMember), ExecutionAlert.jobId, ExecutionQueue.jobId, ITCMismatch.invoiceId
+  4681→- Honored compound uniques required by code: CurrencyRate @@unique([baseCurrency, quoteCurrency, asOfDate]) (used as `where: { baseCurrency_quoteCurrency_asOfDate: ... }`), IdentityConfig @@unique([tenantId, providerKey]) (queried by both fields), DataLineageEvent.replayToken @unique (used as `findUnique({where:{replayToken}})`), Country.isoCode @unique (used as `where: { isoCode }` in seeder.upsert), GSTProfile.gstin @unique (used as `where: { gstin }`), EnterpriseSearchIndex.recordKey @unique (used in upsert), ExecutionWorker.workerId @unique, FeatureFlag.key @unique (used as `where: { key: flagKey }`), FirmProfile.userEmail @unique (used as `where: { userEmail }` in upsert/findUnique)
+  4682→- Wrote `/tmp/schema-group-2.prisma` (804 lines, 44 model definitions, no generator/datasource block — orchestrator will merge)
+  4683→- Verified uniqueness: 0 duplicate model names against the 115 existing models (`comm -12` returned empty)
+  4684→- Validated end-to-end: `cp prisma/schema.prisma /tmp/schema-backup.prisma && cat /tmp/schema-group-2.prisma >> prisma/schema.prisma && npx prisma validate` → `The schema at prisma/schema.prisma is valid 🚀`
+  4685→- Restored `prisma/schema.prisma` from backup so orchestrator remains the sole merger of groups 1+2+3
+  4686→
+  4687→Stage Summary:
+  4688→- Deliverable 1 (✅): `/tmp/schema-group-2.prisma` — 44 Prisma models, 804 lines, validated clean
+  4689→- Deliverable 2 (✅): All 44 models from the task list created with correct PascalCase names that Prisma will expose as the requested `db.<camelCase>` accessors:
+  4690→  ConnectorAnalytic, ConnectorCredential, ConnectorEvent, ConnectorInstance, ConnectorLog, ConnectorReview, ConnectorSyncJob, ConsolidationEntry, ConversationMemory, Country, CrossBorderSimulation, CurrencyRate, DataAnalyticsSnapshot, DataBackup, DataCatalogEntry, DataDiscoveryInsight, DataGovernancePolicy, DataKnowledgeSynthesis, DataLineageEvent, DataObservabilityMetric, DataPipelineRun, DriveFile, EnterpriseAuditLog, EnterpriseRole, EnterpriseSearchIndex, EventStream, ExecutionAlert, ExecutionJob, ExecutionQueue, ExecutionSchedule, ExecutionWorker, FeatureFlag, FinancialMetric, FirmProfile, GSTProfile, GSTR2BInvoice, GSTReturn, GlobalAuditLog, GlobalEntity, GlobalExecutiveBrief, GlobalRecommendation, ITCMismatch, IdentityConfig, IndustryAdvisorSession
+  4691→- Deliverable 3 (✅): This worklog entry appended
+  4692→
+  4693→Tricky relations / decisions worth flagging to the orchestrator:
+  4694→1. **ConnectorLog dual-write pattern**: `src/lib/connectivity/engine.ts` writes `{firmId, connectorId, level, action, message, details, durationMs, statusCode}` while `src/lib/marketplace/{registry,sync-engine,seed}.ts` writes `{installedIntegrationId, level, message, code, metadata}` and queries `orderBy: { timestamp: 'desc' }`. Schema includes ALL of these fields as nullable/optional so both code paths compile. The `timestamp` field is separate from `createdAt` (both kept; analytics sorts by `timestamp`, the logs API sorts by `createdAt`).
+  4695→2. **EnterpriseRole.members back-relation**: `src/lib/enterprise/rbac.ts` calls `include: { _count: { select: { members: true } } }`. This requires `members TenantMember[]` on EnterpriseRole AND `role EnterpriseRole? @relation(fields:[roleId], references:[id])` on TenantMember. Since TenantMember is not in group 2, I left a TODO comment — the orchestrator MUST add the `members TenantMember[]` field to EnterpriseRole when TenantMember is created in another group. Until then, the `include: { _count: { select: { members: true } } }` call will fail at runtime with "Unknown field `members`".
+  4696→3. **GlobalEntity self-reference**: `parentEntityId` is a self-FK to GlobalEntity.id. I left it as a plain `String?` with TODO comment rather than adding the self-relation, to keep the schema simple and avoid Prisma's strict self-relation naming. If the orchestrator wants to use `include: { parent: true }` later, they'll need to add `parent GlobalEntity? @relation("EntityParent", fields: [parentEntityId], references: [id])` and `children GlobalEntity[] @relation("EntityParent")`.
+  4697→4. **Country.isoCode as GlobalEntity FK**: GlobalEntity.countryIso references Country.isoCode (the @unique field, not the @id `id` field). Prisma supports this — already validated.
+  4698→5. **All JSON/array fields are String**: Per SQLite limitation. App code already wraps writes with `JSON.stringify(...)` and reads with `JSON.parse(...)` (verified in marketplace/analytics.ts, governance.ts, synthesis.ts, lineage.ts, etc.) — no app code changes needed.
+  4699→6. **No enums used**: SQLite/Prisma combination used String for all enum-like fields (status, severity, level, etc.) — matches existing schema convention.
+  4700→7. **No `@db.Decimal` / `@db.Text`**: All monetary/decimal fields use `Float` (taxableValue, igst, cgst, sgst, cess, itcAvailable, rate, inverseRate, valueLocal, valueBase, fxRateUsed, ownershipPct, roiPct, riskScore, confidencePct, etc.).
+  4701→
+  4702→Next actions for orchestrator:
+  4703→- Merge groups 1 + 2 + 3 into `prisma/schema.prisma` and re-run `npx prisma validate`
+  4704→- Resolve the TODO comments by adding back-relations on any in-group models that reference group-2 models (e.g., TenantMember.role → EnterpriseRole, InstalledIntegration → ConnectorAnalytic/ConnectorLog, MarketplaceConnector ← ConnectorReview, ExecutionJob ← ExecutionAlert/ExecutionQueue, GSTR2BInvoice ← ITCMismatch)
+  4705→- Run `bun run db:push` (or `npx prisma db push`) to materialize the 44 new tables in SQLite
+  4706→- Re-run `bun run typecheck` — the ~500 TypeScript errors referencing `db.<group2Model>` should now resolve
+  4707→
+  4708→---
+  4709→Task ID: schema-fix-group-3
+  4710→Agent: general-purpose
+  4711→Task: Generate 44 Prisma schema models for missing database tables (Group 3)
+  4712→
+  4713→Work Log:
+  4714→- Read prior worklog context (4667 lines) — confirmed ~115 existing Prisma models + 564 API routes
+  4715→- Verified NONE of the 44 target models exist in prisma/schema.prisma (no duplicates)
+  4716→- Audited existing schema conventions: id String @id @default(cuid()), createdAt/updatedAt, SQLite (no arrays/JSON/@db.*)
+  4717→- For each of the 44 models, searched the codebase with `rg "db\.<model>\."` and read the files calling `.create({ data })`, `.update({ data })`, `.findMany({ select/include })` to extract required fields
+  4718→- Key multi-file audits performed:
+  4719→  • installedIntegration — 5 files (seed, ai-connector, analytics, registry, sync-engine) → fields: tenantId, connectorId, connectorSlug, displayName, status, health, authType, connectedAccountId, scopes, config, syncFrequency, lastSyncAt, lastError, installedAt + relations to MarketplaceConnector, SyncJob, IntegrationEvent
+  4720→  • marketplaceConnector — 2 distinct shapes (registry.ts catalogToRow + connectivity/marketplace.ts publishMarketplaceConnector) merged into one superset model with all fields optional
+  4721→  • intelligenceContribution — 2 usage modes (data-cloud.ts fingerprint-shape + contributor.ts single-metric shape); modeled as a single table with all metric fields optional and `contributionHash` unique
+  4722→  • syncJob — 2 distinct write paths (marketplace/sync-engine.ts + integrations/sync.ts); merged field superset (recordsProcessed/Created/Updated/Failed/Skipped/Pulled, conflictCount, retryCount, log, etc.)
+  4723→  • oracleReasoning/oracleModelCall — full multi-perspective reasoning trace (8 reasoning types) + telemetry
+  4724→  • knowledgeNode/knowledgeEdge — directed graph with self-consistent back-relations ("KnowledgeEdgeSource" + "KnowledgeEdgeTarget")
+  4725→  • organization — self-relation via parentId ("OrganizationHierarchy")
+  4726→  • policy/policyApproval — bi-directional relation (policy.approvals back-reference)
+  4727→- Added 7 in-group @relation pairs (both ends in this file):
+  4728→  1. KnowledgeNode ↔ KnowledgeEdge (source/target)
+  4729→  2. MarketplaceConnector ↔ InstalledIntegration (connectorId)
+  4730→  3. InstalledIntegration ↔ SyncJob (installedIntegrationId)
+  4731→  4. InstalledIntegration ↔ IntegrationEvent (installedIntegrationId, nullable)
+  4732→  5. Policy ↔ PolicyApproval (policyId)
+  4733→  6. Organization self-relation (parentId, parent/children)
+  4734→  7. OracleReasoning ↔ OracleModelCall (reasoningId, nullable)
+  4735→- All OTHER foreign-key fields (to models in groups 1 or 2) are plain String? with `// TODO: relation to <ModelName>` comments to avoid circular dependency
+  4736→- Used `@@unique([...])` on 7 models where the codebase uses upsert/find-by-natural-key:
+  4737→  • IndustryBenchmark(industry, region, sizeBand, asOfPeriod, metric)
+  4738→  • InsightFeedItem(feedDate, headline)
+  4739→  • IntelligenceContribution(contributionHash)
+  4740→  • KnowledgeNode(kind, label)
+  4741→  • KnowledgeEdge(sourceId, targetId, relation)
+  4742→  • MasterDataRecord(entityType, entityKey)
+  4743→  • PayrollStructure(countryIso, structureName)
+  4744→  • TaxRule(countryIso, taxType, taxName)
+  4745→  • Tenant(slug)
+  4746→  • UserPreference(userEmail)
+  4747→  • UserProfile(userEmail)
+  4748→  • Vendor(gstin)
+  4749→  • Workspace(tenantId, key)
+  4750→- Wrote 44 model definitions to /tmp/schema-group-3.prisma (also mirrored at /home/z/my-project/.tmp-schemas/schema-group-3.prisma for sandbox access)
+  4751→- Validation step: temporarily appended to prisma/schema.prisma, ran `npx prisma validate` → "The schema at prisma/schema.prisma is valid 🚀"
+  4752→- Generation step: ran `npx prisma generate` → "✔ Generated Prisma Client (v6.19.2)" in 1.01s
+  4753→- Restored prisma/schema.prisma to original 2347 lines / 115 models (no permanent modifications — orchestrator will merge all 3 groups)
+  4754→
+  4755→Stage Summary:
+  4756→- **Deliverable**: /tmp/schema-group-3.prisma — 44 Prisma model definitions, ~880 lines, validated by `prisma validate` and `prisma generate`
+  4757→- **Models generated (44)**: IndustryBenchmark, InsightFeedItem, MarketplaceConnector, InstalledIntegration, Integration, IntegrationEvent, IntelligenceAuditLog, IntelligenceContribution, KnowledgeNode, KnowledgeEdge, MarketSignal, MasterDataRecord, MemoryEmbedding, OracleAction, OracleAuditLog, OracleConversation, OracleDocument, OracleInsight, OracleLearning, OracleMemory, OracleModelCall, OracleReasoning, OracleSource, OrgModule, Organization, PayrollStructure, Policy, PolicyApproval, PredictiveForecast, RegulationUpdate, SecurityEvent, Subscription, SyncJob, SyncLog, SyncQueueItem, TaskEdge, TaxRule, Tenant, UsageEvent, UserPreference, UserProfile, ValidationRecord, Vendor, Workspace
+  4758→- **In-group relations (7 pairs)**: KnowledgeNode↔KnowledgeEdge (source/target), MarketplaceConnector↔InstalledIntegration (connectorId), InstalledIntegration↔SyncJob (installedIntegrationId), InstalledIntegration↔IntegrationEvent (installedIntegrationId), Policy↔PolicyApproval (policyId), Organization self-relation (parentId), OracleReasoning↔OracleModelCall (reasoningId)
+  4759→- **Cross-group FK stubs (String? with TODO comments)**: Tenant (referenced by 12 models), Firm (referenced by 6 Oracle models), BusinessConnection (referenced by SyncJob, SyncLog, SyncQueueItem, ValidationRecord), User/UserEmail (referenced by UserProfile, UserPreference, MemoryEmbedding), ExecutionJob (referenced by TaskEdge), BillingInvoice (back-relation from Subscription), TenantMember/Company (back-relations from Organization)
+  4760→- **Unique constraints (13)**: added where codebase uses `upsert`/`findUnique` by natural key — ensures idempotent seeding and prevents duplicate records
+  4761→- **Tricky modeling decisions**:
+  4762→  1. intelligenceContribution has dual usage modes (fingerprint-aggregate vs single-metric) — modeled as one table with all metric fields optional + unique on contributionHash
+  4763→  2. marketplaceConnector has two distinct write paths with different field sets — merged into a superset with optional fields
+  4764→  3. syncJob has two distinct write paths (marketplace/sync-engine + integrations/sync) — merged superset with both error and errorMessage, both recordsFailed and recordsSkipped
+  4765→  4. knowledgeEdge uses named @relation("KnowledgeEdgeSource") / @relation("KnowledgeEdgeTarget") because both source and target point to the same KnowledgeNode model — required to disambiguate
+  4766→  5. organization self-relation uses named @relation("OrganizationHierarchy") for parent/children
+  4767→- **No prisma/schema.prisma modifications** — original file untouched at 2347 lines / 115 models
+  4768→- **Ready for orchestrator merge**: append /tmp/schema-group-3.prisma to prisma/schema.prisma, then run `npx prisma validate && npx prisma generate && npx prisma db push` to apply
+  4769→
+  4770→---
+  4771→Task ID: schema-fix-group-1
+  4772→Agent: general-purpose
+  4773→Task: Generate 44 Prisma schema models for missing database tables (Group 1)
+  4774→
+  4775→Work Log:
+  4776→- Read `/home/z/my-project/worklog.md` (4768 lines, last 2 entries from group-2 and group-3 agents). Confirmed Groups 2 & 3 already complete (89 models, both validated). Group 1 must not duplicate any of those models nor any of the 115 existing models in `prisma/schema.prisma`.
+  4777→- Verified NONE of my 44 target models exist in `prisma/schema.prisma` (115 existing) nor in `/tmp/schema-group-2.prisma` (44 models) nor in `/tmp/schema-group-3.prisma` (44 models) — zero duplicates.
+  4778→- Audited existing schema conventions: `id String @id @default(cuid())`, `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt`, SQLite (no arrays/JSON/`@db.*`), String for enums, Float for decimals.
+  4779→- For each of the 44 models, searched the codebase with `rg "db\.<model>\."` and read every `.create({ data })`, `.update({ data })`, `.upsert({ create, update })`, `.findMany({ select/include/where })`, `.findUnique({ where })` call to enumerate required fields, unique constraints, and relations.
+  4780→- Key multi-file audits performed:
+  4781→  • aGIAgent — `src/lib/agi/swarm.ts` (seedAgentsIfMissing + getSwarmAgents updates 6 metrics) + `src/lib/agi/reasoning.ts` (count active). Required unique: agentId.
+  4782→  • aGIGoal — `src/lib/agi/goals.ts` (4 write paths: seed, refreshGoalProgress, createGoal; 4 read paths) + `src/lib/agi/reasoning.ts` (count) + `src/lib/agi/pm.ts` (select planIds). Required unique: goalKey. Has planIds String JSON field (no relation — app stores planIds as JSON array).
+  4783→  • aGILearningEpisode — `src/lib/agi/learning.ts` (recordLearning upserts by subject, recordFeedback creates, getRecentLearnings, getLearningSummary).
+  4784→  • aGIMemory — `src/lib/agi/memory.ts` (upsert by memoryKey, search increments retrievalCount, summary). Required unique: memoryKey.
+  4785→  • aGIPlan — `src/lib/agi/pm.ts` (seedPlansFromGoals, refreshPlanProgress, getPlans, summary). Has goalId FK to AGIGoal — IN-GROUP @relation added.
+  4786→  • aGIReasoningCycle — `src/lib/agi/reasoning.ts` (runCycle create, getRecentCycles, getReasoningSummary) + `src/lib/agi/core.ts` (count + recent 50). cycleNumber is queryable but not unique (multiple rows per cycle is allowed since create uses `cycleCounter` from count).
+  4787→  • aGISimulation — `src/lib/agi/twin.ts` (runSimulation create, getRecentSimulations, getTwinSummary).
+  4788→  • activity — `src/app/api/activities/route.ts` (POST create with `include: { client, user }`, GET list with same include) + `src/app/api/returns/route.ts` (create on prepare/file) + `src/app/api/clients/[id]/route.ts` (create on update/delete). include uses existing Client/User — orchestrator must add `activities Activity[]` back-relations on Client and User.
+  4789→  • alert — `src/lib/connections/alerts.ts` (create from events, list by status/severity, summary counts, markRead/dismiss/archive/resolve updates).
+  4790→  • apiKey — `src/lib/enterprise/seed.ts` (createMany), `src/lib/marketplace/analytics.ts`, `src/lib/enterprise/admin.ts` (count), `src/lib/enterprise/observability.ts`, `src/lib/app-platform/developer.ts` (findMany). tenantId FK to Tenant (group 3).
+  4791→  • App + AppDeveloper + AppInstall + AppVersion + AppReview + AppPlugin + AppWebhook + AppSandboxExecution + AppAnalyticsEvent + AppPayout — `src/lib/app-platform/{seed,registry,monetization,plugins,webhooks,sandbox,analytics,developer,search}.ts` + `src/app/api/apps/{review,reviews}/route.ts`. Cluster has 10 in-group @relation pairs (App↔Developer, App↔Install/Version/Review/Analytics, AppInstall↔Analytics/SandboxExec/Webhook/Plugin, AppDeveloper↔Payout).
+  4792→  • bankAccount — `src/lib/banking/{engine,cashflow,upi,statements}.ts` + `src/lib/business-graph.ts`. NOTE: `db.bankTransaction` is referenced in `connections/index.ts` and `banking/*` but BankTransaction is NOT in any group's model list — orchestrator must add it separately.
+  4793→  • billingInvoice — `src/lib/enterprise/{seed,subscription,admin}.ts`. tenantId → Tenant (group 3), subscriptionId → Subscription (group 3).
+  4794→  • businessConnection — `src/lib/connections/{index,auto-sync}.ts` + `src/lib/oracle/events-context.ts` + `src/lib/business-graph.ts`. Has 17 fields including sync schedule (autoSync, syncIntervalMins, nextSyncAt) + retry state (consecutiveFailures, lastSyncDurationMs). NOTE: Group 3 SyncLog/SyncQueueItem already declare `connectionId String?` with TODO comments referencing BusinessConnection — orchestrator may add back-relations later.
+  4795→  • businessGoal — `src/lib/business-memory.ts` (addGoal, deleteGoal, togglePinGoal).
+  4796→  • businessHealthSnapshot — `src/lib/connections/index.ts` (saveHealthSnapshot).
+  4797→  • cashForecast — `src/lib/banking/engine.ts` (seed creates daily + 7d + 30d rows; getCashFlowForecast filters by horizon).
+  4798→  • clientMemory — `src/lib/business-memory.ts` (upsertClientMemory by clientId, delete, togglePin). Required unique: clientId.
+  4799→  • collectionRecovery + collectionsCase — `src/lib/banking/{collections,engine,intelligence}.ts`. Two distinct models with overlapping but different field sets.
+  4800→  • commandAuditLog — `src/lib/command-network/security.ts` (auditCommand) + `src/lib/agi/{core,swarm}.ts` + `src/lib/command-network/observability.ts`. Required unique: replayToken (used in `findUnique({ where: { replayToken } })`).
+  4801→  • commandIncident — `src/lib/command-network/{incidents,engine,automation}.ts` + `src/lib/agi/learning.ts`. Required unique: incidentKey (used in `findFirst({ where: { incidentKey: input.incidentKey } })` for dedup).
+  4802→  • commandPlaybook — `src/lib/command-network/playbooks.ts`. Required unique: playbookKey.
+  4803→  • commandSimulation — `src/lib/command-network/simulator.ts`.
+  4804→  • commandWorkflow — `src/lib/command-network/{workflows,engine,analytics,coordination}.ts`. Required unique: workflowKey.
+  4805→  • company — `src/lib/enterprise/{seed,search,admin}.ts`. tenantId → Tenant (group 3), organizationId → Organization (group 3), firmId → Firm (existing).
+  4806→  • complianceAuditTrail — `src/lib/compliance-cloud/audit-cloud.ts` + `src/lib/agi/core.ts`. Required unique: replayToken.
+  4807→  • complianceCert — `src/lib/enterprise/governance.ts` (seedComplianceCerts, listComplianceCerts, getGovernanceStats).
+  4808→  • complianceDeadline — `src/lib/global-enterprise/{seeder,compliance}.ts`. Added @@unique([countryIso, regulationType, title]) for natural-key dedup.
+  4809→  • complianceFiling — `src/lib/compliance-cloud/{engine,digital-twin,dashboard}.ts`. In-group relations: auditId → ComplianceAuditTrail, risks[] → ComplianceRisk, snapshots[] → ComplianceTwinSnapshot.
+  4810→  • compliancePolicy — `src/lib/compliance-cloud/policy-engine.ts`.
+  4811→  • complianceRegulation — `src/lib/compliance-cloud/regulation-graph.ts` + `src/lib/agi/core.ts` + `src/lib/data-intelligence/catalog.ts`. Required unique: regulationCode. In-group relation: risks[] → ComplianceRisk.
+  4812→  • complianceRisk — `src/lib/compliance-cloud/{risk-engine,score-engine}.ts` + `src/lib/agi/{core,learning}.ts` + `src/lib/command-network/{engine,coordination,automation}.ts`. In-group relations: regulationId → ComplianceRegulation, filingId → ComplianceFiling.
+  4813→  • complianceScore — `src/lib/compliance-cloud/score-engine.ts` (computeScore persists, findFirst previous by scopeType+scopeId for trend delta).
+  4814→  • complianceTwinSnapshot — `src/lib/compliance-cloud/digital-twin.ts`. In-group relation: filingId → ComplianceFiling.
+  4815→- Identified and declared 15 IN-GROUP @relation pairs (both sides in this file) so `include: { ... }` queries compile cleanly:
+  4816→  1. AGIGoal ↔ AGIPlan (goalId)
+  4817→  2. App ↔ AppDeveloper (developerId)
+  4818→  3. App ↔ AppInstall (appId)
+  4819→  4. App ↔ AppVersion (appId)
+  4820→  5. App ↔ AppReview (appId)
+  4821→  6. App ↔ AppAnalyticsEvent (appId, nullable)
+  4822→  7. AppInstall ↔ AppAnalyticsEvent (installId, nullable)
+  4823→  8. AppInstall ↔ AppSandboxExecution (installId, nullable)
+  4824→  9. AppInstall ↔ AppWebhook (installId, nullable)
+  4825→  10. AppInstall ↔ AppPlugin (installId, nullable)
+  4826→  11. AppDeveloper ↔ AppPayout (developerId, nullable)
+  4827→  12. ComplianceAuditTrail ↔ ComplianceFiling (auditId, nullable)
+  4828→  13. ComplianceRegulation ↔ ComplianceRisk (regulationId, nullable)
+  4829→  14. ComplianceFiling ↔ ComplianceRisk (filingId, nullable)
+  4830→  15. ComplianceFiling ↔ ComplianceTwinSnapshot (filingId, nullable)
+  4831→- All other FK fields to models in groups 2/3, the existing schema, or ungrouped models are plain `String?` with `// TODO: relation to <ModelName>` comments — no circular dependencies, no edits to existing schema.
+  4832→- Honored unique constraints required by code:
+  4833→  • AGIAgent.agentId @unique — findUnique by agentId
+  4834→  • AGIGoal.goalKey @unique — findUnique by goalKey
+  4835→  • AGIMemory.memoryKey @unique — upsert by memoryKey
+  4836→  • AGIPlan.goalId NOT unique (multiple plans per goal — findFirst)
+  4837→  • App.slug @unique — findUnique by slug
+  4838→  • AppDeveloper.slug @unique — findUnique by slug
+  4839→  • AppVersion — no unique (findFirst by appId+version+status)
+  4840→  • BillingInvoice.number @unique — implicit uniqueness from numbering scheme
+  4841→  • ClientMemory.clientId @unique — upsert by clientId
+  4842→  • CommandAuditLog.replayToken @unique — findUnique by replayToken
+  4843→  • CommandIncident.incidentKey @unique — findFirst by incidentKey (made unique for safety)
+  4844→  • CommandPlaybook.playbookKey @unique — count by playbookKey for dedup
+  4845→  • CommandWorkflow.workflowKey @unique — findUnique by id primarily
+  4846→  • ComplianceAuditTrail.replayToken @unique — findUnique by replayToken
+  4847→  • ComplianceRegulation.regulationCode @unique — natural key
+  4848→  • ComplianceDeadline @@unique([countryIso, regulationType, title]) — composite natural key (dedup in seeder)
+  4849→- Wrote `/tmp/schema-group-1.prisma` (also mirrored at `/home/z/my-project/.tmp-schemas/schema-group-1.prisma` for sandbox access). File is ~1050 lines, 44 model definitions, no generator/datasource block.
+  4850→- Validation step 1: temporarily appended Group 1 only → `npx prisma validate` → "The schema at prisma/schema.prisma is valid 🚀"
+  4851→- Validation step 2: temporarily appended all 3 groups (1+2+3) → `npx prisma validate` → "The schema at prisma/schema.prisma is valid 🚀"
+  4852→- Generation step: `npx prisma generate` → "✔ Generated Prisma Client (v6.19.2)" in 1.30s — all 89 new models (44+44+44) + 115 existing = 204 total models compiled cleanly into the client.
+  4853→- Restored `prisma/schema.prisma` to original 2347 lines / 115 models (orchestrator remains the sole merger of groups 1+2+3).
+  4854→
+  4855→Stage Summary:
+  4856→- **Deliverable 1 (✅)**: `/tmp/schema-group-1.prisma` — 44 Prisma model definitions, ~1050 lines, validated by `prisma validate` and `prisma generate`.
+  4857→- **Deliverable 2 (✅)**: All 44 models from the task list created with correct PascalCase names that Prisma exposes as the requested `db.<camelCase>` accessors:
+  4858→  AGIAgent, AGIGoal, AGILearningEpisode, AGIMemory, AGIPlan, AGIReasoningCycle, AGISimulation, Activity, Alert, ApiKey, App, AppAnalyticsEvent, AppDeveloper, AppInstall, AppPayout, AppPlugin, AppReview, AppSandboxExecution, AppVersion, AppWebhook, BankAccount, BillingInvoice, BusinessConnection, BusinessGoal, BusinessHealthSnapshot, CashForecast, ClientMemory, CollectionRecovery, CollectionsCase, CommandAuditLog, CommandIncident, CommandPlaybook, CommandSimulation, CommandWorkflow, Company, ComplianceAuditTrail, ComplianceCert, ComplianceDeadline, ComplianceFiling, CompliancePolicy, ComplianceRegulation, ComplianceRisk, ComplianceScore, ComplianceTwinSnapshot
+  4859→- **Deliverable 3 (✅)**: This worklog entry appended.
+  4860→
+  4861→Tricky relations / decisions worth flagging to the orchestrator:
+  4862→1. **AGIGoal.planIds is JSON, not a relation**: `src/lib/agi/goals.ts` stores plan IDs as `JSON.stringify([])` in the `planIds` String field and never uses `include: { plans: true }` — so I added a one-directional `plans AGIPlan[]` back-relation on AGIGoal (for future use) but the app code continues to read planIds as a parsed JSON array. The relation is wired correctly because AGIPlan.goalId points back to AGIGoal.id and Prisma validates.
+  4863→2. **Activity include{client, user}**: `src/app/api/activities/route.ts` POST handler returns the created Activity with `include: { client: { select: { id, businessName } }, user: { select: { id, name } } }`. My Activity model has clientId/userId as plain `String?` with TODO comments because adding `@relation` to existing Client/User models would require modifying the existing schema (out of scope for this task). **Orchestrator must add `activities Activity[]` back-relations to Client and User**, and convert Activity.clientId/userId from plain String? to `Client? @relation(...)` / `User? @relation(...)` — otherwise the `include: { client: true, user: true }` call will fail at compile time with "Unknown field `client`".
+  4864→3. **App cluster has 10 in-group relations** — all wired up correctly. AppInstall has 4 back-relations (analytics, sandboxExecs, webhooks, plugins) which is fine because each is a distinct Prisma model.
+  4865→4. **BankTransaction is missing from all 3 groups** but is referenced via `db.bankTransaction` in `src/lib/banking/{engine,cashflow,upi,statements,aggregator}.ts` and `src/lib/connections/index.ts`. The orchestrator must create a `BankTransaction` model separately (fields visible in code: id, accountId?, connectionId?, bankProvider?, txnDate, description, amount, category, party, reference, balanceAfter?, createdAt, updatedAt). Without it, the banking engine and connection sync code will not typecheck.
+  4866→5. **`db.aGIApproval`, `db.aGIAuditLog`, `db.aGIDecision` are also missing** — referenced in `src/lib/agi/{security,core,swarm,learning,memory}.ts` and `src/app/api/agi/{approve,execute}/route.ts`. These are NOT in any of the 3 groups' model lists. Orchestrator must create them separately.
+  4867→6. **BusinessConnection → SyncLog/SyncQueueItem back-relations**: Group 3's SyncLog/SyncQueueItem use plain `String connectionId` with TODO comments (not @relation). I did NOT add `syncLogs SyncLog[]` / `syncQueueItems SyncQueueItem[]` back-relations on BusinessConnection because Prisma requires both sides to use @relation. The current state compiles. If the orchestrator wants `include: { syncLogs: true }` later, they must convert BOTH sides to @relation simultaneously.
+  4868→7. **Compliance cluster has 4 in-group relations**: ComplianceAuditTrail←filings, ComplianceRegulation←risks, ComplianceFiling←risks, ComplianceFiling←snapshots. All wired up. The compliance cloud engine writes `auditId` to ComplianceFiling after creating the ComplianceAuditTrail entry — the relation flows correctly.
+  4869→8. **No enums used**: SQLite/Prisma combination used String for all enum-like fields (status, severity, level, type, etc.) — matches existing schema convention. Comments document the allowed values for each field.
+  4870→9. **No `@db.Decimal` / `@db.Text`**: All monetary/decimal fields use `Float` (priceAmount, grossRevenue, platformFee, netPayout, balance, availableBalance, overdraftLimit, openingBalance, inflows, outflows, closingBalance, expectedCollections, expectedPayments, burnRate, shortageAmount, outstanding, amount, recoveredAmount, riskScore, confidence, financialImpact, gstImpact, taxImpact, penaltyEstimate, interestEstimate, cashFlowEffect, auditProbability, complianceScoreDelta, taxScore, payrollScore, corporateScore, bankingScore, legalScore, overallScore, trendDelta, expectedROI, etc.).
+  4871→10. **All JSON/array fields are String**: Per SQLite limitation. App code wraps writes with `JSON.stringify(...)` and reads with `JSON.parse(...)` (verified in app-platform/{seed,registry,plugins,webhooks,sandbox}.ts, connections/{index,auto-sync}.ts, agi/{swarm,goals,pm,reasoning,twin,memory,learning}.ts, command-network/{security,incidents,playbooks,simulator,workflows}.ts, compliance-cloud/{audit-cloud,engine,policy-engine,regulation-graph,risk-engine,score-engine,digital-twin}.ts) — no app code changes needed.
+  4872→
+  4873→Next actions for orchestrator:
+  4874→- Merge groups 1 + 2 + 3 into `prisma/schema.prisma` (validated clean — see Work Log step "Validation step 2")
+  4875→- Run `npx prisma generate && npx prisma db push` to materialize the 132 new tables in SQLite
+  4876→- Create the ungrouped missing models: BankTransaction, AGIApproval, AGIAuditLog, AGIDecision (referenced in code but not in any group's list)
+  4877→- Add back-relations on existing models for include() calls to work:
+  4878→  • Client.activities / User.activities / Firm.activities (Activity model)
+  4879→  • Client.expenses / Client.purchaseBills etc. are already present; check if any new group-1 model needs an existing-model back-relation
+  4880→- Run `bun run typecheck` — the ~500 TypeScript errors referencing `db.<group1Model>` should now resolve
+  4881→

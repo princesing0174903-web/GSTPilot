@@ -1,0 +1,505 @@
+     1→'use client'
+     2→
+     3→import React, { useState } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import {
+     6→  BookOpen, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown,
+     7→  IndianRupee, FileText, BarChart3, Scale, CreditCard,
+     8→  Wallet, Building2, ChevronRight, Plus, Search,
+     9→  ArrowRight, CheckCircle2, Clock, AlertCircle,
+    10→  PieChart, RefreshCw, Download, Filter,
+    11→} from 'lucide-react'
+    12→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    13→import { Badge } from '@/components/ui/badge'
+    14→import { Button } from '@/components/ui/button'
+    15→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    16→import { ScrollArea } from '@/components/ui/scroll-area'
+    17→import { Separator } from '@/components/ui/separator'
+    18→import { Input } from '@/components/ui/input'
+    19→
+    20→// ═══════════════════════════════════════════════════════════════════════════════
+    21→// FORMATTERS
+    22→// ═══════════════════════════════════════════════════════════════════════════════
+    23→
+    24→const fmtINR = (n: number) => '₹' + n.toLocaleString('en-IN')
+    25→const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+    26→
+    27→// ═══════════════════════════════════════════════════════════════════════════════
+    28→// SVG CHARTS
+    29→// ═══════════════════════════════════════════════════════════════════════════════
+    30→
+    31→function SparklineChart({ data, color = '#10b981', height = 40 }: { data: number[]; color?: string; height?: number }) {
+    32→  const max = Math.max(...data)
+    33→  const min = Math.min(...data)
+    34→  const range = max - min || 1
+    35→  const w = 120
+    36→  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${height - ((v - min) / range) * (height - 4) - 2}`)
+    37→  return (
+    38→    <svg width={w} height={height} className="overflow-visible">
+    39→      <defs>
+    40→        <linearGradient id={`grad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+    41→          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+    42→          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+    43→        </linearGradient>
+    44→      </defs>
+    45→      <polygon
+    46→        points={`0,${height} ${pts.join(' ')} ${w},${height}`}
+    47→        fill={`url(#grad-${color.replace('#', '')})`}
+    48→      />
+    49→      <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    50→    </svg>
+    51→  )
+    52→}
+    53→
+    54→function BarChartMini({ data, labels, color = '#10b981' }: { data: number[]; labels: string[]; color?: string }) {
+    55→  const max = Math.max(...data)
+    56→  const barW = 28
+    57→  const gap = 8
+    58→  const h = 80
+    59→  return (
+    60→    <svg width={data.length * (barW + gap)} height={h + 20} className="overflow-visible">
+    61→      {data.map((v, i) => {
+    62→        const barH = (v / max) * (h - 10)
+    63→        return (
+    64→          <g key={i}>
+    65→            <rect x={i * (barW + gap)} y={h - barH} width={barW} height={barH} rx={4} fill={color} opacity={0.8} />
+    66→            <text x={i * (barW + gap) + barW / 2} y={h + 14} textAnchor="middle" className="text-[9px] fill-muted-foreground">{labels[i]}</text>
+    67→          </g>
+    68→        )
+    69→      })}
+    70→    </svg>
+    71→  )
+    72→}
+    73→
+    74→// ═══════════════════════════════════════════════════════════════════════════════
+    75→// DATA
+    76→// ═══════════════════════════════════════════════════════════════════════════════
+    77→
+    78→const statCards = [
+    79→  { label: 'Total Revenue', value: 8745000, change: 12.4, icon: TrendingUp, color: 'emerald' },
+    80→  { label: 'Total Expenses', value: 5234000, change: -3.2, icon: TrendingDown, color: 'rose' },
+    81→  { label: 'Net Profit', value: 3511000, change: 28.6, icon: ArrowUpRight, color: 'emerald' },
+    82→  { label: 'Retained Earnings', value: 2890000, change: 8.1, icon: Wallet, color: 'slate' },
+    83→]
+    84→
+    85→const chartOfAccounts = [
+    86→  { code: '1000', name: 'Cash & Bank', type: 'Asset', balance: 2345000, change: 5.2 },
+    87→  { code: '1100', name: 'Accounts Receivable', type: 'Asset', balance: 1890000, change: -2.1 },
+    88→  { code: '1200', name: 'Inventory', type: 'Asset', balance: 567000, change: 1.8 },
+    89→  { code: '1300', name: 'Fixed Assets', type: 'Asset', balance: 4500000, change: 0.5 },
+    90→  { code: '2000', name: 'Accounts Payable', type: 'Liability', balance: -1234000, change: -4.3 },
+    91→  { code: '2100', name: 'GST Payable', type: 'Liability', balance: -456000, change: 12.1 },
+    92→  { code: '2200', name: 'TDS Payable', type: 'Liability', balance: -189000, change: 6.7 },
+    93→  { code: '2300', name: 'Loans & Borrowings', type: 'Liability', balance: -2000000, change: 0 },
+    94→  { code: '3000', name: 'Share Capital', type: 'Equity', balance: -5000000, change: 0 },
+    95→  { code: '3100', name: 'Retained Earnings', type: 'Equity', balance: -2890000, change: 8.1 },
+    96→  { code: '4000', name: 'Sales Revenue', type: 'Revenue', balance: -8745000, change: 12.4 },
+    97→  { code: '4100', name: 'Service Income', type: 'Revenue', balance: -3210000, change: 15.2 },
+    98→  { code: '5000', name: 'Cost of Goods Sold', type: 'Expense', balance: 3245000, change: -1.5 },
+    99→  { code: '5100', name: 'Salaries & Wages', type: 'Expense', balance: 1456000, change: 3.2 },
+   100→  { code: '5200', name: 'Rent & Utilities', type: 'Expense', balance: 345000, change: 0 },
+   101→  { code: '5300', name: 'Depreciation', type: 'Expense', balance: 188000, change: 2.1 },
+   102→]
+   103→
+   104→const journalEntries = [
+   105→  { id: 'JE-2026-0345', date: '15/03/2026', description: 'Sales Invoice - Sharma & Associates Pvt Ltd', debit: 450000, credit: 0, status: 'posted' },
+   106→  { id: 'JE-2026-0344', date: '14/03/2026', description: 'Rent Payment - Patel Properties', debit: 85000, credit: 85000, status: 'posted' },
+   107→  { id: 'JE-2026-0343', date: '14/03/2026', description: 'Salary Disbursement - March 2026', debit: 485000, credit: 485000, status: 'posted' },
+   108→  { id: 'JE-2026-0342', date: '13/03/2026', description: 'GST Payment - Feb 2026', debit: 156000, credit: 156000, status: 'posted' },
+   109→  { id: 'JE-2026-0341', date: '13/03/2026', description: 'Purchase - Mehta Suppliers Pvt Ltd', debit: 234000, credit: 0, status: 'posted' },
+   110→  { id: 'JE-2026-0340', date: '12/03/2026', description: 'Bank Charges - HDFC Bank', debit: 2500, credit: 2500, status: 'posted' },
+   111→  { id: 'JE-2026-0339', date: '12/03/2026', description: 'TDS Deposit - Kumar Enterprises', debit: 0, credit: 45000, status: 'pending' },
+   112→  { id: 'JE-2026-0338', date: '11/03/2026', description: 'Service Fee - Singh Consultants', debit: 125000, credit: 125000, status: 'posted' },
+   113→  { id: 'JE-2026-0337', date: '11/03/2026', description: 'Customer Payment - Reddy Traders', debit: 0, credit: 320000, status: 'posted' },
+   114→  { id: 'JE-2026-0336', date: '10/03/2026', description: 'Utility Bill - Agarwal Infra Pvt Ltd', debit: 18000, credit: 18000, status: 'draft' },
+   115→]
+   116→
+   117→const revenueData = [45, 52, 48, 61, 55, 67, 72, 68, 78, 82, 87, 94]
+   118→const expenseData = [32, 38, 35, 40, 36, 42, 45, 43, 48, 50, 52, 56]
+   119→const monthLabels = ['A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D', 'J', 'F', 'M']
+   120→
+   121→const typeColors: Record<string, string> = {
+   122→  Asset: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+   123→  Liability: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+   124→  Equity: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+   125→  Revenue: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+   126→  Expense: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+   127→}
+   128→
+   129→const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+   130→const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
+   131→
+   132→// ═══════════════════════════════════════════════════════════════════════════════
+   133→// COMPONENT
+   134→// ═══════════════════════════════════════════════════════════════════════════════
+   135→
+   136→export default function AccountingPage() {
+   137→  const [activeTab, setActiveTab] = useState('overview')
+   138→  const [searchQ, setSearchQ] = useState('')
+   139→
+   140→  const filteredCOA = chartOfAccounts.filter(a =>
+   141→    a.name.toLowerCase().includes(searchQ.toLowerCase()) || a.code.includes(searchQ) || a.type.toLowerCase().includes(searchQ.toLowerCase())
+   142→  )
+   143→
+   144→  const totalAssets = chartOfAccounts.filter(a => a.type === 'Asset').reduce((s, a) => s + a.balance, 0)
+   145→  const totalLiabilities = chartOfAccounts.filter(a => a.type === 'Liability').reduce((s, a) => s + Math.abs(a.balance), 0)
+   146→  const totalEquity = chartOfAccounts.filter(a => a.type === 'Equity').reduce((s, a) => s + Math.abs(a.balance), 0)
+   147→  const totalRevenue = chartOfAccounts.filter(a => a.type === 'Revenue').reduce((s, a) => s + Math.abs(a.balance), 0)
+   148→  const totalExpenses = chartOfAccounts.filter(a => a.type === 'Expense').reduce((s, a) => s + a.balance, 0)
+   149→
+   150→  return (
+   151→    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20">
+   152→      {/* Sticky Header */}
+   153→      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b dark:bg-slate-900/80">
+   154→        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
+   155→          <div className="flex items-center gap-3">
+   156→            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shadow-md shadow-emerald-600/20">
+   157→              <BookOpen className="h-5 w-5 text-white" />
+   158→            </div>
+   159→            <div>
+   160→              <h1 className="text-lg font-bold text-slate-900 dark:text-white">Accounting</h1>
+   161→              <p className="text-xs text-muted-foreground">Sharma & Associates Pvt Ltd &middot; FY 2025-26</p>
+   162→            </div>
+   163→          </div>
+   164→          <div className="flex items-center gap-2">
+   165→            <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
+   166→            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />New Entry</Button>
+   167→          </div>
+   168→        </div>
+   169→        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
+   170→          <TabsList className="bg-transparent h-9 p-0 gap-1 border-b-0">
+   171→            {['overview', 'journal-entries', 'chart-of-accounts', 'reports'].map(t => (
+   172→              <TabsTrigger key={t} value={t} className="rounded-t-lg rounded-b-none data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/20 dark:data-[state=active]:text-emerald-400 text-xs px-3 h-8 capitalize">
+   173→                {t.replace(/-/g, ' ')}
+   174→              </TabsTrigger>
+   175→            ))}
+   176→          </TabsList>
+   177→        </Tabs>
+   178→      </div>
+   179→
+   180→      <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+   181→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   182→          {/* ─── OVERVIEW TAB ─── */}
+   183→          <TabsContent value="overview" className="mt-0 space-y-6">
+   184→            {/* Stat Cards */}
+   185→            <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   186→              {statCards.map((s) => {
+   187→                const Icon = s.icon
+   188→                const positive = s.change >= 0
+   189→                return (
+   190→                  <motion.div key={s.label} variants={item}>
+   191→                    <Card className="hover:shadow-md transition-shadow border-slate-200/60 dark:border-slate-800/60">
+   192→                      <CardContent className="p-4">
+   193→                        <div className="flex items-center justify-between mb-3">
+   194→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${s.color === 'emerald' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : s.color === 'rose' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+   195→                            <Icon className="h-4.5 w-4.5" />
+   196→                          </div>
+   197→                          <div className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+   198→                            {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+   199→                            {fmtPct(s.change)}
+   200→                          </div>
+   201→                        </div>
+   202→                        <p className="text-xl font-bold text-slate-900 dark:text-white">{fmtINR(s.value)}</p>
+   203→                        <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+   204→                      </CardContent>
+   205→                    </Card>
+   206→                  </motion.div>
+   207→                )
+   208→              })}
+   209→            </motion.div>
+   210→
+   211→            {/* P&L + Balance Sheet */}
+   212→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   213→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   214→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   215→                  <CardHeader className="pb-3">
+   216→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   217→                      <PieChart className="h-4 w-4 text-emerald-600" /> Profit & Loss Summary
+   218→                    </CardTitle>
+   219→                  </CardHeader>
+   220→                  <CardContent>
+   221→                    <div className="flex gap-6 items-end">
+   222→                      <div className="flex-1 space-y-3">
+   223→                        <div>
+   224→                          <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">Revenue</span><span className="font-semibold text-emerald-600">{fmtINR(totalRevenue)}</span></div>
+   225→                          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-2 rounded-full bg-emerald-500" style={{ width: '100%' }} /></div>
+   226→                        </div>
+   227→                        <div>
+   228→                          <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">Expenses</span><span className="font-semibold text-rose-500">{fmtINR(totalExpenses)}</span></div>
+   229→                          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-2 rounded-full bg-rose-400" style={{ width: `${(totalExpenses / totalRevenue) * 100}%` }} /></div>
+   230→                        </div>
+   231→                        <Separator />
+   232→                        <div className="flex justify-between text-sm font-bold"><span>Net Profit</span><span className="text-emerald-600">{fmtINR(totalRevenue - totalExpenses)}</span></div>
+   233→                      </div>
+   234→                      <div className="hidden sm:block">
+   235→                        <SparklineChart data={revenueData.slice(-6)} color="#10b981" height={60} />
+   236→                      </div>
+   237→                    </div>
+   238→                    <div className="mt-4 pt-3 border-t dark:border-slate-800">
+   239→                      <p className="text-[10px] text-muted-foreground mb-2">Monthly Trend (FY 2025-26)</p>
+   240→                      <div className="flex gap-1 items-end">
+   241→                        <BarChartMini data={revenueData} labels={monthLabels} color="#10b981" />
+   242→                      </div>
+   243→                    </div>
+   244→                  </CardContent>
+   245→                </Card>
+   246→              </motion.div>
+   247→
+   248→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+   249→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   250→                  <CardHeader className="pb-3">
+   251→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   252→                      <Scale className="h-4 w-4 text-emerald-600" /> Balance Sheet Overview
+   253→                    </CardTitle>
+   254→                  </CardHeader>
+   255→                  <CardContent className="space-y-4">
+   256→                    <div>
+   257→                      <p className="text-xs font-semibold text-emerald-600 mb-2 uppercase tracking-wider">Assets</p>
+   258→                      {chartOfAccounts.filter(a => a.type === 'Asset').map(a => (
+   259→                        <div key={a.code} className="flex justify-between py-1.5 text-xs">
+   260→                          <span className="text-muted-foreground">{a.name}</span>
+   261→                          <span className="font-medium">{fmtINR(a.balance)}</span>
+   262→                        </div>
+   263→                      ))}
+   264→                      <Separator className="my-1" />
+   265→                      <div className="flex justify-between py-1 text-xs font-bold"><span>Total Assets</span><span>{fmtINR(totalAssets)}</span></div>
+   266→                    </div>
+   267→                    <div className="grid grid-cols-2 gap-4">
+   268→                      <div>
+   269→                        <p className="text-xs font-semibold text-rose-500 mb-2 uppercase tracking-wider">Liabilities</p>
+   270→                        {chartOfAccounts.filter(a => a.type === 'Liability').map(a => (
+   271→                          <div key={a.code} className="flex justify-between py-1 text-xs">
+   272→                            <span className="text-muted-foreground">{a.name}</span>
+   273→                            <span className="font-medium">{fmtINR(Math.abs(a.balance))}</span>
+   274→                          </div>
+   275→                        ))}
+   276→                        <Separator className="my-1" />
+   277→                        <div className="flex justify-between py-1 text-xs font-bold"><span>Total</span><span>{fmtINR(totalLiabilities)}</span></div>
+   278→                      </div>
+   279→                      <div>
+   280→                        <p className="text-xs font-semibold text-violet-500 mb-2 uppercase tracking-wider">Equity</p>
+   281→                        {chartOfAccounts.filter(a => a.type === 'Equity').map(a => (
+   282→                          <div key={a.code} className="flex justify-between py-1 text-xs">
+   283→                            <span className="text-muted-foreground">{a.name}</span>
+   284→                            <span className="font-medium">{fmtINR(Math.abs(a.balance))}</span>
+   285→                          </div>
+   286→                        ))}
+   287→                        <Separator className="my-1" />
+   288→                        <div className="flex justify-between py-1 text-xs font-bold"><span>Total</span><span>{fmtINR(totalEquity)}</span></div>
+   289→                      </div>
+   290→                    </div>
+   291→                  </CardContent>
+   292→                </Card>
+   293→              </motion.div>
+   294→            </div>
+   295→
+   296→            {/* Trial Balance + Recent Journal Entries */}
+   297→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   298→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+   299→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   300→                  <CardHeader className="pb-3">
+   301→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   302→                      <BarChart3 className="h-4 w-4 text-emerald-600" /> Trial Balance Summary
+   303→                    </CardTitle>
+   304→                  </CardHeader>
+   305→                  <CardContent>
+   306→                    <div className="space-y-2">
+   307→                      {['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'].map(type => {
+   308→                        const accounts = chartOfAccounts.filter(a => a.type === type)
+   309→                        const debitTotal = accounts.reduce((s, a) => s + (a.balance > 0 ? a.balance : 0), 0)
+   310→                        const creditTotal = accounts.reduce((s, a) => s + (a.balance < 0 ? Math.abs(a.balance) : 0), 0)
+   311→                        return (
+   312→                          <div key={type} className="flex items-center justify-between py-2 border-b last:border-b-0 dark:border-slate-800">
+   313→                            <div className="flex items-center gap-2">
+   314→                              <Badge variant="secondary" className={`text-[10px] ${typeColors[type]}`}>{type}</Badge>
+   315→                              <span className="text-xs">{accounts.length} accounts</span>
+   316→                            </div>
+   317→                            <div className="flex gap-6 text-xs">
+   318→                              <div><span className="text-muted-foreground">Dr: </span><span className="font-semibold">{fmtINR(debitTotal)}</span></div>
+   319→                              <div><span className="text-muted-foreground">Cr: </span><span className="font-semibold">{fmtINR(creditTotal)}</span></div>
+   320→                            </div>
+   321→                          </div>
+   322→                        )
+   323→                      })}
+   324→                    </div>
+   325→                    <Separator className="my-3" />
+   326→                    <div className="flex justify-between text-xs font-bold text-emerald-600">
+   327→                      <span>Trial Balance Check</span>
+   328→                      <span>Balanced</span>
+   329→                    </div>
+   330→                  </CardContent>
+   331→                </Card>
+   332→              </motion.div>
+   333→
+   334→              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+   335→                <Card className="border-slate-200/60 dark:border-slate-800/60">
+   336→                  <CardHeader className="pb-3">
+   337→                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   338→                      <FileText className="h-4 w-4 text-emerald-600" /> Recent Journal Entries
+   339→                    </CardTitle>
+   340→                  </CardHeader>
+   341→                  <CardContent className="p-0">
+   342→                    <ScrollArea className="max-h-72">
+   343→                      <div className="px-4 pb-4 space-y-2">
+   344→                        {journalEntries.slice(0, 7).map(je => (
+   345→                          <div key={je.id} className="flex items-center justify-between py-2 border-b last:border-b-0 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded px-2 transition-colors">
+   346→                            <div className="flex-1 min-w-0">
+   347→                              <div className="flex items-center gap-2">
+   348→                                <span className="text-xs font-mono text-muted-foreground">{je.id}</span>
+   349→                                <Badge variant={je.status === 'posted' ? 'default' : je.status === 'pending' ? 'secondary' : 'outline'} className={`text-[9px] h-4 ${je.status === 'posted' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : je.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-500'}`}>
+   350→                                  {je.status}
+   351→                                </Badge>
+   352→                              </div>
+   353→                              <p className="text-xs text-slate-700 dark:text-slate-300 truncate mt-0.5">{je.description}</p>
+   354→                              <p className="text-[10px] text-muted-foreground">{je.date}</p>
+   355→                            </div>
+   356→                            <div className="text-right ml-3">
+   357→                              <p className="text-xs font-semibold">{fmtINR(je.debit)}</p>
+   358→                              {je.credit > 0 && <p className="text-[10px] text-muted-foreground">Cr: {fmtINR(je.credit)}</p>}
+   359→                            </div>
+   360→                          </div>
+   361→                        ))}
+   362→                      </div>
+   363→                    </ScrollArea>
+   364→                  </CardContent>
+   365→                </Card>
+   366→              </motion.div>
+   367→            </div>
+   368→          </TabsContent>
+   369→
+   370→          {/* ─── JOURNAL ENTRIES TAB ─── */}
+   371→          <TabsContent value="journal-entries" className="mt-0 space-y-4">
+   372→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   373→              <div className="flex items-center justify-between mb-4">
+   374→                <div className="flex items-center gap-2">
+   375→                  <Input placeholder="Search entries..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   376→                  <Button variant="outline" size="sm" className="gap-1.5 h-8"><Filter className="h-3 w-3" />Filter</Button>
+   377→                </div>
+   378→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />New Entry</Button>
+   379→              </div>
+   380→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   381→                <CardContent className="p-0">
+   382→                  <ScrollArea className="max-h-[600px]">
+   383→                    <div className="divide-y dark:divide-slate-800/60">
+   384→                      {journalEntries.map((je, i) => (
+   385→                        <motion.div
+   386→                          key={je.id}
+   387→                          initial={{ opacity: 0, x: -10 }}
+   388→                          animate={{ opacity: 1, x: 0 }}
+   389→                          transition={{ delay: i * 0.04 }}
+   390→                          className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+   391→                        >
+   392→                          <div className="flex items-center gap-4">
+   393→                            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+   394→                              <FileText className="h-4 w-4 text-slate-500" />
+   395→                            </div>
+   396→                            <div>
+   397→                              <div className="flex items-center gap-2">
+   398→                                <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white">{je.id}</span>
+   399→                                <Badge variant={je.status === 'posted' ? 'default' : je.status === 'pending' ? 'secondary' : 'outline'} className={`text-[9px] h-4 ${je.status === 'posted' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : je.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-500'}`}>
+   400→                                  {je.status}
+   401→                                </Badge>
+   402→                              </div>
+   403→                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{je.description}</p>
+   404→                              <p className="text-[10px] text-muted-foreground">{je.date}</p>
+   405→                            </div>
+   406→                          </div>
+   407→                          <div className="text-right">
+   408→                            <p className="text-xs font-bold text-slate-900 dark:text-white">Dr: {fmtINR(je.debit)}</p>
+   409→                            {je.credit > 0 && <p className="text-[10px] text-muted-foreground">Cr: {fmtINR(je.credit)}</p>}
+   410→                          </div>
+   411→                          <ChevronRight className="h-4 w-4 text-muted-foreground ml-3" />
+   412→                        </motion.div>
+   413→                      ))}
+   414→                    </div>
+   415→                  </ScrollArea>
+   416→                </CardContent>
+   417→              </Card>
+   418→            </motion.div>
+   419→          </TabsContent>
+   420→
+   421→          {/* ─── CHART OF ACCOUNTS TAB ─── */}
+   422→          <TabsContent value="chart-of-accounts" className="mt-0 space-y-4">
+   423→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   424→              <div className="flex items-center justify-between mb-4">
+   425→                <div className="flex items-center gap-2">
+   426→                  <Input placeholder="Search accounts..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+   427→                  <div className="flex gap-1">
+   428→                    {['All', 'Asset', 'Liability', 'Equity', 'Revenue', 'Expense'].map(t => (
+   429→                      <Button key={t} variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={() => setSearchQ(t === 'All' ? '' : t)}>{t}</Button>
+   430→                    ))}
+   431→                  </div>
+   432→                </div>
+   433→                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Plus className="h-3.5 w-3.5" />New Account</Button>
+   434→              </div>
+   435→              <Card className="border-slate-200/60 dark:border-slate-800/60">
+   436→                <CardContent className="p-0">
+   437→                  <div className="divide-y dark:divide-slate-800/60">
+   438→                    {filteredCOA.map((acc, i) => (
+   439→                      <motion.div
+   440→                        key={acc.code}
+   441→                        initial={{ opacity: 0, x: -10 }}
+   442→                        animate={{ opacity: 1, x: 0 }}
+   443→                        transition={{ delay: i * 0.03 }}
+   444→                        className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+   445→                      >
+   446→                        <div className="flex items-center gap-4">
+   447→                          <span className="text-xs font-mono font-semibold text-slate-500 w-12">{acc.code}</span>
+   448→                          <div>
+   449→                            <p className="text-xs font-medium text-slate-900 dark:text-white">{acc.name}</p>
+   450→                            <Badge variant="secondary" className={`text-[9px] h-4 mt-0.5 ${typeColors[acc.type]}`}>{acc.type}</Badge>
+   451→                          </div>
+   452→                        </div>
+   453→                        <div className="flex items-center gap-4">
+   454→                          <div className="flex items-center gap-1 text-[10px]">
+   455→                            {acc.change >= 0 ? <ArrowUpRight className="h-3 w-3 text-emerald-500" /> : <ArrowDownRight className="h-3 w-3 text-rose-500" />}
+   456→                            <span className={acc.change >= 0 ? 'text-emerald-600' : 'text-rose-500'}>{fmtPct(acc.change)}</span>
+   457→                          </div>
+   458→                          <span className="text-xs font-bold text-slate-900 dark:text-white min-w-[100px] text-right">{fmtINR(Math.abs(acc.balance))}</span>
+   459→                        </div>
+   460→                      </motion.div>
+   461→                    ))}
+   462→                  </div>
+   463→                </CardContent>
+   464→              </Card>
+   465→            </motion.div>
+   466→          </TabsContent>
+   467→
+   468→          {/* ─── REPORTS TAB ─── */}
+   469→          <TabsContent value="reports" className="mt-0 space-y-4">
+   470→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   471→              {[
+   472→                { title: 'Profit & Loss Statement', desc: 'Revenue, expenses, and net profit for FY 2025-26', icon: PieChart, period: 'As of 15/03/2026' },
+   473→                { title: 'Balance Sheet', desc: 'Assets, liabilities, and equity position', icon: Scale, period: 'As of 15/03/2026' },
+   474→                { title: 'Trial Balance', desc: 'Debit and credit balances for all accounts', icon: BarChart3, period: 'As of 15/03/2026' },
+   475→                { title: 'Cash Flow Statement', desc: 'Operating, investing, and financing activities', icon: IndianRupee, period: 'FY 2025-26' },
+   476→                { title: 'General Ledger', desc: 'Complete transaction history by account', icon: BookOpen, period: 'FY 2025-26' },
+   477→                { title: 'Aging Report', desc: 'Receivables and payables aging analysis', icon: Clock, period: 'As of 15/03/2026' },
+   478→              ].map((r, i) => {
+   479→                const Icon = r.icon
+   480→                return (
+   481→                  <motion.div key={r.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+   482→                    <Card className="hover:shadow-md transition-all border-slate-200/60 dark:border-slate-800/60 cursor-pointer group">
+   483→                      <CardContent className="p-4">
+   484→                        <div className="flex items-start justify-between mb-3">
+   485→                          <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   486→                            <Icon className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+   487→                          </div>
+   488→                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+   489→                        </div>
+   490→                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1">{r.title}</h3>
+   491→                        <p className="text-xs text-muted-foreground mb-2">{r.desc}</p>
+   492→                        <p className="text-[10px] text-muted-foreground">{r.period}</p>
+   493→                      </CardContent>
+   494→                    </Card>
+   495→                  </motion.div>
+   496→                )
+   497→              })}
+   498→            </motion.div>
+   499→          </TabsContent>
+   500→        </Tabs>
+   501→      </div>
+   502→    </div>
+   503→  )
+   504→}
+   505→

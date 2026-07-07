@@ -141,7 +141,7 @@ export function NetworkPage() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] as const }}
       >
         <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <Globe className="h-3.5 w-3.5 text-[#00F5D4]" />
@@ -160,7 +160,7 @@ export function NetworkPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1], delay: 0.05 }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] as const, delay: 0.05 }}
           className="mt-8 space-y-4"
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -219,7 +219,7 @@ export function NetworkPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1], delay: 0.05 }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] as const, delay: 0.05 }}
           className="mt-8"
         >
           <div className="glass-surface relative overflow-hidden rounded-[28px] p-8 md:p-12">
@@ -281,7 +281,7 @@ export function NetworkPage() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1], delay: 0.1 }}
+        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] as const, delay: 0.1 }}
         className="mt-8"
       >
         <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

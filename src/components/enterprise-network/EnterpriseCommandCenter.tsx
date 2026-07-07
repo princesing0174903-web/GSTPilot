@@ -135,7 +135,7 @@ function KpiTile({ icon: Icon, label, value, sub, trend, accent }: KpiTileProps)
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: 'easeOut' as const }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.12] transition-colors"
     >
       <div className="flex items-start justify-between gap-3">
@@ -173,7 +173,7 @@ function CompanyHealthCard({ company, index }: { company: Company; index: number
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' as const }}
       whileHover={{ y: -2 }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.14] transition-all"
     >
@@ -242,7 +242,7 @@ function ScoreBar({
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${value}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const }}
           className={`h-full ${color}`}
         />
       </div>
@@ -268,7 +268,7 @@ function CashFlowChart({ companies }: { companies: Company[] }) {
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.7, delay: i * 0.05, ease: 'easeOut' }}
+                transition={{ duration: 0.7, delay: i * 0.05, ease: 'easeOut' as const }}
                 className="absolute inset-y-0 left-0 flex items-center justify-end rounded-md px-2"
                 style={{
                   background: `linear-gradient(90deg, ${c.color}33, ${c.color}aa)`,

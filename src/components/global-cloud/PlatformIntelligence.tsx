@@ -612,7 +612,7 @@ export default function PlatformIntelligence() {
                             <motion.div
                               initial={{ height: 0 }}
                               animate={{ height: `${Math.max(heightPct, 2)}%` }}
-                              transition={{ duration: 0.5, delay: 0.1 + i * 0.06, ease: 'easeOut' }}
+                              transition={{ duration: 0.5, delay: 0.1 + i * 0.06, ease: 'easeOut' as const }}
                               className={cn(
                                 'w-full max-w-[60px] rounded-t-lg border-t border-x',
                                 a.bar, a.border,

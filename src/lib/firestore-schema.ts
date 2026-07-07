@@ -27,6 +27,10 @@ export const COLLECTIONS = {
   PRIORITY_QUEUE: 'priorityQueue',
   ORGANIZATIONS: 'organizations',
   MEMBERSHIPS: 'memberships',
+  // The canonical multi-tenant membership collection. Join docs live at
+  // `organization_members/{orgId}_{uid}` and carry role + status per user.
+  // `memberships` above is the vestigial alias kept only for legacy callers.
+  ORGANIZATION_MEMBERS: 'organization_members',
   // CRM & Productivity (recovered)
   LEADS: 'leads',
   DEALS: 'deals',
@@ -626,6 +630,13 @@ export interface FirestorePayment {
   referenceNo: string | null;
   status: PaymentStatus;
   reconciled: boolean;
+  /**
+   * The bank transaction this payment was reconciled against (null if not
+   * linked to a bank transaction). Persisted when a user clicks "Match" /
+   * "Resolve" so the reconciliation link survives refreshes — fixes audit 1d
+   * issue #8 (boolean flip without linking).
+   */
+  reconciledTransactionId?: string | null;
   notes: string | null;
   createdAt: unknown;
   updatedAt: unknown;

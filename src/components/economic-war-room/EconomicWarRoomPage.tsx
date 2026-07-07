@@ -81,7 +81,7 @@ const staggerChild = {
   initial: { opacity: 0, y: 14, scale: 0.97 },
   animate: (i: number) => ({
     opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.06, duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { delay: i * 0.06, duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] as const },
   }),
 }
 
@@ -93,12 +93,12 @@ const glowPulse = {
       '0 0 0px rgba(16, 185, 129, 0)',
     ],
   },
-  transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+  transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
 }
 
 const scanLine = {
   animate: { top: ['0%', '100%'] },
-  transition: { duration: 8, repeat: Infinity, ease: 'linear' },
+  transition: { duration: 8, repeat: Infinity, ease: 'linear' as const },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -588,7 +588,7 @@ function GdpLineChart({ data }: { data: { label: string; value: number; current?
         d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.5, ease: 'easeOut' }}
+        transition={{ duration: 1.5, ease: 'easeOut' as const }}
       />
       {/* Data points */}
       {pts.map((p, i) => (
@@ -674,7 +674,7 @@ function GstBarChart({ data }: { data: { label: string; value: number; yoy: numb
               fill={isCurrent ? 'url(#gst-bar-current)' : 'url(#gst-bar)'}
               initial={{ height: 0, y: padT + chartH }}
               animate={{ height: barH, y }}
-              transition={{ delay: 0.2 + i * 0.06, duration: 0.6, ease: 'easeOut' }}
+              transition={{ delay: 0.2 + i * 0.06, duration: 0.6, ease: 'easeOut' as const }}
             />
             <text x={x + barW / 2} y={h - 8} textAnchor="middle" className="fill-slate-500" style={{ fontSize: 9 }}>
               {d.label}
@@ -736,7 +736,7 @@ function BusinessHealthAreaChart({ data }: { data: number[] }) {
         d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.8, ease: 'easeOut' }}
+        transition={{ duration: 1.8, ease: 'easeOut' as const }}
       />
       {/* End dot */}
       <motion.circle
@@ -784,7 +784,7 @@ function CreditDeploymentBarChart({ data }: { data: { name: string; value: numbe
               rx="3" fill="url(#cd-bar)"
               initial={{ width: 0 }}
               animate={{ width: barW }}
-              transition={{ delay: 0.2 + i * 0.08, duration: 0.7, ease: 'easeOut' }}
+              transition={{ delay: 0.2 + i * 0.08, duration: 0.7, ease: 'easeOut' as const }}
             />
             <text x={padL + barW + 6} y={y + barH / 2 + 3} className="fill-slate-200" style={{ fontSize: 9, fontWeight: 600 }}>
               ₹{(d.value / 100000).toFixed(2)}L Cr
@@ -845,7 +845,7 @@ function IndiaEconomicMapSVG({ states, hoveredState, onHover }: {
         filter="url(#india-glow)"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
-        transition={{ duration: 2, ease: 'easeInOut' }}
+        transition={{ duration: 2, ease: 'easeInOut' as const }}
       />
       {/* India fill */}
       <path
@@ -957,7 +957,7 @@ function IndiaEconomicMapSVG({ states, hoveredState, onHover }: {
           cx: [165, 235, 305, 235, 165],
           cy: [290, 395, 245, 130, 290],
         }}
-        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' as const }}
       />
     </svg>
   )
@@ -1079,7 +1079,7 @@ function ScrollingTicker() {
       <motion.div
         className="flex whitespace-nowrap"
         animate={{ x: ['0%', '-50%'] }}
-        transition={{ duration: 45, repeat: Infinity, ease: 'linear' }}
+        transition={{ duration: 45, repeat: Infinity, ease: 'linear' as const }}
       >
         {doubled.map((item, i) => (
           <span key={i} className="inline-flex items-center gap-2 px-5 text-[11px] text-slate-300">
@@ -1533,7 +1533,7 @@ function IndustryHealthMonitor() {
                         style={{ backgroundColor: color }}
                         initial={{ width: 0 }}
                         animate={{ width: `${ind.score}%` }}
-                        transition={{ delay: 0.3 + i * 0.05, duration: 0.8, ease: 'easeOut' }}
+                        transition={{ delay: 0.3 + i * 0.05, duration: 0.8, ease: 'easeOut' as const }}
                       />
                     </div>
                   </div>

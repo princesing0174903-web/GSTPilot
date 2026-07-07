@@ -50,7 +50,7 @@ const stagger = {
 }
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 }
 
 // ─── Sample Data ───────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ function GaugeChart({ value, size = 80, label }: { value: number; size?: number;
           strokeDasharray={circ}
           initial={{ strokeDashoffset: circ }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          transition={{ duration: 1, ease: 'easeOut' as const }}
         />
         <text x={size / 2} y={size / 2 - 4} textAnchor="middle" className="text-sm font-bold" fill={color}>
           {value}
@@ -222,7 +222,7 @@ function ClientScorecard({ client }: { client: ManagedClient }) {
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${s.value}%` }}
-                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  transition={{ duration: 0.6, ease: 'easeOut' as const }}
                   className="h-full rounded-full"
                   style={{ backgroundColor: s.color }}
                 />

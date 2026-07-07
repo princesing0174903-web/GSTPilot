@@ -58,7 +58,7 @@ const fadeUp: Variants = {
     opacity: 1,
     y: 0,
     filter: 'blur(0px)',
-    transition: { duration: 0.7, ease: 'easeOut' },
+    transition: { duration: 0.7, ease: 'easeOut' as const },
   },
 }
 
@@ -92,7 +92,7 @@ function PrimaryButton({
       onClick={onClick}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      transition={{ duration: 0.2, ease: 'easeOut' as const }}
       className={`group inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition-shadow hover:shadow-[0_8px_32px_-8px_rgba(255,255,255,0.4)] ${className}`}
     >
       {children}
@@ -114,7 +114,7 @@ function GhostButton({
       onClick={onClick}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      transition={{ duration: 0.2, ease: 'easeOut' as const }}
       className={`inline-flex items-center justify-center gap-2 rounded-full gp-glass px-6 py-3 text-sm font-semibold text-white/90 transition-colors hover:text-white ${className}`}
     >
       {children}
@@ -271,7 +271,7 @@ function HeroProductMock() {
     <motion.div
       initial={{ opacity: 0, y: 30, filter: 'blur(12px)' }}
       animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-      transition={{ duration: 0.9, ease: 'easeOut', delay: 0.3 }}
+      transition={{ duration: 0.9, ease: 'easeOut' as const, delay: 0.3 }}
       className="relative mx-auto mt-16 w-full max-w-6xl"
     >
       {/* Browser frame */}
@@ -452,7 +452,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const }}
         >
           <Eyebrow>The Financial Operating System for India</Eyebrow>
         </motion.div>
@@ -460,7 +460,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
         <motion.h1
           initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.05 }}
+          transition={{ duration: 0.8, ease: 'easeOut' as const, delay: 0.05 }}
           className="mt-7 max-w-4xl text-6xl font-semibold leading-[0.98] tracking-[-0.04em] text-white md:text-7xl lg:text-8xl"
         >
           The Financial Brain
@@ -474,7 +474,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
         <motion.p
           initial={{ opacity: 0, y: 16, filter: 'blur(8px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.15 }}
+          transition={{ duration: 0.8, ease: 'easeOut' as const, delay: 0.15 }}
           className="mt-7 max-w-2xl text-base leading-relaxed text-white/65 md:text-lg"
         >
           An autonomous financial operating system that files GST, reconciles
@@ -485,7 +485,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: 'easeOut', delay: 0.25 }}
+          transition={{ duration: 0.7, ease: 'easeOut' as const, delay: 0.25 }}
           className="mt-9 flex flex-col items-center gap-3 sm:flex-row"
         >
           <PrimaryButton onClick={onGetStarted} className="w-full sm:w-auto">
@@ -501,7 +501,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: 'easeOut', delay: 0.35 }}
+          transition={{ duration: 0.7, ease: 'easeOut' as const, delay: 0.35 }}
           className="mt-12 grid w-full max-w-4xl grid-cols-2 gap-px overflow-hidden rounded-2xl gp-glass md:grid-cols-4"
         >
           {[
@@ -575,7 +575,7 @@ function TrustedBySection() {
           initial={{ opacity: 0, y: 12, filter: 'blur(6px)' }}
           whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           viewport={VIEWPORT}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
+          transition={{ duration: 0.7, ease: 'easeOut' as const }}
           className="text-center text-sm font-medium uppercase tracking-[0.2em] text-white/45"
         >
           Trusted by India&apos;s most ambitious finance teams
@@ -662,7 +662,7 @@ function FeaturesSection() {
               key={f.title}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className="group relative overflow-hidden rounded-2xl gp-glass gp-ring p-6"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/8 text-white">
@@ -852,7 +852,7 @@ function ProductDemoSection() {
                 viewport={VIEWPORT}
                 transition={{
                   duration: 0.7,
-                  ease: 'easeOut',
+                  ease: 'easeOut' as const,
                   delay: i * 0.1,
                 }}
                 whileHover={{ scale: 1.01 }}
@@ -893,7 +893,7 @@ function OracleSection() {
             initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={VIEWPORT}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' as const }}
             className="rounded-2xl gp-glass-strong gp-ring p-5"
           >
             {/* Chat header */}
@@ -1022,7 +1022,7 @@ function GSTExecutionCloudSection() {
                 initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }}
                 whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                 viewport={VIEWPORT}
-                transition={{ duration: 0.6, ease: 'easeOut', delay: i * 0.08 }}
+                transition={{ duration: 0.6, ease: 'easeOut' as const, delay: i * 0.08 }}
                 whileHover={{ scale: 1.01 }}
                 className="flex items-center justify-between rounded-xl gp-glass p-4"
               >
@@ -1064,7 +1064,7 @@ function BankingCloudSection() {
             initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={VIEWPORT}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' as const }}
             className="rounded-2xl gp-glass-strong gp-ring p-5"
           >
             {/* Balance */}
@@ -1165,7 +1165,7 @@ function InvoiceEngineSection() {
             initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={VIEWPORT}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' as const }}
             className="overflow-hidden rounded-2xl gp-glass-strong gp-ring"
           >
             <div className="flex items-center justify-between border-b border-white/8 px-5 py-3">
@@ -1235,7 +1235,7 @@ function CommunicationCloudSection() {
             initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={VIEWPORT}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' as const }}
             className="rounded-2xl gp-glass-strong gp-ring p-5"
           >
             <div className="mb-4 flex items-center gap-3 border-b border-white/8 pb-3">
@@ -1320,7 +1320,7 @@ function ExecutionEngineSection() {
             initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             viewport={VIEWPORT}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
+            transition={{ duration: 0.8, ease: 'easeOut' as const }}
             className="rounded-2xl gp-glass-strong gp-ring p-6"
           >
             <svg viewBox="0 0 500 280" className="w-full">
@@ -1431,7 +1431,7 @@ function MarketplaceSection() {
               key={m.title}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className="rounded-2xl gp-glass gp-ring p-6"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/8 text-white">
@@ -1524,7 +1524,7 @@ function PricingSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
               key={p.name}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className={`relative flex flex-col rounded-2xl p-6 ${
                 p.highlight
                   ? 'gp-glass-strong gp-ring lg:-mt-3 lg:mb-3'
@@ -1643,7 +1643,7 @@ function TestimonialsSection() {
               key={t.name}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className="flex flex-col rounded-2xl gp-glass gp-ring p-6"
             >
               <blockquote className="text-lg font-medium leading-snug tracking-tight text-white md:text-xl">
@@ -1699,7 +1699,7 @@ function CaseStudiesSection() {
               key={c.label}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className="flex flex-col rounded-2xl gp-glass-strong gp-ring p-6"
             >
               <div className="text-5xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
@@ -1756,7 +1756,7 @@ function SecuritySection() {
               key={s.title}
               variants={fadeUp}
               whileHover={{ scale: 1.02, y: -2 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.25, ease: 'easeOut' as const }}
               className="rounded-2xl gp-glass gp-ring p-5"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/8 text-white">
@@ -1829,7 +1829,7 @@ function IntegrationsSection() {
               key={name}
               variants={fadeUp}
               whileHover={{ scale: 1.04, y: -2 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              transition={{ duration: 0.2, ease: 'easeOut' as const }}
               className="flex flex-col items-center justify-center gap-3 rounded-xl gp-glass px-4 py-6 text-center"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/8 text-white">
@@ -2011,7 +2011,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
           height: open ? 'auto' : 0,
           opacity: open ? 1 : 0,
         }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+        transition={{ duration: 0.3, ease: 'easeOut' as const }}
         className="overflow-hidden"
       >
         <p className="px-5 pb-5 text-sm leading-relaxed text-white/65">{a}</p>
@@ -2069,7 +2069,7 @@ function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
           whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           viewport={VIEWPORT}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          transition={{ duration: 0.8, ease: 'easeOut' as const }}
           className="text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-white md:text-6xl lg:text-7xl"
         >
           Start running your finance on autopilot.
@@ -2078,7 +2078,7 @@ function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={VIEWPORT}
-          transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
+          transition={{ duration: 0.7, ease: 'easeOut' as const, delay: 0.1 }}
           className="mt-6 max-w-xl text-base text-white/65 md:text-lg"
         >
           Join 100,000+ businesses and 10,000+ CA firms running their finance on
@@ -2088,7 +2088,7 @@ function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={VIEWPORT}
-          transition={{ duration: 0.7, ease: 'easeOut', delay: 0.2 }}
+          transition={{ duration: 0.7, ease: 'easeOut' as const, delay: 0.2 }}
           className="mt-9 flex flex-col items-center gap-3 sm:flex-row"
         >
           <PrimaryButton onClick={onGetStarted} className="w-full sm:w-auto">

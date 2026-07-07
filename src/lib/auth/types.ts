@@ -99,6 +99,36 @@ export interface OrganizationDoc {
   status: 'active' | 'suspended' | 'deleted';
   createdAt: unknown;
   updatedAt: unknown;
+  // ── Extended firm-profile fields (written by SettingsPage, previously
+  //    stripped by toOrgDoc() → caused settings to reset on refresh). ──
+  legalName?: string | null;
+  state?: string | null;
+  entityType?: string | null;
+  caRegNumber?: string | null;
+  officeAddress?: string | null;
+  gstConfig?: {
+    returnFrequency?: 'monthly' | 'quarterly';
+    fyStartMonth?: number;
+    gstr1Enabled?: boolean;
+    gstr3bEnabled?: boolean;
+    itcMethod?: 'invoice' | 'provisional';
+    lateFilingAlert?: boolean;
+    dueDateReminderDays?: number;
+  } | null;
+  notifications?: {
+    emailUpdates?: boolean;
+    gstReminders?: boolean;
+    clientActivity?: boolean;
+    aiInsights?: boolean;
+    securityAlerts?: boolean;
+    marketingUpdates?: boolean;
+  } | null;
+  branding?: {
+    primaryColor?: string;
+    accentColor?: string;
+    customDomain?: string | null;
+  } | null;
+  integrations?: Record<string, { connected: boolean; connectedAt?: string | null }> | null;
 }
 
 /**

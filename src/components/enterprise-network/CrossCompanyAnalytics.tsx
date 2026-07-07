@@ -95,7 +95,7 @@ function ComparisonBar({ name, value, meta, max, delay }: { name: string; value:
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, delay, ease: 'easeOut' }}
+          transition={{ duration: 0.6, delay, ease: 'easeOut' as const }}
           className="h-full rounded-md flex items-center justify-end pr-2"
           style={{ background: `linear-gradient(90deg, ${color}22, ${color}66)` }}
         >

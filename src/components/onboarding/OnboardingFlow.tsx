@@ -1089,7 +1089,7 @@ export function OnboardingFlow({
                 className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] rounded-full"
                 initial={false}
                 animate={{ width: `${progressPercent}%` }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
+                transition={{ duration: 0.3, ease: 'easeOut' as const }}
               />
             </div>
           )}

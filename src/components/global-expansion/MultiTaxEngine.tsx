@@ -119,7 +119,7 @@ function TaxSystemCard({ system, index }: { system: TaxSystem; index: number }) 
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' as const }}
       whileHover={{ y: -3 }}
       className={`rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.14] transition-all ${accent.bg}`}
     >
@@ -1606,23 +1606,23 @@ function ConsolidatedTaxPosition() {
   const maxLiabCat = Math.max(...CONSOLIDATED_LIABILITIES.map((l) => l.totalUSD));
   const maxCat = Math.max(maxAssetCat, maxLiabCat);
 
-  // Multi-currency totals
-  const totalsByCurrency = useMemo(() => {
-    const inrA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.inr, 0);
-    const usdA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.usd, 0);
-    const eurA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.eur, 0);
-    const gbpA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.gbp, 0);
-    const otherA = CONSOLIDATED_ASSETS.reduce((s, a) => s + a.other, 0);
-    const inrL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.inr, 0);
-    const usdL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.usd, 0);
-    const eurL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.eur, 0);
-    const gbpL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.gbp, 0);
-    const otherL = CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.other, 0);
-    return {
-      assets: { inr: inrA, usd: usdA, eur: eurA, gbp: gbpA, other: otherA },
-      liabilities: { inr: inrL, usd: usdL, eur: eurL, gbp: gbpL, other: otherL },
-    };
-  }, []);
+  // Multi-currency totals (module-level constants — no memoization needed)
+  const totalsByCurrency = {
+    assets: {
+      inr: CONSOLIDATED_ASSETS.reduce((s, a) => s + a.inr, 0),
+      usd: CONSOLIDATED_ASSETS.reduce((s, a) => s + a.usd, 0),
+      eur: CONSOLIDATED_ASSETS.reduce((s, a) => s + a.eur, 0),
+      gbp: CONSOLIDATED_ASSETS.reduce((s, a) => s + a.gbp, 0),
+      other: CONSOLIDATED_ASSETS.reduce((s, a) => s + a.other, 0),
+    },
+    liabilities: {
+      inr: CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.inr, 0),
+      usd: CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.usd, 0),
+      eur: CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.eur, 0),
+      gbp: CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.gbp, 0),
+      other: CONSOLIDATED_LIABILITIES.reduce((s, l) => s + l.other, 0),
+    },
+  };
 
   function renderRow(item: ConsolidatedBalance, i: number, isAsset: boolean) {
     const widthPct = (item.totalUSD / maxCat) * 100;

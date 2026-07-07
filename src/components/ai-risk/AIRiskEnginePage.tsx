@@ -99,7 +99,7 @@ function AnimatedCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' as const }}
     >
       <Card
         className={`hover:shadow-lg hover:shadow-red-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}
@@ -155,7 +155,7 @@ function RiskScoreBar({ score }: { score: number }) {
           className={`h-full rounded-full ${getColor(score)}`}
           initial={{ width: 0 }}
           animate={{ width: `${score}%` }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          transition={{ duration: 1, ease: 'easeOut' as const }}
         />
       </div>
       <span className="text-xs font-semibold text-foreground w-8 text-right">{score}</span>
@@ -461,7 +461,7 @@ export default function AIRiskEnginePage() {
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.05, duration: 0.5, ease: 'easeOut' }}
+              transition={{ delay: 0.05, duration: 0.5, ease: 'easeOut' as const }}
             >
               <Card className="border-border/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-emerald-500 to-emerald-300" />
@@ -484,7 +484,7 @@ export default function AIRiskEnginePage() {
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
+              transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' as const }}
             >
               <Card className="border-border/50 hover:shadow-lg hover:shadow-amber-500/5 transition-all overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-amber-500 to-amber-300" />
@@ -507,7 +507,7 @@ export default function AIRiskEnginePage() {
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
+              transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' as const }}
             >
               <Card className="border-border/50 hover:shadow-lg hover:shadow-orange-500/5 transition-all overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-orange-500 to-orange-300" />
@@ -530,7 +530,7 @@ export default function AIRiskEnginePage() {
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
+              transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' as const }}
             >
               <Card className="border-border/50 hover:shadow-lg hover:shadow-red-500/5 transition-all overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-500 to-red-300" />

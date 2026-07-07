@@ -175,7 +175,7 @@ function ActivityItem({
     <motion.div
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04, ease: 'easeOut' }}
+      transition={{ duration: 0.3, delay: index * 0.04, ease: 'easeOut' as const }}
       className="flex gap-3 items-start group"
     >
       {/* Timeline connector + icon */}

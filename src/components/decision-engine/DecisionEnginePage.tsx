@@ -672,7 +672,7 @@ function DecisionCard({ decision, onAction, index }: {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ delay: index * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
     >
       <Card className="border-slate-200/80 hover:shadow-md transition-shadow duration-200">
         <CardContent className="p-5">
@@ -716,7 +716,7 @@ function DecisionCard({ decision, onAction, index }: {
                     style={{ backgroundColor: imp.percent >= 70 ? COLORS.emerald500 : imp.percent >= 50 ? COLORS.teal500 : COLORS.amber500 }}
                     initial={{ width: 0 }}
                     animate={{ width: `${imp.percent}%` }}
-                    transition={{ delay: index * 0.08 + 0.3, duration: 0.6, ease: 'easeOut' }}
+                    transition={{ delay: index * 0.08 + 0.3, duration: 0.6, ease: 'easeOut' as const }}
                   />
                 </div>
                 <span className="text-[10px] font-medium text-slate-600 w-28 shrink-0 text-right">{imp.value}</span>

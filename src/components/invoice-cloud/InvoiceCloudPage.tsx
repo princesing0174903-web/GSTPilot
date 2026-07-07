@@ -671,7 +671,7 @@ export default function InvoiceCloudPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] as const }}
           >
             {pageLoading ? (
               <div className="space-y-4">
@@ -1530,7 +1530,7 @@ function ExpensesTab({
                       className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}
-                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] as const }}
                     />
                   </div>
                 </div>
@@ -1741,7 +1741,7 @@ function ReceivablesTab({ invoices }: { invoices: InvoiceCloudInvoice[] }) {
                   className={`h-full bg-gradient-to-r ${AGING_BAR_COLOR[i]} rounded-full`}
                   initial={{ width: 0 }}
                   animate={{ width: `${(b.amount / maxBucket) * 100}%` }}
-                  transition={{ duration: 0.6, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: 0.6, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] as const }}
                 />
               </div>
             </div>

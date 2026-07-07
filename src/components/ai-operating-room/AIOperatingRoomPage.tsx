@@ -89,7 +89,7 @@ function ExecutiveGauge({ value, label, icon: Icon, size = 140 }: {
             strokeDasharray={circumference}
             strokeDashoffset={circumference}
             animate={{ strokeDashoffset: circumference - fill }}
-            transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+            transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.2 }}
           />
         </svg>
         {/* Center content */}
@@ -122,7 +122,7 @@ function MiniGauge({ value, size = 48 }: { value: number; size?: number }) {
         strokeDasharray={c}
         strokeDashoffset={c}
         animate={{ strokeDashoffset: c - fill }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
+        transition={{ duration: 0.8, ease: 'easeOut' as const }}
       />
       <text
         x={cx} y={cy}
@@ -446,7 +446,7 @@ export default function AIOperatingRoomPage() {
                       strokeDasharray={2 * Math.PI * 32}
                       strokeDashoffset={2 * Math.PI * 32}
                       animate={{ strokeDashoffset: 2 * Math.PI * 32 * (1 - overallScore / 100) }}
-                      transition={{ duration: 1, ease: 'easeOut' }}
+                      transition={{ duration: 1, ease: 'easeOut' as const }}
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -545,7 +545,7 @@ export default function AIOperatingRoomPage() {
                             className={`h-full rounded-full ${color}`}
                             initial={{ width: 0 }}
                             animate={{ width: `${Math.max(val, 2)}%` }}
-                            transition={{ duration: 0.8, ease: 'easeOut', delay: i * 0.1 }}
+                            transition={{ duration: 0.8, ease: 'easeOut' as const, delay: i * 0.1 }}
                           />
                         </div>
                         <span className="text-xs font-bold text-slate-700 w-8 text-right">{Math.round(val)}</span>

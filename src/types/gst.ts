@@ -14,7 +14,7 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export type IssueSeverity = 'critical' | 'warning' | 'info';
 
-export type FilingStatus = 'draft' | 'prepared' | 'validated' | 'reviewed' | 'generated' | 'filed' | 'reopened';
+export type FilingStatus = 'draft' | 'prepared' | 'validated' | 'reviewed' | 'generated' | 'submitted' | 'filed' | 'reopened';
 
 export type InvoiceStatus = 'draft' | 'approved' | 'filed' | 'cancelled';
 
@@ -274,6 +274,7 @@ export const FILING_STATUS_CONFIG: Record<FilingStatus, { label: string; color: 
   validated: { label: 'Validated', color: 'text-cyan-700', bgColor: 'bg-cyan-50' },
   reviewed: { label: 'Reviewed', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   generated: { label: 'Generated', color: 'text-purple-700', bgColor: 'bg-purple-50' },
+  submitted: { label: 'Submitted', color: 'text-indigo-700', bgColor: 'bg-indigo-50' },
   filed: { label: 'Filed', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   reopened: { label: 'Reopened', color: 'text-red-700', bgColor: 'bg-red-50' },
 };

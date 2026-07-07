@@ -270,7 +270,7 @@ export function OracleAvatar({
         xmlns="http://www.w3.org/2000/svg"
         className={cn('relative', config.animClass)}
         animate={{ scale: [1, 1.02, 1] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' as const }}
       >
         <defs>
           {/* Face fill: emerald → cyan → blue gradient */}

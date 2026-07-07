@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useRef } from 'react'
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card'
+    11→import { Button } from '@/components/ui/button'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Separator } from '@/components/ui/separator'
+    16→import { Badge } from '@/components/ui/badge'
+    17→import { Textarea } from '@/components/ui/textarea'
+    18→import { Progress } from '@/components/ui/progress'
+    19→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    20→import {
+    21→  Select,
+    22→  SelectContent,
+    23→  SelectItem,
+    24→  SelectTrigger,
+    25→  SelectValue,
+    26→} from '@/components/ui/select'
+    27→import {
+    28→  AlertDialog,
+    29→  AlertDialogContent,
+    30→  AlertDialogHeader,
+    31→  AlertDialogTitle,
+    32→  AlertDialogDescription,
+    33→  AlertDialogFooter,
+    34→  AlertDialogAction,
+    35→  AlertDialogCancel,
+    36→} from '@/components/ui/alert-dialog'
+    37→import {
+    38→  Dialog,
+    39→  DialogContent,
+    40→  DialogHeader,
+    41→  DialogTitle,
+    42→  DialogFooter,
+    43→} from '@/components/ui/dialog'
+    44→import {
+    45→  Building2,
+    46→  ClipboardList,
+    47→  Users,
+    48→  Bell,
+    49→  Lock,
+    50→  CreditCard,
+    51→  Save,
+    52→  Check,
+    53→  Loader2,
+    54→  Camera,
+    55→  AlertTriangle,
+    56→  CalendarClock,
+    57→  Mail,
+    58→  Activity,
+    59→  Upload,
+    60→  Shield,
+    61→  Smartphone,
+    62→  Monitor,
+    63→  Globe,
+    64→  ChevronRight,
+    65→  Download,
+    66→  LockKeyhole,
+    67→} from 'lucide-react'
+    68→import { motion, AnimatePresence } from 'framer-motion'
+    69→import { toast } from 'sonner'
+    70→import { useAuth } from '@/contexts/AuthContext'
+    71→import { useOrg } from '@/contexts/OrgContext'
+    72→import { useIsMobile } from '@/hooks/use-mobile'
+    73→import { useOrgMembers } from '@/hooks/use-firestore'
+    74→import { db, storage, auth } from '@/lib/firebase'
+    75→import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+    76→import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+    77→import { updatePassword } from 'firebase/auth'
+    78→import {
+    79→  inviteMember,
+    80→  updateMemberRole,
+    81→  removeMember,
+    82→} from '@/lib/auth/organizations'
+    83→import type { OrgRole } from '@/lib/auth/types'
+    84→
+    85→// ─── Permission-error detection (graceful degradation) ──────────────────
+    86→// Mirrors the helper in src/hooks/use-firestore.ts so the Settings page can
+    87→// detect Firestore permission-denied errors and surface a friendly message
+    88→// instead of the raw "Missing or insufficient permissions" wall.
+    89→function isPermissionError(err: unknown): boolean {
+    90→  if (!err) return false
+    91→  const e = err as { code?: string; message?: string; name?: string }
+    92→  const code = (e.code || '').toLowerCase()
+    93→  const message = (e.message || '').toLowerCase()
+    94→  if (
+    95→    code === 'permission-denied' ||
+    96→    code === 'unauthenticated' ||
+    97→    code === 'auth/operation-not-allowed' ||
+    98→    code === 'auth/user-not-found'
+    99→  ) {
+   100→    return true
+   101→  }
+   102→  if (
+   103→    message.includes('missing or insufficient permissions') ||
+   104→    message.includes('permission-denied') ||
+   105→    message.includes('insufficient permissions') ||
+   106→    message.includes('not authorized') ||
+   107→    message.includes('unauthenticated')
+   108→  ) {
+   109→    return true
+   110→  }
+   111→  return false
+   112→}
+   113→
+   114→const PERMISSION_DENIED_MSG =
+   115→  "You don't have permission to save these changes. Contact your organization admin."
+   116→const PREVIEW_MODE_MSG =
+   117→  'Preview mode — your changes are shown here but not persisted to the cloud.'
+   118→
+   119→// ─── Indian States ──────────────────────────────────────────────────────
+   120→const INDIAN_STATES = [
+   121→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+   122→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+   123→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+   124→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+   125→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+   126→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+   127→  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
+   128→  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry',
+   129→]
+   130→
+   131→const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
+   132→
+   133→// ─── Section IDs ────────────────────────────────────────────────────────
+   134→type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
+   135→
+   136→interface NavSection {
+   137→  id: SectionId
+   138→  label: string
+   139→  icon: React.ReactNode
+   140→}
+   141→
+   142→const SECTIONS: NavSection[] = [
+   143→  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
+   144→  { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
+   145→  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
+   146→  { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
+   147→  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
+   148→  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
+   149→  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
+   150→  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
+   151→]
+   152→
+   153→// ─── Team Member Type ───────────────────────────────────────────────────
+   154→// The Settings UI surfaces a simplified 4-role taxonomy (Admin / Manager /
+   155→// Staff / Viewer). The Firestore `organization_members` collection stores the
+   156→// richer `OrgRole` enum (owner / admin / accountant / employee / auditor /
+   157→// viewer). The two helpers below translate between the two representations so
+   158→// the UI keeps its existing labels while the persistence layer uses the
+   159→// canonical org-role vocabulary.
+   160→interface TeamMember {
+   161→  id: string
+   162→  /** Firestore Auth uid — used as the key for role/status mutations. */
+   163→  userId: string
+   164→  name: string
+   165→  email: string
+   166→  role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
+   167→  status: 'Active' | 'Invited'
+   168→  initials: string
+   169→}
+   170→
+   171→/**
+   172→ * Map the Firestore `OrgRole` enum to the four UI role labels. The org owner
+   173→ * and admin both surface as "Admin" so the existing UI rule (hide Edit/Remove
+   174→ * for Admin rows) protects the owner from accidental demotion.
+   175→ */
+   176→function orgRoleToUiRole(role: string): TeamMember['role'] {
+   177→  switch (role) {
+   178→    case 'owner':
+   179→    case 'admin':
+   180→      return 'Admin'
+   181→    case 'accountant':
+   182→      return 'Manager'
+   183→    case 'employee':
+   184→      return 'Staff'
+   185→    case 'auditor':
+   186→    case 'viewer':
+   187→    default:
+   188→      return 'Viewer'
+   189→  }
+   190→}
+   191→
+   192→/** Map a UI role label back to the Firestore `OrgRole` enum for persistence. */
+   193→function uiRoleToOrgRole(role: TeamMember['role']): OrgRole {
+   194→  switch (role) {
+   195→    case 'Admin':
+   196→      return 'admin'
+   197→    case 'Manager':
+   198→      return 'accountant'
+   199→    case 'Staff':
+   200→      return 'employee'
+   201→    case 'Viewer':
+   202→    default:
+   203→      return 'viewer'
+   204→  }
+   205→}
+   206→
+   207→/** Map the Firestore `MemberStatus` to the two-state UI label. */
+   208→function memberStatusToUi(status: string): TeamMember['status'] {
+   209→  return status === 'invited' ? 'Invited' : 'Active'
+   210→}
+   211→
+   212→/** Derive 2-letter initials for the avatar fallback. */
+   213→function getInitials(name: string, email: string): string {
+   214→  if (name && name.trim()) {
+   215→    const parts = name.trim().split(/\s+/).filter(Boolean)
+   216→    if (parts.length >= 2) {
+   217→      return (parts[0][0] + parts[1][0]).toUpperCase()
+   218→    }
+   219→    return parts[0].slice(0, 2).toUpperCase()
+   220→  }
+   221→  return (email.split('@')[0] || '?').slice(0, 2).toUpperCase()
+   222→}
+   223→
+   224→// ─── Session Type ───────────────────────────────────────────────────────
+   225→interface Session {
+   226→  id: string
+   227→  device: string
+   228→  location: string
+   229→  lastActive: string
+   230→  icon: React.ReactNode
+   231→  current?: boolean
+   232→}
+   233→
+   234→const MOCK_SESSIONS: Session[] = [
+   235→  { id: '1', device: 'Chrome on MacOS', location: 'Mumbai, India', lastActive: 'Now', icon: <Monitor className="h-4 w-4" />, current: true },
+   236→  { id: '2', device: 'GSTPilot Mobile App', location: 'Mumbai, India', lastActive: '2 hours ago', icon: <Smartphone className="h-4 w-4" /> },
+   237→  { id: '3', device: 'Firefox on Windows', location: 'Pune, India', lastActive: 'Yesterday', icon: <Globe className="h-4 w-4" /> },
+   238→]
+   239→
+   240→// ─── Billing History ────────────────────────────────────────────────────
+   241→interface BillingInvoice {
+   242→  id: string
+   243→  date: string
+   244→  amount: string
+   245→  status: 'Paid' | 'Pending' | 'Failed'
+   246→}
+   247→
+   248→const BILLING_HISTORY: BillingInvoice[] = [
+   249→  { id: '1', date: '1 Jun 2025', amount: '₹1,499', status: 'Paid' },
+   250→  { id: '2', date: '1 May 2025', amount: '₹1,499', status: 'Paid' },
+   251→  { id: '3', date: '1 Apr 2025', amount: '₹1,499', status: 'Paid' },
+   252→  { id: '4', date: '1 Mar 2025', amount: '₹1,499', status: 'Paid' },
+   253→]
+   254→
+   255→// ─── GST API Connection Status ──────────────────────────────────────────
+   256→interface ApiConnection {
+   257→  id: string
+   258→  name: string
+   259→  description: string
+   260→  status: 'Connected' | 'Disconnected' | 'Not Configured'
+   261→  lastSync?: string
+   262→  icon: React.ReactNode
+   263→}
+   264→
+   265→const MOCK_API_CONNECTIONS: ApiConnection[] = [
+   266→  { id: 'gst-portal', name: 'GST Portal API', description: 'GSTN portal for filing returns and viewing status', status: 'Connected', lastSync: '5 minutes ago', icon: <Globe className="h-4 w-4" /> },
+   267→  { id: 'eway-bill', name: 'E-Way Bill API', description: 'Generate and manage e-way bills for transport', status: 'Disconnected', lastSync: '2 hours ago', icon: <ClipboardList className="h-4 w-4" /> },
+   268→  { id: 'e-invoice', name: 'E-Invoice API', description: 'IRN generation and e-invoice management', status: 'Not Configured', icon: <ClipboardList className="h-4 w-4" /> },
+   269→]
+   270→
+   271→// ─── Audit Log Entry ──────────────────────────────────────────────────
+   272→interface AuditLogEntry {
+   273→  id: string
+   274→  timestamp: string
+   275→  user: string
+   276→  action: string
+   277→  entity: string
+   278→  actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
+   279→}
+   280→
+   281→const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
+   282→  { id: '1', timestamp: '2025-06-04 14:32', user: 'Rajesh Kumar', action: 'Filed GSTR-1 for Sharma Enterprises', entity: 'GSTR-1 May 2025', actionType: 'filing' },
+   283→  { id: '2', timestamp: '2025-06-04 13:15', user: 'Priya Sharma', action: 'Updated client Patel & Sons', entity: 'Client Profile', actionType: 'client_update' },
+   284→  { id: '3', timestamp: '2025-06-04 11:48', user: 'Rajesh Kumar', action: 'Uploaded 24 invoices for Krishna Traders', entity: 'Invoice Batch', actionType: 'invoice' },
+   285→  { id: '4', timestamp: '2025-06-04 10:30', user: 'Amit Patel', action: 'Reconciled GSTR-2B for Metro Retail Solutions', entity: 'Reconciliation', actionType: 'reconciliation' },
+   286→  { id: '5', timestamp: '2025-06-03 17:22', user: 'Priya Sharma', action: 'Changed notification preferences', entity: 'Settings', actionType: 'settings' },
+   287→  { id: '6', timestamp: '2025-06-03 16:10', user: 'Rajesh Kumar', action: 'Filed GSTR-3B for Sunrise Exports Ltd', entity: 'GSTR-3B May 2025', actionType: 'filing' },
+   288→  { id: '7', timestamp: '2025-06-03 14:45', user: 'Amit Patel', action: 'Approved 6 invoices for Gupta Manufacturing', entity: 'Invoice Queue', actionType: 'invoice' },
+   289→  { id: '8', timestamp: '2025-06-03 11:20', user: 'Priya Sharma', action: 'Added new client Digital Commerce India', entity: 'Client Profile', actionType: 'client_update' },
+   290→  { id: '9', timestamp: '2025-06-02 16:55', user: 'Rajesh Kumar', action: 'Reconciled ITC for Apex Logistics', entity: 'Reconciliation', actionType: 'reconciliation' },
+   291→  { id: '10', timestamp: '2025-06-02 10:05', user: 'Amit Patel', action: 'Generated e-way bill for Sharma Enterprises', entity: 'E-Way Bill', actionType: 'invoice' },
+   292→]
+   293→
+   294→// ─── Save Button with Animated States ──────────────────────────────────
+   295→function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
+   296→  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+   297→
+   298→  const handleClick = async () => {
+   299→    setState('saving')
+   300→    try {
+   301→      await onSave()
+   302→      setState('saved')
+   303→      setTimeout(() => setState('idle'), 2000)
+   304→    } catch {
+   305→      setState('idle')
+   306→    }
+   307→  }
+   308→
+   309→  return (
+   310→    <Button
+   311→      onClick={handleClick}
+   312→      disabled={state === 'saving'}
+   313→      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[110px]"
+   314→    >
+   315→      <AnimatePresence mode="wait">
+   316→        {state === 'idle' && (
+   317→          <motion.span
+   318→            key="idle"
+   319→            initial={{ opacity: 0, scale: 0.8 }}
+   320→            animate={{ opacity: 1, scale: 1 }}
+   321→            exit={{ opacity: 0, scale: 0.8 }}
+   322→            className="flex items-center gap-2"
+   323→          >
+   324→            <Save className="h-4 w-4" />
+   325→            Save
+   326→          </motion.span>
+   327→        )}
+   328→        {state === 'saving' && (
+   329→          <motion.span
+   330→            key="saving"
+   331→            initial={{ opacity: 0, scale: 0.8 }}
+   332→            animate={{ opacity: 1, scale: 1 }}
+   333→            exit={{ opacity: 0, scale: 0.8 }}
+   334→            className="flex items-center gap-2"
+   335→          >
+   336→            <Loader2 className="h-4 w-4 animate-spin" />
+   337→            Saving...
+   338→          </motion.span>
+   339→        )}
+   340→        {state === 'saved' && (
+   341→          <motion.span
+   342→            key="saved"
+   343→            initial={{ opacity: 0, scale: 0.8 }}
+   344→            animate={{ opacity: 1, scale: 1 }}
+   345→            exit={{ opacity: 0, scale: 0.8 }}
+   346→            className="flex items-center gap-2"
+   347→          >
+   348→            <Check className="h-4 w-4" />
+   349→            Saved
+   350→          </motion.span>
+   351→        )}
+   352→      </AnimatePresence>
+   353→    </Button>
+   354→  )
+   355→}
+   356→
+   357→// ─── Password Strength Helper ──────────────────────────────────────────
+   358→function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+   359→  if (!password) return { score: 0, label: '', color: '' }
+   360→  let score = 0
+   361→  if (password.length >= 8) score++
+   362→  if (password.length >= 12) score++
+   363→  if (/[A-Z]/.test(password)) score++
+   364→  if (/[0-9]/.test(password)) score++
+   365→  if (/[^A-Za-z0-9]/.test(password)) score++
+   366→
+   367→  if (score <= 1) return { score: 20, label: 'Weak', color: 'bg-red-500' }
+   368→  if (score <= 2) return { score: 40, label: 'Fair', color: 'bg-orange-500' }
+   369→  if (score <= 3) return { score: 60, label: 'Good', color: 'bg-yellow-500' }
+   370→  if (score <= 4) return { score: 80, label: 'Strong', color: 'bg-emerald-500' }
+   371→  return { score: 100, label: 'Excellent', color: 'bg-emerald-600' }
+   372→}
+   373→
+   374→// ─── Section Content Animation Variants ─────────────────────────────────
+   375→const contentVariants = {
+   376→  hidden: { opacity: 0, x: 12 },
+   377→  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
+   378→  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+   379→}
+   380→
+   381→// ═══════════════════════════════════════════════════════════════════════
+   382→// MAIN COMPONENT
+   383→// ═══════════════════════════════════════════════════════════════════════
+   384→export default function SettingsPage() {
+   385→  const { user } = useAuth()
+   386→  const { organization, reload: reloadOrg, isPreviewMode } = useOrg()
+   387→  const orgId = organization?.id ?? null
+   388→  const isMobile = useIsMobile()
+   389→
+   390→  // True when there's no real organization to write to — either OrgContext is
+   391→  // still loading, has fallen back to the demo "preview-org" (Firestore
+   392→  // unreachable), or explicitly flagged preview mode. All save handlers use
+   393→  // this to no-op gracefully instead of throwing permission-denied.
+   394→  const isPreview = !orgId || isPreviewMode || orgId === 'preview-org'
+   395→
+   396→  // ── Active Section ──────────────────────────────────────────────────
+   397→  const [activeSection, setActiveSection] = useState<SectionId>('firm')
+   398→
+   399→  // ── Logo upload state ───────────────────────────────────────────────
+   400→  // `logoPreview` holds a local object-URL while the upload is in flight so
+   401→  // the avatar reflects the new image instantly. Once the Firestore write
+   402→  // completes, `organization.logoUrl` becomes the source of truth.
+   403→  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+   404→  const [logoUploading, setLogoUploading] = useState(false)
+   405→  const logoInputRef = useRef<HTMLInputElement | null>(null)
+   406→
+   407→  // Track whether we've hydrated local form state from the org doc — we only
+   408→  // want to do this once per organization to avoid clobbering in-progress edits.
+   409→  const orgInitializedRef = useRef<string | null>(null)
+   410→
+   411→  // ── Firm Profile State ──────────────────────────────────────────────
+   412→  const [firmName, setFirmName] = useState('Sharma & Associates')
+   413→  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
+   414→  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
+   415→  const [firmState, setFirmState] = useState('Maharashtra')
+   416→  const [entityType, setEntityType] = useState('LLP')
+   417→  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
+   418→  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
+   419→
+   420→  // ── GST Config State ────────────────────────────────────────────────
+   421→  const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
+   422→  const [fyStart, setFyStart] = useState<'april' | 'january'>('april')
+   423→  const [gstr1Pref, setGstr1Pref] = useState<'auto' | 'manual'>('auto')
+   424→  const [gstr3bPref, setGstr3bPref] = useState<'auto' | 'manual'>('auto')
+   425→  const [itcMethod, setItcMethod] = useState<'auto-match' | 'manual-review'>('auto-match')
+   426→  const [lateFilingAlert, setLateFilingAlert] = useState(true)
+   427→  const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
+   428→
+   429→  // ── Team State ──────────────────────────────────────────────────────
+   430→  // The roster is sourced from a real-time Firestore subscription on the
+   431→  // `organization_members` collection (org-scoped). We map the canonical
+   432→  // `OrganizationMemberDoc` shape to the simplified `TeamMember` UI type —
+   433→  // no local seed data, no optimistic inserts that can drift from Firestore.
+   434→  // Invite / role-change / remove mutate Firestore directly; the onSnapshot
+   435→  // listener recomputes `teamMembers` automatically when the write lands.
+   436→  const {
+   437→    data: memberDocs,
+   438→    loading: membersLoading,
+   439→    error: membersError,
+   440→  } = useOrgMembers()
+   441→  const teamMembers: TeamMember[] = memberDocs
+   442→    .filter(m => m.status === 'active' || m.status === 'invited')
+   443→    .map(m => ({
+   444→      id: m.id,
+   445→      userId: m.userId,
+   446→      name: m.userDisplayName || m.userEmail.split('@')[0] || 'Member',
+   447→      email: m.userEmail,
+   448→      role: orgRoleToUiRole(m.role),
+   449→      status: memberStatusToUi(m.status),
+   450→      initials: getInitials(m.userDisplayName, m.userEmail),
+   451→    }))
+   452→  const membersFetchError = membersError
+   453→
+   454→  const [showInviteDialog, setShowInviteDialog] = useState(false)
+   455→  const [inviteEmail, setInviteEmail] = useState('')
+   456→  const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
+   457→  const [inviting, setInviting] = useState(false)
+   458→  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+   459→  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
+   460→  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+   461→  const [editRole, setEditRole] = useState<string>('')
+   462→
+   463→  // ── Notifications State ─────────────────────────────────────────────
+   464→  const [filingDeadline, setFilingDeadline] = useState(true)
+   465→  const [mismatchAlerts, setMismatchAlerts] = useState(true)
+   466→  const [weeklySummary, setWeeklySummary] = useState(false)
+   467→  const [healthScoreChanges, setHealthScoreChanges] = useState(true)
+   468→  const [teamActivity, setTeamActivity] = useState(false)
+   469→  const [newInvoiceUploaded, setNewInvoiceUploaded] = useState(true)
+   470→
+   471→  // ── Security State ──────────────────────────────────────────────────
+   472→  const [currentPassword, setCurrentPassword] = useState('')
+   473→  const [newPassword, setNewPassword] = useState('')
+   474→  const [confirmPassword, setConfirmPassword] = useState('')
+   475→  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+   476→
+   477→  // ── Audit Log Filter ──────────────────────────────────────────────
+   478→  const [auditFilter, setAuditFilter] = useState<string>('all')
+   479→
+   480→  // ── GSTIN Validation ────────────────────────────────────────────────
+   481→  const isGstinValid = (gstin: string) => {
+   482→    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+   483→    return regex.test(gstin.toUpperCase())
+   484→  }
+   485→  const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
+   486→
+   487→  // ── Hydrate form state from the organization doc (once per org) ─────
+   488→  useEffect(() => {
+   489→    if (!organization) return
+   490→    if (orgInitializedRef.current === organization.id) return
+   491→    orgInitializedRef.current = organization.id
+   492→
+   493→    if (organization.name) setFirmName(organization.name)
+   494→    if (organization.gstin) setFirmGstin(organization.gstin)
+   495→
+   496→    // Extended fields may or may not exist on every org doc — read defensively.
+   497→    const anyOrg = organization as Record<string, unknown>
+   498→    if (typeof anyOrg.legalName === 'string' && anyOrg.legalName) setLegalName(anyOrg.legalName)
+   499→    if (typeof anyOrg.state === 'string' && anyOrg.state) setFirmState(anyOrg.state)
+   500→    if (typeof anyOrg.entityType === 'string' && anyOrg.entityType) setEntityType(anyOrg.entityType)
+   501→    if (typeof anyOrg.caRegNumber === 'string' && anyOrg.caRegNumber) setCaRegNumber(anyOrg.caRegNumber)
+   502→    if (typeof anyOrg.officeAddress === 'string' && anyOrg.officeAddress) setOfficeAddress(anyOrg.officeAddress)
+   503→    if (anyOrg.gstConfig && typeof anyOrg.gstConfig === 'object') {
+   504→      const c = anyOrg.gstConfig
+   505→      if (c.returnPeriod === 'monthly' || c.returnPeriod === 'quarterly') setReturnPeriod(c.returnPeriod)
+   506→      if (c.fyStart === 'april' || c.fyStart === 'january') setFyStart(c.fyStart)
+   507→      if (c.gstr1Pref === 'auto' || c.gstr1Pref === 'manual') setGstr1Pref(c.gstr1Pref)
+   508→      if (c.gstr3bPref === 'auto' || c.gstr3bPref === 'manual') setGstr3bPref(c.gstr3bPref)
+   509→      if (c.itcMethod === 'auto-match' || c.itcMethod === 'manual-review') setItcMethod(c.itcMethod)
+   510→      if (typeof c.lateFilingAlert === 'boolean') setLateFilingAlert(c.lateFilingAlert)
+   511→      if (typeof c.dueDateReminderDays === 'number') setDueDateReminderDays(String(c.dueDateReminderDays))
+   512→    }
+   513→    if (anyOrg.notifications && typeof anyOrg.notifications === 'object') {
+   514→      const n = anyOrg.notifications
+   515→      if (typeof n.filingDeadline === 'boolean') setFilingDeadline(n.filingDeadline)
+   516→      if (typeof n.mismatchAlerts === 'boolean') setMismatchAlerts(n.mismatchAlerts)
+   517→      if (typeof n.weeklySummary === 'boolean') setWeeklySummary(n.weeklySummary)
+   518→      if (typeof n.healthScoreChanges === 'boolean') setHealthScoreChanges(n.healthScoreChanges)
+   519→      if (typeof n.teamActivity === 'boolean') setTeamActivity(n.teamActivity)
+   520→      if (typeof n.newInvoiceUploaded === 'boolean') setNewInvoiceUploaded(n.newInvoiceUploaded)
+   521→    }
+   522→  }, [organization])
+   523→
+   524→  // ── Handlers ────────────────────────────────────────────────────────
+   525→  // Every Save button persists to Firestore `organizations/{orgId}`. Org-level
+   526→  // writes satisfy the Firestore security rules because the signed-in user is
+   527→  // a member of the org (owner/admin for the membership row). `reloadOrg()` is
+   528→  // called after each successful write so the navbar / sidebar / context
+   529→  // reflect the new value immediately.
+   530→
+   531→  const handleSaveFirmProfile = async () => {
+   532→    // Preview mode — gracefully no-op. Don't attempt the write (it would fail
+   533→    // with permission-denied and confuse the user). The inline check also
+   534→    // narrows `orgId` to `string` for TypeScript.
+   535→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   536→      toast.info(PREVIEW_MODE_MSG)
+   537→      // Throw so SaveButton reverts to its idle state — we already surfaced
+   538→      // the info toast, so no error toast is needed.
+   539→      throw new Error('preview-mode')
+   540→    }
+   541→    try {
+   542→      await updateDoc(doc(db, 'organizations', orgId), {
+   543→        name: firmName,
+   544→        legalName,
+   545→        gstin: firmGstin,
+   546→        state: firmState,
+   547→        entityType,
+   548→        caRegNumber,
+   549→        officeAddress,
+   550→        updatedAt: serverTimestamp(),
+   551→      })
+   552→      await reloadOrg()
+   553→      toast.success('Firm profile saved')
+   554→    } catch (err) {
+   555→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save firm profile'))
+   556→      throw err
+   557→    }
+   558→  }
+   559→
+   560→  const handleSaveGstConfig = async () => {
+   561→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   562→      toast.info(PREVIEW_MODE_MSG)
+   563→      throw new Error('preview-mode')
+   564→    }
+   565→    try {
+   566→      await updateDoc(doc(db, 'organizations', orgId), {
+   567→        gstConfig: {
+   568→          returnPeriod,
+   569→          fyStart,
+   570→          gstr1Pref,
+   571→          gstr3bPref,
+   572→          itcMethod,
+   573→          lateFilingAlert,
+   574→          dueDateReminderDays: parseInt(dueDateReminderDays, 10) || 3,
+   575→        },
+   576→        updatedAt: serverTimestamp(),
+   577→      })
+   578→      await reloadOrg()
+   579→      toast.success('GST configuration saved')
+   580→    } catch (err) {
+   581→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save GST configuration'))
+   582→      throw err
+   583→    }
+   584→  }
+   585→
+   586→  const handleSaveNotifications = async () => {
+   587→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   588→      toast.info(PREVIEW_MODE_MSG)
+   589→      throw new Error('preview-mode')
+   590→    }
+   591→    try {
+   592→      await updateDoc(doc(db, 'organizations', orgId), {
+   593→        notifications: {
+   594→          filingDeadline,
+   595→          mismatchAlerts,
+   596→          weeklySummary,
+   597→          healthScoreChanges,
+   598→          teamActivity,
+   599→          newInvoiceUploaded,
+   600→        },
+   601→        updatedAt: serverTimestamp(),
+   602→      })
+   603→      await reloadOrg()
+   604→      toast.success('Notification preferences saved')
+   605→    } catch (err) {
+   606→      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save notifications'))
+   607→      throw err
+   608→    }
+   609→  }
+   610→
+   611→  const handleChangePassword = async () => {
+   612→    if (!newPassword || newPassword !== confirmPassword) {
+   613→      toast.error('Passwords do not match')
+   614→      throw new Error('Password mismatch')
+   615→    }
+   616→    if (newPassword.length < 8) {
+   617→      toast.error('Password must be at least 8 characters')
+   618→      throw new Error('Password too short')
+   619→    }
+   620→    // Preview mode (no real Firebase session) — password changes aren't
+   621→    // available. Don't attempt the call.
+   622→    const fbUser = auth.currentUser
+   623→    if (!fbUser || isPreview) {
+   624→      toast.info('Preview mode — password changes are not available. Sign in to enable.')
+   625→      throw new Error('preview-mode')
+   626→    }
+   627→    try {
+   628→      await updatePassword(fbUser, newPassword)
+   629→      setCurrentPassword('')
+   630→      setNewPassword('')
+   631→      setConfirmPassword('')
+   632→      toast.success('Password updated successfully')
+   633→    } catch (err) {
+   634→      // Firebase throws auth/requires-recent-login if the user hasn't signed
+   635→      // in recently — surface that hint to the user.
+   636→      const raw = err instanceof Error ? err.message : 'Failed to change password'
+   637→      const friendly = raw.includes('requires-recent-login')
+   638→        ? 'For your security, please sign out and sign back in, then try again.'
+   639→        : raw
+   640→      toast.error(friendly)
+   641→      throw err
+   642→    }
+   643→  }
+   644→
+   645→  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   646→    const file = e.target.files?.[0]
+   647→    // Reset the input so the same file can be re-selected later.
+   648→    e.target.value = ''
+   649→    if (!file) return
+   650→
+   651→    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+   652→    if (!allowedTypes.includes(file.type)) {
+   653→      toast.error('Logo must be a PNG, JPG, or WebP file')
+   654→      return
+   655→    }
+   656→    if (file.size > 2 * 1024 * 1024) {
+   657→      toast.error('Logo must be under 2 MB')
+   658→      return
+   659→    }
+   660→
+   661→    setLogoUploading(true)
+   662→    // Show a local preview immediately so the user sees feedback before the
+   663→    // upload completes. In preview mode this is the ONLY copy we keep — the
+   664→    // logo stays visible locally but is never written to the cloud.
+   665→    const localPreviewUrl = URL.createObjectURL(file)
+   666→    setLogoPreview(localPreviewUrl)
+   667→
+   668→    // Preview mode: keep the local preview, skip the cloud writes. The avatar
+   669→    // shows the new logo for the rest of the session but it won't persist.
+   670→    if (isPreview) {
+   671→      setLogoUploading(false)
+   672→      toast.info('Preview mode — logo change is shown here but not persisted to the cloud.')
+   673→      return
+   674→    }
+   675→
+   676→    // After the preview-mode check, orgId is guaranteed non-null.
+   677→    const orgIdNonNull: string = orgId as string
+   678→
+   679→    try {
+   680→      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+   681→      const fileRef = storageRef(storage, `organizations/${orgIdNonNull}/logo.${ext}`)
+   682→      await uploadBytes(fileRef, file)
+   683→      const downloadUrl = await getDownloadURL(fileRef)
+   684→      await updateDoc(doc(db, 'organizations', orgIdNonNull), {
+   685→        logoUrl: downloadUrl,
+   686→        updatedAt: serverTimestamp(),
+   687→      })
+   688→      await reloadOrg()
+   689→      // The Firestore-backed URL is now the source of truth — drop the local
+   690→      // preview so the canonical URL takes over on the next render.
+   691→      setLogoPreview(null)
+   692→      URL.revokeObjectURL(localPreviewUrl)
+   693→      toast.success('Firm logo updated')
+   694→    } catch (err) {
+   695→      setLogoPreview(null)
+   696→      URL.revokeObjectURL(localPreviewUrl)
+   697→      const msg = isPermissionError(err)
+   698→        ? PERMISSION_DENIED_MSG
+   699→        : (err instanceof Error ? err.message : 'Failed to upload logo')
+   700→      toast.error(msg)
+   701→    } finally {
+   702→      setLogoUploading(false)
+   703→    }
+   704→  }
+   705→
+   706→  const handleInviteMember = async () => {
+   707→    if (!inviteEmail.trim()) return
+   708→    // Preview mode — gracefully no-op. The invite would fail Firestore rules
+   709→    // (no real org to write to), so we surface the same friendly message used
+   710→    // by the other Settings save handlers instead of attempting the write.
+   711→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   712→      toast.info(PREVIEW_MODE_MSG)
+   713→      return
+   714→    }
+   715→    setInviting(true)
+   716→    try {
+   717→      const email = inviteEmail.trim()
+   718→      // Pre-auth invite: the invitee has no Firebase Auth UID yet, so we
+   719→      // synthesize a deterministic placeholder (`pending-<email>`) that the
+   720→      // backend can later reconcile with a real UID when the user signs up.
+   721→      // The Firestore `inviteMember()` helper de-dupes on the resulting doc
+   722→      // id `${orgId}_${userId}`, preventing double-invites of the same email.
+   723→      const pendingUserId = `pending-${email.toLowerCase()}`
+   724→      const { member, error } = await inviteMember({
+   725→        organizationId: orgId,
+   726→        invitedBy: user?.id ?? null,
+   727→        userId: pendingUserId,
+   728→        userEmail: email,
+   729→        userDisplayName: email.split('@')[0],
+   730→        role: uiRoleToOrgRole(inviteRole),
+   731→      })
+   732→      if (error || !member) {
+   733→        throw new Error(error ?? 'Failed to send invite')
+   734→      }
+   735→      // No optimistic local insert — the `useOrgMembers()` onSnapshot
+   736→      // subscription will surface the new membership row automatically when
+   737→      // the Firestore write lands, keeping local state in lockstep with the
+   738→      // canonical source of truth.
+   739→      toast.success(`Invitation sent to ${email}`)
+   740→      setInviteEmail('')
+   741→      setInviteRole('Staff')
+   742→      setShowInviteDialog(false)
+   743→    } catch (err) {
+   744→      toast.error(err instanceof Error ? err.message : 'Failed to send invite')
+   745→    } finally {
+   746→      setInviting(false)
+   747→    }
+   748→  }
+   749→
+   750→  const handleRemoveMember = async () => {
+   751→    if (!memberToRemove) return
+   752→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   753→      toast.info(PREVIEW_MODE_MSG)
+   754→      setShowRemoveDialog(false)
+   755→      setMemberToRemove(null)
+   756→      return
+   757→    }
+   758→    try {
+   759→      const { error } = await removeMember(orgId, memberToRemove.userId)
+   760→      if (error) throw new Error(error)
+   761→      // Soft-delete flips `status` → 'removed' in Firestore. The
+   762→      // `useOrgMembers()` listener filters removed rows out of `teamMembers`
+   763→      // on the next snapshot, so no local mutation is needed.
+   764→      toast.success(`${memberToRemove.name} removed from team`)
+   765→    } catch (err) {
+   766→      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
+   767→    } finally {
+   768→      setShowRemoveDialog(false)
+   769→      setMemberToRemove(null)
+   770→    }
+   771→  }
+   772→
+   773→  const handleUpdateRole = async (memberId: string, role: string) => {
+   774→    const member = teamMembers.find(m => m.id === memberId)
+   775→    if (!member) return
+   776→    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+   777→      toast.info(PREVIEW_MODE_MSG)
+   778→      setEditingMemberId(null)
+   779→      setEditRole('')
+   780→      return
+   781→    }
+   782→    try {
+   783→      const uiRole = role as TeamMember['role']
+   784→      const { error } = await updateMemberRole(orgId, member.userId, uiRoleToOrgRole(uiRole))
+   785→      if (error) throw new Error(error)
+   786→      // The role change lands via the onSnapshot subscription — no local
+   787→      // state mutation, so the badge only flips once Firestore confirms.
+   788→      toast.success(`${member.name}'s role updated to ${role}`)
+   789→      setEditingMemberId(null)
+   790→      setEditRole('')
+   791→    } catch (err) {
+   792→      toast.error(err instanceof Error ? err.message : 'Failed to update role')
+   793→    }
+   794→  }
+   795→
+   796→  // ── Password strength ───────────────────────────────────────────────
+   797→  const passwordStrength = getPasswordStrength(newPassword)
+   798→
+   799→  // ── Role Badge Color ────────────────────────────────────────────────
+   800→  const getRoleBadgeClass = (role: string) => {
+   801→    switch (role) {
+   802→      case 'Admin': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   803→      case 'Manager': return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800'
+   804→      case 'Staff': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   805→      case 'Viewer': return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700'
+   806→      default: return ''
+   807→    }
+   808→  }
+   809→
+   810→  const getStatusBadgeClass = (status: string) => {
+   811→    return status === 'Active'
+   812→      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   813→      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   814→  }
+   815→
+   816→  // ═══════════════════════════════════════════════════════════════════
+   817→  // RENDER SECTION CONTENT
+   818→  // ═══════════════════════════════════════════════════════════════════
+   819→  const renderSection = () => {
+   820→    switch (activeSection) {
+   821→      // ───────────────────────────────────────────────────────────────
+   822→      // SECTION 1: FIRM PROFILE
+   823→      // ───────────────────────────────────────────────────────────────
+   824→      case 'firm':
+   825→        return (
+   826→          <motion.div
+   827→            key="firm"
+   828→            initial="hidden"
+   829→            animate="visible"
+   830→            exit="exit"
+   831→            variants={contentVariants}
+   832→            className="space-y-6"
+   833→          >
+   834→            <div>
+   835→              <h2 className="text-xl font-semibold text-foreground">Firm Profile</h2>
+   836→              <p className="text-sm text-muted-foreground mt-1">Manage your CA firm details used across all GST filings</p>
+   837→            </div>
+   838→
+   839→            <Card className="border-border/50">
+   840→              <CardContent className="pt-6 space-y-6">
+   841→                {/* Logo Upload */}
+   842→                <div className="flex items-center gap-5">
+   843→                  <div className="relative group">
+   844→                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20 overflow-hidden">
+   845→                      {/* Render the uploaded logo (Firestore-backed URL or local
+   846→                          in-flight preview) when available; otherwise fall back
+   847→                          to the firm-initials mark so the logo never disappears. */}
+   848→                      {(logoPreview || organization?.logoUrl) ? (
+   849→                        <img
+   850→                          src={(logoPreview || organization!.logoUrl) as string}
+   851→                          alt={firmName || 'Firm logo'}
+   852→                          className="h-full w-full object-cover"
+   853→                        />
+   854→                      ) : (
+   855→                        <span>
+   856→                          {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+   857→                        </span>
+   858→                      )}
+   859→                    </div>
+   860→                    <button
+   861→                      type="button"
+   862→                      onClick={() => logoInputRef.current?.click()}
+   863→                      disabled={logoUploading}
+   864→                      aria-label="Upload firm logo"
+   865→                      className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+   866→                    >
+   867→                      {logoUploading ? (
+   868→                        <Loader2 className="h-5 w-5 text-white animate-spin" />
+   869→                      ) : (
+   870→                        <Camera className="h-5 w-5 text-white" />
+   871→                      )}
+   872→                    </button>
+   873→                    <input
+   874→                      ref={logoInputRef}
+   875→                      type="file"
+   876→                      accept="image/png,image/jpeg,image/webp"
+   877→                      onChange={handleLogoUpload}
+   878→                      className="hidden"
+   879→                    />
+   880→                  </div>
+   881→                  <div>
+   882→                    <p className="text-sm font-medium text-foreground">Firm Logo</p>
+   883→                    <p className="text-xs text-muted-foreground mt-0.5">
+   884→                      {logoUploading ? 'Uploading...' : 'Click the avatar to upload a logo'}
+   885→                    </p>
+   886→                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG, JPG, or WebP (max 2 MB)</p>
+   887→                    {isPreview && (
+   888→                      <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+   889→                        Preview only — logo change won&rsquo;t be saved.
+   890→                      </p>
+   891→                    )}
+   892→                  </div>
+   893→                </div>
+   894→
+   895→                <Separator />
+   896→
+   897→                {/* Firm Name & Legal Name */}
+   898→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   899→                  <div className="space-y-2">
+   900→                    <Label htmlFor="firmName" className="text-sm font-medium">Firm Name</Label>
+   901→                    <Input
+   902→                      id="firmName"
+   903→                      value={firmName}
+   904→                      onChange={(e) => setFirmName(e.target.value)}
+   905→                      placeholder="Enter firm name"
+   906→                      className="h-10"
+   907→                    />
+   908→                  </div>
+   909→                  <div className="space-y-2">
+   910→                    <Label htmlFor="legalName" className="text-sm font-medium">Legal Name</Label>
+   911→                    <Input
+   912→                      id="legalName"
+   913→                      value={legalName}
+   914→                      onChange={(e) => setLegalName(e.target.value)}
+   915→                      placeholder="Enter legal name as per registration"
+   916→                      className="h-10"
+   917→                    />
+   918→                  </div>
+   919→                </div>
+   920→
+   921→                {/* GSTIN & State */}
+   922→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   923→                  <div className="space-y-2">
+   924→                    <Label htmlFor="firmGstin" className="text-sm font-medium">Firm GSTIN</Label>
+   925→                    <div className="relative">
+   926→                      <Input
+   927→                        id="firmGstin"
+   928→                        value={firmGstin}
+   929→                        onChange={(e) => setFirmGstin(e.target.value.toUpperCase())}
+   930→                        placeholder="22AAAAA0000A1Z5"
+   931→                        className={`h-10 pr-10 ${gstinValidation === false ? 'border-red-300 focus-visible:ring-red-400' : gstinValidation === true ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+   932→                        maxLength={15}
+   933→                      />
+   934→                      {gstinValidation !== null && (
+   935→                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${gstinValidation ? 'text-emerald-500' : 'text-red-500'}`}>
+   936→                          {gstinValidation ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+   937→                        </div>
+   938→                      )}
+   939→                    </div>
+   940→                    {gstinValidation === false && (
+   941→                      <p className="text-[11px] text-red-500">Invalid GSTIN format</p>
+   942→                    )}
+   943→                    {gstinValidation === true && (
+   944→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Valid GSTIN format</p>
+   945→                    )}
+   946→                  </div>
+   947→                  <div className="space-y-2">
+   948→                    <Label className="text-sm font-medium">Registration State</Label>
+   949→                    <Select value={firmState} onValueChange={setFirmState}>
+   950→                      <SelectTrigger className="h-10">
+   951→                        <SelectValue />
+   952→                      </SelectTrigger>
+   953→                      <SelectContent>
+   954→                        {INDIAN_STATES.map((state) => (
+   955→                          <SelectItem key={state} value={state}>{state}</SelectItem>
+   956→                        ))}
+   957→                      </SelectContent>
+   958→                    </Select>
+   959→                  </div>
+   960→                </div>
+   961→
+   962→                {/* Entity Type & CA Reg Number */}
+   963→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   964→                  <div className="space-y-2">
+   965→                    <Label className="text-sm font-medium">Entity Type</Label>
+   966→                    <Select value={entityType} onValueChange={setEntityType}>
+   967→                      <SelectTrigger className="h-10">
+   968→                        <SelectValue />
+   969→                      </SelectTrigger>
+   970→                      <SelectContent>
+   971→                        {ENTITY_TYPES.map((type) => (
+   972→                          <SelectItem key={type} value={type}>{type}</SelectItem>
+   973→                        ))}
+   974→                      </SelectContent>
+   975→                    </Select>
+   976→                  </div>
+   977→                  <div className="space-y-2">
+   978→                    <Label htmlFor="caRegNumber" className="text-sm font-medium">CA Registration Number</Label>
+   979→                    <Input
+   980→                      id="caRegNumber"
+   981→                      value={caRegNumber}
+   982→                      onChange={(e) => setCaRegNumber(e.target.value)}
+   983→                      placeholder="ICAI/M/000000"
+   984→                      className="h-10"
+   985→                    />
+   986→                  </div>
+   987→                </div>
+   988→
+   989→                {/* Office Address */}
+   990→                <div className="space-y-2">
+   991→                  <Label htmlFor="officeAddress" className="text-sm font-medium">Office Address</Label>
+   992→                  <Textarea
+   993→                    id="officeAddress"
+   994→                    value={officeAddress}
+   995→                    onChange={(e) => setOfficeAddress(e.target.value)}
+   996→                    placeholder="Enter complete office address"
+   997→                    className="min-h-[80px] resize-none"
+   998→                  />
+   999→                </div>
+  1000→
+  1001→                {/* Save */}
+  1002→                <div className="flex justify-end pt-2">
+  1003→                  <SaveButton onSave={handleSaveFirmProfile} />
+  1004→                </div>
+  1005→              </CardContent>
+  1006→            </Card>
+  1007→          </motion.div>
+  1008→        )
+  1009→
+  1010→      // ───────────────────────────────────────────────────────────────
+  1011→      // SECTION 2: GST CONFIGURATION
+  1012→      // ───────────────────────────────────────────────────────────────
+  1013→      case 'gst':
+  1014→        return (
+  1015→          <motion.div
+  1016→            key="gst"
+  1017→            initial="hidden"
+  1018→            animate="visible"
+  1019→            exit="exit"
+  1020→            variants={contentVariants}
+  1021→            className="space-y-6"
+  1022→          >
+  1023→            <div>
+  1024→              <h2 className="text-xl font-semibold text-foreground">GST Configuration</h2>
+  1025→              <p className="text-sm text-muted-foreground mt-1">Configure default GST filing preferences and automation rules</p>
+  1026→            </div>
+  1027→
+  1028→            <Card className="border-border/50">
+  1029→              <CardContent className="pt-6 space-y-6">
+  1030→                {/* Default Return Period */}
+  1031→                <div className="space-y-3">
+  1032→                  <div>
+  1033→                    <Label className="text-sm font-medium">Default Return Period</Label>
+  1034→                    <p className="text-xs text-muted-foreground mt-0.5">Set the default filing frequency for new clients</p>
+  1035→                  </div>
+  1036→                  <div className="flex gap-2">
+  1037→                    <button
+  1038→                      onClick={() => setReturnPeriod('monthly')}
+  1039→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1040→                        returnPeriod === 'monthly'
+  1041→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+  1042→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+  1043→                      }`}
+  1044→                    >
+  1045→                      Monthly
+  1046→                    </button>
+  1047→                    <button
+  1048→                      onClick={() => setReturnPeriod('quarterly')}
+  1049→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1050→                        returnPeriod === 'quarterly'
+  1051→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+  1052→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+  1053→                      }`}
+  1054→                    >
+  1055→                      Quarterly
+  1056→                    </button>
+  1057→                  </div>
+  1058→                </div>
+  1059→
+  1060→                <Separator />
+  1061→
+  1062→                {/* Financial Year Start */}
+  1063→                <div className="space-y-3">
+  1064→                  <div>
+  1065→                    <Label className="text-sm font-medium">Financial Year Start</Label>
+  1066→                    <p className="text-xs text-muted-foreground mt-0.5">Start month for financial year calculations</p>
+  1067→                  </div>
+  1068→                  <div className="flex gap-2">
+  1069→                    <button
+  1070→                      onClick={() => setFyStart('april')}
+  1071→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1072→                        fyStart === 'april'
+  1073→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+  1074→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+  1075→                      }`}
+  1076→                    >
+  1077→                      April
+  1078→                    </button>
+  1079→                    <button
+  1080→                      onClick={() => setFyStart('january')}
+  1081→                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  1082→                        fyStart === 'january'
+  1083→                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+  1084→                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
+  1085→                      }`}
+  1086→                    >
+  1087→                      January
+  1088→                    </button>
+  1089→                  </div>
+  1090→                </div>
+  1091→
+  1092→                <Separator />
+  1093→
+  1094→                {/* GSTR-1 Filing Preference */}
+  1095→                <div className="flex items-center justify-between">
+  1096→                  <div>
+  1097→                    <Label className="text-sm font-medium">GSTR-1 Filing Preference</Label>
+  1098→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-fill from sales register or manual entry</p>
+  1099→                  </div>
+  1100→                  <Select value={gstr1Pref} onValueChange={(v) => setGstr1Pref(v as 'auto' | 'manual')}>
+  1101→                    <SelectTrigger className="w-[140px] h-9">
+  1102→                      <SelectValue />
+  1103→                    </SelectTrigger>
+  1104→                    <SelectContent>
+  1105→                      <SelectItem value="auto">Auto</SelectItem>
+  1106→                      <SelectItem value="manual">Manual</SelectItem>
+  1107→                    </SelectContent>
+  1108→                  </Select>
+  1109→                </div>
+  1110→
+  1111→                {/* GSTR-3B Filing Preference */}
+  1112→                <div className="flex items-center justify-between">
+  1113→                  <div>
+  1114→                    <Label className="text-sm font-medium">GSTR-3B Filing Preference</Label>
+  1115→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-compute liability or manual entry</p>
+  1116→                  </div>
+  1117→                  <Select value={gstr3bPref} onValueChange={(v) => setGstr3bPref(v as 'auto' | 'manual')}>
+  1118→                    <SelectTrigger className="w-[140px] h-9">
+  1119→                      <SelectValue />
+  1120→                    </SelectTrigger>
+  1121→                    <SelectContent>
+  1122→                      <SelectItem value="auto">Auto</SelectItem>
+  1123→                      <SelectItem value="manual">Manual</SelectItem>
+  1124→                    </SelectContent>
+  1125→                  </Select>
+  1126→                </div>
+  1127→
+  1128→                {/* ITC Claiming Method */}
+  1129→                <div className="flex items-center justify-between">
+  1130→                  <div>
+  1131→                    <Label className="text-sm font-medium">ITC Claiming Method</Label>
+  1132→                    <p className="text-xs text-muted-foreground mt-0.5">Auto-match with GSTR-2A or manual review</p>
+  1133→                  </div>
+  1134→                  <Select value={itcMethod} onValueChange={(v) => setItcMethod(v as 'auto-match' | 'manual-review')}>
+  1135→                    <SelectTrigger className="w-[160px] h-9">
+  1136→                      <SelectValue />
+  1137→                    </SelectTrigger>
+  1138→                    <SelectContent>
+  1139→                      <SelectItem value="auto-match">Auto-match</SelectItem>
+  1140→                      <SelectItem value="manual-review">Manual review</SelectItem>
+  1141→                    </SelectContent>
+  1142→                  </Select>
+  1143→                </div>
+  1144→
+  1145→                <Separator />
+  1146→
+  1147→                {/* Late Filing Penalty Alert */}
+  1148→                <div className="flex items-center justify-between">
+  1149→                  <div className="flex items-center gap-3">
+  1150→                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1151→                      <AlertTriangle className="h-4 w-4" />
+  1152→                    </div>
+  1153→                    <div>
+  1154→                      <Label className="text-sm font-medium">Late Filing Penalty Alert</Label>
+  1155→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified when penalty is applicable</p>
+  1156→                    </div>
+  1157→                  </div>
+  1158→                  <Switch
+  1159→                    checked={lateFilingAlert}
+  1160→                    onCheckedChange={setLateFilingAlert}
+  1161→                    className="data-[state=checked]:bg-emerald-600"
+  1162→                  />
+  1163→                </div>
+  1164→
+  1165→                {/* Due Date Reminder Days */}
+  1166→                <div className="flex items-center justify-between">
+  1167→                  <div>
+  1168→                    <Label className="text-sm font-medium">Due Date Reminder Days</Label>
+  1169→                    <p className="text-xs text-muted-foreground mt-0.5">Days before due date to send reminder</p>
+  1170→                  </div>
+  1171→                  <Input
+  1172→                    type="number"
+  1173→                    value={dueDateReminderDays}
+  1174→                    onChange={(e) => setDueDateReminderDays(e.target.value)}
+  1175→                    min={1}
+  1176→                    max={30}
+  1177→                    className="w-[80px] h-9 text-center"
+  1178→                  />
+  1179→                </div>
+  1180→
+  1181→                {/* Save */}
+  1182→                <div className="flex justify-end pt-2">
+  1183→                  <SaveButton onSave={handleSaveGstConfig} />
+  1184→                </div>
+  1185→              </CardContent>
+  1186→            </Card>
+  1187→          </motion.div>
+  1188→        )
+  1189→
+  1190→      // ───────────────────────────────────────────────────────────────
+  1191→      // SECTION 3: TEAM MEMBERS
+  1192→      // ───────────────────────────────────────────────────────────────
+  1193→      case 'team':
+  1194→        return (
+  1195→          <motion.div
+  1196→            key="team"
+  1197→            initial="hidden"
+  1198→            animate="visible"
+  1199→            exit="exit"
+  1200→            variants={contentVariants}
+  1201→            className="space-y-6"
+  1202→          >
+  1203→            <div className="flex items-center justify-between">
+  1204→              <div>
+  1205→                <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
+  1206→                <p className="text-sm text-muted-foreground mt-1">Manage your team and their access levels</p>
+  1207→              </div>
+  1208→              <Button
+  1209→                onClick={() => setShowInviteDialog(true)}
+  1210→                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+  1211→              >
+  1212→                <Users className="h-4 w-4" />
+  1213→                Invite Team Member
+  1214→              </Button>
+  1215→            </div>
+  1216→
+  1217→            <div className="space-y-3">
+  1218→              {teamMembers.map((member) => (
+  1219→                <Card key={member.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1220→                  <CardContent className="pt-0 py-4">
+  1221→                    <div className="flex items-center gap-4">
+  1222→                      <Avatar className="h-10 w-10">
+  1223→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
+  1224→                          {member.initials}
+  1225→                        </AvatarFallback>
+  1226→                      </Avatar>
+  1227→                      <div className="flex-1 min-w-0">
+  1228→                        <div className="flex items-center gap-2 flex-wrap">
+  1229→                          <p className="text-sm font-semibold text-foreground">{member.name}</p>
+  1230→                          <Badge className={`text-[11px] px-2 py-0 border ${getRoleBadgeClass(member.role)}`}>
+  1231→                            {member.role}
+  1232→                          </Badge>
+  1233→                          <Badge className={`text-[11px] px-2 py-0 border ${getStatusBadgeClass(member.status)}`}>
+  1234→                            {member.status}
+  1235→                          </Badge>
+  1236→                        </div>
+  1237→                        <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
+  1238→                      </div>
+  1239→
+  1240→                      {/* Edit Role */}
+  1241→                      {editingMemberId === member.id ? (
+  1242→                        <div className="flex items-center gap-2">
+  1243→                          <Select value={editRole} onValueChange={(v) => setEditRole(v)}>
+  1244→                            <SelectTrigger className="w-[110px] h-8 text-xs">
+  1245→                              <SelectValue />
+  1246→                            </SelectTrigger>
+  1247→                            <SelectContent>
+  1248→                              <SelectItem value="Admin">Admin</SelectItem>
+  1249→                              <SelectItem value="Manager">Manager</SelectItem>
+  1250→                              <SelectItem value="Staff">Staff</SelectItem>
+  1251→                              <SelectItem value="Viewer">Viewer</SelectItem>
+  1252→                            </SelectContent>
+  1253→                          </Select>
+  1254→                          <Button
+  1255→                            size="sm"
+  1256→                            variant="ghost"
+  1257→                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
+  1258→                            onClick={() => handleUpdateRole(member.id, editRole)}
+  1259→                          >
+  1260→                            <Check className="h-4 w-4" />
+  1261→                          </Button>
+  1262→                        </div>
+  1263→                      ) : (
+  1264→                        <div className="flex items-center gap-1">
+  1265→                          {member.role !== 'Admin' && (
+  1266→                            <>
+  1267→                              <Button
+  1268→                                size="sm"
+  1269→                                variant="ghost"
+  1270→                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+  1271→                                onClick={() => {
+  1272→                                  setEditingMemberId(member.id)
+  1273→                                  setEditRole(member.role)
+  1274→                                }}
+  1275→                              >
+  1276→                                Edit role
+  1277→                              </Button>
+  1278→                              <Button
+  1279→                                size="sm"
+  1280→                                variant="ghost"
+  1281→                                className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+  1282→                                onClick={() => {
+  1283→                                  setMemberToRemove(member)
+  1284→                                  setShowRemoveDialog(true)
+  1285→                                }}
+  1286→                              >
+  1287→                                Remove
+  1288→                              </Button>
+  1289→                            </>
+  1290→                          )}
+  1291→                        </div>
+  1292→                      )}
+  1293→                    </div>
+  1294→                  </CardContent>
+  1295→                </Card>
+  1296→              ))}
+  1297→            </div>
+  1298→
+  1299→            {teamMembers.length === 0 && (
+  1300→              <Card className="border-border/50 border-dashed">
+  1301→                <CardContent className="pt-6 text-center py-12">
+  1302→                  <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+  1303→                  <p className="text-sm text-muted-foreground">No team members yet</p>
+  1304→                  <p className="text-xs text-muted-foreground mt-1">Invite your first team member to get started</p>
+  1305→                </CardContent>
+  1306→              </Card>
+  1307→            )}
+  1308→
+  1309→            {/* Invite Dialog */}
+  1310→            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+  1311→              <DialogContent>
+  1312→                <DialogHeader>
+  1313→                  <DialogTitle className="flex items-center gap-2">
+  1314→                    <Users className="h-5 w-5 text-emerald-600" />
+  1315→                    Invite Team Member
+  1316→                  </DialogTitle>
+  1317→                </DialogHeader>
+  1318→                <div className="space-y-4 py-2">
+  1319→                  <div className="space-y-2">
+  1320→                    <Label className="text-sm font-medium">Email Address</Label>
+  1321→                    <Input
+  1322→                      value={inviteEmail}
+  1323→                      onChange={(e) => setInviteEmail(e.target.value)}
+  1324→                      placeholder="colleague@firm.com"
+  1325→                      type="email"
+  1326→                      className="h-10"
+  1327→                    />
+  1328→                  </div>
+  1329→                  <div className="space-y-2">
+  1330→                    <Label className="text-sm font-medium">Role</Label>
+  1331→                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'Manager' | 'Staff' | 'Viewer')}>
+  1332→                      <SelectTrigger className="h-10">
+  1333→                        <SelectValue />
+  1334→                      </SelectTrigger>
+  1335→                      <SelectContent>
+  1336→                        <SelectItem value="Manager">Manager</SelectItem>
+  1337→                        <SelectItem value="Staff">Staff</SelectItem>
+  1338→                        <SelectItem value="Viewer">Viewer</SelectItem>
+  1339→                      </SelectContent>
+  1340→                    </Select>
+  1341→                    <p className="text-[11px] text-muted-foreground">Admin role can only be assigned by existing admins</p>
+  1342→                  </div>
+  1343→                </div>
+  1344→                <DialogFooter>
+  1345→                  <Button
+  1346→                    variant="outline"
+  1347→                    onClick={() => setShowInviteDialog(false)}
+  1348→                    disabled={inviting}
+  1349→                  >
+  1350→                    Cancel
+  1351→                  </Button>
+  1352→                  <Button
+  1353→                    onClick={handleInviteMember}
+  1354→                    disabled={!inviteEmail.trim() || inviting}
+  1355→                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+  1356→                  >
+  1357→                    {inviting ? (
+  1358→                      <>
+  1359→                        <Loader2 className="h-4 w-4 animate-spin" />
+  1360→                        Sending...
+  1361→                      </>
+  1362→                    ) : (
+  1363→                      <>
+  1364→                        <Mail className="h-4 w-4" />
+  1365→                        Send Invite
+  1366→                      </>
+  1367→                    )}
+  1368→                  </Button>
+  1369→                </DialogFooter>
+  1370→              </DialogContent>
+  1371→            </Dialog>
+  1372→
+  1373→            {/* Remove Confirmation */}
+  1374→            <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+  1375→              <AlertDialogContent>
+  1376→                <AlertDialogHeader>
+  1377→                  <AlertDialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
+  1378→                    <AlertTriangle className="h-5 w-5" />
+  1379→                    Remove Team Member?
+  1380→                  </AlertDialogTitle>
+  1381→                  <AlertDialogDescription>
+  1382→                    {memberToRemove && (
+  1383→                      <>Are you sure you want to remove <strong>{memberToRemove.name}</strong> from your team? They will lose access to all firm data immediately.</>
+  1384→                    )}
+  1385→                  </AlertDialogDescription>
+  1386→                </AlertDialogHeader>
+  1387→                <AlertDialogFooter>
+  1388→                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+  1389→                  <AlertDialogAction
+  1390→                    onClick={handleRemoveMember}
+  1391→                    className="bg-red-600 hover:bg-red-700 text-white"
+  1392→                  >
+  1393→                    Remove Member
+  1394→                  </AlertDialogAction>
+  1395→                </AlertDialogFooter>
+  1396→              </AlertDialogContent>
+  1397→            </AlertDialog>
+  1398→          </motion.div>
+  1399→        )
+  1400→
+  1401→      // ───────────────────────────────────────────────────────────────
+  1402→      // SECTION 4: NOTIFICATIONS
+  1403→      // ───────────────────────────────────────────────────────────────
+  1404→      case 'notifications':
+  1405→        return (
+  1406→          <motion.div
+  1407→            key="notifications"
+  1408→            initial="hidden"
+  1409→            animate="visible"
+  1410→            exit="exit"
+  1411→            variants={contentVariants}
+  1412→            className="space-y-6"
+  1413→          >
+  1414→            <div>
+  1415→              <h2 className="text-xl font-semibold text-foreground">Notifications</h2>
+  1416→              <p className="text-sm text-muted-foreground mt-1">Choose what notifications you want to receive</p>
+  1417→            </div>
+  1418→
+  1419→            <Card className="border-border/50">
+  1420→              <CardContent className="pt-6 space-y-1">
+  1421→                {/* Filing Deadline Reminders */}
+  1422→                <div className="flex items-center justify-between py-4">
+  1423→                  <div className="flex items-center gap-3">
+  1424→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1425→                      <CalendarClock className="h-4.5 w-4.5" />
+  1426→                    </div>
+  1427→                    <div>
+  1428→                      <p className="text-sm font-medium text-foreground">Filing Deadline Reminders</p>
+  1429→                      <p className="text-xs text-muted-foreground mt-0.5">Get notified before GST filing due dates</p>
+  1430→                    </div>
+  1431→                  </div>
+  1432→                  <Switch
+  1433→                    checked={filingDeadline}
+  1434→                    onCheckedChange={setFilingDeadline}
+  1435→                    className="data-[state=checked]:bg-emerald-600"
+  1436→                  />
+  1437→                </div>
+  1438→
+  1439→                <Separator />
+  1440→
+  1441→                {/* Mismatch Alerts */}
+  1442→                <div className="flex items-center justify-between py-4">
+  1443→                  <div className="flex items-center gap-3">
+  1444→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1445→                      <AlertTriangle className="h-4.5 w-4.5" />
+  1446→                    </div>
+  1447→                    <div>
+  1448→                      <p className="text-sm font-medium text-foreground">Mismatch Alerts</p>
+  1449→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when GSTR-2A vs books mismatches are detected</p>
+  1450→                    </div>
+  1451→                  </div>
+  1452→                  <Switch
+  1453→                    checked={mismatchAlerts}
+  1454→                    onCheckedChange={setMismatchAlerts}
+  1455→                    className="data-[state=checked]:bg-emerald-600"
+  1456→                  />
+  1457→                </div>
+  1458→
+  1459→                <Separator />
+  1460→
+  1461→                {/* Weekly Summary Email */}
+  1462→                <div className="flex items-center justify-between py-4">
+  1463→                  <div className="flex items-center gap-3">
+  1464→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1465→                      <Mail className="h-4.5 w-4.5" />
+  1466→                    </div>
+  1467→                    <div>
+  1468→                      <p className="text-sm font-medium text-foreground">Weekly Summary Email</p>
+  1469→                      <p className="text-xs text-muted-foreground mt-0.5">Receive a weekly digest of filing statuses and activity</p>
+  1470→                    </div>
+  1471→                  </div>
+  1472→                  <Switch
+  1473→                    checked={weeklySummary}
+  1474→                    onCheckedChange={setWeeklySummary}
+  1475→                    className="data-[state=checked]:bg-emerald-600"
+  1476→                  />
+  1477→                </div>
+  1478→
+  1479→                <Separator />
+  1480→
+  1481→                {/* Client Health Score Changes */}
+  1482→                <div className="flex items-center justify-between py-4">
+  1483→                  <div className="flex items-center gap-3">
+  1484→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shrink-0">
+  1485→                      <Activity className="h-4.5 w-4.5" />
+  1486→                    </div>
+  1487→                    <div>
+  1488→                      <p className="text-sm font-medium text-foreground">Client Health Score Changes</p>
+  1489→                      <p className="text-xs text-muted-foreground mt-0.5">Alert when a client&apos;s health score drops significantly</p>
+  1490→                    </div>
+  1491→                  </div>
+  1492→                  <Switch
+  1493→                    checked={healthScoreChanges}
+  1494→                    onCheckedChange={setHealthScoreChanges}
+  1495→                    className="data-[state=checked]:bg-emerald-600"
+  1496→                  />
+  1497→                </div>
+  1498→
+  1499→                <Separator />
+  1500→
+  1501→                {/* Team Activity Updates */}
+  1502→                <div className="flex items-center justify-between py-4">
+  1503→                  <div className="flex items-center gap-3">
+  1504→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+  1505→                      <Users className="h-4.5 w-4.5" />
+  1506→                    </div>
+  1507→                    <div>
+  1508→                      <p className="text-sm font-medium text-foreground">Team Activity Updates</p>
+  1509→                      <p className="text-xs text-muted-foreground mt-0.5">Notifications when team members complete filings or actions</p>
+  1510→                    </div>
+  1511→                  </div>
+  1512→                  <Switch
+  1513→                    checked={teamActivity}
+  1514→                    onCheckedChange={setTeamActivity}
+  1515→                    className="data-[state=checked]:bg-emerald-600"
+  1516→                  />
+  1517→                </div>
+  1518→
+  1519→                <Separator />
+  1520→
+  1521→                {/* New Invoice Uploaded */}
+  1522→                <div className="flex items-center justify-between py-4">
+  1523→                  <div className="flex items-center gap-3">
+  1524→                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1525→                      <Upload className="h-4.5 w-4.5" />
+  1526→                    </div>
+  1527→                    <div>
+  1528→                      <p className="text-sm font-medium text-foreground">New Invoice Uploaded</p>
+  1529→                      <p className="text-xs text-muted-foreground mt-0.5">Notify when clients upload new invoices or documents</p>
+  1530→                    </div>
+  1531→                  </div>
+  1532→                  <Switch
+  1533→                    checked={newInvoiceUploaded}
+  1534→                    onCheckedChange={setNewInvoiceUploaded}
+  1535→                    className="data-[state=checked]:bg-emerald-600"
+  1536→                  />
+  1537→                </div>
+  1538→
+  1539→                {/* Save */}
+  1540→                <div className="flex justify-end pt-4">
+  1541→                  <SaveButton onSave={handleSaveNotifications} />
+  1542→                </div>
+  1543→              </CardContent>
+  1544→            </Card>
+  1545→          </motion.div>
+  1546→        )
+  1547→
+  1548→      // ───────────────────────────────────────────────────────────────
+  1549→      // SECTION 5: SECURITY
+  1550→      // ───────────────────────────────────────────────────────────────
+  1551→      case 'security':
+  1552→        return (
+  1553→          <motion.div
+  1554→            key="security"
+  1555→            initial="hidden"
+  1556→            animate="visible"
+  1557→            exit="exit"
+  1558→            variants={contentVariants}
+  1559→            className="space-y-6"
+  1560→          >
+  1561→            <div>
+  1562→              <h2 className="text-xl font-semibold text-foreground">Security</h2>
+  1563→              <p className="text-sm text-muted-foreground mt-1">Manage your password, two-factor authentication, and sessions</p>
+  1564→            </div>
+  1565→
+  1566→            {/* Change Password */}
+  1567→            <Card className="border-border/50">
+  1568→              <CardHeader className="pb-0">
+  1569→                <div className="flex items-center gap-3">
+  1570→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1571→                    <Lock className="h-4.5 w-4.5" />
+  1572→                  </div>
+  1573→                  <div>
+  1574→                    <CardTitle className="text-base">Change Password</CardTitle>
+  1575→                    <CardDescription>Update your account password</CardDescription>
+  1576→                  </div>
+  1577→                </div>
+  1578→              </CardHeader>
+  1579→              <CardContent className="space-y-4 pt-4">
+  1580→                <div className="space-y-2">
+  1581→                  <Label className="text-sm font-medium">Current Password</Label>
+  1582→                  <Input
+  1583→                    type="password"
+  1584→                    value={currentPassword}
+  1585→                    onChange={(e) => setCurrentPassword(e.target.value)}
+  1586→                    placeholder="Enter current password"
+  1587→                    className="h-10"
+  1588→                  />
+  1589→                </div>
+  1590→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1591→                  <div className="space-y-2">
+  1592→                    <Label className="text-sm font-medium">New Password</Label>
+  1593→                    <Input
+  1594→                      type="password"
+  1595→                      value={newPassword}
+  1596→                      onChange={(e) => setNewPassword(e.target.value)}
+  1597→                      placeholder="Enter new password"
+  1598→                      className="h-10"
+  1599→                    />
+  1600→                    {newPassword && (
+  1601→                      <div className="space-y-1.5">
+  1602→                        <div className="flex items-center justify-between">
+  1603→                          <span className="text-[11px] text-muted-foreground">Strength</span>
+  1604→                          <span className={`text-[11px] font-medium ${
+  1605→                            passwordStrength.score <= 40 ? 'text-red-500' :
+  1606→                            passwordStrength.score <= 60 ? 'text-yellow-600' :
+  1607→                            'text-emerald-600'
+  1608→                          }`}>{passwordStrength.label}</span>
+  1609→                        </div>
+  1610→                        <Progress value={passwordStrength.score} className={`h-1.5 ${passwordStrength.color}`} />
+  1611→                      </div>
+  1612→                    )}
+  1613→                  </div>
+  1614→                  <div className="space-y-2">
+  1615→                    <Label className="text-sm font-medium">Confirm Password</Label>
+  1616→                    <Input
+  1617→                      type="password"
+  1618→                      value={confirmPassword}
+  1619→                      onChange={(e) => setConfirmPassword(e.target.value)}
+  1620→                      placeholder="Confirm new password"
+  1621→                      className={`h-10 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : confirmPassword && newPassword === confirmPassword ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
+  1622→                    />
+  1623→                    {confirmPassword && newPassword !== confirmPassword && (
+  1624→                      <p className="text-[11px] text-red-500">Passwords do not match</p>
+  1625→                    )}
+  1626→                    {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+  1627→                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Passwords match</p>
+  1628→                    )}
+  1629→                  </div>
+  1630→                </div>
+  1631→                {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
+  1632→                  <div className="flex justify-end">
+  1633→                    <SaveButton onSave={handleChangePassword} />
+  1634→                  </div>
+  1635→                )}
+  1636→              </CardContent>
+  1637→            </Card>
+  1638→
+  1639→            {/* Two-Factor Authentication */}
+  1640→            <Card className="border-border/50">
+  1641→              <CardHeader className="pb-0">
+  1642→                <div className="flex items-center gap-3">
+  1643→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
+  1644→                    <Shield className="h-4.5 w-4.5" />
+  1645→                  </div>
+  1646→                  <div className="flex-1">
+  1647→                    <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
+  1648→                    <CardDescription>Add an extra layer of security to your account</CardDescription>
+  1649→                  </div>
+  1650→                  <Badge className={`text-[11px] px-2.5 py-0.5 border ${
+  1651→                    twoFactorEnabled
+  1652→                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1653→                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1654→                  }`}>
+  1655→                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+  1656→                  </Badge>
+  1657→                </div>
+  1658→              </CardHeader>
+  1659→              <CardContent className="pt-4">
+  1660→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1661→                  <div>
+  1662→                    <p className="text-sm font-medium text-foreground">
+  1663→                      {twoFactorEnabled ? 'Two-factor authentication is enabled' : 'Enable two-factor authentication'}
+  1664→                    </p>
+  1665→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1666→                      {twoFactorEnabled
+  1667→                        ? 'Your account is protected with an additional verification step'
+  1668→                        : 'Protect your account with OTP verification on login'}
+  1669→                    </p>
+  1670→                  </div>
+  1671→                  <Switch
+  1672→                    checked={twoFactorEnabled}
+  1673→                    onCheckedChange={setTwoFactorEnabled}
+  1674→                    className="data-[state=checked]:bg-emerald-600"
+  1675→                  />
+  1676→                </div>
+  1677→              </CardContent>
+  1678→            </Card>
+  1679→
+  1680→            {/* Active Sessions */}
+  1681→            <Card className="border-border/50">
+  1682→              <CardHeader className="pb-0">
+  1683→                <div className="flex items-center gap-3">
+  1684→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
+  1685→                    <Smartphone className="h-4.5 w-4.5" />
+  1686→                  </div>
+  1687→                  <div>
+  1688→                    <CardTitle className="text-base">Active Sessions</CardTitle>
+  1689→                    <CardDescription>Devices currently signed in to your account</CardDescription>
+  1690→                  </div>
+  1691→                </div>
+  1692→              </CardHeader>
+  1693→              <CardContent className="pt-4">
+  1694→                <div className="space-y-3">
+  1695→                  {MOCK_SESSIONS.map((session) => (
+  1696→                    <div
+  1697→                      key={session.id}
+  1698→                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+  1699→                        session.current
+  1700→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+  1701→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+  1702→                      }`}
+  1703→                    >
+  1704→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+  1705→                        session.current
+  1706→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+  1707→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1708→                      }`}>
+  1709→                        {session.icon}
+  1710→                      </div>
+  1711→                      <div className="flex-1 min-w-0">
+  1712→                        <div className="flex items-center gap-2">
+  1713→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+  1714→                          {session.current && (
+  1715→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+  1716→                              Current
+  1717→                            </Badge>
+  1718→                          )}
+  1719→                        </div>
+  1720→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+  1721→                      </div>
+  1722→                      {!session.current && (
+  1723→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+  1724→                          Revoke
+  1725→                        </Button>
+  1726→                      )}
+  1727→                    </div>
+  1728→                  ))}
+  1729→                </div>
+  1730→              </CardContent>
+  1731→            </Card>
+  1732→
+  1733→            {/* Data Encryption */}
+  1734→            <Card className="border-border/50">
+  1735→              <CardContent className="pt-6">
+  1736→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1737→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1738→                    <LockKeyhole className="h-4.5 w-4.5" />
+  1739→                  </div>
+  1740→                  <div>
+  1741→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+  1742→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+  1743→                  </div>
+  1744→                </div>
+  1745→              </CardContent>
+  1746→            </Card>
+  1747→          </motion.div>
+  1748→        )
+  1749→
+  1750→      // ───────────────────────────────────────────────────────────────
+  1751→      // SECTION 6: BILLING
+  1752→      // ───────────────────────────────────────────────────────────────
+  1753→      case 'billing':
+  1754→        return (
+  1755→          <motion.div
+  1756→            key="billing"
+  1757→            initial="hidden"
+  1758→            animate="visible"
+  1759→            exit="exit"
+  1760→            variants={contentVariants}
+  1761→            className="space-y-6"
+  1762→          >
+  1763→            <div>
+  1764→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+  1765→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+  1766→            </div>
+  1767→
+  1768→            {/* Current Plan */}
+  1769→            <Card className="border-border/50 overflow-hidden">
+  1770→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+  1771→              <CardContent className="pt-6">
+  1772→                <div className="flex items-start justify-between">
+  1773→                  <div>
+  1774→                    <div className="flex items-center gap-2">
+  1775→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+  1776→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+  1777→                        Active
+  1778→                      </Badge>
+  1779→                    </div>
+  1780→                    <div className="flex items-baseline gap-1 mt-2">
+  1781→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+  1782→                      <span className="text-sm text-muted-foreground">/month</span>
+  1783→                    </div>
+  1784→                    <p className="text-xs text-muted-foreground mt-1">
+  1785→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+  1786→                    </p>
+  1787→                  </div>
+  1788→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+  1789→                    <ChevronRight className="h-4 w-4" />
+  1790→                    Upgrade Plan
+  1791→                  </Button>
+  1792→                </div>
+  1793→              </CardContent>
+  1794→            </Card>
+  1795→
+  1796→            {/* Usage This Month */}
+  1797→            <Card className="border-border/50">
+  1798→              <CardHeader className="pb-0">
+  1799→                <CardTitle className="text-base">Usage This Month</CardTitle>
+  1800→                <CardDescription>Your current usage against plan limits</CardDescription>
+  1801→              </CardHeader>
+  1802→              <CardContent className="pt-4 space-y-5">
+  1803→                {/* Clients */}
+  1804→                <div className="space-y-2">
+  1805→                  <div className="flex items-center justify-between">
+  1806→                    <div className="flex items-center gap-2">
+  1807→                      <Users className="h-4 w-4 text-muted-foreground" />
+  1808→                      <span className="text-sm font-medium text-foreground">Clients</span>
+  1809→                    </div>
+  1810→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+  1811→                  </div>
+  1812→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+  1813→                </div>
+  1814→
+  1815→                {/* Invoices Processed */}
+  1816→                <div className="space-y-2">
+  1817→                  <div className="flex items-center justify-between">
+  1818→                    <div className="flex items-center gap-2">
+  1819→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+  1820→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+  1821→                    </div>
+  1822→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+  1823→                  </div>
+  1824→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+  1825→                </div>
+  1826→
+  1827→                {/* Reconciliation Runs */}
+  1828→                <div className="space-y-2">
+  1829→                  <div className="flex items-center justify-between">
+  1830→                    <div className="flex items-center gap-2">
+  1831→                      <Activity className="h-4 w-4 text-muted-foreground" />
+  1832→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+  1833→                    </div>
+  1834→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+  1835→                  </div>
+  1836→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+  1837→                </div>
+  1838→              </CardContent>
+  1839→            </Card>
+  1840→
+  1841→            {/* Payment Method */}
+  1842→            <Card className="border-border/50">
+  1843→              <CardHeader className="pb-0">
+  1844→                <CardTitle className="text-base">Payment Method</CardTitle>
+  1845→              </CardHeader>
+  1846→              <CardContent className="pt-4">
+  1847→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1848→                  <div className="flex items-center gap-3">
+  1849→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+  1850→                      VISA
+  1851→                    </div>
+  1852→                    <div>
+  1853→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+  1854→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+  1855→                    </div>
+  1856→                  </div>
+  1857→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+  1858→                    Update Payment Method
+  1859→                  </Button>
+  1860→                </div>
+  1861→              </CardContent>
+  1862→            </Card>
+  1863→
+  1864→            {/* Billing History */}
+  1865→            <Card className="border-border/50">
+  1866→              <CardHeader className="pb-0">
+  1867→                <CardTitle className="text-base">Billing History</CardTitle>
+  1868→                <CardDescription>Download past invoices</CardDescription>
+  1869→              </CardHeader>
+  1870→              <CardContent className="pt-4">
+  1871→                <div className="space-y-2 max-h-64 overflow-y-auto">
+  1872→                  {BILLING_HISTORY.map((invoice) => (
+  1873→                    <div
+  1874→                      key={invoice.id}
+  1875→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+  1876→                    >
+  1877→                      <div className="flex items-center gap-3">
+  1878→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1879→                          <CreditCard className="h-4 w-4" />
+  1880→                        </div>
+  1881→                        <div>
+  1882→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+  1883→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+  1884→                        </div>
+  1885→                      </div>
+  1886→                      <div className="flex items-center gap-3">
+  1887→                        <Badge className={`text-[11px] px-2 py-0 border ${
+  1888→                          invoice.status === 'Paid'
+  1889→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1890→                            : invoice.status === 'Pending'
+  1891→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1892→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+  1893→                        }`}>
+  1894→                          {invoice.status}
+  1895→                        </Badge>
+  1896→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+  1897→                          <Download className="h-4 w-4" />
+  1898→                        </Button>
+  1899→                      </div>
+  1900→                    </div>
+  1901→                  ))}
+  1902→                </div>
+  1903→              </CardContent>
+  1904→            </Card>
+  1905→          </motion.div>
+  1906→        )
+  1907→
+  1908→      // ───────────────────────────────────────────────────────────────
+  1909→      // SECTION: GST API CONNECTIONS
+  1910→      // ───────────────────────────────────────────────────────────────
+  1911→      case 'api':
+  1912→        return (
+  1913→          <motion.div
+  1914→            key="api"
+  1915→            initial="hidden"
+  1916→            animate="visible"
+  1917→            exit="exit"
+  1918→            variants={contentVariants}
+  1919→            className="space-y-6"
+  1920→          >
+  1921→            <div>
+  1922→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+  1923→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+  1924→            </div>
+  1925→
+  1926→            <div className="space-y-4">
+  1927→              {MOCK_API_CONNECTIONS.map((connection) => (
+  1928→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1929→                  <CardContent className="pt-0 py-4">
+  1930→                    <div className="flex items-center gap-4">
+  1931→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+  1932→                        connection.status === 'Connected'
+  1933→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1934→                          : connection.status === 'Disconnected'
+  1935→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1936→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+  1937→                      }`}>
+  1938→                        {connection.icon}
+  1939→                      </div>
+  1940→                      <div className="flex-1 min-w-0">
+  1941→                        <div className="flex items-center gap-2 flex-wrap">
+  1942→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+  1943→                          <Badge className={`text-[10px] px-2 py-0 border ${
+  1944→                            connection.status === 'Connected'
+  1945→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1946→                              : connection.status === 'Disconnected'
+  1947→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1948→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1949→                          }`}>
+  1950→                            <span className={`size-1.5 rounded-full mr-1 ${
+  1951→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+  1952→                            }`} />
+  1953→                            {connection.status}
+  1954→                          </Badge>
+  1955→                        </div>
+  1956→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+  1957→                        {connection.lastSync && (
+  1958→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+  1959→                            Last synced: {connection.lastSync}
+  1960→                          </p>
+  1961→                        )}
+  1962→                      </div>
+  1963→                      <div className="flex items-center gap-2 shrink-0">
+  1964→                        <Button
+  1965→                          variant="outline"
+  1966→                          size="sm"
+  1967→                          className="h-8 text-xs gap-1.5"
+  1968→                          onClick={async () => {
+  1969→                            try {
+  1970→                              // Test by hitting the GSTN connect endpoint with the
+  1971→                              // firm's own GSTIN — if it returns a valid profile,
+  1972→                              // the connection is healthy.
+  1973→                              const res = await fetch('/api/connect/gstn', {
+  1974→                                method: 'POST',
+  1975→                                headers: { 'Content-Type': 'application/json' },
+  1976→                                body: JSON.stringify({
+  1977→                                  userId: user?.id ?? 'system-test',
+  1978→                                  gstin: firmGstin || '27AABCS1429B1Z5',
+  1979→                                }),
+  1980→                              })
+  1981→                              const data = await res.json()
+  1982→                              if (!res.ok) {
+  1983→                                throw new Error(data?.error ?? 'Test failed')
+  1984→                              }
+  1985→                              toast.success(`${connection.name} — connection OK`)
+  1986→                            } catch (err) {
+  1987→                              toast.error(err instanceof Error ? err.message : 'Test failed')
+  1988→                            }
+  1989→                          }}
+  1990→                        >
+  1991→                          <Activity className="h-3.5 w-3.5" />
+  1992→                          Test Connection
+  1993→                        </Button>
+  1994→                        <Button
+  1995→                          variant="ghost"
+  1996→                          size="sm"
+  1997→                          className="h-8 text-xs text-muted-foreground"
+  1998→                          disabled
+  1999→                          title={`${connection.name} configuration is managed in the provider's dashboard`}
+  2000→                        >
+
+[showing lines 1-2000 of 2201; use offset=2001 with limit to continue reading]

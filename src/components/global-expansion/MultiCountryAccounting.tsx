@@ -106,7 +106,7 @@ function KpiTile({ icon: Icon, label, value, sub, accent }: KpiTileProps) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: 'easeOut' as const }}
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm hover:border-white/[0.12] transition-colors"
     >
       <div className="flex items-center gap-2">
@@ -136,7 +136,7 @@ function ScoreBar({
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${value}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const }}
           className={`h-full ${color}`}
         />
       </div>
@@ -155,7 +155,7 @@ function CountryAccountingCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' }}
+      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' as const }}
       whileHover={{ y: -3 }}
       onClick={() => onOpen(country)}
       role="button"

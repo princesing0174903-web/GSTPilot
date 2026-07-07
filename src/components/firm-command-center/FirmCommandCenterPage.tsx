@@ -92,7 +92,7 @@ function ScoreGauge({ value, size = 72, label }: { value: number; size?: number;
           stroke={color} strokeWidth="6" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c}
           animate={{ strokeDashoffset: c - fill }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          transition={{ duration: 1, ease: 'easeOut' as const }}
         />
         <text
           x={size / 2} y={size / 2}

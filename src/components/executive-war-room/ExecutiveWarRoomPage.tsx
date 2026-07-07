@@ -77,7 +77,7 @@ const staggerChild = {
   initial: { opacity: 0, y: 16, scale: 0.96 },
   animate: (i: number) => ({
     opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.06, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { delay: i * 0.06, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const },
   }),
 }
 
@@ -89,14 +89,14 @@ const glowPulse = {
       '0 0 0px rgba(16, 185, 129, 0)',
     ],
   },
-  transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+  transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
 }
 
 const scanLine = {
   animate: {
     top: ['0%', '100%'],
   },
-  transition: { duration: 8, repeat: Infinity, ease: 'linear' },
+  transition: { duration: 8, repeat: Infinity, ease: 'linear' as const },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -216,7 +216,7 @@ function AreaChart({ data, labels, color = '#10b981', h = 180 }: {
         d={linePath} fill="none" stroke={color} strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.5, ease: 'easeOut' }}
+        transition={{ duration: 1.5, ease: 'easeOut' as const }}
       />
       {/* Data points */}
       {pts.map((p, i) => (
@@ -428,7 +428,7 @@ function HorizontalBars({ items }: {
               style={{ backgroundColor: item.color }}
               initial={{ width: 0 }}
               animate={{ width: `${(item.value / max) * 100}%` }}
-              transition={{ delay: 0.3 + i * 0.1, duration: 0.8, ease: 'easeOut' }}
+              transition={{ delay: 0.3 + i * 0.1, duration: 0.8, ease: 'easeOut' as const }}
             />
           </div>
         </div>
@@ -482,7 +482,7 @@ function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: n
               duration: 2 + i * 0.3,
               repeat: Infinity,
               delay: i * 0.4,
-              ease: 'easeInOut',
+              ease: 'easeInOut' as const,
             }}
           />
         </g>
@@ -548,7 +548,7 @@ function LiveTicker({ activities }: { activities: Array<{ title: string; type: s
       <motion.div
         className="flex whitespace-nowrap"
         animate={{ x: ['0%', '-50%'] }}
-        transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+        transition={{ duration: 30, repeat: Infinity, ease: 'linear' as const }}
       >
         {doubled.map((item, i) => (
           <span key={i} className="inline-flex items-center gap-2 px-6 text-[11px] text-slate-400">
@@ -639,7 +639,7 @@ function GlassPanel({ children, className = '', delay = 0 }: {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+      transition={{ delay, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] as const }}
       className={`relative overflow-hidden rounded-xl border border-slate-700/40 bg-gradient-to-br from-slate-900/95 to-slate-950/95 backdrop-blur-xl ${className}`}
     >
       {/* Scan line */}

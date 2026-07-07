@@ -52,7 +52,7 @@ const logBgColors = {
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
   visible: (i: number) => ({
-    opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.4, ease: 'easeOut' },
+    opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.4, ease: 'easeOut' as const },
   }),
 }
 
@@ -220,7 +220,7 @@ export default function AutopilotPage() {
               {runState === 'running' && (
                 <motion.div key="running" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
                   className="flex flex-col items-center gap-1">
-                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' as const }}>
                     <Zap className="h-8 w-8 md:h-10 md:w-10" fill="white" />
                   </motion.div>
                   <span className="text-[10px] md:text-xs font-bold tracking-wide">{buttonLabel}</span>

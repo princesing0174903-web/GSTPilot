@@ -538,7 +538,7 @@ function ScoreGauge({
     <motion.div
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.5, ease: 'easeOut' as const }}
       className="flex flex-col items-center gap-3"
     >
       <div className="relative" style={{ width: size, height: size }}>
@@ -561,7 +561,7 @@ function ScoreGauge({
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset }}
-            transition={{ duration: 1.6, ease: 'easeOut', delay: 0.2 }}
+            transition={{ duration: 1.6, ease: 'easeOut' as const, delay: 0.2 }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -635,7 +635,7 @@ function FactorBarChart({ factors, color }: { factors: ScoreFactor[]; color: str
                 style={{ backgroundColor: color, opacity: 0.85 }}
                 initial={{ width: 0 }}
                 animate={{ width: `${barPct}%` }}
-                transition={{ duration: 0.8, delay: 0.2 + i * 0.05, ease: 'easeOut' }}
+                transition={{ duration: 0.8, delay: 0.2 + i * 0.05, ease: 'easeOut' as const }}
               />
               <div className="absolute inset-0 flex items-center px-2">
                 <span className="text-[10px] font-semibold text-white drop-shadow-sm">
@@ -1768,7 +1768,7 @@ function ScoreSimulatorTab() {
                           className="h-full rounded"
                           style={{ backgroundColor: color }}
                           animate={{ width: `${simVal}%` }}
-                          transition={{ duration: 0.4, ease: 'easeOut' }}
+                          transition={{ duration: 0.4, ease: 'easeOut' as const }}
                         />
                         <div className="absolute inset-0 flex items-center px-2">
                           <span className="text-[10px] font-bold text-white drop-shadow-sm tabular-nums">

@@ -462,7 +462,7 @@ function ScoreGauge({ value, label, size = 130, icon: Icon }: {
             transform={`rotate(-90 ${cx} ${cy})`}
             initial={{ strokeDasharray: `0 ${circumference}` }}
             animate={{ strokeDasharray: `${dash} ${circumference}` }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
+            transition={{ duration: 1.2, ease: 'easeOut' as const }}
           />
           {/* Tick marks */}
           {Array.from({ length: 12 }).map((_, i) => {
@@ -519,7 +519,7 @@ function Sparkline({ data, color = '#10b981', w = 280, h = 56 }: {
         d={linePath} fill="none" stroke={color} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.2, ease: 'easeOut' }}
+        transition={{ duration: 1.2, ease: 'easeOut' as const }}
       />
       {pts.map((p, i) => (
         <motion.circle
@@ -617,7 +617,7 @@ function TrustNetworkGraph({ business }: { business: Business }) {
                 strokeOpacity={0.85}
                 initial={{ strokeDashoffset: 0 }}
                 animate={{ strokeDashoffset: [-24, 0] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' as const }}
               />
               {/* Trust particle */}
               <motion.circle
@@ -625,7 +625,7 @@ function TrustNetworkGraph({ business }: { business: Business }) {
                 fill={color}
                 initial={{ cx: center.x, cy: center.y }}
                 animate={{ cx: [center.x, n.x], cy: [center.y, n.y] }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: n.score % 1 }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' as const, delay: n.score % 1 }}
               />
             </g>
           )
@@ -772,7 +772,7 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
         d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-        transition={{ duration: 1.5, ease: 'easeOut' }}
+        transition={{ duration: 1.5, ease: 'easeOut' as const }}
       />
 
       {/* Mean line */}
@@ -940,7 +940,7 @@ function HeroBanner() {
                 <motion.div
                   className="absolute inset-0 rounded-2xl bg-emerald-400/20 blur-2xl"
                   animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.6, 0.4] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' as const }}
                 />
                 <div className="relative w-32 h-32 rounded-2xl bg-white border-2 border-emerald-200 flex items-center justify-center shadow-lg">
                   <div className="text-center">

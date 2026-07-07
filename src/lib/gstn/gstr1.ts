@@ -83,12 +83,19 @@ export async function fileGstr1(gstin: string, period: string): Promise<FilingRe
   if (!draft || draft.status !== 'prepared') {
     throw new Error(`No prepared GSTR-1 draft found for ${gstin} / ${period}. Prepare the draft first.`);
   }
-  const ackNo = genAckNo();
+  // ── PRODUCTION SAFETY ──
+  // We do NOT fabricate a fake acknowledgment number and mark the return as
+  // "filed". Real GSTN filing requires the official GST portal API with a
+  // valid OTP / DSC. Until that integration is live, we mark the return as
+  // "submitted" (not "filed") so the user knows it still needs to be filed
+  // on the GST portal.
+  //
+  // The previous implementation called genAckNo() (a random string) and
+  // marked the return as "filed" — this was a fake government filing.
   await db.gSTReturn.update({
     where: { id: draft.id },
     data: {
-      status: 'filed',
-      ackNo,
+      status: 'submitted',
       filedAt: new Date(),
     },
   });
@@ -96,10 +103,10 @@ export async function fileGstr1(gstin: string, period: string): Promise<FilingRe
     gstin,
     returnType: 'GSTR-1',
     period,
-    status: 'filed',
-    ackNo,
+    status: 'submitted',
+    ackNo: null,
     filedAt: nowISO(),
-    message: `GSTR-1 for ${period} filed successfully. ARN: ${ackNo}.`,
+    message: `GSTR-1 for ${period} has been submitted. Complete the filing on the GST portal using your OTP / DSC. The return will be marked "filed" once the portal returns an acknowledgment number (ARN).`,
   };
 }
 

@@ -339,7 +339,7 @@ function StepProgressBar({ currentStep }: { currentStep: number }) {
         <span className="text-xs font-medium text-muted-foreground">{percent}% Complete</span>
       </div>
       <div className="h-2 rounded-full bg-slate-100 mb-6 overflow-hidden">
-        <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${percent}%` }} transition={{ duration: 0.6, ease: 'easeOut' }} />
+        <motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${percent}%` }} transition={{ duration: 0.6, ease: 'easeOut' as const }} />
       </div>
       <div className="flex items-start">
         {PREP_STEPS.map((step, idx) => {
@@ -356,7 +356,7 @@ function StepProgressBar({ currentStep }: { currentStep: number }) {
                         : 'bg-slate-100 text-slate-400'
                   }`}
                   animate={isActive ? { scale: [1, 1.08, 1] } : {}}
-                  transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                  transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' as const } : {}}
                 >
                   {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                 </motion.div>
@@ -371,7 +371,7 @@ function StepProgressBar({ currentStep }: { currentStep: number }) {
                   <motion.div
                     className={`h-[3px] w-full rounded-full transition-colors duration-500 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}
                     animate={isActive ? { opacity: [0.5, 1, 0.5] } : {}}
-                    transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                    transition={isActive ? { duration: 2, repeat: Infinity, ease: 'easeInOut' as const } : {}}
                   />
                 </div>
               )}
@@ -609,14 +609,70 @@ export default function ReturnPrepWorkspace() {
     }
   }, [clientId, currentReturn, returnType, period, invoicesList, approvedCount, highRiskCount, totalTaxable, totalTax, handleAdvanceStep]);
 
-  const handleRunReconciliation = useCallback(() => {
+  const handleRunReconciliation = useCallback(async () => {
     if (effectiveStep < 2) {
       toast.warning('Complete validation first');
       return;
     }
-    handleAdvanceStep(3);
-    toast.success('Reconciliation Complete', { description: 'Books vs GSTR-2B matching finished.' });
-  }, [effectiveStep, handleAdvanceStep]);
+    // Resolve the client's GSTIN — the /api/reconcile endpoint requires it
+    // (it calls reconcileGstr2b(gstin, period)). We also pass clientId + period
+    // in the body so the request carries full context.
+    const gstin = (clientDoc?.gstin ?? '').trim().toUpperCase();
+    if (!gstin) {
+      toast.error('Cannot run reconciliation', {
+        description: 'Client GSTIN is missing. Edit the client profile to add a GSTIN before reconciling.',
+      });
+      return;
+    }
+    if (!period) {
+      toast.error('Cannot run reconciliation', { description: 'Period is not set.' });
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, gstin, period }),
+      });
+      const body = await res.json().catch(() => ({})) as {
+        ok?: boolean;
+        error?: string;
+        result?: {
+          matched?: number;
+          mismatched?: number;
+          unmatched?: number;
+          missingITC?: number;
+          mismatchValue?: number;
+          riskLevel?: string;
+        };
+      };
+      if (!res.ok || !body.ok) {
+        const msg = body.error ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      const r = body.result;
+      const mismatchCount = r?.mismatched ?? 0;
+      const matchedCount = r?.matched ?? 0;
+      const unmatchedCount = r?.unmatched ?? 0;
+      const missingITC = r?.missingITC ?? 0;
+      // Advance the step only on success.
+      handleAdvanceStep(3);
+      toast.success('Reconciliation Complete', {
+        description: `${matchedCount} matched · ${mismatchCount} mismatched · ${unmatchedCount} unmatched. Missing ITC: ₹${missingITC.toLocaleString('en-IN')}.`,
+        duration: 6000,
+      });
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      toast.error('Reconciliation failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+        duration: 6000,
+      });
+      // Do NOT advance the step on error.
+    } finally {
+      setActionLoading(false);
+    }
+  }, [effectiveStep, clientDoc, clientId, period, handleAdvanceStep]);
 
   const handleMarkReady = useCallback(async () => {
     if (!currentReturn?.id) {
@@ -800,8 +856,8 @@ export default function ReturnPrepWorkspace() {
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={handleRunValidation} disabled={effectiveStep >= 2 || actionLoading}>
                 <ShieldCheck className="size-3.5" /> Validate
               </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleRunReconciliation} disabled={effectiveStep < 2 || effectiveStep >= 3}>
-                <GitCompareArrows className="size-3.5" /> Reconcile
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 disabled:opacity-60" onClick={handleRunReconciliation} disabled={effectiveStep < 2 || effectiveStep >= 3 || actionLoading}>
+                {actionLoading ? <Loader2 className="size-3.5 animate-spin" /> : <GitCompareArrows className="size-3.5" />} Reconcile
               </Button>
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleMarkReady} disabled={effectiveStep < 3 || effectiveStep >= 5 || actionLoading}>
                 <CheckCircle2 className="size-3.5" /> Mark Ready

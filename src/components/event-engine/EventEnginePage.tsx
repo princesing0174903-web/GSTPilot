@@ -907,7 +907,7 @@ export default function EventEnginePage() {
                               initial={{ opacity: 0, y: -20, scale: 0.97 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, x: -50 }}
-                              transition={{ duration: 0.3, ease: 'easeOut' }}
+                              transition={{ duration: 0.3, ease: 'easeOut' as const }}
                               className={`flex items-start gap-3 p-3 rounded-lg border ${colors.bg} ${colors.border} cursor-pointer hover:shadow-sm transition-shadow`}
                             >
                               <div className={`mt-0.5 p-1.5 rounded-md ${colors.dot}/10`}>

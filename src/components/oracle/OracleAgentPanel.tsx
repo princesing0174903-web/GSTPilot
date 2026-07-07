@@ -217,7 +217,7 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
             <motion.div
               className="h-full accent-gradient"
               animate={{ width: `${task.progress}%` }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
+              transition={{ duration: 0.4, ease: 'easeOut' as const }}
             />
           </div>
           {/* Active step */}

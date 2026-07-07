@@ -464,7 +464,7 @@ export default function AIBusinessCopilotPage() {
                 key={msg.id}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
+                transition={{ duration: 0.25, ease: 'easeOut' as const }}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div className={`flex items-start gap-2.5 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -767,7 +767,7 @@ export default function AIBusinessCopilotPage() {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${stats.complianceRate}%` }}
-                    transition={{ duration: 1, ease: 'easeOut' }}
+                    transition={{ duration: 1, ease: 'easeOut' as const }}
                     className={`h-2 rounded-full ${
                       stats.complianceRate >= 90
                         ? 'bg-emerald-500'

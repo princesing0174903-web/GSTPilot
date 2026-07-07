@@ -116,7 +116,7 @@ export function OracleNotifications({
             initial={{ opacity: 0, x: 40, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 40, scale: 0.95 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
+            transition={{ duration: 0.3, ease: 'easeOut' as const }}
             onMouseEnter={() => setHovering(true)}
             onMouseLeave={() => setHovering(false)}
             className={cn(
@@ -196,7 +196,7 @@ export function OracleNotifications({
                 className={cn('h-0.5', TONE_META[notification.tone].accent)}
                 initial={{ width: '100%' }}
                 animate={{ width: '0%' }}
-                transition={{ duration: 12, ease: 'linear' }}
+                transition={{ duration: 12, ease: 'linear' as const }}
               />
             )}
           </motion.div>

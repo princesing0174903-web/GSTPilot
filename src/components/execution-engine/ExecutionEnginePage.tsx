@@ -686,7 +686,7 @@ function EventsByTypeChart({ byType }: { byType: Record<BusinessEventType, numbe
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] as const }}
                 className="h-full bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] rounded-full"
               />
             </div>
@@ -1108,7 +1108,7 @@ function ApprovalCard({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${approval.risk}%` }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
             className={`h-full rounded-full ${risk.bar}`}
           />
         </div>
@@ -1324,7 +1324,7 @@ function WorkflowCard({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
             className={`h-full rounded-full ${isCompleted ? 'bg-emerald-500' : 'bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6]'}`}
           />
         </div>
@@ -1439,7 +1439,7 @@ function PatternCard({ pattern }: { pattern: LearnedPattern }) {
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${pattern.confidence}%` }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
             className={`h-full rounded-full ${barColor}`}
           />
         </div>
@@ -1710,7 +1710,7 @@ export default function ExecutionEnginePage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] as const }}
           >
             {isLoading ? (
               <LoadingSkeleton />

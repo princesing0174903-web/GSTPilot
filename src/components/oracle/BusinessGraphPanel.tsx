@@ -979,7 +979,7 @@ function HealthBar({ metric }: { metric: HealthMetric }) {
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${metric.score}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.6, ease: 'easeOut' as const }}
           className="h-full rounded-full"
           style={{ background: color, boxShadow: `0 0 8px ${color}80` }}
         />

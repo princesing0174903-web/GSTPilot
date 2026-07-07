@@ -118,7 +118,7 @@ export function BusinessActivation() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] as const }}
         className="glass-surface rounded-[24px] p-5"
       >
         {/* Header row: label + progress */}
@@ -149,7 +149,7 @@ export function BusinessActivation() {
             className="accent-gradient h-full rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] as const }}
           />
         </div>
 

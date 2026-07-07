@@ -24,8 +24,20 @@ import {
   TrendingUp, DollarSign, Users, Calendar, Clock, ArrowRight,
   Star, Target, Award, ChevronRight, MoreHorizontal,
   GripVertical, CheckCircle2, XCircle, AlertCircle,
-  Sparkles, BarChart3, PhoneCall, UserPlus,
+  Sparkles, BarChart3, PhoneCall, UserPlus, Trash2,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   useFireLeads, useFireDeals, useFireMeetings,
 } from '@/hooks/use-firestore'
@@ -242,12 +254,14 @@ const SAMPLE_MEETINGS: FirestoreMeeting[] = [
 // KANBAN LEAD CARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function KanbanLeadCard({ lead, onStatusChange, onConvert }: {
+function KanbanLeadCard({ lead, onStatusChange, onConvert, onDelete }: {
   lead: FirestoreLead & { id: string }
   onStatusChange: (id: string, status: LeadStatus) => void
   onConvert: (id: string) => void
-}) {
+  onDelete: (id: string) => void
+  }) {
   const [isDragging, setIsDragging] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const days = daysUntil(lead.nextFollowUp)
 
   return (
@@ -272,9 +286,41 @@ function KanbanLeadCard({ lead, onStatusChange, onConvert }: {
           <p className="text-sm font-semibold text-foreground truncate">{lead.contactName}</p>
           <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
         </div>
-        <Badge variant="outline" className={`text-[10px] font-bold shrink-0 ${scoreColor(lead.leadScore)}`}>
-          {lead.leadScore}
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                aria-label={`Delete lead ${lead.contactName}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete lead?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete the lead “{lead.contactName}” from {lead.company}. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => onDelete(lead.leadId)}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Badge variant="outline" className={`text-[10px] font-bold ${scoreColor(lead.leadScore)}`}>
+            {lead.leadScore}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 mb-2.5">
@@ -373,6 +419,7 @@ function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: s
       await updateLead(leadId, { status: newStatus })
     } catch (err) {
       console.warn('Failed to update lead status:', err)
+      toast.error('Failed to update lead status. Please try again.')
     }
   }, [])
 
@@ -382,8 +429,19 @@ function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: s
       await convertLeadToClient(leadId)
     } catch (err) {
       console.warn('Failed to convert lead:', err)
+      toast.error('Failed to convert lead to client. Please try again.')
     } finally {
       setConvertingId(null)
+    }
+  }, [])
+
+  const handleDeleteLead = useCallback(async (leadId: string) => {
+    try {
+      await deleteLead(leadId)
+      toast.success('Lead deleted')
+    } catch (err) {
+      console.warn('Failed to delete lead:', err)
+      toast.error('Failed to delete lead. Please try again.')
     }
   }, [])
 
@@ -483,6 +541,7 @@ function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: s
                           lead={lead}
                           onStatusChange={handleStatusChange}
                           onConvert={handleConvert}
+                          onDelete={handleDeleteLead}
                         />
                       </div>
                     ))}
@@ -514,6 +573,7 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [newDeal, setNewDeal] = useState({ title: '', description: '', value: '', stage: 'proposal' as DealStage, probability: '30', expectedCloseDate: '', assignedTo: '', leadId: '' })
+  const [deleteDealId, setDeleteDealId] = useState<string | null>(null)
 
   const sortedDeals = useMemo(() => {
     return [...deals].sort((a, b) => {
@@ -549,6 +609,20 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
       setNewDeal({ title: '', description: '', value: '', stage: 'proposal', probability: '30', expectedCloseDate: '', assignedTo: '', leadId: '' })
     } catch (err) {
       console.warn('Failed to create deal:', err)
+      toast.error('Failed to create deal. Please try again.')
+    }
+  }
+
+  const handleDeleteDeal = async () => {
+    if (!deleteDealId) return
+    try {
+      await deleteDeal(deleteDealId)
+      toast.success('Deal deleted')
+    } catch (err) {
+      console.warn('Failed to delete deal:', err)
+      toast.error('Failed to delete deal. Please try again.')
+    } finally {
+      setDeleteDealId(null)
     }
   }
 
@@ -637,6 +711,7 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
                 Expected Close {sortField === 'expectedCloseDate' && (sortDir === 'asc' ? '↑' : '↓')}
               </TableHead>
               <TableHead className="text-xs">Assigned</TableHead>
+              <TableHead className="text-xs w-[60px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -664,12 +739,47 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
                       <span className="text-[10px] text-muted-foreground">{deal.assignedTo}</span>
                     </div>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                      aria-label={`Delete deal ${deal.title}`}
+                      onClick={() => setDeleteDealId(deal.dealId)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               )
             })}
           </TableBody>
         </Table>
       </Card>
+
+      {/* Delete Deal Confirmation */}
+      <AlertDialog open={deleteDealId !== null} onOpenChange={(open) => { if (!open) setDeleteDealId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete deal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the deal “{(() => {
+                const d = sortedDeals.find(x => x.dealId === deleteDealId)
+                return d ? d.title : 'this deal'
+              })()}”. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={handleDeleteDeal}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* New Deal Dialog */}
       <Dialog open={showNewDeal} onOpenChange={setShowNewDeal}>
@@ -743,6 +853,7 @@ function MeetingsView({ meetings, leads, loading }: { meetings: Array<FirestoreM
     title: '', description: '', dateTime: '', duration: '30', type: 'video_call' as MeetingType,
     attendees: '', leadId: '',
   })
+  const [deleteMeetingId, setDeleteMeetingId] = useState<string | null>(null)
 
   const upcoming = useMemo(() => {
     return meetings
@@ -772,6 +883,20 @@ function MeetingsView({ meetings, leads, loading }: { meetings: Array<FirestoreM
       setNewMeeting({ title: '', description: '', dateTime: '', duration: '30', type: 'video_call', attendees: '', leadId: '' })
     } catch (err) {
       console.warn('Failed to create meeting:', err)
+      toast.error('Failed to schedule meeting. Please try again.')
+    }
+  }
+
+  const handleDeleteMeeting = async () => {
+    if (!deleteMeetingId) return
+    try {
+      await deleteMeeting(deleteMeetingId)
+      toast.success('Meeting deleted')
+    } catch (err) {
+      console.warn('Failed to delete meeting:', err)
+      toast.error('Failed to delete meeting. Please try again.')
+    } finally {
+      setDeleteMeetingId(null)
     }
   }
 
@@ -869,21 +994,56 @@ function MeetingsView({ meetings, leads, loading }: { meetings: Array<FirestoreM
                   </div>
                 </div>
 
-                {/* Follow-up urgency */}
-                <div className="flex flex-col items-end justify-center shrink-0">
+                {/* Follow-up urgency + actions */}
+                <div className="flex flex-col items-end justify-between shrink-0 gap-2">
                   {days <= 0 ? (
                     <Badge className="text-[10px] bg-red-500 text-white">Today</Badge>
                   ) : days === 1 ? (
                     <Badge className="text-[10px] bg-amber-500 text-white">Tomorrow</Badge>
                   ) : days <= 7 ? (
                     <span className="text-[10px] text-muted-foreground">{days} days</span>
-                  ) : null}
+                  ) : (
+                    <span className="text-[10px] text-transparent select-none">·</span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    aria-label={`Delete meeting ${meeting.title}`}
+                    onClick={() => setDeleteMeetingId(meeting.meetingId)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </motion.div>
             )
           })}
         </div>
       )}
+
+      {/* Delete Meeting Confirmation */}
+      <AlertDialog open={deleteMeetingId !== null} onOpenChange={(open) => { if (!open) setDeleteMeetingId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete meeting?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete “{(() => {
+                const m = meetings.find(x => x.meetingId === deleteMeetingId)
+                return m ? m.title : 'this meeting'
+              })()}”. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={handleDeleteMeeting}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* New Meeting Dialog */}
       <Dialog open={showNewMeeting} onOpenChange={setShowNewMeeting}>
@@ -1194,7 +1354,7 @@ function RevenueForecastView({ leads, deals, loading }: { leads: Array<Firestore
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${(stage.value / maxBarValue) * 100}%` }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                    transition={{ duration: 0.6, ease: 'easeOut' as const }}
                     className="h-full rounded-lg flex items-center px-2"
                     style={{ backgroundColor: stage.color, minWidth: stage.value > 0 ? '20px' : '0' }}
                   >
@@ -1284,6 +1444,7 @@ function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
       setForm({ contactName: '', contactEmail: '', contactPhone: '', company: '', gstin: '', source: 'website', estimatedValue: '', notes: '', assignedTo: '', nextFollowUp: '', tags: '' })
     } catch (err) {
       console.warn('Failed to create lead:', err)
+      toast.error('Failed to create lead. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -1377,12 +1538,14 @@ export default function CRMPage() {
   const { data: fireMeetings, loading: meetingsLoading } = useFireMeetings()
   const [showAddLead, setShowAddLead] = useState(false)
 
-  // Use Firestore data when available, otherwise use sample data for demo
-  const leads = fireLeads.length > 0 ? fireLeads as unknown as Array<FirestoreLead & { id: string }> : SAMPLE_LEADS as unknown as Array<FirestoreLead & { id: string }>
-  const deals = fireDeals.length > 0 ? fireDeals as unknown as Array<FirestoreDeal & { id: string }> : SAMPLE_DEALS as unknown as Array<FirestoreDeal & { id: string }>
-  const meetings = fireMeetings.length > 0 ? fireMeetings as unknown as Array<FirestoreMeeting & { id: string }> : SAMPLE_MEETINGS as unknown as Array<FirestoreMeeting & { id: string }>
+  // Use real Firestore data only. Empty arrays render honest empty states.
+  // (SAMPLE_LEADS/SAMPLE_DEALS/SAMPLE_MEETINGS constants are retained for reference
+  // but are NOT used as a fallback — see audit 1d.)
+  const leads = fireLeads as unknown as Array<FirestoreLead & { id: string }>
+  const deals = fireDeals as unknown as Array<FirestoreDeal & { id: string }>
+  const meetings = fireMeetings as unknown as Array<FirestoreMeeting & { id: string }>
 
-  const loading = leadsLoading && dealsLoading && meetingsLoading
+  const loading = leadsLoading || dealsLoading || meetingsLoading
 
   // Quick stats
   const activeLeads = leads.filter(l => l.status !== 'converted' && l.status !== 'lost')

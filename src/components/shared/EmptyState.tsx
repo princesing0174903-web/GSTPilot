@@ -35,7 +35,7 @@ export function EmptyState({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: 'easeOut' as const }}
       className={`flex flex-col items-center justify-center text-center ${
         compact ? 'py-8' : 'py-16'
       } ${className}`}

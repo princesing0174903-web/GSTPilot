@@ -1,0 +1,693 @@
+     1→=========== connectorAnalytic ===========
+     2→src/lib/marketplace/seed.ts-
+     3→src/lib/marketplace/seed.ts-    // 3. Seed analytics if none exist (last 14 days)
+     4→src/lib/marketplace/seed.ts:    const analyticsCount = await db.connectorAnalytic.count({ where: { tenantId } })
+     5→src/lib/marketplace/seed.ts-    if (analyticsCount === 0) {
+     6→src/lib/marketplace/seed.ts-      const installed = await db.installedIntegration.findMany({ where: { tenantId, status: 'connected' } })
+     7→src/lib/marketplace/seed.ts-      for (let d = 13; d >= 0; d--) {
+     8→src/lib/marketplace/seed.ts-        const bucket = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10)
+     9→src/lib/marketplace/seed.ts-        for (const inst of installed) {
+    10→src/lib/marketplace/seed.ts-          const apiCalls = Math.floor(50 + Math.random() * 800)
+    11→src/lib/marketplace/seed.ts-          const syncSuccess = Math.floor(5 + Math.random() * 20)
+    12→src/lib/marketplace/seed.ts-          const syncFailed = Math.floor(Math.random() * 3)
+    13→src/lib/marketplace/seed.ts-          const recordsSynced = Math.floor(100 + Math.random() * 2000)
+    14→src/lib/marketplace/seed.ts:          await db.connectorAnalytic.create({
+    15→src/lib/marketplace/seed.ts-            data: {
+    16→src/lib/marketplace/seed.ts-              tenantId,
+    17→src/lib/marketplace/seed.ts-              installedIntegrationId: inst.id,
+    18→src/lib/marketplace/seed.ts-              bucket,
+    19→src/lib/marketplace/seed.ts-              apiCalls,
+    20→src/lib/marketplace/seed.ts-              syncSuccess,
+    21→src/lib/marketplace/seed.ts-              syncFailed,
+    22→src/lib/marketplace/seed.ts-              eventsPublished: Math.floor(5 + Math.random() * 40),
+    23→--
+    24→src/lib/marketplace/analytics.ts-
+    25→src/lib/marketplace/analytics.ts-  // Aggregate analytics across all installed integrations for the tenant
+    26→src/lib/marketplace/analytics.ts:  const analytics = await db.connectorAnalytic.findMany({
+    27→src/lib/marketplace/analytics.ts-    where: { tenantId, bucket: { gte: since.toISOString().slice(0, 10) } },
+    28→src/lib/marketplace/analytics.ts-    include: { installedIntegration: { include: { connector: { select: { displayName: true, slug: true } } } } },
+    29→src/lib/marketplace/analytics.ts-  })
+    30→src/lib/marketplace/analytics.ts-
+    31→src/lib/marketplace/analytics.ts-  if (analytics.length === 0) {
+    32→src/lib/marketplace/analytics.ts-    return {
+    33→src/lib/marketplace/analytics.ts-      totalApiCalls: 0, totalSyncSuccess: 0, totalSyncFailed: 0, totalEventsPublished: 0,
+    34→src/lib/marketplace/analytics.ts-      totalRecordsSynced: 0, avgLatencyMs: 0, totalErrors: 0, totalAutomationTriggered: 0,
+    35→--
+    36→src/lib/marketplace/sync-engine.ts-  const tenantId = await resolveTenantId()
+    37→src/lib/marketplace/sync-engine.ts-  const bucket = new Date().toISOString().slice(0, 10)
+    38→src/lib/marketplace/sync-engine.ts:  const existing = await db.connectorAnalytic.findFirst({
+    39→src/lib/marketplace/sync-engine.ts-    where: { tenantId, installedIntegrationId: installationId, bucket },
+    40→src/lib/marketplace/sync-engine.ts-  })
+    41→src/lib/marketplace/sync-engine.ts-  if (existing) {
+    42→src/lib/marketplace/sync-engine.ts:    await db.connectorAnalytic.update({
+    43→src/lib/marketplace/sync-engine.ts-      where: { id: existing.id },
+    44→src/lib/marketplace/sync-engine.ts-      data: {
+    45→src/lib/marketplace/sync-engine.ts-        apiCalls: { increment: data.apiCalls },
+    46→src/lib/marketplace/sync-engine.ts-        syncSuccess: { increment: data.syncSuccess },
+    47→src/lib/marketplace/sync-engine.ts-        syncFailed: { increment: data.syncFailed },
+    48→src/lib/marketplace/sync-engine.ts-        recordsSynced: { increment: data.recordsSynced },
+    49→src/lib/marketplace/sync-engine.ts-        eventsPublished: { increment: data.eventsPublished },
+    50→src/lib/marketplace/sync-engine.ts-        errorsCount: { increment: data.errorsCount },
+    51→--
+    52→src/lib/marketplace/sync-engine.ts-    })
+    53→src/lib/marketplace/sync-engine.ts-  } else {
+    54→src/lib/marketplace/sync-engine.ts:    await db.connectorAnalytic.create({
+    55→src/lib/marketplace/sync-engine.ts-      data: {
+    56→src/lib/marketplace/sync-engine.ts-        tenantId,
+    57→src/lib/marketplace/sync-engine.ts-        installedIntegrationId: installationId,
+    58→src/lib/marketplace/sync-engine.ts-        bucket,
+    59→src/lib/marketplace/sync-engine.ts-        apiCalls: data.apiCalls,
+    60→src/lib/marketplace/sync-engine.ts-        syncSuccess: data.syncSuccess,
+    61→src/lib/marketplace/sync-engine.ts-        syncFailed: data.syncFailed,
+    62→src/lib/marketplace/sync-engine.ts-        recordsSynced: data.recordsSynced,
+    63→=========== connectorCredential ===========
+    64→src/lib/connectivity/engine.ts-    db.connectorSyncJob.count({ where: { connectorId: row.id } }),
+    65→src/lib/connectivity/engine.ts-    db.connectorSyncJob.findFirst({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+    66→src/lib/connectivity/engine.ts:    db.connectorCredential.findMany({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+    67→src/lib/connectivity/engine.ts-  ]);
+    68→src/lib/connectivity/engine.ts-
+    69→src/lib/connectivity/engine.ts-  const credSummary: CredentialSummary[] = credentials.map((c) => ({
+    70→src/lib/connectivity/engine.ts-    id: c.id,
+    71→src/lib/connectivity/engine.ts-    type: c.type,
+    72→src/lib/connectivity/engine.ts-    label: c.label,
+    73→src/lib/connectivity/engine.ts-    scopes: safeJsonParse<string[]>(c.scopes, []),
+    74→src/lib/connectivity/engine.ts-    expiresAt: iso(c.expiresAt),
+    75→--
+    76→src/lib/connectivity/engine.ts-
+    77→src/lib/connectivity/engine.ts-  // Replace any existing access tokens for this connector (rotation)
+    78→src/lib/connectivity/engine.ts:  await db.connectorCredential.updateMany({
+    79→src/lib/connectivity/engine.ts-    where: { connectorId: instance.id, type: 'access_token' },
+    80→src/lib/connectivity/engine.ts-    data: { type: 'access_token_superseded' },
+    81→src/lib/connectivity/engine.ts-  });
+    82→src/lib/connectivity/engine.ts-
+    83→src/lib/connectivity/engine.ts:  await db.connectorCredential.create({
+    84→src/lib/connectivity/engine.ts-    data: {
+    85→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+    86→src/lib/connectivity/engine.ts-      type: 'access_token',
+    87→src/lib/connectivity/engine.ts-      label: `${def.provider} access token`,
+    88→src/lib/connectivity/engine.ts-      encryptedValue: `enc:${instance.id}:${now.getTime()}`, // secrets-manager placeholder
+    89→src/lib/connectivity/engine.ts-      scopes: JSON.stringify(scopes),
+    90→src/lib/connectivity/engine.ts-      expiresAt: expires,
+    91→src/lib/connectivity/engine.ts-      lastRotatedAt: now,
+    92→--
+    93→src/lib/connectivity/engine.ts-
+    94→src/lib/connectivity/engine.ts-  // 2. Credential check
+    95→src/lib/connectivity/engine.ts:  const creds = await db.connectorCredential.findMany({
+    96→src/lib/connectivity/engine.ts-    where: { connectorId: instance.id, type: 'access_token' },
+    97→src/lib/connectivity/engine.ts-    orderBy: { createdAt: 'desc' },
+    98→src/lib/connectivity/engine.ts-  });
+    99→src/lib/connectivity/engine.ts-  const hasCred = creds.length > 0;
+   100→src/lib/connectivity/engine.ts-  const credExpired = creds.some((c) => c.expiresAt && c.expiresAt < new Date());
+   101→src/lib/connectivity/engine.ts-  checks.push({
+   102→src/lib/connectivity/engine.ts-    name: 'Credential present',
+   103→src/lib/connectivity/engine.ts-    passed: hasCred,
+   104→=========== connectorEvent ===========
+   105→src/lib/connectivity/health.ts-
+   106→src/lib/connectivity/health.ts-  // Webhook health — derived from webhook-received events in last 24h
+   107→src/lib/connectivity/health.ts:  const webhookEvents = await db.connectorEvent.count({
+   108→src/lib/connectivity/health.ts-    where: { connectorId: installed.id, type: 'webhook.received', createdAt: { gte: day24 } },
+   109→src/lib/connectivity/health.ts-  });
+   110→src/lib/connectivity/health.ts-  const webhookHealthy = !installed.metadata?.webhookRequired ? true : webhookEvents > 0;
+   111→src/lib/connectivity/health.ts-
+   112→src/lib/connectivity/health.ts-  // Health score (0..100)
+   113→src/lib/connectivity/health.ts-  let score = 100;
+   114→src/lib/connectivity/health.ts-  if (installed.status === 'error') score -= 40;
+   115→src/lib/connectivity/health.ts-  if (installed.status === 'expired') score -= 50;
+   116→--
+   117→src/lib/connectivity/health.ts-  const connectorIds = connectorHealth.map((h) => h.connectorId);
+   118→src/lib/connectivity/health.ts-  const [totalEvents24h, totalFailures24h, totalSyncs24h] = connectorIds.length > 0 ? await Promise.all([
+   119→src/lib/connectivity/health.ts:    db.connectorEvent.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } }),
+   120→src/lib/connectivity/health.ts:    db.connectorEvent.count({ where: { connectorId: { in: connectorIds }, severity: { in: ['high', 'critical'] }, createdAt: { gte: day24 } } }),
+   121→src/lib/connectivity/health.ts-    db.connectorSyncJob.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } }),
+   122→src/lib/connectivity/health.ts-  ]) : [0, 0, 0];
+   123→src/lib/connectivity/health.ts-
+   124→src/lib/connectivity/health.ts-  // Total API calls in 24h — approximated by sum of connector logs
+   125→src/lib/connectivity/health.ts-  const totalApiCalls24h = connectorIds.length > 0
+   126→src/lib/connectivity/health.ts-    ? await db.connectorLog.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } })
+   127→src/lib/connectivity/health.ts-    : 0;
+   128→src/lib/connectivity/health.ts-
+   129→--
+   130→src/lib/connectivity/engine.ts-  const def = getConnector(row.connectorKey);
+   131→src/lib/connectivity/engine.ts-  const [eventCount, logCount, syncJobCount, lastSyncJob, credentials] = await Promise.all([
+   132→src/lib/connectivity/engine.ts:    db.connectorEvent.count({ where: { connectorId: row.id } }),
+   133→src/lib/connectivity/engine.ts-    db.connectorLog.count({ where: { connectorId: row.id } }),
+   134→src/lib/connectivity/engine.ts-    db.connectorSyncJob.count({ where: { connectorId: row.id } }),
+   135→src/lib/connectivity/engine.ts-    db.connectorSyncJob.findFirst({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   136→src/lib/connectivity/engine.ts-    db.connectorCredential.findMany({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   137→src/lib/connectivity/engine.ts-  ]);
+   138→src/lib/connectivity/engine.ts-
+   139→src/lib/connectivity/engine.ts-  const credSummary: CredentialSummary[] = credentials.map((c) => ({
+   140→src/lib/connectivity/engine.ts-    id: c.id,
+   141→--
+   142→src/lib/connectivity/engine.ts-}): Promise<void> {
+   143→src/lib/connectivity/engine.ts-  try {
+   144→src/lib/connectivity/engine.ts:    await db.connectorEvent.create({
+   145→src/lib/connectivity/engine.ts-      data: {
+   146→src/lib/connectivity/engine.ts-        firmId: params.firmId,
+   147→src/lib/connectivity/engine.ts-        connectorId: params.connectorId,
+   148→src/lib/connectivity/engine.ts-        connectorKey: params.connectorKey,
+   149→src/lib/connectivity/engine.ts-        type: params.type,
+   150→src/lib/connectivity/engine.ts-        severity: params.severity,
+   151→src/lib/connectivity/engine.ts-        title: params.title,
+   152→src/lib/connectivity/engine.ts-        description: params.description ?? null,
+   153→--
+   154→src/lib/connectivity/events.ts-export async function getRecentEvents(limit = 50, firmId?: string | null): Promise<ConnectorEventRecord[]> {
+   155→src/lib/connectivity/events.ts-  const where = firmId ? { firmId } : {};
+   156→src/lib/connectivity/events.ts:  const rows = await db.connectorEvent.findMany({
+   157→src/lib/connectivity/events.ts-    where,
+   158→src/lib/connectivity/events.ts-    orderBy: { createdAt: 'desc' },
+   159→src/lib/connectivity/events.ts-    take: limit,
+   160→src/lib/connectivity/events.ts-    include: { connector: { select: { provider: true, category: true } } },
+   161→src/lib/connectivity/events.ts-  });
+   162→src/lib/connectivity/events.ts-
+   163→src/lib/connectivity/events.ts-  return rows.map((r) => ({
+   164→src/lib/connectivity/events.ts-    id: r.id,
+   165→--
+   166→src/lib/connectivity/events.ts-  };
+   167→src/lib/connectivity/events.ts-
+   168→src/lib/connectivity/events.ts:  const rows = await db.connectorEvent.findMany({
+   169→src/lib/connectivity/events.ts-    where,
+   170→src/lib/connectivity/events.ts-    select: { type: true, severity: true, reaction: true },
+   171→src/lib/connectivity/events.ts-  });
+   172→src/lib/connectivity/events.ts-
+   173→src/lib/connectivity/events.ts-  const byType: Record<string, number> = {};
+   174→src/lib/connectivity/events.ts-  const bySeverity: Record<string, number> = {};
+   175→src/lib/connectivity/events.ts-  let oracleReactions = 0;
+   176→src/lib/connectivity/events.ts-
+   177→=========== connectorInstance ===========
+   178→src/lib/connectivity/health.ts-
+   179→src/lib/connectivity/health.ts-  // 1. Find expired connectors and mark them expired
+   180→src/lib/connectivity/health.ts:  const expiredInstances = await db.connectorInstance.findMany({
+   181→src/lib/connectivity/health.ts-    where: { status: 'active' },
+   182→src/lib/connectivity/health.ts-    include: { credentials: true },
+   183→src/lib/connectivity/health.ts-  });
+   184→src/lib/connectivity/health.ts-
+   185→src/lib/connectivity/health.ts-  for (const inst of expiredInstances) {
+   186→src/lib/connectivity/health.ts-    const accessCred = inst.credentials.find((c) => c.type === 'access_token');
+   187→src/lib/connectivity/health.ts-    if (accessCred?.expiresAt && accessCred.expiresAt < new Date()) {
+   188→src/lib/connectivity/health.ts:      await db.connectorInstance.update({
+   189→src/lib/connectivity/health.ts-        where: { id: inst.id },
+   190→src/lib/connectivity/health.ts-        data: { status: 'expired', lastError: 'Access token expired' },
+   191→src/lib/connectivity/health.ts-      });
+   192→src/lib/connectivity/health.ts-      actions.push(`Marked ${inst.provider} as expired (token expired)`);
+   193→src/lib/connectivity/health.ts-    }
+   194→src/lib/connectivity/health.ts-
+   195→src/lib/connectivity/health.ts-    // 2. Find overdue syncs and queue retry
+   196→src/lib/connectivity/health.ts-    if (inst.nextSyncAt && inst.nextSyncAt < new Date() && inst.status === 'active') {
+   197→src/lib/connectivity/health.ts:      await db.connectorInstance.update({
+   198→src/lib/connectivity/health.ts-        where: { id: inst.id },
+   199→src/lib/connectivity/health.ts-        data: { nextSyncAt: new Date(Date.now() + 15 * 60 * 1000) },
+   200→src/lib/connectivity/health.ts-      });
+   201→src/lib/connectivity/health.ts-      actions.push(`Rescheduled overdue sync for ${inst.provider}`);
+   202→src/lib/connectivity/health.ts-      recovered++;
+   203→src/lib/connectivity/health.ts-    }
+   204→src/lib/connectivity/health.ts-  }
+   205→src/lib/connectivity/health.ts-
+   206→--
+   207→src/lib/connectivity/engine.ts-
+   208→src/lib/connectivity/engine.ts-// ─── Mapping: Prisma row → InstalledConnector ────────────────────────────────────
+   209→src/lib/connectivity/engine.ts:type InstanceRow = Awaited<ReturnType<typeof db.connectorInstance.findFirst>>;
+   210→src/lib/connectivity/engine.ts-
+   211→src/lib/connectivity/engine.ts-export async function mapInstance(row: NonNullable<InstanceRow>): Promise<InstalledConnector> {
+   212→src/lib/connectivity/engine.ts-  const def = getConnector(row.connectorKey);
+   213→src/lib/connectivity/engine.ts-  const [eventCount, logCount, syncJobCount, lastSyncJob, credentials] = await Promise.all([
+   214→src/lib/connectivity/engine.ts-    db.connectorEvent.count({ where: { connectorId: row.id } }),
+   215→src/lib/connectivity/engine.ts-    db.connectorLog.count({ where: { connectorId: row.id } }),
+   216→src/lib/connectivity/engine.ts-    db.connectorSyncJob.count({ where: { connectorId: row.id } }),
+   217→src/lib/connectivity/engine.ts-    db.connectorSyncJob.findFirst({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   218→--
+   219→src/lib/connectivity/engine.ts-
+   220→src/lib/connectivity/engine.ts-  // Reuse existing instance if installed for same scope
+   221→src/lib/connectivity/engine.ts:  const existing = await db.connectorInstance.findFirst({
+   222→src/lib/connectivity/engine.ts-    where: {
+   223→src/lib/connectivity/engine.ts-      connectorKey: params.connectorKey,
+   224→src/lib/connectivity/engine.ts-      userId: params.userId ?? null,
+   225→src/lib/connectivity/engine.ts-      firmId: params.firmId ?? null,
+   226→src/lib/connectivity/engine.ts-    },
+   227→src/lib/connectivity/engine.ts-  });
+   228→src/lib/connectivity/engine.ts-  if (existing) {
+   229→src/lib/connectivity/engine.ts-    return {
+   230→--
+   231→src/lib/connectivity/engine.ts-  const nextSyncAt = new Date(now.getTime() + intervalToMs(interval));
+   232→src/lib/connectivity/engine.ts-
+   233→src/lib/connectivity/engine.ts:  const instance = await db.connectorInstance.create({
+   234→src/lib/connectivity/engine.ts-    data: {
+   235→src/lib/connectivity/engine.ts-      firmId: params.firmId ?? null,
+   236→src/lib/connectivity/engine.ts-      userId: params.userId ?? null,
+   237→src/lib/connectivity/engine.ts-      connectorKey: def.key,
+   238→src/lib/connectivity/engine.ts-      category: def.category,
+   239→src/lib/connectivity/engine.ts-      provider: def.provider,
+   240→src/lib/connectivity/engine.ts-      displayName: params.displayName ?? def.name,
+   241→src/lib/connectivity/engine.ts-      identifier: params.identifier ?? null,
+   242→--
+   243→src/lib/connectivity/engine.ts-// ─── Uninstall ───────────────────────────────────────────────────────────────────
+   244→src/lib/connectivity/engine.ts-export async function uninstallConnector(connectorId: string): Promise<InstallResult> {
+   245→src/lib/connectivity/engine.ts:  const instance = await db.connectorInstance.findUnique({ where: { id: connectorId } });
+   246→src/lib/connectivity/engine.ts-  if (!instance) {
+   247→src/lib/connectivity/engine.ts-    return { success: false, connectorId: null, message: 'Connector not found', status: 'inactive' };
+   248→src/lib/connectivity/engine.ts-  }
+   249→src/lib/connectivity/engine.ts-
+   250→src/lib/connectivity/engine.ts-  await db.connectorLog.create({
+   251→src/lib/connectivity/engine.ts-    data: {
+   252→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   253→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   254→--
+   255→src/lib/connectivity/engine.ts-
+   256→src/lib/connectivity/engine.ts-  // Cascade deletes handle events/logs/syncJobs/credentials
+   257→src/lib/connectivity/engine.ts:  await db.connectorInstance.delete({ where: { id: connectorId } });
+   258→src/lib/connectivity/engine.ts-
+   259→src/lib/connectivity/engine.ts-  return {
+   260→src/lib/connectivity/engine.ts-    success: true,
+   261→src/lib/connectivity/engine.ts-    connectorId,
+   262→src/lib/connectivity/engine.ts-    message: `${instance.provider} uninstalled. All credentials revoked.`,
+   263→src/lib/connectivity/engine.ts-    status: 'revoked',
+   264→src/lib/connectivity/engine.ts-  };
+   265→src/lib/connectivity/engine.ts-}
+   266→--
+   267→src/lib/connectivity/engine.ts-  metadata?: Record<string, unknown>;
+   268→src/lib/connectivity/engine.ts-}): Promise<AuthResult> {
+   269→src/lib/connectivity/engine.ts:  const instance = await db.connectorInstance.findUnique({ where: { id: params.connectorId } });
+   270→src/lib/connectivity/engine.ts-  if (!instance) {
+   271→src/lib/connectivity/engine.ts-    return { success: false, authenticated: false, message: 'Connector not found', expiresAt: null, scopes: [] };
+   272→src/lib/connectivity/engine.ts-  }
+   273→src/lib/connectivity/engine.ts-  const def = getConnector(instance.connectorKey);
+   274→src/lib/connectivity/engine.ts-  if (!def) {
+   275→src/lib/connectivity/engine.ts-    return { success: false, authenticated: false, message: 'Connector definition missing', expiresAt: null, scopes: [] };
+   276→src/lib/connectivity/engine.ts-  }
+   277→src/lib/connectivity/engine.ts-
+   278→--
+   279→src/lib/connectivity/engine.ts-  // Update instance status + schedule next sync
+   280→src/lib/connectivity/engine.ts-  const nextSyncAt = new Date(now.getTime() + intervalToMs(classifyInterval(instance.syncInterval)));
+   281→src/lib/connectivity/engine.ts:  await db.connectorInstance.update({
+   282→src/lib/connectivity/engine.ts-    where: { id: instance.id },
+   283→src/lib/connectivity/engine.ts-    data: {
+   284→src/lib/connectivity/engine.ts-      status: 'active',
+   285→src/lib/connectivity/engine.ts-      lastError: null,
+   286→src/lib/connectivity/engine.ts-      scopes: JSON.stringify(scopes),
+   287→src/lib/connectivity/engine.ts-      metadata: params.metadata ? JSON.stringify(params.metadata) : instance.metadata,
+   288→src/lib/connectivity/engine.ts-      nextSyncAt,
+   289→src/lib/connectivity/engine.ts-    },
+   290→--
+   291→src/lib/connectivity/engine.ts-// ─── Test connection ─────────────────────────────────────────────────────────────
+   292→src/lib/connectivity/engine.ts-export async function testConnector(connectorId: string): Promise<TestResult> {
+   293→src/lib/connectivity/engine.ts:  const instance = await db.connectorInstance.findUnique({ where: { id: connectorId } });
+   294→src/lib/connectivity/engine.ts-  if (!instance) {
+   295→src/lib/connectivity/engine.ts-    return { success: false, reachable: false, latencyMs: 0, statusCode: null, message: 'Connector not found', checks: [] };
+   296→src/lib/connectivity/engine.ts-  }
+   297→src/lib/connectivity/engine.ts-  const def = getConnector(instance.connectorKey);
+   298→src/lib/connectivity/engine.ts-  if (!def) {
+   299→src/lib/connectivity/engine.ts-    return { success: false, reachable: false, latencyMs: 0, statusCode: null, message: 'Connector definition missing', checks: [] };
+   300→src/lib/connectivity/engine.ts-  }
+   301→src/lib/connectivity/engine.ts-
+   302→--
+   303→src/lib/connectivity/engine.ts-  const allPassed = checks.every((c) => c.passed);
+   304→src/lib/connectivity/engine.ts-
+   305→src/lib/connectivity/engine.ts:  await db.connectorInstance.update({
+   306→src/lib/connectivity/engine.ts-    where: { id: instance.id },
+   307→src/lib/connectivity/engine.ts-    data: { apiLatencyMs: latencyMs },
+   308→src/lib/connectivity/engine.ts-  });
+   309→src/lib/connectivity/engine.ts-
+   310→src/lib/connectivity/engine.ts-  await db.connectorLog.create({
+   311→src/lib/connectivity/engine.ts-    data: {
+   312→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   313→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   314→--
+   315→src/lib/connectivity/engine.ts-  entities?: string[];
+   316→src/lib/connectivity/engine.ts-}): Promise<SyncTriggerResult> {
+   317→src/lib/connectivity/engine.ts:  const instance = await db.connectorInstance.findUnique({ where: { id: params.connectorId } });
+   318→src/lib/connectivity/engine.ts-  if (!instance) {
+   319→src/lib/connectivity/engine.ts-    return { success: false, jobId: null, message: 'Connector not found', status: 'failed', recordsSynced: 0 };
+   320→src/lib/connectivity/engine.ts-  }
+   321→src/lib/connectivity/engine.ts-  const def = getConnector(instance.connectorKey);
+   322→src/lib/connectivity/engine.ts-  if (!def) {
+   323→src/lib/connectivity/engine.ts-    return { success: false, jobId: null, message: 'Connector definition missing', status: 'failed', recordsSynced: 0 };
+   324→src/lib/connectivity/engine.ts-  }
+   325→src/lib/connectivity/engine.ts-
+   326→--
+   327→src/lib/connectivity/engine.ts-
+   328→src/lib/connectivity/engine.ts-  // Mark instance as syncing
+   329→src/lib/connectivity/engine.ts:  await db.connectorInstance.update({
+   330→src/lib/connectivity/engine.ts-    where: { id: instance.id },
+   331→src/lib/connectivity/engine.ts-    data: { status: 'syncing' },
+   332→src/lib/connectivity/engine.ts-  });
+   333→src/lib/connectivity/engine.ts-
+   334→src/lib/connectivity/engine.ts-  // Create sync job
+   335→src/lib/connectivity/engine.ts-  const job = await db.connectorSyncJob.create({
+   336→src/lib/connectivity/engine.ts-    data: {
+   337→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   338→--
+   339→src/lib/connectivity/engine.ts-  // Update instance with new sync time + schedule next sync
+   340→src/lib/connectivity/engine.ts-  const nextSyncAt = new Date(completed.getTime() + intervalToMs(classifyInterval(instance.syncInterval)));
+   341→src/lib/connectivity/engine.ts:  await db.connectorInstance.update({
+   342→src/lib/connectivity/engine.ts-    where: { id: instance.id },
+   343→src/lib/connectivity/engine.ts-    data: {
+   344→src/lib/connectivity/engine.ts-      status: 'active',
+   345→src/lib/connectivity/engine.ts-      lastSyncAt: completed,
+   346→src/lib/connectivity/engine.ts-      lastSyncStatus: success ? 'success' : 'failed',
+   347→src/lib/connectivity/engine.ts-      nextSyncAt,
+   348→src/lib/connectivity/engine.ts-      reliabilityPct: success ? Math.min(100, instance.reliabilityPct + 0.5) : Math.max(0, instance.reliabilityPct - 10),
+   349→src/lib/connectivity/engine.ts-    },
+   350→--
+   351→src/lib/connectivity/orchestrator.ts-async function buildDashboard(): Promise<ConnectivityDashboard> {
+   352→src/lib/connectivity/orchestrator.ts-  // Installed connectors (real)
+   353→src/lib/connectivity/orchestrator.ts:  const instanceRows = await db.connectorInstance.findMany({
+   354→src/lib/connectivity/orchestrator.ts-    orderBy: { createdAt: 'desc' },
+   355→src/lib/connectivity/orchestrator.ts-    take: 100,
+   356→src/lib/connectivity/orchestrator.ts-  });
+   357→src/lib/connectivity/orchestrator.ts-  const installed = await Promise.all(instanceRows.map(mapInstance));
+   358→src/lib/connectivity/orchestrator.ts-
+   359→src/lib/connectivity/orchestrator.ts-  // Health center (derived from installed)
+   360→src/lib/connectivity/orchestrator.ts-  const health = await getHealthCenter(installed);
+   361→src/lib/connectivity/orchestrator.ts-
+   362→--
+   363→src/lib/oracle-core/insights.ts-    (async () => {
+   364→src/lib/oracle-core/insights.ts-      try {
+   365→src/lib/oracle-core/insights.ts:        return (await db.connectorInstance.findMany({
+   366→src/lib/oracle-core/insights.ts-          where: { status: { in: ['error', 'expired', 'revoked'] } },
+   367→src/lib/oracle-core/insights.ts-          take: 50,
+   368→src/lib/oracle-core/insights.ts-          select: {
+   369→src/lib/oracle-core/insights.ts-            displayName: true,
+   370→src/lib/oracle-core/insights.ts-            provider: true,
+   371→src/lib/oracle-core/insights.ts-            status: true,
+   372→src/lib/oracle-core/insights.ts-            connectorKey: true,
+   373→src/lib/oracle-core/insights.ts-          },
+   374→--
+   375→src/app/api/connectivity/installed/route.ts-    if (firmId) where.firmId = firmId;
+   376→src/app/api/connectivity/installed/route.ts-
+   377→src/app/api/connectivity/installed/route.ts:    const rows = await db.connectorInstance.findMany({
+   378→=========== connectorLog ===========
+   379→src/lib/connectivity/health.ts-  // Total API calls in 24h — approximated by sum of connector logs
+   380→src/lib/connectivity/health.ts-  const totalApiCalls24h = connectorIds.length > 0
+   381→src/lib/connectivity/health.ts:    ? await db.connectorLog.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } })
+   382→src/lib/connectivity/health.ts-    : 0;
+   383→src/lib/connectivity/health.ts-
+   384→src/lib/connectivity/health.ts-  // Top issues — sort by severity, take top 10
+   385→src/lib/connectivity/health.ts-  const issues: HealthIssue[] = connectorHealth
+   386→src/lib/connectivity/health.ts-    .filter((h) => h.recommendation)
+   387→src/lib/connectivity/health.ts-    .map((h) => ({
+   388→src/lib/connectivity/health.ts-      severity: (h.healthScore < 30 ? 'critical' : h.healthScore < 60 ? 'high' : h.healthScore < 85 ? 'medium' : 'low') as HealthIssue['severity'],
+   389→src/lib/connectivity/health.ts-      connectorKey: h.connectorKey,
+   390→--
+   391→src/lib/connectivity/engine.ts-  const [eventCount, logCount, syncJobCount, lastSyncJob, credentials] = await Promise.all([
+   392→src/lib/connectivity/engine.ts-    db.connectorEvent.count({ where: { connectorId: row.id } }),
+   393→src/lib/connectivity/engine.ts:    db.connectorLog.count({ where: { connectorId: row.id } }),
+   394→src/lib/connectivity/engine.ts-    db.connectorSyncJob.count({ where: { connectorId: row.id } }),
+   395→src/lib/connectivity/engine.ts-    db.connectorSyncJob.findFirst({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   396→src/lib/connectivity/engine.ts-    db.connectorCredential.findMany({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   397→src/lib/connectivity/engine.ts-  ]);
+   398→src/lib/connectivity/engine.ts-
+   399→src/lib/connectivity/engine.ts-  const credSummary: CredentialSummary[] = credentials.map((c) => ({
+   400→src/lib/connectivity/engine.ts-    id: c.id,
+   401→src/lib/connectivity/engine.ts-    type: c.type,
+   402→--
+   403→src/lib/connectivity/engine.ts-  });
+   404→src/lib/connectivity/engine.ts-
+   405→src/lib/connectivity/engine.ts:  await db.connectorLog.create({
+   406→src/lib/connectivity/engine.ts-    data: {
+   407→src/lib/connectivity/engine.ts-      firmId: params.firmId ?? null,
+   408→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   409→src/lib/connectivity/engine.ts-      level: 'info',
+   410→src/lib/connectivity/engine.ts-      action: 'install',
+   411→src/lib/connectivity/engine.ts-      message: `${def.provider} connector installed`,
+   412→src/lib/connectivity/engine.ts-      details: JSON.stringify({ connectorKey: def.key, category: def.category, authMethod: params.authMethod ?? def.authMethods[0] }),
+   413→src/lib/connectivity/engine.ts-      durationMs: 0,
+   414→--
+   415→src/lib/connectivity/engine.ts-  }
+   416→src/lib/connectivity/engine.ts-
+   417→src/lib/connectivity/engine.ts:  await db.connectorLog.create({
+   418→src/lib/connectivity/engine.ts-    data: {
+   419→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   420→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   421→src/lib/connectivity/engine.ts-      level: 'warn',
+   422→src/lib/connectivity/engine.ts-      action: 'uninstall',
+   423→src/lib/connectivity/engine.ts-      message: `${instance.provider} connector uninstalled`,
+   424→src/lib/connectivity/engine.ts-      details: JSON.stringify({ connectorKey: instance.connectorKey }),
+   425→src/lib/connectivity/engine.ts-      durationMs: 0,
+   426→--
+   427→src/lib/connectivity/engine.ts-  });
+   428→src/lib/connectivity/engine.ts-
+   429→src/lib/connectivity/engine.ts:  await db.connectorLog.create({
+   430→src/lib/connectivity/engine.ts-    data: {
+   431→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   432→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   433→src/lib/connectivity/engine.ts-      level: 'info',
+   434→src/lib/connectivity/engine.ts-      action: 'authenticate',
+   435→src/lib/connectivity/engine.ts-      message: `${def.provider} authenticated successfully`,
+   436→src/lib/connectivity/engine.ts-      details: JSON.stringify({ scopes, expiresAt: expires.toISOString() }),
+   437→src/lib/connectivity/engine.ts-      durationMs: 0,
+   438→--
+   439→src/lib/connectivity/engine.ts-  });
+   440→src/lib/connectivity/engine.ts-
+   441→src/lib/connectivity/engine.ts:  await db.connectorLog.create({
+   442→src/lib/connectivity/engine.ts-    data: {
+   443→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   444→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   445→src/lib/connectivity/engine.ts-      level: allPassed ? 'info' : 'warn',
+   446→src/lib/connectivity/engine.ts-      action: 'test',
+   447→src/lib/connectivity/engine.ts-      message: allPassed
+   448→src/lib/connectivity/engine.ts-        ? `${def.provider} connection test passed`
+   449→src/lib/connectivity/engine.ts-        : `${def.provider} connection test failed: ${checks.filter((c) => !c.passed).map((c) => c.name).join(', ')}`,
+   450→--
+   451→src/lib/connectivity/engine.ts-  });
+   452→src/lib/connectivity/engine.ts-
+   453→src/lib/connectivity/engine.ts:  await db.connectorLog.create({
+   454→src/lib/connectivity/engine.ts-    data: {
+   455→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   456→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   457→src/lib/connectivity/engine.ts-      level: success ? 'info' : 'error',
+   458→src/lib/connectivity/engine.ts-      action: 'sync',
+   459→src/lib/connectivity/engine.ts-      message: success
+   460→src/lib/connectivity/engine.ts-        ? `${def.provider} sync completed — ${recordsSynced} records`
+   461→src/lib/connectivity/engine.ts-        : `${def.provider} sync failed`,
+   462→--
+   463→src/lib/connectivity/orchestrator.ts-
+   464→src/lib/connectivity/orchestrator.ts-  // Recent logs (real)
+   465→src/lib/connectivity/orchestrator.ts:  const logRows = await db.connectorLog.findMany({
+   466→src/lib/connectivity/orchestrator.ts-    orderBy: { createdAt: 'desc' },
+   467→src/lib/connectivity/orchestrator.ts-    take: 40,
+   468→src/lib/connectivity/orchestrator.ts-    include: { connector: { select: { provider: true, connectorKey: true } } },
+   469→src/lib/connectivity/orchestrator.ts-  });
+   470→src/lib/connectivity/orchestrator.ts-  const recentLogs = logRows.map((l) => ({
+   471→src/lib/connectivity/orchestrator.ts-    id: l.id,
+   472→src/lib/connectivity/orchestrator.ts-    connectorId: l.connectorId,
+   473→src/lib/connectivity/orchestrator.ts-    provider: l.connector?.provider ?? 'Unknown',
+   474→--
+   475→src/lib/connectivity/orchestrator.ts-  // Audit events count (24h)
+   476→src/lib/connectivity/orchestrator.ts-  const day24 = new Date(Date.now() - 24 * 60 * 60 * 1000);
+   477→src/lib/connectivity/orchestrator.ts:  const totalAuditEvents = await db.connectorLog.count({ where: { createdAt: { gte: day24 } } });
+   478→src/lib/connectivity/orchestrator.ts-
+   479→src/lib/connectivity/orchestrator.ts-  // Security score
+   480→src/lib/connectivity/orchestrator.ts-  let score = 100;
+   481→src/lib/connectivity/orchestrator.ts-  if (expiredTokens > 0) score -= 20;
+   482→src/lib/connectivity/orchestrator.ts-  if (expiringTokens7d > 0) score -= 10;
+   483→src/lib/connectivity/orchestrator.ts-  if (webhookUnverified > 0) score -= 10;
+   484→src/lib/connectivity/orchestrator.ts-  if (tokenRotationDisabled > 5) score -= 10;
+   485→src/lib/connectivity/orchestrator.ts-  if (apiKey > oauth2 + mtls) score -= 5; // prefer OAuth over API keys
+   486→--
+   487→src/lib/marketplace/seed.ts-        })
+   488→src/lib/marketplace/seed.ts-        // Seed an initial log
+   489→src/lib/marketplace/seed.ts:        await db.connectorLog.create({
+   490→src/lib/marketplace/seed.ts-          data: {
+   491→src/lib/marketplace/seed.ts-            installedIntegrationId: installed.id,
+   492→src/lib/marketplace/seed.ts-            level: 'info',
+   493→src/lib/marketplace/seed.ts-            message: `Connected as ${p.account}`,
+   494→src/lib/marketplace/seed.ts-            code: 'AUTH_SUCCESS',
+   495→src/lib/marketplace/seed.ts-          },
+   496→src/lib/marketplace/seed.ts-        })
+   497→src/lib/marketplace/seed.ts-      }
+   498→--
+   499→src/lib/marketplace/analytics.ts-  })
+   500→src/lib/marketplace/analytics.ts-  if (!integration) throw new Error('Integration not found')
+   501→src/lib/marketplace/analytics.ts:  const logs = await db.connectorLog.findMany({
+   502→src/lib/marketplace/analytics.ts-    where: { installedIntegrationId: installationId },
+   503→src/lib/marketplace/analytics.ts-    orderBy: { timestamp: 'desc' },
+   504→src/lib/marketplace/analytics.ts-    take: Math.min(limit, 200),
+   505→src/lib/marketplace/analytics.ts-  })
+   506→src/lib/marketplace/analytics.ts-  return logs.map((l) => ({
+   507→src/lib/marketplace/analytics.ts-    id: l.id,
+   508→src/lib/marketplace/analytics.ts-    level: l.level as ConnectorLogDTO['level'],
+   509→src/lib/marketplace/analytics.ts-    message: l.message,
+   510→--
+   511→src/lib/marketplace/registry.ts-  })
+   512→src/lib/marketplace/registry.ts-
+   513→src/lib/marketplace/registry.ts:  await db.connectorLog.create({
+   514→src/lib/marketplace/registry.ts-    data: {
+   515→src/lib/marketplace/registry.ts-      installedIntegrationId: installationId,
+   516→src/lib/marketplace/registry.ts-      level: 'info',
+   517→src/lib/marketplace/registry.ts-      message: `Connected as ${opts.connectedAccountId ?? 'authenticated user'}`,
+   518→src/lib/marketplace/registry.ts-      code: 'AUTH_SUCCESS',
+   519→src/lib/marketplace/registry.ts-    },
+   520→src/lib/marketplace/registry.ts-  })
+   521→src/lib/marketplace/registry.ts-
+   522→--
+   523→src/lib/marketplace/registry.ts-  })
+   524→src/lib/marketplace/registry.ts-
+   525→src/lib/marketplace/registry.ts:  await db.connectorLog.create({
+   526→src/lib/marketplace/registry.ts-    data: {
+   527→src/lib/marketplace/registry.ts-      installedIntegrationId: installationId,
+   528→src/lib/marketplace/registry.ts-      level: 'warn',
+   529→src/lib/marketplace/registry.ts-      message: 'Integration disconnected by user',
+   530→src/lib/marketplace/registry.ts-      code: 'DISCONNECTED',
+   531→src/lib/marketplace/registry.ts-    },
+   532→src/lib/marketplace/registry.ts-  })
+   533→src/lib/marketplace/registry.ts-
+   534→--
+   535→src/lib/marketplace/registry.ts-    : `Connection failed — ${existing.connector.displayName} API is currently ${existing.connector.healthStatus}`
+   536→src/lib/marketplace/registry.ts-
+   537→src/lib/marketplace/registry.ts:  await db.connectorLog.create({
+   538→src/lib/marketplace/registry.ts-    data: {
+   539→src/lib/marketplace/registry.ts-      installedIntegrationId: installationId,
+   540→src/lib/marketplace/registry.ts-      level: isHealthy ? 'info' : 'error',
+   541→src/lib/marketplace/registry.ts-      message,
+   542→src/lib/marketplace/registry.ts-      code: isHealthy ? 'TEST_SUCCESS' : 'TEST_FAILED',
+   543→src/lib/marketplace/registry.ts-      metadata: JSON.stringify({ latencyMs }),
+   544→src/lib/marketplace/registry.ts-    },
+   545→src/lib/marketplace/registry.ts-  })
+   546→--
+   547→src/lib/marketplace/sync-engine.ts-
+   548→src/lib/marketplace/sync-engine.ts-    // Log
+   549→src/lib/marketplace/sync-engine.ts:    await db.connectorLog.create({
+   550→src/lib/marketplace/sync-engine.ts-      data: {
+   551→src/lib/marketplace/sync-engine.ts-        installedIntegrationId: installationId,
+   552→src/lib/marketplace/sync-engine.ts-        level: success ? 'info' : 'error',
+   553→src/lib/marketplace/sync-engine.ts-        message: `Sync ${success ? 'completed' : 'failed'} — ${recordCount} records processed (${recordsCreated} created, ${recordsUpdated} updated, ${recordsFailed} failed) in ${durationMs}ms`,
+   554→src/lib/marketplace/sync-engine.ts-        code: success ? 'SYNC_SUCCESS' : 'SYNC_PARTIAL_FAILURE',
+   555→src/lib/marketplace/sync-engine.ts-        metadata: JSON.stringify({ durationMs, recordsProcessed: recordCount, conflicts: conflictCount }),
+   556→src/lib/marketplace/sync-engine.ts-      },
+   557→src/lib/marketplace/sync-engine.ts-    })
+   558→--
+   559→src/app/api/connectivity/logs/route.ts-    if (connectorId) where.connectorId = connectorId;
+   560→src/app/api/connectivity/logs/route.ts-
+   561→src/app/api/connectivity/logs/route.ts:    const rows = await db.connectorLog.findMany({
+   562→src/app/api/connectivity/logs/route.ts-      where,
+   563→src/app/api/connectivity/logs/route.ts-      orderBy: { createdAt: 'desc' },
+   564→src/app/api/connectivity/logs/route.ts-      take: limit,
+   565→src/app/api/connectivity/logs/route.ts-      include: { connector: { select: { provider: true, connectorKey: true } } },
+   566→src/app/api/connectivity/logs/route.ts-    });
+   567→src/app/api/connectivity/logs/route.ts-
+   568→src/app/api/connectivity/logs/route.ts-    const logs = rows.map((l) => ({
+   569→src/app/api/connectivity/logs/route.ts-      id: l.id,
+   570→=========== connectorReview ===========
+   571→src/lib/connectivity/marketplace.ts-  }
+   572→src/lib/connectivity/marketplace.ts-  try {
+   573→src/lib/connectivity/marketplace.ts:    const review = await db.connectorReview.create({
+   574→src/lib/connectivity/marketplace.ts-      data: {
+   575→src/lib/connectivity/marketplace.ts-        connectorSlug: params.connectorSlug,
+   576→src/lib/connectivity/marketplace.ts-        reviewerName: params.reviewerName,
+   577→src/lib/connectivity/marketplace.ts-        reviewerHandle: params.reviewerHandle ?? null,
+   578→src/lib/connectivity/marketplace.ts-        rating: params.rating,
+   579→src/lib/connectivity/marketplace.ts-        title: params.title ?? null,
+   580→src/lib/connectivity/marketplace.ts-        body: params.body ?? null,
+   581→src/lib/connectivity/marketplace.ts-        verified: false,
+   582→--
+   583→src/lib/connectivity/marketplace.ts-
+   584→src/lib/connectivity/marketplace.ts-    // Recompute rating + reviewCount on the listing
+   585→src/lib/connectivity/marketplace.ts:    const reviews = await db.connectorReview.findMany({ where: { connectorSlug: params.connectorSlug } });
+   586→src/lib/connectivity/marketplace.ts-    const avg = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
+   587→src/lib/connectivity/marketplace.ts-    await db.marketplaceConnector.update({
+   588→src/lib/connectivity/marketplace.ts-      where: { slug: params.connectorSlug },
+   589→src/lib/connectivity/marketplace.ts-      data: { rating: Math.round(avg * 10) / 10, reviewCount: reviews.length },
+   590→src/lib/connectivity/marketplace.ts-    });
+   591→src/lib/connectivity/marketplace.ts-
+   592→src/lib/connectivity/marketplace.ts-    return { success: true, id: review.id, message: 'Review submitted' };
+   593→src/lib/connectivity/marketplace.ts-  } catch (err) {
+   594→--
+   595→src/lib/connectivity/marketplace.ts-  const [listings, reviews] = await Promise.all([
+   596→src/lib/connectivity/marketplace.ts-    db.marketplaceConnector.findMany(),
+   597→src/lib/connectivity/marketplace.ts:    db.connectorReview.count(),
+   598→src/lib/connectivity/marketplace.ts-  ]);
+   599→src/lib/connectivity/marketplace.ts-
+   600→src/lib/connectivity/marketplace.ts-  const byCategory: Record<string, number> = {};
+   601→src/lib/connectivity/marketplace.ts-  let totalInstalls = 0;
+   602→src/lib/connectivity/marketplace.ts-  let totalActiveInstalls = 0;
+   603→src/lib/connectivity/marketplace.ts-  let ratingSum = 0;
+   604→src/lib/connectivity/marketplace.ts-  let ratedCount = 0;
+   605→src/lib/connectivity/marketplace.ts-  let certified = 0;
+   606→=========== connectorSyncJob ===========
+   607→src/lib/connectivity/health.ts-  // Recent successes / failures from sync jobs (last 24h)
+   608→src/lib/connectivity/health.ts-  const [recentSuccesses, recentFailures] = await Promise.all([
+   609→src/lib/connectivity/health.ts:    db.connectorSyncJob.count({
+   610→src/lib/connectivity/health.ts-      where: { connectorId: installed.id, status: 'success', completedAt: { gte: day24 } },
+   611→src/lib/connectivity/health.ts-    }),
+   612→src/lib/connectivity/health.ts:    db.connectorSyncJob.count({
+   613→src/lib/connectivity/health.ts-      where: { connectorId: installed.id, status: 'failed', completedAt: { gte: day24 } },
+   614→src/lib/connectivity/health.ts-    }),
+   615→src/lib/connectivity/health.ts-  ]);
+   616→src/lib/connectivity/health.ts-
+   617→src/lib/connectivity/health.ts-  // Credential expiry
+   618→src/lib/connectivity/health.ts-  const creds = installed.credentials;
+   619→src/lib/connectivity/health.ts-  const accessCred = creds.find((c) => c.type === 'access_token');
+   620→src/lib/connectivity/health.ts-  const credExpiry = accessCred?.expiresAt ? new Date(accessCred.expiresAt) : null;
+   621→--
+   622→src/lib/connectivity/health.ts-    db.connectorEvent.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } }),
+   623→src/lib/connectivity/health.ts-    db.connectorEvent.count({ where: { connectorId: { in: connectorIds }, severity: { in: ['high', 'critical'] }, createdAt: { gte: day24 } } }),
+   624→src/lib/connectivity/health.ts:    db.connectorSyncJob.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } }),
+   625→src/lib/connectivity/health.ts-  ]) : [0, 0, 0];
+   626→src/lib/connectivity/health.ts-
+   627→src/lib/connectivity/health.ts-  // Total API calls in 24h — approximated by sum of connector logs
+   628→src/lib/connectivity/health.ts-  const totalApiCalls24h = connectorIds.length > 0
+   629→src/lib/connectivity/health.ts-    ? await db.connectorLog.count({ where: { connectorId: { in: connectorIds }, createdAt: { gte: day24 } } })
+   630→src/lib/connectivity/health.ts-    : 0;
+   631→src/lib/connectivity/health.ts-
+   632→src/lib/connectivity/health.ts-  // Top issues — sort by severity, take top 10
+   633→--
+   634→src/lib/connectivity/health.ts-  // 3. Find failed sync jobs in last hour and flag for retry
+   635→src/lib/connectivity/health.ts-  const hour1 = new Date(Date.now() - 60 * 60 * 1000);
+   636→src/lib/connectivity/health.ts:  const failedJobs = await db.connectorSyncJob.findMany({
+   637→src/lib/connectivity/health.ts-    where: { status: 'failed', createdAt: { gte: hour1 } },
+   638→src/lib/connectivity/health.ts-    take: 5,
+   639→src/lib/connectivity/health.ts-  });
+   640→src/lib/connectivity/health.ts-  for (const job of failedJobs) {
+   641→src/lib/connectivity/health.ts-    actions.push(`Flagged failed sync job ${job.id} for retry`);
+   642→src/lib/connectivity/health.ts-    recovered++;
+   643→src/lib/connectivity/health.ts-  }
+   644→src/lib/connectivity/health.ts-
+   645→--
+   646→src/lib/connectivity/engine.ts-    db.connectorEvent.count({ where: { connectorId: row.id } }),
+   647→src/lib/connectivity/engine.ts-    db.connectorLog.count({ where: { connectorId: row.id } }),
+   648→src/lib/connectivity/engine.ts:    db.connectorSyncJob.count({ where: { connectorId: row.id } }),
+   649→src/lib/connectivity/engine.ts:    db.connectorSyncJob.findFirst({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   650→src/lib/connectivity/engine.ts-    db.connectorCredential.findMany({ where: { connectorId: row.id }, orderBy: { createdAt: 'desc' } }),
+   651→src/lib/connectivity/engine.ts-  ]);
+   652→src/lib/connectivity/engine.ts-
+   653→src/lib/connectivity/engine.ts-  const credSummary: CredentialSummary[] = credentials.map((c) => ({
+   654→src/lib/connectivity/engine.ts-    id: c.id,
+   655→src/lib/connectivity/engine.ts-    type: c.type,
+   656→src/lib/connectivity/engine.ts-    label: c.label,
+   657→src/lib/connectivity/engine.ts-    scopes: safeJsonParse<string[]>(c.scopes, []),
+   658→--
+   659→src/lib/connectivity/engine.ts-
+   660→src/lib/connectivity/engine.ts-  // Create sync job
+   661→src/lib/connectivity/engine.ts:  const job = await db.connectorSyncJob.create({
+   662→src/lib/connectivity/engine.ts-    data: {
+   663→src/lib/connectivity/engine.ts-      firmId: instance.firmId,
+   664→src/lib/connectivity/engine.ts-      connectorId: instance.id,
+   665→src/lib/connectivity/engine.ts-      status: 'running',
+   666→src/lib/connectivity/engine.ts-      trigger,
+   667→src/lib/connectivity/engine.ts-      startedAt: now,
+   668→src/lib/connectivity/engine.ts-      entities: JSON.stringify(params.entities ?? ['auto']),
+   669→src/lib/connectivity/engine.ts-    },
+   670→--
+   671→src/lib/connectivity/engine.ts-  const recordsFailed = 0;
+   672→src/lib/connectivity/engine.ts-
+   673→src/lib/connectivity/engine.ts:  await db.connectorSyncJob.update({
+   674→src/lib/connectivity/engine.ts-    where: { id: job.id },
+   675→src/lib/connectivity/engine.ts-    data: {
+   676→src/lib/connectivity/engine.ts-      status: success ? 'success' : 'failed',
+   677→src/lib/connectivity/engine.ts-      recordsTotal,
+   678→src/lib/connectivity/engine.ts-      recordsSynced,
+   679→src/lib/connectivity/engine.ts-      recordsFailed,
+   680→src/lib/connectivity/engine.ts-      completedAt: completed,
+   681→src/lib/connectivity/engine.ts-      durationMs,
+   682→--
+   683→src/lib/connectivity/orchestrator.ts-
+   684→src/lib/connectivity/orchestrator.ts-  // Recent sync jobs (real)
+   685→src/lib/connectivity/orchestrator.ts:  const syncRows = await db.connectorSyncJob.findMany({
+   686→src/lib/connectivity/orchestrator.ts-    orderBy: { createdAt: 'desc' },
+   687→src/lib/connectivity/orchestrator.ts-    take: 30,
+   688→src/lib/connectivity/orchestrator.ts-    include: { connector: { select: { provider: true, connectorKey: true } } },
+   689→src/lib/connectivity/orchestrator.ts-  });
+   690→src/lib/connectivity/orchestrator.ts-  const recentSyncJobs = syncRows.map((s) => ({
+   691→src/lib/connectivity/orchestrator.ts-    id: s.id,
+   692→src/lib/connectivity/orchestrator.ts-    connectorId: s.connectorId,
+   693→src/lib/connectivity/orchestrator.ts-    provider: s.connector?.provider ?? 'Unknown',

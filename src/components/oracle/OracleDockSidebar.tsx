@@ -125,7 +125,7 @@ export function OracleDockSidebar({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] as const }}
             className={cn(
               'fixed right-0 top-0 z-50 hidden h-full w-[380px] flex-col',
               'border-l border-white/[0.08] bg-zinc-950/95 backdrop-blur-2xl',
@@ -157,7 +157,7 @@ export function OracleDockSidebar({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] as const }}
             className={cn(
               'fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col',
               'rounded-t-3xl border-t border-white/[0.08] bg-zinc-950/95 backdrop-blur-2xl',

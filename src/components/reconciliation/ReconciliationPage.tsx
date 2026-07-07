@@ -295,12 +295,12 @@ const staggerContainer = {
 
 const cardEntrance = {
   hidden: { opacity: 0, y: 12, scale: 0.97 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' as const } },
 };
 
 const slideInRight = {
   hidden: { opacity: 0, x: 20 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 };
 
 // ──────────────────────────────────────────────
@@ -416,7 +416,7 @@ function MatchRateRing({
             strokeDasharray={`${matchLen} ${circumference - matchLen}`} strokeDashoffset={0}
             initial={{ strokeDasharray: `0 ${circumference}` }}
             animate={{ strokeDasharray: `${matchLen} ${circumference - matchLen}` }}
-            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] as const }}
             filter="url(#ringGlow)"
           />
         )}
@@ -427,7 +427,7 @@ function MatchRateRing({
             strokeDasharray={`${partialLen} ${circumference - partialLen}`} strokeDashoffset={partialOffset}
             initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
             animate={{ strokeDasharray: `${partialLen} ${circumference - partialLen}`, strokeDashoffset: partialOffset }}
-            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.2 }}
+            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.2 }}
             filter="url(#ringGlow)"
           />
         )}
@@ -438,7 +438,7 @@ function MatchRateRing({
             strokeDasharray={`${mismatchLen} ${circumference - mismatchLen}`} strokeDashoffset={mismatchOffset}
             initial={{ strokeDasharray: `0 ${circumference}`, strokeDashoffset: 0 }}
             animate={{ strokeDasharray: `${mismatchLen} ${circumference - mismatchLen}`, strokeDashoffset: mismatchOffset }}
-            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.4 }}
+            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.4 }}
             filter="url(#ringGlow)"
           />
         )}

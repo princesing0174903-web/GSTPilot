@@ -1,0 +1,502 @@
+  1700→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+  1701→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+  1702→                      }`}
+  1703→                    >
+  1704→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+  1705→                        session.current
+  1706→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+  1707→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  1708→                      }`}>
+  1709→                        {session.icon}
+  1710→                      </div>
+  1711→                      <div className="flex-1 min-w-0">
+  1712→                        <div className="flex items-center gap-2">
+  1713→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+  1714→                          {session.current && (
+  1715→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+  1716→                              Current
+  1717→                            </Badge>
+  1718→                          )}
+  1719→                        </div>
+  1720→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+  1721→                      </div>
+  1722→                      {!session.current && (
+  1723→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+  1724→                          Revoke
+  1725→                        </Button>
+  1726→                      )}
+  1727→                    </div>
+  1728→                  ))}
+  1729→                </div>
+  1730→              </CardContent>
+  1731→            </Card>
+  1732→
+  1733→            {/* Data Encryption */}
+  1734→            <Card className="border-border/50">
+  1735→              <CardContent className="pt-6">
+  1736→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1737→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1738→                    <LockKeyhole className="h-4.5 w-4.5" />
+  1739→                  </div>
+  1740→                  <div>
+  1741→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+  1742→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+  1743→                  </div>
+  1744→                </div>
+  1745→              </CardContent>
+  1746→            </Card>
+  1747→          </motion.div>
+  1748→        )
+  1749→
+  1750→      // ───────────────────────────────────────────────────────────────
+  1751→      // SECTION 6: BILLING
+  1752→      // ───────────────────────────────────────────────────────────────
+  1753→      case 'billing':
+  1754→        return (
+  1755→          <motion.div
+  1756→            key="billing"
+  1757→            initial="hidden"
+  1758→            animate="visible"
+  1759→            exit="exit"
+  1760→            variants={contentVariants}
+  1761→            className="space-y-6"
+  1762→          >
+  1763→            <div>
+  1764→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+  1765→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+  1766→            </div>
+  1767→
+  1768→            {/* Current Plan */}
+  1769→            <Card className="border-border/50 overflow-hidden">
+  1770→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+  1771→              <CardContent className="pt-6">
+  1772→                <div className="flex items-start justify-between">
+  1773→                  <div>
+  1774→                    <div className="flex items-center gap-2">
+  1775→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+  1776→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+  1777→                        Active
+  1778→                      </Badge>
+  1779→                    </div>
+  1780→                    <div className="flex items-baseline gap-1 mt-2">
+  1781→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+  1782→                      <span className="text-sm text-muted-foreground">/month</span>
+  1783→                    </div>
+  1784→                    <p className="text-xs text-muted-foreground mt-1">
+  1785→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+  1786→                    </p>
+  1787→                  </div>
+  1788→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+  1789→                    <ChevronRight className="h-4 w-4" />
+  1790→                    Upgrade Plan
+  1791→                  </Button>
+  1792→                </div>
+  1793→              </CardContent>
+  1794→            </Card>
+  1795→
+  1796→            {/* Usage This Month */}
+  1797→            <Card className="border-border/50">
+  1798→              <CardHeader className="pb-0">
+  1799→                <CardTitle className="text-base">Usage This Month</CardTitle>
+  1800→                <CardDescription>Your current usage against plan limits</CardDescription>
+  1801→              </CardHeader>
+  1802→              <CardContent className="pt-4 space-y-5">
+  1803→                {/* Clients */}
+  1804→                <div className="space-y-2">
+  1805→                  <div className="flex items-center justify-between">
+  1806→                    <div className="flex items-center gap-2">
+  1807→                      <Users className="h-4 w-4 text-muted-foreground" />
+  1808→                      <span className="text-sm font-medium text-foreground">Clients</span>
+  1809→                    </div>
+  1810→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+  1811→                  </div>
+  1812→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+  1813→                </div>
+  1814→
+  1815→                {/* Invoices Processed */}
+  1816→                <div className="space-y-2">
+  1817→                  <div className="flex items-center justify-between">
+  1818→                    <div className="flex items-center gap-2">
+  1819→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+  1820→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+  1821→                    </div>
+  1822→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+  1823→                  </div>
+  1824→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+  1825→                </div>
+  1826→
+  1827→                {/* Reconciliation Runs */}
+  1828→                <div className="space-y-2">
+  1829→                  <div className="flex items-center justify-between">
+  1830→                    <div className="flex items-center gap-2">
+  1831→                      <Activity className="h-4 w-4 text-muted-foreground" />
+  1832→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+  1833→                    </div>
+  1834→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+  1835→                  </div>
+  1836→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+  1837→                </div>
+  1838→              </CardContent>
+  1839→            </Card>
+  1840→
+  1841→            {/* Payment Method */}
+  1842→            <Card className="border-border/50">
+  1843→              <CardHeader className="pb-0">
+  1844→                <CardTitle className="text-base">Payment Method</CardTitle>
+  1845→              </CardHeader>
+  1846→              <CardContent className="pt-4">
+  1847→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+  1848→                  <div className="flex items-center gap-3">
+  1849→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+  1850→                      VISA
+  1851→                    </div>
+  1852→                    <div>
+  1853→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+  1854→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+  1855→                    </div>
+  1856→                  </div>
+  1857→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+  1858→                    Update Payment Method
+  1859→                  </Button>
+  1860→                </div>
+  1861→              </CardContent>
+  1862→            </Card>
+  1863→
+  1864→            {/* Billing History */}
+  1865→            <Card className="border-border/50">
+  1866→              <CardHeader className="pb-0">
+  1867→                <CardTitle className="text-base">Billing History</CardTitle>
+  1868→                <CardDescription>Download past invoices</CardDescription>
+  1869→              </CardHeader>
+  1870→              <CardContent className="pt-4">
+  1871→                <div className="space-y-2 max-h-64 overflow-y-auto">
+  1872→                  {BILLING_HISTORY.map((invoice) => (
+  1873→                    <div
+  1874→                      key={invoice.id}
+  1875→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+  1876→                    >
+  1877→                      <div className="flex items-center gap-3">
+  1878→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+  1879→                          <CreditCard className="h-4 w-4" />
+  1880→                        </div>
+  1881→                        <div>
+  1882→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+  1883→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+  1884→                        </div>
+  1885→                      </div>
+  1886→                      <div className="flex items-center gap-3">
+  1887→                        <Badge className={`text-[11px] px-2 py-0 border ${
+  1888→                          invoice.status === 'Paid'
+  1889→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1890→                            : invoice.status === 'Pending'
+  1891→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1892→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+  1893→                        }`}>
+  1894→                          {invoice.status}
+  1895→                        </Badge>
+  1896→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+  1897→                          <Download className="h-4 w-4" />
+  1898→                        </Button>
+  1899→                      </div>
+  1900→                    </div>
+  1901→                  ))}
+  1902→                </div>
+  1903→              </CardContent>
+  1904→            </Card>
+  1905→          </motion.div>
+  1906→        )
+  1907→
+  1908→      // ───────────────────────────────────────────────────────────────
+  1909→      // SECTION: GST API CONNECTIONS
+  1910→      // ───────────────────────────────────────────────────────────────
+  1911→      case 'api':
+  1912→        return (
+  1913→          <motion.div
+  1914→            key="api"
+  1915→            initial="hidden"
+  1916→            animate="visible"
+  1917→            exit="exit"
+  1918→            variants={contentVariants}
+  1919→            className="space-y-6"
+  1920→          >
+  1921→            <div>
+  1922→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+  1923→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+  1924→            </div>
+  1925→
+  1926→            <div className="space-y-4">
+  1927→              {MOCK_API_CONNECTIONS.map((connection) => (
+  1928→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+  1929→                  <CardContent className="pt-0 py-4">
+  1930→                    <div className="flex items-center gap-4">
+  1931→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+  1932→                        connection.status === 'Connected'
+  1933→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  1934→                          : connection.status === 'Disconnected'
+  1935→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  1936→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+  1937→                      }`}>
+  1938→                        {connection.icon}
+  1939→                      </div>
+  1940→                      <div className="flex-1 min-w-0">
+  1941→                        <div className="flex items-center gap-2 flex-wrap">
+  1942→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+  1943→                          <Badge className={`text-[10px] px-2 py-0 border ${
+  1944→                            connection.status === 'Connected'
+  1945→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+  1946→                              : connection.status === 'Disconnected'
+  1947→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+  1948→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+  1949→                          }`}>
+  1950→                            <span className={`size-1.5 rounded-full mr-1 ${
+  1951→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+  1952→                            }`} />
+  1953→                            {connection.status}
+  1954→                          </Badge>
+  1955→                        </div>
+  1956→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+  1957→                        {connection.lastSync && (
+  1958→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+  1959→                            Last synced: {connection.lastSync}
+  1960→                          </p>
+  1961→                        )}
+  1962→                      </div>
+  1963→                      <div className="flex items-center gap-2 shrink-0">
+  1964→                        <Button
+  1965→                          variant="outline"
+  1966→                          size="sm"
+  1967→                          className="h-8 text-xs gap-1.5"
+  1968→                          onClick={async () => {
+  1969→                            try {
+  1970→                              // Test by hitting the GSTN connect endpoint with the
+  1971→                              // firm's own GSTIN — if it returns a valid profile,
+  1972→                              // the connection is healthy.
+  1973→                              const res = await fetch('/api/connect/gstn', {
+  1974→                                method: 'POST',
+  1975→                                headers: { 'Content-Type': 'application/json' },
+  1976→                                body: JSON.stringify({
+  1977→                                  userId: user?.id ?? 'system-test',
+  1978→                                  gstin: firmGstin || '27AABCS1429B1Z5',
+  1979→                                }),
+  1980→                              })
+  1981→                              const data = await res.json()
+  1982→                              if (!res.ok) {
+  1983→                                throw new Error(data?.error ?? 'Test failed')
+  1984→                              }
+  1985→                              toast.success(`${connection.name} — connection OK`)
+  1986→                            } catch (err) {
+  1987→                              toast.error(err instanceof Error ? err.message : 'Test failed')
+  1988→                            }
+  1989→                          }}
+  1990→                        >
+  1991→                          <Activity className="h-3.5 w-3.5" />
+  1992→                          Test Connection
+  1993→                        </Button>
+  1994→                        <Button
+  1995→                          variant="ghost"
+  1996→                          size="sm"
+  1997→                          className="h-8 text-xs text-muted-foreground"
+  1998→                          disabled
+  1999→                          title={`${connection.name} configuration is managed in the provider's dashboard`}
+  2000→                        >
+  2001→                          Configure
+  2002→                        </Button>
+  2003→                      </div>
+  2004→                    </div>
+  2005→                  </CardContent>
+  2006→                </Card>
+  2007→              ))}
+  2008→            </div>
+  2009→          </motion.div>
+  2010→        )
+  2011→
+  2012→      // ───────────────────────────────────────────────────────────────
+  2013→      // SECTION: AUDIT LOGS
+  2014→      // ───────────────────────────────────────────────────────────────
+  2015→      case 'audit':
+  2016→        return (
+  2017→          <motion.div
+  2018→            key="audit"
+  2019→            initial="hidden"
+  2020→            animate="visible"
+  2021→            exit="exit"
+  2022→            variants={contentVariants}
+  2023→            className="space-y-6"
+  2024→          >
+  2025→            <div className="flex items-center justify-between">
+  2026→              <div>
+  2027→                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
+  2028→                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
+  2029→              </div>
+  2030→              <Select value={auditFilter} onValueChange={setAuditFilter}>
+  2031→                <SelectTrigger className="w-[160px] h-9">
+  2032→                  <SelectValue placeholder="Filter by type" />
+  2033→                </SelectTrigger>
+  2034→                <SelectContent>
+  2035→                  <SelectItem value="all">All Actions</SelectItem>
+  2036→                  <SelectItem value="filing">Filing</SelectItem>
+  2037→                  <SelectItem value="client_update">Client Updates</SelectItem>
+  2038→                  <SelectItem value="invoice">Invoices</SelectItem>
+  2039→                  <SelectItem value="settings">Settings</SelectItem>
+  2040→                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
+  2041→                </SelectContent>
+  2042→              </Select>
+  2043→            </div>
+  2044→
+  2045→            <Card className="border-border/50">
+  2046→              <CardContent className="pt-6 p-0">
+  2047→                <div className="max-h-[520px] overflow-y-auto">
+  2048→                  <div className="divide-y divide-border/50">
+  2049→                    {MOCK_AUDIT_LOGS
+  2050→                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
+  2051→                      .map((log, idx) => (
+  2052→                      <motion.div
+  2053→                        key={log.id}
+  2054→                        initial={{ opacity: 0, y: 4 }}
+  2055→                        animate={{ opacity: 1, y: 0 }}
+  2056→                        transition={{ duration: 0.2, delay: idx * 0.03 }}
+  2057→                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
+  2058→                      >
+  2059→                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
+  2060→                          log.actionType === 'filing'
+  2061→                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+  2062→                            : log.actionType === 'client_update'
+  2063→                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
+  2064→                            : log.actionType === 'invoice'
+  2065→                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+  2066→                            : log.actionType === 'reconciliation'
+  2067→                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+  2068→                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  2069→                        }`}>
+  2070→                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
+  2071→                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
+  2072→                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
+  2073→                           <Shield className="h-4 w-4" />}
+  2074→                        </div>
+  2075→                        <div className="flex-1 min-w-0">
+  2076→                          <p className="text-sm font-medium text-foreground">{log.action}</p>
+  2077→                          <div className="flex items-center gap-2 mt-0.5">
+  2078→                            <span className="text-xs text-muted-foreground">{log.entity}</span>
+  2079→                            <span className="text-muted-foreground/40">·</span>
+  2080→                            <span className="text-xs text-muted-foreground">{log.user}</span>
+  2081→                          </div>
+  2082→                        </div>
+  2083→                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+  2084→                          {log.timestamp}
+  2085→                        </span>
+  2086→                      </motion.div>
+  2087→                    ))}
+  2088→                  </div>
+  2089→                </div>
+  2090→                {MOCK_AUDIT_LOGS.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
+  2091→                  <div className="py-12 text-center">
+  2092→                    <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+  2093→                    <p className="text-sm text-muted-foreground">No audit logs match this filter</p>
+  2094→                  </div>
+  2095→                )}
+  2096→              </CardContent>
+  2097→            </Card>
+  2098→          </motion.div>
+  2099→        )
+  2100→
+  2101→      default:
+  2102→        return null
+  2103→    }
+  2104→  }
+  2105→
+  2106→  // ═══════════════════════════════════════════════════════════════════
+  2107→  // MAIN LAYOUT
+  2108→  // ═══════════════════════════════════════════════════════════════════
+  2109→  return (
+  2110→    <div className="h-full flex flex-col">
+  2111→      {/* ── Mobile: Horizontal Scrollable Tabs ── */}
+  2112→      {isMobile && (
+  2113→        <div className="border-b border-border bg-background px-4 pt-4">
+  2114→          <h1 className="text-xl font-bold text-foreground mb-3">Settings</h1>
+  2115→          <div className="flex gap-1 overflow-x-auto pb-0 -mb-px scrollbar-hide">
+  2116→            {SECTIONS.map((section) => (
+  2117→              <button
+  2118→                key={section.id}
+  2119→                onClick={() => setActiveSection(section.id)}
+  2120→                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+  2121→                  activeSection === section.id
+  2122→                    ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+  2123→                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+  2124→                }`}
+  2125→              >
+  2126→                {section.icon}
+  2127→                {section.label}
+  2128→              </button>
+  2129→            ))}
+  2130→          </div>
+  2131→        </div>
+  2132→      )}
+  2133→
+  2134→      <div className="flex-1 flex min-h-0">
+  2135→        {/* ── Desktop: Left Navigation ── */}
+  2136→        {!isMobile && (
+  2137→          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+  2138→            <div className="p-5 pb-4">
+  2139→              <h1 className="text-lg font-bold text-foreground">Settings</h1>
+  2140→            </div>
+  2141→
+  2142→            <nav className="flex-1 px-3 space-y-0.5">
+  2143→              {SECTIONS.map((section) => (
+  2144→                <button
+  2145→                  key={section.id}
+  2146→                  onClick={() => setActiveSection(section.id)}
+  2147→                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+  2148→                    activeSection === section.id
+  2149→                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
+  2150→                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
+  2151→                  }`}
+  2152→                >
+  2153→                  {section.icon}
+  2154→                  {section.label}
+  2155→                </button>
+  2156→              ))}
+  2157→            </nav>
+  2158→
+  2159→            {/* Version & Status */}
+  2160→            <div className="p-4 border-t border-border mt-auto">
+  2161→              <div className="flex items-center gap-2 mb-1">
+  2162→                <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
+  2163→                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
+  2164→                  v1.0.0
+  2165→                </Badge>
+  2166→              </div>
+  2167→              <div className="flex items-center gap-1.5">
+  2168→                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+  2169→                <span className="text-[11px] text-muted-foreground">Online</span>
+  2170→              </div>
+  2171→            </div>
+  2172→          </aside>
+  2173→        )}
+  2174→
+  2175→        {/* ── Right Content Area ── */}
+  2176→        <main className="flex-1 overflow-y-auto">
+  2177→          <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
+  2178→            {/* Preview-mode banner — shown only when OrgContext fell back to
+  2179→                the demo workspace (Firestore unreachable / no real org). The
+  2180→                form below still works visually but saves are no-ops. */}
+  2181→            {isPreview && (
+  2182→              <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 flex items-start gap-2.5">
+  2183→                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+  2184→                <div className="min-w-0">
+  2185→                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Preview mode</p>
+  2186→                  <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-0.5">
+  2187→                    You&rsquo;re viewing a preview workspace. Settings edits are shown here but won&rsquo;t be persisted to the cloud.
+  2188→                  </p>
+  2189→                </div>
+  2190→              </div>
+  2191→            )}
+  2192→            <AnimatePresence mode="wait">
+  2193→              {renderSection()}
+  2194→            </AnimatePresence>
+  2195→          </div>
+  2196→        </main>
+  2197→      </div>
+  2198→    </div>
+  2199→  )
+  2200→}
+  2201→

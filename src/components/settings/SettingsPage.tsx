@@ -70,7 +70,8 @@ import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { useOrgMembers } from '@/hooks/use-firestore'
+import { useOrgMembers, useFireRecentActivities } from '@/hooks/use-firestore'
+import type { FirestoreActivity, ActivityType } from '@/lib/firestore-schema'
 import { db, storage, auth } from '@/lib/firebase'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -476,6 +477,83 @@ export default function SettingsPage() {
 
   // ── Audit Log Filter ──────────────────────────────────────────────
   const [auditFilter, setAuditFilter] = useState<string>('all')
+
+  // ── Real audit logs from Firestore activities ─────────────────────
+  // Replaces the former MOCK_AUDIT_LOGS — every entry is now a real
+  // activity document written by the firestore-service workflow engine.
+  const { data: recentActivities, loading: auditLoading } = useFireRecentActivities(50)
+
+  // ── API connection statuses (persisted on the org doc) ────────────
+  // The static MOCK_API_CONNECTIONS list defines the catalog of supported
+  // integrations; the LIVE status + lastSync are read from
+  // `organization.gstApiConnections` so they survive refresh.
+  type ApiConnStatus = 'Connected' | 'Disconnected' | 'Not Configured'
+  const [apiConnStatuses, setApiConnStatuses] = useState<Record<string, { status: ApiConnStatus; lastSync?: string }>>({})
+
+  useEffect(() => {
+    if (!organization) return
+    const anyOrg = organization as Record<string, unknown>
+    if (anyOrg.gstApiConnections && typeof anyOrg.gstApiConnections === 'object') {
+      setApiConnStatuses(anyOrg.gstApiConnections as Record<string, { status: ApiConnStatus; lastSync?: string }>)
+    }
+  }, [organization])
+
+  // Map a FirestoreActivity.type → the audit-log actionType categories
+  // used by the filter dropdown (filing / client_update / invoice /
+  // reconciliation / settings).
+  const activityTypeToCategory = (t: ActivityType): AuditLogEntry['actionType'] => {
+    switch (t) {
+      case 'return_prepared':
+      case 'return_reviewed':
+      case 'return_filed':
+      case 'return_reopened':
+        return 'filing'
+      case 'client_created':
+      case 'client_updated':
+      case 'client_deleted':
+        return 'client_update'
+      case 'invoice_extracted':
+      case 'invoice_approved':
+      case 'invoice_corrected':
+      case 'document_uploaded':
+      case 'document_processed':
+      case 'document_failed':
+        return 'invoice'
+      case 'reconciliation_run':
+      case 'mismatch_resolved':
+        return 'reconciliation'
+      default:
+        return 'settings'
+    }
+  }
+
+  // Convert real activities into the AuditLogEntry shape the UI expects.
+  const auditLogs: AuditLogEntry[] = recentActivities.map((a: FirestoreActivity & { id: string }) => {
+    const created = (a.createdAt as { toDate?: () => Date } | string | null)
+    let ts = '—'
+    if (created && typeof created === 'object' && typeof created.toDate === 'function') {
+      ts = created.toDate().toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    } else if (typeof created === 'string') {
+      const d = new Date(created)
+      if (!Number.isNaN(d.getTime())) {
+        ts = d.toLocaleString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        })
+      }
+    }
+    return {
+      id: a.id,
+      timestamp: ts,
+      user: (a.metadata?.userName as string) || a.userId || 'System',
+      action: a.title || a.description || a.type,
+      entity: a.entityType || a.entityId || '—',
+      actionType: activityTypeToCategory(a.type),
+    }
+  })
 
   // ── GSTIN Validation ────────────────────────────────────────────────
   const isGstinValid = (gstin: string) => {
@@ -1924,14 +2002,18 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-4">
-              {MOCK_API_CONNECTIONS.map((connection) => (
+              {MOCK_API_CONNECTIONS.map((connection) => {
+                const live = apiConnStatuses[connection.id]
+                const status: ApiConnStatus = live?.status ?? connection.status
+                const lastSync = live?.lastSync
+                return (
                 <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
                   <CardContent className="pt-0 py-4">
                     <div className="flex items-center gap-4">
                       <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
-                        connection.status === 'Connected'
+                        status === 'Connected'
                           ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                          : connection.status === 'Disconnected'
+                          : status === 'Disconnected'
                           ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
                       }`}>
@@ -1941,22 +2023,22 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-foreground">{connection.name}</p>
                           <Badge className={`text-[10px] px-2 py-0 border ${
-                            connection.status === 'Connected'
+                            status === 'Connected'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-                              : connection.status === 'Disconnected'
+                              : status === 'Disconnected'
                               ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
                               : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                           }`}>
                             <span className={`size-1.5 rounded-full mr-1 ${
-                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+                              status === 'Connected' ? 'bg-emerald-500' : status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
                             }`} />
-                            {connection.status}
+                            {status}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
-                        {connection.lastSync && (
+                        {lastSync && (
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Last synced: {connection.lastSync}
+                            Last synced: {lastSync}
                           </p>
                         )}
                       </div>
@@ -1982,8 +2064,28 @@ export default function SettingsPage() {
                               if (!res.ok) {
                                 throw new Error(data?.error ?? 'Test failed')
                               }
+                              // Persist the healthy status + lastSync to the org doc
+                              // so the badge survives refresh.
+                              if (orgId && !isPreviewMode && orgId !== 'preview-org') {
+                                const now = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                                await updateDoc(doc(db, 'organizations', orgId), {
+                                  [`gstApiConnections.${connection.id}`]: { status: 'Connected' as ApiConnStatus, lastSync: now },
+                                  updatedAt: serverTimestamp(),
+                                })
+                                setApiConnStatuses(prev => ({ ...prev, [connection.id]: { status: 'Connected', lastSync: now } }))
+                              }
                               toast.success(`${connection.name} — connection OK`)
                             } catch (err) {
+                              // Persist the failed status too.
+                              if (orgId && !isPreviewMode && orgId !== 'preview-org') {
+                                try {
+                                  await updateDoc(doc(db, 'organizations', orgId), {
+                                    [`gstApiConnections.${connection.id}`]: { status: 'Disconnected' as ApiConnStatus, lastSync: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) },
+                                    updatedAt: serverTimestamp(),
+                                  })
+                                  setApiConnStatuses(prev => ({ ...prev, [connection.id]: { status: 'Disconnected', lastSync: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) } }))
+                                } catch { /* non-fatal */ }
+                              }
                               toast.error(err instanceof Error ? err.message : 'Test failed')
                             }
                           }}
@@ -2004,7 +2106,8 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
             </div>
           </motion.div>
         )
@@ -2046,7 +2149,13 @@ export default function SettingsPage() {
               <CardContent className="pt-6 p-0">
                 <div className="max-h-[520px] overflow-y-auto">
                   <div className="divide-y divide-border/50">
-                    {MOCK_AUDIT_LOGS
+                    {auditLoading && (
+                      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm">Loading activity…</span>
+                      </div>
+                    )}
+                    {!auditLoading && auditLogs
                       .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
                       .map((log, idx) => (
                       <motion.div
@@ -2087,7 +2196,7 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
-                {MOCK_AUDIT_LOGS.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
+                {!auditLoading && auditLogs.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
                   <div className="py-12 text-center">
                     <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">No audit logs match this filter</p>

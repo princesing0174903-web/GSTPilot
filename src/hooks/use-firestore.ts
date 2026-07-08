@@ -39,6 +39,7 @@ import {
   type FirestoreGstProfile, type FirestoreGstReturn,
   type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
   type FirestoreNotice, type FirestoreReport,
+  type FirestoreJournalEntry,
   type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
 } from '@/lib/firestore-schema';
 import { computeDashboardMetrics } from '@/lib/firestore-service';
@@ -692,4 +693,14 @@ export function useFireReports(clientId?: string | null) {
 
 export function useFireReport(reportId: string | null) {
   return useFirestoreDoc<FirestoreReport>(COLLECTIONS.REPORTS, reportId);
+}
+
+// ─── Manual Journal Entries ──────────────────────────────────────────────────
+
+export function useFireJournalEntries() {
+  return useFirestoreCollection<FirestoreJournalEntry>(
+    COLLECTIONS.JOURNAL_ENTRIES,
+    [orderBy('entryDate', 'desc')],
+    [],
+  );
 }

@@ -29,6 +29,7 @@ import {
   Wallet, Building2, ChevronRight, Plus, Search,
   ArrowRight, CheckCircle2, Clock, AlertCircle,
   PieChart, RefreshCw, Download, Filter, Info,
+  Check, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +40,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -47,11 +49,14 @@ import { EmptyState } from '@/components/shared/EmptyState';
 
 import {
   useFireInvoices, useFireExpenses, useFirePayments,
-  useFireBankAccounts, useFireBankTransactions,
+  useFireBankAccounts, useFireBankTransactions, useFireJournalEntries,
 } from '@/hooks/use-firestore';
+import {
+  createJournalEntry, deleteJournalEntry,
+} from '@/lib/firestore-service';
 import type {
   FirestoreInvoice, FirestoreExpense, FirestorePayment,
-  FirestoreBankAccount, FirestoreBankTransaction,
+  FirestoreBankAccount, FirestoreBankTransaction, FirestoreJournalEntry,
 } from '@/lib/firestore-schema';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -101,7 +106,7 @@ interface JournalEntry {
   debit: number;
   credit: number;
   status: 'posted' | 'pending';
-  source: 'invoice' | 'expense' | 'payment';
+  source: 'invoice' | 'expense' | 'payment' | 'manual';
 }
 
 interface StatCard {
@@ -801,6 +806,15 @@ export default function AccountingPage() {
   const [searchQ, setSearchQ] = useState('');
   const [openReport, setOpenReport] = useState<ReportKey>(null);
   const [showNotice, setShowNotice] = useState<null | 'new-entry' | 'new-account'>(null);
+  // Manual journal entry form state
+  const [jeForm, setJeForm] = useState({
+    entryDate: new Date().toISOString().slice(0, 10),
+    description: '',
+    debitAccount: 'Cash & Bank',
+    creditAccount: 'Sales Revenue',
+    amount: '',
+  });
+  const [jeSaving, setJeSaving] = useState(false);
 
   // Real Firestore data
   const { data: invoices, loading: invLoading, error: invError } = useFireInvoices();
@@ -808,6 +822,7 @@ export default function AccountingPage() {
   const { data: payments, loading: payLoading, error: payError } = useFirePayments();
   const { data: bankAccounts, loading: bankLoading, error: bankError } = useFireBankAccounts();
   const { data: bankTxns, loading: txnLoading, error: txnError } = useFireBankTransactions();
+  const { data: manualJEs, loading: manualJEsLoading } = useFireJournalEntries();
 
   // Surface any genuine (non-permission) Firestore errors as a toast.
   React.useEffect(() => {
@@ -825,10 +840,79 @@ export default function AccountingPage() {
     [invoices, expenses, bankAccounts],
   );
   const chartOfAccounts = useMemo(() => buildChartOfAccounts(accounts), [accounts]);
-  const journalEntries = useMemo(
-    () => buildJournalEntries(invoices, expenses, payments),
-    [invoices, expenses, payments],
+
+  // Account options for the manual journal entry dropdowns.
+  const accountOptions = useMemo(
+    () => chartOfAccounts.map((a) => a.name).sort(),
+    [chartOfAccounts],
   );
+
+  const handleSaveJournalEntry = async () => {
+    const amount = parseFloat(jeForm.amount);
+    if (!jeForm.description.trim() || !Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a description and a valid amount.');
+      return;
+    }
+    if (jeForm.debitAccount === jeForm.creditAccount) {
+      toast.error('Debit and credit accounts must differ.');
+      return;
+    }
+    setJeSaving(true);
+    try {
+      await createJournalEntry({
+        entryDate: jeForm.entryDate,
+        description: jeForm.description.trim(),
+        debitAccount: jeForm.debitAccount,
+        creditAccount: jeForm.creditAccount,
+        amount,
+        status: 'posted',
+      });
+      toast.success('Journal entry posted.');
+      setShowNotice(null);
+      setJeForm({
+        entryDate: new Date().toISOString().slice(0, 10),
+        description: '',
+        debitAccount: 'Cash & Bank',
+        creditAccount: 'Sales Revenue',
+        amount: '',
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to post journal entry.');
+    } finally {
+      setJeSaving(false);
+    }
+  };
+
+  const handleDeleteManualEntry = async (jeId: string) => {
+    try {
+      await deleteJournalEntry(jeId);
+      toast.success('Journal entry deleted.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete entry.');
+    }
+  };
+
+  const journalEntries = useMemo(() => {
+    const auto = buildJournalEntries(invoices, expenses, payments);
+    // Merge manual journal entries from Firestore (adjusting entries, depreciation, etc.)
+    const manual: JournalEntry[] = (manualJEs as Array<FirestoreJournalEntry & { id: string }>).map((je) => ({
+      id: je.id,
+      date: je.entryDate,
+      description: je.description,
+      debitAccount: je.debitAccount,
+      creditAccount: je.creditAccount,
+      debit: je.amount,
+      credit: je.amount,
+      status: je.status,
+      source: 'manual' as const,
+    }));
+    // Sort by date descending (manual + auto combined)
+    return [...manual, ...auto].sort((a, b) => {
+      const da = new Date(a.date).getTime() || 0;
+      const db = new Date(b.date).getTime() || 0;
+      return db - da;
+    });
+  }, [invoices, expenses, payments, manualJEs]);
   const monthly = useMemo(() => buildMonthlySeries(invoices, expenses), [invoices, expenses]);
 
   const statCards: StatCard[] = [
@@ -1370,31 +1454,126 @@ export default function AccountingPage() {
         bankTxns={bankTxns}
       />
 
-      {/* "Coming soon" notice for New Entry / New Account */}
-      <Dialog open={showNotice !== null} onOpenChange={(o) => { if (!o) setShowNotice(null); }}>
+      {/* Manual Journal Entry Form (New Entry button) */}
+      <Dialog open={showNotice === 'new-entry'} onOpenChange={(o) => { if (!o) setShowNotice(null); }}>
+        <DialogContent className="max-w-lg bg-zinc-950 border-white/[0.08]">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Plus className="h-4 w-4 text-emerald-400" />
+              New Manual Journal Entry
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Post an adjusting entry (depreciation, accruals, corrections). Debit and credit must balance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Date</Label>
+                <Input
+                  type="date"
+                  value={jeForm.entryDate}
+                  onChange={(e) => setJeForm((p) => ({ ...p, entryDate: e.target.value }))}
+                  className="bg-white/[0.03] border-white/[0.08] text-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={jeForm.amount}
+                  onChange={(e) => setJeForm((p) => ({ ...p, amount: e.target.value }))}
+                  placeholder="50000"
+                  className="bg-white/[0.03] border-white/[0.08] text-white"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-400">Description</Label>
+              <Input
+                value={jeForm.description}
+                onChange={(e) => setJeForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="e.g., Monthly depreciation for office equipment"
+                className="bg-white/[0.03] border-white/[0.08] text-white"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Debit Account (Dr)</Label>
+                <select
+                  value={jeForm.debitAccount}
+                  onChange={(e) => setJeForm((p) => ({ ...p, debitAccount: e.target.value }))}
+                  className="w-full h-9 rounded-md bg-white/[0.03] border border-white/[0.08] text-white text-sm px-3"
+                >
+                  {accountOptions.map((name) => (
+                    <option key={name} value={name} className="bg-zinc-900">{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Credit Account (Cr)</Label>
+                <select
+                  value={jeForm.creditAccount}
+                  onChange={(e) => setJeForm((p) => ({ ...p, creditAccount: e.target.value }))}
+                  className="w-full h-9 rounded-md bg-white/[0.03] border border-white/[0.08] text-white text-sm px-3"
+                >
+                  {accountOptions.map((name) => (
+                    <option key={name} value={name} className="bg-zinc-900">{name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {jeForm.debitAccount && jeForm.creditAccount && jeForm.debitAccount === jeForm.creditAccount && (
+              <p className="text-xs text-rose-400">Debit and credit accounts must differ.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-white/[0.08] text-zinc-200 hover:bg-white/[0.04]"
+              onClick={() => setShowNotice(null)}
+              disabled={jeSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              onClick={handleSaveJournalEntry}
+              disabled={jeSaving || !jeForm.description.trim() || !jeForm.amount || jeForm.debitAccount === jeForm.creditAccount}
+            >
+              {jeSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Post Entry
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Account info dialog (custom COA creation) */}
+      <Dialog open={showNotice === 'new-account'} onOpenChange={(o) => { if (!o) setShowNotice(null); }}>
         <DialogContent className="max-w-md bg-zinc-950 border-white/[0.08]">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Info className="h-4 w-4 text-emerald-400" />
-              {showNotice === 'new-entry' ? 'Manual Journal Entry' : 'New Chart-of-Accounts Entry'}
+              Chart of Accounts
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              {showNotice === 'new-entry'
-                ? 'Manual journal entry creation requires the full accounting engine (coming soon).'
-                : 'Custom chart-of-accounts creation requires the full accounting engine (coming soon).'}
+              Your chart of accounts is auto-generated from real records.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm text-zinc-300">
             <p>
-              Your current accounting entries are <span className="text-emerald-400 font-medium">auto-generated</span> from real records:
+              The chart of accounts is <span className="text-emerald-400 font-medium">dynamically computed</span> from your real transactions:
             </p>
             <ul className="space-y-1.5 text-xs pl-4">
-              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Each invoice → Dr Accounts Receivable, Cr Sales Revenue + GST Payable</li>
-              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Each expense → Dr Expense (by category), Cr Cash &amp; Bank</li>
-              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Each payment → Dr Cash &amp; Bank, Cr Accounts Receivable (or vice versa for vendors)</li>
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Cash &amp; Bank from bank accounts + payments</li>
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Accounts Receivable from outstanding invoices</li>
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />GST Payable from tax collected on invoices</li>
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />Sales Revenue + Expense-by-category from invoices/expenses</li>
             </ul>
             <p className="text-xs text-zinc-500">
-              To add a new entry, create an invoice, expense, or payment from the respective module — it will appear here automatically.
+              To add a new account, create the corresponding invoice, expense, or payment — it will appear here automatically.
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">

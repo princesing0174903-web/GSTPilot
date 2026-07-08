@@ -47,6 +47,8 @@ export const COLLECTIONS = {
   // Phase 1 — Notices & Reports (regulatory notices + generated business reports)
   NOTICES: 'notices',
   REPORTS: 'reports',
+  // Manual journal entries (adjusting entries, depreciation, accruals, etc.)
+  JOURNAL_ENTRIES: 'journal_entries',
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -61,7 +63,7 @@ export interface FirestoreUser {
   provider: 'google' | 'email';
   role: 'admin' | 'manager' | 'staff' | 'viewer';
   firmId: string | null;
-  firmName: string | null;
+  organizationId: string;  firmName: string | null;
   phone: string | null;
   onboardingCompleted: boolean;
   emailVerified: boolean;
@@ -74,7 +76,7 @@ export interface FirestoreUser {
 
 export interface FirestoreFirm {
   firmId: string;
-  ownerId: string;
+  organizationId: string;  ownerId: string;
   firmName: string;
   gstin: string | null;
   state: string | null;
@@ -96,7 +98,7 @@ export interface FirestoreFirm {
 export interface FirestoreClient {
   clientId: string;
   firmId: string;
-  gstin: string;
+  organizationId: string;  gstin: string;
   tradeName: string;
   legalName: string;
   address: string | null;
@@ -135,7 +137,7 @@ export type DocumentType = 'purchase_register' | 'sales_register' | 'gstr1' | 'g
 export interface FirestoreDocument {
   docId: string;
   firmId: string;
-  clientId: string;
+  organizationId: string;  clientId: string;
   uploadedBy: string;
   fileName: string;
   filePath: string | null;     // Firebase Storage path
@@ -158,7 +160,7 @@ export interface FirestoreDocument {
 export interface FirestoreInvoice {
   invoiceId: string;
   firmId: string;
-  clientId: string;
+  organizationId: string;  clientId: string;
   documentId: string | null;   // source document
   invoiceNumber: string;
   invoiceDate: string;
@@ -192,7 +194,7 @@ export interface FirestoreInvoice {
 export interface FirestoreReturn {
   returnId: string;
   firmId: string;
-  clientId: string;
+  organizationId: string;  clientId: string;
   returnType: 'GSTR-1' | 'GSTR-3B';
   period: string;              // MM-YYYY
   financialYear: string;
@@ -222,7 +224,7 @@ export type ReconStatus = 'running' | 'completed' | 'failed';
 export interface FirestoreReconciliation {
   reconId: string;
   firmId: string;
-  clientId: string;
+  organizationId: string;  clientId: string;
   period: string;
   sources: string;             // e.g., "GSTR-2B vs Purchase Register"
   status: ReconStatus;
@@ -264,7 +266,7 @@ export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 export interface FirestoreNotification {
   notifId: string;
   firmId: string;
-  userId: string;
+  organizationId: string;  userId: string;
   type: NotificationType;
   priority: NotificationPriority;
   title: string;
@@ -290,7 +292,7 @@ export type ActivityType =
 export interface FirestoreActivity {
   activityId: string;
   firmId: string;
-  userId: string;
+  organizationId: string;  userId: string;
   clientId: string | null;
   type: ActivityType;
   title: string;
@@ -306,7 +308,7 @@ export interface FirestoreActivity {
 export interface FirestoreAIRecommendation {
   recId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   invoiceId: string | null;
   reconId: string | null;
   type: AIRecommendationType;
@@ -331,7 +333,7 @@ export type PredictionType =
 export interface FirestorePrediction {
   predictionId: string;
   firmId: string;
-  type: PredictionType;
+  organizationId: string;  type: PredictionType;
   entityId: string | null;        // clientId, userId, etc.
   score: number;                   // 0-100
   confidence: number;              // 0-100
@@ -348,7 +350,7 @@ export type PriorityCategory = 'filing' | 'follow_up' | 'review' | 'upload' | 'c
 export interface FirestorePriority {
   priorityId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   category: PriorityCategory;
   title: string;
   description: string;
@@ -384,7 +386,7 @@ export interface FirestoreMembership {
   membershipId: string;
   orgId: string;
   firmId: string;
-  userId: string;
+  organizationId: string;  userId: string;
   role: MembershipRole;
   permissions: string[];
   invitedBy: string;
@@ -401,7 +403,7 @@ export type LeadSource = 'website' | 'referral' | 'advertisement' | 'cold_call' 
 export interface FirestoreLead {
   leadId: string;
   firmId: string;
-  contactName: string;
+  organizationId: string;  contactName: string;
   contactEmail: string;
   contactPhone: string;
   company: string;
@@ -426,7 +428,7 @@ export type DealStage = 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost
 export interface FirestoreDeal {
   dealId: string;
   firmId: string;
-  leadId: string | null;
+  organizationId: string;  leadId: string | null;
   clientId: string | null;
   title: string;
   description: string;
@@ -447,7 +449,7 @@ export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
 export interface FirestoreMeeting {
   meetingId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   leadId: string | null;
   title: string;
   description: string;
@@ -471,7 +473,7 @@ export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'completed' | 'canc
 export interface FirestoreTask {
   taskId: string;
   firmId: string;
-  title: string;
+  organizationId: string;  title: string;
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
@@ -492,7 +494,7 @@ export type BankAccountStatus = 'connected' | 'disconnected' | 'syncing' | 'erro
 export interface FirestoreBankAccount {
   bankAccountId: string;
   firmId: string;
-  userId: string;                 // Firebase UID of the user who linked the account
+  organizationId: string;  userId: string;                 // Firebase UID of the user who linked the account
   bankName: string;
   accountNumberMasked: string;    // e.g. "XXXX1234"
   accountType: BankAccountType;
@@ -515,7 +517,7 @@ export type BankTransactionType = 'credit' | 'debit';
 export interface FirestoreBankTransaction {
   bankTxnId: string;
   firmId: string;
-  bankAccountId: string;
+  organizationId: string;  bankAccountId: string;
   date: string;                   // ISO date string
   description: string;
   amount: number;                 // positive = credit, negative = debit
@@ -539,7 +541,7 @@ export type GstFilingFrequency = 'monthly' | 'quarterly';
 export interface FirestoreGstProfile {
   gstProfileId: string;
   firmId: string;
-  userId: string;
+  organizationId: string;  userId: string;
   gstin: string;
   legalName: string;
   tradeName: string | null;
@@ -568,7 +570,7 @@ export type GstReturnStatus = 'draft' | 'prepared' | 'filed' | 'acknowledged' | 
 export interface FirestoreGstReturn {
   gstReturnId: string;
   firmId: string;
-  gstProfileId: string;
+  organizationId: string;  gstProfileId: string;
   returnType: GstReturnType;
   period: string;                 // MM-YYYY
   financialYear: string;
@@ -593,7 +595,7 @@ export type ExpenseStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'pai
 export interface FirestoreExpense {
   expenseId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   category: string;
   description: string | null;
   vendor: string | null;
@@ -619,7 +621,7 @@ export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded' | 'c
 export interface FirestorePayment {
   paymentId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   invoiceId: string | null;
   purchaseBillId: string | null;
   partyName: string;
@@ -654,7 +656,7 @@ export type AiMemoryType = 'fact' | 'preference' | 'pattern' | 'outcome' | 'skil
 export interface FirestoreAiMemory {
   memoryId: string;
   firmId: string;
-  agent: AiMemoryAgent;
+  organizationId: string;  agent: AiMemoryAgent;
   memoryType: AiMemoryType;
   key: string;
   value: string;
@@ -679,7 +681,7 @@ export type NoticePriority = 'low' | 'medium' | 'high' | 'urgent';
 export interface FirestoreNotice {
   noticeId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   clientTradeName: string | null;
   clientGstin: string | null;
   noticeType: NoticeType;
@@ -716,7 +718,7 @@ export type ReportFormat = 'json' | 'pdf' | 'excel' | 'csv';
 export interface FirestoreReport {
   reportId: string;
   firmId: string;
-  clientId: string | null;
+  organizationId: string;  clientId: string | null;
   clientTradeName: string | null;
   reportType: ReportType;
   format: ReportFormat;
@@ -729,6 +731,26 @@ export interface FirestoreReport {
   generatedBy: string;              // Firebase UID
   generatedAt: unknown;             // serverTimestamp
   metadata: Record<string, string | number | boolean>;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+// ─── Manual Journal Entry (journal_entries/{jeId}) ───────────────────────────
+// Adjusting entries, depreciation, accruals, and other manual postings that
+// supplement the auto-generated entries derived from invoices/expenses/payments.
+
+export interface FirestoreJournalEntry {
+  jeId: string;
+  organizationId: string;
+  entryDate: string;             // ISO date
+  description: string;
+  debitAccount: string;          // account name (e.g. "Cash & Bank")
+  creditAccount: string;         // account name (e.g. "Sales Revenue")
+  amount: number;
+  status: 'posted' | 'pending';
+  source: 'manual';
+  createdBy: string;             // Firebase UID
+  createdByName: string | null;
   createdAt: unknown;
   updatedAt: unknown;
 }

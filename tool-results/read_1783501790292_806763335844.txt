@@ -1,0 +1,502 @@
+     1→                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
+     2→                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
+     3→                      }`}
+     4→                    >
+     5→                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
+     6→                        session.current
+     7→                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+     8→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+     9→                      }`}>
+    10→                        {session.icon}
+    11→                      </div>
+    12→                      <div className="flex-1 min-w-0">
+    13→                        <div className="flex items-center gap-2">
+    14→                          <p className="text-sm font-medium text-foreground">{session.device}</p>
+    15→                          {session.current && (
+    16→                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+    17→                              Current
+    18→                            </Badge>
+    19→                          )}
+    20→                        </div>
+    21→                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
+    22→                      </div>
+    23→                      {!session.current && (
+    24→                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
+    25→                          Revoke
+    26→                        </Button>
+    27→                      )}
+    28→                    </div>
+    29→                  ))}
+    30→                </div>
+    31→              </CardContent>
+    32→            </Card>
+    33→
+    34→            {/* Data Encryption */}
+    35→            <Card className="border-border/50">
+    36→              <CardContent className="pt-6">
+    37→                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+    38→                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+    39→                    <LockKeyhole className="h-4.5 w-4.5" />
+    40→                  </div>
+    41→                  <div>
+    42→                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
+    43→                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
+    44→                  </div>
+    45→                </div>
+    46→              </CardContent>
+    47→            </Card>
+    48→          </motion.div>
+    49→        )
+    50→
+    51→      // ───────────────────────────────────────────────────────────────
+    52→      // SECTION 6: BILLING
+    53→      // ───────────────────────────────────────────────────────────────
+    54→      case 'billing':
+    55→        return (
+    56→          <motion.div
+    57→            key="billing"
+    58→            initial="hidden"
+    59→            animate="visible"
+    60→            exit="exit"
+    61→            variants={contentVariants}
+    62→            className="space-y-6"
+    63→          >
+    64→            <div>
+    65→              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
+    66→              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
+    67→            </div>
+    68→
+    69→            {/* Current Plan */}
+    70→            <Card className="border-border/50 overflow-hidden">
+    71→              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+    72→              <CardContent className="pt-6">
+    73→                <div className="flex items-start justify-between">
+    74→                  <div>
+    75→                    <div className="flex items-center gap-2">
+    76→                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
+    77→                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
+    78→                        Active
+    79→                      </Badge>
+    80→                    </div>
+    81→                    <div className="flex items-baseline gap-1 mt-2">
+    82→                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
+    83→                      <span className="text-sm text-muted-foreground">/month</span>
+    84→                    </div>
+    85→                    <p className="text-xs text-muted-foreground mt-1">
+    86→                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
+    87→                    </p>
+    88→                  </div>
+    89→                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+    90→                    <ChevronRight className="h-4 w-4" />
+    91→                    Upgrade Plan
+    92→                  </Button>
+    93→                </div>
+    94→              </CardContent>
+    95→            </Card>
+    96→
+    97→            {/* Usage This Month */}
+    98→            <Card className="border-border/50">
+    99→              <CardHeader className="pb-0">
+   100→                <CardTitle className="text-base">Usage This Month</CardTitle>
+   101→                <CardDescription>Your current usage against plan limits</CardDescription>
+   102→              </CardHeader>
+   103→              <CardContent className="pt-4 space-y-5">
+   104→                {/* Clients */}
+   105→                <div className="space-y-2">
+   106→                  <div className="flex items-center justify-between">
+   107→                    <div className="flex items-center gap-2">
+   108→                      <Users className="h-4 w-4 text-muted-foreground" />
+   109→                      <span className="text-sm font-medium text-foreground">Clients</span>
+   110→                    </div>
+   111→                    <span className="text-sm text-muted-foreground">12 / 25</span>
+   112→                  </div>
+   113→                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+   114→                </div>
+   115→
+   116→                {/* Invoices Processed */}
+   117→                <div className="space-y-2">
+   118→                  <div className="flex items-center justify-between">
+   119→                    <div className="flex items-center gap-2">
+   120→                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+   121→                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
+   122→                    </div>
+   123→                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
+   124→                  </div>
+   125→                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
+   126→                </div>
+   127→
+   128→                {/* Reconciliation Runs */}
+   129→                <div className="space-y-2">
+   130→                  <div className="flex items-center justify-between">
+   131→                    <div className="flex items-center gap-2">
+   132→                      <Activity className="h-4 w-4 text-muted-foreground" />
+   133→                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
+   134→                    </div>
+   135→                    <span className="text-sm text-muted-foreground">23 / 50</span>
+   136→                  </div>
+   137→                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
+   138→                </div>
+   139→              </CardContent>
+   140→            </Card>
+   141→
+   142→            {/* Payment Method */}
+   143→            <Card className="border-border/50">
+   144→              <CardHeader className="pb-0">
+   145→                <CardTitle className="text-base">Payment Method</CardTitle>
+   146→              </CardHeader>
+   147→              <CardContent className="pt-4">
+   148→                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+   149→                  <div className="flex items-center gap-3">
+   150→                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
+   151→                      VISA
+   152→                    </div>
+   153→                    <div>
+   154→                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
+   155→                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
+   156→                    </div>
+   157→                  </div>
+   158→                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
+   159→                    Update Payment Method
+   160→                  </Button>
+   161→                </div>
+   162→              </CardContent>
+   163→            </Card>
+   164→
+   165→            {/* Billing History */}
+   166→            <Card className="border-border/50">
+   167→              <CardHeader className="pb-0">
+   168→                <CardTitle className="text-base">Billing History</CardTitle>
+   169→                <CardDescription>Download past invoices</CardDescription>
+   170→              </CardHeader>
+   171→              <CardContent className="pt-4">
+   172→                <div className="space-y-2 max-h-64 overflow-y-auto">
+   173→                  {BILLING_HISTORY.map((invoice) => (
+   174→                    <div
+   175→                      key={invoice.id}
+   176→                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+   177→                    >
+   178→                      <div className="flex items-center gap-3">
+   179→                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
+   180→                          <CreditCard className="h-4 w-4" />
+   181→                        </div>
+   182→                        <div>
+   183→                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
+   184→                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
+   185→                        </div>
+   186→                      </div>
+   187→                      <div className="flex items-center gap-3">
+   188→                        <Badge className={`text-[11px] px-2 py-0 border ${
+   189→                          invoice.status === 'Paid'
+   190→                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   191→                            : invoice.status === 'Pending'
+   192→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   193→                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+   194→                        }`}>
+   195→                          {invoice.status}
+   196→                        </Badge>
+   197→                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
+   198→                          <Download className="h-4 w-4" />
+   199→                        </Button>
+   200→                      </div>
+   201→                    </div>
+   202→                  ))}
+   203→                </div>
+   204→              </CardContent>
+   205→            </Card>
+   206→          </motion.div>
+   207→        )
+   208→
+   209→      // ───────────────────────────────────────────────────────────────
+   210→      // SECTION: GST API CONNECTIONS
+   211→      // ───────────────────────────────────────────────────────────────
+   212→      case 'api':
+   213→        return (
+   214→          <motion.div
+   215→            key="api"
+   216→            initial="hidden"
+   217→            animate="visible"
+   218→            exit="exit"
+   219→            variants={contentVariants}
+   220→            className="space-y-6"
+   221→          >
+   222→            <div>
+   223→              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
+   224→              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
+   225→            </div>
+   226→
+   227→            <div className="space-y-4">
+   228→              {MOCK_API_CONNECTIONS.map((connection) => (
+   229→                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
+   230→                  <CardContent className="pt-0 py-4">
+   231→                    <div className="flex items-center gap-4">
+   232→                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
+   233→                        connection.status === 'Connected'
+   234→                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+   235→                          : connection.status === 'Disconnected'
+   236→                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+   237→                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+   238→                      }`}>
+   239→                        {connection.icon}
+   240→                      </div>
+   241→                      <div className="flex-1 min-w-0">
+   242→                        <div className="flex items-center gap-2 flex-wrap">
+   243→                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+   244→                          <Badge className={`text-[10px] px-2 py-0 border ${
+   245→                            connection.status === 'Connected'
+   246→                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+   247→                              : connection.status === 'Disconnected'
+   248→                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+   249→                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+   250→                          }`}>
+   251→                            <span className={`size-1.5 rounded-full mr-1 ${
+   252→                              connection.status === 'Connected' ? 'bg-emerald-500' : connection.status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
+   253→                            }`} />
+   254→                            {connection.status}
+   255→                          </Badge>
+   256→                        </div>
+   257→                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
+   258→                        {connection.lastSync && (
+   259→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+   260→                            Last synced: {connection.lastSync}
+   261→                          </p>
+   262→                        )}
+   263→                      </div>
+   264→                      <div className="flex items-center gap-2 shrink-0">
+   265→                        <Button
+   266→                          variant="outline"
+   267→                          size="sm"
+   268→                          className="h-8 text-xs gap-1.5"
+   269→                          onClick={async () => {
+   270→                            try {
+   271→                              // Test by hitting the GSTN connect endpoint with the
+   272→                              // firm's own GSTIN — if it returns a valid profile,
+   273→                              // the connection is healthy.
+   274→                              const res = await fetch('/api/connect/gstn', {
+   275→                                method: 'POST',
+   276→                                headers: { 'Content-Type': 'application/json' },
+   277→                                body: JSON.stringify({
+   278→                                  userId: user?.id ?? 'system-test',
+   279→                                  gstin: firmGstin || '27AABCS1429B1Z5',
+   280→                                }),
+   281→                              })
+   282→                              const data = await res.json()
+   283→                              if (!res.ok) {
+   284→                                throw new Error(data?.error ?? 'Test failed')
+   285→                              }
+   286→                              toast.success(`${connection.name} — connection OK`)
+   287→                            } catch (err) {
+   288→                              toast.error(err instanceof Error ? err.message : 'Test failed')
+   289→                            }
+   290→                          }}
+   291→                        >
+   292→                          <Activity className="h-3.5 w-3.5" />
+   293→                          Test Connection
+   294→                        </Button>
+   295→                        <Button
+   296→                          variant="ghost"
+   297→                          size="sm"
+   298→                          className="h-8 text-xs text-muted-foreground"
+   299→                          disabled
+   300→                          title={`${connection.name} configuration is managed in the provider's dashboard`}
+   301→                        >
+   302→                          Configure
+   303→                        </Button>
+   304→                      </div>
+   305→                    </div>
+   306→                  </CardContent>
+   307→                </Card>
+   308→              ))}
+   309→            </div>
+   310→          </motion.div>
+   311→        )
+   312→
+   313→      // ───────────────────────────────────────────────────────────────
+   314→      // SECTION: AUDIT LOGS
+   315→      // ───────────────────────────────────────────────────────────────
+   316→      case 'audit':
+   317→        return (
+   318→          <motion.div
+   319→            key="audit"
+   320→            initial="hidden"
+   321→            animate="visible"
+   322→            exit="exit"
+   323→            variants={contentVariants}
+   324→            className="space-y-6"
+   325→          >
+   326→            <div className="flex items-center justify-between">
+   327→              <div>
+   328→                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
+   329→                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
+   330→              </div>
+   331→              <Select value={auditFilter} onValueChange={setAuditFilter}>
+   332→                <SelectTrigger className="w-[160px] h-9">
+   333→                  <SelectValue placeholder="Filter by type" />
+   334→                </SelectTrigger>
+   335→                <SelectContent>
+   336→                  <SelectItem value="all">All Actions</SelectItem>
+   337→                  <SelectItem value="filing">Filing</SelectItem>
+   338→                  <SelectItem value="client_update">Client Updates</SelectItem>
+   339→                  <SelectItem value="invoice">Invoices</SelectItem>
+   340→                  <SelectItem value="settings">Settings</SelectItem>
+   341→                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
+   342→                </SelectContent>
+   343→              </Select>
+   344→            </div>
+   345→
+   346→            <Card className="border-border/50">
+   347→              <CardContent className="pt-6 p-0">
+   348→                <div className="max-h-[520px] overflow-y-auto">
+   349→                  <div className="divide-y divide-border/50">
+   350→                    {MOCK_AUDIT_LOGS
+   351→                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
+   352→                      .map((log, idx) => (
+   353→                      <motion.div
+   354→                        key={log.id}
+   355→                        initial={{ opacity: 0, y: 4 }}
+   356→                        animate={{ opacity: 1, y: 0 }}
+   357→                        transition={{ duration: 0.2, delay: idx * 0.03 }}
+   358→                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
+   359→                      >
+   360→                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
+   361→                          log.actionType === 'filing'
+   362→                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+   363→                            : log.actionType === 'client_update'
+   364→                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
+   365→                            : log.actionType === 'invoice'
+   366→                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+   367→                            : log.actionType === 'reconciliation'
+   368→                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+   369→                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+   370→                        }`}>
+   371→                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
+   372→                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
+   373→                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
+   374→                           <Shield className="h-4 w-4" />}
+   375→                        </div>
+   376→                        <div className="flex-1 min-w-0">
+   377→                          <p className="text-sm font-medium text-foreground">{log.action}</p>
+   378→                          <div className="flex items-center gap-2 mt-0.5">
+   379→                            <span className="text-xs text-muted-foreground">{log.entity}</span>
+   380→                            <span className="text-muted-foreground/40">·</span>
+   381→                            <span className="text-xs text-muted-foreground">{log.user}</span>
+   382→                          </div>
+   383→                        </div>
+   384→                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+   385→                          {log.timestamp}
+   386→                        </span>
+   387→                      </motion.div>
+   388→                    ))}
+   389→                  </div>
+   390→                </div>
+   391→                {MOCK_AUDIT_LOGS.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
+   392→                  <div className="py-12 text-center">
+   393→                    <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+   394→                    <p className="text-sm text-muted-foreground">No audit logs match this filter</p>
+   395→                  </div>
+   396→                )}
+   397→              </CardContent>
+   398→            </Card>
+   399→          </motion.div>
+   400→        )
+   401→
+   402→      default:
+   403→        return null
+   404→    }
+   405→  }
+   406→
+   407→  // ═══════════════════════════════════════════════════════════════════
+   408→  // MAIN LAYOUT
+   409→  // ═══════════════════════════════════════════════════════════════════
+   410→  return (
+   411→    <div className="h-full flex flex-col">
+   412→      {/* ── Mobile: Horizontal Scrollable Tabs ── */}
+   413→      {isMobile && (
+   414→        <div className="border-b border-border bg-background px-4 pt-4">
+   415→          <h1 className="text-xl font-bold text-foreground mb-3">Settings</h1>
+   416→          <div className="flex gap-1 overflow-x-auto pb-0 -mb-px scrollbar-hide">
+   417→            {SECTIONS.map((section) => (
+   418→              <button
+   419→                key={section.id}
+   420→                onClick={() => setActiveSection(section.id)}
+   421→                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
+   422→                  activeSection === section.id
+   423→                    ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+   424→                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+   425→                }`}
+   426→              >
+   427→                {section.icon}
+   428→                {section.label}
+   429→              </button>
+   430→            ))}
+   431→          </div>
+   432→        </div>
+   433→      )}
+   434→
+   435→      <div className="flex-1 flex min-h-0">
+   436→        {/* ── Desktop: Left Navigation ── */}
+   437→        {!isMobile && (
+   438→          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+   439→            <div className="p-5 pb-4">
+   440→              <h1 className="text-lg font-bold text-foreground">Settings</h1>
+   441→            </div>
+   442→
+   443→            <nav className="flex-1 px-3 space-y-0.5">
+   444→              {SECTIONS.map((section) => (
+   445→                <button
+   446→                  key={section.id}
+   447→                  onClick={() => setActiveSection(section.id)}
+   448→                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+   449→                    activeSection === section.id
+   450→                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
+   451→                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
+   452→                  }`}
+   453→                >
+   454→                  {section.icon}
+   455→                  {section.label}
+   456→                </button>
+   457→              ))}
+   458→            </nav>
+   459→
+   460→            {/* Version & Status */}
+   461→            <div className="p-4 border-t border-border mt-auto">
+   462→              <div className="flex items-center gap-2 mb-1">
+   463→                <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
+   464→                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
+   465→                  v1.0.0
+   466→                </Badge>
+   467→              </div>
+   468→              <div className="flex items-center gap-1.5">
+   469→                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+   470→                <span className="text-[11px] text-muted-foreground">Online</span>
+   471→              </div>
+   472→            </div>
+   473→          </aside>
+   474→        )}
+   475→
+   476→        {/* ── Right Content Area ── */}
+   477→        <main className="flex-1 overflow-y-auto">
+   478→          <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
+   479→            {/* Preview-mode banner — shown only when OrgContext fell back to
+   480→                the demo workspace (Firestore unreachable / no real org). The
+   481→                form below still works visually but saves are no-ops. */}
+   482→            {isPreview && (
+   483→              <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 flex items-start gap-2.5">
+   484→                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+   485→                <div className="min-w-0">
+   486→                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Preview mode</p>
+   487→                  <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-0.5">
+   488→                    You&rsquo;re viewing a preview workspace. Settings edits are shown here but won&rsquo;t be persisted to the cloud.
+   489→                  </p>
+   490→                </div>
+   491→              </div>
+   492→            )}
+   493→            <AnimatePresence mode="wait">
+   494→              {renderSection()}
+   495→            </AnimatePresence>
+   496→          </div>
+   497→        </main>
+   498→      </div>
+   499→    </div>
+   500→  )
+   501→}
+   502→

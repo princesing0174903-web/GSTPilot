@@ -25,6 +25,7 @@ import {
   type FirestoreGstProfile, type FirestoreGstReturn,
   type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
   type FirestoreNotice, type FirestoreReport,
+  type FirestoreJournalEntry,
   type LeadStatus, type LeadSource, type DealStage, type MeetingType, type MeetingStatus,
   type ActivityType, type NotificationType, type NotificationPriority,
   type ReconMismatch, type DocumentStatus, type DocumentType,
@@ -52,9 +53,23 @@ function currentUserId(): string {
   return auth.currentUser?.uid || 'system';
 }
 
-function currentFirmId(): string | null {
-  // Read from localStorage fast-path — the AuthContext stores the firmId there
+/**
+ * Returns the current organization id (the canonical tenant scope) or null.
+ *
+ * The OrgContext persists the active organization id to localStorage under
+ * `gstpilot_org_id` whenever it resolves. This non-React module reads that
+ * value so CRUD functions can stamp every document with `organizationId` —
+ * the field the Firestore security rules and the onSnapshot hooks require.
+ *
+ * Falls back to the legacy `firmId` in `gstpilot_session` for compatibility
+ * with older sessions.
+ */
+function currentOrgId(): string | null {
   try {
+    // 1. Canonical: org id persisted by OrgContext.
+    const orgId = localStorage.getItem('gstpilot_org_id');
+    if (orgId) return orgId;
+    // 2. Legacy: firmId embedded in the auth session.
     const stored = localStorage.getItem('gstpilot_session');
     if (stored) {
       const parsed = JSON.parse(stored);
@@ -62,6 +77,11 @@ function currentFirmId(): string | null {
     }
   } catch { /* ignore */ }
   return null;
+}
+
+/** Alias kept for backward compatibility with existing call sites. */
+function currentFirmId(): string | null {
+  return currentOrgId();
 }
 
 /**
@@ -91,7 +111,7 @@ function docToData<T>(d: { id: string; data: () => Record<string, unknown> }): T
 //   - Adds activity log
 //   - Generates compliance profile
 
-export async function createClient(data: Omit<FirestoreClient, 'clientId' | 'firmId' | 'complianceProfile' | 'invoiceCount' | 'totalTaxPaid' | 'pendingReturnCount' | 'documentCount' | 'createdAt' | 'updatedAt'>): Promise<string> {
+export async function createClient(data: Omit<FirestoreClient, 'clientId' | 'firmId' | 'organizationId' | 'complianceProfile' | 'invoiceCount' | 'totalTaxPaid' | 'pendingReturnCount' | 'documentCount' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
 
@@ -102,6 +122,7 @@ export async function createClient(data: Omit<FirestoreClient, 'clientId' | 'fir
     ...data,
     clientId,
     firmId,
+    organizationId: firmId,
     complianceProfile: {
       filingCompliance: 100,
       gstinValidity: true,
@@ -201,6 +222,7 @@ export async function createDocument(data: {
   const docData: FirestoreDocument = {
     docId,
     firmId: firmId || '',
+    organizationId: firmId || '',
     clientId: data.clientId,
     uploadedBy: currentUserId(),
     fileName: data.fileName,
@@ -285,7 +307,7 @@ function simulateExtraction(docId: string, clientId: string): void {
 //   - Updates dashboard statistics
 //   - Generates draft returns
 
-export async function createInvoice(data: Omit<FirestoreInvoice, 'invoiceId' | 'firmId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+export async function createInvoice(data: Omit<FirestoreInvoice, 'invoiceId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const firmId = currentFirmId();
   const invoiceId = generateId();
   const invoiceRef = doc(db, COLLECTIONS.INVOICES, invoiceId);
@@ -294,6 +316,7 @@ export async function createInvoice(data: Omit<FirestoreInvoice, 'invoiceId' | '
     ...data,
     invoiceId,
     firmId: firmId || '',
+    organizationId: firmId || '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -370,7 +393,7 @@ export async function deleteInvoice(invoiceId: string): Promise<void> {
 //   - Updates dashboard metrics
 //   - Adds timeline activity
 
-export async function createReturn(data: Omit<FirestoreReturn, 'returnId' | 'firmId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+export async function createReturn(data: Omit<FirestoreReturn, 'returnId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<string> {
   const firmId = currentFirmId();
   const returnId = generateId();
   const returnRef = doc(db, COLLECTIONS.RETURNS, returnId);
@@ -379,6 +402,7 @@ export async function createReturn(data: Omit<FirestoreReturn, 'returnId' | 'fir
     ...data,
     returnId,
     firmId: firmId || '',
+    organizationId: firmId || '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -593,6 +617,7 @@ export async function createReconciliation(data: {
   const reconData: FirestoreReconciliation = {
     reconId,
     firmId: firmId || '',
+    organizationId: firmId || '',
     clientId: data.clientId,
     period: data.period,
     sources: data.sources,
@@ -694,6 +719,7 @@ export async function addNotification(data: {
   const notifData: FirestoreNotification = {
     notifId,
     firmId,
+    organizationId: firmId,
     userId: currentUserId(),
     type: data.type,
     priority: data.priority,
@@ -749,6 +775,7 @@ export async function addActivity(data: {
   const activityData: FirestoreActivity = {
     activityId,
     firmId,
+    organizationId: firmId,
     userId: currentUserId(),
     clientId: data.clientId || null,
     type: data.type,
@@ -775,6 +802,7 @@ function generateAIRecommendations(firmId: string, clientId: string, reconId: st
     const recData: FirestoreAIRecommendation = {
       recId,
       firmId,
+      organizationId: firmId,
       clientId,
       invoiceId: null,
       reconId,
@@ -1032,7 +1060,7 @@ function parsePeriod(period: string | null): Date | null {
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
 export async function createLead(
-  data: Omit<FirestoreLead, 'leadId' | 'firmId' | 'convertedClientId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreLead, 'leadId' | 'firmId' | 'organizationId' | 'convertedClientId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1042,6 +1070,7 @@ export async function createLead(
     ...data,
     leadId,
     firmId,
+    organizationId: firmId,
     convertedClientId: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -1098,7 +1127,7 @@ export async function convertLeadToClient(leadId: string): Promise<string> {
 // ─── Deals ────────────────────────────────────────────────────────────────────
 
 export async function createDeal(
-  data: Omit<FirestoreDeal, 'dealId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreDeal, 'dealId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1108,6 +1137,7 @@ export async function createDeal(
     ...data,
     dealId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1128,7 +1158,7 @@ export async function deleteDeal(dealId: string): Promise<void> {
 // ─── Meetings ─────────────────────────────────────────────────────────────────
 
 export async function createMeeting(
-  data: Omit<FirestoreMeeting, 'meetingId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreMeeting, 'meetingId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1138,6 +1168,7 @@ export async function createMeeting(
     ...data,
     meetingId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1175,7 +1206,7 @@ export async function listTasks(
 }
 
 export async function createTask(
-  data: Omit<FirestoreTask, 'taskId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreTask, 'taskId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1185,6 +1216,7 @@ export async function createTask(
     ...data,
     taskId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1237,7 +1269,7 @@ export async function listBankAccounts(
 }
 
 export async function createBankAccount(
-  data: Omit<FirestoreBankAccount, 'bankAccountId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreBankAccount, 'bankAccountId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1247,6 +1279,7 @@ export async function createBankAccount(
     ...data,
     bankAccountId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1295,7 +1328,7 @@ export async function listBankTransactions(
 }
 
 export async function createBankTransaction(
-  data: Omit<FirestoreBankTransaction, 'bankTxnId' | 'firmId' | 'createdAt'>,
+  data: Omit<FirestoreBankTransaction, 'bankTxnId' | 'firmId' | 'organizationId' | 'createdAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1305,6 +1338,7 @@ export async function createBankTransaction(
     ...data,
     bankTxnId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
   };
   await setDoc(ref, bankTxnData);
@@ -1339,7 +1373,7 @@ export async function listGstProfiles(
 }
 
 export async function createGstProfile(
-  data: Omit<FirestoreGstProfile, 'gstProfileId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreGstProfile, 'gstProfileId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1349,6 +1383,7 @@ export async function createGstProfile(
     ...data,
     gstProfileId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1396,7 +1431,7 @@ export async function listGstReturns(
 }
 
 export async function createGstReturn(
-  data: Omit<FirestoreGstReturn, 'gstReturnId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreGstReturn, 'gstReturnId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1406,6 +1441,7 @@ export async function createGstReturn(
     ...data,
     gstReturnId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1441,7 +1477,7 @@ export async function listExpenses(
 }
 
 export async function createExpense(
-  data: Omit<FirestoreExpense, 'expenseId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreExpense, 'expenseId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1451,6 +1487,7 @@ export async function createExpense(
     ...data,
     expenseId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1486,7 +1523,7 @@ export async function listPayments(
 }
 
 export async function createPayment(
-  data: Omit<FirestorePayment, 'paymentId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestorePayment, 'paymentId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1496,6 +1533,7 @@ export async function createPayment(
     ...data,
     paymentId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1538,7 +1576,7 @@ export async function listAiMemories(
 }
 
 export async function createAiMemory(
-  data: Omit<FirestoreAiMemory, 'memoryId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreAiMemory, 'memoryId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1548,6 +1586,7 @@ export async function createAiMemory(
     ...data,
     memoryId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1596,7 +1635,7 @@ export async function listNotices(
 }
 
 export async function createNotice(
-  data: Omit<FirestoreNotice, 'noticeId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreNotice, 'noticeId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1606,6 +1645,7 @@ export async function createNotice(
     ...data,
     noticeId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1672,7 +1712,7 @@ export async function listReports(
 }
 
 export async function createReport(
-  data: Omit<FirestoreReport, 'reportId' | 'firmId' | 'createdAt' | 'updatedAt'>,
+  data: Omit<FirestoreReport, 'reportId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
 ): Promise<string> {
   const firmId = currentFirmId();
   if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
@@ -1682,6 +1722,7 @@ export async function createReport(
     ...data,
     reportId,
     firmId,
+    organizationId: firmId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -1708,4 +1749,56 @@ export async function getReport(
   const snap = await getDoc(doc(db, COLLECTIONS.REPORTS, reportId));
   if (!snap.exists()) return null;
   return docToData<FirestoreReport>(snap);
+}
+
+// ─── Manual Journal Entries ──────────────────────────────────────────────────
+
+export async function createJournalEntry(
+  data: Omit<FirestoreJournalEntry, 'jeId' | 'organizationId' | 'source' | 'createdBy' | 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const orgId = currentOrgId();
+  if (!orgId) throw new Error('No organization found. Please complete onboarding first.');
+  const jeId = generateId();
+  const ref = doc(db, COLLECTIONS.JOURNAL_ENTRIES, jeId);
+  const jeData: FirestoreJournalEntry = {
+    ...data,
+    jeId,
+    organizationId: orgId,
+    source: 'manual',
+    createdBy: currentUserId(),
+    createdByName: auth.currentUser?.displayName || null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(ref, jeData);
+
+  addActivity({
+    type: 'system',
+    title: 'Manual journal entry posted',
+    description: `${data.description} — Dr ${data.debitAccount}, Cr ${data.creditAccount} (₹${data.amount.toLocaleString('en-IN')})`,
+    clientId: null,
+    entityType: COLLECTIONS.JOURNAL_ENTRIES,
+    entityId: jeId,
+  });
+
+  return jeId;
+}
+
+export async function deleteJournalEntry(jeId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.JOURNAL_ENTRIES, jeId);
+  await deleteDoc(ref);
+}
+
+export async function listJournalEntries(
+  scope: { firmId?: string; clientId?: string },
+): Promise<Array<FirestoreJournalEntry & { id: string }>> {
+  const constraints: QueryConstraint[] = [orderBy('entryDate', 'desc')];
+  if (scope.clientId) {
+    constraints.unshift(where('clientId', '==', scope.clientId));
+  } else if (scope.firmId) {
+    constraints.unshift(where('organizationId', '==', scope.firmId));
+  }
+  const q = query(collection(db, COLLECTIONS.JOURNAL_ENTRIES), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => docToData<FirestoreJournalEntry>(d));
 }

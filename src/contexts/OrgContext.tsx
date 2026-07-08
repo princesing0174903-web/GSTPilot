@@ -118,6 +118,23 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     }
   }, [loading, clearIsLoading]);
 
+  // Persist the current organization id to localStorage so the non-React
+  // firestore-service module can stamp every written document with
+  // `organizationId` (the field the security rules + onSnapshot hooks require).
+  // Without this, currentOrgId() in firestore-service returns null and writes
+  // either throw or create documents the hooks can never read back.
+  useEffect(() => {
+    try {
+      if (organization?.id) {
+        localStorage.setItem('gstpilot_org_id', organization.id);
+      } else {
+        localStorage.removeItem('gstpilot_org_id');
+      }
+    } catch {
+      /* storage may be unavailable (private mode) — non-fatal */
+    }
+  }, [organization?.id]);
+
   /**
    * Resolve the full org context for a Firebase user. Idempotent — if a load
    * is already in-flight for this uid, it returns early.

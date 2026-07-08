@@ -18,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
-import { EmptyState } from '@/components/shared'
+import { EmptyState, ProfessionalEmptyState } from '@/components/shared'
 import { useApp } from '@/contexts/AppContext'
 import { toast } from 'sonner'
 import { useFirePayments, useFireExpenses } from '@/hooks/use-firestore'
@@ -635,10 +635,20 @@ export default function PaymentsPage() {
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
                   {receivables.length === 0 ? (
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={IndianRupee}
                       title="No receivables yet"
-                      description="Customer payments will appear here once you record a receipt or sync an invoice."
+                      description="Record a customer receipt or sync an invoice to start collecting payments. Each receipt can be auto-matched to an open invoice."
+                      accent="emerald"
+                      action={{
+                        label: 'Record Receipt',
+                        onClick: () => handleRecordPayment('customer'),
+                        icon: Plus,
+                      }}
+                      secondaryAction={{
+                        label: 'Open invoice workspace',
+                        onClick: () => setCurrentView('invoices'),
+                      }}
                     />
                   ) : (
                     <ScrollArea className="max-h-[600px]">
@@ -694,10 +704,20 @@ export default function PaymentsPage() {
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
                   {payables.length === 0 ? (
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={Send}
                       title="No payables yet"
-                      description="Vendor payments and recorded expenses will appear here."
+                      description="Schedule a vendor payment or record an expense to start tracking your outflows. Scheduled payments can be auto-reconciled once cleared."
+                      accent="amber"
+                      action={{
+                        label: 'Schedule Payment',
+                        onClick: () => handleRecordPayment('vendor'),
+                        icon: Plus,
+                      }}
+                      secondaryAction={{
+                        label: 'Open banking',
+                        onClick: () => setCurrentView('banking'),
+                      }}
                     />
                   ) : (
                     <div className="divide-y dark:divide-slate-800/60">
@@ -741,11 +761,16 @@ export default function PaymentsPage() {
                   <div className="col-span-full">
                     <Card className="border-slate-200/60 dark:border-slate-800/60">
                       <CardContent>
-                        <EmptyState
+                        <ProfessionalEmptyState
                           icon={Link2}
                           title="No payment links yet"
-                          description="Create a payment link to share with clients and start collecting online."
-                          action={{ label: 'Create Link', onClick: () => setCurrentView('payments') }}
+                          description="Create a payment link to share with clients and start collecting online. Links can be tracked, expired, and auto-reconciled."
+                          accent="cyan"
+                          action={{
+                            label: 'Create Link',
+                            onClick: () => setCurrentView('clients'),
+                            icon: Plus,
+                          }}
                         />
                       </CardContent>
                     </Card>
@@ -808,10 +833,16 @@ export default function PaymentsPage() {
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
                   {reconciliationItems.length === 0 ? (
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={ArrowRightLeft}
                       title="No reconciliations yet"
-                      description="Bank-to-book matches will appear here once payments are reconciled."
+                      description="Open the reconciliation workspace to auto-match bank transactions against invoices, expenses, and payments."
+                      accent="teal"
+                      action={{
+                        label: 'Start reconciliation',
+                        onClick: () => setCurrentView('reconcile'),
+                        icon: ArrowRightLeft,
+                      }}
                     />
                   ) : (
                     <div className="divide-y dark:divide-slate-800/60">

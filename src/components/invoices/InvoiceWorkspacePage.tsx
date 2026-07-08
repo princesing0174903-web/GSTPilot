@@ -91,6 +91,8 @@ import { useDocuments } from '@/hooks/useDocuments';
 import { validateFile } from '@/lib/firebase/storage-service';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
+import { useApp } from '@/contexts/AppContext';
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -146,6 +148,9 @@ function getFileIcon(fileName: string) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InvoiceWorkspacePage() {
+  // ── App navigation ──
+  const { setCurrentView } = useApp();
+
   // ── Firestore data hooks ──
   const { data: invoices, loading: invoicesLoading, error: invoicesError } = useFireInvoices();
   const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
@@ -356,14 +361,19 @@ export default function InvoiceWorkspacePage() {
             </div>
           </motion.div>
 
-          <EmptyState
+          <ProfessionalEmptyState
             icon={FileUp}
             title="No invoices yet"
-            description="Upload your first document to start processing and validating GST invoices."
+            description="Upload your first purchase or sales document — GSTPilot will extract, validate, and match each invoice automatically."
+            accent="emerald"
             action={{
               label: 'Upload your first document',
               onClick: () => fileInputRef.current?.click(),
               icon: Upload,
+            }}
+            secondaryAction={{
+              label: 'Add a client first',
+              onClick: () => setCurrentView('clients'),
             }}
           />
         </div>

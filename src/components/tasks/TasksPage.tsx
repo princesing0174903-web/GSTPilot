@@ -17,7 +17,7 @@ import { Plus, List, LayoutGrid, Calendar, User, Tag, Filter, CheckCircle2, Cloc
 import { toast } from 'sonner'
 import { useFireTasks } from '@/hooks/use-firestore'
 import { createTask, updateTask } from '@/lib/firestore-service'
-import { EmptyState } from '@/components/shared'
+import { EmptyState, ProfessionalEmptyState } from '@/components/shared'
 import { CheckSquare } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -194,7 +194,7 @@ function AssigneeAvatar({ name }: { name: string | null }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function TasksPage() {
-  const { currentView } = useApp()
+  const { currentView, setCurrentView } = useApp()
 
   // ── Firestore data ──────────────────────────────────────────────
   const fireTasksQ = useFireTasks()
@@ -340,10 +340,20 @@ export default function TasksPage() {
 
     if (tasks.length === 0 && !error) {
       return (
-        <EmptyState
+        <ProfessionalEmptyState
           icon={CheckSquare}
           title="No tasks yet"
-          description="Create your first task to start tracking work."
+          description="Create your first task to assign work, set due dates, and track progress across your firm. Tasks can be linked to clients, returns, or notices."
+          accent="violet"
+          action={{
+            label: 'Create your first task',
+            onClick: () => setDialogOpen(true),
+            icon: Plus,
+          }}
+          secondaryAction={{
+            label: 'Go to clients',
+            onClick: () => setCurrentView('clients'),
+          }}
         />
       )
     }
@@ -539,10 +549,20 @@ export default function TasksPage() {
 
     if (tasks.length === 0 && !error) {
       return (
-        <EmptyState
+        <ProfessionalEmptyState
           icon={CheckSquare}
           title="No tasks yet"
-          description="Create your first task to start tracking work."
+          description="Create your first task to assign work, set due dates, and track progress across your firm. Tasks can be linked to clients, returns, or notices."
+          accent="violet"
+          action={{
+            label: 'Create your first task',
+            onClick: () => setDialogOpen(true),
+            icon: Plus,
+          }}
+          secondaryAction={{
+            label: 'Go to clients',
+            onClick: () => setCurrentView('clients'),
+          }}
         />
       )
     }

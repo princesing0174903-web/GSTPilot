@@ -80,6 +80,7 @@ import { INDIAN_STATES, ENTITY_TYPES as ENTITY_TYPE_OPTIONS } from '@/lib/consta
 import { validateGSTIN, formatGSTIN } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 
 // ─── Type for client with Firestore doc id ────────────────────────────────────
 
@@ -408,14 +409,19 @@ export default function ClientRegistryPage() {
 
       {/* ── Empty State ─────────────────────────────────────────────────────── */}
       {!loading && !error && clients.length === 0 && (
-        <EmptyState
+        <ProfessionalEmptyState
           icon={UserPlus}
           title="No clients yet"
-          description="Add your first GST client to get started with compliance tracking, return filing, and invoice management."
+          description="Add your first GST client to unlock compliance tracking, return filing, invoice management, and a dedicated client workspace."
+          accent="emerald"
           action={{
             label: 'Add your first client',
             onClick: openCreate,
             icon: Plus,
+          }}
+          secondaryAction={{
+            label: 'Go to invoice workspace',
+            onClick: () => setCurrentView('invoices'),
           }}
         />
       )}

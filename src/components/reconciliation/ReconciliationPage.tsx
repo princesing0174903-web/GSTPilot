@@ -78,6 +78,8 @@ import type {
 import { MATCH_STATUS_CONFIG, RISK_LEVEL_CONFIG } from '@/types/gst';
 import type { MatchStatus, RiskLevel } from '@/types/gst';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
+import { useApp } from '@/contexts/AppContext';
 
 // ─── API response shapes (subset of Prisma models) ─────────────────────────
 
@@ -462,6 +464,9 @@ function MatchRateRing({
 // Main Component
 // ──────────────────────────────────────────────
 export default function ReconciliationPage() {
+  // ── App navigation ──
+  const { setCurrentView } = useApp();
+
   // ── Real API-backed state (replaces former Firestore hooks) ─────────
   const [reconciliations, setReconciliations] = useState<(FirestoreReconciliation & { id: string })[]>([]);
   const [clients, setClients] = useState<(FirestoreClient & { id: string })[]>([]);
@@ -795,14 +800,19 @@ export default function ReconciliationPage() {
           </Dialog>
         </div>
 
-        <EmptyState
+        <ProfessionalEmptyState
           icon={GitCompareArrows}
           title="No reconciliations yet"
-          description="Run your first reconciliation to compare your books with GST portal data and identify mismatches."
+          description="Run your first reconciliation to compare your books with GST portal data, surface mismatches, and close compliance gaps before filing."
+          accent="teal"
           action={{
             label: 'Run your first reconciliation',
             onClick: () => setDialogOpen(true),
             icon: Play,
+          }}
+          secondaryAction={{
+            label: 'Need invoices first? Open invoice workspace',
+            onClick: () => setCurrentView('invoices'),
           }}
         />
       </motion.div>

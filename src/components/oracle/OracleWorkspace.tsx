@@ -44,7 +44,7 @@ import {
   ORACLE_EMOTIONS, nativeLanguageLabel,
 } from './oracle-human';
 import { detectBrandQuestion } from './oracle-brand';
-import { OracleEmptyState } from './OracleEmptyState';
+import { ExecutiveBrief } from './ExecutiveBrief';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -859,7 +859,17 @@ export function OracleWorkspace({
               className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
             >
               {isEmpty ? (
-                <OracleEmptyState onPick={(p) => sendMessage(p)} userName={userName} />
+                <div className="custom-scrollbar min-h-full overflow-y-auto">
+                  {/* Executive Brief — shown by default when Oracle opens with
+                      no active conversation. Renders 8 sections of real
+                      Firestore-computed data. The chat input remains available
+                      below the brief so the user can immediately ask a follow-up. */}
+                  <ExecutiveBrief
+                    onNavigate={(v) => { onNavigate(v); onClose(); }}
+                    onAskOracle={(p) => sendMessage(p)}
+                    userName={userName}
+                  />
+                </div>
               ) : (
                 <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
                   {messages.map((m) => (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,8 +39,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import {
-  useFireLeads, useFireDeals, useFireMeetings,
+  useFireLeads, useFireDeals, useFireMeetings, useFireActivities,
 } from '@/hooks/use-firestore'
+import { TrustBar } from '@/components/shared/TrustBar'
+import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState'
 import {
   createLead, updateLead, deleteLead, convertLeadToClient,
   createDeal, updateDeal, deleteDeal,
@@ -914,16 +916,17 @@ function MeetingsView({ meetings, leads, loading }: { meetings: Array<FirestoreM
       </div>
 
       {upcoming.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-            <Calendar className="h-6 w-6 text-slate-400" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">No meetings scheduled</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Schedule your first meeting to get started.</p>
-          <Button size="sm" className="mt-4 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowNewMeeting(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Schedule Meeting
-          </Button>
-        </div>
+        <ProfessionalEmptyState
+          icon={Calendar}
+          title="No meetings scheduled"
+          description="Schedule your first meeting with a lead or client to keep your pipeline moving. Meetings sync to your activity timeline and CRM dashboard."
+          accent="violet"
+          action={{
+            label: 'Schedule Meeting',
+            onClick: () => setShowNewMeeting(true),
+            icon: Plus,
+          }}
+        />
       ) : (
         <div className="space-y-3">
           {upcoming.map(meeting => {
@@ -1533,9 +1536,10 @@ function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function CRMPage() {
-  const { data: fireLeads, loading: leadsLoading } = useFireLeads()
-  const { data: fireDeals, loading: dealsLoading } = useFireDeals()
-  const { data: fireMeetings, loading: meetingsLoading } = useFireMeetings()
+  const { data: fireLeads, loading: leadsLoading, error: leadsError } = useFireLeads()
+  const { data: fireDeals, loading: dealsLoading, error: dealsError } = useFireDeals()
+  const { data: fireMeetings, loading: meetingsLoading, error: meetingsError } = useFireMeetings()
+  const { data: fireActivities } = useFireActivities()
   const [showAddLead, setShowAddLead] = useState(false)
 
   // Use real Firestore data only. Empty arrays render honest empty states.
@@ -1546,6 +1550,17 @@ export default function CRMPage() {
   const meetings = fireMeetings as unknown as Array<FirestoreMeeting & { id: string }>
 
   const loading = leadsLoading || dealsLoading || meetingsLoading
+  const error = leadsError || dealsError || meetingsError
+
+  // ── Trust indicator: last sync time ──
+  // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers a
+  // fresh snapshot on every backend write, so this reflects the true last
+  // update from Firestore.
+  const [lastSync, setLastSync] = useState<Date | null>(null)
+  useEffect(() => {
+    if (loading) return
+    setLastSync(new Date())
+  }, [loading, fireLeads, fireDeals, fireMeetings])
 
   // Quick stats
   const activeLeads = leads.filter(l => l.status !== 'converted' && l.status !== 'lost')
@@ -1555,6 +1570,16 @@ export default function CRMPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
+      {/* ── Trust bar: real connection status + last sync + activity count ── */}
+      <TrustBar
+        lastSync={lastSync}
+        connected={!loading && !error}
+        connecting={loading}
+        error={error}
+        activityCount={(fireActivities || []).length}
+        onRefresh={() => window.location.reload()}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -32,7 +32,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useLiveDashboardMetrics,
   useFireActivities,
+  useFireClients,
 } from '@/hooks/use-firestore';
+import { TrustBar } from '@/components/shared/TrustBar';
 import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -153,8 +155,11 @@ function buildInsights(opts: {
     upcomingFilings: FirestoreReturn[];
   };
   clients: Array<FirestoreClient & { id: string }>;
+  /** True when the firm has real Firestore data. Gates the "all clear" insight
+   *  so we never say "Everything looks good today" when there's no data at all. */
+  hasData: boolean;
 }): AIInsight[] {
-  const { metrics, clients } = opts;
+  const { metrics, clients, hasData } = opts;
   const insights: AIInsight[] = [];
 
   // 1. Overdue returns — most urgent
@@ -235,8 +240,10 @@ function buildInsights(opts: {
     });
   }
 
-  // 6. Always-on "all clear" nudge if nothing urgent
-  if (insights.length === 0) {
+  // 6. Always-on "all clear" nudge — only when we actually have data.
+  // Never say "Everything looks good today" when there is no data at all;
+  // in that case the widget shows its own honest empty state instead.
+  if (hasData && insights.length === 0) {
     insights.push({
       id: 'all-clear',
       icon: Sparkles,
@@ -550,6 +557,10 @@ export default function MissionControlPage() {
   const { user } = useAuth();
   const { metrics, loading, error } = useLiveDashboardMetrics();
   const { data: activities } = useFireActivities();
+  // Real clients list — used by buildInsights() to detect churn-risk. This is
+  // the same Firestore subscription useLiveDashboardMetrics opens internally;
+  // Firestore multiplexes the listener so there is no extra cost.
+  const { data: fireClients } = useFireClients();
 
   // ── Priority checkbox toggle state (visual only, local to Today's Priorities widget) ──
   const [done, setDone] = useState<Record<string, boolean>>({});
@@ -566,6 +577,16 @@ export default function MissionControlPage() {
   }, [loading]);
   const showLoading = loading && !loadingTimedOut;
 
+  // ── Trust indicator: last sync time ──
+  // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers
+  // a fresh snapshot on every backend write, so this reflects the true last
+  // update from Firestore — not a polling interval.
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    setLastSync(new Date());
+  }, [metrics, loading]);
+
   // ── Business Score ──
   const businessScore = useMemo(() => computeBusinessScore({
     totalClients: metrics.totalClients,
@@ -577,7 +598,18 @@ export default function MissionControlPage() {
     matchPercentage: metrics.matchPercentage,
   }), [metrics]);
 
+  // ── "Has data" flag — drives honest empty vs premium states ──
+  const hasData = useMemo(() => (
+    metrics.totalClients > 0 ||
+    metrics.pendingReturns > 0 ||
+    metrics.overdueReturns > 0 ||
+    metrics.totalTaxVolume > 0
+  ), [metrics]);
+
   // ── AI Insights ──
+  // Real clients feed the churn-risk detector. hasData gates the "all clear"
+  // insight so we never claim "Everything looks good today" when the firm has
+  // no Firestore data at all.
   const insights = useMemo(() => buildInsights({
     metrics: {
       totalClients: metrics.totalClients,
@@ -590,22 +622,15 @@ export default function MissionControlPage() {
       matchPercentage: metrics.matchPercentage,
       upcomingFilings: metrics.upcomingFilings,
     },
-    clients: [] as Array<FirestoreClient & { id: string }>,
-  }), [metrics]);
+    clients: fireClients as Array<FirestoreClient & { id: string }>,
+    hasData,
+  }), [metrics, fireClients, hasData]);
 
   // V16: AI Recommendations widget shows up to 4 insights (no hero insight slice —
   // the hero is now the Getting Started checklist, so all insights go to the widget).
   const recommendations = useMemo(() => insights.slice(0, 4), [insights]);
 
   const tier = scoreTier(businessScore);
-
-  // ── "Has data" flag — drives honest empty vs premium states ──
-  const hasData = useMemo(() => (
-    metrics.totalClients > 0 ||
-    metrics.pendingReturns > 0 ||
-    metrics.overdueReturns > 0 ||
-    metrics.totalTaxVolume > 0
-  ), [metrics]);
 
   // ── Collection Score (0-100): how well are receivables being recovered ──
   const collectionScore = useMemo(() => {
@@ -729,8 +754,26 @@ export default function MissionControlPage() {
   // ── Helpers for navigation ──
   const goToSettings = () => setCurrentView('settings');
 
+  // ── Trust indicator derived state ──
+  // Permission errors are swallowed by the hooks (never reach `error`), so a
+  // non-null `error` here is always a genuine network/index failure — surface
+  // it to TrustBar so the user sees the red "Connection error" state.
+  const trustError = isPermissionErr ? null : error;
+  const trustConnected = !loading && !trustError;
+  const trustConnecting = loading;
+
   return (
     <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
+
+      {/* ═══ 0. TRUST BAR — connection status, last sync, activity count ═══ */}
+      <TrustBar
+        lastSync={lastSync}
+        connected={trustConnected}
+        connecting={trustConnecting}
+        error={trustError}
+        activityCount={activities.length}
+        onRefresh={() => window.location.reload()}
+      />
 
       {/* ═══ 1. HERO — Greeting + Business Status + Getting Started checklist ═══ */}
       <motion.section

@@ -58,7 +58,8 @@ import { formatNumber } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import { useFireNotices, useFireClients } from '@/hooks/use-firestore';
 import { createNotice, updateNotice } from '@/lib/firestore-service';
-import { EmptyState } from '@/components/shared';
+import { EmptyState, ProfessionalEmptyState } from '@/components/shared';
+import { useApp } from '@/contexts/AppContext';
 import { Bell as BellIcon } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -310,6 +311,9 @@ const mockTeamMembers: TeamMember[] = [
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 export default function NoticeCenterPage() {
+  // ── App navigation ──
+  const { setCurrentView } = useApp();
+
   // ── State ──────────────────────────────────────────────────────────────
   // P1-M2: notices + clients now come from Firestore hooks (real-time).
   // Team members still come from REST (memberships aren't one of the 15
@@ -818,10 +822,20 @@ export default function NoticeCenterPage() {
           ) : (
             <AnimatedCard>
               <CardContent className="p-8">
-                <EmptyState
+                <ProfessionalEmptyState
                   icon={BellIcon}
                   title="No notices yet"
-                  description="Regulatory and GST notices will appear here when received."
+                  description="Regulatory and GST notices will appear here when received. Manually log a notice to track deadlines, responses, and resolutions in one place."
+                  accent="rose"
+                  action={{
+                    label: 'Log a notice',
+                    onClick: () => setCreateDialogOpen(true),
+                    icon: Plus,
+                  }}
+                  secondaryAction={{
+                    label: 'Open returns workspace',
+                    onClick: () => setCurrentView('returns'),
+                  }}
                 />
               </CardContent>
             </AnimatedCard>

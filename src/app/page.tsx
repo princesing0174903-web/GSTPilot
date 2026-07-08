@@ -1006,7 +1006,11 @@ function AppRouter() {
   const handleBackToLanding = () => setCurrentScreen('landing')
 
   // ── PART 7 ── Loading state while authentication initializes.
-  if (isInitializing && !isAuthenticated) {
+  // Only show the full-screen loader on the INITIAL landing/app load — never
+  // when the user has explicitly navigated to the login screen. This guarantees
+  // the login form is always reachable even if Firebase auth init is slow, so
+  // the user can sign in with demo mode or email without waiting on the network.
+  if (isInitializing && !isAuthenticated && currentScreen !== 'login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">

@@ -55,7 +55,7 @@ import type {
   ReportType,
   ReportFormat,
 } from '@/lib/firestore-schema';
-import { EmptyState } from '@/components/shared';
+import { EmptyState, ProfessionalEmptyState } from '@/components/shared';
 import { Database } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -2525,11 +2525,17 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {recentExports.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <BarChart3 className="size-10 mb-3 text-muted-foreground/40" />
-                  <p className="text-sm">No reports generated yet</p>
-                  <p className="text-xs mt-1">Use the export options and category tabs to generate your first report</p>
-                </div>
+                <ProfessionalEmptyState
+                  icon={BarChart3}
+                  title="No reports generated yet"
+                  description="Use the Export Package tab to generate your first GST, compliance, financial, or cash-flow report — completed exports will appear here for quick re-download."
+                  accent="violet"
+                  compact
+                  action={{
+                    label: 'Open Export Package',
+                    onClick: () => setActiveTab('export'),
+                  }}
+                />
               ) : (
                 <div className="overflow-x-auto rounded-lg border">
                   <Table>

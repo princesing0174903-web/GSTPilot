@@ -56,6 +56,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
+import { useApp } from '@/contexts/AppContext';
 import { createReturn, fileReturn } from '@/lib/firestore-service';
 import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
 import type { FilingStatus } from '@/types/gst';
@@ -346,6 +348,9 @@ const columnEnter = {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function ReturnsPage() {
+  // ── App navigation ──
+  const { setCurrentView } = useApp();
+
   // ── Real API-backed state (replaces former Firestore hooks) ─────────
   const [returns, setReturns] = useState<ReturnItem[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
@@ -1402,14 +1407,19 @@ export default function ReturnsPage() {
         </motion.div>
 
         <div className="flex-1 flex items-center justify-center">
-          <EmptyState
+          <ProfessionalEmptyState
             icon={FileOutput}
-            title="No returns prepared"
-            description="Create your first GST return to get started with the filing workflow."
+            title="No returns prepared yet"
+            description="Create your first GST return to start the filing workflow — GSTPilot will pull invoice data, calculate liability, and prepare a draft for review."
+            accent="amber"
             action={{
               label: 'Create First Return',
               onClick: () => setCreateDialogOpen(true),
               icon: Plus,
+            }}
+            secondaryAction={{
+              label: 'Need invoices? Open invoice workspace',
+              onClick: () => setCurrentView('invoices'),
             }}
           />
         </div>

@@ -103,14 +103,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Safety timeout — if Firebase doesn't respond in 5s, unblock the UI.
+    // Safety timeout — if Firebase doesn't respond in 3s, unblock the UI so
+    // the landing page and login form are always reachable, even on slow
+    // networks or in restricted sandbox environments.
     const safetyTimer = setTimeout(() => {
       if (mounted && !initialized) {
         console.warn('[Auth] Initialization timeout — unblocking UI');
         setUser(null);
         setIsInitializing(false);
       }
-    }, 5000);
+    }, 3000);
 
     // ── Restore from localStorage for instant UI ──
     let restoredFromCache = false;

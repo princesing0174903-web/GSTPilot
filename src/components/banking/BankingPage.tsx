@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Landmark, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -18,7 +18,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
-import { EmptyState } from '@/components/shared'
+import { EmptyState, ProfessionalEmptyState } from '@/components/shared'
+import { TrustBar } from '@/components/shared/TrustBar'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -28,6 +29,7 @@ import {
   useFirePayments,
   useFireExpenses,
   useFireInvoices,
+  useFireActivities,
 } from '@/hooks/use-firestore'
 import {
   createBankAccount,
@@ -360,6 +362,8 @@ export default function BankingPage() {
   // of the global loading/error state so the page renders even if invoices are
   // still loading (reconcile will simply return 0 matches in that case).
   const invoicesHook = useFireInvoices()
+  // Activities feed the TrustBar's "recent activity" count.
+  const activitiesHook = useFireActivities()
 
   const loading =
     bankAcctsHook.loading ||
@@ -371,6 +375,22 @@ export default function BankingPage() {
     bankTxnsHook.error ||
     paymentsHook.error ||
     expensesHook.error
+
+  // ── Trust indicator: last sync time ──
+  // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers a
+  // fresh snapshot on every backend write, so this reflects the true last
+  // update from Firestore.
+  const [lastSync, setLastSync] = useState<Date | null>(null)
+  useEffect(() => {
+    if (loading) return
+    setLastSync(new Date())
+  }, [
+    loading,
+    bankAcctsHook.data,
+    bankTxnsHook.data,
+    paymentsHook.data,
+    expensesHook.data,
+  ])
 
   // ── Derived arrays (memoized) — feed existing UI unchanged ─────────────────
   const bankAccounts = useMemo(
@@ -748,6 +768,18 @@ export default function BankingPage() {
       </div>
 
       <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        {/* ── Trust bar: real connection status + last sync + activity count ── */}
+        <div className="mb-6">
+          <TrustBar
+            lastSync={lastSync}
+            connected={!loading && !error}
+            connecting={loading}
+            error={error}
+            activityCount={(activitiesHook.data || []).length}
+            onRefresh={() => setRetryKey((k) => k + 1)}
+          />
+        </div>
+
         {/* ── Error banner ── */}
         {error && !loading && (
           <Card className="mb-6 border-rose-200 dark:border-rose-900/60">
@@ -859,12 +891,17 @@ export default function BankingPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {bankAccounts.length === 0 ? (
-                      <EmptyState
+                      <ProfessionalEmptyState
                         icon={Landmark}
                         title="No bank connected"
-                        description="Connect your bank account to view balances and transactions."
-                        action={{ label: 'Connect Bank', onClick: () => setCurrentView('connections') }}
+                        description="Link your first bank account to see live balances, transactions, and auto-reconciliation."
+                        accent="cyan"
                         compact
+                        action={{
+                          label: 'Connect Bank',
+                          onClick: () => setCurrentView('connections'),
+                          icon: Plus,
+                        }}
                       />
                     ) : (
                       bankAccounts.map(acc => {
@@ -1020,11 +1057,20 @@ export default function BankingPage() {
               {bankAccounts.length === 0 ? (
                 <Card className="border-slate-200/60 dark:border-slate-800/60">
                   <CardContent>
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={Landmark}
-                      title="No bank connected"
-                      description="Connect your bank account to view balances and transactions."
-                      action={{ label: 'Connect Bank', onClick: () => setCurrentView('connections') }}
+                      title="No bank accounts yet"
+                      description="Connect your first bank account to unlock live balances, transaction sync, and automatic bank-to-book reconciliation."
+                      accent="cyan"
+                      action={{
+                        label: 'Connect Bank',
+                        onClick: () => setCurrentView('connections'),
+                        icon: Plus,
+                      }}
+                      secondaryAction={{
+                        label: 'Open reconciliation instead',
+                        onClick: () => setCurrentView('reconcile'),
+                      }}
                     />
                   </CardContent>
                 </Card>
@@ -1097,10 +1143,16 @@ export default function BankingPage() {
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
                   {transactions.length === 0 ? (
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={FileText}
-                      title="No transactions"
-                      description="Bank transactions will appear here once you connect and sync a bank account."
+                      title="No transactions yet"
+                      description="Bank transactions will appear here automatically once you connect and sync a bank account."
+                      accent="cyan"
+                      action={{
+                        label: 'Connect Bank',
+                        onClick: () => setCurrentView('connections'),
+                        icon: Plus,
+                      }}
                     />
                   ) : (
                     <ScrollArea className="max-h-[600px]">
@@ -1166,10 +1218,16 @@ export default function BankingPage() {
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
                   {reconciliationData.length === 0 ? (
-                    <EmptyState
+                    <ProfessionalEmptyState
                       icon={ArrowRightLeft}
                       title="No reconciliations yet"
-                      description="Bank-to-book matches will appear here once payments are reconciled."
+                      description="Open the reconciliation workspace to match bank transactions against your books and surface mismatches."
+                      accent="teal"
+                      action={{
+                        label: 'Start reconciliation',
+                        onClick: () => setCurrentView('reconcile'),
+                        icon: ArrowRightLeft,
+                      }}
                     />
                   ) : (
                     <div className="divide-y dark:divide-slate-800/60">
@@ -1236,11 +1294,16 @@ export default function BankingPage() {
                   <div className="col-span-full">
                     <Card className="border-slate-200/60 dark:border-slate-800/60">
                       <CardContent>
-                        <EmptyState
+                        <ProfessionalEmptyState
                           icon={FileText}
-                          title="No statements"
+                          title="No statements imported"
                           description="Imported bank statements will appear here for download and review."
-                          action={{ label: 'Import Statement', onClick: () => setCurrentView('connections') }}
+                          accent="cyan"
+                          action={{
+                            label: 'Import Statement',
+                            onClick: () => setCurrentView('connections'),
+                            icon: Download,
+                          }}
                         />
                       </CardContent>
                     </Card>

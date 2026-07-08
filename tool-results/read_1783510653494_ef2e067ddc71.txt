@@ -1,0 +1,707 @@
+     1→     1→/* eslint-disable react-hooks/set-state-in-effect -- Firestore onSnapshot hooks legitimately clear state synchronously on early-exit paths (no docId, preview mode, no user). The cascading-render concern doesn't apply here because these are deterministic single-pass resets, not derived-state updates. */
+     2→     2→// ═══════════════════════════════════════════════════════════════════════════════
+     3→     3→// GSTPilot — Real-time Firestore Hooks
+     4→     4→// React hooks with onSnapshot listeners for live data + optimistic UI.
+     5→     5→//
+     6→     6→// ARCHITECTURE (Production-grade multi-tenant):
+     7→     7→//   • Every query is scoped by `organizationId` from OrgContext — NEVER by the
+     8→     8→//     legacy `firmId`. This matches the Firestore security rules, which require
+     9→     9→//     every tenant-scoped document to carry `organizationId` and only allow
+    10→    10→//     reads where `isOrgMember(resource.data.organizationId)` is true.
+    11→    11→//   • If there is no organization (preview / demo mode, or not yet loaded),
+    12→    12→//     hooks return empty data WITHOUT subscribing — so the UI renders premium
+    13→    13→//     empty states instead of throwing permission errors.
+    14→    14→//   • Permission errors (permission-denied / unauthenticated) are treated as
+    15→    15→//     "no data available" — the hook clears its error and returns an empty
+    16→    16→//     array. This is the graceful-degradation contract: the app NEVER shows a
+    17→    17→//     "Missing or insufficient permissions" wall. Genuine errors (network,
+    18→    18→//     index missing) still surface as `error`.
+    19→    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→    20→
+    21→    21→'use client';
+    22→    22→
+    23→    23→import { useState, useEffect, useMemo } from 'react';
+    24→    24→import {
+    25→    25→  collection, doc, onSnapshot, query, where, orderBy, limit,
+    26→    26→  type Unsubscribe, type QueryConstraint,
+    27→    27→} from 'firebase/firestore';
+    28→    28→import { db } from '@/lib/firebase';
+    29→    29→import { useAuth } from '@/contexts/AuthContext';
+    30→    30→import { useOrg } from '@/contexts/OrgContext';
+    31→    31→import {
+    32→    32→  COLLECTIONS,
+    33→    33→  type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
+    34→    34→  type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
+    35→    35→  type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
+    36→    36→  type FirestorePrediction, type FirestorePriority, type FirestoreOrganization, type FirestoreMembership,
+    37→    37→  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting, type FirestoreTask,
+    38→    38→  type FirestoreBankAccount, type FirestoreBankTransaction,
+    39→    39→  type FirestoreGstProfile, type FirestoreGstReturn,
+    40→    40→  type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
+    41→    41→  type FirestoreNotice, type FirestoreReport,
+    42→    42→  type FirestoreJournalEntry,
+    43→    43→  type LiveDashboardMetrics, type FirmExecutiveScores, type CollectionName,
+    44→    44→} from '@/lib/firestore-schema';
+    45→    45→import { computeDashboardMetrics } from '@/lib/firestore-service';
+    46→    46→
+    47→    47→// ─── Permission-error detection (graceful degradation) ───────────────────────
+    48→    48→
+    49→    49→/**
+    50→    50→ * True if the given Firestore error is a permission / auth failure that we
+    51→    51→ * should treat as "no data available" rather than a hard error. This is the
+    52→    52→ * core of the never-show-a-permission-wall contract.
+    53→    53→ */
+    54→    54→function isPermissionError(err: unknown): boolean {
+    55→    55→  if (!err) return false;
+    56→    56→  const e = err as { code?: string; message?: string };
+    57→    57→  const code = (e.code || '').toLowerCase();
+    58→    58→  const message = (e.message || '').toLowerCase();
+    59→    59→  if (
+    60→    60→    code === 'permission-denied' ||
+    61→    61→    code === 'unauthenticated' ||
+    62→    62→    code === 'auth/operation-not-allowed' ||
+    63→    63→    code === 'auth/user-not-found'
+    64→    64→  ) {
+    65→    65→    return true;
+    66→    66→  }
+    67→    67→  if (
+    68→    68→    message.includes('missing or insufficient permissions') ||
+    69→    69→    message.includes('permission-denied') ||
+    70→    70→    message.includes('insufficient permissions') ||
+    71→    71→    message.includes('not authorized') ||
+    72→    72→    message.includes('unauthenticated')
+    73→    73→  ) {
+    74→    74→    return true;
+    75→    75→  }
+    76→    76→  return false;
+    77→    77→}
+    78→    78→
+    79→    79→// ─── Timestamp Converter ─────────────────────────────────────────────────────
+    80→    80→
+    81→    81→function convertDoc<T extends Record<string, unknown>>(snapData: Record<string, unknown>): T {
+    82→    82→  const converted: Record<string, unknown> = {};
+    83→    83→  for (const [key, value] of Object.entries(snapData)) {
+    84→    84→    if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+    85→    85→      converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+    86→    86→    } else if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+    87→    87→      // Recursively convert nested objects
+    88→    88→      converted[key] = convertDoc(value as Record<string, unknown>);
+    89→    89→    } else {
+    90→    90→      converted[key] = value;
+    91→    91→    }
+    92→    92→  }
+    93→    93→  return converted as T;
+    94→    94→}
+    95→    95→
+    96→    96→// ─── Generic Collection Hook ─────────────────────────────────────────────────
+    97→    97→//
+    98→    98→// The hook resolves the current `organizationId` from OrgContext. If the org
+    99→    99→// isn't resolved yet (loading) OR we're in preview mode (no org), the hook
+   100→   100→// returns empty data without subscribing. This guarantees no permission errors
+   101→   101→// ever reach the UI in preview/offline mode.
+   102→   102→
+   103→   103→function useFirestoreCollection<T>(
+   104→   104→  collectionName: CollectionName,
+   105→   105→  constraints: QueryConstraint[] = [],
+   106→   106→  deps: unknown[] = [],
+   107→   107→): { data: Array<T & { id: string }>; loading: boolean; error: string | null } {
+   108→   108→  const { user } = useAuth();
+   109→   109→  const { organization, isPreviewMode, loading: orgLoading } = useOrg();
+   110→   110→  const organizationId = organization?.id ?? null;
+   111→   111→
+   112→   112→  const [data, setData] = useState<Array<T & { id: string }>>([]);
+   113→   113→  const [loading, setLoading] = useState(true);
+   114→   114→  const [error, setError] = useState<string | null>(null);
+   115→   115→
+   116→   116→  useEffect(() => {
+   117→   117→    // No user → nothing to subscribe to (empty data).
+   118→   118→    if (!user) {
+   119→   119→      setData([]);
+   120→   120→      setLoading(false);
+   121→   121→      setError(null);
+   122→   122→      return;
+   123→   123→    }
+   124→   124→
+   125→   125→    // Org still resolving — stay in loading state, but don't subscribe yet.
+   126→   126→    if (orgLoading && !organizationId) {
+   127→   127→      return;
+   128→   128→    }
+   129→   129→
+   130→   130→    // Preview mode (no real org) OR no organization at all → empty data,
+   131→   131→    // no subscription. This is the preview-mode contract.
+   132→   132→    if (!organizationId || isPreviewMode || organizationId === 'preview-org') {
+   133→   133→      setData([]);
+   134→   134→      setLoading(false);
+   135→   135→      setError(null);
+   136→   136→      return;
+   137→   137→    }
+   138→   138→
+   139→   139→    let unsub: Unsubscribe | null = null;
+   140→   140→
+   141→   141→    // Scope EVERY query by organizationId. This is required by the Firestore
+   142→   142→    // security rules — unbounded collection reads are denied.
+   143→   143→    const baseConstraints: QueryConstraint[] = [
+   144→   144→      where('organizationId', '==', organizationId),
+   145→   145→      ...constraints,
+   146→   146→    ];
+   147→   147→
+   148→   148→    const q = query(collection(db, collectionName), ...baseConstraints);
+   149→   149→
+   150→   150→    unsub = onSnapshot(q, (snap) => {
+   151→   151→      const items = snap.docs.map(d => ({
+   152→   152→        id: d.id,
+   153→   153→        ...convertDoc<T>(d.data() as Record<string, unknown>),
+   154→   154→      }));
+   155→   155→      setData(items);
+   156→   156→      setLoading(false);
+   157→   157→      setError(null);
+   158→   158→    }, (err) => {
+   159→   159→      console.warn(`[Firestore] ${collectionName} subscription error:`, err);
+   160→   160→      // Permission errors → graceful degradation (empty data, no error wall).
+   161→   161→      if (isPermissionError(err)) {
+   162→   162→        setData([]);
+   163→   163→        setError(null);
+   164→   164→        setLoading(false);
+   165→   165→        return;
+   166→   166→      }
+   167→   167→      // Genuine errors (network, missing index) still surface.
+   168→   168→      setError(err.message);
+   169→   169→      setLoading(false);
+   170→   170→    });
+   171→   171→
+   172→   172→    return () => {
+   173→   173→      if (unsub) unsub();
+   174→   174→    };
+   175→   175→  }, [user, organizationId, isPreviewMode, orgLoading, ...deps]);
+   176→   176→
+   177→   177→  // When user is null, return empty data (not loading)
+   178→   178→  if (!user && loading) {
+   179→   179→    return { data: [], loading: false, error: null };
+   180→   180→  }
+   181→   181→
+   182→   182→  return { data, loading, error };
+   183→   183→}
+   184→   184→
+   185→   185→// ─── Generic Document Hook ───────────────────────────────────────────────────
+   186→   186→
+   187→   187→function useFirestoreDoc<T>(
+   188→   188→  collectionName: CollectionName,
+   189→   189→  docId: string | null,
+   190→   190→): { data: (T & { id: string }) | null; loading: boolean; error: string | null } {
+   191→   191→  const { user } = useAuth();
+   192→   192→  const { organization, isPreviewMode } = useOrg();
+   193→   193→  const organizationId = organization?.id ?? null;
+   194→   194→
+   195→   195→  const [data, setData] = useState<(T & { id: string }) | null>(null);
+   196→   196→  const [loading, setLoading] = useState(!!docId);
+   197→   197→  const [error, setError] = useState<string | null>(null);
+   198→   198→
+   199→   199→  useEffect(() => {
+   200→   200→    if (!docId) {
+   201→   201→      setData(null);
+   202→   202→      setLoading(false);
+   203→   203→      return;
+   204→   204→    }
+   205→   205→
+   206→   206→    // Preview mode (no real org) → no doc, no subscription.
+   207→   207→    if (!user || !organizationId || isPreviewMode || organizationId === 'preview-org') {
+   208→   208→      setData(null);
+   209→   209→      setLoading(false);
+   210→   210→      setError(null);
+   211→   211→      return;
+   212→   212→    }
+   213→   213→
+   214→   214→    const unsub = onSnapshot(doc(db, collectionName, docId), (snap) => {
+   215→   215→      if (!snap.exists()) {
+   216→   216→        setData(null);
+   217→   217→        setLoading(false);
+   218→   218→        return;
+   219→   219→      }
+   220→   220→      setData({
+   221→   221→        id: snap.id,
+   222→   222→        ...convertDoc<T>(snap.data() as Record<string, unknown>),
+   223→   223→      });
+   224→   224→      setLoading(false);
+   225→   225→      setError(null);
+   226→   226→    }, (err) => {
+   227→   227→      console.warn(`[Firestore] ${collectionName}/${docId} doc error:`, err);
+   228→   228→      if (isPermissionError(err)) {
+   229→   229→        setData(null);
+   230→   230→        setError(null);
+   231→   231→        setLoading(false);
+   232→   232→        return;
+   233→   233→      }
+   234→   234→      setError(err.message);
+   235→   235→      setLoading(false);
+   236→   236→    });
+   237→   237→
+   238→   238→    return () => {
+   239→   239→      if (unsub) unsub();
+   240→   240→    };
+   241→   241→  }, [collectionName, docId, user, organizationId, isPreviewMode]);
+   242→   242→
+   243→   243→  return { data, loading, error };
+   244→   244→}
+   245→   245→
+   246→   246→// ═══════════════════════════════════════════════════════════════════════════════
+   247→   247→// PUBLIC HOOKS — One per collection + computed hooks
+   248→   248→// ═══════════════════════════════════════════════════════════════════════════════
+   249→   249→
+   250→   250→// ─── Clients ─────────────────────────────────────────────────────────────────
+   251→   251→
+   252→   252→export function useFireClients() {
+   253→   253→  return useFirestoreCollection<FirestoreClient>(COLLECTIONS.CLIENTS, [orderBy('createdAt', 'desc')]);
+   254→   254→}
+   255→   255→
+   256→   256→export function useFireClient(clientId: string | null) {
+   257→   257→  return useFirestoreDoc<FirestoreClient>(COLLECTIONS.CLIENTS, clientId);
+   258→   258→}
+   259→   259→
+   260→   260→export function useFireActiveClients() {
+   261→   261→  return useFirestoreCollection<FirestoreClient>(COLLECTIONS.CLIENTS, [
+   262→   262→    where('status', '==', 'active'),
+   263→   263→    orderBy('tradeName', 'asc'),
+   264→   264→  ]);
+   265→   265→}
+   266→   266→
+   267→   267→// ─── Documents ───────────────────────────────────────────────────────────────
+   268→   268→
+   269→   269→export function useFireDocuments(clientId?: string | null) {
+   270→   270→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   271→   271→  if (clientId) {
+   272→   272→    constraints.unshift(where('clientId', '==', clientId));
+   273→   273→  }
+   274→   274→  return useFirestoreCollection<FirestoreDocument>(COLLECTIONS.DOCUMENTS, constraints, [clientId]);
+   275→   275→}
+   276→   276→
+   277→   277→// ─── Invoices ────────────────────────────────────────────────────────────────
+   278→   278→
+   279→   279→export function useFireInvoices(clientId?: string | null) {
+   280→   280→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   281→   281→  if (clientId) {
+   282→   282→    constraints.unshift(where('clientId', '==', clientId));
+   283→   283→  }
+   284→   284→  return useFirestoreCollection<FirestoreInvoice>(COLLECTIONS.INVOICES, constraints, [clientId]);
+   285→   285→}
+   286→   286→
+   287→   287→// ─── Returns ─────────────────────────────────────────────────────────────────
+   288→   288→
+   289→   289→export function useFireReturns(clientId?: string | null) {
+   290→   290→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   291→   291→  if (clientId) {
+   292→   292→    constraints.unshift(where('clientId', '==', clientId));
+   293→   293→  }
+   294→   294→  return useFirestoreCollection<FirestoreReturn>(COLLECTIONS.RETURNS, constraints, [clientId]);
+   295→   295→}
+   296→   296→
+   297→   297→export function useFireReadyReturns() {
+   298→   298→  return useFirestoreCollection<FirestoreReturn>(COLLECTIONS.RETURNS, [
+   299→   299→    where('status', 'in', ['validated', 'reviewed', 'generated']),
+   300→   300→    orderBy('createdAt', 'desc'),
+   301→   301→  ]);
+   302→   302→}
+   303→   303→
+   304→   304→export function useFireFiledReturns() {
+   305→   305→  return useFirestoreCollection<FirestoreReturn>(COLLECTIONS.RETURNS, [
+   306→   306→    where('status', '==', 'filed'),
+   307→   307→    orderBy('filedDate', 'desc'),
+   308→   308→  ]);
+   309→   309→}
+   310→   310→
+   311→   311→// ─── Reconciliations ────────────────────────────────────────────────────────
+   312→   312→
+   313→   313→export function useFireReconciliations(clientId?: string | null) {
+   314→   314→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   315→   315→  if (clientId) {
+   316→   316→    constraints.unshift(where('clientId', '==', clientId));
+   317→   317→  }
+   318→   318→  return useFirestoreCollection<FirestoreReconciliation>(COLLECTIONS.RECONCILIATIONS, constraints, [clientId]);
+   319→   319→}
+   320→   320→
+   321→   321→// ─── Notifications ───────────────────────────────────────────────────────────
+   322→   322→
+   323→   323→export function useFireNotifications() {
+   324→   324→  return useFirestoreCollection<FirestoreNotification>(COLLECTIONS.NOTIFICATIONS, [
+   325→   325→    orderBy('createdAt', 'desc'),
+   326→   326→    limit(50),
+   327→   327→  ]);
+   328→   328→}
+   329→   329→
+   330→   330→export function useFireUnreadNotifications() {
+   331→   331→  const { user } = useAuth();
+   332→   332→  return useFirestoreCollection<FirestoreNotification>(COLLECTIONS.NOTIFICATIONS, [
+   333→   333→    where('read', '==', false),
+   334→   334→    orderBy('createdAt', 'desc'),
+   335→   335→    limit(20),
+   336→   336→  ], [user?.id]);
+   337→   337→}
+   338→   338→
+   339→   339→// ─── Activities ──────────────────────────────────────────────────────────────
+   340→   340→
+   341→   341→export function useFireActivities(clientId?: string | null) {
+   342→   342→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc'), limit(100)];
+   343→   343→  if (clientId) {
+   344→   344→    constraints.unshift(where('clientId', '==', clientId));
+   345→   345→  }
+   346→   346→  return useFirestoreCollection<FirestoreActivity>(COLLECTIONS.ACTIVITIES, constraints, [clientId]);
+   347→   347→}
+   348→   348→
+   349→   349→export function useFireRecentActivities(limitCount: number = 10) {
+   350→   350→  return useFirestoreCollection<FirestoreActivity>(COLLECTIONS.ACTIVITIES, [
+   351→   351→    orderBy('createdAt', 'desc'),
+   352→   352→    limit(limitCount),
+   353→   353→  ]);
+   354→   354→}
+   355→   355→
+   356→   356→// ─── AI Recommendations ─────────────────────────────────────────────────────
+   357→   357→
+   358→   358→export function useFireAIRecommendations() {
+   359→   359→  return useFirestoreCollection<FirestoreAIRecommendation>(COLLECTIONS.AI_RECOMMENDATIONS, [
+   360→   360→    where('status', '==', 'active'),
+   361→   361→    orderBy('createdAt', 'desc'),
+   362→   362→  ]);
+   363→   363→}
+   364→   364→
+   365→   365→// ─── Firm ────────────────────────────────────────────────────────────────────
+   366→   366→// NOTE: The legacy `firms` collection is vestigial. The real tenant root is
+   367→   367→// `organizations`. We keep this hook for backwards compat but it resolves the
+   368→   368→// org doc instead. Most callers should use `useOrg().organization` directly.
+   369→   369→
+   370→   370→export function useFireFirm() {
+   371→   371→  const { organization } = useOrg();
+   372→   372→  return useFirestoreDoc<FirestoreFirm>(COLLECTIONS.ORGANIZATIONS, organization?.id || null);
+   373→   373→}
+   374→   374→
+   375→   375→// ═══════════════════════════════════════════════════════════════════════════════
+   376→   376→// COMPUTED HOOKS — Dashboard metrics from live data
+   377→   377→// ═══════════════════════════════════════════════════════════════════════════════
+   378→   378→
+   379→   379→export function useLiveDashboardMetrics(): {
+   380→   380→  metrics: LiveDashboardMetrics;
+   381→   381→  loading: boolean;
+   382→   382→  error: string | null;
+   383→   383→} {
+   384→   384→  const clients = useFireClients();
+   385→   385→  const invoices = useFireInvoices();
+   386→   386→  const returns = useFireReturns();
+   387→   387→  const documents = useFireDocuments();
+   388→   388→  const activities = useFireRecentActivities(20);
+   389→   389→
+   390→   390→  const loading = clients.loading || invoices.loading || returns.loading || documents.loading || activities.loading;
+   391→   391→  const error = clients.error || invoices.error || returns.error || documents.error || activities.error;
+   392→   392→
+   393→   393→  const metrics = useMemo(() => {
+   394→   394→    if (loading) {
+   395→   395→      return {
+   396→   396→        totalClients: 0, activeClients: 0, totalInvoices: 0, totalTaxVolume: 0,
+   397→   397→        filedReturns: 0, pendingReturns: 0, overdueReturns: 0, readyToFile: 0,
+   398→   398→        criticalIssues: 0, warnings: 0, averageHealthScore: 0, matchPercentage: 100,
+   399→   399→        riskPercentage: 0, documentsProcessed: 0, extractionsPending: 0,
+   400→   400→        recentActivities: [], upcomingFilings: [],
+   401→   401→      } as LiveDashboardMetrics;
+   402→   402→    }
+   403→   403→
+   404→   404→    return computeDashboardMetrics(
+   405→   405→      clients.data as unknown as Array<FirestoreClient & { id: string }>,
+   406→   406→      invoices.data as unknown as Array<FirestoreInvoice & { id: string }>,
+   407→   407→      returns.data as unknown as Array<FirestoreReturn & { id: string }>,
+   408→   408→      documents.data as unknown as Array<FirestoreDocument & { id: string }>,
+   409→   409→      activities.data as unknown as Array<FirestoreActivity & { id: string }>,
+   410→   410→    );
+   411→   411→  }, [clients.data, invoices.data, returns.data, documents.data, activities.data, loading]);
+   412→   412→
+   413→   413→  return { metrics, loading, error };
+   414→   414→}
+   415→   415→
+   416→   416→// ═══════════════════════════════════════════════════════════════════════════════
+   417→   417→// AI EXECUTIVE LAYER HOOKS
+   418→   418→// ═══════════════════════════════════════════════════════════════════════════════
+   419→   419→
+   420→   420→// ─── Predictions ────────────────────────────────────────────────────────────
+   421→   421→
+   422→   422→export function useFirePredictions(type?: string) {
+   423→   423→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   424→   424→  if (type) {
+   425→   425→    constraints.unshift(where('type', '==', type));
+   426→   426→  }
+   427→   427→  return useFirestoreCollection<FirestorePrediction>(COLLECTIONS.PREDICTIONS, constraints, [type]);
+   428→   428→}
+   429→   429→
+   430→   430→// ─── Priority Queue ─────────────────────────────────────────────────────────
+   431→   431→
+   432→   432→export function useFirePriorities(status?: string) {
+   433→   433→  const constraints: QueryConstraint[] = [orderBy('priorityScore', 'desc')];
+   434→   434→  if (status) {
+   435→   435→    constraints.unshift(where('status', '==', status));
+   436→   436→  }
+   437→   437→  return useFirestoreCollection<FirestorePriority>(COLLECTIONS.PRIORITY_QUEUE, constraints, [status]);
+   438→   438→}
+   439→   439→
+   440→   440→// ─── Organizations ──────────────────────────────────────────────────────────
+   441→   441→
+   442→   442→export function useFireOrganizations() {
+   443→   443→  return useFirestoreCollection<FirestoreOrganization>(COLLECTIONS.ORGANIZATIONS, [orderBy('createdAt', 'desc')]);
+   444→   444→}
+   445→   445→
+   446→   446→// ─── Memberships ────────────────────────────────────────────────────────────
+   447→   447→// NOTE: The canonical membership collection is `organization_members`. The
+   448→   448→// `memberships` collection is vestigial. Callers should use `useOrg().members`
+   449→   449→// for the one-shot roster loaded by OrgContext, or `useOrgMembers()` below for
+   450→   450→// a real-time subscription with per-collection loading/error state.
+   451→   451→
+   452→   452→export function useFireMemberships(_firmId?: string | null) {
+   453→   453→  // Ignore the legacy firmId arg; members come from OrgContext.
+   454→   454→  void _firmId;
+   455→   455→  const { members } = useOrg();
+   456→   456→  return {
+   457→   457→    data: members as unknown as Array<FirestoreMembership & { id: string }>,
+   458→   458→    loading: false,
+   459→   459→    error: null,
+   460→   460→  };
+   461→   461→}
+   462→   462→
+   463→   463→/**
+   464→   464→ * Shape of an `organization_members/{orgId}_{uid}` document AFTER `convertDoc`
+   465→   465→ * has run — Firestore Timestamps have been converted to ISO strings (or null).
+   466→   466→ *
+   467→   467→ * Mirrors `OrganizationMemberDoc` from `@/lib/auth/types` but with the
+   468→   468→ * post-conversion timestamp representation.
+   469→   469→ */
+   470→   470→export interface FirestoreOrganizationMember {
+   471→   471→  organizationId: string;
+   472→   472→  userId: string;
+   473→   473→  userEmail: string;
+   474→   474→  userDisplayName: string;
+   475→   475→  userPhotoURL: string | null;
+   476→   476→  role: string; // OrgRole union, kept loose for graceful degradation
+   477→   477→  status: string; // MemberStatus union, kept loose for graceful degradation
+   478→   478→  invitedBy: string | null;
+   479→   479→  invitedAt: string | null;
+   480→   480→  joinedAt: string | null;
+   481→   481→  createdAt: string | null;
+   482→   482→  updatedAt: string | null;
+   483→   483→}
+   484→   484→
+   485→   485→/**
+   486→   486→ * Real-time subscription to the current organization's member roster.
+   487→   487→ *
+   488→   488→ * Subscribes to `organization_members` scoped by `organizationId`. Returns
+   489→   489→ * the raw membership rows — callers are responsible for any UI-role mapping
+   490→   490→ * (e.g. translating the Firestore `OrgRole` enum to the role labels shown in
+   491→   491→ * the Settings page).
+   492→   492→ *
+   493→   493→ * In preview mode (no real org), returns an empty array without subscribing —
+   494→   494→ * same graceful-degradation contract as every other hook in this file.
+   495→   495→ */
+   496→   496→export function useOrgMembers() {
+   497→   497→  return useFirestoreCollection<FirestoreOrganizationMember>(
+   498→   498→    COLLECTIONS.ORGANIZATION_MEMBERS,
+   499→   499→    [orderBy('joinedAt', 'asc')],
+   500→   500→  );
+   501→   501→}
+   502→   502→
+   503→   503→// ─── Executive Scores (computed from live data) ─────────────────────────────
+   504→   504→
+   505→   505→export function useFirmExecutiveScores(): { scores: FirmExecutiveScores; loading: boolean } {
+   506→   506→  const { data: clients } = useFireClients();
+   507→   507→  const { data: returns } = useFireReturns();
+   508→   508→  const { data: invoices } = useFireInvoices();
+   509→   509→  const { data: reconciliations } = useFireReconciliations();
+   510→   510→  const { data: activities } = useFireRecentActivities(50);
+   511→   511→
+   512→   512→  const loading = clients.length === 0 && returns.length === 0;
+   513→   513→
+   514→   514→  const scores = useMemo<FirmExecutiveScores>(() => {
+   515→   515→    if (loading) {
+   516→   516→      return { firmHealth: 0, revenue: 0, compliance: 0, teamEfficiency: 0, clientSatisfaction: 0, cashFlow: 0 };
+   517→   517→    }
+   518→   518→
+   519→   519→    // Firm Health: weighted avg of client health scores
+   520→   520→    const activeClients = clients.filter(c => c.status === 'active');
+   521→   521→    const avgHealth = activeClients.length > 0
+   522→   522→      ? activeClients.reduce((s, c) => s + (c.healthScore || 0), 0) / activeClients.length
+   523→   523→      : 50;
+   524→   524→
+   525→   525→    // Revenue Score: based on tax volume
+   526→   526→    const totalTax = invoices.reduce((s, i) => s + (i.totalTax || 0) + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0);
+   527→   527→    const revenueScore = Math.min(100, Math.round((totalTax / 1000000) * 100));
+   528→   528→
+   529→   529→    // Compliance Score: filed vs total returns
+   530→   530→    const filedReturns = returns.filter(r => r.status === 'filed').length;
+   531→   531→    const complianceScore = returns.length > 0 ? Math.round((filedReturns / returns.length) * 100) : 50;
+   532→   532→
+   533→   533→    // Team Efficiency: based on completed activities
+   534→   534→    const completedActivities = activities.filter(a => a.type.includes('filed') || a.type.includes('completed') || a.type.includes('resolved')).length;
+   535→   535→    const teamEfficiency = activities.length > 0 ? Math.min(100, Math.round((completedActivities / Math.max(activities.length, 1)) * 100)) : 50;
+   536→   536→
+   537→   537→    // Client Satisfaction: inverse of overdue + health
+   538→   538→    const overdueClients = activeClients.filter(c => (c.pendingReturnCount || 0) > 0).length;
+   539→   539→    const clientSatisfaction = activeClients.length > 0 ? Math.round(((activeClients.length - overdueClients) / activeClients.length) * 100) : 50;
+   540→   540→
+   541→   541→    // Cash Flow: based on reconciliation match rate
+   542→   542→    const matchedRecons = reconciliations.filter(r => r.matched > 0);
+   543→   543→    const totalMatched = matchedRecons.reduce((s, r) => s + r.matched, 0);
+   544→   544→    const totalRecords = matchedRecons.reduce((s, r) => s + r.totalRecords, 0);
+   545→   545→    const cashFlow = totalRecords > 0 ? Math.round((totalMatched / totalRecords) * 100) : 50;
+   546→   546→
+   547→   547→    return {
+   548→   548→      firmHealth: Math.round(avgHealth) || 50,
+   549→   549→      revenue: revenueScore || 50,
+   550→   550→      compliance: complianceScore || 50,
+   551→   551→      teamEfficiency: teamEfficiency || 50,
+   552→   552→      clientSatisfaction: clientSatisfaction || 50,
+   553→   553→      cashFlow: cashFlow || 50,
+   554→   554→    };
+   555→   555→  }, [clients, returns, invoices, reconciliations, activities, loading]);
+   556→   556→
+   557→   557→  return { scores, loading };
+   558→   558→}
+   559→   559→
+   560→   560→// ─── CRM: Leads ──────────────────────────────────────────────────────────────
+   561→   561→
+   562→   562→export function useFireLeads() {
+   563→   563→  return useFirestoreCollection<FirestoreLead>(COLLECTIONS.LEADS, [orderBy('createdAt', 'desc')]);
+   564→   564→}
+   565→   565→
+   566→   566→// ─── CRM: Deals ──────────────────────────────────────────────────────────────
+   567→   567→
+   568→   568→export function useFireDeals() {
+   569→   569→  return useFirestoreCollection<FirestoreDeal>(COLLECTIONS.DEALS, [orderBy('createdAt', 'desc')]);
+   570→   570→}
+   571→   571→
+   572→   572→// ─── CRM: Meetings ───────────────────────────────────────────────────────────
+   573→   573→
+   574→   574→export function useFireMeetings() {
+   575→   575→  return useFirestoreCollection<FirestoreMeeting>(COLLECTIONS.MEETINGS, [orderBy('dateTime', 'asc')]);
+   576→   576→}
+   577→   577→
+   578→   578→// ─── Tasks ───────────────────────────────────────────────────────────────────
+   579→   579→
+   580→   580→export function useFireTasks() {
+   581→   581→  return useFirestoreCollection<FirestoreTask>(COLLECTIONS.TASKS, [orderBy('createdAt', 'desc')]);
+   582→   582→}
+   583→   583→
+   584→   584→// ═══════════════════════════════════════════════════════════════════════════════
+   585→   585→// BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
+   586→   586→// Each hook wires a COLLECTIONS.xxx entry to useFirestoreCollection /
+   587→   587→// useFirestoreDoc with the appropriate organizationId scope filter.
+   588→   588→// ═══════════════════════════════════════════════════════════════════════════════
+   589→   589→
+   590→   590→// ─── Bank Accounts ──────────────────────────────────────────────────────────
+   591→   591→
+   592→   592→export function useFireBankAccounts() {
+   593→   593→  return useFirestoreCollection<FirestoreBankAccount>(COLLECTIONS.BANK_ACCOUNTS, [
+   594→   594→    orderBy('createdAt', 'desc'),
+   595→   595→  ]);
+   596→   596→}
+   597→   597→
+   598→   598→export function useFireBankAccount(bankAccountId: string | null) {
+   599→   599→  return useFirestoreDoc<FirestoreBankAccount>(COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+   600→   600→}
+   601→   601→
+   602→   602→// ─── Bank Transactions ──────────────────────────────────────────────────────
+   603→   603→// Pass a bankAccountId to scope to one account; omit for org-wide feed.
+   604→   604→
+   605→   605→export function useFireBankTransactions(bankAccountId?: string | null) {
+   606→   606→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   607→   607→  if (bankAccountId) {
+   608→   608→    constraints.unshift(where('bankAccountId', '==', bankAccountId));
+   609→   609→  }
+   610→   610→  return useFirestoreCollection<FirestoreBankTransaction>(COLLECTIONS.BANK_TRANSACTIONS, constraints, [bankAccountId]);
+   611→   611→}
+   612→   612→
+   613→   613→// ─── GST Profiles ───────────────────────────────────────────────────────────
+   614→   614→
+   615→   615→export function useFireGstProfiles() {
+   616→   616→  return useFirestoreCollection<FirestoreGstProfile>(COLLECTIONS.GST_PROFILES, [
+   617→   617→    orderBy('createdAt', 'desc'),
+   618→   618→  ]);
+   619→   619→}
+   620→   620→
+   621→   621→export function useFireGstProfile(gstProfileId: string | null) {
+   622→   622→  return useFirestoreDoc<FirestoreGstProfile>(COLLECTIONS.GST_PROFILES, gstProfileId);
+   623→   623→}
+   624→   624→
+   625→   625→// ─── GST Returns ────────────────────────────────────────────────────────────
+   626→   626→// Pass a gstProfileId to scope to one profile; omit for org-wide feed.
+   627→   627→
+   628→   628→export function useFireGstReturns(gstProfileId?: string | null) {
+   629→   629→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   630→   630→  if (gstProfileId) {
+   631→   631→    constraints.unshift(where('gstProfileId', '==', gstProfileId));
+   632→   632→  }
+   633→   633→  return useFirestoreCollection<FirestoreGstReturn>(COLLECTIONS.GST_RETURNS, constraints, [gstProfileId]);
+   634→   634→}
+   635→   635→
+   636→   636→// ─── Expenses ───────────────────────────────────────────────────────────────
+   637→   637→
+   638→   638→export function useFireExpenses() {
+   639→   639→  return useFirestoreCollection<FirestoreExpense>(COLLECTIONS.EXPENSES, [
+   640→   640→    orderBy('createdAt', 'desc'),
+   641→   641→  ]);
+   642→   642→}
+   643→   643→
+   644→   644→// ─── Payments ───────────────────────────────────────────────────────────────
+   645→   645→
+   646→   646→export function useFirePayments() {
+   647→   647→  return useFirestoreCollection<FirestorePayment>(COLLECTIONS.PAYMENTS, [
+   648→   648→    orderBy('createdAt', 'desc'),
+   649→   649→  ]);
+   650→   650→}
+   651→   651→
+   652→   652→// ─── AI Memory ──────────────────────────────────────────────────────────────
+   653→   653→// Pass an agent string to scope to one agent's memory; omit for org-wide.
+   654→   654→
+   655→   655→export function useFireAiMemories(agent?: string) {
+   656→   656→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   657→   657→  if (agent) {
+   658→   658→    constraints.unshift(where('agent', '==', agent));
+   659→   659→  }
+   660→   660→  return useFirestoreCollection<FirestoreAiMemory>(COLLECTIONS.AI_MEMORY, constraints, [agent]);
+   661→   661→}
+   662→   662→
+   663→   663→// ═══════════════════════════════════════════════════════════════════════════════
+   664→   664→// NOTICES & REPORTS (Phase 1 — Real Backend Foundation)
+   665→   665→// Real-time onSnapshot listeners scoped to the current organization.
+   666→   666→// ═══════════════════════════════════════════════════════════════════════════════
+   667→   667→
+   668→   668→// ─── Notices ─────────────────────────────────────────────────────────────────
+   669→   669→// Pass a clientId to scope to one client; omit for org-wide feed.
+   670→   670→
+   671→   671→export function useFireNotices(clientId?: string | null) {
+   672→   672→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   673→   673→  if (clientId) {
+   674→   674→    constraints.unshift(where('clientId', '==', clientId));
+   675→   675→  }
+   676→   676→  return useFirestoreCollection<FirestoreNotice>(COLLECTIONS.NOTICES, constraints, [clientId]);
+   677→   677→}
+   678→   678→
+   679→   679→export function useFireNotice(noticeId: string | null) {
+   680→   680→  return useFirestoreDoc<FirestoreNotice>(COLLECTIONS.NOTICES, noticeId);
+   681→   681→}
+   682→   682→
+   683→   683→// ─── Reports ─────────────────────────────────────────────────────────────────
+   684→   684→// Pass a clientId to scope to one client; omit for org-wide feed.
+   685→   685→
+   686→   686→export function useFireReports(clientId?: string | null) {
+   687→   687→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+   688→   688→  if (clientId) {
+   689→   689→    constraints.unshift(where('clientId', '==', clientId));
+   690→   690→  }
+   691→   691→  return useFirestoreCollection<FirestoreReport>(COLLECTIONS.REPORTS, constraints, [clientId]);
+   692→   692→}
+   693→   693→
+   694→   694→export function useFireReport(reportId: string | null) {
+   695→   695→  return useFirestoreDoc<FirestoreReport>(COLLECTIONS.REPORTS, reportId);
+   696→   696→}
+   697→   697→
+   698→   698→// ─── Manual Journal Entries ──────────────────────────────────────────────────
+   699→   699→
+   700→   700→export function useFireJournalEntries() {
+   701→   701→  return useFirestoreCollection<FirestoreJournalEntry>(
+   702→   702→    COLLECTIONS.JOURNAL_ENTRIES,
+   703→   703→    [orderBy('entryDate', 'desc')],
+   704→   704→    [],
+   705→   705→  );
+   706→   706→}
+   707→   707→

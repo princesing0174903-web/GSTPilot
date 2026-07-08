@@ -133,6 +133,16 @@ const EnterpriseCommandCenterPage = dynamic(() => import('@/components/enterpris
 const MultiCompanyWorkspacePage = dynamic(() => import('@/components/enterprise-network/MultiCompanyWorkspace'), { loading: PageLoader, ssr: false })
 const TeamCollaborationPage = dynamic(() => import('@/components/enterprise-network/TeamCollaboration'), { loading: PageLoader, ssr: false })
 const WorkflowEnginePage = dynamic(() => import('@/components/enterprise-network/WorkflowEngine'), { loading: PageLoader, ssr: false })
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase Delta — Autonomous Finance OS (lazy-loaded)
+// ═══════════════════════════════════════════════════════════════════════════════
+const AutonomousFinanceDashboard = dynamic(() => import('@/components/autonomous-finance/AutonomousFinanceDashboard').then(m => ({ default: m.AutonomousFinanceDashboard })), { loading: PageLoader, ssr: false })
+const WorkflowStudioPage = dynamic(() => import('@/components/autonomous-finance/WorkflowStudioPage').then(m => ({ default: m.WorkflowStudioPage })), { loading: PageLoader, ssr: false })
+const OracleActionsPanel = dynamic(() => import('@/components/autonomous-finance/OracleActionsPanel').then(m => ({ default: m.OracleActionsPanel })), { loading: PageLoader, ssr: false })
+const FinancialIntelligencePage = dynamic(() => import('@/components/autonomous-finance/FinancialIntelligencePage').then(m => ({ default: m.FinancialIntelligencePage })), { loading: PageLoader, ssr: false })
+const SmartReconciliationPage = dynamic(() => import('@/components/autonomous-finance/SmartReconciliationPage').then(m => ({ default: m.SmartReconciliationPage })), { loading: PageLoader, ssr: false })
+const PredictiveCompliancePage = dynamic(() => import('@/components/autonomous-finance/PredictiveCompliancePage').then(m => ({ default: m.PredictiveCompliancePage })), { loading: PageLoader, ssr: false })
+const IntelligentCollectionsPage = dynamic(() => import('@/components/autonomous-finance/IntelligentCollectionsPage').then(m => ({ default: m.IntelligentCollectionsPage })), { loading: PageLoader, ssr: false })
 const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
 const ExecutiveCalendarPage = dynamic(() => import('@/components/enterprise-network/ExecutiveCalendar'), { loading: PageLoader, ssr: false })
 const EnterpriseSearchPage = dynamic(() => import('@/components/enterprise-network/EnterpriseSearch'), { loading: PageLoader, ssr: false })
@@ -315,6 +325,14 @@ const VIEW_TITLES: Record<string, string> = {
   'enterprise-security-cloud': 'Enterprise Security™',
   'global-financial-network': 'Global Financial Network™',
   'platform-intelligence': 'Platform Intelligence™',
+  // Phase Delta — Autonomous Finance OS
+  'autonomous-finance': 'Autonomous Finance OS',
+  'workflow-studio': 'Workflow Studio',
+  'oracle-actions': 'Oracle Autonomous Actions',
+  'financial-intelligence': 'Financial Intelligence',
+  'smart-reconciliation': 'Smart Reconciliation',
+  'predictive-compliance': 'Predictive Compliance',
+  'intelligent-collections': 'Intelligent Collections',
 }
 
 function DashboardContent() {
@@ -619,6 +637,21 @@ function DashboardContent() {
         return <GlobalFinancialNetworkPage />
       case 'platform-intelligence':
         return <PlatformIntelligencePage />
+      // Phase Delta — Autonomous Finance OS
+      case 'autonomous-finance':
+        return <AutonomousFinanceDashboard />
+      case 'workflow-studio':
+        return <WorkflowStudioPage />
+      case 'oracle-actions':
+        return <OracleActionsPanel />
+      case 'financial-intelligence':
+        return <FinancialIntelligencePage />
+      case 'smart-reconciliation':
+        return <SmartReconciliationPage />
+      case 'predictive-compliance':
+        return <PredictiveCompliancePage />
+      case 'intelligent-collections':
+        return <IntelligentCollectionsPage />
       default:
         return <MissionControlPage />
     }

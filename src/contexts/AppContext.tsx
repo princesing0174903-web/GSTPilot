@@ -197,7 +197,15 @@ export type AppView =
   | 'multi-tenant-infra'
   | 'enterprise-security-cloud'
   | 'global-financial-network'
-  | 'platform-intelligence';
+  | 'platform-intelligence'
+  // Phase Delta — Autonomous Finance OS
+  | 'autonomous-finance'
+  | 'workflow-studio'
+  | 'oracle-actions'
+  | 'financial-intelligence'
+  | 'smart-reconciliation'
+  | 'predictive-compliance'
+  | 'intelligent-collections';
 
 export interface ReturnPrepContext {
   clientId: string | null;

@@ -89,6 +89,11 @@ import {
   ScrollText,
   BarChart,
   Command,
+  Sparkles,
+  Zap,
+  ShieldAlert,
+  GitCompareArrows,
+  Brain as BrainIcon,
 } from 'lucide-react'
 import { BrandLogo } from '@/components/brand'
 import { useApp, type AppView } from '@/contexts/AppContext'
@@ -124,6 +129,17 @@ const commandItems: NavItem[] = [
   { title: 'Business DNA', view: 'business-dna', icon: Fingerprint, subtitle: '6 Scores · Digital DNA', isNew: true },
   { title: "RUN INDIA'S BUSINESS™", view: 'run-india-business', icon: Landmark, subtitle: 'Autonomous Enterprise', isNew: true },
   { title: 'RUN MY BUSINESS™', view: 'run-my-business', icon: Rocket, subtitle: 'One-Click Automation', isNew: true },
+]
+
+// AUTONOMOUS FINANCE OS — Phase Delta
+const autonomousItems: NavItem[] = [
+  { title: 'Autonomous Finance OS', view: 'autonomous-finance', icon: Sparkles, subtitle: 'AI Finance Team', isNew: true },
+  { title: 'Workflow Studio', view: 'workflow-studio', icon: Workflow, subtitle: 'Visual Automation', isNew: true },
+  { title: 'Oracle Actions', view: 'oracle-actions', icon: Zap, subtitle: 'Autonomous Execution', isNew: true },
+  { title: 'Financial Intelligence', view: 'financial-intelligence', icon: BrainIcon, subtitle: 'AI Insights & Risks', isNew: true },
+  { title: 'Smart Reconciliation', view: 'smart-reconciliation', icon: GitCompareArrows, subtitle: 'AI-Assisted Matching', isNew: true },
+  { title: 'Predictive Compliance', view: 'predictive-compliance', icon: ShieldAlert, subtitle: 'Risk Forecasting', isNew: true },
+  { title: 'Intelligent Collections', view: 'intelligent-collections', icon: Users, subtitle: 'Payment Scoring', isNew: true },
 ]
 
 // INTELLIGENCE — AI Executive + AI Workforce merged
@@ -337,6 +353,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
 
       <SidebarContent className="px-1.5 py-2 overflow-y-auto scrollbar-thin">
         {renderGroup('Command', commandItems, true)}
+        {renderGroup('Autonomous Finance OS', autonomousItems, true)}
         {renderGroup('Intelligence', intelligenceItems)}
         {renderGroup('Finance', financeItems)}
         {renderGroup('Business', businessNavItems)}

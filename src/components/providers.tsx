@@ -24,6 +24,7 @@ import { AppProvider } from '@/contexts/AppContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { OrgProvider } from '@/contexts/OrgContext';
 import GSTPilotIntelligence from '@/components/intelligence/GSTPilotIntelligence';
+import { DevServerReconnect } from '@/components/shared/DevServerReconnect';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -48,6 +49,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <Toaster />
               {/* Global Floating AI Assistant — visible on every page when authenticated */}
               <GSTPilotIntelligence />
+              {/* Preview stability: shows a professional reconnect overlay when
+                  the dev server briefly restarts, instead of a browser error. */}
+              <DevServerReconnect />
             </AppProvider>
           </OrgProvider>
         </AuthProvider>

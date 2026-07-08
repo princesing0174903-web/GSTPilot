@@ -45,6 +45,7 @@ import {
 } from './oracle-human';
 import { detectBrandQuestion } from './oracle-brand';
 import { ExecutiveBrief } from './ExecutiveBrief';
+import { OracleEvolutionPanel } from '@/components/oracle-evolution/OracleEvolutionPanel';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -118,6 +119,8 @@ export function OracleWorkspace({
   const [activeLanguage, setActiveLanguage] = useState<OracleMessage['language']>('english');
   // Mobile: history drawer open state
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Oracle AI Evolution panel (Upgrade Phase 1) — overlay, not a nav change
+  const [evolutionOpen, setEvolutionOpen] = useState(false);
 
   // ── Oracle Context Engine™ — live dashboard metrics from Firestore are
   //    forwarded to the API as context.dashboardMetrics so the model can
@@ -843,6 +846,15 @@ export function OracleWorkspace({
               )}
               <button
                 type="button"
+                onClick={() => setEvolutionOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-emerald-400/80 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
+                title="Oracle AI Evolution — Forecasting, Specialists, Diagnostics, Accuracy"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Evolution</span>
+              </button>
+              <button
+                type="button"
                 onClick={onClose}
                 disabled={isStreaming}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
@@ -988,6 +1000,9 @@ export function OracleWorkspace({
               />
             )}
           </AnimatePresence>
+
+          {/* Oracle AI Evolution panel (Upgrade Phase 1) — overlay triggered from header */}
+          <OracleEvolutionPanel open={evolutionOpen} onClose={() => setEvolutionOpen(false)} />
         </motion.div>
       )}
     </AnimatePresence>,

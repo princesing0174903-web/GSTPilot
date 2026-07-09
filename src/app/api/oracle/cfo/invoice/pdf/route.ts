@@ -33,12 +33,12 @@ export async function POST(request: NextRequest) {
       termsAndConditions: [],
     });
 
-    return new NextResponse(result.base64, {
+    return new NextResponse(Buffer.from(result.base64, 'base64'), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="invoice-${(summary as InvoiceApprovalSummary).invoice.number}.pdf"`,
-        'Content-Transfer-Encoding': 'base64',
+        'Content-Length': String(result.buffer.length),
       },
     });
   } catch (err) {

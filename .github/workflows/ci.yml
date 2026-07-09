@@ -1,0 +1,223 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GSTPilot Infinity™ — Continuous Integration Pipeline
+#
+# Runs on every push to `main` and on every pull request targeting `main`.
+# Five jobs (fail-fast): lint → typecheck → build → security-scan → functions-build.
+# All jobs use ubuntu-latest, Node 20, Bun, with caches for node_modules,
+# .next/cache, and functions/node_modules.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Dummy NEXT_PUBLIC_FIREBASE_* values for CI builds. The Next.js build needs
+  # these to be defined even when firebase.ts hardcodes the real values, because
+  # next.config may reference env vars at build time. NEVER put real keys here.
+  NEXT_PUBLIC_FIREBASE_API_KEY: "ci-dummy-api-key-000000000000000000000000000"
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "ci-dummy.firebaseapp.com"
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: "ci-dummy-project"
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "ci-dummy-project.firebasestorage.app"
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+  NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000000000"
+  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: "G-CIDUMMY0000"
+  # Dummy encryption keys so the build does not bail on missing crypto env.
+  ERP_ENCRYPTION_KEY: "ci-dummy-erp-key-32-bytes-aaaaaaaaaaaaaa"
+  BILLING_ENCRYPTION_KEY: "ci-dummy-billing-key-32-bytes-aaaaaa"
+  PAYMENT_PROVIDER: "mock-razorpay"
+  BILLING_PROVIDER: "mock-razorpay"
+  ERP_PROVIDER: "mock"
+  DATABASE_URL: "file:./db/ci-dummy.db"
+
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node_modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run ESLint
+        run: bun run lint
+
+  typecheck:
+    name: Typecheck (tsc --noEmit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node_modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+  build:
+    name: Build (Next.js)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node_modules-${{ runner.os }}-
+
+      - name: Cache .next/cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('bun.lock', 'next.config.ts') }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next/
+          retention-days: 7
+
+  security-scan:
+    name: Security Scan (ESLint quiet + secret-scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node_modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: ESLint (quiet — errors only)
+        run: bunx eslint --ext .ts,.tsx src --quiet
+
+      - name: Secret scan (grep — fail if any secret literal found)
+        # Looks for assignment patterns like api_key = "AB12CD...20+ chars"
+        # in src/**/*.ts and src/**/*.tsx. Real secrets MUST be loaded from
+        # env vars / Firebase Secrets, never committed as literals.
+        run: |
+          set -e
+          echo "Scanning src/ for hard-coded secrets..."
+          if grep -rE "(api_key|secret|password|token)\s*[:=]\s*['\"][a-zA-Z0-9]{20,}" \
+              src --include="*.ts" --include="*.tsx" ; then
+            echo "::error::Hard-coded secret literal detected in src/. Move it to an env var or Firebase Secret."
+            exit 1
+          fi
+          echo "No hard-coded secrets found in src/."
+
+  functions-build:
+    name: Cloud Functions build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache functions/node_modules
+        uses: actions/cache@v4
+        with:
+          path: functions/node_modules
+          key: fn-node_modules-${{ runner.os }}-${{ hashFiles('functions/package-lock.json') }}
+          restore-keys: |
+            fn-node_modules-${{ runner.os }}-
+
+      - name: Install Functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Build Functions
+        working-directory: functions
+        run: npm run build

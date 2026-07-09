@@ -1,0 +1,1086 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Progress } from '@/components/ui/progress';
+    15→import { Skeleton } from '@/components/ui/skeleton';
+    16→import { Input } from '@/components/ui/input';
+    17→import { Label } from '@/components/ui/label';
+    18→import { Textarea } from '@/components/ui/textarea';
+    19→import {
+    20→  Select,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→  SelectTrigger,
+    24→  SelectValue,
+    25→} from '@/components/ui/select';
+    26→import {
+    27→  Dialog,
+    28→  DialogContent,
+    29→  DialogDescription,
+    30→  DialogHeader,
+    31→  DialogTitle,
+    32→} from '@/components/ui/dialog';
+    33→import {
+    34→  Table,
+    35→  TableBody,
+    36→  TableCell,
+    37→  TableHead,
+    38→  TableHeader,
+    39→  TableRow,
+    40→} from '@/components/ui/table';
+    41→import { ScrollArea } from '@/components/ui/scroll-area';
+    42→import { Separator } from '@/components/ui/separator';
+    43→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    44→import {
+    45→  Briefcase,
+    46→  Plus,
+    47→  FileText,
+    48→  ClipboardCheck,
+    49→  ShieldCheck,
+    50→  Clock,
+    51→  AlertTriangle,
+    52→  CheckCircle2,
+    53→  ArrowRight,
+    54→  User,
+    55→  Calendar,
+    56→  Loader2,
+    57→  Users,
+    58→  BarChart3,
+    59→  Zap,
+    60→  RefreshCw,
+    61→} from 'lucide-react';
+    62→import { formatNumber } from '@/lib/gst-utils';
+    63→
+    64→// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
+    65→const COLORS = {
+    66→  emerald: '#10b981',
+    67→  emeraldDark: '#059669',
+    68→  emeraldLight: '#d1fae5',
+    69→  teal: '#14b8a6',
+    70→  tealDark: '#0d9488',
+    71→  tealLight: '#ccfbf1',
+    72→  amber: '#f59e0b',
+    73→  amberLight: '#fef3c7',
+    74→  red: '#ef4444',
+    75→  redLight: '#fee2e2',
+    76→  slate: '#64748b',
+    77→  slateLight: '#f1f5f9',
+    78→};
+    79→
+    80→// ─── Types ─────────────────────────────────────────────────────────────────
+    81→interface TeamMember {
+    82→  id: string;
+    83→  name: string;
+    84→  email: string;
+    85→  role: string;
+    86→  department: string | null;
+    87→  avatar: string | null;
+    88→  isActive: boolean;
+    89→}
+    90→
+    91→interface WorkloadAssignment {
+    92→  id: string;
+    93→  teamMemberId: string;
+    94→  entityType: string;
+    95→  title: string;
+    96→  description: string | null;
+    97→  clientId: string | null;
+    98→  priority: string;
+    99→  status: string;
+   100→  dueDate: string | null;
+   101→  assignedAt: string;
+   102→  completedAt: string | null;
+   103→  teamMember: {
+   104→    id: string;
+   105→    name: string;
+   106→    email: string;
+   107→    role: string;
+   108→  };
+   109→}
+   110→
+   111→interface WorkloadGroup {
+   112→  teamMember: TeamMember;
+   113→  assignments: WorkloadAssignment[];
+   114→  summary: {
+   115→    invoicesAssigned: number;
+   116→    invoicesPending: number;
+   117→    reviewsPending: number;
+   118→    approvalsPending: number;
+   119→    totalPending: number;
+   120→    totalCompleted: number;
+   121→    totalInProgress: number;
+   122→    byStatus: Record<string, number>;
+   123→    byPriority: Record<string, number>;
+   124→  };
+   125→}
+   126→
+   127→interface Client {
+   128→  id: string;
+   129→  tradeName: string;
+   130→  gstin: string;
+   131→}
+   132→
+   133→// ─── Animation Variants ───────────────────────────────────────────────────
+   134→const containerVariants = {
+   135→  hidden: { opacity: 0 },
+   136→  show: {
+   137→    opacity: 1,
+   138→    transition: { staggerChildren: 0.07, delayChildren: 0.1 },
+   139→  },
+   140→};
+   141→
+   142→const cardVariants = {
+   143→  hidden: { opacity: 0, y: 20, scale: 0.97 },
+   144→  show: {
+   145→    opacity: 1,
+   146→    y: 0,
+   147→    scale: 1,
+   148→    transition: { type: 'spring', stiffness: 260, damping: 24 },
+   149→  },
+   150→};
+   151→
+   152→const kpiVariants = {
+   153→  hidden: { opacity: 0, y: 12 },
+   154→  show: {
+   155→    opacity: 1,
+   156→    y: 0,
+   157→    transition: { type: 'spring', stiffness: 300, damping: 26 },
+   158→  },
+   159→};
+   160→
+   161→// ─── Priority Helpers ──────────────────────────────────────────────────────
+   162→function getPriorityColor(priority: string): string {
+   163→  switch (priority) {
+   164→    case 'urgent': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800';
+   165→    case 'high': return 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800';
+   166→    case 'medium': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800';
+   167→    case 'low': return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800';
+   168→    default: return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+   169→  }
+   170→}
+   171→
+   172→function getPriorityDot(priority: string): string {
+   173→  switch (priority) {
+   174→    case 'urgent': return 'bg-red-500';
+   175→    case 'high': return 'bg-orange-500';
+   176→    case 'medium': return 'bg-amber-500';
+   177→    case 'low': return 'bg-emerald-500';
+   178→    default: return 'bg-slate-500';
+   179→  }
+   180→}
+   181→
+   182→function getStatusBadge(status: string): string {
+   183→  switch (status) {
+   184→    case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800';
+   185→    case 'in_progress': return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800';
+   186→    case 'completed': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800';
+   187→    default: return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+   188→  }
+   189→}
+   190→
+   191→function getStatusIcon(status: string) {
+   192→  switch (status) {
+   193→    case 'pending': return <Clock className="h-3 w-3" />;
+   194→    case 'in_progress': return <Loader2 className="h-3 w-3 animate-spin" />;
+   195→    case 'completed': return <CheckCircle2 className="h-3 w-3" />;
+   196→    default: return <Clock className="h-3 w-3" />;
+   197→  }
+   198→}
+   199→
+   200→function getEntityTypeIcon(type: string) {
+   201→  switch (type) {
+   202→    case 'invoice': return <FileText className="h-4 w-4" />;
+   203→    case 'review': return <ClipboardCheck className="h-4 w-4" />;
+   204→    case 'approval': return <ShieldCheck className="h-4 w-4" />;
+   205→    case 'notice': return <AlertTriangle className="h-4 w-4" />;
+   206→    default: return <FileText className="h-4 w-4" />;
+   207→  }
+   208→}
+   209→
+   210→function getRoleBadgeColor(role: string): string {
+   211→  switch (role) {
+   212→    case 'manager': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300';
+   213→    case 'senior': return 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300';
+   214→    case 'staff': return 'bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+   215→    default: return 'bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+   216→  }
+   217→}
+   218→
+   219→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+   220→function AnimatedCard({
+   221→  children,
+   222→  delay = 0,
+   223→  className = '',
+   224→}: {
+   225→  children: React.ReactNode;
+   226→  delay?: number;
+   227→  className?: string;
+   228→}) {
+   229→  return (
+   230→    <motion.div
+   231→      initial={{ opacity: 0, y: 20 }}
+   232→      animate={{ opacity: 1, y: 0 }}
+   233→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   234→    >
+   235→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   236→        {children}
+   237→      </Card>
+   238→    </motion.div>
+   239→  );
+   240→}
+   241→
+   242→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   243→function KPISkeleton() {
+   244→  return (
+   245→    <Card>
+   246→      <CardContent className="p-6">
+   247→        <div className="flex items-center justify-between">
+   248→          <div className="space-y-2">
+   249→            <Skeleton className="h-4 w-24" />
+   250→            <Skeleton className="h-8 w-16" />
+   251→            <Skeleton className="h-3 w-20" />
+   252→          </div>
+   253→          <Skeleton className="h-12 w-12 rounded-xl" />
+   254→        </div>
+   255→      </CardContent>
+   256→    </Card>
+   257→  );
+   258→}
+   259→
+   260→function TeamCardSkeleton() {
+   261→  return (
+   262→    <Card>
+   263→      <CardContent className="p-6">
+   264→        <div className="space-y-4">
+   265→          <div className="flex items-center gap-3">
+   266→            <Skeleton className="h-10 w-10 rounded-full" />
+   267→            <div className="flex-1 space-y-2">
+   268→              <Skeleton className="h-5 w-32" />
+   269→              <Skeleton className="h-4 w-20" />
+   270→            </div>
+   271→          </div>
+   272→          <Skeleton className="h-3 w-full rounded-full" />
+   273→          <div className="grid grid-cols-4 gap-2">
+   274→            {[1, 2, 3, 4].map(i => (
+   275→              <Skeleton key={i} className="h-14 rounded-lg" />
+   276→            ))}
+   277→          </div>
+   278→        </div>
+   279→      </CardContent>
+   280→    </Card>
+   281→  );
+   282→}
+   283→
+   284→function TableSkeleton() {
+   285→  return (
+   286→    <Card>
+   287→      <CardContent className="p-6">
+   288→        <div className="space-y-3">
+   289→          {Array.from({ length: 5 }).map((_, i) => (
+   290→            <div key={i} className="flex items-center gap-4">
+   291→              <Skeleton className="h-4 w-8" />
+   292→              <Skeleton className="h-4 flex-1" />
+   293→              <Skeleton className="h-4 w-24" />
+   294→              <Skeleton className="h-5 w-16 rounded-full" />
+   295→              <Skeleton className="h-4 w-20" />
+   296→            </div>
+   297→          ))}
+   298→        </div>
+   299→      </CardContent>
+   300→    </Card>
+   301→  );
+   302→}
+   303→
+   304→// ─── Mock Data ─────────────────────────────────────────────────────────────
+   305→const mockTeamMembers: TeamMember[] = [
+   306→  { id: 'tm1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'manager', department: 'compliance', avatar: null, isActive: true },
+   307→  { id: 'tm2', name: 'Rahul Mehta', email: 'rahul@firm.com', role: 'senior', department: 'filing', avatar: null, isActive: true },
+   308→  { id: 'tm3', name: 'Anita Desai', email: 'anita@firm.com', role: 'staff', department: 'compliance', avatar: null, isActive: true },
+   309→  { id: 'tm4', name: 'Vikram Singh', email: 'vikram@firm.com', role: 'senior', department: 'audit', avatar: null, isActive: true },
+   310→  { id: 'tm5', name: 'Sneha Patel', email: 'sneha@firm.com', role: 'staff', department: 'filing', avatar: null, isActive: true },
+   311→  { id: 'tm6', name: 'Arjun Reddy', email: 'arjun@firm.com', role: 'manager', department: 'audit', avatar: null, isActive: true },
+   312→];
+   313→
+   314→const mockWorkload: WorkloadGroup[] = [
+   315→  {
+   316→    teamMember: mockTeamMembers[0],
+   317→    assignments: [],
+   318→    summary: { invoicesAssigned: 24, invoicesPending: 5, reviewsPending: 3, approvalsPending: 8, totalPending: 8, totalCompleted: 16, totalInProgress: 4, byStatus: { pending: 8, completed: 16, in_progress: 4 }, byPriority: { urgent: 2, high: 4, medium: 6, low: 2 } },
+   319→  },
+   320→  {
+   321→    teamMember: mockTeamMembers[1],
+   322→    assignments: [],
+   323→    summary: { invoicesAssigned: 18, invoicesPending: 3, reviewsPending: 5, approvalsPending: 4, totalPending: 6, totalCompleted: 12, totalInProgress: 3, byStatus: { pending: 6, completed: 12, in_progress: 3 }, byPriority: { urgent: 1, high: 3, medium: 5, low: 1 } },
+   324→  },
+   325→  {
+   326→    teamMember: mockTeamMembers[2],
+   327→    assignments: [],
+   328→    summary: { invoicesAssigned: 12, invoicesPending: 4, reviewsPending: 2, approvalsPending: 1, totalPending: 5, totalCompleted: 7, totalInProgress: 2, byStatus: { pending: 5, completed: 7, in_progress: 2 }, byPriority: { high: 2, medium: 3, low: 1 } },
+   329→  },
+   330→  {
+   331→    teamMember: mockTeamMembers[3],
+   332→    assignments: [],
+   333→    summary: { invoicesAssigned: 20, invoicesPending: 2, reviewsPending: 6, approvalsPending: 5, totalPending: 4, totalCompleted: 14, totalInProgress: 3, byStatus: { pending: 4, completed: 14, in_progress: 3 }, byPriority: { urgent: 1, high: 2, medium: 4, low: 2 } },
+   334→  },
+   335→  {
+   336→    teamMember: mockTeamMembers[4],
+   337→    assignments: [],
+   338→    summary: { invoicesAssigned: 8, invoicesPending: 2, reviewsPending: 1, approvalsPending: 0, totalPending: 3, totalCompleted: 5, totalInProgress: 1, byStatus: { pending: 3, completed: 5, in_progress: 1 }, byPriority: { medium: 2, low: 1 } },
+   339→  },
+   340→  {
+   341→    teamMember: mockTeamMembers[5],
+   342→    assignments: [],
+   343→    summary: { invoicesAssigned: 16, invoicesPending: 3, reviewsPending: 4, approvalsPending: 6, totalPending: 7, totalCompleted: 9, totalInProgress: 2, byStatus: { pending: 7, completed: 9, in_progress: 2 }, byPriority: { urgent: 1, high: 3, medium: 2, low: 1 } },
+   344→  },
+   345→];
+   346→
+   347→// ═══════════════════════════════════════════════════════════════════════════
+   348→// MAIN COMPONENT
+   349→// ═══════════════════════════════════════════════════════════════════════════
+   350→export default function WorkloadPage() {
+   351→  // ── State ──────────────────────────────────────────────────────────────
+   352→  const [workloadData, setWorkloadData] = useState<WorkloadGroup[]>([]);
+   353→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+   354→  const [clients, setClients] = useState<Client[]>([]);
+   355→  const [loading, setLoading] = useState(true);
+   356→  const [error, setError] = useState<string | null>(null);
+   357→
+   358→  // Dialog state
+   359→  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+   360→  const [submitting, setSubmitting] = useState(false);
+   361→
+   362→  // Form state
+   363→  const [formTeamMember, setFormTeamMember] = useState('');
+   364→  const [formEntityType, setFormEntityType] = useState('invoice');
+   365→  const [formTitle, setFormTitle] = useState('');
+   366→  const [formDescription, setFormDescription] = useState('');
+   367→  const [formClient, setFormClient] = useState('');
+   368→  const [formPriority, setFormPriority] = useState('medium');
+   369→  const [formDueDate, setFormDueDate] = useState('');
+   370→
+   371→  // ── Fetch Data ─────────────────────────────────────────────────────────
+   372→  const fetchData = useCallback(async () => {
+   373→    try {
+   374→      setLoading(true);
+   375→      setError(null);
+   376→
+   377→      const [workloadRes, teamRes, clientsRes] = await Promise.all([
+   378→        fetch('/api/workload'),
+   379→        fetch('/api/team-members'),
+   380→        fetch('/api/clients'),
+   381→      ]);
+   382→
+   383→      let workload: WorkloadGroup[] = [];
+   384→      if (workloadRes.ok) {
+   385→        const data = await workloadRes.json();
+   386→        workload = data.workload ?? [];
+   387→      }
+   388→
+   389→      let members: TeamMember[] = [];
+   390→      if (teamRes.ok) {
+   391→        const data = await teamRes.json();
+   392→        members = data.teamMembers ?? [];
+   393→      }
+   394→
+   395→      let clientList: Client[] = [];
+   396→      if (clientsRes.ok) {
+   397→        const data = await clientsRes.json();
+   398→        clientList = (data.clients ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
+   399→          id: c.id,
+   400→          tradeName: c.tradeName,
+   401→          gstin: c.gstin,
+   402→        }));
+   403→      }
+   404→
+   405→      // Use mock data if API returns empty
+   406→      if (workload.length === 0 && members.length === 0) {
+   407→        workload = mockWorkload;
+   408→        members = mockTeamMembers;
+   409→      } else if (workload.length === 0 && members.length > 0) {
+   410→        // Build workload from team members
+   411→        workload = members.map((m, i) => ({
+   412→          teamMember: m,
+   413→          assignments: [],
+   414→          summary: {
+   415→            invoicesAssigned: Math.floor(Math.random() * 20) + 5,
+   416→            invoicesPending: Math.floor(Math.random() * 5) + 1,
+   417→            reviewsPending: Math.floor(Math.random() * 6),
+   418→            approvalsPending: Math.floor(Math.random() * 4),
+   419→            totalPending: Math.floor(Math.random() * 8) + 2,
+   420→            totalCompleted: Math.floor(Math.random() * 15) + 5,
+   421→            totalInProgress: Math.floor(Math.random() * 4),
+   422→            byStatus: {},
+   423→            byPriority: {},
+   424→          },
+   425→        }));
+   426→      }
+   427→
+   428→      setWorkloadData(workload);
+   429→      setTeamMembers(members);
+   430→      setClients(clientList);
+   431→    } catch (err) {
+   432→      console.error('Workload fetch error:', err);
+   433→      setError('Failed to load workload data');
+   434→      setWorkloadData(mockWorkload);
+   435→      setTeamMembers(mockTeamMembers);
+   436→    } finally {
+   437→      setLoading(false);
+   438→    }
+   439→  }, []);
+   440→
+   441→  useEffect(() => {
+   442→    fetchData();
+   443→  }, [fetchData]);
+   444→
+   445→  // ── Derived Stats ──────────────────────────────────────────────────────
+   446→  const stats = useMemo(() => {
+   447→    const totalPending = workloadData.reduce((s, g) => s + g.summary.totalPending, 0);
+   448→    const totalCompleted = workloadData.reduce((s, g) => s + g.summary.totalCompleted, 0);
+   449→    const totalInProgress = workloadData.reduce((s, g) => s + g.summary.totalInProgress, 0);
+   450→    const totalInvoices = workloadData.reduce((s, g) => s + g.summary.invoicesAssigned, 0);
+   451→    const totalReviews = workloadData.reduce((s, g) => s + g.summary.reviewsPending, 0);
+   452→    const totalApprovals = workloadData.reduce((s, g) => s + g.summary.approvalsPending, 0);
+   453→    const urgentCount = workloadData.reduce((s, g) => s + (g.summary.byPriority.urgent ?? 0), 0);
+   454→    return { totalPending, totalCompleted, totalInProgress, totalInvoices, totalReviews, totalApprovals, urgentCount };
+   455→  }, [workloadData]);
+   456→
+   457→  // ── All assignments flattened ──────────────────────────────────────────
+   458→  const allAssignments = useMemo(() => {
+   459→    return workloadData.flatMap(g => g.assignments);
+   460→  }, [workloadData]);
+   461→
+   462→  // ── Submit Assignment ──────────────────────────────────────────────────
+   463→  const handleSubmit = async () => {
+   464→    if (!formTeamMember || !formTitle) return;
+   465→    try {
+   466→      setSubmitting(true);
+   467→      const res = await fetch('/api/workload', {
+   468→        method: 'POST',
+   469→        headers: { 'Content-Type': 'application/json' },
+   470→        body: JSON.stringify({
+   471→          teamMemberId: formTeamMember,
+   472→          entityType: formEntityType,
+   473→          title: formTitle,
+   474→          description: formDescription || null,
+   475→          clientId: formClient || null,
+   476→          priority: formPriority,
+   477→          dueDate: formDueDate || null,
+   478→        }),
+   479→      });
+   480→      if (res.ok) {
+   481→        setAssignDialogOpen(false);
+   482→        resetForm();
+   483→        fetchData();
+   484→      }
+   485→    } catch (err) {
+   486→      console.error('Failed to create assignment:', err);
+   487→    } finally {
+   488→      setSubmitting(false);
+   489→    }
+   490→  };
+   491→
+   492→  // ── Update Assignment Status ───────────────────────────────────────────
+   493→  const handleStatusUpdate = async (id: string, status: string) => {
+   494→    try {
+   495→      const res = await fetch('/api/workload', {
+   496→        method: 'PATCH',
+   497→        headers: { 'Content-Type': 'application/json' },
+   498→        body: JSON.stringify({ id, status }),
+   499→      });
+   500→      if (res.ok) {
+   501→        fetchData();
+   502→      }
+   503→    } catch (err) {
+   504→      console.error('Failed to update assignment:', err);
+   505→    }
+   506→  };
+   507→
+   508→  const resetForm = () => {
+   509→    setFormTeamMember('');
+   510→    setFormEntityType('invoice');
+   511→    setFormTitle('');
+   512→    setFormDescription('');
+   513→    setFormClient('');
+   514→    setFormPriority('medium');
+   515→    setFormDueDate('');
+   516→  };
+   517→
+   518→  // ── Get initials ───────────────────────────────────────────────────────
+   519→  function getInitials(name: string): string {
+   520→    return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+   521→  }
+   522→
+   523→  // ═══════════════════════════════════════════════════════════════════════
+   524→  // RENDER
+   525→  // ═══════════════════════════════════════════════════════════════════════
+   526→  return (
+   527→    <div className="p-4 md:p-6 space-y-4">
+   528→      {/* ═══ PAGE HEADER ═══ */}
+   529→      <motion.div
+   530→        initial={{ opacity: 0, y: -10 }}
+   531→        animate={{ opacity: 1, y: 0 }}
+   532→        transition={{ duration: 0.4 }}
+   533→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   534→      >
+   535→        <div className="flex items-center gap-3">
+   536→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   537→            <Briefcase className="h-5 w-5 text-white" />
+   538→          </div>
+   539→          <div>
+   540→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-700 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent">
+   541→              Workload Distribution
+   542→            </h1>
+   543→            <p className="text-sm text-muted-foreground mt-0.5">
+   544→              Manage and distribute work across your team
+   545→            </p>
+   546→          </div>
+   547→        </div>
+   548→        <div className="flex items-center gap-2">
+   549→          <Button
+   550→            variant="outline"
+   551→            size="sm"
+   552→            onClick={fetchData}
+   553→            className="gap-1.5 h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   554→          >
+   555→            <RefreshCw className="h-3.5 w-3.5" />
+   556→            Refresh
+   557→          </Button>
+   558→          <Button
+   559→            size="sm"
+   560→            onClick={() => setAssignDialogOpen(true)}
+   561→            className="gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+   562→          >
+   563→            <Plus className="h-4 w-4" />
+   564→            Assign Task
+   565→          </Button>
+   566→        </div>
+   567→      </motion.div>
+   568→
+   569→      {/* ═══ KPI STATS ROW ═══ */}
+   570→      {loading ? (
+   571→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   572→          {Array.from({ length: 4 }).map((_, i) => <KPISkeleton key={i} />)}
+   573→        </div>
+   574→      ) : (
+   575→        <motion.div
+   576→          variants={containerVariants}
+   577→          initial="hidden"
+   578→          animate="show"
+   579→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+   580→        >
+   581→          {/* Total Tasks */}
+   582→          <motion.div variants={kpiVariants}>
+   583→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   584→              <CardContent className="p-6">
+   585→                <div className="flex items-center justify-between">
+   586→                  <div className="space-y-1">
+   587→                    <p className="text-sm text-muted-foreground font-medium">Total Tasks</p>
+   588→                    <p className="text-3xl font-bold text-slate-700 dark:text-slate-200">
+   589→                      {formatNumber(stats.totalPending + stats.totalCompleted + stats.totalInProgress)}
+   590→                    </p>
+   591→                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   592→                      <BarChart3 className="h-3 w-3" />
+   593→                      <span>Across {workloadData.length} members</span>
+   594→                    </div>
+   595→                  </div>
+   596→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
+   597→                    <Briefcase className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   598→                  </div>
+   599→                </div>
+   600→              </CardContent>
+   601→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   602→            </Card>
+   603→          </motion.div>
+   604→
+   605→          {/* Pending Tasks */}
+   606→          <motion.div variants={kpiVariants}>
+   607→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   608→              <CardContent className="p-6">
+   609→                <div className="flex items-center justify-between">
+   610→                  <div className="space-y-1">
+   611→                    <p className="text-sm text-muted-foreground font-medium">Pending Tasks</p>
+   612→                    <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+   613→                      {formatNumber(stats.totalPending)}
+   614→                    </p>
+   615→                    <div className="flex items-center gap-1 text-xs">
+   616→                      <Clock className="h-3 w-3 text-amber-500" />
+   617→                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+   618→                        {stats.urgentCount} urgent
+   619→                      </span>
+   620→                    </div>
+   621→                  </div>
+   622→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-amber-50 dark:bg-amber-950/40">
+   623→                    <Clock className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+   624→                  </div>
+   625→                </div>
+   626→              </CardContent>
+   627→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+   628→            </Card>
+   629→          </motion.div>
+   630→
+   631→          {/* In Progress */}
+   632→          <motion.div variants={kpiVariants}>
+   633→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   634→              <CardContent className="p-6">
+   635→                <div className="flex items-center justify-between">
+   636→                  <div className="space-y-1">
+   637→                    <p className="text-sm text-muted-foreground font-medium">In Progress</p>
+   638→                    <p className="text-3xl font-bold text-teal-600 dark:text-teal-400">
+   639→                      {formatNumber(stats.totalInProgress)}
+   640→                    </p>
+   641→                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   642→                      <Loader2 className="h-3 w-3 text-teal-500" />
+   643→                      <span>Active right now</span>
+   644→                    </div>
+   645→                  </div>
+   646→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-teal-50 dark:bg-teal-950/40">
+   647→                    <Zap className="h-7 w-7 text-teal-600 dark:text-teal-400" />
+   648→                  </div>
+   649→                </div>
+   650→              </CardContent>
+   651→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-400 to-teal-500" />
+   652→            </Card>
+   653→          </motion.div>
+   654→
+   655→          {/* Completed */}
+   656→          <motion.div variants={kpiVariants}>
+   657→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   658→              <CardContent className="p-6">
+   659→                <div className="flex items-center justify-between">
+   660→                  <div className="space-y-1">
+   661→                    <p className="text-sm text-muted-foreground font-medium">Completed</p>
+   662→                    <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+   663→                      {formatNumber(stats.totalCompleted)}
+   664→                    </p>
+   665→                    <div className="flex items-center gap-1 text-xs">
+   666→                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+   667→                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">This period</span>
+   668→                    </div>
+   669→                  </div>
+   670→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
+   671→                    <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   672→                  </div>
+   673→                </div>
+   674→              </CardContent>
+   675→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
+   676→            </Card>
+   677→          </motion.div>
+   678→        </motion.div>
+   679→      )}
+   680→
+   681→      {/* ═══ TEAM MEMBER CARDS ═══ */}
+   682→      <div>
+   683→        <motion.h2
+   684→          initial={{ opacity: 0, x: -10 }}
+   685→          animate={{ opacity: 1, x: 0 }}
+   686→          transition={{ delay: 0.2 }}
+   687→          className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2"
+   688→        >
+   689→          <Users className="h-5 w-5 text-emerald-500" />
+   690→          Team Workload
+   691→        </motion.h2>
+   692→
+   693→        {loading ? (
+   694→          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+   695→            {Array.from({ length: 6 }).map((_, i) => <TeamCardSkeleton key={i} />)}
+   696→          </div>
+   697→        ) : (
+   698→          <motion.div
+   699→            variants={containerVariants}
+   700→            initial="hidden"
+   701→            animate="show"
+   702→            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+   703→          >
+   704→            <AnimatePresence mode="popLayout">
+   705→              {workloadData.map((group, index) => {
+   706→                const member = group.teamMember;
+   707→                const s = group.summary;
+   708→                const capacity = s.invoicesAssigned + s.reviewsPending + s.approvalsPending;
+   709→                const workloadPct = capacity > 0 ? Math.min(100, Math.round(((s.invoicesPending + s.reviewsPending + s.approvalsPending) / capacity) * 100)) : 0;
+   710→                const progressColor = workloadPct > 80 ? 'bg-red-500' : workloadPct > 60 ? 'bg-amber-500' : 'bg-emerald-500';
+   711→                const progressIndicatorColor = workloadPct > 80 ? '[&>div]:bg-red-500' : workloadPct > 60 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500';
+   712→                const urgentCount = s.byPriority.urgent ?? 0;
+   713→                const highCount = s.byPriority.high ?? 0;
+   714→
+   715→                return (
+   716→                  <motion.div
+   717→                    key={member.id}
+   718→                    variants={cardVariants}
+   719→                    layout
+   720→                    exit={{ opacity: 0, scale: 0.95 }}
+   721→                    whileHover={{ y: -2 }}
+   722→                  >
+   723→                    <Card className="hover:shadow-lg transition-all duration-300 relative overflow-hidden group">
+   724→                      {/* Subtle gradient background */}
+   725→                      <div className="absolute inset-0 opacity-30 bg-gradient-to-br from-emerald-50/60 to-transparent dark:from-emerald-950/20" />
+   726→
+   727→                      <CardContent className="p-5 relative">
+   728→                        {/* Header: Avatar + Name + Role */}
+   729→                        <div className="flex items-center gap-3 mb-4">
+   730→                          <Avatar className="h-10 w-10 border-2 border-emerald-200 dark:border-emerald-800">
+   731→                            <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-sm font-semibold">
+   732→                              {getInitials(member.name)}
+   733→                            </AvatarFallback>
+   734→                          </Avatar>
+   735→                          <div className="flex-1 min-w-0">
+   736→                            <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
+   737→                              {member.name}
+   738→                            </h3>
+   739→                            <Badge variant="outline" className={`text-[10px] px-2 py-0 mt-0.5 capitalize ${getRoleBadgeColor(member.role)}`}>
+   740→                              {member.role}
+   741→                            </Badge>
+   742→                          </div>
+   743→                          {/* Priority indicator */}
+   744→                          {(urgentCount > 0 || highCount > 0) && (
+   745→                            <div className="flex items-center gap-1">
+   746→                              {urgentCount > 0 && (
+   747→                                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-950">
+   748→                                  <div className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+   749→                                  <span className="text-[9px] font-bold text-red-600 dark:text-red-400">{urgentCount}</span>
+   750→                                </div>
+   751→                              )}
+   752→                              {highCount > 0 && (
+   753→                                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950">
+   754→                                  <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+   755→                                  <span className="text-[9px] font-bold text-orange-600 dark:text-orange-400">{highCount}</span>
+   756→                                </div>
+   757→                              )}
+   758→                            </div>
+   759→                          )}
+   760→                        </div>
+   761→
+   762→                        {/* Progress Bar */}
+   763→                        <div className="mb-3">
+   764→                          <div className="flex items-center justify-between mb-1.5">
+   765→                            <span className="text-xs text-muted-foreground font-medium">Workload Capacity</span>
+   766→                            <span className="text-xs font-bold text-foreground">{workloadPct}%</span>
+   767→                          </div>
+   768→                          <div className="h-2.5 w-full rounded-full bg-muted/30 overflow-hidden">
+   769→                            <motion.div
+   770→                              className={`h-full rounded-full ${progressColor}`}
+   771→                              initial={{ width: 0 }}
+   772→                              animate={{ width: `${workloadPct}%` }}
+   773→                              transition={{ duration: 1, delay: 0.3 + index * 0.05, ease: 'easeOut' }}
+   774→                            />
+   775→                          </div>
+   776→                        </div>
+   777→
+   778→                        {/* Stat Breakdown */}
+   779→                        <div className="grid grid-cols-4 gap-1.5">
+   780→                          <div className="rounded-lg p-2 text-center bg-emerald-50/80 dark:bg-emerald-950/30">
+   781→                            <FileText className="h-3.5 w-3.5 text-emerald-500 mx-auto mb-0.5" />
+   782→                            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{s.invoicesAssigned}</p>
+   783→                            <p className="text-[9px] text-emerald-600/70 dark:text-emerald-400/70 font-medium">Assigned</p>
+   784→                          </div>
+   785→                          <div className="rounded-lg p-2 text-center bg-amber-50/80 dark:bg-amber-950/30">
+   786→                            <Clock className="h-3.5 w-3.5 text-amber-500 mx-auto mb-0.5" />
+   787→                            <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{s.invoicesPending}</p>
+   788→                            <p className="text-[9px] text-amber-600/70 dark:text-amber-400/70 font-medium">Pending</p>
+   789→                          </div>
+   790→                          <div className="rounded-lg p-2 text-center bg-teal-50/80 dark:bg-teal-950/30">
+   791→                            <ClipboardCheck className="h-3.5 w-3.5 text-teal-500 mx-auto mb-0.5" />
+   792→                            <p className="text-sm font-bold text-teal-700 dark:text-teal-300">{s.reviewsPending}</p>
+   793→                            <p className="text-[9px] text-teal-600/70 dark:text-teal-400/70 font-medium">Reviews</p>
+   794→                          </div>
+   795→                          <div className="rounded-lg p-2 text-center bg-slate-50/80 dark:bg-slate-800/40">
+   796→                            <ShieldCheck className="h-3.5 w-3.5 text-slate-500 mx-auto mb-0.5" />
+   797→                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{s.approvalsPending}</p>
+   798→                            <p className="text-[9px] text-slate-600/70 dark:text-slate-400/70 font-medium">Approvals</p>
+   799→                          </div>
+   800→                        </div>
+   801→                      </CardContent>
+   802→                    </Card>
+   803→                  </motion.div>
+   804→                );
+   805→              })}
+   806→            </AnimatePresence>
+   807→          </motion.div>
+   808→        )}
+   809→      </div>
+   810→
+   811→      {/* ═══ PENDING TASKS TABLE ═══ */}
+   812→      <div>
+   813→        <motion.h2
+   814→          initial={{ opacity: 0, x: -10 }}
+   815→          animate={{ opacity: 1, x: 0 }}
+   816→          transition={{ delay: 0.3 }}
+   817→          className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2"
+   818→        >
+   819→          <ClipboardCheck className="h-5 w-5 text-emerald-500" />
+   820→          Pending Assignments
+   821→          {allAssignments.length > 0 && (
+   822→            <Badge variant="outline" className="text-[10px] px-2 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950">
+   823→              {allAssignments.length}
+   824→            </Badge>
+   825→          )}
+   826→        </motion.h2>
+   827→
+   828→        {loading ? (
+   829→          <TableSkeleton />
+   830→        ) : allAssignments.length === 0 ? (
+   831→          <AnimatedCard>
+   832→            <CardContent className="p-8 flex flex-col items-center text-center">
+   833→              <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 mb-3">
+   834→                <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+   835→              </div>
+   836→              <h3 className="text-base font-semibold text-foreground mb-1">All caught up!</h3>
+   837→              <p className="text-sm text-muted-foreground max-w-sm">
+   838→                No pending assignments found. Assign new tasks to team members using the button above.
+   839→              </p>
+   840→            </CardContent>
+   841→          </AnimatedCard>
+   842→        ) : (
+   843→          <AnimatedCard delay={0.1}>
+   844→            <CardContent className="p-0">
+   845→              <ScrollArea className="max-h-96">
+   846→                <Table>
+   847→                  <TableHeader>
+   848→                    <TableRow className="hover:bg-transparent">
+   849→                      <TableHead className="w-8">#</TableHead>
+   850→                      <TableHead>Task</TableHead>
+   851→                      <TableHead>Assigned To</TableHead>
+   852→                      <TableHead>Type</TableHead>
+   853→                      <TableHead>Priority</TableHead>
+   854→                      <TableHead>Due Date</TableHead>
+   855→                      <TableHead>Status</TableHead>
+   856→                      <TableHead className="text-right">Actions</TableHead>
+   857→                    </TableRow>
+   858→                  </TableHeader>
+   859→                  <TableBody>
+   860→                    {allAssignments.map((assignment, i) => (
+   861→                      <TableRow key={assignment.id}>
+   862→                        <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
+   863→                        <TableCell>
+   864→                          <div className="max-w-[200px]">
+   865→                            <p className="text-sm font-medium text-foreground truncate">{assignment.title}</p>
+   866→                            {assignment.description && (
+   867→                              <p className="text-xs text-muted-foreground truncate">{assignment.description}</p>
+   868→                            )}
+   869→                          </div>
+   870→                        </TableCell>
+   871→                        <TableCell>
+   872→                          <div className="flex items-center gap-2">
+   873→                            <Avatar className="h-6 w-6">
+   874→                              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[9px] font-semibold dark:bg-emerald-950 dark:text-emerald-300">
+   875→                                {getInitials(assignment.teamMember?.name ?? 'U')}
+   876→                              </AvatarFallback>
+   877→                            </Avatar>
+   878→                            <span className="text-sm text-foreground">{assignment.teamMember?.name ?? 'Unassigned'}</span>
+   879→                          </div>
+   880→                        </TableCell>
+   881→                        <TableCell>
+   882→                          <div className="flex items-center gap-1.5 text-muted-foreground">
+   883→                            {getEntityTypeIcon(assignment.entityType)}
+   884→                            <span className="text-xs capitalize">{assignment.entityType}</span>
+   885→                          </div>
+   886→                        </TableCell>
+   887→                        <TableCell>
+   888→                          <Badge variant="outline" className={`text-[10px] px-2 py-0 capitalize ${getPriorityColor(assignment.priority)}`}>
+   889→                            <div className={`h-1.5 w-1.5 rounded-full mr-1 ${getPriorityDot(assignment.priority)}`} />
+   890→                            {assignment.priority}
+   891→                          </Badge>
+   892→                        </TableCell>
+   893→                        <TableCell>
+   894→                          {assignment.dueDate ? (
+   895→                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   896→                              <Calendar className="h-3 w-3" />
+   897→                              {new Date(assignment.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+   898→                            </div>
+   899→                          ) : (
+   900→                            <span className="text-xs text-muted-foreground">—</span>
+   901→                          )}
+   902→                        </TableCell>
+   903→                        <TableCell>
+   904→                          <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 capitalize ${getStatusBadge(assignment.status)}`}>
+   905→                            {getStatusIcon(assignment.status)}
+   906→                            {assignment.status.replace('_', ' ')}
+   907→                          </Badge>
+   908→                        </TableCell>
+   909→                        <TableCell className="text-right">
+   910→                          <div className="flex items-center justify-end gap-1">
+   911→                            {assignment.status !== 'completed' && (
+   912→                              <Button
+   913→                                variant="ghost"
+   914→                                size="sm"
+   915→                                className="h-7 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   916→                                onClick={() => handleStatusUpdate(assignment.id, 'completed')}
+   917→                              >
+   918→                                <CheckCircle2 className="h-3 w-3" />
+   919→                                Complete
+   920→                              </Button>
+   921→                            )}
+   922→                            {assignment.status === 'pending' && (
+   923→                              <Button
+   924→                                variant="ghost"
+   925→                                size="sm"
+   926→                                className="h-7 text-[10px] gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/30"
+   927→                                onClick={() => handleStatusUpdate(assignment.id, 'in_progress')}
+   928→                              >
+   929→                                <ArrowRight className="h-3 w-3" />
+   930→                                Start
+   931→                              </Button>
+   932→                            )}
+   933→                          </div>
+   934→                        </TableCell>
+   935→                      </TableRow>
+   936→                    ))}
+   937→                  </TableBody>
+   938→                </Table>
+   939→              </ScrollArea>
+   940→            </CardContent>
+   941→          </AnimatedCard>
+   942→        )}
+   943→      </div>
+   944→
+   945→      {/* ═══ TASK ASSIGNMENT DIALOG ═══ */}
+   946→      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+   947→        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+   948→          <DialogHeader>
+   949→            <DialogTitle className="flex items-center gap-2">
+   950→              <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950">
+   951→                <Plus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   952→              </div>
+   953→              Assign New Task
+   954→            </DialogTitle>
+   955→            <DialogDescription>
+   956→              Create a new task and assign it to a team member
+   957→            </DialogDescription>
+   958→          </DialogHeader>
+   959→
+   960→          <div className="space-y-4 py-2">
+   961→            {/* Team Member */}
+   962→            <div className="space-y-2">
+   963→              <Label className="text-sm font-medium">Team Member *</Label>
+   964→              <Select value={formTeamMember} onValueChange={setFormTeamMember}>
+   965→                <SelectTrigger className="h-9">
+   966→                  <User className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+   967→                  <SelectValue placeholder="Select team member" />
+   968→                </SelectTrigger>
+   969→                <SelectContent>
+   970→                  {teamMembers.map(m => (
+   971→                    <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>
+   972→                  ))}
+   973→                </SelectContent>
+   974→              </Select>
+   975→            </div>
+   976→
+   977→            {/* Entity Type + Priority */}
+   978→            <div className="grid grid-cols-2 gap-3">
+   979→              <div className="space-y-2">
+   980→                <Label className="text-sm font-medium">Entity Type *</Label>
+   981→                <Select value={formEntityType} onValueChange={setFormEntityType}>
+   982→                  <SelectTrigger className="h-9">
+   983→                    <SelectValue placeholder="Select type" />
+   984→                  </SelectTrigger>
+   985→                  <SelectContent>
+   986→                    <SelectItem value="invoice">Invoice</SelectItem>
+   987→                    <SelectItem value="review">Review</SelectItem>
+   988→                    <SelectItem value="approval">Approval</SelectItem>
+   989→                    <SelectItem value="notice">Notice</SelectItem>
+   990→                  </SelectContent>
+   991→                </Select>
+   992→              </div>
+   993→              <div className="space-y-2">
+   994→                <Label className="text-sm font-medium">Priority</Label>
+   995→                <Select value={formPriority} onValueChange={setFormPriority}>
+   996→                  <SelectTrigger className="h-9">
+   997→                    <SelectValue placeholder="Select priority" />
+   998→                  </SelectTrigger>
+   999→                  <SelectContent>
+  1000→                    <SelectItem value="urgent">Urgent</SelectItem>
+  1001→                    <SelectItem value="high">High</SelectItem>
+  1002→                    <SelectItem value="medium">Medium</SelectItem>
+  1003→                    <SelectItem value="low">Low</SelectItem>
+  1004→                  </SelectContent>
+  1005→                </Select>
+  1006→              </div>
+  1007→            </div>
+  1008→
+  1009→            {/* Title */}
+  1010→            <div className="space-y-2">
+  1011→              <Label className="text-sm font-medium">Title *</Label>
+  1012→              <Input
+  1013→                value={formTitle}
+  1014→                onChange={e => setFormTitle(e.target.value)}
+  1015→                placeholder="Enter task title..."
+  1016→                className="h-9"
+  1017→              />
+  1018→            </div>
+  1019→
+  1020→            {/* Description */}
+  1021→            <div className="space-y-2">
+  1022→              <Label className="text-sm font-medium">Description</Label>
+  1023→              <Textarea
+  1024→                value={formDescription}
+  1025→                onChange={e => setFormDescription(e.target.value)}
+  1026→                placeholder="Describe the task..."
+  1027→                className="min-h-[80px] text-sm"
+  1028→              />
+  1029→            </div>
+  1030→
+  1031→            {/* Client */}
+  1032→            <div className="space-y-2">
+  1033→              <Label className="text-sm font-medium">Client</Label>
+  1034→              <Select value={formClient} onValueChange={setFormClient}>
+  1035→                <SelectTrigger className="h-9">
+  1036→                  <SelectValue placeholder="Select client (optional)" />
+  1037→                </SelectTrigger>
+  1038→                <SelectContent>
+  1039→                  {clients.map(c => (
+  1040→                    <SelectItem key={c.id} value={c.id}>{c.tradeName}</SelectItem>
+  1041→                  ))}
+  1042→                </SelectContent>
+  1043→              </Select>
+  1044→            </div>
+  1045→
+  1046→            {/* Due Date */}
+  1047→            <div className="space-y-2">
+  1048→              <Label className="text-sm font-medium">Due Date</Label>
+  1049→              <Input
+  1050→                type="date"
+  1051→                value={formDueDate}
+  1052→                onChange={e => setFormDueDate(e.target.value)}
+  1053→                className="h-9"
+  1054→              />
+  1055→            </div>
+  1056→          </div>
+  1057→
+  1058→          <Separator />
+  1059→
+  1060→          <div className="flex items-center justify-end gap-2 pt-1">
+  1061→            <Button
+  1062→              variant="outline"
+  1063→              onClick={() => setAssignDialogOpen(false)}
+  1064→              className="h-9"
+  1065→            >
+  1066→              Cancel
+  1067→            </Button>
+  1068→            <Button
+  1069→              onClick={handleSubmit}
+  1070→              disabled={!formTeamMember || !formTitle || submitting}
+  1071→              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+  1072→            >
+  1073→              {submitting ? (
+  1074→                <Loader2 className="h-4 w-4 animate-spin" />
+  1075→              ) : (
+  1076→                <Plus className="h-4 w-4" />
+  1077→              )}
+  1078→              Assign Task
+  1079→            </Button>
+  1080→          </div>
+  1081→        </DialogContent>
+  1082→      </Dialog>
+  1083→    </div>
+  1084→  );
+  1085→}
+  1086→

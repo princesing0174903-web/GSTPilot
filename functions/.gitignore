@@ -1,0 +1,20 @@
+# Build output
+lib/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local env (NEVER commit secrets)
+.env
+.env.local
+.runtimeconfig.json
+
+# Firebase
+.firebase/
+
+# OS
+.DS_Store

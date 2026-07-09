@@ -1,0 +1,940 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useMemo, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→import { ScrollArea } from '@/components/ui/scroll-area';
+    15→import {
+    16→  Table,
+    17→  TableBody,
+    18→  TableCell,
+    19→  TableHead,
+    20→  TableHeader,
+    21→  TableRow,
+    22→} from '@/components/ui/table';
+    23→import {
+    24→  BarChart3,
+    25→  Users,
+    26→  Target,
+    27→  Clock,
+    28→  Award,
+    29→  TrendingUp,
+    30→  Activity,
+    31→  Sparkles,
+    32→  Zap,
+    33→  Shield,
+    34→  FileCheck,
+    35→  CheckCircle2,
+    36→  AlertCircle,
+    37→  UserCheck,
+    38→} from 'lucide-react';
+    39→import { motion, AnimatePresence } from 'framer-motion';
+    40→import { formatNumber } from '@/lib/gst-utils';
+    41→
+    42→// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
+    43→const COLORS = {
+    44→  emerald: '#10b981',
+    45→  emeraldDark: '#059669',
+    46→  emeraldLight: '#d1fae5',
+    47→  teal: '#14b8a6',
+    48→  tealDark: '#0d9488',
+    49→  tealLight: '#ccfbf1',
+    50→  amber: '#f59e0b',
+    51→  amberLight: '#fef3c7',
+    52→  red: '#ef4444',
+    53→  redLight: '#fee2e2',
+    54→  slate: '#64748b',
+    55→  slateLight: '#f1f5f9',
+    56→};
+    57→
+    58→// ─── Types ─────────────────────────────────────────────────────────────────
+    59→interface TeamMember {
+    60→  id: string;
+    61→  name: string;
+    62→  email: string;
+    63→  role: string;
+    64→  department: string;
+    65→  avatar: string | null;
+    66→  rank: number;
+    67→  performanceScore: number;
+    68→  aggregatedMetrics: {
+    69→    invoicesProcessed: number;
+    70→    reviewsCompleted: number;
+    71→    approvalsCompleted: number;
+    72→    averageAccuracy: number;
+    73→    averageTurnaround: number;
+    74→  };
+    75→  workload: {
+    76→    pending: number;
+    77→    inProgress: number;
+    78→    completed: number;
+    79→  };
+    80→}
+    81→
+    82→type RoleFilter = 'all' | 'auditor' | 'manager' | 'data_entry';
+    83→
+    84→// ─── Mock fallback data ───────────────────────────────────────────────────
+    85→const mockLeaderboard: TeamMember[] = [
+    86→  {
+    87→    id: '1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'auditor', department: 'Audit', avatar: null, rank: 1,
+    88→    performanceScore: 94.2,
+    89→    aggregatedMetrics: { invoicesProcessed: 245, reviewsCompleted: 89, approvalsCompleted: 45, averageAccuracy: 97.8, averageTurnaround: 3.2 },
+    90→    workload: { pending: 5, inProgress: 3, completed: 42 },
+    91→  },
+    92→  {
+    93→    id: '2', name: 'Rahul Verma', email: 'rahul@firm.com', role: 'manager', department: 'Tax', avatar: null, rank: 2,
+    94→    performanceScore: 91.5,
+    95→    aggregatedMetrics: { invoicesProcessed: 198, reviewsCompleted: 112, approvalsCompleted: 78, averageAccuracy: 96.5, averageTurnaround: 4.1 },
+    96→    workload: { pending: 8, inProgress: 4, completed: 38 },
+    97→  },
+    98→  {
+    99→    id: '3', name: 'Anita Desai', email: 'anita@firm.com', role: 'auditor', department: 'Compliance', avatar: null, rank: 3,
+   100→    performanceScore: 89.8,
+   101→    aggregatedMetrics: { invoicesProcessed: 176, reviewsCompleted: 95, approvalsCompleted: 52, averageAccuracy: 95.2, averageTurnaround: 4.8 },
+   102→    workload: { pending: 6, inProgress: 2, completed: 35 },
+   103→  },
+   104→  {
+   105→    id: '4', name: 'Vikram Patel', email: 'vikram@firm.com', role: 'data_entry', department: 'Data Entry', avatar: null, rank: 4,
+   106→    performanceScore: 86.3,
+   107→    aggregatedMetrics: { invoicesProcessed: 312, reviewsCompleted: 23, approvalsCompleted: 10, averageAccuracy: 92.1, averageTurnaround: 2.8 },
+   108→    workload: { pending: 12, inProgress: 5, completed: 48 },
+   109→  },
+   110→  {
+   111→    id: '5', name: 'Meera Joshi', email: 'meera@firm.com', role: 'manager', department: 'Audit', avatar: null, rank: 5,
+   112→    performanceScore: 83.7,
+   113→    aggregatedMetrics: { invoicesProcessed: 145, reviewsCompleted: 87, approvalsCompleted: 65, averageAccuracy: 88.4, averageTurnaround: 5.6 },
+   114→    workload: { pending: 7, inProgress: 3, completed: 30 },
+   115→  },
+   116→  {
+   117→    id: '6', name: 'Arjun Kumar', email: 'arjun@firm.com', role: 'data_entry', department: 'Data Entry', avatar: null, rank: 6,
+   118→    performanceScore: 80.1,
+   119→    aggregatedMetrics: { invoicesProcessed: 278, reviewsCompleted: 15, approvalsCompleted: 5, averageAccuracy: 83.5, averageTurnaround: 3.5 },
+   120→    workload: { pending: 15, inProgress: 6, completed: 40 },
+   121→  },
+   122→];
+   123→
+   124→// ─── Circular Performance Score ────────────────────────────────────────────
+   125→function PerformanceCircle({
+   126→  score,
+   127→  size = 48,
+   128→  strokeWidth = 5,
+   129→}: {
+   130→  score: number;
+   131→  size?: number;
+   132→  strokeWidth?: number;
+   133→}) {
+   134→  const radius = (size - strokeWidth) / 2;
+   135→  const circumference = 2 * Math.PI * radius;
+   136→  const offset = circumference - (score / 100) * circumference;
+   137→  const center = size / 2;
+   138→
+   139→  const getColor = (s: number) => {
+   140→    if (s >= 90) return COLORS.emerald;
+   141→    if (s >= 80) return COLORS.teal;
+   142→    if (s >= 70) return COLORS.amber;
+   143→    return COLORS.red;
+   144→  };
+   145→
+   146→  return (
+   147→    <div className="relative" style={{ width: size, height: size }}>
+   148→      <svg width={size} height={size} className="transform -rotate-90">
+   149→        <circle
+   150→          cx={center}
+   151→          cy={center}
+   152→          r={radius}
+   153→          fill="none"
+   154→          stroke="currentColor"
+   155→          strokeWidth={strokeWidth}
+   156→          className="text-muted/20"
+   157→        />
+   158→        <circle
+   159→          cx={center}
+   160→          cy={center}
+   161→          r={radius}
+   162→          fill="none"
+   163→          stroke={getColor(score)}
+   164→          strokeWidth={strokeWidth}
+   165→          strokeDasharray={circumference}
+   166→          strokeDashoffset={offset}
+   167→          strokeLinecap="round"
+   168→          className="transition-all duration-700 ease-out"
+   169→          style={{ filter: `drop-shadow(0 0 3px ${getColor(score)}40)` }}
+   170→        />
+   171→      </svg>
+   172→      <div className="absolute inset-0 flex items-center justify-center">
+   173→        <span className="text-[11px] font-bold text-foreground">{Math.round(score)}</span>
+   174→      </div>
+   175→    </div>
+   176→  );
+   177→}
+   178→
+   179→// ─── Rank Badge ────────────────────────────────────────────────────────────
+   180→function RankBadge({ rank }: { rank: number }) {
+   181→  if (rank === 1) {
+   182→    return (
+   183→      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 shadow-md shadow-amber-500/30">
+   184→        <span className="text-xs font-bold text-white">1</span>
+   185→      </div>
+   186→    );
+   187→  }
+   188→  if (rank === 2) {
+   189→    return (
+   190→      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-br from-slate-300 to-slate-400 shadow-md shadow-slate-400/30">
+   191→        <span className="text-xs font-bold text-white">2</span>
+   192→      </div>
+   193→    );
+   194→  }
+   195→  if (rank === 3) {
+   196→    return (
+   197→      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 shadow-md shadow-amber-700/30">
+   198→        <span className="text-xs font-bold text-white">3</span>
+   199→      </div>
+   200→    );
+   201→  }
+   202→  return (
+   203→    <div className="flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 dark:bg-slate-800">
+   204→      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{rank}</span>
+   205→    </div>
+   206→  );
+   207→}
+   208→
+   209→// ─── Avatar with initials ─────────────────────────────────────────────────
+   210→function InitialsAvatar({ name, index }: { name: string; index: number }) {
+   211→  const initials = name
+   212→    .split(' ')
+   213→    .map(w => w[0])
+   214→    .join('')
+   215→    .slice(0, 2)
+   216→    .toUpperCase();
+   217→
+   218→  const gradients = [
+   219→    'from-emerald-400 to-teal-500',
+   220→    'from-teal-400 to-emerald-500',
+   221→    'from-emerald-500 to-green-600',
+   222→    'from-teal-500 to-cyan-600',
+   223→    'from-green-400 to-emerald-500',
+   224→    'from-emerald-300 to-teal-400',
+   225→  ];
+   226→
+   227→  const gradient = gradients[index % gradients.length];
+   228→
+   229→  return (
+   230→    <div className={`flex items-center justify-center h-9 w-9 rounded-full bg-gradient-to-br ${gradient} shadow-sm shrink-0`}>
+   231→      <span className="text-xs font-bold text-white">{initials}</span>
+   232→    </div>
+   233→  );
+   234→}
+   235→
+   236→// ─── Accuracy Color ────────────────────────────────────────────────────────
+   237→function getAccuracyColor(accuracy: number): string {
+   238→  if (accuracy >= 95) return 'text-emerald-600 dark:text-emerald-400';
+   239→  if (accuracy >= 85) return 'text-amber-600 dark:text-amber-400';
+   240→  return 'text-red-600 dark:text-red-400';
+   241→}
+   242→
+   243→function getAccuracyBg(accuracy: number): string {
+   244→  if (accuracy >= 95) return 'bg-emerald-50 dark:bg-emerald-950/40';
+   245→  if (accuracy >= 85) return 'bg-amber-50 dark:bg-amber-950/40';
+   246→  return 'bg-red-50 dark:bg-red-950/40';
+   247→}
+   248→
+   249→// ─── Role Badge ────────────────────────────────────────────────────────────
+   250→function RoleBadge({ role }: { role: string }) {
+   251→  const roleConfig: Record<string, { label: string; classes: string }> = {
+   252→    auditor: { label: 'Auditor', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800' },
+   253→    manager: { label: 'Manager', classes: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800' },
+   254→    data_entry: { label: 'Data Entry', classes: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' },
+   255→  };
+   256→
+   257→  const config = roleConfig[role] || { label: role, classes: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:border-slate-800' };
+   258→
+   259→  return (
+   260→    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-semibold ${config.classes}`}>
+   261→      {config.label}
+   262→    </Badge>
+   263→  );
+   264→}
+   265→
+   266→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   267→function OverviewSkeleton() {
+   268→  return (
+   269→    <Card>
+   270→      <CardContent className="p-5">
+   271→        <div className="flex items-center justify-between">
+   272→          <div className="space-y-2">
+   273→            <Skeleton className="h-3.5 w-24" />
+   274→            <Skeleton className="h-8 w-16" />
+   275→            <Skeleton className="h-3 w-20" />
+   276→          </div>
+   277→          <Skeleton className="h-12 w-12 rounded-xl" />
+   278→        </div>
+   279→      </CardContent>
+   280→    </Card>
+   281→  );
+   282→}
+   283→
+   284→function LeaderboardSkeleton() {
+   285→  return (
+   286→    <Card>
+   287→      <CardContent className="p-4">
+   288→        <div className="space-y-3">
+   289→          {Array.from({ length: 5 }).map((_, i) => (
+   290→            <div key={i} className="flex items-center gap-3">
+   291→              <Skeleton className="h-7 w-7 rounded-full" />
+   292→              <Skeleton className="h-9 w-9 rounded-full" />
+   293→              <div className="flex-1 space-y-1.5">
+   294→                <Skeleton className="h-4 w-32" />
+   295→                <Skeleton className="h-3 w-20" />
+   296→              </div>
+   297→              <Skeleton className="h-4 w-12" />
+   298→              <Skeleton className="h-4 w-12" />
+   299→              <Skeleton className="h-4 w-12" />
+   300→              <Skeleton className="h-10 w-10 rounded-full" />
+   301→            </div>
+   302→          ))}
+   303→        </div>
+   304→      </CardContent>
+   305→    </Card>
+   306→  );
+   307→}
+   308→
+   309→function DeptCardSkeleton() {
+   310→  return (
+   311→    <Card>
+   312→      <CardContent className="p-5">
+   313→        <div className="space-y-3">
+   314→          <div className="flex items-center gap-2">
+   315→            <Skeleton className="h-5 w-5 rounded" />
+   316→            <Skeleton className="h-5 w-24" />
+   317→          </div>
+   318→          <div className="grid grid-cols-2 gap-2">
+   319→            <Skeleton className="h-12 w-full rounded-lg" />
+   320→            <Skeleton className="h-12 w-full rounded-lg" />
+   321→          </div>
+   322→          <Skeleton className="h-12 w-full rounded-lg" />
+   323→        </div>
+   324→      </CardContent>
+   325→    </Card>
+   326→  );
+   327→}
+   328→
+   329→// ─── Animation variants ───────────────────────────────────────────────────
+   330→const containerVariants = {
+   331→  hidden: { opacity: 0 },
+   332→  show: {
+   333→    opacity: 1,
+   334→    transition: { staggerChildren: 0.07, delayChildren: 0.1 },
+   335→  },
+   336→};
+   337→
+   338→const kpiVariants = {
+   339→  hidden: { opacity: 0, y: 12 },
+   340→  show: {
+   341→    opacity: 1,
+   342→    y: 0,
+   343→    transition: { type: 'spring', stiffness: 300, damping: 26 },
+   344→  },
+   345→};
+   346→
+   347→const rowVariants = {
+   348→  hidden: { opacity: 0, x: -20 },
+   349→  show: {
+   350→    opacity: 1,
+   351→    x: 0,
+   352→    transition: { type: 'spring', stiffness: 260, damping: 24 },
+   353→  },
+   354→};
+   355→
+   356→// ═══════════════════════════════════════════════════════════════════════════
+   357→// MAIN COMPONENT
+   358→// ═══════════════════════════════════════════════════════════════════════════
+   359→export default function TeamPerformancePage() {
+   360→  // ── State ────────────────────────────────────────────────────────────────
+   361→  const [leaderboard, setLeaderboard] = useState<TeamMember[]>(mockLeaderboard);
+   362→  const [loading, setLoading] = useState(true);
+   363→  const [error, setError] = useState<string | null>(null);
+   364→  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+   365→
+   366→  // ── Data Fetching ────────────────────────────────────────────────────────
+   367→  const fetchData = useCallback(async () => {
+   368→    try {
+   369→      setLoading(true);
+   370→      setError(null);
+   371→
+   372→      const res = await fetch('/api/team-performance');
+   373→      if (res.ok) {
+   374→        const data = await res.json();
+   375→        if (data.leaderboard && Array.isArray(data.leaderboard) && data.leaderboard.length > 0) {
+   376→          setLeaderboard(data.leaderboard);
+   377→        }
+   378→      } else {
+   379→        setError('Failed to fetch team performance data');
+   380→      }
+   381→    } catch (err) {
+   382→      console.error('TeamPerformance fetch error:', err);
+   383→      setError(err instanceof Error ? err.message : 'Unknown error');
+   384→    } finally {
+   385→      setLoading(false);
+   386→    }
+   387→  }, []);
+   388→
+   389→  useEffect(() => {
+   390→    fetchData();
+   391→  }, [fetchData]);
+   392→
+   393→  // ── Filtered leaderboard ─────────────────────────────────────────────────
+   394→  const filteredLeaderboard = useMemo(() => {
+   395→    if (roleFilter === 'all') return leaderboard;
+   396→    return leaderboard.filter(m => {
+   397→      if (roleFilter === 'auditor') return m.role === 'auditor';
+   398→      if (roleFilter === 'manager') return m.role === 'manager';
+   399→      if (roleFilter === 'data_entry') return m.role === 'data_entry';
+   400→      return true;
+   401→    });
+   402→  }, [leaderboard, roleFilter]);
+   403→
+   404→  // ── Overview metrics ─────────────────────────────────────────────────────
+   405→  const overviewMetrics = useMemo(() => {
+   406→    const totalMembers = leaderboard.length;
+   407→    const avgAccuracy = leaderboard.length > 0
+   408→      ? Math.round(leaderboard.reduce((sum, m) => sum + m.aggregatedMetrics.averageAccuracy, 0) / leaderboard.length * 10) / 10
+   409→      : 0;
+   410→    const avgTurnaround = leaderboard.length > 0
+   411→      ? Math.round(leaderboard.reduce((sum, m) => sum + m.aggregatedMetrics.averageTurnaround, 0) / leaderboard.length * 10) / 10
+   412→      : 0;
+   413→    return { totalMembers, avgAccuracy, avgTurnaround };
+   414→  }, [leaderboard]);
+   415→
+   416→  // ── Department breakdown ─────────────────────────────────────────────────
+   417→  const departmentBreakdown = useMemo(() => {
+   418→    const departments = new Map<string, { name: string; members: TeamMember[] }>();
+   419→
+   420→    for (const member of leaderboard) {
+   421→      const dept = member.department || 'Unassigned';
+   422→      if (!departments.has(dept)) {
+   423→        departments.set(dept, { name: dept, members: [] });
+   424→      }
+   425→      departments.get(dept)!.members.push(member);
+   426→    }
+   427→
+   428→    return Array.from(departments.values()).map(dept => {
+   429→      const memberCount = dept.members.length;
+   430→      const avgAccuracy = memberCount > 0
+   431→        ? Math.round(dept.members.reduce((s, m) => s + m.aggregatedMetrics.averageAccuracy, 0) / memberCount * 10) / 10
+   432→        : 0;
+   433→      const avgTurnaround = memberCount > 0
+   434→        ? Math.round(dept.members.reduce((s, m) => s + m.aggregatedMetrics.averageTurnaround, 0) / memberCount * 10) / 10
+   435→        : 0;
+   436→      const avgScore = memberCount > 0
+   437→        ? Math.round(dept.members.reduce((s, m) => s + m.performanceScore, 0) / memberCount * 10) / 10
+   438→        : 0;
+   439→      const totalInvoices = dept.members.reduce((s, m) => s + m.aggregatedMetrics.invoicesProcessed, 0);
+   440→      const totalReviews = dept.members.reduce((s, m) => s + m.aggregatedMetrics.reviewsCompleted, 0);
+   441→
+   442→      return {
+   443→        name: dept.name,
+   444→        memberCount,
+   445→        avgAccuracy,
+   446→        avgTurnaround,
+   447→        avgScore,
+   448→        totalInvoices,
+   449→        totalReviews,
+   450→      };
+   451→    });
+   452→  }, [leaderboard]);
+   453→
+   454→  // ── Role filter tabs config ──────────────────────────────────────────────
+   455→  const roleTabs: { value: RoleFilter; label: string; count: number }[] = [
+   456→    { value: 'all', label: 'All', count: leaderboard.length },
+   457→    { value: 'auditor', label: 'Auditors', count: leaderboard.filter(m => m.role === 'auditor').length },
+   458→    { value: 'manager', label: 'Managers', count: leaderboard.filter(m => m.role === 'manager').length },
+   459→    { value: 'data_entry', label: 'Data Entry', count: leaderboard.filter(m => m.role === 'data_entry').length },
+   460→  ];
+   461→
+   462→  // ── Department icon ──────────────────────────────────────────────────────
+   463→  function getDeptIcon(dept: string) {
+   464→    switch (dept.toLowerCase()) {
+   465→      case 'audit':
+   466→        return <Shield className="h-5 w-5 text-emerald-500" />;
+   467→      case 'tax':
+   468→        return <Target className="h-5 w-5 text-teal-500" />;
+   469→      case 'compliance':
+   470→        return <FileCheck className="h-5 w-5 text-emerald-500" />;
+   471→      case 'data entry':
+   472→        return <Activity className="h-5 w-5 text-teal-500" />;
+   473→      default:
+   474→        return <Users className="h-5 w-5 text-slate-500" />;
+   475→    }
+   476→  }
+   477→
+   478→  function getDeptGradient(dept: string): string {
+   479→    switch (dept.toLowerCase()) {
+   480→      case 'audit':
+   481→        return 'from-emerald-500 to-teal-500';
+   482→      case 'tax':
+   483→        return 'from-teal-500 to-emerald-500';
+   484→      case 'compliance':
+   485→        return 'from-emerald-400 to-green-500';
+   486→      case 'data entry':
+   487→        return 'from-teal-400 to-emerald-400';
+   488→      default:
+   489→        return 'from-slate-400 to-slate-500';
+   490→    }
+   491→  }
+   492→
+   493→  // ═══ RENDER ══════════════════════════════════════════════════════════════
+   494→  return (
+   495→    <div className="p-4 md:p-6 space-y-4">
+   496→      {/* ═══ PAGE HEADER ═══ */}
+   497→      <motion.div
+   498→        initial={{ opacity: 0, y: -10 }}
+   499→        animate={{ opacity: 1, y: 0 }}
+   500→        transition={{ duration: 0.4 }}
+   501→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   502→      >
+   503→        <div className="flex items-center gap-3">
+   504→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 shadow-lg shadow-teal-500/20">
+   505→            <BarChart3 className="h-5 w-5 text-white" />
+   506→          </div>
+   507→          <div>
+   508→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-teal-700 to-emerald-600 dark:from-teal-400 dark:to-emerald-300 bg-clip-text text-transparent">
+   509→              Team Performance Center
+   510→            </h1>
+   511→            <p className="text-sm text-muted-foreground mt-0.5">
+   512→              Track individual and team performance metrics
+   513→            </p>
+   514→          </div>
+   515→        </div>
+   516→        <div className="flex items-center gap-2">
+   517→          <Badge
+   518→            variant="outline"
+   519→            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
+   520→          >
+   521→            <Sparkles className="h-3.5 w-3.5" />
+   522→            AI Scored
+   523→          </Badge>
+   524→          <Badge
+   525→            variant="outline"
+   526→            className="gap-1.5 px-3 py-1.5 border-teal-200 text-teal-700 bg-teal-50/80 dark:border-teal-800 dark:text-teal-400 dark:bg-teal-950/40"
+   527→          >
+   528→            <Activity className="h-3.5 w-3.5 animate-pulse" />
+   529→            Live
+   530→          </Badge>
+   531→        </div>
+   532→      </motion.div>
+   533→
+   534→      {/* ═══ ROLE FILTER TABS ═══ */}
+   535→      <motion.div
+   536→        initial={{ opacity: 0, y: -5 }}
+   537→        animate={{ opacity: 1, y: 0 }}
+   538→        transition={{ duration: 0.3, delay: 0.1 }}
+   539→        className="flex items-center gap-2 flex-wrap"
+   540→      >
+   541→        {roleTabs.map(tab => (
+   542→          <Button
+   543→            key={tab.value}
+   544→            size="sm"
+   545→            variant={roleFilter === tab.value ? 'default' : 'outline'}
+   546→            onClick={() => setRoleFilter(tab.value)}
+   547→            className={`gap-1.5 h-8 text-xs ${
+   548→              roleFilter === tab.value
+   549→                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   550→                : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30'
+   551→            }`}
+   552→          >
+   553→            {tab.label}
+   554→            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+   555→              roleFilter === tab.value
+   556→                ? 'bg-emerald-700/50 text-emerald-100'
+   557→                : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300'
+   558→            }`}>
+   559→              {tab.count}
+   560→            </span>
+   561→          </Button>
+   562→        ))}
+   563→      </motion.div>
+   564→
+   565→      {/* ═══ PERFORMANCE OVERVIEW ROW (3 metric cards) ═══ */}
+   566→      {loading ? (
+   567→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   568→          {Array.from({ length: 3 }).map((_, i) => (
+   569→            <OverviewSkeleton key={i} />
+   570→          ))}
+   571→        </div>
+   572→      ) : (
+   573→        <motion.div
+   574→          variants={containerVariants}
+   575→          initial="hidden"
+   576→          animate="show"
+   577→          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+   578→        >
+   579→          {/* Total Team Members */}
+   580→          <motion.div variants={kpiVariants}>
+   581→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   582→              <CardContent className="p-5">
+   583→                <div className="flex items-center justify-between">
+   584→                  <div className="space-y-1">
+   585→                    <p className="text-sm text-muted-foreground font-medium">Total Team Members</p>
+   586→                    <p className="text-3xl font-bold text-foreground">
+   587→                      {formatNumber(overviewMetrics.totalMembers)}
+   588→                    </p>
+   589→                    <div className="flex items-center gap-1 text-xs">
+   590→                      <UserCheck className="h-3 w-3 text-emerald-500" />
+   591→                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">Active</span>
+   592→                    </div>
+   593→                  </div>
+   594→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
+   595→                    <Users className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   596→                  </div>
+   597→                </div>
+   598→              </CardContent>
+   599→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   600→            </Card>
+   601→          </motion.div>
+   602→
+   603→          {/* Average Accuracy */}
+   604→          <motion.div variants={kpiVariants}>
+   605→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   606→              <CardContent className="p-5">
+   607→                <div className="flex items-center justify-between">
+   608→                  <div className="space-y-1">
+   609→                    <p className="text-sm text-muted-foreground font-medium">Average Accuracy</p>
+   610→                    <p className={`text-3xl font-bold ${getAccuracyColor(overviewMetrics.avgAccuracy)}`}>
+   611→                      {overviewMetrics.avgAccuracy}%
+   612→                    </p>
+   613→                    <div className="flex items-center gap-1 text-xs">
+   614→                      <Target className="h-3 w-3 text-teal-500" />
+   615→                      <span className="text-muted-foreground">Across team</span>
+   616→                    </div>
+   617→                  </div>
+   618→                  <div className={`flex items-center justify-center h-14 w-14 rounded-xl ${getAccuracyBg(overviewMetrics.avgAccuracy)}`}>
+   619→                    <Target className="h-7 w-7 text-teal-600 dark:text-teal-400" />
+   620→                  </div>
+   621→                </div>
+   622→              </CardContent>
+   623→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-400 to-teal-500" />
+   624→            </Card>
+   625→          </motion.div>
+   626→
+   627→          {/* Average Turnaround */}
+   628→          <motion.div variants={kpiVariants}>
+   629→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   630→              <CardContent className="p-5">
+   631→                <div className="flex items-center justify-between">
+   632→                  <div className="space-y-1">
+   633→                    <p className="text-sm text-muted-foreground font-medium">Average Turnaround</p>
+   634→                    <p className="text-3xl font-bold text-foreground">
+   635→                      {overviewMetrics.avgTurnaround}
+   636→                      <span className="text-sm font-normal text-muted-foreground ml-1">hrs</span>
+   637→                    </p>
+   638→                    <div className="flex items-center gap-1 text-xs">
+   639→                      <Clock className="h-3 w-3 text-amber-500" />
+   640→                      <span className="text-muted-foreground">Processing speed</span>
+   641→                    </div>
+   642→                  </div>
+   643→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-amber-50 dark:bg-amber-950/40">
+   644→                    <Clock className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+   645→                  </div>
+   646→                </div>
+   647→              </CardContent>
+   648→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+   649→            </Card>
+   650→          </motion.div>
+   651→        </motion.div>
+   652→      )}
+   653→
+   654→      {/* ═══ LEADERBOARD SECTION ═══ */}
+   655→      {loading ? (
+   656→        <LeaderboardSkeleton />
+   657→      ) : (
+   658→        <motion.div
+   659→          initial={{ opacity: 0, y: 20 }}
+   660→          animate={{ opacity: 1, y: 0 }}
+   661→          transition={{ delay: 0.2, duration: 0.5 }}
+   662→        >
+   663→          <Card className="border-border/50 backdrop-blur-sm bg-card/80">
+   664→            <CardHeader className="pb-3">
+   665→              <div className="flex items-center justify-between">
+   666→                <div>
+   667→                  <CardTitle className="flex items-center gap-2 text-base">
+   668→                    <Award className="h-5 w-5 text-emerald-500" />
+   669→                    Performance Leaderboard
+   670→                  </CardTitle>
+   671→                  <CardDescription className="mt-0.5">
+   672→                    Ranked by weighted performance score (accuracy, volume, speed, reviews)
+   673→                  </CardDescription>
+   674→                </div>
+   675→                <Badge
+   676→                  variant="outline"
+   677→                  className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
+   678→                >
+   679→                  <Zap className="h-2.5 w-2.5 mr-0.5" />
+   680→                  AI Scored
+   681→                </Badge>
+   682→              </div>
+   683→            </CardHeader>
+   684→            <CardContent className="p-0">
+   685→              <ScrollArea className="max-h-[480px]">
+   686→                {/* Desktop Table */}
+   687→                <div className="hidden md:block">
+   688→                  <Table>
+   689→                    <TableHeader>
+   690→                      <TableRow className="hover:bg-transparent">
+   691→                        <TableHead className="w-12 text-center text-[11px]">Rank</TableHead>
+   692→                        <TableHead className="text-[11px]">Member</TableHead>
+   693→                        <TableHead className="text-center text-[11px]">Invoices</TableHead>
+   694→                        <TableHead className="text-center text-[11px]">Reviews</TableHead>
+   695→                        <TableHead className="text-center text-[11px]">Approvals</TableHead>
+   696→                        <TableHead className="text-center text-[11px]">Accuracy</TableHead>
+   697→                        <TableHead className="text-center text-[11px]">Turnaround</TableHead>
+   698→                        <TableHead className="text-center text-[11px] w-16">Score</TableHead>
+   699→                      </TableRow>
+   700→                    </TableHeader>
+   701→                    <TableBody>
+   702→                      <AnimatePresence mode="popLayout">
+   703→                        {filteredLeaderboard.map((member, index) => (
+   704→                          <motion.tr
+   705→                            key={member.id}
+   706→                            variants={rowVariants}
+   707→                            initial="hidden"
+   708→                            animate="show"
+   709→                            transition={{ delay: 0.3 + index * 0.06 }}
+   710→                            layout
+   711→                            exit={{ opacity: 0, scale: 0.95 }}
+   712→                            className="group hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors border-b border-border/50"
+   713→                          >
+   714→                            <TableCell className="text-center py-3">
+   715→                              <RankBadge rank={member.rank} />
+   716→                            </TableCell>
+   717→                            <TableCell className="py-3">
+   718→                              <div className="flex items-center gap-2.5">
+   719→                                <InitialsAvatar name={member.name} index={index} />
+   720→                                <div>
+   721→                                  <p className="text-sm font-medium text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
+   722→                                    {member.name}
+   723→                                  </p>
+   724→                                  <RoleBadge role={member.role} />
+   725→                                </div>
+   726→                              </div>
+   727→                            </TableCell>
+   728→                            <TableCell className="text-center py-3">
+   729→                              <span className="text-sm font-semibold text-foreground">
+   730→                                {formatNumber(member.aggregatedMetrics.invoicesProcessed)}
+   731→                              </span>
+   732→                            </TableCell>
+   733→                            <TableCell className="text-center py-3">
+   734→                              <span className="text-sm font-semibold text-foreground">
+   735→                                {formatNumber(member.aggregatedMetrics.reviewsCompleted)}
+   736→                              </span>
+   737→                            </TableCell>
+   738→                            <TableCell className="text-center py-3">
+   739→                              <span className="text-sm font-semibold text-foreground">
+   740→                                {formatNumber(member.aggregatedMetrics.approvalsCompleted)}
+   741→                              </span>
+   742→                            </TableCell>
+   743→                            <TableCell className="text-center py-3">
+   744→                              <span className={`text-sm font-bold ${getAccuracyColor(member.aggregatedMetrics.averageAccuracy)}`}>
+   745→                                {member.aggregatedMetrics.averageAccuracy}%
+   746→                              </span>
+   747→                            </TableCell>
+   748→                            <TableCell className="text-center py-3">
+   749→                              <span className="text-sm text-muted-foreground">
+   750→                                {member.aggregatedMetrics.averageTurnaround}h
+   751→                              </span>
+   752→                            </TableCell>
+   753→                            <TableCell className="text-center py-3">
+   754→                              <div className="flex justify-center">
+   755→                                <PerformanceCircle score={member.performanceScore} />
+   756→                              </div>
+   757→                            </TableCell>
+   758→                          </motion.tr>
+   759→                        ))}
+   760→                      </AnimatePresence>
+   761→                    </TableBody>
+   762→                  </Table>
+   763→                </div>
+   764→
+   765→                {/* Mobile Cards */}
+   766→                <div className="md:hidden space-y-2 p-3">
+   767→                  <AnimatePresence mode="popLayout">
+   768→                    {filteredLeaderboard.map((member, index) => (
+   769→                      <motion.div
+   770→                        key={member.id}
+   771→                        variants={rowVariants}
+   772→                        initial="hidden"
+   773→                        animate="show"
+   774→                        transition={{ delay: 0.3 + index * 0.06 }}
+   775→                        layout
+   776→                        exit={{ opacity: 0, scale: 0.95 }}
+   777→                        className="p-3 rounded-xl border border-border/50 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all bg-card"
+   778→                      >
+   779→                        <div className="flex items-center gap-3 mb-3">
+   780→                          <RankBadge rank={member.rank} />
+   781→                          <InitialsAvatar name={member.name} index={index} />
+   782→                          <div className="flex-1 min-w-0">
+   783→                            <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
+   784→                            <RoleBadge role={member.role} />
+   785→                          </div>
+   786→                          <PerformanceCircle score={member.performanceScore} size={42} strokeWidth={4} />
+   787→                        </div>
+   788→
+   789→                        <div className="grid grid-cols-4 gap-2">
+   790→                          <div className="text-center p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+   791→                            <p className="text-[9px] text-muted-foreground uppercase font-semibold">Inv.</p>
+   792→                            <p className="text-xs font-bold text-foreground">{formatNumber(member.aggregatedMetrics.invoicesProcessed)}</p>
+   793→                          </div>
+   794→                          <div className="text-center p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+   795→                            <p className="text-[9px] text-muted-foreground uppercase font-semibold">Rev.</p>
+   796→                            <p className="text-xs font-bold text-foreground">{formatNumber(member.aggregatedMetrics.reviewsCompleted)}</p>
+   797→                          </div>
+   798→                          <div className="text-center p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+   799→                            <p className="text-[9px] text-muted-foreground uppercase font-semibold">Acc.</p>
+   800→                            <p className={`text-xs font-bold ${getAccuracyColor(member.aggregatedMetrics.averageAccuracy)}`}>
+   801→                              {member.aggregatedMetrics.averageAccuracy}%
+   802→                            </p>
+   803→                          </div>
+   804→                          <div className="text-center p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/30">
+   805→                            <p className="text-[9px] text-muted-foreground uppercase font-semibold">TAT</p>
+   806→                            <p className="text-xs font-bold text-foreground">{member.aggregatedMetrics.averageTurnaround}h</p>
+   807→                          </div>
+   808→                        </div>
+   809→                      </motion.div>
+   810→                    ))}
+   811→                  </AnimatePresence>
+   812→                </div>
+   813→
+   814→                {/* Empty state */}
+   815→                {filteredLeaderboard.length === 0 && !loading && (
+   816→                  <div className="flex flex-col items-center justify-center py-12 text-center">
+   817→                    <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 mb-3">
+   818→                      <Users className="h-6 w-6 text-slate-400" />
+   819→                    </div>
+   820→                    <p className="text-sm font-medium text-foreground mb-1">No team members found</p>
+   821→                    <p className="text-xs text-muted-foreground">Try adjusting your filter to see more results</p>
+   822→                  </div>
+   823→                )}
+   824→              </ScrollArea>
+   825→            </CardContent>
+   826→          </Card>
+   827→        </motion.div>
+   828→      )}
+   829→
+   830→      {/* ═══ DEPARTMENT BREAKDOWN ═══ */}
+   831→      {loading ? (
+   832→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   833→          {Array.from({ length: 4 }).map((_, i) => (
+   834→            <DeptCardSkeleton key={i} />
+   835→          ))}
+   836→        </div>
+   837→      ) : (
+   838→        <motion.div
+   839→          variants={containerVariants}
+   840→          initial="hidden"
+   841→          animate="show"
+   842→          className="space-y-3"
+   843→        >
+   844→          <div className="flex items-center gap-2">
+   845→            <h2 className="text-base font-semibold text-foreground">Department Breakdown</h2>
+   846→            <Badge variant="outline" className="text-[10px] px-2 py-0 border-teal-200 text-teal-700 bg-teal-50/80 dark:border-teal-800 dark:text-teal-400 dark:bg-teal-950/40">
+   847→              {departmentBreakdown.length} Departments
+   848→            </Badge>
+   849→          </div>
+   850→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   851→            {departmentBreakdown.map((dept, index) => (
+   852→              <motion.div
+   853→                key={dept.name}
+   854→                variants={kpiVariants}
+   855→                whileHover={{ y: -2 }}
+   856→                className="transition-all"
+   857→              >
+   858→                <Card className="hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 relative overflow-hidden">
+   859→                  {/* Department gradient header */}
+   860→                  <div className={`h-1.5 w-full bg-gradient-to-r ${getDeptGradient(dept.name)}`} />
+   861→
+   862→                  <CardContent className="p-5 pt-4">
+   863→                    <div className="flex items-center gap-2 mb-3">
+   864→                      {getDeptIcon(dept.name)}
+   865→                      <div>
+   866→                        <p className="text-sm font-semibold text-foreground">{dept.name}</p>
+   867→                        <p className="text-[11px] text-muted-foreground">
+   868→                          {dept.memberCount} {dept.memberCount === 1 ? 'member' : 'members'}
+   869→                        </p>
+   870→                      </div>
+   871→                    </div>
+   872→
+   873→                    <div className="grid grid-cols-2 gap-2 mb-3">
+   874→                      <div className="text-center p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30">
+   875→                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Accuracy</p>
+   876→                        <p className={`text-sm font-bold ${getAccuracyColor(dept.avgAccuracy)}`}>
+   877→                          {dept.avgAccuracy}%
+   878→                        </p>
+   879→                      </div>
+   880→                      <div className="text-center p-2 rounded-lg bg-teal-50/60 dark:bg-teal-950/20 border border-teal-100/50 dark:border-teal-900/30">
+   881→                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Avg TAT</p>
+   882→                        <p className="text-sm font-bold text-foreground">
+   883→                          {dept.avgTurnaround}h
+   884→                        </p>
+   885→                      </div>
+   886→                    </div>
+   887→
+   888→                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/60 dark:bg-slate-900/20 border border-slate-200/50 dark:border-slate-800/30">
+   889→                      <div>
+   890→                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Score</p>
+   891→                        <p className="text-sm font-bold text-foreground">{dept.avgScore}</p>
+   892→                      </div>
+   893→                      <div className="flex items-center gap-1.5">
+   894→                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+   895→                        <span className="text-[11px] text-muted-foreground">
+   896→                          {formatNumber(dept.totalInvoices)} inv. &middot; {formatNumber(dept.totalReviews)} rev.
+   897→                        </span>
+   898→                      </div>
+   899→                    </div>
+   900→                  </CardContent>
+   901→                </Card>
+   902→              </motion.div>
+   903→            ))}
+   904→
+   905→            {/* Empty state if no departments */}
+   906→            {departmentBreakdown.length === 0 && (
+   907→              <div className="col-span-full flex flex-col items-center justify-center py-8 text-center">
+   908→                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 mb-3">
+   909→                  <Users className="h-6 w-6 text-slate-400" />
+   910→                </div>
+   911→                <p className="text-sm font-medium text-foreground">No department data</p>
+   912→                <p className="text-xs text-muted-foreground mt-1">Department breakdown will appear when team members are assigned</p>
+   913→              </div>
+   914→            )}
+   915→          </div>
+   916→        </motion.div>
+   917→      )}
+   918→
+   919→      {/* ═══ ERROR STATE ═══ */}
+   920→      {error && !loading && (
+   921→        <motion.div
+   922→          initial={{ opacity: 0 }}
+   923→          animate={{ opacity: 1 }}
+   924→          className="flex flex-col items-center justify-center py-8 text-center"
+   925→        >
+   926→          <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-red-50 dark:bg-red-950/40 mb-3">
+   927→            <AlertCircle className="h-6 w-6 text-red-500" />
+   928→          </div>
+   929→          <p className="text-sm font-medium text-foreground mb-1">Failed to load performance data</p>
+   930→          <p className="text-xs text-muted-foreground mb-3">{error}</p>
+   931→          <Button size="sm" variant="outline" onClick={fetchData} className="gap-1.5 text-xs">
+   932→            <Zap className="h-3 w-3" />
+   933→            Retry
+   934→          </Button>
+   935→        </motion.div>
+   936→      )}
+   937→    </div>
+   938→  );
+   939→}
+   940→

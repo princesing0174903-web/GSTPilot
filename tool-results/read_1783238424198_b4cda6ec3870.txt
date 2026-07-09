@@ -1,0 +1,927 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot ERP & Accounting Integrations™ — Client-Safe Firestore Service
+     3→//
+     4→// The single entry point for all ERP Firestore operations on the CLIENT side.
+     5→// Mirrors the banking-provider + communication-provider service pattern:
+     6→//   • Real-time subscriptions via onSnapshot (org-scoped)
+     7→//   • CRUD writes via the Firebase client SDK (rules enforce org isolation)
+     8→//   • Multi-tenant — every function filters on `organizationId`
+     9→//
+    10→// This module is CLIENT-SAFE — it only imports from `firebase/firestore` and
+    11→// `@/lib/firebase` (the client SDK). It NEVER imports the provider, crypto, or
+    12→// any server-only code.
+    13→//
+    14→// The flow for each ERP operation:
+    15→//   1. Client hook calls the appropriate API route (/api/erp/*) for the
+    16→//      provider work (connect, sync, etc.). The API route returns plain data +
+    17→//      the encrypted connection.
+    18→//   2. Client hook calls the appropriate function HERE to persist the result
+    19→//      to Firestore.
+    20→//   3. Real-time onSnapshot subscriptions surface the change to every
+    21→//      connected client instantly.
+    22→//
+    23→// Firestore timeout guard: when the Firebase project has the Firestore API
+    24→// disabled, the SDK retries PERMISSION_DENIED for ~120s before rejecting.
+    25→// `withTimeout` races every op against a 6s deadline so the UI never hangs.
+    26→// ═══════════════════════════════════════════════════════════════════════════════
+    27→
+    28→import {
+    29→  collection,
+    30→  doc,
+    31→  getDoc,
+    32→  getDocs,
+    33→  setDoc,
+    34→  addDoc,
+    35→  updateDoc,
+    36→  deleteDoc,
+    37→  query,
+    38→  where,
+    39→  orderBy,
+    40→  limit,
+    41→  serverTimestamp,
+    42→  writeBatch,
+    43→  onSnapshot,
+    44→  type Unsubscribe,
+    45→  type QueryConstraint,
+    46→} from 'firebase/firestore';
+    47→import { db } from '@/lib/firebase';
+    48→import type {
+    49→  ERPBankTransaction,
+    50→  ERPConnection,
+    51→  ERPCustomer,
+    52→  ERPInventoryItem,
+    53→  ERPInvoice,
+    54→  ERPLedger,
+    55→  ERPPayment,
+    56→  ERPProviderName,
+    57→  ERPSyncJob,
+    58→  ERPSyncJobType,
+    59→  ERPSyncStatus,
+    60→  ERPSyncSummary,
+    61→  ERPSyncTrigger,
+    62→  ERPSummary,
+    63→  ERPTax,
+    64→  ERPVendor,
+    65→} from './types';
+    66→import { ERPError } from './errors';
+    67→
+    68→// ─── Collection names ────────────────────────────────────────────────────────
+    69→
+    70→export const ERP_COLLECTIONS = {
+    71→  CONNECTIONS: 'erp_connections',
+    72→  SYNC_JOBS: 'erp_sync_jobs',
+    73→  CUSTOMERS: 'erp_customers',
+    74→  VENDORS: 'erp_vendors',
+    75→  INVOICES: 'erp_invoices',
+    76→  INVENTORY: 'erp_inventory',
+    77→  LEDGERS: 'erp_ledgers',
+    78→  PAYMENTS: 'erp_payments',
+    79→  BANK_TRANSACTIONS: 'erp_bank_transactions',
+    80→  TAXES: 'erp_taxes',
+    81→} as const;
+    82→
+    83→// ─── Org guard ───────────────────────────────────────────────────────────────
+    84→
+    85→function assertOrg(orgId: string | undefined | null): void {
+    86→  if (!orgId) {
+    87→    throw new Error('You must belong to an organization to manage ERP data.');
+    88→  }
+    89→}
+    90→
+    91→// ─── Firestore timeout guard ─────────────────────────────────────────────────
+    92→
+    93→const FIRESTORE_TIMEOUT_MS = 6000;
+    94→
+    95→function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+    96→  promise.catch(() => { /* timed-out op — ignore late rejection */ });
+    97→  return Promise.race([
+    98→    promise,
+    99→    new Promise<T>((_, reject) =>
+   100→      setTimeout(
+   101→        () =>
+   102→          reject(
+   103→            new ERPError(
+   104→              `${label} timed out — Firestore may be unreachable.`,
+   105→              { code: 'FIRESTORE_TIMEOUT', statusCode: 503, retryable: true },
+   106→            ),
+   107→          ),
+   108→        FIRESTORE_TIMEOUT_MS,
+   109→      ),
+   110→    ),
+   111→  ]);
+   112→}
+   113→
+   114→const safeAddDoc = <T>(ref: ReturnType<typeof collection>, data: T) =>
+   115→  withTimeout(addDoc(ref, data as Record<string, unknown>), 'ERP addDoc');
+   116→const safeSetDoc = (ref: ReturnType<typeof doc>, data: unknown, opts?: { merge?: boolean }) =>
+   117→  withTimeout(setDoc(ref, data as Record<string, unknown>, opts), 'ERP setDoc');
+   118→const safeUpdateDoc = (ref: ReturnType<typeof doc>, data: unknown) =>
+   119→  withTimeout(updateDoc(ref, data as Record<string, unknown>), 'ERP updateDoc');
+   120→const safeDeleteDoc = (ref: ReturnType<typeof doc>) =>
+   121→  withTimeout(deleteDoc(ref), 'ERP deleteDoc');
+   122→const safeGetDoc = (ref: ReturnType<typeof doc>) =>
+   123→  withTimeout(getDoc(ref), 'ERP getDoc');
+   124→const safeGetDocs = (q: ReturnType<typeof query>) =>
+   125→  withTimeout(getDocs(q), 'ERP getDocs');
+   126→const safeCommit = (batch: ReturnType<typeof writeBatch>) =>
+   127→  withTimeout(batch.commit(), 'ERP writeBatch.commit');
+   128→
+   129→// ─── Timestamp conversion ────────────────────────────────────────────────────
+   130→
+   131→function ts(value: unknown): string {
+   132→  if (value && typeof value === 'object' && 'toDate' in value) {
+   133→    return (value as { toDate: () => Date }).toDate().toISOString();
+   134→  }
+   135→  if (typeof value === 'string') return value;
+   136→  return '';
+   137→}
+   138→
+   139→function round2(n: number): number {
+   140→  return Math.round(n * 100) / 100;
+   141→}
+   142→
+   143→// ─── Connection ──────────────────────────────────────────────────────────────
+   144→
+   145→export function toConnection(id: string, raw: Record<string, unknown>): ERPConnection {
+   146→  return {
+   147→    id,
+   148→    organizationId: String(raw.organizationId ?? ''),
+   149→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   150→    companyName: String(raw.companyName ?? ''),
+   151→    companyId: String(raw.companyId ?? ''),
+   152→    companyGstin: (raw.companyGstin as string | null) ?? null,
+   153→    connectionStatus: (raw.connectionStatus as ERPConnection['connectionStatus']) ?? 'disconnected',
+   154→    lastSync: raw.lastSync ? ts(raw.lastSync) : null,
+   155→    syncProgress: Number(raw.syncProgress ?? 0),
+   156→    encryptedConnection: (raw.encryptedConnection as string | null) ?? null,
+   157→    tokenExpiry: raw.tokenExpiry ? ts(raw.tokenExpiry) : null,
+   158→    lastError: (raw.lastError as string | null) ?? null,
+   159→    lastSyncSummary: (raw.lastSyncSummary as ERPSyncSummary | null) ?? null,
+   160→    createdBy: raw.createdBy as ERPConnection['createdBy'],
+   161→    createdAt: ts(raw.createdAt),
+   162→    updatedAt: ts(raw.updatedAt),
+   163→  };
+   164→}
+   165→
+   166→export function subscribeToConnections(
+   167→  organizationId: string,
+   168→  callback: (connections: ERPConnection[]) => void,
+   169→  options?: { onError?: (err: Error) => void },
+   170→): Unsubscribe {
+   171→  assertOrg(organizationId);
+   172→  const q = query(
+   173→    collection(db, ERP_COLLECTIONS.CONNECTIONS),
+   174→    where('organizationId', '==', organizationId),
+   175→    orderBy('createdAt', 'desc'),
+   176→  );
+   177→  return onSnapshot(
+   178→    q,
+   179→    (snap) => callback(snap.docs.map((d) => toConnection(d.id, d.data() as Record<string, unknown>))),
+   180→    (err) => options?.onError?.(err as Error),
+   181→  );
+   182→}
+   183→
+   184→export async function getConnections(organizationId: string): Promise<ERPConnection[]> {
+   185→  assertOrg(organizationId);
+   186→  const q = query(
+   187→    collection(db, ERP_COLLECTIONS.CONNECTIONS),
+   188→    where('organizationId', '==', organizationId),
+   189→    orderBy('createdAt', 'desc'),
+   190→  );
+   191→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   192→  return snap.docs.map((d) => toConnection(d.id, d.data() as Record<string, unknown>));
+   193→}
+   194→
+   195→export async function getConnection(
+   196→  organizationId: string,
+   197→  connectionId: string,
+   198→): Promise<ERPConnection | null> {
+   199→  assertOrg(organizationId);
+   200→  const ref = doc(db, ERP_COLLECTIONS.CONNECTIONS, connectionId);
+   201→  const snap = await safeGetDoc(ref).catch(() => null);
+   202→  if (!snap || !snap.exists()) return null;
+   203→  return toConnection(snap.id, snap.data() as Record<string, unknown>);
+   204→}
+   205→
+   206→export async function saveConnection(
+   207→  organizationId: string,
+   208→  data: Omit<ERPConnection, 'id' | 'createdAt' | 'updatedAt'>,
+   209→): Promise<string> {
+   210→  assertOrg(organizationId);
+   211→  const ref = await safeAddDoc(collection(db, ERP_COLLECTIONS.CONNECTIONS), {
+   212→    ...data,
+   213→    organizationId,
+   214→    createdAt: serverTimestamp(),
+   215→    updatedAt: serverTimestamp(),
+   216→  });
+   217→  return ref.id;
+   218→}
+   219→
+   220→export async function updateConnection(
+   221→  organizationId: string,
+   222→  connectionId: string,
+   223→  patch: Partial<ERPConnection>,
+   224→): Promise<void> {
+   225→  assertOrg(organizationId);
+   226→  const ref = doc(db, ERP_COLLECTIONS.CONNECTIONS, connectionId);
+   227→  const { id: _id, organizationId: _orgId, createdAt: _ca, ...rest } = patch as Record<string, unknown>;
+   228→  void _id; void _orgId; void _ca;
+   229→  await safeUpdateDoc(ref, { ...rest, updatedAt: serverTimestamp() });
+   230→}
+   231→
+   232→export async function deleteConnection(organizationId: string, connectionId: string): Promise<void> {
+   233→  assertOrg(organizationId);
+   234→  await safeDeleteDoc(doc(db, ERP_COLLECTIONS.CONNECTIONS, connectionId));
+   235→}
+   236→
+   237→// ─── Sync Jobs ───────────────────────────────────────────────────────────────
+   238→
+   239→export function toSyncJob(id: string, raw: Record<string, unknown>): ERPSyncJob {
+   240→  return {
+   241→    id,
+   242→    organizationId: String(raw.organizationId ?? ''),
+   243→    connectionId: String(raw.connectionId ?? ''),
+   244→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   245→    jobType: (raw.jobType as ERPSyncJobType) ?? 'full',
+   246→    status: (raw.status as ERPSyncStatus) ?? 'pending',
+   247→    trigger: (raw.trigger as ERPSyncTrigger) ?? 'manual',
+   248→    startedAt: raw.startedAt ? ts(raw.startedAt) : null,
+   249→    completedAt: raw.completedAt ? ts(raw.completedAt) : null,
+   250→    recordsProcessed: Number(raw.recordsProcessed ?? 0),
+   251→    errors: (raw.errors as string[]) ?? [],
+   252→    retryCount: Number(raw.retryCount ?? 0),
+   253→    maxRetries: Number(raw.maxRetries ?? 3),
+   254→    syncCursor: (raw.syncCursor as string | null) ?? null,
+   255→    createdAt: ts(raw.createdAt),
+   256→    updatedAt: ts(raw.updatedAt),
+   257→  };
+   258→}
+   259→
+   260→export function subscribeToSyncJobs(
+   261→  organizationId: string,
+   262→  callback: (jobs: ERPSyncJob[]) => void,
+   263→  options?: { onError?: (err: Error) => void; limitCount?: number },
+   264→): Unsubscribe {
+   265→  assertOrg(organizationId);
+   266→  const constraints: QueryConstraint[] = [
+   267→    where('organizationId', '==', organizationId),
+   268→    orderBy('createdAt', 'desc'),
+   269→  ];
+   270→  if (options?.limitCount) constraints.push(limit(options.limitCount));
+   271→  const q = query(collection(db, ERP_COLLECTIONS.SYNC_JOBS), ...constraints);
+   272→  return onSnapshot(
+   273→    q,
+   274→    (snap) => callback(snap.docs.map((d) => toSyncJob(d.id, d.data() as Record<string, unknown>))),
+   275→    (err) => options?.onError?.(err as Error),
+   276→  );
+   277→}
+   278→
+   279→export async function createSyncJob(
+   280→  organizationId: string,
+   281→  data: {
+   282→    connectionId: string;
+   283→    provider: ERPProviderName;
+   284→    jobType: ERPSyncJobType;
+   285→    trigger: ERPSyncTrigger;
+   286→    maxRetries?: number;
+   287→    syncCursor?: string | null;
+   288→  },
+   289→): Promise<string> {
+   290→  assertOrg(organizationId);
+   291→  const ref = await safeAddDoc(collection(db, ERP_COLLECTIONS.SYNC_JOBS), {
+   292→    organizationId,
+   293→    connectionId: data.connectionId,
+   294→    provider: data.provider,
+   295→    jobType: data.jobType,
+   296→    trigger: data.trigger,
+   297→    status: 'pending' as const,
+   298→    startedAt: null,
+   299→    completedAt: null,
+   300→    recordsProcessed: 0,
+   301→    errors: [],
+   302→    retryCount: 0,
+   303→    maxRetries: data.maxRetries ?? 3,
+   304→    syncCursor: data.syncCursor ?? null,
+   305→    createdAt: serverTimestamp(),
+   306→    updatedAt: serverTimestamp(),
+   307→  });
+   308→  return ref.id;
+   309→}
+   310→
+   311→export async function updateSyncJob(
+   312→  organizationId: string,
+   313→  jobId: string,
+   314→  patch: Partial<ERPSyncJob>,
+   315→): Promise<void> {
+   316→  assertOrg(organizationId);
+   317→  const ref = doc(db, ERP_COLLECTIONS.SYNC_JOBS, jobId);
+   318→  const { id: _id, organizationId: _orgId, createdAt: _ca, ...rest } = patch as Record<string, unknown>;
+   319→  void _id; void _orgId; void _ca;
+   320→  await safeUpdateDoc(ref, { ...rest, updatedAt: serverTimestamp() });
+   321→}
+   322→
+   323→// ─── Generic entity subscription + save ──────────────────────────────────────
+   324→
+   325→function subscribeToEntities<T>(
+   326→  organizationId: string,
+   327→  collName: string,
+   328→  converter: (id: string, raw: Record<string, unknown>) => T,
+   329→  callback: (records: T[]) => void,
+   330→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string; orderByField?: string; orderDir?: 'asc' | 'desc' },
+   331→): Unsubscribe {
+   332→  assertOrg(organizationId);
+   333→  const constraints: QueryConstraint[] = [where('organizationId', '==', organizationId)];
+   334→  if (options?.connectionId) constraints.push(where('connectionId', '==', options.connectionId));
+   335→  if (options?.orderByField) {
+   336→    constraints.push(orderBy(options.orderByField, options.orderDir ?? 'desc'));
+   337→  }
+   338→  if (options?.limitCount) constraints.push(limit(options.limitCount));
+   339→  const q = query(collection(db, collName), ...constraints);
+   340→  return onSnapshot(
+   341→    q,
+   342→    (snap) => callback(snap.docs.map((d) => converter(d.id, d.data() as Record<string, unknown>))),
+   343→    (err) => options?.onError?.(err as Error),
+   344→  );
+   345→}
+   346→
+   347→async function saveEntities<T extends { id: string }>(
+   348→  organizationId: string,
+   349→  collName: string,
+   350→  records: T[],
+   351→): Promise<void> {
+   352→  assertOrg(organizationId);
+   353→  if (records.length === 0) return;
+   354→  const batch = writeBatch(db);
+   355→  for (const r of records) {
+   356→    const { id: _id, ...data } = r;
+   357→    void _id;
+   358→    const ref = doc(db, collName, r.id);
+   359→    batch.set(ref, { ...data, organizationId, updatedAt: serverTimestamp() }, { merge: true });
+   360→  }
+   361→  await safeCommit(batch);
+   362→}
+   363→
+   364→async function deleteEntitiesForConnection(
+   365→  organizationId: string,
+   366→  collName: string,
+   367→  connectionId: string,
+   368→): Promise<void> {
+   369→  assertOrg(organizationId);
+   370→  const q = query(
+   371→    collection(db, collName),
+   372→    where('organizationId', '==', organizationId),
+   373→    where('connectionId', '==', connectionId),
+   374→  );
+   375→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ ref: import('firebase/firestore').DocumentReference }> }));
+   376→  const batch = writeBatch(db);
+   377→  snap.docs.forEach((d) => batch.delete(d.ref));
+   378→  if (snap.docs.length > 0) await safeCommit(batch);
+   379→}
+   380→
+   381→// ─── Customers ────────────────────────────────────────────────────────────────
+   382→
+   383→export function toCustomer(id: string, raw: Record<string, unknown>): ERPCustomer {
+   384→  return {
+   385→    id,
+   386→    organizationId: String(raw.organizationId ?? ''),
+   387→    connectionId: String(raw.connectionId ?? ''),
+   388→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   389→    erpCustomerId: String(raw.erpCustomerId ?? ''),
+   390→    mappedClientId: (raw.mappedClientId as string | null) ?? null,
+   391→    name: String(raw.name ?? ''),
+   392→    gstin: (raw.gstin as string | null) ?? null,
+   393→    email: (raw.email as string | null) ?? null,
+   394→    phone: (raw.phone as string | null) ?? null,
+   395→    address: (raw.address as string | null) ?? null,
+   396→    city: (raw.city as string | null) ?? null,
+   397→    state: (raw.state as string | null) ?? null,
+   398→    stateCode: (raw.stateCode as string | null) ?? null,
+   399→    outstandingBalance: Number(raw.outstandingBalance ?? 0),
+   400→    totalSales: Number(raw.totalSales ?? 0),
+   401→    lastTransactionDate: raw.lastTransactionDate ? ts(raw.lastTransactionDate) : null,
+   402→    active: Boolean(raw.active ?? true),
+   403→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   404→    lastSyncedAt: ts(raw.lastSyncedAt),
+   405→    createdAt: ts(raw.createdAt),
+   406→    updatedAt: ts(raw.updatedAt),
+   407→  };
+   408→}
+   409→
+   410→export function subscribeToCustomers(
+   411→  organizationId: string,
+   412→  callback: (records: ERPCustomer[]) => void,
+   413→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   414→): Unsubscribe {
+   415→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.CUSTOMERS, toCustomer, callback, {
+   416→    ...options,
+   417→    orderByField: 'lastSyncedAt',
+   418→  });
+   419→}
+   420→
+   421→export async function getCustomers(organizationId: string): Promise<ERPCustomer[]> {
+   422→  assertOrg(organizationId);
+   423→  const q = query(
+   424→    collection(db, ERP_COLLECTIONS.CUSTOMERS),
+   425→    where('organizationId', '==', organizationId),
+   426→    orderBy('lastSyncedAt', 'desc'),
+   427→  );
+   428→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   429→  return snap.docs.map((d) => toCustomer(d.id, d.data() as Record<string, unknown>));
+   430→}
+   431→
+   432→export async function saveCustomers(organizationId: string, records: ERPCustomer[]): Promise<void> {
+   433→  return saveEntities(organizationId, ERP_COLLECTIONS.CUSTOMERS, records);
+   434→}
+   435→
+   436→// ─── Vendors ──────────────────────────────────────────────────────────────────
+   437→
+   438→export function toVendor(id: string, raw: Record<string, unknown>): ERPVendor {
+   439→  return {
+   440→    id,
+   441→    organizationId: String(raw.organizationId ?? ''),
+   442→    connectionId: String(raw.connectionId ?? ''),
+   443→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   444→    erpVendorId: String(raw.erpVendorId ?? ''),
+   445→    name: String(raw.name ?? ''),
+   446→    gstin: (raw.gstin as string | null) ?? null,
+   447→    email: (raw.email as string | null) ?? null,
+   448→    phone: (raw.phone as string | null) ?? null,
+   449→    address: (raw.address as string | null) ?? null,
+   450→    city: (raw.city as string | null) ?? null,
+   451→    state: (raw.state as string | null) ?? null,
+   452→    stateCode: (raw.stateCode as string | null) ?? null,
+   453→    outstandingPayable: Number(raw.outstandingPayable ?? 0),
+   454→    totalPurchases: Number(raw.totalPurchases ?? 0),
+   455→    lastTransactionDate: raw.lastTransactionDate ? ts(raw.lastTransactionDate) : null,
+   456→    active: Boolean(raw.active ?? true),
+   457→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   458→    lastSyncedAt: ts(raw.lastSyncedAt),
+   459→    createdAt: ts(raw.createdAt),
+   460→    updatedAt: ts(raw.updatedAt),
+   461→  };
+   462→}
+   463→
+   464→export function subscribeToVendors(
+   465→  organizationId: string,
+   466→  callback: (records: ERPVendor[]) => void,
+   467→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   468→): Unsubscribe {
+   469→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.VENDORS, toVendor, callback, {
+   470→    ...options,
+   471→    orderByField: 'lastSyncedAt',
+   472→  });
+   473→}
+   474→
+   475→export async function getVendors(organizationId: string): Promise<ERPVendor[]> {
+   476→  assertOrg(organizationId);
+   477→  const q = query(
+   478→    collection(db, ERP_COLLECTIONS.VENDORS),
+   479→    where('organizationId', '==', organizationId),
+   480→    orderBy('lastSyncedAt', 'desc'),
+   481→  );
+   482→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   483→  return snap.docs.map((d) => toVendor(d.id, d.data() as Record<string, unknown>));
+   484→}
+   485→
+   486→export async function saveVendors(organizationId: string, records: ERPVendor[]): Promise<void> {
+   487→  return saveEntities(organizationId, ERP_COLLECTIONS.VENDORS, records);
+   488→}
+   489→
+   490→// ─── Invoices ────────────────────────────────────────────────────────────────
+   491→
+   492→export function toInvoice(id: string, raw: Record<string, unknown>): ERPInvoice {
+   493→  return {
+   494→    id,
+   495→    organizationId: String(raw.organizationId ?? ''),
+   496→    connectionId: String(raw.connectionId ?? ''),
+   497→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   498→    erpInvoiceNumber: String(raw.erpInvoiceNumber ?? ''),
+   499→    mappedInvoiceId: (raw.mappedInvoiceId as string | null) ?? null,
+   500→    invoiceType: (raw.invoiceType as ERPInvoice['invoiceType']) ?? 'sales',
+   501→    partyName: String(raw.partyName ?? ''),
+   502→    partyGstin: (raw.partyGstin as string | null) ?? null,
+   503→    invoiceDate: ts(raw.invoiceDate),
+   504→    dueDate: raw.dueDate ? ts(raw.dueDate) : null,
+   505→    subtotal: Number(raw.subtotal ?? 0),
+   506→    taxAmount: Number(raw.taxAmount ?? 0),
+   507→    grandTotal: Number(raw.grandTotal ?? 0),
+   508→    balanceDue: Number(raw.balanceDue ?? 0),
+   509→    status: (raw.status as ERPInvoice['status']) ?? 'unpaid',
+   510→    lineItems: (raw.lineItems as ERPInvoice['lineItems']) ?? [],
+   511→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   512→    lastSyncedAt: ts(raw.lastSyncedAt),
+   513→    createdAt: ts(raw.createdAt),
+   514→    updatedAt: ts(raw.updatedAt),
+   515→  };
+   516→}
+   517→
+   518→export function subscribeToInvoices(
+   519→  organizationId: string,
+   520→  callback: (records: ERPInvoice[]) => void,
+   521→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   522→): Unsubscribe {
+   523→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.INVOICES, toInvoice, callback, {
+   524→    ...options,
+   525→    orderByField: 'invoiceDate',
+   526→  });
+   527→}
+   528→
+   529→export async function getInvoices(organizationId: string): Promise<ERPInvoice[]> {
+   530→  assertOrg(organizationId);
+   531→  const q = query(
+   532→    collection(db, ERP_COLLECTIONS.INVOICES),
+   533→    where('organizationId', '==', organizationId),
+   534→    orderBy('invoiceDate', 'desc'),
+   535→  );
+   536→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   537→  return snap.docs.map((d) => toInvoice(d.id, d.data() as Record<string, unknown>));
+   538→}
+   539→
+   540→export async function saveInvoices(organizationId: string, records: ERPInvoice[]): Promise<void> {
+   541→  return saveEntities(organizationId, ERP_COLLECTIONS.INVOICES, records);
+   542→}
+   543→
+   544→// ─── Inventory ───────────────────────────────────────────────────────────────
+   545→
+   546→export function toInventoryItem(id: string, raw: Record<string, unknown>): ERPInventoryItem {
+   547→  return {
+   548→    id,
+   549→    organizationId: String(raw.organizationId ?? ''),
+   550→    connectionId: String(raw.connectionId ?? ''),
+   551→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   552→    erpItemId: String(raw.erpItemId ?? ''),
+   553→    itemCode: String(raw.itemCode ?? ''),
+   554→    name: String(raw.name ?? ''),
+   555→    hsn: (raw.hsn as string | null) ?? null,
+   556→    unit: (raw.unit as string | null) ?? null,
+   557→    quantity: Number(raw.quantity ?? 0),
+   558→    stockValue: Number(raw.stockValue ?? 0),
+   559→    salePrice: Number(raw.salePrice ?? 0),
+   560→    purchasePrice: Number(raw.purchasePrice ?? 0),
+   561→    reorderLevel: Number(raw.reorderLevel ?? 0),
+   562→    godown: (raw.godown as string | null) ?? null,
+   563→    stockStatus: (raw.stockStatus as ERPInventoryItem['stockStatus']) ?? 'in_stock',
+   564→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   565→    lastSyncedAt: ts(raw.lastSyncedAt),
+   566→    createdAt: ts(raw.createdAt),
+   567→    updatedAt: ts(raw.updatedAt),
+   568→  };
+   569→}
+   570→
+   571→export function subscribeToInventory(
+   572→  organizationId: string,
+   573→  callback: (records: ERPInventoryItem[]) => void,
+   574→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   575→): Unsubscribe {
+   576→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.INVENTORY, toInventoryItem, callback, options);
+   577→}
+   578→
+   579→export async function getInventory(organizationId: string): Promise<ERPInventoryItem[]> {
+   580→  assertOrg(organizationId);
+   581→  const q = query(
+   582→    collection(db, ERP_COLLECTIONS.INVENTORY),
+   583→    where('organizationId', '==', organizationId),
+   584→  );
+   585→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   586→  return snap.docs.map((d) => toInventoryItem(d.id, d.data() as Record<string, unknown>));
+   587→}
+   588→
+   589→export async function saveInventory(organizationId: string, records: ERPInventoryItem[]): Promise<void> {
+   590→  return saveEntities(organizationId, ERP_COLLECTIONS.INVENTORY, records);
+   591→}
+   592→
+   593→// ─── Ledgers ──────────────────────────────────────────────────────────────────
+   594→
+   595→export function toLedger(id: string, raw: Record<string, unknown>): ERPLedger {
+   596→  return {
+   597→    id,
+   598→    organizationId: String(raw.organizationId ?? ''),
+   599→    connectionId: String(raw.connectionId ?? ''),
+   600→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   601→    erpLedgerId: String(raw.erpLedgerId ?? ''),
+   602→    name: String(raw.name ?? ''),
+   603→    ledgerType: (raw.ledgerType as ERPLedger['ledgerType']) ?? 'asset',
+   604→    gstin: (raw.gstin as string | null) ?? null,
+   605→    openingBalance: Number(raw.openingBalance ?? 0),
+   606→    closingBalance: Number(raw.closingBalance ?? 0),
+   607→    asOfDate: ts(raw.asOfDate),
+   608→    parentGroup: (raw.parentGroup as string | null) ?? null,
+   609→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   610→    lastSyncedAt: ts(raw.lastSyncedAt),
+   611→    createdAt: ts(raw.createdAt),
+   612→    updatedAt: ts(raw.updatedAt),
+   613→  };
+   614→}
+   615→
+   616→export function subscribeToLedgers(
+   617→  organizationId: string,
+   618→  callback: (records: ERPLedger[]) => void,
+   619→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   620→): Unsubscribe {
+   621→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.LEDGERS, toLedger, callback, options);
+   622→}
+   623→
+   624→export async function getLedgers(organizationId: string): Promise<ERPLedger[]> {
+   625→  assertOrg(organizationId);
+   626→  const q = query(
+   627→    collection(db, ERP_COLLECTIONS.LEDGERS),
+   628→    where('organizationId', '==', organizationId),
+   629→  );
+   630→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   631→  return snap.docs.map((d) => toLedger(d.id, d.data() as Record<string, unknown>));
+   632→}
+   633→
+   634→export async function saveLedgers(organizationId: string, records: ERPLedger[]): Promise<void> {
+   635→  return saveEntities(organizationId, ERP_COLLECTIONS.LEDGERS, records);
+   636→}
+   637→
+   638→// ─── Payments ──────────────────────────────────────────────────────────────────
+   639→
+   640→export function toPayment(id: string, raw: Record<string, unknown>): ERPPayment {
+   641→  return {
+   642→    id,
+   643→    organizationId: String(raw.organizationId ?? ''),
+   644→    connectionId: String(raw.connectionId ?? ''),
+   645→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   646→    erpVoucherNumber: String(raw.erpVoucherNumber ?? ''),
+   647→    paymentType: (raw.paymentType as ERPPayment['paymentType']) ?? 'payment',
+   648→    date: ts(raw.date),
+   649→    amount: Number(raw.amount ?? 0),
+   650→    debitLedger: String(raw.debitLedger ?? ''),
+   651→    creditLedger: String(raw.creditLedger ?? ''),
+   652→    mode: (raw.mode as ERPPayment['mode']) ?? 'other',
+   653→    referenceNumber: (raw.referenceNumber as string | null) ?? null,
+   654→    narration: (raw.narration as string | null) ?? null,
+   655→    linkedInvoiceNumbers: (raw.linkedInvoiceNumbers as string[]) ?? [],
+   656→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   657→    lastSyncedAt: ts(raw.lastSyncedAt),
+   658→    createdAt: ts(raw.createdAt),
+   659→    updatedAt: ts(raw.updatedAt),
+   660→  };
+   661→}
+   662→
+   663→export function subscribeToPayments(
+   664→  organizationId: string,
+   665→  callback: (records: ERPPayment[]) => void,
+   666→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   667→): Unsubscribe {
+   668→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.PAYMENTS, toPayment, callback, {
+   669→    ...options,
+   670→    orderByField: 'date',
+   671→  });
+   672→}
+   673→
+   674→export async function getPayments(organizationId: string): Promise<ERPPayment[]> {
+   675→  assertOrg(organizationId);
+   676→  const q = query(
+   677→    collection(db, ERP_COLLECTIONS.PAYMENTS),
+   678→    where('organizationId', '==', organizationId),
+   679→    orderBy('date', 'desc'),
+   680→  );
+   681→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   682→  return snap.docs.map((d) => toPayment(d.id, d.data() as Record<string, unknown>));
+   683→}
+   684→
+   685→export async function savePayments(organizationId: string, records: ERPPayment[]): Promise<void> {
+   686→  return saveEntities(organizationId, ERP_COLLECTIONS.PAYMENTS, records);
+   687→}
+   688→
+   689→// ─── Bank Transactions ─────────────────────────────────────────────────────────
+   690→
+   691→export function toBankTransaction(id: string, raw: Record<string, unknown>): ERPBankTransaction {
+   692→  return {
+   693→    id,
+   694→    organizationId: String(raw.organizationId ?? ''),
+   695→    connectionId: String(raw.connectionId ?? ''),
+   696→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   697→    date: ts(raw.date),
+   698→    bankLedger: String(raw.bankLedger ?? ''),
+   699→    description: String(raw.description ?? ''),
+   700→    amount: Number(raw.amount ?? 0),
+   701→    type: (raw.type as ERPBankTransaction['type']) ?? 'debit',
+   702→    balance: raw.balance !== null && raw.balance !== undefined ? Number(raw.balance) : null,
+   703→    referenceNumber: (raw.referenceNumber as string | null) ?? null,
+   704→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   705→    lastSyncedAt: ts(raw.lastSyncedAt),
+   706→    createdAt: ts(raw.createdAt),
+   707→    updatedAt: ts(raw.updatedAt),
+   708→  };
+   709→}
+   710→
+   711→export function subscribeToBankTransactions(
+   712→  organizationId: string,
+   713→  callback: (records: ERPBankTransaction[]) => void,
+   714→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   715→): Unsubscribe {
+   716→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.BANK_TRANSACTIONS, toBankTransaction, callback, {
+   717→    ...options,
+   718→    orderByField: 'date',
+   719→  });
+   720→}
+   721→
+   722→export async function getBankTransactions(organizationId: string): Promise<ERPBankTransaction[]> {
+   723→  assertOrg(organizationId);
+   724→  const q = query(
+   725→    collection(db, ERP_COLLECTIONS.BANK_TRANSACTIONS),
+   726→    where('organizationId', '==', organizationId),
+   727→    orderBy('date', 'desc'),
+   728→  );
+   729→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   730→  return snap.docs.map((d) => toBankTransaction(d.id, d.data() as Record<string, unknown>));
+   731→}
+   732→
+   733→export async function saveBankTransactions(organizationId: string, records: ERPBankTransaction[]): Promise<void> {
+   734→  return saveEntities(organizationId, ERP_COLLECTIONS.BANK_TRANSACTIONS, records);
+   735→}
+   736→
+   737→// ─── Taxes ─────────────────────────────────────────────────────────────────────
+   738→
+   739→export function toTax(id: string, raw: Record<string, unknown>): ERPTax {
+   740→  return {
+   741→    id,
+   742→    organizationId: String(raw.organizationId ?? ''),
+   743→    connectionId: String(raw.connectionId ?? ''),
+   744→    provider: (raw.provider as ERPProviderName) ?? 'tally',
+   745→    taxHead: (raw.taxHead as ERPTax['taxHead']) ?? 'IGST',
+   746→    rate: Number(raw.rate ?? 0),
+   747→    direction: (raw.direction as ERPTax['direction']) ?? 'output',
+   748→    taxableValue: Number(raw.taxableValue ?? 0),
+   749→    taxAmount: Number(raw.taxAmount ?? 0),
+   750→    period: String(raw.period ?? ''),
+   751→    raw: (raw.raw as Record<string, unknown>) ?? {},
+   752→    lastSyncedAt: ts(raw.lastSyncedAt),
+   753→    createdAt: ts(raw.createdAt),
+   754→    updatedAt: ts(raw.updatedAt),
+   755→  };
+   756→}
+   757→
+   758→export function subscribeToTaxes(
+   759→  organizationId: string,
+   760→  callback: (records: ERPTax[]) => void,
+   761→  options?: { onError?: (err: Error) => void; limitCount?: number; connectionId?: string },
+   762→): Unsubscribe {
+   763→  return subscribeToEntities(organizationId, ERP_COLLECTIONS.TAXES, toTax, callback, options);
+   764→}
+   765→
+   766→export async function getTaxes(organizationId: string): Promise<ERPTax[]> {
+   767→  assertOrg(organizationId);
+   768→  const q = query(
+   769→    collection(db, ERP_COLLECTIONS.TAXES),
+   770→    where('organizationId', '==', organizationId),
+   771→  );
+   772→  const snap = await safeGetDocs(q).catch(() => ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }));
+   773→  return snap.docs.map((d) => toTax(d.id, d.data() as Record<string, unknown>));
+   774→}
+   775→
+   776→export async function saveTaxes(organizationId: string, records: ERPTax[]): Promise<void> {
+   777→  return saveEntities(organizationId, ERP_COLLECTIONS.TAXES, records);
+   778→}
+   779→
+   780→// ─── Disconnect cascade (delete all ERP data for a connection) ───────────────
+   781→
+   782→/**
+   783→ * Delete ALL ERP data for a connection — used during disconnect.
+   784→ * Order: delete child collections first, then sync jobs, then the connection.
+   785→ */
+   786→export async function cascadeDisconnect(
+   787→  organizationId: string,
+   788→  connectionId: string,
+   789→): Promise<void> {
+   790→  assertOrg(organizationId);
+   791→  await Promise.all([
+   792→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.CUSTOMERS, connectionId),
+   793→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.VENDORS, connectionId),
+   794→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.INVOICES, connectionId),
+   795→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.INVENTORY, connectionId),
+   796→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.LEDGERS, connectionId),
+   797→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.PAYMENTS, connectionId),
+   798→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.BANK_TRANSACTIONS, connectionId),
+   799→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.TAXES, connectionId),
+   800→    deleteEntitiesForConnection(organizationId, ERP_COLLECTIONS.SYNC_JOBS, connectionId),
+   801→  ]).catch(() => { /* partial — continue */ });
+   802→  await deleteConnection(organizationId, connectionId);
+   803→}
+   804→
+   805→// ─── ERP summary (computed from Firestore data) ──────────────────────────────
+   806→
+   807→function emptySummary(): ERPSummary {
+   808→  return {
+   809→    connectedERPs: 0,
+   810→    connectedProviders: [],
+   811→    totalRevenue: 0,
+   812→    totalExpenses: 0,
+   813→    netProfit: 0,
+   814→    outstandingReceivables: 0,
+   815→    outstandingPayables: 0,
+   816→    inventoryValue: 0,
+   817→    cashPosition: 0,
+   818→    lowStockItems: 0,
+   819→    overdueInvoices: 0,
+   820→    netTaxLiability: 0,
+   821→    customerCount: 0,
+   822→    vendorCount: 0,
+   823→    inventoryItemCount: 0,
+   824→    isConnected: false,
+   825→    recentInvoices: [],
+   826→    topCustomers: [],
+   827→    topVendors: [],
+   828→  };
+   829→}
+   830→
+   831→/**
+   832→ * Compute the ERPSummary from real-time Firestore data.
+   833→ * Pure + deterministic — used by the useERP hook (memoized) and dashboard.
+   834→ *
+   835→ * Accepts the entity arrays (which the hook already has from subscriptions) so
+   836→ * this is a pure function with no Firestore reads.
+   837→ */
+   838→export function computeERPSummary(
+   839→  connections: ERPConnection[],
+   840→  customers: ERPCustomer[],
+   841→  vendors: ERPVendor[],
+   842→  invoices: ERPInvoice[],
+   843→  inventory: ERPInventoryItem[],
+   844→  ledgers: ERPLedger[],
+   845→  taxes: ERPTax[],
+   846→): ERPSummary {
+   847→  const connected = connections.filter((c) => c.connectionStatus === 'connected');
+   848→  if (connections.length === 0 && customers.length === 0 && invoices.length === 0) {
+   849→    return emptySummary();
+   850→  }
+   851→
+   852→  // Revenue = Σ sales invoices grandTotal
+   853→  const totalRevenue = round2(
+   854→    invoices.filter((i) => i.invoiceType === 'sales').reduce((s, i) => s + i.grandTotal, 0),
+   855→  );
+   856→  // Expenses = Σ purchase invoices grandTotal
+   857→  const totalExpenses = round2(
+   858→    invoices.filter((i) => i.invoiceType === 'purchase').reduce((s, i) => s + i.grandTotal, 0),
+   859→  );
+   860→  const netProfit = round2(totalRevenue - totalExpenses);
+   861→
+   862→  const outstandingReceivables = round2(
+   863→    customers.reduce((s, c) => s + c.outstandingBalance, 0),
+   864→  );
+   865→  const outstandingPayables = round2(
+   866→    vendors.reduce((s, v) => s + v.outstandingPayable, 0),
+   867→  );
+   868→
+   869→  const inventoryValue = round2(
+   870→    inventory.reduce((s, i) => s + i.stockValue, 0),
+   871→  );
+   872→  const lowStockItems = inventory.filter(
+   873→    (i) => i.stockStatus === 'low_stock' || i.stockStatus === 'out_of_stock',
+   874→  ).length;
+   875→
+   876→  const now = new Date().toISOString();
+   877→  const overdueInvoices = invoices.filter(
+   878→    (i) => i.status === 'overdue' || (i.balanceDue > 0 && i.dueDate && i.dueDate < now.slice(0, 10)),
+   879→  ).length;
+   880→
+   881→  // Cash position = Σ bank + cash ledger closing balances
+   882→  const cashPosition = round2(
+   883→    ledgers
+   884→      .filter((l) => l.ledgerType === 'bank' || l.ledgerType === 'cash')
+   885→      .reduce((s, l) => s + l.closingBalance, 0),
+   886→  );
+   887→
+   888→  // Net tax liability = output tax - input tax (current period)
+   889→  const outputTax = taxes.filter((t) => t.direction === 'output').reduce((s, t) => s + t.taxAmount, 0);
+   890→  const inputTax = taxes.filter((t) => t.direction === 'input').reduce((s, t) => s + t.taxAmount, 0);
+   891→  const netTaxLiability = round2(outputTax - inputTax);
+   892→
+   893→  const recentInvoices = invoices.slice(0, 10);
+   894→
+   895→  const topCustomers = [...customers]
+   896→    .sort((a, b) => b.totalSales - a.totalSales)
+   897→    .slice(0, 5)
+   898→    .map((c) => ({ name: c.name, totalSales: round2(c.totalSales) }));
+   899→
+   900→  const topVendors = [...vendors]
+   901→    .sort((a, b) => b.totalPurchases - a.totalPurchases)
+   902→    .slice(0, 5)
+   903→    .map((v) => ({ name: v.name, totalPurchases: round2(v.totalPurchases) }));
+   904→
+   905→  return {
+   906→    connectedERPs: connected.length,
+   907→    connectedProviders: connected.map((c) => c.provider),
+   908→    totalRevenue,
+   909→    totalExpenses,
+   910→    netProfit,
+   911→    outstandingReceivables,
+   912→    outstandingPayables,
+   913→    inventoryValue,
+   914→    cashPosition,
+   915→    lowStockItems,
+   916→    overdueInvoices,
+   917→    netTaxLiability,
+   918→    customerCount: customers.length,
+   919→    vendorCount: vendors.length,
+   920→    inventoryItemCount: inventory.length,
+   921→    isConnected: connected.length > 0,
+   922→    recentInvoices,
+   923→    topCustomers,
+   924→    topVendors,
+   925→  };
+   926→}
+   927→

@@ -1,0 +1,1515 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import { useQuery } from '@tanstack/react-query';
+     5→import { apiGet } from '@/lib/api';
+     6→import { motion, AnimatePresence } from 'framer-motion';
+     7→import {
+     8→  TrendingUp, TrendingDown, Shield, Wallet, CreditCard as CreditScore, BarChart3,
+     9→  IndianRupee, ArrowUpRight, ArrowDownRight, Clock, CheckCircle,
+    10→  AlertTriangle, Sparkles, Building2, FileText, Users, Target, Zap,
+    11→  Gauge, Banknote,
+    12→} from 'lucide-react';
+    13→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Button } from '@/components/ui/button';
+    16→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    17→import { ScrollArea } from '@/components/ui/scroll-area';
+    18→import { Separator } from '@/components/ui/separator';
+    19→import { Progress } from '@/components/ui/progress';
+    20→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+    21→import { useFireClients, useFireInvoices, useFireReturns } from '@/hooks/use-firestore';
+    22→
+    23→// ═══════════════════════════════════════════════════════════════════════════════
+    24→// INDIAN FORMATTING UTILS
+    25→// ═══════════════════════════════════════════════════════════════════════════════
+    26→
+    27→function formatINR(amount: number): string {
+    28→  const parts = amount.toFixed(0).split('.');
+    29→  let intPart = parts[0];
+    30→  const lastThree = intPart.slice(-3);
+    31→  const otherNumbers = intPart.slice(0, -3);
+    32→  if (otherNumbers !== '' && otherNumbers !== '-') {
+    33→    intPart = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+    34→  } else {
+    35→    intPart = lastThree;
+    36→  }
+    37→  return '₹' + intPart;
+    38→}
+    39→
+    40→function formatDate(dateStr: string): string {
+    41→  const d = new Date(dateStr);
+    42→  const dd = String(d.getDate()).padStart(2, '0');
+    43→  const mm = String(d.getMonth() + 1).padStart(2, '0');
+    44→  const yyyy = d.getFullYear();
+    45→  return `${dd}/${mm}/${yyyy}`;
+    46→}
+    47→
+    48→// ═══════════════════════════════════════════════════════════════════════════════
+    49→// DEMO DATA — not yet wired to backend
+    50→//
+    51→// The financing/loans/deals concepts below have no Firestore collection or
+    52→// API route yet. Live invoice data IS available via useFireInvoices (used in
+    53→// the header count), but the eligibility/advancePct/financier/maturity fields
+    54→// are not modeled. These arrays are kept as explicit demo data so the UI
+    55→// remains functional while the working-capital backend is being built.
+    56→// ═══════════════════════════════════════════════════════════════════════════════
+    57→
+    58→// DEMO DATA — not yet wired to backend
+    59→const demoInvoices = [
+    60→  { id: 'INV-001', number: 'INV/2025/001', client: 'Sharma Textiles Pvt Ltd', amount: 456000, age: 15, status: 'unpaid' as const, eligible: true, advancePct: 90 },
+    61→  { id: 'INV-002', number: 'INV/2025/002', client: 'Patel Engineering Works', amount: 1280000, age: 22, status: 'unpaid' as const, eligible: true, advancePct: 85 },
+    62→  { id: 'INV-003', number: 'INV/2025/003', client: 'Krishna Industries', amount: 345000, age: 38, status: 'unpaid' as const, eligible: true, advancePct: 80 },
+    63→  { id: 'INV-004', number: 'INV/2025/004', client: 'Mehta Exports Ltd', amount: 2100000, age: 45, status: 'unpaid' as const, eligible: true, advancePct: 80 },
+    64→  { id: 'INV-005', number: 'INV/2025/005', client: 'Gupta Trading Co', amount: 189000, age: 52, status: 'overdue' as const, eligible: true, advancePct: 75 },
+    65→  { id: 'INV-006', number: 'INV/2025/006', client: 'Reddy Constructions', amount: 3200000, age: 67, status: 'overdue' as const, eligible: true, advancePct: 70 },
+    66→  { id: 'INV-007', number: 'INV/2025/007', client: 'Jain Pharma Distributors', amount: 567000, age: 78, status: 'overdue' as const, eligible: false, advancePct: 0 },
+    67→  { id: 'INV-008', number: 'INV/2025/008', client: 'Singh Agro Products', amount: 890000, age: 90, status: 'overdue' as const, eligible: false, advancePct: 0 },
+    68→  { id: 'INV-009', number: 'INV/2025/009', client: 'Desai Auto Components', amount: 725000, age: 18, status: 'unpaid' as const, eligible: true, advancePct: 88 },
+    69→  { id: 'INV-010', number: 'INV/2025/010', client: 'Kumar Electronics Ltd', amount: 1560000, age: 30, status: 'unpaid' as const, eligible: true, advancePct: 85 },
+    70→];
+    71→
+    72→// DEMO DATA — not yet wired to backend
+    73→const demoFinancingDeals = [
+    74→  { id: 'FD-001', financier: 'HDFC Bank', invoice: 'INV/2024/089', client: 'Sharma Textiles Pvt Ltd', advanceAmount: 855000, fee: 25650, status: 'active' as const, maturityDate: '2025-04-15', advancePct: 90 },
+    75→  { id: 'FD-002', financier: 'ICICI Bank', invoice: 'INV/2024/092', client: 'Mehta Exports Ltd', advanceAmount: 1680000, fee: 67200, status: 'active' as const, maturityDate: '2025-03-28', advancePct: 85 },
+    76→  { id: 'FD-003', financier: 'Kotak Mahindra', invoice: 'INV/2024/095', client: 'Patel Engineering Works', advanceAmount: 960000, fee: 38400, status: 'repaid' as const, maturityDate: '2025-02-10', advancePct: 80 },
+    77→  { id: 'FD-004', financier: 'Axis Bank', invoice: 'INV/2024/088', client: 'Krishna Industries', advanceAmount: 270000, fee: 10800, status: 'repaid' as const, maturityDate: '2025-01-20', advancePct: 80 },
+    78→];
+    79→
+    80→// DEMO DATA — not yet wired to backend
+    81→const demoActiveLoans = [
+    82→  { id: 'LN-001', type: 'Working Capital Loan', amount: 2500000, interestRate: 12.5, emi: 58400, outstanding: 1850000, nextDue: '2025-04-05', tenure: '24 months' },
+    83→  { id: 'LN-002', type: 'Overdraft Facility', amount: 5000000, interestRate: 11.0, emi: 0, outstanding: 2300000, nextDue: '2025-04-01', tenure: 'Revolving' },
+    84→  { id: 'LN-003', type: 'Invoice Discounting', amount: 1500000, interestRate: 13.5, emi: 42500, outstanding: 1100000, nextDue: '2025-04-15', tenure: '12 months' },
+    85→];
+    86→
+    87→const loanProducts = [
+    88→  { name: 'Working Capital Loan', icon: Banknote, interestRate: '10.5% - 14%', maxAmount: 5000000, tenure: '12-36 months', processingFee: '1.5%', eligibility: 'Min ₹10L annual turnover, 2+ years in business', color: 'emerald' },
+    89→  { name: 'Overdraft Facility', icon: Wallet, interestRate: '9.5% - 12%', maxAmount: 10000000, tenure: 'Revolving', processingFee: '1%', eligibility: 'Min ₹25L annual turnover, collateral required', color: 'teal' },
+    90→  { name: 'Invoice Discounting', icon: FileText, interestRate: '12% - 16%', maxAmount: 3000000, tenure: '30-90 days', processingFee: '0.5%', eligibility: 'Verified invoices, B2B clients only', color: 'cyan' },
+    91→  { name: 'Revenue-Based Financing', icon: TrendingUp, interestRate: '14% - 18%', maxAmount: 2000000, tenure: '6-18 months', processingFee: '2%', eligibility: 'Min ₹5L monthly revenue, 1+ year operational', color: 'green' },
+    92→];
+    93→
+    94→const scoreHistory = {
+    95→  cashFlow: [58, 62, 65, 68, 70, 72],
+    96→  credit: [55, 58, 60, 64, 66, 68],
+    97→  collection: [72, 74, 76, 78, 80, 81],
+    98→  health: [62, 64, 67, 70, 72, 74],
+    99→};
+   100→
+   101→const monthlyRevenue = [
+   102→  { month: 'Apr 24', value: 1820000 },
+   103→  { month: 'May 24', value: 2150000 },
+   104→  { month: 'Jun 24', value: 1980000 },
+   105→  { month: 'Jul 24', value: 2340000 },
+   106→  { month: 'Aug 24', value: 2520000 },
+   107→  { month: 'Sep 24', value: 2210000 },
+   108→  { month: 'Oct 24', value: 2680000 },
+   109→  { month: 'Nov 24', value: 2890000 },
+   110→  { month: 'Dec 24', value: 2750000 },
+   111→  { month: 'Jan 25', value: 3120000 },
+   112→  { month: 'Feb 25', value: 2950000 },
+   113→  { month: 'Mar 25', value: 3380000 },
+   114→];
+   115→
+   116→// ═══════════════════════════════════════════════════════════════════════════════
+   117→// SCORE COMPUTATION
+   118→// ═══════════════════════════════════════════════════════════════════════════════
+   119→
+   120→function computeScores(invoices: typeof demoInvoices) {
+   121→  const total = invoices.length;
+   122→  const unpaid = invoices.filter(i => i.status === 'unpaid').length;
+   123→  const overdue = invoices.filter(i => i.status === 'overdue').length;
+   124→  const totalAmount = invoices.reduce((s, i) => s + i.amount, 0);
+   125→  const overdueAmount = invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + i.amount, 0);
+   126→  const avgAge = invoices.reduce((s, i) => s + i.age, 0) / total;
+   127→  const eligibleCount = invoices.filter(i => i.eligible).length;
+   128→  const eligibleAmount = invoices.filter(i => i.eligible).reduce((s, i) => s + i.amount, 0);
+   129→
+   130→  // Cash Flow Score: f(invoice aging, collection speed, bank balance trend)
+   131→  const ageFactor = Math.max(0, 100 - avgAge * 0.8);
+   132→  const collectionFactor = ((total - overdue) / total) * 100;
+   133→  const cashFlow = Math.round(ageFactor * 0.4 + collectionFactor * 0.6);
+   134→
+   135→  // Credit Score: f(payment regularity, GST compliance, default history)
+   136→  const paymentRegularity = Math.min(100, ((unpaid + 1) / (overdue + 1)) * 50);
+   137→  const gstCompliance = 85; // assumed
+   138→  const credit = Math.round(paymentRegularity * 0.5 + gstCompliance * 0.5);
+   139→
+   140→  // Collection Score: f(on-time collections %, overdue amount ratio, DSO)
+   141→  const onTimePct = ((total - overdue) / total) * 100;
+   142→  const overdueRatio = overdueAmount / totalAmount;
+   143→  const dso = avgAge;
+   144→  const dsoFactor = Math.max(0, 100 - (dso - 30) * 1.5);
+   145→  const collection = Math.round(onTimePct * 0.4 + (1 - overdueRatio) * 100 * 0.35 + dsoFactor * 0.25);
+   146→
+   147→  // Business Health: weighted average
+   148→  const health = Math.round(cashFlow * 0.3 + credit * 0.25 + collection * 0.25 + gstCompliance * 0.2);
+   149→
+   150→  return {
+   151→    cashFlow: Math.min(100, Math.max(0, cashFlow)),
+   152→    credit: Math.min(100, Math.max(0, credit)),
+   153→    collection: Math.min(100, Math.max(0, collection)),
+   154→    health: Math.min(100, Math.max(0, health)),
+   155→    eligibleCount,
+   156→    eligibleAmount,
+   157→    totalAmount,
+   158→    overdueAmount,
+   159→  };
+   160→}
+   161→
+   162→// ═══════════════════════════════════════════════════════════════════════════════
+   163→// SVG GAUGE COMPONENT
+   164→// ═══════════════════════════════════════════════════════════════════════════════
+   165→
+   166→function ScoreGauge({ score, label, icon: Icon, size = 140 }: {
+   167→  score: number; label: string; icon: React.ElementType; size?: number;
+   168→}) {
+   169→  const r = (size - 20) / 2;
+   170→  const cx = size / 2;
+   171→  const cy = size / 2;
+   172→  const circumference = 2 * Math.PI * r;
+   173→  const strokeDashoffset = circumference * (1 - score / 100);
+   174→
+   175→  const getColor = (s: number) => {
+   176→    if (s >= 70) return { stroke: '#10b981', fill: '#ecfdf5', text: 'text-emerald-600', bg: 'bg-emerald-50' };
+   177→    if (s >= 40) return { stroke: '#f59e0b', fill: '#fffbeb', text: 'text-amber-600', bg: 'bg-amber-50' };
+   178→    return { stroke: '#ef4444', fill: '#fef2f2', text: 'text-red-600', bg: 'bg-red-50' };
+   179→  };
+   180→
+   181→  const color = getColor(score);
+   182→
+   183→  return (
+   184→    <div className="flex flex-col items-center gap-2">
+   185→      <div className="relative" style={{ width: size, height: size }}>
+   186→        <svg width={size} height={size} className="transform -rotate-90">
+   187→          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="8" />
+   188→          <motion.circle
+   189→            cx={cx} cy={cy} r={r} fill="none"
+   190→            stroke={color.stroke}
+   191→            strokeWidth="8"
+   192→            strokeLinecap="round"
+   193→            strokeDasharray={circumference}
+   194→            initial={{ strokeDashoffset: circumference }}
+   195→            animate={{ strokeDashoffset }}
+   196→            transition={{ duration: 1.5, ease: 'easeOut', delay: 0.2 }}
+   197→          />
+   198→        </svg>
+   199→        <div className="absolute inset-0 flex flex-col items-center justify-center">
+   200→          <motion.span
+   201→            className="text-2xl font-bold"
+   202→            initial={{ opacity: 0, scale: 0.5 }}
+   203→            animate={{ opacity: 1, scale: 1 }}
+   204→            transition={{ duration: 0.5, delay: 0.8 }}
+   205→          >
+   206→            <span className={color.text}>{score}</span>
+   207→            <span className="text-xs text-slate-400 font-normal">/100</span>
+   208→          </motion.span>
+   209→        </div>
+   210→        <div className={`absolute top-1 left-1/2 -translate-x-1/2 rounded-full p-1 ${color.bg}`}>
+   211→          <Icon className={`h-3.5 w-3.5 ${color.text}`} />
+   212→        </div>
+   213→      </div>
+   214→      <span className="text-xs font-semibold text-slate-600 text-center">{label}</span>
+   215→    </div>
+   216→  );
+   217→}
+   218→
+   219→// ═══════════════════════════════════════════════════════════════════════════════
+   220→// SPARKLINE COMPONENT
+   221→// ═══════════════════════════════════════════════════════════════════════════════
+   222→
+   223→function Sparkline({ data, color = '#10b981', width = 120, height = 32 }: {
+   224→  data: number[]; color?: string; width?: number; height?: number;
+   225→}) {
+   226→  const max = Math.max(...data);
+   227→  const min = Math.min(...data);
+   228→  const range = max - min || 1;
+   229→  const padding = 2;
+   230→
+   231→  const points = data.map((v, i) => {
+   232→    const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+   233→    const y = padding + (1 - (v - min) / range) * (height - padding * 2);
+   234→    return `${x},${y}`;
+   235→  }).join(' ');
+   236→
+   237→  const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
+   238→
+   239→  return (
+   240→    <svg width={width} height={height} className="overflow-visible">
+   241→      <motion.polygon
+   242→        points={areaPoints}
+   243→        fill={color}
+   244→        fillOpacity={0.1}
+   245→        initial={{ opacity: 0 }}
+   246→        animate={{ opacity: 1 }}
+   247→        transition={{ duration: 0.8, delay: 0.5 }}
+   248→      />
+   249→      <motion.polyline
+   250→        points={points}
+   251→        fill="none"
+   252→        stroke={color}
+   253→        strokeWidth="2"
+   254→        strokeLinecap="round"
+   255→        strokeLinejoin="round"
+   256→        initial={{ pathLength: 0 }}
+   257→        animate={{ pathLength: 1 }}
+   258→        transition={{ duration: 1.2, delay: 0.3 }}
+   259→      />
+   260→      {data.length > 0 && (
+   261→        <motion.circle
+   262→          cx={padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2)}
+   263→          cy={padding + (1 - (data[data.length - 1] - min) / range) * (height - padding * 2)}
+   264→          r="3"
+   265→          fill={color}
+   266→          initial={{ scale: 0 }}
+   267→          animate={{ scale: 1 }}
+   268→          transition={{ duration: 0.3, delay: 1.5 }}
+   269→        />
+   270→      )}
+   271→    </svg>
+   272→  );
+   273→}
+   274→
+   275→// ═══════════════════════════════════════════════════════════════════════════════
+   276→// REVENUE AREA CHART
+   277→// ═══════════════════════════════════════════════════════════════════════════════
+   278→
+   279→function RevenueAreaChart({ data }: { data: typeof monthlyRevenue }) {
+   280→  const width = 700;
+   281→  const height = 180;
+   282→  const padding = { top: 10, right: 10, bottom: 30, left: 70 };
+   283→  const chartW = width - padding.left - padding.right;
+   284→  const chartH = height - padding.top - padding.bottom;
+   285→
+   286→  const maxVal = Math.max(...data.map(d => d.value));
+   287→  const minVal = Math.min(...data.map(d => d.value)) * 0.85;
+   288→
+   289→  const points = data.map((d, i) => ({
+   290→    x: padding.left + (i / (data.length - 1)) * chartW,
+   291→    y: padding.top + (1 - (d.value - minVal) / (maxVal - minVal)) * chartH,
+   292→  }));
+   293→
+   294→  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+   295→  const areaPath = `${linePath} L${points[points.length - 1].x},${padding.top + chartH} L${points[0].x},${padding.top + chartH} Z`;
+   296→
+   297→  return (
+   298→    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+   299→      <defs>
+   300→        <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+   301→          <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+   302→          <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+   303→        </linearGradient>
+   304→      </defs>
+   305→      {/* Grid lines */}
+   306→      {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+   307→        const y = padding.top + pct * chartH;
+   308→        const val = maxVal - pct * (maxVal - minVal);
+   309→        return (
+   310→          <g key={pct}>
+   311→            <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e2e8f0" strokeDasharray="3,3" />
+   312→            <text x={padding.left - 8} y={y + 4} textAnchor="end" className="text-[9px] fill-slate-400">{formatINR(val)}</text>
+   313→          </g>
+   314→        );
+   315→      })}
+   316→      {/* X labels */}
+   317→      {data.map((d, i) => {
+   318→        const x = padding.left + (i / (data.length - 1)) * chartW;
+   319→        return (
+   320→          <text key={i} x={x} y={height - 5} textAnchor="middle" className="text-[8px] fill-slate-400">
+   321→            {d.month.split(' ')[0]}
+   322→          </text>
+   323→        );
+   324→      })}
+   325→      <motion.path
+   326→        d={areaPath}
+   327→        fill="url(#revenueGrad)"
+   328→        initial={{ opacity: 0 }}
+   329→        animate={{ opacity: 1 }}
+   330→        transition={{ duration: 1, delay: 0.3 }}
+   331→      />
+   332→      <motion.path
+   333→        d={linePath}
+   334→        fill="none"
+   335→        stroke="#10b981"
+   336→        strokeWidth="2.5"
+   337→        strokeLinecap="round"
+   338→        strokeLinejoin="round"
+   339→        initial={{ pathLength: 0 }}
+   340→        animate={{ pathLength: 1 }}
+   341→        transition={{ duration: 1.5, delay: 0.2 }}
+   342→      />
+   343→      {points.map((p, i) => (
+   344→        <motion.circle
+   345→          key={i}
+   346→          cx={p.x} cy={p.y} r="3.5"
+   347→          fill="white" stroke="#10b981" strokeWidth="2"
+   348→          initial={{ scale: 0 }}
+   349→          animate={{ scale: 1 }}
+   350→          transition={{ duration: 0.3, delay: 0.5 + i * 0.08 }}
+   351→        />
+   352→      ))}
+   353→    </svg>
+   354→  );
+   355→}
+   356→
+   357→// ═══════════════════════════════════════════════════════════════════════════════
+   358→// EMI CALCULATOR CHART
+   359→// ═══════════════════════════════════════════════════════════════════════════════
+   360→
+   361→function EMIChart({ principal, rate, tenure }: { principal: number; rate: number; tenure: number }) {
+   362→  const monthlyRate = rate / 12 / 100;
+   363→  const emi = monthlyRate > 0
+   364→    ? principal * monthlyRate * Math.pow(1 + monthlyRate, tenure) / (Math.pow(1 + monthlyRate, tenure) - 1)
+   365→    : principal / tenure;
+   366→  const totalPayment = emi * tenure;
+   367→  const totalInterest = totalPayment - principal;
+   368→
+   369→  const size = 160;
+   370→  const cx = size / 2;
+   371→  const cy = size / 2;
+   372→  const r = 55;
+   373→  const circumference = 2 * Math.PI * r;
+   374→  const principalPct = principal / totalPayment;
+   375→  const principalDash = circumference * principalPct;
+   376→
+   377→  return (
+   378→    <div className="flex items-center gap-4">
+   379→      <svg width={size} height={size}>
+   380→        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="16" />
+   381→        <motion.circle
+   382→          cx={cx} cy={cy} r={r} fill="none"
+   383→          stroke="#10b981" strokeWidth="16"
+   384→          strokeDasharray={`${principalDash} ${circumference}`}
+   385→          strokeLinecap="round"
+   386→          transform={`rotate(-90 ${cx} ${cy})`}
+   387→          initial={{ strokeDasharray: `0 ${circumference}` }}
+   388→          animate={{ strokeDasharray: `${principalDash} ${circumference}` }}
+   389→          transition={{ duration: 1, delay: 0.3 }}
+   390→        />
+   391→        <motion.circle
+   392→          cx={cx} cy={cy} r={r} fill="none"
+   393→          stroke="#f59e0b" strokeWidth="16"
+   394→          strokeDasharray={`${circumference - principalDash} ${circumference}`}
+   395→          strokeDashoffset={-principalDash}
+   396→          strokeLinecap="round"
+   397→          transform={`rotate(-90 ${cx} ${cy})`}
+   398→          initial={{ opacity: 0 }}
+   399→          animate={{ opacity: 1 }}
+   400→          transition={{ duration: 0.5, delay: 1 }}
+   401→        />
+   402→        <text x={cx} y={cy - 6} textAnchor="middle" className="text-xs font-bold fill-slate-700">{formatINR(Math.round(emi))}</text>
+   403→        <text x={cx} y={cy + 10} textAnchor="middle" className="text-[9px] fill-slate-400">/month</text>
+   404→      </svg>
+   405→      <div className="flex flex-col gap-2 text-xs">
+   406→        <div className="flex items-center gap-2">
+   407→          <div className="h-3 w-3 rounded-sm bg-emerald-500" />
+   408→          <span className="text-slate-600">Principal: {formatINR(principal)}</span>
+   409→        </div>
+   410→        <div className="flex items-center gap-2">
+   411→          <div className="h-3 w-3 rounded-sm bg-amber-500" />
+   412→          <span className="text-slate-600">Interest: {formatINR(Math.round(totalInterest))}</span>
+   413→        </div>
+   414→        <div className="flex items-center gap-2">
+   415→          <div className="h-3 w-3 rounded-sm bg-slate-300" />
+   416→          <span className="text-slate-600">Total: {formatINR(Math.round(totalPayment))}</span>
+   417→        </div>
+   418→      </div>
+   419→    </div>
+   420→  );
+   421→}
+   422→
+   423→// ═══════════════════════════════════════════════════════════════════════════════
+   424→// TAB 1: BUSINESS HEALTH DASHBOARD
+   425→// ═══════════════════════════════════════════════════════════════════════════════
+   426→
+   427→function BusinessHealthTab({ scores }: { scores: ReturnType<typeof computeScores> }) {
+   428→  const healthStatus = scores.health >= 70 ? 'Healthy' : scores.health >= 40 ? 'Moderate' : 'Concerning';
+   429→  const healthColor = scores.health >= 70 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : scores.health >= 40 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200';
+   430→
+   431→  const helping = [
+   432→    scores.cashFlow >= 65 ? 'Strong cash flow management' : null,
+   433→    scores.collection >= 70 ? 'Efficient collection practices' : null,
+   434→    scores.credit >= 65 ? 'Good payment discipline' : null,
+   435→    'Consistent GST filing compliance',
+   436→    'Low default history',
+   437→  ].filter(Boolean) as string[];
+   438→
+   439→  const hurting = [
+   440→    scores.cashFlow < 65 ? 'Slow invoice collections' : null,
+   441→    scores.collection < 70 ? 'High overdue ratio' : null,
+   442→    scores.credit < 65 ? 'Irregular payment patterns' : null,
+   443→    'Some invoices aging beyond 60 days',
+   444→  ].filter(Boolean) as string[];
+   445→
+   446→  return (
+   447→    <div className="space-y-6">
+   448→      {/* Health Status Banner */}
+   449→      <div className="flex items-center justify-between">
+   450→        <div className="flex items-center gap-3">
+   451→          <motion.div
+   452→            initial={{ scale: 0 }}
+   453→            animate={{ scale: 1 }}
+   454→            transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
+   455→          >
+   456→            <Badge className={`text-xs font-semibold px-3 py-1 border ${healthColor}`}>
+   457→              {healthStatus}
+   458→            </Badge>
+   459→          </motion.div>
+   460→          <span className="text-sm text-slate-500">Overall Business Health Score</span>
+   461→        </div>
+   462→        <div className="flex items-center gap-2 text-xs text-emerald-600">
+   463→          <TrendingUp className="h-3.5 w-3.5" />
+   464→          <span>+4 pts this month</span>
+   465→        </div>
+   466→      </div>
+   467→
+   468→      {/* Score Cards */}
+   469→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   470→        {[
+   471→          { score: scores.cashFlow, label: 'Cash Flow Score', icon: Wallet, history: scoreHistory.cashFlow },
+   472→          { score: scores.credit, label: 'Credit Score', icon: CreditScore, history: scoreHistory.credit },
+   473→          { score: scores.collection, label: 'Collection Score', icon: Target, history: scoreHistory.collection },
+   474→          { score: scores.health, label: 'Business Health', icon: Gauge, history: scoreHistory.health },
+   475→        ].map((item, idx) => (
+   476→          <motion.div
+   477→            key={item.label}
+   478→            initial={{ opacity: 0, y: 20 }}
+   479→            animate={{ opacity: 1, y: 0 }}
+   480→            transition={{ duration: 0.4, delay: idx * 0.1 }}
+   481→          >
+   482→            <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
+   483→              <CardContent className="p-4">
+   484→                <div className="flex items-start justify-between">
+   485→                  <ScoreGauge score={item.score} label={item.label} icon={item.icon} size={110} />
+   486→                  <div className="flex flex-col items-end gap-1 pt-2">
+   487→                    <span className="text-[10px] text-slate-400 font-medium">6M Trend</span>
+   488→                    <Sparkline
+   489→                      data={item.history}
+   490→                      color={item.score >= 70 ? '#10b981' : item.score >= 40 ? '#f59e0b' : '#ef4444'}
+   491→                      width={80}
+   492→                      height={28}
+   493→                    />
+   494→                    <div className="flex items-center gap-1 text-[10px]">
+   495→                      {item.history[item.history.length - 1] > item.history[0] ? (
+   496→                        <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   497→                      ) : (
+   498→                        <ArrowDownRight className="h-3 w-3 text-red-500" />
+   499→                      )}
+   500→                      <span className={item.history[item.history.length - 1] > item.history[0] ? 'text-emerald-600' : 'text-red-600'}>
+   501→                        {Math.abs(item.history[item.history.length - 1] - item.history[0])} pts
+   502→                      </span>
+   503→                    </div>
+   504→                  </div>
+   505→                </div>
+   506→              </CardContent>
+   507→            </Card>
+   508→          </motion.div>
+   509→        ))}
+   510→      </div>
+   511→
+   512→      {/* Score Breakdown */}
+   513→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   514→        <motion.div
+   515→          initial={{ opacity: 0, x: -20 }}
+   516→          animate={{ opacity: 1, x: 0 }}
+   517→          transition={{ duration: 0.4, delay: 0.5 }}
+   518→        >
+   519→          <Card className="border-emerald-200/60 bg-emerald-50/30">
+   520→            <CardHeader className="pb-2 pt-4 px-4">
+   521→              <CardTitle className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
+   522→                <CheckCircle className="h-4 w-4" /> What&apos;s Helping
+   523→              </CardTitle>
+   524→            </CardHeader>
+   525→            <CardContent className="px-4 pb-4">
+   526→              <ul className="space-y-2">
+   527→                {helping.map((item, i) => (
+   528→                  <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+   529→                    <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+   530→                    {item}
+   531→                  </li>
+   532→                ))}
+   533→              </ul>
+   534→            </CardContent>
+   535→          </Card>
+   536→        </motion.div>
+   537→
+   538→        <motion.div
+   539→          initial={{ opacity: 0, x: 20 }}
+   540→          animate={{ opacity: 1, x: 0 }}
+   541→          transition={{ duration: 0.4, delay: 0.6 }}
+   542→        >
+   543→          <Card className="border-amber-200/60 bg-amber-50/30">
+   544→            <CardHeader className="pb-2 pt-4 px-4">
+   545→              <CardTitle className="text-sm font-semibold text-amber-700 flex items-center gap-2">
+   546→                <AlertTriangle className="h-4 w-4" /> What&apos;s Hurting
+   547→              </CardTitle>
+   548→            </CardHeader>
+   549→            <CardContent className="px-4 pb-4">
+   550→              <ul className="space-y-2">
+   551→                {hurting.map((item, i) => (
+   552→                  <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+   553→                    <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+   554→                    {item}
+   555→                  </li>
+   556→                ))}
+   557→              </ul>
+   558→            </CardContent>
+   559→          </Card>
+   560→        </motion.div>
+   561→      </div>
+   562→
+   563→      {/* Summary Stats */}
+   564→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   565→        {[
+   566→          { label: 'Total Invoice Value', value: formatINR(scores.totalAmount), icon: IndianRupee, color: 'emerald' },
+   567→          { label: 'Eligible for Financing', value: formatINR(scores.eligibleAmount), icon: Sparkles, color: 'emerald' },
+   568→          { label: 'Overdue Amount', value: formatINR(scores.overdueAmount), icon: AlertTriangle, color: 'amber' },
+   569→          { label: 'Eligible Invoices', value: `${scores.eligibleCount} of ${demoInvoices.length}`, icon: FileText, color: 'emerald' },
+   570→        ].map((stat, idx) => (
+   571→          <motion.div
+   572→            key={stat.label}
+   573→            initial={{ opacity: 0, y: 10 }}
+   574→            animate={{ opacity: 1, y: 0 }}
+   575→            transition={{ duration: 0.3, delay: 0.7 + idx * 0.05 }}
+   576→          >
+   577→            <Card className="border-slate-200/60">
+   578→              <CardContent className="p-3 flex items-center gap-3">
+   579→                <div className={`rounded-lg p-2 ${stat.color === 'emerald' ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+   580→                  <stat.icon className={`h-4 w-4 ${stat.color === 'emerald' ? 'text-emerald-600' : 'text-amber-600'}`} />
+   581→                </div>
+   582→                <div>
+   583→                  <p className="text-[10px] text-slate-500 font-medium">{stat.label}</p>
+   584→                  <p className="text-sm font-bold text-slate-800">{stat.value}</p>
+   585→                </div>
+   586→              </CardContent>
+   587→            </Card>
+   588→          </motion.div>
+   589→        ))}
+   590→      </div>
+   591→    </div>
+   592→  );
+   593→}
+   594→
+   595→// ═══════════════════════════════════════════════════════════════════════════════
+   596→// TAB 2: INVOICE FINANCING
+   597→// ═══════════════════════════════════════════════════════════════════════════════
+   598→
+   599→function InvoiceFinancingTab({ scores }: { scores: ReturnType<typeof computeScores> }) {
+   600→  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
+   601→  const [showCalculator, setShowCalculator] = useState(false);
+   602→
+   603→  const toggleInvoice = useCallback((id: string) => {
+   604→    setSelectedInvoices(prev => {
+   605→      const next = new Set(prev);
+   606→      if (next.has(id)) next.delete(id);
+   607→      else next.add(id);
+   608→      return next;
+   609→    });
+   610→  }, []);
+   611→
+   612→  const selectedData = useMemo(() => {
+   613→    const invoices = demoInvoices.filter(i => selectedInvoices.has(i.id) && i.eligible);
+   614→    const totalValue = invoices.reduce((s, i) => s + i.amount, 0);
+   615→    const avgAdvancePct = invoices.length > 0
+   616→      ? invoices.reduce((s, i) => s + i.advancePct, 0) / invoices.length
+   617→      : 0;
+   618→    const advanceAmount = Math.round(totalValue * avgAdvancePct / 100);
+   619→    const fee = Math.round(advanceAmount * 0.03); // 3% fee
+   620→    const netDisbursement = advanceAmount - fee;
+   621→    return { invoices, totalValue, avgAdvancePct, advanceAmount, fee, netDisbursement };
+   622→  }, [selectedInvoices]);
+   623→
+   624→  return (
+   625→    <div className="space-y-6">
+   626→      {/* AI Recommendation */}
+   627→      <motion.div
+   628→        initial={{ opacity: 0, y: -10 }}
+   629→        animate={{ opacity: 1, y: 0 }}
+   630→        transition={{ duration: 0.4 }}
+   631→      >
+   632→        <Card className="border-emerald-200/80 bg-gradient-to-r from-emerald-50 to-teal-50">
+   633→          <CardContent className="p-4 flex items-start gap-3">
+   634→            <div className="rounded-lg bg-emerald-100 p-2 shrink-0">
+   635→              <Sparkles className="h-5 w-5 text-emerald-600" />
+   636→            </div>
+   637→            <div>
+   638→              <p className="text-sm font-semibold text-emerald-800">AI Recommendation</p>
+   639→              <p className="text-xs text-slate-600 mt-0.5">
+   640→                {scores.eligibleCount} invoices worth {formatINR(scores.eligibleAmount)} are eligible for instant financing.
+   641→                Select invoices below to calculate your advance.
+   642→              </p>
+   643→            </div>
+   644→          </CardContent>
+   645→        </Card>
+   646→      </motion.div>
+   647→
+   648→      {/* Eligible Invoices Table */}
+   649→      <Card className="border-slate-200/60">
+   650→        <CardHeader className="pb-3 pt-4 px-4">
+   651→          <div className="flex items-center justify-between">
+   652→            <CardTitle className="text-sm font-semibold text-slate-700">Eligible Invoices</CardTitle>
+   653→            {selectedInvoices.size > 0 && (
+   654→              <Button
+   655→                size="sm"
+   656→                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+   657→                onClick={() => setShowCalculator(true)}
+   658→              >
+   659→                <IndianRupee className="h-3.5 w-3.5 mr-1" />
+   660→                Calculate Advance ({selectedInvoices.size})
+   661→              </Button>
+   662→            )}
+   663→          </div>
+   664→        </CardHeader>
+   665→        <CardContent className="px-4 pb-4">
+   666→          <ScrollArea className="max-h-80">
+   667→            <div className="space-y-2">
+   668→              {demoInvoices.map((inv, idx) => (
+   669→                <motion.div
+   670→                  key={inv.id}
+   671→                  initial={{ opacity: 0, x: -10 }}
+   672→                  animate={{ opacity: 1, x: 0 }}
+   673→                  transition={{ duration: 0.3, delay: idx * 0.05 }}
+   674→                  onClick={() => inv.eligible && toggleInvoice(inv.id)}
+   675→                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+   676→                    inv.eligible
+   677→                      ? selectedInvoices.has(inv.id)
+   678→                        ? 'border-emerald-300 bg-emerald-50/50 cursor-pointer'
+   679→                        : 'border-slate-200 bg-white hover:border-emerald-200 cursor-pointer'
+   680→                      : 'border-slate-100 bg-slate-50/50 opacity-60 cursor-not-allowed'
+   681→                  }`}
+   682→                >
+   683→                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+   684→                    selectedInvoices.has(inv.id)
+   685→                      ? 'border-emerald-500 bg-emerald-500'
+   686→                      : inv.eligible
+   687→                        ? 'border-slate-300'
+   688→                        : 'border-slate-200'
+   689→                  }`}>
+   690→                    {selectedInvoices.has(inv.id) && (
+   691→                      <CheckCircle className="h-3 w-3 text-white" />
+   692→                    )}
+   693→                  </div>
+   694→                  <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
+   695→                    <div>
+   696→                      <p className="text-xs font-semibold text-slate-700">{inv.number}</p>
+   697→                      <p className="text-[10px] text-slate-400 truncate">{inv.client}</p>
+   698→                    </div>
+   699→                    <p className="text-xs font-semibold text-slate-700">{formatINR(inv.amount)}</p>
+   700→                    <div className="flex items-center gap-1">
+   701→                      <Clock className="h-3 w-3 text-slate-400" />
+   702→                      <span className={`text-xs font-medium ${inv.age > 60 ? 'text-amber-600' : 'text-slate-600'}`}>
+   703→                        {inv.age} days
+   704→                      </span>
+   705→                    </div>
+   706→                    <Badge
+   707→                      variant="outline"
+   708→                      className={`text-[10px] w-fit ${
+   709→                        inv.eligible
+   710→                          ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+   711→                          : 'border-red-300 text-red-600 bg-red-50'
+   712→                      }`}
+   713→                    >
+   714→                      {inv.eligible ? 'Eligible' : 'Not Eligible'}
+   715→                    </Badge>
+   716→                    <p className="text-xs text-slate-500">
+   717→                      {inv.eligible ? `${inv.advancePct}% advance` : '—'}
+   718→                    </p>
+   719→                  </div>
+   720→                </motion.div>
+   721→              ))}
+   722→            </div>
+   723→          </ScrollArea>
+   724→        </CardContent>
+   725→      </Card>
+   726→
+   727→      {/* Financing Calculator Dialog */}
+   728→      <Dialog open={showCalculator} onOpenChange={setShowCalculator}>
+   729→        <DialogContent className="max-w-lg">
+   730→          <DialogHeader>
+   731→            <DialogTitle className="flex items-center gap-2">
+   732→              <IndianRupee className="h-5 w-5 text-emerald-600" />
+   733→              Financing Calculator
+   734→            </DialogTitle>
+   735→          </DialogHeader>
+   736→          <div className="space-y-4 pt-2">
+   737→            {selectedData.invoices.length === 0 ? (
+   738→              <p className="text-sm text-slate-500 text-center py-6">Select eligible invoices to calculate advance</p>
+   739→            ) : (
+   740→              <>
+   741→                <div className="space-y-2">
+   742→                  {selectedData.invoices.map(inv => (
+   743→                    <div key={inv.id} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded">
+   744→                      <span className="text-slate-600">{inv.number} — {inv.client.slice(0, 20)}</span>
+   745→                      <span className="font-semibold text-slate-700">{formatINR(inv.amount)}</span>
+   746→                    </div>
+   747→                  ))}
+   748→                </div>
+   749→                <Separator />
+   750→                <div className="space-y-2">
+   751→                  <div className="flex justify-between text-xs">
+   752→                    <span className="text-slate-500">Total Invoice Value</span>
+   753→                    <span className="font-semibold">{formatINR(selectedData.totalValue)}</span>
+   754→                  </div>
+   755→                  <div className="flex justify-between text-xs">
+   756→                    <span className="text-slate-500">Average Advance %</span>
+   757→                    <span className="font-semibold text-emerald-600">{selectedData.avgAdvancePct.toFixed(1)}%</span>
+   758→                  </div>
+   759→                  <div className="flex justify-between text-xs">
+   760→                    <span className="text-slate-500">Advance Amount</span>
+   761→                    <span className="font-semibold text-emerald-600">{formatINR(selectedData.advanceAmount)}</span>
+   762→                  </div>
+   763→                  <div className="flex justify-between text-xs">
+   764→                    <span className="text-slate-500">Processing Fee (3%)</span>
+   765→                    <span className="font-semibold text-amber-600">- {formatINR(selectedData.fee)}</span>
+   766→                  </div>
+   767→                  <Separator />
+   768→                  <div className="flex justify-between text-sm">
+   769→                    <span className="font-semibold text-slate-700">Net Disbursement</span>
+   770→                    <span className="font-bold text-emerald-700 text-lg">{formatINR(selectedData.netDisbursement)}</span>
+   771→                  </div>
+   772→                </div>
+   773→                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+   774→                  <Zap className="h-4 w-4 mr-2" />
+   775→                  Get Instant Advance
+   776→                </Button>
+   777→              </>
+   778→            )}
+   779→          </div>
+   780→        </DialogContent>
+   781→      </Dialog>
+   782→
+   783→      {/* Active Financing Deals */}
+   784→      <Card className="border-slate-200/60">
+   785→        <CardHeader className="pb-3 pt-4 px-4">
+   786→          <CardTitle className="text-sm font-semibold text-slate-700">Active Financing Deals</CardTitle>
+   787→        </CardHeader>
+   788→        <CardContent className="px-4 pb-4">
+   789→          <ScrollArea className="max-h-64">
+   790→            <div className="space-y-2">
+   791→              {demoFinancingDeals.map((deal, idx) => (
+   792→                <motion.div
+   793→                  key={deal.id}
+   794→                  initial={{ opacity: 0 }}
+   795→                  animate={{ opacity: 1 }}
+   796→                  transition={{ duration: 0.3, delay: idx * 0.08 }}
+   797→                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
+   798→                >
+   799→                  <div className="flex items-center gap-3">
+   800→                    <div className={`rounded-lg p-2 ${deal.status === 'active' ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+   801→                      <Building2 className={`h-4 w-4 ${deal.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`} />
+   802→                    </div>
+   803→                    <div>
+   804→                      <p className="text-xs font-semibold text-slate-700">{deal.financier}</p>
+   805→                      <p className="text-[10px] text-slate-400">{deal.invoice} — {deal.client}</p>
+   806→                    </div>
+   807→                  </div>
+   808→                  <div className="flex items-center gap-4">
+   809→                    <div className="text-right">
+   810→                      <p className="text-xs font-semibold text-slate-700">{formatINR(deal.advanceAmount)}</p>
+   811→                      <p className="text-[10px] text-amber-500">Fee: {formatINR(deal.fee)}</p>
+   812→                    </div>
+   813→                    <div className="text-right">
+   814→                      <p className="text-[10px] text-slate-400">Due: {formatDate(deal.maturityDate)}</p>
+   815→                      <Badge
+   816→                        variant="outline"
+   817→                        className={`text-[10px] ${
+   818→                          deal.status === 'active'
+   819→                            ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+   820→                            : 'border-slate-300 text-slate-500 bg-slate-50'
+   821→                        }`}
+   822→                      >
+   823→                        {deal.status === 'active' ? 'Active' : 'Repaid'}
+   824→                      </Badge>
+   825→                    </div>
+   826→                  </div>
+   827→                </motion.div>
+   828→              ))}
+   829→            </div>
+   830→          </ScrollArea>
+   831→        </CardContent>
+   832→      </Card>
+   833→    </div>
+   834→  );
+   835→}
+   836→
+   837→// ═══════════════════════════════════════════════════════════════════════════════
+   838→// TAB 3: WORKING CAPITAL LOANS
+   839→// ═══════════════════════════════════════════════════════════════════════════════
+   840→
+   841→function WorkingCapitalLoansTab() {
+   842→  const [loanAppOpen, setLoanAppOpen] = useState(false);
+   843→  const [emiPrincipal, setEmiPrincipal] = useState(2000000);
+   844→  const [emiRate, setEmiRate] = useState(12);
+   845→  const [emiTenure, setEmiTenure] = useState(24);
+   846→
+   847→  // ── Real data fetch for eligibility checks ──
+   848→  // Annual invoice volume = sum of Invoice.taxableValue over the last 12 months
+   849→  // GST filing regularity = filedReturns / (filedReturns + pendingReturns + overdueReturns)
+   850→  const { data: invoicesResp, isLoading: invoicesLoading } = useQuery<{ invoices: Array<{ taxableValue: number; invoiceDate: string }> }>({
+   851→    queryKey: ['invoices', 'wc-loans'],
+   852→    queryFn: () => apiGet('/api/invoices'),
+   853→  });
+   854→  const { data: dashboard } = useQuery<{ filedReturns: number; pendingReturns: number; overdueReturns: number }>({
+   855→    queryKey: ['dashboard', 'wc-loans'],
+   856→    queryFn: () => apiGet('/api/dashboard'),
+   857→  });
+   858→
+   859→  const annualInvoiceVolume = useMemo(() => {
+   860→    const invoices = invoicesResp?.invoices ?? [];
+   861→    if (invoices.length === 0) return 0;
+   862→    const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
+   863→    return invoices
+   864→      .filter((inv) => {
+   865→        if (!inv.invoiceDate) return true;
+   866→        const d = new Date(inv.invoiceDate).getTime();
+   867→        return Number.isNaN(d) || d >= oneYearAgo;
+   868→      })
+   869→      .reduce((sum, inv) => sum + (Number(inv.taxableValue) || 0), 0);
+   870→  }, [invoicesResp]);
+   871→
+   872→  const filingRegularity = useMemo(() => {
+   873→    const filed = dashboard?.filedReturns ?? 0;
+   874→    const pending = dashboard?.pendingReturns ?? 0;
+   875→    const overdue = dashboard?.overdueReturns ?? 0;
+   876→    const total = filed + pending + overdue;
+   877→    if (total === 0) return { filed: 0, total: 0, pct: 0 };
+   878→    return { filed, total, pct: Math.round((filed / total) * 100) };
+   879→  }, [dashboard]);
+   880→
+   881→  // 1.2 Cr threshold = 12,000,000. Below this → status flips to 'review'.
+   882→  const INVOICE_VOLUME_THRESHOLD = 12000000;
+   883→  const invoiceVolumePass = annualInvoiceVolume >= INVOICE_VOLUME_THRESHOLD;
+   884→  // Filing regularity "pass" if >= 90% of returns filed on time
+   885→  const filingRegularityPass = filingRegularity.total === 0 ? false : filingRegularity.pct >= 90;
+   886→
+   887→  const eligibilityChecks = [
+   888→    {
+   889→      label: 'GST Filing Regularity',
+   890→      status: (filingRegularity.total === 0 ? 'warn' : filingRegularityPass ? 'pass' : 'review') as 'pass' | 'warn' | 'review',
+   891→      detail:
+   892→        filingRegularity.total === 0
+   893→          ? 'No returns on record yet'
+   894→          : `Filed ${filingRegularity.filed}/${filingRegularity.total} returns on time (${filingRegularity.pct}%)`,
+   895→    },
+   896→    {
+   897→      label: 'Invoice Volume',
+   898→      status: (invoicesLoading ? 'warn' : invoiceVolumePass ? 'pass' : 'review') as 'pass' | 'warn' | 'review',
+   899→      detail: invoicesLoading
+   900→        ? 'Calculating annual invoice volume…'
+   901→        : `${formatINR(annualInvoiceVolume)} annual invoice volume${invoiceVolumePass ? '' : ' (below ₹1.2 Cr threshold)'}`,
+   902→    },
+   903→    { label: 'Payment History', status: 'pass' as const, detail: 'No defaults in last 24 months' },
+   904→    { label: 'Business Vintage', status: 'pass' as const, detail: '3+ years in operation' },
+   905→    { label: 'Collateral Available', status: 'warn' as const, detail: 'Partial collateral available' },
+   906→  ];
+   907→
+   908→  return (
+   909→    <div className="space-y-6">
+   910→      {/* Eligibility Checker */}
+   911→      <motion.div
+   912→        initial={{ opacity: 0, y: -10 }}
+   913→        animate={{ opacity: 1, y: 0 }}
+   914→        transition={{ duration: 0.4 }}
+   915→      >
+   916→        <Card className="border-emerald-200/60">
+   917→          <CardHeader className="pb-3 pt-4 px-4">
+   918→            <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+   919→              <Shield className="h-4 w-4 text-emerald-600" />
+   920→              Loan Eligibility
+   921→            </CardTitle>
+   922→          </CardHeader>
+   923→          <CardContent className="px-4 pb-4">
+   924→            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
+   925→              {eligibilityChecks.map((check, idx) => (
+   926→                <motion.div
+   927→                  key={check.label}
+   928→                  initial={{ opacity: 0, scale: 0.9 }}
+   929→                  animate={{ opacity: 1, scale: 1 }}
+   930→                  transition={{ duration: 0.3, delay: idx * 0.08 }}
+   931→                  className={`flex items-center gap-2 p-2.5 rounded-lg border ${
+   932→                    check.status === 'pass'
+   933→                      ? 'border-emerald-200 bg-emerald-50/50'
+   934→                      : 'border-amber-200 bg-amber-50/50'
+   935→                  }`}
+   936→                >
+   937→                  {check.status === 'pass' ? (
+   938→                    <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+   939→                  ) : (
+   940→                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+   941→                  )}
+   942→                  <div>
+   943→                    <p className="text-[10px] font-semibold text-slate-700">{check.label}</p>
+   944→                    <p className="text-[9px] text-slate-500">{check.detail}</p>
+   945→                  </div>
+   946→                </motion.div>
+   947→              ))}
+   948→            </div>
+   949→          </CardContent>
+   950→        </Card>
+   951→      </motion.div>
+   952→
+   953→      {/* Loan Products */}
+   954→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   955→        {loanProducts.map((product, idx) => (
+   956→          <motion.div
+   957→            key={product.name}
+   958→            initial={{ opacity: 0, y: 15 }}
+   959→            animate={{ opacity: 1, y: 0 }}
+   960→            transition={{ duration: 0.4, delay: idx * 0.1 }}
+   961→          >
+   962→            <Card className="border-slate-200/60 hover:shadow-md transition-shadow h-full">
+   963→              <CardContent className="p-4 flex flex-col h-full">
+   964→                <div className="flex items-center gap-3 mb-3">
+   965→                  <div className={`rounded-lg p-2.5 ${
+   966→                    product.color === 'emerald' ? 'bg-emerald-50' :
+   967→                    product.color === 'teal' ? 'bg-teal-50' :
+   968→                    product.color === 'cyan' ? 'bg-cyan-50' :
+   969→                    'bg-green-50'
+   970→                  }`}>
+   971→                    <product.icon className={`h-5 w-5 ${
+   972→                      product.color === 'emerald' ? 'text-emerald-600' :
+   973→                      product.color === 'teal' ? 'text-teal-600' :
+   974→                      product.color === 'cyan' ? 'text-cyan-600' :
+   975→                      'text-green-600'
+   976→                    }`} />
+   977→                  </div>
+   978→                  <div>
+   979→                    <p className="text-sm font-semibold text-slate-800">{product.name}</p>
+   980→                    <p className="text-[10px] text-slate-500">Interest: {product.interestRate}</p>
+   981→                  </div>
+   982→                </div>
+   983→                <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+   984→                  <div className="bg-slate-50 rounded p-2">
+   985→                    <p className="text-[10px] text-slate-400">Max Amount</p>
+   986→                    <p className="font-semibold text-slate-700">{formatINR(product.maxAmount)}</p>
+   987→                  </div>
+   988→                  <div className="bg-slate-50 rounded p-2">
+   989→                    <p className="text-[10px] text-slate-400">Tenure</p>
+   990→                    <p className="font-semibold text-slate-700">{product.tenure}</p>
+   991→                  </div>
+   992→                  <div className="bg-slate-50 rounded p-2">
+   993→                    <p className="text-[10px] text-slate-400">Processing Fee</p>
+   994→                    <p className="font-semibold text-slate-700">{product.processingFee}</p>
+   995→                  </div>
+   996→                  <div className="bg-slate-50 rounded p-2">
+   997→                    <p className="text-[10px] text-slate-400">Eligibility</p>
+   998→                    <p className="font-semibold text-slate-700 text-[10px] leading-tight">{product.eligibility}</p>
+   999→                  </div>
+  1000→                </div>
+  1001→                <div className="mt-auto">
+  1002→                  <Button
+  1003→                    variant="outline"
+  1004→                    size="sm"
+  1005→                    className="w-full text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+  1006→                    onClick={() => setLoanAppOpen(true)}
+  1007→                  >
+  1008→                    Apply Now
+  1009→                  </Button>
+  1010→                </div>
+  1011→              </CardContent>
+  1012→            </Card>
+  1013→          </motion.div>
+  1014→        ))}
+  1015→      </div>
+  1016→
+  1017→      {/* Active Loans Table */}
+  1018→      <Card className="border-slate-200/60">
+  1019→        <CardHeader className="pb-3 pt-4 px-4">
+  1020→          <CardTitle className="text-sm font-semibold text-slate-700">Active Loans</CardTitle>
+  1021→        </CardHeader>
+  1022→        <CardContent className="px-4 pb-4">
+  1023→          <ScrollArea className="max-h-64">
+  1024→            <div className="space-y-2">
+  1025→              {demoActiveLoans.map((loan, idx) => (
+  1026→                <motion.div
+  1027→                  key={loan.id}
+  1028→                  initial={{ opacity: 0 }}
+  1029→                  animate={{ opacity: 1 }}
+  1030→                  transition={{ duration: 0.3, delay: idx * 0.1 }}
+  1031→                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
+  1032→                >
+  1033→                  <div className="flex items-center gap-3">
+  1034→                    <div className="rounded-lg p-2 bg-emerald-50">
+  1035→                      <Banknote className="h-4 w-4 text-emerald-600" />
+  1036→                    </div>
+  1037→                    <div>
+  1038→                      <p className="text-xs font-semibold text-slate-700">{loan.type}</p>
+  1039→                      <p className="text-[10px] text-slate-400">{loan.tenure} • {loan.interestRate}% p.a.</p>
+  1040→                    </div>
+  1041→                  </div>
+  1042→                  <div className="flex items-center gap-4">
+  1043→                    <div className="text-right">
+  1044→                      <p className="text-[10px] text-slate-400">Amount</p>
+  1045→                      <p className="text-xs font-semibold text-slate-700">{formatINR(loan.amount)}</p>
+  1046→                    </div>
+  1047→                    <div className="text-right">
+  1048→                      <p className="text-[10px] text-slate-400">Outstanding</p>
+  1049→                      <p className="text-xs font-semibold text-amber-600">{formatINR(loan.outstanding)}</p>
+  1050→                    </div>
+  1051→                    <div className="text-right">
+  1052→                      <p className="text-[10px] text-slate-400">{loan.emi > 0 ? 'EMI' : 'Interest Only'}</p>
+  1053→                      <p className="text-xs font-semibold text-slate-700">{loan.emi > 0 ? formatINR(loan.emi) : 'Variable'}</p>
+  1054→                    </div>
+  1055→                    <div className="text-right">
+  1056→                      <p className="text-[10px] text-slate-400">Next Due</p>
+  1057→                      <p className="text-xs text-slate-600">{formatDate(loan.nextDue)}</p>
+  1058→                    </div>
+  1059→                  </div>
+  1060→                </motion.div>
+  1061→              ))}
+  1062→            </div>
+  1063→          </ScrollArea>
+  1064→        </CardContent>
+  1065→      </Card>
+  1066→
+  1067→      {/* EMI Calculator */}
+  1068→      <Card className="border-slate-200/60">
+  1069→        <CardHeader className="pb-3 pt-4 px-4">
+  1070→          <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1071→            <BarChart3 className="h-4 w-4 text-emerald-600" />
+  1072→            EMI Calculator
+  1073→          </CardTitle>
+  1074→        </CardHeader>
+  1075→        <CardContent className="px-4 pb-4">
+  1076→          <div className="flex flex-col md:flex-row gap-6 items-start">
+  1077→            <div className="space-y-3 flex-1 w-full">
+  1078→              <div>
+  1079→                <label className="text-xs text-slate-500 font-medium">Loan Amount: {formatINR(emiPrincipal)}</label>
+  1080→                <input
+  1081→                  type="range"
+  1082→                  min={100000}
+  1083→                  max={10000000}
+  1084→                  step={100000}
+  1085→                  value={emiPrincipal}
+  1086→                  onChange={e => setEmiPrincipal(Number(e.target.value))}
+  1087→                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+  1088→                />
+  1089→              </div>
+  1090→              <div>
+  1091→                <label className="text-xs text-slate-500 font-medium">Interest Rate: {emiRate}%</label>
+  1092→                <input
+  1093→                  type="range"
+  1094→                  min={8}
+  1095→                  max={24}
+  1096→                  step={0.5}
+  1097→                  value={emiRate}
+  1098→                  onChange={e => setEmiRate(Number(e.target.value))}
+  1099→                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+  1100→                />
+  1101→              </div>
+  1102→              <div>
+  1103→                <label className="text-xs text-slate-500 font-medium">Tenure: {emiTenure} months</label>
+  1104→                <input
+  1105→                  type="range"
+  1106→                  min={6}
+  1107→                  max={60}
+  1108→                  step={6}
+  1109→                  value={emiTenure}
+  1110→                  onChange={e => setEmiTenure(Number(e.target.value))}
+  1111→                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+  1112→                />
+  1113→              </div>
+  1114→            </div>
+  1115→            <EMIChart principal={emiPrincipal} rate={emiRate} tenure={emiTenure} />
+  1116→          </div>
+  1117→        </CardContent>
+  1118→      </Card>
+  1119→
+  1120→      {/* Loan Application Dialog */}
+  1121→      <Dialog open={loanAppOpen} onOpenChange={setLoanAppOpen}>
+  1122→        <DialogContent className="max-w-md">
+  1123→          <DialogHeader>
+  1124→            <DialogTitle className="flex items-center gap-2">
+  1125→              <Building2 className="h-5 w-5 text-emerald-600" />
+  1126→              Apply for Working Capital Loan
+  1127→            </DialogTitle>
+  1128→          </DialogHeader>
+  1129→          <div className="space-y-4 pt-2">
+  1130→            <div className="space-y-3">
+  1131→              <div>
+  1132→                <label className="text-xs text-slate-500 font-medium">Loan Amount</label>
+  1133→                <input className="w-full mt-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400" placeholder="₹10,00,000" />
+  1134→              </div>
+  1135→              <div>
+  1136→                <label className="text-xs text-slate-500 font-medium">Purpose</label>
+  1137→                <input className="w-full mt-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400" placeholder="Working capital for operations" />
+  1138→              </div>
+  1139→              <div>
+  1140→                <label className="text-xs text-slate-500 font-medium">Tenure</label>
+  1141→                <select className="w-full mt-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white">
+  1142→                  <option>12 months</option>
+  1143→                  <option>24 months</option>
+  1144→                  <option>36 months</option>
+  1145→                </select>
+  1146→              </div>
+  1147→            </div>
+  1148→            <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+  1149→              Submit Application
+  1150→            </Button>
+  1151→            <p className="text-[10px] text-slate-400 text-center">
+  1152→              Your GST data and invoice history will be used for eligibility verification
+  1153→            </p>
+  1154→          </div>
+  1155→        </DialogContent>
+  1156→      </Dialog>
+  1157→    </div>
+  1158→  );
+  1159→}
+  1160→
+  1161→// ═══════════════════════════════════════════════════════════════════════════════
+  1162→// TAB 4: CREDIT INTELLIGENCE
+  1163→// ═══════════════════════════════════════════════════════════════════════════════
+  1164→
+  1165→function CreditIntelligenceTab({ scores }: { scores: ReturnType<typeof computeScores> }) {
+  1166→  const creditRating = scores.credit >= 80 ? 'AAA' : scores.credit >= 70 ? 'AA' : scores.credit >= 60 ? 'A' : scores.credit >= 50 ? 'BBB' : scores.credit >= 40 ? 'BB' : 'B';
+  1167→  const ratingColor = scores.credit >= 70 ? 'emerald' : scores.credit >= 50 ? 'amber' : 'red';
+  1168→  const creditLimit = 5000000;
+  1169→  const creditUsed = 2300000;
+  1170→  const utilizationPct = (creditUsed / creditLimit) * 100;
+  1171→
+  1172→  const paymentBehavior = {
+  1173→    onTimePct: 78,
+  1174→    avgDelayDays: 4.2,
+  1175→    defaultHistory: 0,
+  1176→  };
+  1177→
+  1178→  const gstCompliance = {
+  1179→    filingRegularity: 92,
+  1180→    taxPaymentConsistency: 88,
+  1181→    lastFilingDate: '2025-02-15',
+  1182→    missedFilings: 1,
+  1183→  };
+  1184→
+  1185→  const recommendations = [
+  1186→    { action: 'Reduce average payment delay from 4.2 to 2 days', impact: '+5 points', icon: Clock },
+  1187→    { action: 'Maintain on-time payment rate above 85%', impact: '+3 points', icon: CheckCircle },
+  1188→    { action: 'Clear 1 pending GST filing', impact: '+4 points', icon: FileText },
+  1189→    { action: 'Reduce credit utilization below 40%', impact: '+3 points', icon: CreditScore },
+  1190→    { action: 'Maintain zero defaults for next 6 months', impact: '+2 points', icon: Shield },
+  1191→  ];
+  1192→
+  1193→  return (
+  1194→    <div className="space-y-6">
+  1195→      {/* Credit Profile Summary */}
+  1196→      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  1197→        <motion.div
+  1198→          initial={{ opacity: 0, scale: 0.95 }}
+  1199→          animate={{ opacity: 1, scale: 1 }}
+  1200→          transition={{ duration: 0.4 }}
+  1201→        >
+  1202→          <Card className={`border-${ratingColor === 'emerald' ? 'emerald' : ratingColor === 'amber' ? 'amber' : 'red'}-200/60`}>
+  1203→            <CardContent className="p-4 text-center">
+  1204→              <p className="text-xs text-slate-500 font-medium mb-2">Overall Credit Rating</p>
+  1205→              <motion.div
+  1206→                className={`text-5xl font-black ${
+  1207→                  ratingColor === 'emerald' ? 'text-emerald-600' :
+  1208→                  ratingColor === 'amber' ? 'text-amber-600' :
+  1209→                  'text-red-600'
+  1210→                }`}
+  1211→                initial={{ scale: 0 }}
+  1212→                animate={{ scale: 1 }}
+  1213→                transition={{ type: 'spring', stiffness: 200, delay: 0.3 }}
+  1214→              >
+  1215→                {creditRating}
+  1216→              </motion.div>
+  1217→              <p className="text-[10px] text-slate-400 mt-1">Based on composite scoring model</p>
+  1218→            </CardContent>
+  1219→          </Card>
+  1220→        </motion.div>
+  1221→
+  1222→        <motion.div
+  1223→          initial={{ opacity: 0, scale: 0.95 }}
+  1224→          animate={{ opacity: 1, scale: 1 }}
+  1225→          transition={{ duration: 0.4, delay: 0.1 }}
+  1226→        >
+  1227→          <Card className="border-slate-200/60">
+  1228→            <CardContent className="p-4">
+  1229→              <p className="text-xs text-slate-500 font-medium mb-2">Credit Limit</p>
+  1230→              <p className="text-xl font-bold text-slate-800">{formatINR(creditLimit)}</p>
+  1231→              <div className="mt-2">
+  1232→                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+  1233→                  <span>Used: {formatINR(creditUsed)}</span>
+  1234→                  <span>{utilizationPct.toFixed(0)}%</span>
+  1235→                </div>
+  1236→                <Progress value={utilizationPct} className="h-2" />
+  1237→              </div>
+  1238→              <p className="text-[10px] text-slate-400 mt-2">
+  1239→                Available: {formatINR(creditLimit - creditUsed)}
+  1240→              </p>
+  1241→            </CardContent>
+  1242→          </Card>
+  1243→        </motion.div>
+  1244→
+  1245→        <motion.div
+  1246→          initial={{ opacity: 0, scale: 0.95 }}
+  1247→          animate={{ opacity: 1, scale: 1 }}
+  1248→          transition={{ duration: 0.4, delay: 0.2 }}
+  1249→        >
+  1250→          <Card className="border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-teal-50">
+  1251→            <CardContent className="p-4">
+  1252→              <p className="text-xs text-slate-500 font-medium mb-2">Peer Comparison</p>
+  1253→              <div className="flex items-end gap-1 mb-2">
+  1254→                <span className="text-3xl font-black text-emerald-600">72%</span>
+  1255→                <span className="text-xs text-slate-500 mb-1">of similar businesses</span>
+  1256→              </div>
+  1257→              <p className="text-[10px] text-slate-500">
+  1258→                Your credit score is better than 72% of similar businesses in your sector
+  1259→              </p>
+  1260→              <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600">
+  1261→                <TrendingUp className="h-3 w-3" />
+  1262→                <span>Above sector average</span>
+  1263→              </div>
+  1264→            </CardContent>
+  1265→          </Card>
+  1266→        </motion.div>
+  1267→      </div>
+  1268→
+  1269→      {/* Payment Behavior + GST Compliance */}
+  1270→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1271→        <motion.div
+  1272→          initial={{ opacity: 0, x: -15 }}
+  1273→          animate={{ opacity: 1, x: 0 }}
+  1274→          transition={{ duration: 0.4, delay: 0.3 }}
+  1275→        >
+  1276→          <Card className="border-slate-200/60">
+  1277→            <CardHeader className="pb-3 pt-4 px-4">
+  1278→              <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1279→                <Users className="h-4 w-4 text-emerald-600" />
+  1280→                Payment Behavior
+  1281→              </CardTitle>
+  1282→            </CardHeader>
+  1283→            <CardContent className="px-4 pb-4 space-y-3">
+  1284→              <div>
+  1285→                <div className="flex justify-between text-xs mb-1">
+  1286→                  <span className="text-slate-500">On-time Payments</span>
+  1287→                  <span className="font-semibold text-emerald-600">{paymentBehavior.onTimePct}%</span>
+  1288→                </div>
+  1289→                <Progress value={paymentBehavior.onTimePct} className="h-2" />
+  1290→              </div>
+  1291→              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+  1292→                <span className="text-xs text-slate-500">Average Delay</span>
+  1293→                <span className="text-xs font-semibold text-amber-600">{paymentBehavior.avgDelayDays} days</span>
+  1294→              </div>
+  1295→              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+  1296→                <span className="text-xs text-slate-500">Default History</span>
+  1297→                <span className="text-xs font-semibold text-emerald-600">{paymentBehavior.defaultHistory} defaults</span>
+  1298→              </div>
+  1299→              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+  1300→                <span className="text-xs text-slate-500">DSO (Days Sales Outstanding)</span>
+  1301→                <span className="text-xs font-semibold text-slate-700">38 days</span>
+  1302→              </div>
+  1303→            </CardContent>
+  1304→          </Card>
+  1305→        </motion.div>
+  1306→
+  1307→        <motion.div
+  1308→          initial={{ opacity: 0, x: 15 }}
+  1309→          animate={{ opacity: 1, x: 0 }}
+  1310→          transition={{ duration: 0.4, delay: 0.4 }}
+  1311→        >
+  1312→          <Card className="border-slate-200/60">
+  1313→            <CardHeader className="pb-3 pt-4 px-4">
+  1314→              <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1315→                <Shield className="h-4 w-4 text-emerald-600" />
+  1316→                GST Compliance as Credit Factor
+  1317→              </CardTitle>
+  1318→            </CardHeader>
+  1319→            <CardContent className="px-4 pb-4 space-y-3">
+  1320→              <div>
+  1321→                <div className="flex justify-between text-xs mb-1">
+  1322→                  <span className="text-slate-500">Filing Regularity</span>
+  1323→                  <span className="font-semibold text-emerald-600">{gstCompliance.filingRegularity}%</span>
+  1324→                </div>
+  1325→                <Progress value={gstCompliance.filingRegularity} className="h-2" />
+  1326→              </div>
+  1327→              <div>
+  1328→                <div className="flex justify-between text-xs mb-1">
+  1329→                  <span className="text-slate-500">Tax Payment Consistency</span>
+  1330→                  <span className="font-semibold text-emerald-600">{gstCompliance.taxPaymentConsistency}%</span>
+  1331→                </div>
+  1332→                <Progress value={gstCompliance.taxPaymentConsistency} className="h-2" />
+  1333→              </div>
+  1334→              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+  1335→                <span className="text-xs text-slate-500">Last Filing Date</span>
+  1336→                <span className="text-xs font-semibold text-slate-700">{formatDate(gstCompliance.lastFilingDate)}</span>
+  1337→              </div>
+  1338→              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+  1339→                <span className="text-xs text-slate-500">Missed Filings (12M)</span>
+  1340→                <span className={`text-xs font-semibold ${gstCompliance.missedFilings > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+  1341→                  {gstCompliance.missedFilings}
+  1342→                </span>
+  1343→              </div>
+  1344→            </CardContent>
+  1345→          </Card>
+  1346→        </motion.div>
+  1347→      </div>
+  1348→
+  1349→      {/* Revenue Trend Chart */}
+  1350→      <motion.div
+  1351→        initial={{ opacity: 0, y: 15 }}
+  1352→        animate={{ opacity: 1, y: 0 }}
+  1353→        transition={{ duration: 0.4, delay: 0.5 }}
+  1354→      >
+  1355→        <Card className="border-slate-200/60">
+  1356→          <CardHeader className="pb-3 pt-4 px-4">
+  1357→            <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+  1358→              <BarChart3 className="h-4 w-4 text-emerald-600" />
+  1359→              Revenue Trend (Last 12 Months)
+  1360→            </CardTitle>
+  1361→          </CardHeader>
+  1362→          <CardContent className="px-4 pb-4">
+  1363→            <RevenueAreaChart data={monthlyRevenue} />
+  1364→          </CardContent>
+  1365→        </Card>
+  1366→      </motion.div>
+  1367→
+  1368→      {/* Credit Improvement Recommendations */}
+  1369→      <motion.div
+  1370→        initial={{ opacity: 0, y: 15 }}
+  1371→        animate={{ opacity: 1, y: 0 }}
+  1372→        transition={{ duration: 0.4, delay: 0.6 }}
+  1373→      >
+  1374→        <Card className="border-emerald-200/60">
+  1375→          <CardHeader className="pb-3 pt-4 px-4">
+  1376→            <CardTitle className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
+  1377→              <Sparkles className="h-4 w-4" />
+  1378→              Credit Improvement Recommendations
+  1379→            </CardTitle>
+  1380→          </CardHeader>
+  1381→          <CardContent className="px-4 pb-4">
+  1382→            <div className="space-y-2">
+  1383→              {recommendations.map((rec, idx) => (
+  1384→                <motion.div
+  1385→                  key={idx}
+  1386→                  initial={{ opacity: 0, x: -10 }}
+  1387→                  animate={{ opacity: 1, x: 0 }}
+  1388→                  transition={{ duration: 0.3, delay: 0.7 + idx * 0.08 }}
+  1389→                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-200 transition-colors"
+  1390→                >
+  1391→                  <div className="flex items-center gap-3">
+  1392→                    <div className="rounded-lg p-1.5 bg-emerald-50">
+  1393→                      <rec.icon className="h-3.5 w-3.5 text-emerald-600" />
+  1394→                    </div>
+  1395→                    <p className="text-xs text-slate-700">{rec.action}</p>
+  1396→                  </div>
+  1397→                  <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold shrink-0">
+  1398→                    {rec.impact}
+  1399→                  </Badge>
+  1400→                </motion.div>
+  1401→              ))}
+  1402→            </div>
+  1403→            <div className="mt-3 p-3 bg-emerald-50 rounded-lg flex items-center gap-2">
+  1404→              <Target className="h-4 w-4 text-emerald-600" />
+  1405→              <p className="text-xs text-emerald-700 font-medium">
+  1406→                Implementing all recommendations could improve your credit score by up to <strong>17 points</strong>
+  1407→              </p>
+  1408→            </div>
+  1409→          </CardContent>
+  1410→        </Card>
+  1411→      </motion.div>
+  1412→    </div>
+  1413→  );
+  1414→}
+  1415→
+  1416→// ═══════════════════════════════════════════════════════════════════════════════
+  1417→// MAIN PAGE
+  1418→// ═══════════════════════════════════════════════════════════════════════════════
+  1419→
+  1420→export default function WorkingCapitalPage() {
+  1421→  const [activeTab, setActiveTab] = useState('health');
+  1422→  const { data: clients } = useFireClients();
+  1423→  const { data: invoices } = useFireInvoices();
+  1424→  const { data: returns } = useFireReturns();
+  1425→
+  1426→  // Compute scores from demo data (would use live data in production)
+  1427→  const scores = useMemo(() => computeScores(demoInvoices), []);
+  1428→
+  1429→  // In production, scores would be computed from live Firestore data:
+  1430→  // const scores = useMemo(() => computeScoresFromLive(invoices, clients, returns), [invoices, clients, returns]);
+  1431→
+  1432→  return (
+  1433→    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+  1434→      {/* Page Header */}
+  1435→      <motion.div
+  1436→        initial={{ opacity: 0, y: -10 }}
+  1437→        animate={{ opacity: 1, y: 0 }}
+  1438→        transition={{ duration: 0.4 }}
+  1439→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+  1440→      >
+  1441→        <div>
+  1442→          <div className="flex items-center gap-2">
+  1443→            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-md shadow-emerald-600/20">
+  1444→              <Banknote className="h-4 w-4 text-white" />
+  1445→            </div>
+  1446→            <h1 className="text-xl font-bold text-slate-800">Working Capital Engine</h1>
+  1447→          </div>
+  1448→          <p className="text-xs text-slate-500 mt-1 ml-10">
+  1449→            Financing, loans & credit intelligence for your business
+  1450→          </p>
+  1451→        </div>
+  1452→        <div className="flex items-center gap-2">
+  1453→          <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 bg-emerald-50">
+  1454→            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
+  1455→            Live Scoring
+  1456→          </Badge>
+  1457→          <span className="text-[10px] text-slate-400">
+  1458→            {clients.length} clients • {invoices.length} invoices • {returns.length} returns
+  1459→          </span>
+  1460→        </div>
+  1461→      </motion.div>
+  1462→
+  1463→      {/* Tabs */}
+  1464→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+  1465→        <TabsList className="grid w-full grid-cols-4 bg-slate-100/80 h-10 p-1">
+  1466→          <TabsTrigger value="health" className="text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+  1467→            <Gauge className="h-3.5 w-3.5 mr-1.5" />
+  1468→            <span className="hidden sm:inline">Business Health</span>
+  1469→            <span className="sm:hidden">Health</span>
+  1470→          </TabsTrigger>
+  1471→          <TabsTrigger value="financing" className="text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+  1472→            <IndianRupee className="h-3.5 w-3.5 mr-1.5" />
+  1473→            <span className="hidden sm:inline">Invoice Financing</span>
+  1474→            <span className="sm:hidden">Financing</span>
+  1475→          </TabsTrigger>
+  1476→          <TabsTrigger value="loans" className="text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+  1477→            <Banknote className="h-3.5 w-3.5 mr-1.5" />
+  1478→            <span className="hidden sm:inline">WC Loans</span>
+  1479→            <span className="sm:hidden">Loans</span>
+  1480→          </TabsTrigger>
+  1481→          <TabsTrigger value="credit" className="text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+  1482→            <CreditScore className="h-3.5 w-3.5 mr-1.5" />
+  1483→            <span className="hidden sm:inline">Credit Intelligence</span>
+  1484→            <span className="sm:hidden">Credit</span>
+  1485→          </TabsTrigger>
+  1486→        </TabsList>
+  1487→
+  1488→        <AnimatePresence mode="wait">
+  1489→          <motion.div
+  1490→            key={activeTab}
+  1491→            initial={{ opacity: 0, y: 8 }}
+  1492→            animate={{ opacity: 1, y: 0 }}
+  1493→            exit={{ opacity: 0, y: -8 }}
+  1494→            transition={{ duration: 0.25 }}
+  1495→            className="mt-4"
+  1496→          >
+  1497→            <TabsContent value="health" className="mt-0">
+  1498→              <BusinessHealthTab scores={scores} />
+  1499→            </TabsContent>
+  1500→            <TabsContent value="financing" className="mt-0">
+  1501→              <InvoiceFinancingTab scores={scores} />
+  1502→            </TabsContent>
+  1503→            <TabsContent value="loans" className="mt-0">
+  1504→              <WorkingCapitalLoansTab />
+  1505→            </TabsContent>
+  1506→            <TabsContent value="credit" className="mt-0">
+  1507→              <CreditIntelligenceTab scores={scores} />
+  1508→            </TabsContent>
+  1509→          </motion.div>
+  1510→        </AnimatePresence>
+  1511→      </Tabs>
+  1512→    </div>
+  1513→  );
+  1514→}
+  1515→

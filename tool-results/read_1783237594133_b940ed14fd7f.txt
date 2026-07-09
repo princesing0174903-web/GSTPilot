@@ -1,0 +1,707 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Billing, Subscriptions & Payments™ — Type Definitions
+     3→//
+     4→// The single source of truth for the billing / subscription / payment data model.
+     5→// Every field maps 1:1 to a Firestore collection. All types are PURE (no Firebase
+     6→// imports) so they are safe to import from both client and server code.
+     7→//
+     8→// Provider pattern:
+     9→//   • IPaymentProvider (see provider.ts) — the contract every payment backend implements
+    10→//   • MockRazorpayProvider  — deterministic simulated UPI/card/netbanking (default, India)
+    11→//   • MockStripeProvider    — deterministic simulated card payments (default, international)
+    12→//   • FutureRazorpayProvider — Razorpay production (placeholder, throws NotImplementedError)
+    13→//   • FutureStripeProvider   — Stripe production (placeholder, throws NotImplementedError)
+    14→//   • Switch to production later by changing ONE env var in registry.ts
+    15→//
+    16→// Multi-tenant: every document carries `organizationId` (except the two global
+    17→// collections `subscription_plans` and `coupons` which are readable by every
+    18→// authenticated user). Every org-scoped query filters on `organizationId`.
+    19→//
+    20→// Security: payment session IDs / customer IDs / provider tokens / receipt data
+    21→// are encrypted with AES-256-GCM (server-only key) before being stored in
+    22→// Firestore. The client reads the encrypted blob and passes it back to the
+    23→// server during payment operations — the client can NEVER decrypt it.
+    24→// ═══════════════════════════════════════════════════════════════════════════════
+    25→
+    26→// ─── Provider Identifiers ─────────────────────────────────────────────────────
+    27→
+    28→/**
+    29→ * The set of supported payment provider backends. Today the two 'mock' variants
+    30→ * are live; the 'future' variants throw NotImplementedError until implemented.
+    31→ */
+    32→export type PaymentProviderName =
+    33→  | 'mock-razorpay'   // MockRazorpayProvider — UPI / card / netbanking (India-first)
+    34→  | 'mock-stripe'     // MockStripeProvider   — card payments (international)
+    35→  | 'razorpay'        // FutureRazorpayProvider — production Razorpay
+    36→  | 'stripe';         // FutureStripeProvider   — production Stripe
+    37→
+    38→// ─── Subscription Plans (subscription_plans collection — GLOBAL) ──────────────
+    39→
+    40→/**
+    41→ * A subscription tier — one row per plan. Stored in Firestore
+    42→ * `subscription_plans/{planId}` (e.g. `free`, `starter`, `professional`,
+    43→ * `business`, `enterprise`).
+    44→ *
+    45→ * GLOBAL collection: every authenticated user can read; only server-side
+    46→ * (Admin SDK / seed script) can write.
+    47→ */
+    48→export interface SubscriptionPlan {
+    49→  /** Doc id = plan slug (e.g. 'free', 'starter'). */
+    50→  id: string;
+    51→  /** Display name (e.g. 'Free', 'Starter', 'Professional'). */
+    52→  name: string;
+    53→  /** One-line marketing tagline. */
+    54→  tagline: string;
+    55→  /** Monthly price in paise (₹0 = free). Use `monthlyPrice / 100` for display. */
+    56→  monthlyPrice: number;
+    57→  /** Yearly price in paise (≈ 10 × monthly — 2 months free). */
+    58→  yearlyPrice: number;
+    59→  /** Currency code (ISO 4217). Always 'INR' for now. */
+    60→  currency: string;
+    61→  /** Human-readable feature list (for the pricing card). */
+    62→  features: string[];
+    63→  /** Hard usage limits — enforced by the Usage Meter. */
+    64→  limits: SubscriptionPlanLimits;
+    65→  /** Highlighted as "Most Popular" in the pricing UI (Professional). */
+    66→  isPopular: boolean;
+    67→  /** Trial period in days (14 for paid plans, 0 for Free). */
+    68→  trialDays: number;
+    69→  /** Sort order on the pricing page (0 = first). */
+    70→  sortOrder: number;
+    71→  /** ISO timestamp the plan was created / last updated. */
+    72→  createdAt: string;
+    73→  updatedAt: string;
+    74→}
+    75→
+    76→/**
+    77→ * Hard usage limits per plan. Each key is enforced by the Usage Meter via
+    78→ * `checkLimit(orgId, limitType)`.
+    79→ */
+    80→export interface SubscriptionPlanLimits {
+    81→  /** Max invoices generated per month (0 = unlimited). */
+    82→  invoicesPerMonth: number;
+    83→  /** Max clients in the CRM (0 = unlimited). */
+    84→  clients: number;
+    85→  /** Max team members (0 = unlimited). */
+    86→  users: number;
+    87→  /** AI Oracle credits per month (0 = unlimited). */
+    88→  aiCredits: number;
+    89→  /** Storage in bytes (0 = unlimited). */
+    90→  storageBytes: number;
+    91→  /** API calls per day (0 = no API access). */
+    92→  apiCallsPerDay: number;
+    93→  /** Automation workflow runs per month (0 = no automation). */
+    94→  automationRunsPerMonth: number;
+    95→  /** Support tier. */
+    96→  support: 'community' | 'email' | 'priority' | 'phone247' | 'dedicated';
+    97→}
+    98→
+    99→// ─── Billing Cycle & Status ───────────────────────────────────────────────────
+   100→
+   101→export type BillingCycle = 'monthly' | 'yearly';
+   102→
+   103→export type SubscriptionStatus =
+   104→  | 'trialing'        // free trial active, no payment method
+   105→  | 'active'          // paid, current, in good standing
+   106→  | 'past_due'        // renewal payment failed, in grace period
+   107→  | 'paused'          // user-paused (no invoices, no usage)
+   108→  | 'suspended'       // grace period expired, access locked
+   109→  | 'canceled'        // user canceled (still active until period end)
+   110→  | 'expired';        // fully expired — no access
+   111→
+   112→// ─── Subscriptions (subscriptions collection — ORG-SCOPED) ────────────────────
+   113→
+   114→/**
+   115→ * The active subscription document for an organization — one per org.
+   116→ * Stored in Firestore `subscriptions/{subscriptionId}`. The doc id is the
+   117→ * subscription id from the provider (e.g. `sub_mock_rzp_xxx`).
+   118→ */
+   119→export interface Subscription {
+   120→  id: string;
+   121→  /** Tenant scope — NEVER null. */
+   122→  organizationId: string;
+   123→  /** Plan id (e.g. 'professional'). */
+   124→  planId: string;
+   125→  /** Snapshot of the plan name at subscription time (for historical display). */
+   126→  planName: string;
+   127→  /** Billing cycle. */
+   128→  billingCycle: BillingCycle;
+   129→  /** Current status — drives access. */
+   130→  status: SubscriptionStatus;
+   131→  /** ISO timestamp the subscription started. */
+   132→  startDate: string;
+   133→  /** ISO timestamp the current billing period ends (renews here if active). */
+   134→  currentPeriodEnd: string;
+   135→  /** ISO timestamp the current billing period started. */
+   136→  currentPeriodStart: string;
+   137→  /** ISO timestamp when the trial ends (null if no trial). */
+   138→  trialEnd: string | null;
+   139→  /** ISO timestamp when the subscription was canceled (null if not canceled). */
+   140→  canceledAt: string | null;
+   141→  /** ISO timestamp when the subscription is scheduled to end (canceled + period end). */
+   142→  cancelAtPeriodEnd: string | null;
+   143→  /** Reason for cancellation (if any). */
+   144→  cancelReason: string | null;
+   145→  /** ISO timestamp when the subscription was paused (null if not paused). */
+   146→  pausedAt: string | null;
+   147→  /** ISO timestamp when the subscription was suspended (null if not suspended). */
+   148→  suspendedAt: string | null;
+   149→  /** ISO timestamp when the grace period ends (if past_due). */
+   150→  gracePeriodEnd: string | null;
+   151→  /** Payment provider customer id (encrypted at rest in billing_accounts). */
+   152→  provider: PaymentProviderName;
+   153→  /** Auto-renew on period end? */
+   154→  autoRenew: boolean;
+   155→  /** Coupon applied (if any). */
+   156→  couponId: string | null;
+   157→  /** Coupon code applied (for display). */
+   158→  couponCode: string | null;
+   159→  /** Next retry attempt ISO timestamp (if past_due + retry scheduled). */
+   160→  nextRetryAt: string | null;
+   161→  /** Number of failed renewal attempts (resets on success). */
+   162→  failedAttempts: number;
+   163→  /** User who created the subscription. */
+   164→  createdBy: { uid: string; name: string; email: string };
+   165→  createdAt: string;
+   166→  updatedAt: string;
+   167→}
+   168→
+   169→// ─── Billing Accounts (billing_accounts collection — ORG-SCOPED) ─────────────
+   170→
+   171→/**
+   172→ * The billing account document — one per organization. Stores the customer ID
+   173→ * at the payment provider + an AES-256-GCM encrypted blob of provider-side
+   174→ * metadata. Stored in Firestore `billing_accounts/{accountId}`.
+   175→ */
+   176→export interface BillingAccount {
+   177→  id: string;
+   178→  /** Tenant scope — NEVER null. */
+   179→  organizationId: string;
+   180→  /** Payment provider this account is registered with. */
+   181→  provider: PaymentProviderName;
+   182→  /** Customer ID at the provider (e.g. `cust_mock_rzp_xxx`). */
+   183→  customerId: string;
+   184→  /** Masked customer email (for display). */
+   185→  email: string;
+   186→  /** Masked customer name. */
+   187→  name: string;
+   188→  /** Masked phone (last 4 digits). */
+   189→  phoneMasked: string | null;
+   190→  /**
+   191→   * AES-256-GCM encrypted blob containing provider tokens / customer metadata /
+   192→   * saved payment method references. Org members can READ this field (rules
+   193→   * allow it) but they CANNOT decrypt it without the server-only master key.
+   194→   */
+   195→  encryptedAccount: string;
+   196→  /** Default payment method id (if a saved method exists). */
+   197→  defaultPaymentMethodId: string | null;
+   198→  /** User who created the billing account. */
+   199→  createdBy: { uid: string; name: string; email: string };
+   200→  createdAt: string;
+   201→  updatedAt: string;
+   202→}
+   203→
+   204→// ─── Invoices (billing_invoices collection — ORG-SCOPED) ─────────────────────
+   205→
+   206→export type InvoiceDocumentType =
+   207→  | 'tax_invoice'      // regular GST invoice for a subscription
+   208→  | 'receipt'          // payment confirmation
+   209→  | 'credit_note'      // refunds / downgrades
+   210→  | 'debit_note'       // additional charges
+   211→  | 'refund_receipt';  // refund confirmation
+   212→
+   213→export type InvoiceDocumentStatus =
+   214→  | 'draft'      // not yet issued
+   215→  | 'issued'     // sent to customer
+   216→  | 'paid'       // fully paid
+   217→  | 'partial'    // partially paid
+   218→  | 'overdue'    // past due date, unpaid
+   219→  | 'void'       // cancelled
+   220→  | 'refunded';  // fully refunded
+   221→
+   222→/**
+   223→ * A single line item on a billing invoice.
+   224→ */
+   225→export interface BillingLineItem {
+   226→  /** Description (e.g. 'Professional Plan — Monthly'). */
+   227→  description: string;
+   228→  /** Quantity (typically 1). */
+   229→  quantity: number;
+   230→  /** Unit price in paise. */
+   231→  unitPrice: number;
+   232→  /** Line total in paise (quantity × unitPrice). */
+   233→  amount: number;
+   234→  /** HSN / SAC code (for GST). */
+   235→  hsnCode?: string;
+   236→  /** Optional reference (subscription id, plan id, etc.). */
+   237→  reference?: string;
+   238→}
+   239→
+   240→/**
+   241→ * The billing invoice document — one per billing period per subscription.
+   242→ * Stored in Firestore `billing_invoices/{invoiceId}`.
+   243→ *
+   244→ * NOTE: This is a BILLING invoice (subscription payment), distinct from the
+   245→ * user's sales invoices in the `invoices` collection. We use the prefix
+   246→ * `billing_invoices` to avoid name collision.
+   247→ */
+   248→export interface BillingInvoice {
+   249→  id: string;
+   250→  /** Tenant scope — NEVER null. */
+   251→  organizationId: string;
+   252→  /** Document type — see InvoiceDocumentType. */
+   253→  type: InvoiceDocumentType;
+   254→  /** Invoice number (e.g. `GSTP-INV-2024-0001`, `GSTP-RCPT-2024-0001`). */
+   255→  number: string;
+   256→  /** ISO timestamp the invoice was issued. */
+   257→  issueDate: string;
+   258→  /** ISO timestamp the invoice is due (null for receipts). */
+   259→  dueDate: string | null;
+   260→  /** Subscription this invoice belongs to (null for one-off charges). */
+   261→  subscriptionId: string | null;
+   262→  /** Original invoice this document references (for credit/debit notes). */
+   263→  originalInvoiceId: string | null;
+   264→  /** Bill-from details (GSTPilot). */
+   265→  billFrom: BillingParty;
+   266→  /** Bill-to details (the customer org). */
+   267→  billTo: BillingParty;
+   268→  /** Line items. */
+   269→  lineItems: BillingLineItem[];
+   270→  /** Subtotal in paise (Σ lineItems.amount). */
+   271→  subtotal: number;
+   272→  /** Discount in paise (from applied coupon, if any). */
+   273→  discount: number;
+   274→  /** Applied coupon id (if any). */
+   275→  couponId: string | null;
+   276→  /** Applied coupon code (for display). */
+   277→  couponCode: string | null;
+   278→  /** Tax rate percentage (e.g. 18 for 18% GST). */
+   279→  taxRate: number;
+   280→  /** Tax amount in paise (GST). */
+   281→  taxAmount: number;
+   282→  /** Total in paise (subtotal − discount + taxAmount). */
+   283→  total: number;
+   284→  /** Amount paid in paise. */
+   285→  paidAmount: number;
+   286→  /** Balance due in paise (total − paidAmount). */
+   287→  balanceDue: number;
+   288→  /** Currency code (ISO 4217). */
+   289→  currency: string;
+   290→  /** Current status. */
+   291→  status: InvoiceDocumentStatus;
+   292→  /** Notes shown on the invoice. */
+   293→  notes: string | null;
+   294→  /** Terms & conditions. */
+   295→  termsAndConditions: string | null;
+   296→  /** URL to the PDF (null until generated). */
+   297→  pdfUrl: string | null;
+   298→  /** Billing period this invoice covers (YYYY-MM). */
+   299→  billingPeriod: string | null;
+   300→  /** Arbitrary metadata. */
+   301→  metadata: Record<string, unknown>;
+   302→  createdAt: string;
+   303→  updatedAt: string;
+   304→}
+   305→
+   306→/** A billing party (bill-from or bill-to) on an invoice. */
+   307→export interface BillingParty {
+   308→  name: string;
+   309→  email: string;
+   310→  phone: string | null;
+   311→  gstin: string | null;
+   312→  addressLine1: string;
+   313→  addressLine2: string | null;
+   314→  city: string;
+   315→  state: string;
+   316→  postalCode: string;
+   317→  country: string;
+   318→}
+   319→
+   320→// ─── Payments (payments collection — ORG-SCOPED) ─────────────────────────────
+   321→
+   322→export type PaymentStatus =
+   323→  | 'pending'    // created, awaiting completion
+   324→  | 'paid'       // successfully captured
+   325→  | 'failed'     // failed (declined, insufficient funds, etc.)
+   326→  | 'refunded'   // fully refunded
+   327→  | 'partial_refunded'  // partially refunded
+   328→  | 'disputed';  // customer disputed the charge
+   329→
+   330→export type PaymentMethod =
+   331→  | 'upi'
+   332→  | 'card'
+   333→  | 'netbanking'
+   334→  | 'wallet'
+   335→  | 'emi'
+   336→  | 'bank_transfer'
+   337→  | 'unknown';
+   338→
+   339→/**
+   340→ * A single payment — one per invoice payment attempt that succeeded.
+   341→ * Stored in Firestore `payments/{paymentId}`.
+   342→ */
+   343→export interface Payment {
+   344→  id: string;
+   345→  /** Tenant scope — NEVER null. */
+   346→  organizationId: string;
+   347→  /** Provider payment id (e.g. `pay_mock_rzp_xxx`, `pi_mock_stripe_xxx`). */
+   348→  providerPaymentId: string;
+   349→  /** Invoice this payment is for. */
+   350→  invoiceId: string;
+   351→  /** Subscription this payment is for (denormalized for queries). */
+   352→  subscriptionId: string | null;
+   353→  /** Amount in paise. */
+   354→  amount: number;
+   355→  /** Currency code. */
+   356→  currency: string;
+   357→  /** Payment status. */
+   358→  status: PaymentStatus;
+   359→  /** Payment method used. */
+   360→  method: PaymentMethod;
+   361→  /** Masked payment instrument (e.g. `**** **** **** 4242`, `name@okhdfc`). */
+   362→  maskedInstrument: string | null;
+   363→  /** ISO timestamp the payment was created. */
+   364→  initiatedAt: string;
+   365→  /** ISO timestamp the payment was captured (null if not yet paid). */
+   366→  capturedAt: string | null;
+   367→  /** ISO timestamp the payment failed (null if not failed). */
+   368→  failedAt: string | null;
+   369→  /** Failure reason (if status='failed'). */
+   370→  failureReason: string | null;
+   371→  /** Provider fee charged (in paise). */
+   372→  fee: number | null;
+   373→  /** Tax on the fee (GST on fee, in paise). */
+   374→  taxOnFee: number | null;
+   375→  /** Amount refunded (in paise) — sum of all refunds. */
+   376→  refundedAmount: number;
+   377→  /** Provider session / order id this payment was created from. */
+   378→  sessionId: string | null;
+   379→  /** Payment provider name. */
+   380→  provider: PaymentProviderName;
+   381→  /** ISO timestamp. */
+   382→  createdAt: string;
+   383→  updatedAt: string;
+   384→}
+   385→
+   386→// ─── Payment Attempts (payment_attempts collection — ORG-SCOPED) ─────────────
+   387→
+   388→export type PaymentAttemptStatus =
+   389→  | 'initiated'
+   390→  | 'succeeded'
+   391→  | 'failed'
+   392→  | 'abandoned'
+   393→  | 'refunded';
+   394→
+   395→/**
+   396→ * Every payment attempt is logged — successful or not — for retry logic,
+   397→ * fraud detection, and analytics. Stored in Firestore
+   398→ * `payment_attempts/{attemptId}`. A failed attempt that's later retried creates
+   399→ * a NEW attempt doc (with the same invoiceId).
+   400→ */
+   401→export interface PaymentAttempt {
+   402→  id: string;
+   403→  /** Tenant scope — NEVER null. */
+   404→  organizationId: string;
+   405→  /** Invoice this attempt is for. */
+   406→  invoiceId: string;
+   407→  /** Provider session / order id (e.g. `sess_mock_rzp_xxx`). */
+   408→  sessionId: string;
+   409→  /** Payment id (null until the attempt succeeds). */
+   410→  paymentId: string | null;
+   411→  /** Amount attempted in paise. */
+   412→  amount: number;
+   413→  /** Currency code. */
+   414→  currency: string;
+   415→  /** Attempt status. */
+   416→  status: PaymentAttemptStatus;
+   417→  /** Payment method attempted. */
+   418→  method: PaymentMethod | null;
+   419→  /** ISO timestamp the attempt was initiated. */
+   420→  initiatedAt: string;
+   421→  /** ISO timestamp the attempt was resolved (succeeded/failed/abandoned). */
+   422→  resolvedAt: string | null;
+   423→  /** Failure reason (if status='failed'). */
+   424→  failureReason: string | null;
+   425→  /** Provider used. */
+   426→  provider: PaymentProviderName;
+   427→  /** User agent that initiated the attempt (for fraud detection). */
+   428→  userAgent: string | null;
+   429→  /** IP address that initiated the attempt (for fraud detection). */
+   430→  ipAddress: string | null;
+   431→  createdAt: string;
+   432→  updatedAt: string;
+   433→}
+   434→
+   435→// ─── Receipts (receipts collection — ORG-SCOPED) ─────────────────────────────
+   436→
+   437→export type ReceiptType = 'payment' | 'refund';
+   438→
+   439→/**
+   440→ * A receipt — generated after a payment (or refund) succeeds. Distinct from an
+   441→ * invoice because the invoice is the bill; the receipt is the proof of payment.
+   442→ * Stored in Firestore `receipts/{receiptId}`.
+   443→ */
+   444→export interface Receipt {
+   445→  id: string;
+   446→  /** Tenant scope — NEVER null. */
+   447→  organizationId: string;
+   448→  /** Receipt number (e.g. `GSTP-RCPT-2024-0001`). */
+   449→  number: string;
+   450→  /** Receipt type. */
+   451→  type: ReceiptType;
+   452→  /** Payment this receipt is for. */
+   453→  paymentId: string;
+   454→  /** Invoice this receipt is for. */
+   455→  invoiceId: string;
+   456→  /** Subscription this receipt is for. */
+   457→  subscriptionId: string | null;
+   458→  /** Amount in paise. */
+   459→  amount: number;
+   460→  /** Currency code. */
+   461→  currency: string;
+   462→  /** ISO timestamp the receipt was issued. */
+   463→  issuedAt: string;
+   464→  /** Bill-to details (the customer). */
+   465→  billTo: BillingParty;
+   466→  /** Payment method (for display). */
+   467→  method: PaymentMethod;
+   468→  /** Masked payment instrument. */
+   469→  maskedInstrument: string | null;
+   470→  /** PDF URL (null until generated). */
+   471→  pdfUrl: string | null;
+   472→  /** Notes. */
+   473→  notes: string | null;
+   474→  createdAt: string;
+   475→  updatedAt: string;
+   476→}
+   477→
+   478→// ─── Coupons (coupons collection — GLOBAL) ───────────────────────────────────
+   479→
+   480→export type CouponDiscountType = 'percentage' | 'fixed';
+   481→
+   482→export type CouponStatus = 'active' | 'expired' | 'exhausted' | 'disabled';
+   483→
+   484→/**
+   485→ * A coupon / promo code. Stored in Firestore `coupons/{couponId}`.
+   486→ * GLOBAL collection: every authenticated user can read (so they can validate
+   487→ * codes); only server-side (Admin SDK) can create / update / delete.
+   488→ */
+   489→export interface Coupon {
+   490→  /** Doc id = coupon code uppercased (e.g. `LAUNCH50`). */
+   491→  id: string;
+   492→  /** Display code (case-preserved). */
+   493→  code: string;
+   494→  /** Human-readable description. */
+   495→  description: string;
+   496→  /** Discount type. */
+   497→  discountType: CouponDiscountType;
+   498→  /** Discount value (percentage 0-100 OR fixed amount in paise). */
+   499→  discountValue: number;
+   500→  /** Max discount amount in paise (for percentage coupons, null = unlimited). */
+   501→  maxDiscount: number | null;
+   502→  /** Min cart value in paise (null = no minimum). */
+   503→  minCartValue: number | null;
+   504→  /** Number of times this coupon can be redeemed (null = unlimited). */
+   505→  maxRedemptions: number | null;
+   506→  /** Number of times this coupon has been redeemed. */
+   507→  redemptionsCount: number;
+   508→  /** Number of times a single user can redeem (null = unlimited). */
+   509→  maxRedemptionsPerUser: number | null;
+   510→  /** ISO timestamp the coupon becomes valid. */
+   511→  validFrom: string;
+   512→  /** ISO timestamp the coupon expires. */
+   513→  validUntil: string | null;
+   514→  /** Whether this coupon applies only to the first billing cycle. */
+   515→  firstCycleOnly: boolean;
+   516→  /** Plans this coupon is valid for (empty = all plans). */
+   517→  applicablePlanIds: string[];
+   518→  /** Status. */
+   519→  status: CouponStatus;
+   520→  /** Created by. */
+   521→  createdBy: { uid: string; name: string; email: string } | null;
+   522→  createdAt: string;
+   523→  updatedAt: string;
+   524→}
+   525→
+   526→// ─── Usage Records (usage_records collection — ORG-SCOPED) ───────────────────
+   527→
+   528→export type UsageType =
+   529→  | 'oracle_request'      // AI Oracle chat / analysis request
+   530→  | 'storage_bytes'       // bytes stored (documents, attachments)
+   531→  | 'ai_tokens'           // AI tokens consumed
+   532→  | 'invoice_generated'   // invoice created
+   533→  | 'return_filed'        // GST return filed
+   534→  | 'api_call'            // external API call
+   535→  | 'automation_run';     // automation workflow executed
+   536→
+   537→/**
+   538→ * A single usage event — one doc per event. Stored in Firestore
+   539→ * `usage_records/{recordId}`. Aggregated by month for limit enforcement.
+   540→ *
+   541→ * Creating usage records is open to all org members (rules allow create for any
+   542→ * signed-in member); reading is restricted to owner/admin/accountant.
+   543→ */
+   544→export interface UsageRecord {
+   545→  id: string;
+   546→  /** Tenant scope — NEVER null. */
+   547→  organizationId: string;
+   548→  /** Usage type. */
+   549→  type: UsageType;
+   550→  /** Amount consumed (e.g. 1 for one request, 1024 for KB of storage). */
+   551→  amount: number;
+   552→  /** ISO date the usage was recorded (YYYY-MM-DD). */
+   553→  date: string;
+   554→  /** Year-month (YYYY-MM) — denormalized for fast monthly aggregation. */
+   555→  yearMonth: string;
+   556→  /** Arbitrary metadata (request id, file name, etc.). */
+   557→  metadata: Record<string, unknown>;
+   558→  /** User who triggered the usage. */
+   559→  triggeredBy: { uid: string; name: string } | null;
+   560→  createdAt: string;
+   561→}
+   562→
+   563→// ─── Service Input / Result Types ─────────────────────────────────────────────
+   564→
+   565→export interface CreateSubscriptionInput {
+   566→  organizationId: string;
+   567→  planId: string;
+   568→  billingCycle: BillingCycle;
+   569→  couponCode?: string;
+   570→  createdBy: { uid: string; name: string; email: string };
+   571→  /** Customer email (for the billing account). */
+   572→  customerEmail: string;
+   573→  /** Customer name. */
+   574→  customerName: string;
+   575→  /** Customer phone (optional). */
+   576→  customerPhone?: string;
+   577→}
+   578→
+   579→export interface CreateSubscriptionResult {
+   580→  subscription: Subscription;
+   581→  billingAccount: BillingAccount;
+   582→  /** Encrypted billing account blob (already saved to Firestore). */
+   583→  encryptedAccount: string;
+   584→  /** Initial invoice (if not a free trial). */
+   585→  invoice: BillingInvoice | null;
+   586→  /** Payment session for the initial invoice (if not a free trial). */
+   587→  paymentSession: PaymentSessionResult | null;
+   588→}
+   589→
+   590→export interface PaymentSessionResult {
+   591→  sessionId: string;
+   592→  paymentUrl: string;
+   593→  amount: number;
+   594→  currency: string;
+   595→  invoiceId: string;
+   596→}
+   597→
+   598→export interface VerifyPaymentResult {
+   599→  status: 'paid' | 'failed' | 'pending';
+   600→  paymentId?: string;
+   601→  method?: PaymentMethod;
+   602→  failureReason?: string;
+   603→}
+   604→
+   605→export interface RefundResult {
+   606→  refundId: string;
+   607→  status: 'pending' | 'completed' | 'failed';
+   608→  amount: number;
+   609→}
+   610→
+   611→export interface ProrationResult {
+   612→  /** Amount to CREDIT to the customer (in paise) — they overpaid for unused time. */
+   613→  credit: number;
+   614→  /** Amount to CHARGE the customer (in paise) — they underpaid for the upgrade. */
+   615→  debit: number;
+   616→  /** Net amount (debit − credit). Positive = charge, negative = credit. */
+   617→  net: number;
+   618→  /** Days remaining in the current billing period. */
+   619→  daysRemaining: number;
+   620→  /** Total days in the current billing period. */
+   621→  totalDays: number;
+   622→}
+   623→
+   624→// ─── Aggregated Billing Summary (for dashboard) ───────────────────────────────
+   625→
+   626→/**
+   627→ * Aggregated billing state for the dashboard — computed from real-time
+   628→ * Firestore data. This is what `useBilling()` returns as `summary`.
+   629→ */
+   630→export interface BillingSummary {
+   631→  /** True if the org has an active or trialing subscription. */
+   632→  hasActiveSubscription: boolean;
+   633→  /** Current plan name (or 'Free' if none). */
+   634→  planName: string;
+   635→  /** Current plan id (or 'free' if none). */
+   636→  planId: string;
+   637→  /** Current status (or 'expired' if no subscription). */
+   638→  status: SubscriptionStatus | 'expired';
+   639→  /** Monthly recurring revenue (in paise). */
+   640→  mrr: number;
+   641→  /** Annual recurring revenue (in paise). */
+   642→  arr: number;
+   643→  /** Total amount paid (lifetime, in paise). */
+   644→  lifetimeRevenue: number;
+   645→  /** Outstanding balance (in paise) — sum of overdue + pending invoices. */
+   646→  outstandingBalance: number;
+   647→  /** Number of invoices (all-time). */
+   648→  invoiceCount: number;
+   649→  /** Number of overdue invoices. */
+   650→  overdueInvoiceCount: number;
+   651→  /** Number of successful payments. */
+   652→  paymentCount: number;
+   653→  /** Number of failed payment attempts. */
+   654→  failedPaymentCount: number;
+   655→  /** Total amount refunded (lifetime, in paise). */
+   656→  totalRefunded: number;
+   657→  /** ISO timestamp of the next renewal (or null). */
+   658→  nextRenewalDate: string | null;
+   659→  /** Days until the next renewal (or null). */
+   660→  daysUntilRenewal: number | null;
+   661→  /** ISO timestamp of the next invoice (or null). */
+   662→  nextInvoiceDate: string | null;
+   663→  /** Usage for the current month by type. */
+   664→  currentUsage: Record<UsageType, number>;
+   665→  /** Active coupon code (or null). */
+   666→  activeCouponCode: string | null;
+   667→  /** Trial days remaining (or 0 if not trialing). */
+   668→  trialDaysRemaining: number;
+   669→}
+   670→
+   671→// ─── Usage Summary (for dashboard) ────────────────────────────────────────────
+   672→
+   673→export interface UsageLimitStatus {
+   674→  /** Limit type identifier. */
+   675→  limitType: UsageLimitType;
+   676→  /** Current usage for the period. */
+   677→  used: number;
+   678→  /** Hard limit (0 = unlimited). */
+   679→  limit: number;
+   680→  /** Remaining capacity (Infinity if unlimited). */
+   681→  remaining: number;
+   682→  /** Usage percentage (0-100, 100 = at limit, >100 = exceeded). */
+   683→  percentage: number;
+   684→  /** True if the limit has been exceeded. */
+   685→  exceeded: boolean;
+   686→}
+   687→
+   688→export type UsageLimitType =
+   689→  | 'invoicesPerMonth'
+   690→  | 'clients'
+   691→  | 'users'
+   692→  | 'aiCredits'
+   693→  | 'storageBytes'
+   694→  | 'apiCallsPerDay'
+   695→  | 'automationRunsPerMonth';
+   696→
+   697→/** Maps UsageType (recorded events) → UsageLimitType (plan limit). */
+   698→export const USAGE_TYPE_TO_LIMIT: Record<UsageType, UsageLimitType | null> = {
+   699→  oracle_request: 'aiCredits',
+   700→  storage_bytes: 'storageBytes',
+   701→  ai_tokens: null, // not directly limited
+   702→  invoice_generated: 'invoicesPerMonth',
+   703→  return_filed: null, // not directly limited
+   704→  api_call: 'apiCallsPerDay',
+   705→  automation_run: 'automationRunsPerMonth',
+   706→};
+   707→

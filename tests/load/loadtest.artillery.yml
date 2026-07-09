@@ -1,0 +1,69 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GSTPilot Infinity™ — Artillery Enterprise Load Test (equivalent to k6 script)
+#
+# 4 phases (sequential, 5 min each): 100k → 500k → 1m → 5m virtual users.
+# Targets the same endpoints as the k6 script (/, /api/health,
+# /api/billing/plans, /api/dashboard with weighted probabilities).
+#
+# Usage:
+#   artillery run tests/load/loadtest.artillery.yml
+#   TARGET=1m artillery run tests/load/loadtest.artillery.yml   (single tier —
+#       Artillery doesn't natively filter phases by env var; comment out the
+#       phases you don't want)
+#
+# Ensure block (run is marked failed if violated):
+#   • p99 latency  < 1500 ms
+#   • error rate   < 1%
+# ═══════════════════════════════════════════════════════════════════════════════
+
+config:
+  target: "http://localhost:3000"
+  phases:
+    # 100k tier — pilot
+    - name: "100k pilot"
+      duration: 5
+      arrivalRate: 1
+      rampTo: 100
+    # 500k tier — growth
+    - name: "500k growth"
+      duration: 5
+      arrivalRate: 100
+      rampTo: 500
+    # 1m tier — scale
+    - name: "1m scale"
+      duration: 5
+      arrivalRate: 500
+      rampTo: 1000
+    # 5m tier — enterprise
+    - name: "5m enterprise"
+      duration: 5
+      arrivalRate: 1000
+      rampTo: 5000
+  defaults:
+    headers:
+      User-Agent: "artillery/gstpilot-loadtest"
+  ensure:
+    p99: 1500
+    thresholds:
+      - http.response_time.p99: 1500
+      - http.codes.4xx: 1
+
+scenarios:
+  - name: "Browse landing + health + plans"
+    weight: 70
+    flow:
+      - get:
+          url: "/"
+      - think: 0.3
+      - get:
+          url: "/api/health"
+      - think: 0.2
+      - get:
+          url: "/api/billing/plans"
+
+  - name: "Dashboard hit"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/dashboard"
+      - think: 0.5

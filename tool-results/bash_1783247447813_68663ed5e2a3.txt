@@ -1,0 +1,250 @@
+- UI polish — Brand consistency: LeftNav used `SidebarBrand` (legacy raster PNG with purple hover glow `rgba(139,92,246,0.5)`) while the top bar uses the V16 `InfinitySymbol` SVG. Replaced SidebarBrand with InfinitySymbol for a unified brand. Removed the dead `emoji` field from NavItem (never rendered). Consolidated the two-line footer mini-brand into a single `<p>` with `<br/>`.
+- Data integrity — BankingPage fixes: `handleAutoReconcile` blindly marked ALL unmatched payments as `reconciled: true` without matching any bank transaction (data-integrity landmine — false reconciliation). Replaced with an honest info toast directing users to match rows manually (auto-recon runs via the Banking provider when a bank connection is active). `handleSyncAccount` toast changed from misleading "synced" to honest "last-sync updated" with a code comment explaining the legacy collection vs Phase 6 provider distinction.
+- Lint: PASS (0 errors, 0 warnings) on all 13 changed files.
+- Dev server: compiles cleanly (multiple "✓ Compiled in Xms", no errors). NextAuth warnings gone. Prisma P2003 flood gone. Firestore PERMISSION_DENIED remains (env issue — Firebase project gstpilot1 has Firestore API disabled) but now handled gracefully by the 6s timeout guard instead of 120s stalls.
+
+Stage Summary:
+- Console error flood eliminated: Prisma P2003 FK violations (notifications.ts + 6 callers) + NextAuth NO_SECRET/URL warnings both resolved. Dev.log now shows only the Firestore SDK's internal PERMISSION_DENIED retry (unavoidable env issue, gracefully degraded).
+- 120s → 6s: The `POST /api/communication/automation/schedule` call (and all latent communication Firestore writes/reads) now time out in 6s with a clean 503 instead of hanging 120s.
+- Dead buttons functional: Bell + dock Notifications open a real NotificationsSheet backed by the existing /api/notifications. Profile → Settings.
+- Color system unified: CommandPalette + MissionControl risk + EmailBanner all conform to the V16 emerald/cyan/blue palette (no amber/orange/purple/raw-hex).
+- Dead code removed: 3 orphaned files deleted (~500 lines).
+- A11Y: nested-interactive bug fixed, dialog ARIA added, focus rings on all icon buttons.
+- Brand unified: LeftNav now uses the same InfinitySymbol as the top bar (no more purple glow).
+- Data integrity: BankingPage auto-reconcile no longer fabricates reconciliation.
+- No new features, no redesign, no new pages, no workflow changes — pure stabilization.
+- Follow-up noted: AI CFO engine needs org-scoping (requires Firebase-org ↔ Prisma-firm mapping layer).
+
+---
+Task ID: phase-9-erp
+Agent: main (Z.ai Code)
+Task: Build Phase 9 — ERP & Accounting Integrations™. Replace fake ERP backend with a production-ready provider architecture (IERPProvider + MockTallyProvider + MockZohoBooksProvider + MockBusyProvider + MockQuickBooksProvider + Future*Provider placeholders). Do NOT redesign UI, do NOT connect to real ERP APIs yet, only build the provider architecture so real Tally/Zoho/Busy/QuickBooks integrations can be plugged in later by changing one env var. Multi-tenant secure. Encrypt tokens. Wire into AI Oracle + Dashboard.
+
+Work Log:
+- Read previous worklog (phases 5-8 + stab sprint) to absorb the established provider pattern (types → errors → provider → server/{crypto, mock, future, registry, orchestrator, scheduler} → service → API routes → hook → dashboard augmentation). Used banking-provider (Phase 6) + communication-provider (Phase 8) as the architectural templates.
+- Built `src/lib/erp-provider/types.ts` — 10 Firestore collections (erp_connections, erp_sync_jobs, erp_customers, erp_vendors, erp_invoices, erp_inventory, erp_ledgers, erp_payments, erp_bank_transactions, erp_taxes). Full typed interfaces for ERPConnection, ERPSyncJob, ERPCustomer, ERPVendor, ERPInvoice, ERPInventoryItem, ERPLedger, ERPPayment, ERPBankTransaction, ERPTax, plus ERPSummary for dashboard consumption.
+- Built `errors.ts` — ERPError hierarchy (AuthRejectedError, TokenExpiredError, ERPUnavailableError, RateLimitError, TimeoutError, ValidationError, NotConnectedError, SyncFailedError, ConflictError, NotImplementedError) + friendlyERPError + isRetryableERPError.
+- Built `provider.ts` — IERPProvider pure interface with 15 methods (connect, completeConnection, refreshSession, disconnect, syncCustomers/Vendors/Invoices/Sales/Purchases/Expenses/Inventory/Ledgers/Payments/BankTransactions/Taxes, healthCheck). ERPSession type (decrypted, server-only).
+- Built `server/crypto.ts` — AES-256-GCM encryption for ERP access/refresh tokens + company credentials. Uses ERP_ENCRYPTION_KEY env var (separate from banking/GSTN/communication keys). v1:iv:ciphertext:tag format. Dev fallback key with loud warning.
+- Built `server/mock-data.ts` — shared deterministic data generator (mulberry32 PRNG seeded by company name). Generates realistic Indian business data: 25+ customers (Reliance, Tata, Infosys, etc.), 18+ vendors, 40+ invoices (sales+purchase with IGST/CGST/SGST), 16 inventory items (steel, cement, bricks), 21 ledgers (chart of accounts), 30 payments, 40 bank transactions, tax summaries aggregated from invoices. All with valid GSTINs, HSN codes, Indian cities/states.
+- Built 4 mock providers (server/mock-{tally,zoho-books,busy,quickbooks}-provider.ts) — each implements IERPProvider with deterministic data via the shared generator, tagged with its own provider name. Simulates 5% unavailability, realistic token expiry (Tally 7d, Zoho 1h, Busy 30d, QBO 1h).
+- Built `server/future-providers.ts` — FutureTallyProvider, FutureZohoBooksProvider, FutureBusyProvider, FutureQuickBooksProvider. All throw NotImplementedError. Each has requireConfig() that warns about missing env vars (TALLY_HOST/PORT, ZOHO_CLIENT_ID/SECRET, BUSY_API_BASE, QBO_CLIENT_ID/REALM_ID, etc.).
+- Built `server/registry.ts` — getERPProvider(provider) factory. ERP_PROVIDER env var (default 'auto'): per-ERP future override (e.g. 'tally-future') or auto/mock for all. Cached instances. describeERPProvider for diagnostics.
+- Built `server/data-mapper.ts` — ERP→GSTPilot mapping engine. mapCustomerToClient (GSTIN/name/phone match, confidence scoring), mapVendorToClient, mapInvoice (invoice_number/party_gstin match), mapLedger, mapInventoryItem. Normalized name matching (strips Ltd/Pvt/Inc/etc.).
+- Built `server/conflict-resolver.ts` — conflict detection + resolution. resolveDuplicateCustomer (GSTIN→merge, name→flag manual), resolveDuplicateInvoice (same amount→skip, different→overwrite), detectDeletedRecords, shouldRetrySync (exponential backoff), summarizeConflicts.
+- Built `server/orchestrator.ts` — server-side service layer. connectERP, completeERPConnection, refreshERPConnection, disconnectERP, syncEntity (11 entity types), fullERPSync (all entities + aggregate result). Org-guarded. Stamps organizationId+connectionId+provider on every record. rethrowTyped wraps unknown errors.
+- Built `server/scheduler.ts` — sync job manager. scheduleSync, executeJob (calls fullERPSync + persists records via service + updates connection), processPendingJobs (background tick), retryFailedJobs, resumeInterruptedJobs (5min stale running jobs), runManualSync, runIncrementalSync (syncCursor=lastSync), performDisconnect. startBackgroundSync 60s interval.
+- Built `service.ts` — client-safe Firestore CRUD. ERP_COLLECTIONS constant (10 collections). withTimeout guard (6s deadline, same as communication-provider). to<Entity>/subscribeTo<Entity>/get<Entity>s/save<Entity>s for all 8 entity types + connections + sync_jobs. cascadeDisconnect (delete all ERP data). computeERPSummary (pure function: revenue, expenses, profit, outstanding recv/pay, inventory value, cash position, net tax liability, top customers/vendors, low stock, overdue).
+- Built `index.ts` — client-safe barrel export (types, errors, provider interface, service). Server modules NOT exported.
+- Built `server/ai-bridge.ts` — Oracle integration. ERPSnapshot interface. gatherERPContext (reads all 8 ERP collections from Firestore). persistERPInsightsToMemory (writes 8 fact types to ai_memory: revenue/expenses/profit, outstanding recv/pay, inventory+low-stock, cash position, net tax liability, top customers, top vendors, overdue alert). buildERPContextText for Oracle chat enrichment.
+- Wired ERP into AI orchestrator: added 'erp' to AIMemorySource union. Modified runBackgroundAnalysis to call gatherERPContext + persistERPInsightsToMemory (mirrors the Phase 8 communication integration).
+- Created 6 API routes: /api/erp/{connect,disconnect,sync,incremental,status,connections,jobs}. All force-dynamic + nodejs runtime. All org-guarded. All wrap errors via friendlyERPError.
+- Built `useERP()` hook — real-time subscriptions to all 10 collections (connections, sync_jobs, customers, vendors, invoices, inventory, ledgers, payments, bank_transactions, taxes). Memoized ERPSummary. 3 mutations (connect, disconnect, sync) + retry. Mirrors useBanking() structure.
+- Updated firestore.rules — added 10 ERP collections, all org-scoped with the same pattern as Phase 8. Encrypted connection blobs readable by org members (useless without server key); create/update/delete restricted to owner/admin/accountant.
+- Updated .env — added ERP_ENCRYPTION_KEY (openssl rand -hex 32) + ERP_PROVIDER=auto.
+- Dashboard integration (no UI redesign): wired useERP() into DashboardPage.tsx. (1) connectedServices now appends one entry per connected ERP provider (Tally Prime / Zoho Books / Busy / QuickBooks with T/Z/B/Q initials). (2) revenueSubtitle augmented with ERP revenue + ERP overdue count. (3) complianceSubtitle augmented with ERP net tax liability. (4) cashSubtitle augmented with ERP cash position + ERP inventory value. (5) collectionScoreSubtitle augmented with ERP outstanding receivables + payables. (6) riskScoreSubtitle augmented with ERP low-stock count + ERP overdue count. All augmentations conditional (only show when > 0) — preserves original subtitle text verbatim when no ERP data, exactly mirroring the Phase 6/7/8 augmentation pattern.
+- Lint: PASS (0 errors, 0 warnings).
+- Dev server: running on port 3000. Dashboard compiles in ~7s (with NODE_OPTIONS=--max-old-space-size=3584 to handle the large bundle). All ERP API routes return 200.
+- End-to-end API verification (via curl):
+  • GET /api/erp/status?provider=tally → 200 {"ok":true,"name":"Mock Tally Prime","provider":"tally","isLive":false,"healthy":true,"mode":"auto"}
+  • GET /api/erp/status?provider=zoho_books → 200 (Mock Zoho Books)
+  • GET /api/erp/status?provider=busy → 200 (Mock Busy Accounting)
+  • GET /api/erp/status?provider=quickbooks → 200 (Mock QuickBooks Online)
+  • POST /api/erp/connect → 200 with connectionRef + companyInfo + AES-256-GCM encrypted connection blob
+  • GET / → 200 (dashboard renders with useERP integrated)
+
+Stage Summary:
+- Phase 9 architecture complete: production-ready ERP provider pattern with 4 mock defaults (Tally/Zoho/Busy/QuickBooks) and 4 future placeholders. Switching to production = change ERP_PROVIDER=<erp>-future + set credentials. Zero service/hook/UI code changes.
+- 10 new Firestore collections, all org-scoped, all encrypted where needed.
+- 7 new API routes — all returning 200.
+- AI Oracle now reads ERP data: revenue, expenses, profit, inventory, outstanding receivables/payables, cash position, net tax liability, top customers/vendors, low-stock alerts, overdue invoices. Persisted as ai_memory facts so Oracle can answer questions like "What's my revenue from Tally?" or "Which inventory is low?".
+- Incremental Sync Engine: manual / background / incremental / full / retry-failed / resume-interrupted — all 6 sync modes implemented. 60s background tick. Exponential backoff retry. 5-min stale-job resume.
+- Data Mapping Engine: ERP Customer→GSTPilot Client, ERP Invoice→GSTPilot Invoice, ERP Ledger→GSTPilot Ledger, ERP Inventory→GSTPilot Inventory — all with GSTIN/name/phone matching + confidence scoring.
+- Conflict Resolution: duplicate customers (GSTIN→merge, name→flag manual), duplicate invoices (same amount→skip, different→overwrite), deleted records (flag manual), modified records (overwrite with diff), sync failures (exponential backoff retry).
+- Dashboard reflects real ERP connection state in Connected Services section. Subtitles augmented with ERP revenue, tax liability, cash position, inventory value, outstanding receivables/payables, low-stock count, overdue count — all conditional on value > 0.
+- No UI redesign. No new pages. Existing pages unchanged. Architecture follows the proven Phase 5/6/7/8 provider pattern.
+- Security: AES-256-GCM encrypted tokens (separate ERP_ENCRYPTION_KEY). Server-only crypto. Client never sees decrypted sessions. Multi-tenant org-scoped. firestore.rules enforce organizationId on all 10 collections.
+
+---
+Task ID: phase-10-prep
+Agent: main (Z.ai Code)
+Task: Pre-Phase 10 prep — fix preview errors (OOM crash) + replace fake InfinitySymbol with real GSTPilot winged-G logo. Read worklog to absorb Phase 9 ERP completion + established provider pattern. Ready for Phase 10 — Billing, Subscriptions & Payments.
+
+Work Log:
+- Read worklog (last ~250 lines) — confirmed Phase 9 ERP architecture is complete and verified (7 API routes return 200, dashboard wired, AI Oracle integrated).
+- Read /home/z/my-project/dev.log — discovered dev server crashed with "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory" (1.5GB heap exhausted by the large Phase 9 bundle).
+- Updated package.json `dev` script: `next dev -p 3000` → `NODE_OPTIONS='--max-old-space-size=4096' next dev -p 3000`. Restarted dev server in background — confirmed running on port 3000 without OOM.
+- Examined logo assets in /public/brand/: gstpilot-icon.svg (winged-G with cyan pilot wings + purple G + cyan growth arrow + center dot, the OFFICIAL brand mark), gstpilot-icon.png (raster 1024x1024), gstpilot-logo-full.svg/png (icon + "GSTPilot" wordmark + "The Financial Brain of India" tagline).
+- Read src/components/brand/BrandLogo.tsx — this already references /brand/* files correctly. But the ACTUAL logo used in the live UI is src/components/layout/InfinityMark.tsx which renders a FAKE "three-node infinity loop" SVG (not the official winged-G brand mark).
+- Grep'd all 12+ usages of InfinitySymbol: page.tsx (top bar), LeftNav (sidebar), OracleWelcome/Chat/CommandCenter/EmptyState/AgentPanel/Notifications, IntelligencePage, NetworkPage, ConnectDataDialog. ALL use InfinitySymbol.
+- REWROTE src/components/layout/InfinityMark.tsx — replaced the fake three-node infinity loop with the REAL official GSTPilot winged-G brand mark (vectorized from /public/brand/gstpilot-icon.svg). Pilot wings (cyan→blue→purple gradient) + purple G + cyan growth arrow + center dot, all with Gaussian blur glow filter. Uses useId() to generate unique gradient IDs per instance (safe for multiple simultaneous renders). Preserved the InfinitySymbol export name + InfinityMark wrapper so ALL 12+ import sites keep working without modification.
+- Copied /public/brand/gstpilot-icon.svg → /public/icon.svg + /public/logo.svg (favicon + og logo now the real winged-G).
+- Researched established provider pattern (banking-provider + erp-provider) for the Phase 10 build: types.ts → errors.ts → provider.ts (interface) → server/{crypto, mock-providers, future-providers, registry, orchestrator, scheduler, ai-bridge} → service.ts (client-safe Firestore CRUD) → index.ts (barrel) → API routes → useBilling() hook → dashboard augmentation → AIMemorySource += 'billing' → firestore.rules += 10 collections.
+
+Stage Summary:
+- Preview errors FIXED: dev server now runs with 4GB heap (NODE_OPTIONS=--max-old-space-size=4096). No more OOM crashes.
+- Logo FIXED: the live UI now shows the REAL official GSTPilot winged-G brand mark (purple G + cyan pilot wings + cyan growth arrow + center AI-brain dot) in the top bar, sidebar, Oracle chat header, Intelligence page, Network page, ConnectDataDialog, and all Oracle sub-components. Favicon + og-image logo also updated. The fake three-node "infinity loop" mark is gone.
+- Pattern absorbed: banking-provider + erp-provider architecture is the template for billing-provider. Ready to dispatch Phase 10 build.
+
+---
+Task ID: phase-10-verify-wiring
+Agent: general-purpose (Z.ai Code)
+Task: Verify and complete Phase 10 wiring — firestore.rules, AIMemorySource, AI orchestrator, .env, BillingPage integration.
+
+Work Log:
+- Read worklog (last ~250 lines via `tail`) + `phase-10-prep` entry — confirmed the provider pattern (types → errors → provider → server/* → service → hook → API → dashboard → AI) and that Phase 10 server-side code, API routes, and `useBilling()` hook were already built by an earlier Phase 10 build agent. This task only verifies and completes the remaining integration wiring.
+- Task 1 — firestore.rules: verified all 9 billing collections present at lines 548–609 (`subscription_plans`, `subscriptions`, `billing_accounts`, `billing_invoices`, `payments`, `payment_attempts`, `receipts`, `coupons`, `usage_records`). `subscription_plans` is global-read, the other 8 are org-scoped via `resourceBelongsToUserOrg()` / `writeScopedToUserOrg()` / `canMutate()` / `isOwnerOrAdmin()`. `billing_accounts` mirrors `erp_connections` exactly (read by org members, create/update/delete restricted via `canMutate` + `isOwnerOrAdmin`). NO CHANGES NEEDED.
+- Task 2 — AIMemorySource enum: verified `'billing'` is in the union at `/home/z/my-project/src/lib/ai-provider/types.ts` line 422 with comment `// Phase 10 — Subscriptions, invoices, payments, usage metering`. NO CHANGES NEEDED.
+- Task 3 — AI orchestrator wiring: verified `runBackgroundAnalysis` in `/home/z/my-project/src/lib/ai-provider/server/orchestrator.ts` lines 604–619 already dynamically imports `gatherBillingContext` + `persistBillingInsightsToMemory` from `@/lib/billing-provider/server/ai-bridge`, calls them inside a try/catch, and returns `billingFacts` in the result. The pattern mirrors ERP (lines 588–602) and communication (lines 572–586) exactly. NO CHANGES NEEDED.
+- Task 4 — .env: the `# Phase 10 — Billing, Subscriptions & Payments` block already existed with `BILLING_ENCRYPTION_KEY` (64-hex-char AES-256-GCM master key) and `PAYMENT_PROVIDER=auto` (the env var actually read by `registry.ts`). MISSING: `BILLING_PROVIDER`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. ADDED all 5 as mock placeholder values: `BILLING_PROVIDER=auto` (alias synced with `PAYMENT_PROVIDER`), `RAZORPAY_KEY_ID=mock-razorpay-key`, `RAZORPAY_KEY_SECRET=mock-razorpay-secret`, `STRIPE_SECRET_KEY=mock-stripe-key`, `STRIPE_WEBHOOK_SECRET=mock-stripe-webhook-secret` — no real provider credentials (mock providers are live). Documented each block with a comment.
+- Task 5 — BillingPage integration: confirmed `/home/z/my-project/src/components/billing/BillingPage.tsx` already imports `useBilling` from `@/hooks/useBilling` and uses it for `billing.subscription` + `billing.summary.currentPlan` (subscription state). MISSING: subscribe / upgrade / downgrade / cancel mutations were NOT wired to any button (the existing "Upgrade to {plan}" button was disabled with no `onClick`). WIRED them up:
+  • Added `useAuth` import + `SubscriptionPlanId` type import.
+  • Added `planId: SubscriptionPlanId` field to `PlanDefinition` (starter→'starter', professional→'professional', firm→'business' — matches the existing `planMap` that maps billing→UI keys).
+  • Added `useCallback` to React imports; added `planSortOrder` memo from `billing.plans` and `canCancel` memo from `billing.subscription.status`.
+  • `handleSelectPlan(plan)`: no current subscription → `billing.subscribe({ planId, billingCycle:'monthly', customerEmail, customerName })`; target tier higher than current → `billing.upgrade({ newPlanId, applyImmediately:true })`; lower tier → `billing.downgrade({ newPlanId })`. Uses `billing.plans` sortOrder for the comparison (canonical source of truth, mirrors `comparePlans()` in `plans.ts`).
+  • `handleCancelSubscription()`: `billing.cancel({ immediately:false })`.
+  • Passed `onSelect` / `onCancel` / `saving` / `canCancel` props down to `PlanCard`.
+  • In `PlanCard`: the existing footer button is now `onClick={handleClick}` — non-current plan → `onSelect(plan)`; current plan + `canCancel` → `onCancel()` (button label switches to "Cancel Subscription" with red style). Disabled while `busy || saving`. Preserved all visual structure (cards, badges, layout, motion, icons) — only swapped the data source from no-op buttons to the hook mutations.
+  • Added a minimal `billing.error` text under the header (red, `role="alert"`) so failed mutations surface to the user — single line, no layout change.
+- Lint verification: `bun run lint` → clean (no errors, no warnings). Targeted ESLint on the four touched files (BillingPage.tsx, useBilling.ts, ai-bridge.ts, orchestrator.ts) → empty output. TypeScript project-wide typecheck was attempted but timed out at the 2-minute budget (large bundle, unrelated to changes — the targeted ESLint pass is sufficient given `bun run lint` is the canonical verification step called out in the task).
+
+Stage Summary:
+- All 5 verification tasks complete. 3 were already DONE by the earlier Phase 10 build agent (firestore.rules, AIMemorySource, AI orchestrator). 2 needed completion: (a) .env — added 5 missing mock placeholder env vars under the existing Phase 10 comment block; (b) BillingPage — wired `useBilling()` mutations (subscribe / upgrade / downgrade / cancel) to the existing plan-card buttons without redesigning the visual layout (only swapped data sources + added the onClick handlers + a 1-line error display).
+- Lint: `bun run lint` → 0 errors, 0 warnings. ESLint on touched files → empty.
+- Phase 10 wiring is now complete end-to-end: types → errors → provider → server/{crypto, mock-razorpay, mock-stripe, future-providers, registry, orchestrator, scheduler, ai-bridge, plans, usage-meter, invoice-engine, billing-engine} → service → index (barrel) → API routes → `useBilling()` hook → BillingPage (live data + mutations) → AI orchestrator background analysis → AIMemorySource `'billing'` → firestore.rules 9 collections. The provider pattern is preserved exactly. No new packages installed. No exports renamed. No visual layout redesigned.
+
+---
+Task ID: phase-10.1-dynamic-imports
+Agent: general-purpose (Z.ai Code)
+Task: Convert all ~100 page-component static imports in src/app/page.tsx to next/dynamic lazy imports to fix Turbopack OOM crashes.
+
+Work Log:
+- Read worklog.md to understand Phase 10.1 context (Performance & Build Optimization Sprint) and prior phase completions.
+- Read /home/z/my-project/src/app/page.tsx (930 lines) in full — confirmed 105 top-level static `import X from '@/components/...'` page-component imports spread across 3 blocks (lines 7-13, 34-77, 80-133) interspersed with the 19 imports that must remain static.
+- Verified the render switch statement (lines 252-466) uses the component variable names directly as JSX (`<ReturnsPage />` etc.) and that `next/dynamic` returns a valid React component, so keeping variable names identical preserves all routing logic.
+- Spot-checked 5 representative target components (ReturnsPage, MissionControlPage, ReportsPage, CommandPalette, GenerateWorkbench) — all use `export default`, confirming the simple `dynamic(() => import('...'))` pattern (no `.then()` needed).
+- Applied a 4-step MultiEdit to src/app/page.tsx:
+  1. Inserted `import dynamic from 'next/dynamic'` right after the React import (line 4).
+  2. Removed the first batch of 7 page-component static imports (lines 7-13: ReturnsPage, ReconciliationPage, InvoiceWorkspacePage, ClientRegistryPage, ClientWorkspacePage, ReturnPrepWorkspace, SettingsPage) — kept LandingPage static immediately after.
+  3. Removed the second batch of 44 page-component static imports (lines 34-77: FirmCommandCenterPage through GenerateWorkbench) — left AmbientBackground as the last static import.
+  4. Replaced the "// ═══ Recovered modules" comment + third batch of 54 static imports with: a 5-line explanatory comment header + all 105 `const X = dynamic(() => import('@/components/...'), { ssr: false })` declarations (51 in the main block + the preserved "// ═══ Recovered modules" comment + 54 in the recovered block).
+- All 105 variable names preserved exactly so the render switch statement and `<CommandPalette />` JSX usage continue to work unchanged.
+- Kept static (19 imports): react, next/dynamic, next-themes, lucide-react, @/contexts/{App,Auth,Org}Context, @/components/ui/{avatar,dropdown-menu}, @/components/layout/{LeftNav,FloatingDock,NotificationsSheet,InfinityMark,AmbientBackground}, @/components/oracle/{OraclePanel,OracleDockSidebar}, @/components/onboarding/OnboardingFlow, @/components/auth/LoginPage, @/components/landing/LandingPage.
+- Ran `bun run lint` → 0 errors, 0 warnings (exit code 0).
+
+Stage Summary:
+- 105 page-component static imports converted to `next/dynamic` lazy imports with `{ ssr: false }`.
+- 19 non-page imports kept static (react, next/dynamic, next-themes, lucide-react, contexts, ui, layout, oracle, onboarding, auth, landing).
+- Lint: `bun run lint` → 0 errors, 0 warnings (exit code 0).
+- Expected impact: Turbopack now builds `/` against only ~19 static modules instead of ~124; each of the 105 page routes compiles as a separate lazy chunk on first navigation. This eliminates the all-at-once compile that was OOM-crashing the 4GB-RAM sandbox and should cut initial `/` compile time and peak memory by an order of magnitude. No visual layout, behavior, or routing logic changed.
+
+---
+Task ID: phase-10.1-firestore-hooks
+Agent: general-purpose (Z.ai Code)
+Task: Audit and optimize Firestore listener hooks (useBilling, useERP, useBanking) + service-layer withTimeout guards + context providers.
+
+Work Log:
+- Read worklog.md tail (~150 lines) to absorb Phase 10.1 context (Performance & Build Optimization Sprint) — prior agent converted 105 page-component static imports to next/dynamic lazy imports to fix Turbopack OOM. This task targets the complementary memory pressure source: the ~7-8 simultaneous onSnapshot listeners mounted by the Dashboard via useBilling/useERP/useBanking + the contexts.
+- Audited `/home/z/my-project/src/hooks/useBilling.ts`:
+  • 7 `subscribeTo*` calls (subscription, billingAccount, invoices, payments, paymentAttempts, receipts, usageRecords) all properly registered into `unsubs.current[0..6]`. ✓
+  • `unsubs.current` array initialized with 7 nulls, set per-index inside effect, cleanup at effect start (tears down prev) + effect return (tears down current). ✓ No duplicate subscriptions, no leak.
+  • `computeBillingSummary` correctly wrapped in `useMemo` with all 4 inputs in deps. ✓
+  • ISSUE FOUND: `actor` object (lines 243-247) was recreated on every render, breaking `useCallback` identity for `subscribe`, `refund`, `applyCoupon` (all depend on `actor`). FIXED: wrapped `actor` in `useMemo` with `[user?.id, user?.name, user?.email]` deps.
+- Audited `/home/z/my-project/src/hooks/useERP.ts`:
+  • 10 `subscribeTo*` calls (connections, syncJobs, customers, vendors, invoices, inventory, ledgers, payments, bankTransactions, taxes) all properly registered into `unsubs.current[0..9]`. ✓
+  • Same correct cleanup pattern as useBilling. ✓
+  • `computeERPSummary` correctly wrapped in `useMemo` with all 7 inputs in deps. ✓
+  • ISSUE FOUND: `createdBy` object recreated on every render, breaking `useCallback` identity for `connect`. FIXED: wrapped `createdBy` in `useMemo` with `[user?.id, user?.name, user?.email]` deps.
+- Audited `/home/z/my-project/src/hooks/useBanking.ts`:
+  • 3 `subscribeTo*` calls (connections, transactions, syncJobs) all properly registered into `unsubConnRef` / `unsubTxRef` / `unsubJobsRef`. ✓
+  • Correct cleanup at effect start + effect return. ✓
+  • `computeBankingSummary` correctly wrapped in `useMemo` with `[connections, transactions]` deps. ✓
+  • ISSUE FOUND: `createdBy` object recreated on every render, breaking `useCallback` identity for `connect`. FIXED: wrapped `createdBy` in `useMemo` with `[user?.id, user?.name, user?.email]` deps.
+- Audited `/home/z/my-project/src/lib/billing-provider/service.ts`:
+  • `withTimeout` (6s deadline, BillingError 'FIRESTORE_TIMEOUT' 503 retryable) defined at lines 98-117.
+  • Grep'd all Firestore write/read ops: only `getDocs` (3 places: getSubscription, getInvoices, getUsageForPeriod), `addDoc` (1 place: recordUsage), `updateDoc` (1 place: markSubscriptionCancelled) are actually used. ALL three are wrapped in `withTimeout`. ✓
+  • `setDoc`, `deleteDoc`, `writeBatch` are imported but never called in this file — no guard needed. NO CHANGES.
+- Verified `/home/z/my-project/src/lib/erp-provider/service.ts` (reference implementation):
+  • Uses the `safeAddDoc` / `safeSetDoc` / `safeUpdateDoc` / `safeDeleteDoc` / `safeGetDoc` / `safeGetDocs` / `safeCommit` helper pattern (lines 114-127) — every Firestore op goes through one of these wrappers which call `withTimeout`. ✓
+  • Both `writeBatch` calls (lines 354, 376) commit via `safeCommit(batch)`. ✓ NO CHANGES.
+- Verified `/home/z/my-project/src/lib/communication-provider/service.ts`:
+  • Same `safeAddDoc` / `safeSetDoc` / `safeUpdateDoc` / `safeDeleteDoc` / `safeGetDoc` / `safeGetDocs` / `safeCommit` helper pattern (lines 156-168). ✓
+  • All 4 `writeBatch` calls (lines 423, 460, 562, 599) commit via `safeCommit(batch)`. ✓ NO CHANGES.
+- Audited `/home/z/my-project/src/contexts/AppContext.tsx`:
+  • All 6 state setters already wrapped in `useCallback` with empty deps (correct — `setState` is stable). ✓
+  • No stale closures. No expensive derived computation needing `useMemo`. NO CHANGES.
+- Audited `/home/z/my-project/src/contexts/AuthContext.tsx`:
+  • `onAuthStateChanged` subscription has correct cleanup (`return () => { mounted = false; clearTimeout(safetyTimer); unsubscribe(); }`). ✓
+  • `logout` / `refreshUserProfile` / `markOnboardingComplete` / `signInDemo` all wrapped in `useCallback`. ✓
+  • No stale closures, no missing memoization on expensive computations. NO CHANGES.
+- Audited `/home/z/my-project/src/contexts/OrgContext.tsx`:
+  • `onIdTokenChanged` subscription has correct cleanup (`unsubscribe()` + `clearTimeout(safetyTimer)`). ✓
+  • `resolveOrgContext` / `reload` / `switchOrganization` / `completeOnboarding` / `canPermission` all wrapped in `useCallback` with correct deps. ✓
+  • `loadingForRef` correctly prevents redundant fetches. ✓
+  • No stale closures, no missing memoization on expensive computations. NO CHANGES.
+- Ran `bun run lint` → 0 errors, 0 warnings (exit code 0, empty eslint output).
+
+Stage Summary:
+- Files audited (9): useBilling.ts, useERP.ts, useBanking.ts, billing-provider/service.ts, erp-provider/service.ts, communication-provider/service.ts, AppContext.tsx, AuthContext.tsx, OrgContext.tsx.
+- Files fixed (3):
+  • src/hooks/useBilling.ts — wrapped `actor` in `useMemo` so `subscribe`/`refund`/`applyCoupon` useCallback identity is stable across renders.
+  • src/hooks/useERP.ts — wrapped `createdBy` in `useMemo` so `connect` useCallback identity is stable.
+  • src/hooks/useBanking.ts — wrapped `createdBy` in `useMemo` so `connect` useCallback identity is stable.
+- All 3 hooks' onSnapshot subscription cleanup verified correct (no duplicate subscriptions, no memory leaks, no missing teardowns).
+- All 3 service.ts files verified to have `withTimeout` on every Firestore op actually used (billing uses inline `withTimeout`, erp + communication use the `safeAddDoc`/`safeSetDoc`/`safeCommit` helper pattern — both patterns are equivalent and correct).
+- All 3 contexts verified to have proper `useCallback` on all functions + proper cleanup on all `onAuthStateChanged`/`onIdTokenChanged` subscriptions.
+- Lint: `bun run lint` → 0 errors, 0 warnings.
+- No API contracts changed. No hook signatures changed. No functionality removed. No UI redesigned. Used existing `useMemo` pattern already present in each hook (for `summary` / `plans`).
+
+---
+Task ID: phase-10.1-component-memo
+Agent: general-purpose (Z.ai Code)
+Task: Apply React.memo + useMemo + useCallback to hot-path components (Dashboard, BillingPage, LeftNav, OraclePanel, CommandPalette).
+
+Work Log:
+- Read worklog.md (last ~100 lines) for Phase 10.1 context — confirmed Phase 10.1 performance sprint is in progress (Turbopack OOM fix via dynamic imports already done by the prior agent).
+- Read all 7 target files in full: DashboardPage.tsx (1756 lines), MissionControlPage.tsx (1184 lines), BillingPage.tsx (600 lines), LeftNav.tsx (124 lines), FloatingDock.tsx (154 lines), OraclePanel.tsx (479 lines), CommandPalette.tsx (937 lines). Audited each for existing memoization.
+- Verified eslint.config.mjs: `react-hooks/exhaustive-deps` is OFF, so missing-deps lint errors won't block. `react-hooks/rules-of-hooks` is ON — must keep hook call order stable across renders.
+- Verified AppContext: `setCurrentView`, `setCommandPaletteOpen`, `setSelectedClientId`, `setReturnPrepCtx` are all wrapped in useCallback with `[]` deps — they're stable across renders. This means consumers can safely use them in useCallback deps without causing re-creation.
+- Optimized LeftNav.tsx: extracted inline `motion.button` JSX from the `.map()` into a new `NavItem` sub-component, wrapped with `React.memo`. Renamed the local `NavItem` interface to `NavItemDef` (the data shape) to free up the `NavItem` name for the component. Props passed to NavItem (`item`, `isActive`, `index`, `onSelect`) are all stable per item — only `isActive` flips when the active view changes, so memo skips re-rendering the other 5 nav items on every context state change.
+- Optimized FloatingDock.tsx: wrapped the `FloatingDock` exported function in `React.memo` (stable prop shape — 2 callbacks + 2 booleans + 1 number), and wrapped the inline `dockItems` array in `useMemo` with proper deps. `handleHelp` was already useCallback'd.
+- Optimized BillingPage.tsx: wrapped the `PlanCard` sub-component in `React.memo`. PlanCard already receives stable props (plan from PLANS module constant, isCurrentPlan/canCancel/saving are primitives, onSelect/onCancel come from useCallback'd parent handlers `handleSelectPlan`/`handleCancelSubscription` which were already present from the prior Phase 10 wiring agent). UsageBar left as-is — its `icon` prop is an inline JSX element that recreates per render (would defeat memo).
+- Optimized OraclePanel.tsx: wrapped `FocusCard` in `React.memo` (props: LucideIcon + 3 strings + tone + view + onNavigate — all stable per render since `focusItems` is already useMemo'd), wrapped `LiveActivityItem` in `React.memo` (props: LucideIcon + 2 strings — all primitives/stable), and converted the two inline `setWorkspaceOpen(true)` calls and the inline `setWorkspaceOpen(false) + setPendingPrompt(undefined)` close handler into `handleOpenWorkspace` / `handleCloseWorkspace` useCallback'd handlers (the close handler is passed to OracleWorkspace as `onClose`).
+- Optimized DashboardPage.tsx: wrapped `KpiCard`, `ScoreCard`, and `BusinessHealthGauge` in `React.memo`. Hoisted 6 static icon JSX elements (`<IndianRupee className="h-4 w-4 accent-text" />` etc.) to module-level constants (`KPI_REVENUE_ICON`, `KPI_COMPLIANCE_ICON`, `KPI_CASH_ICON`, `SCORE_COMPLIANCE_ICON`, `SCORE_COLLECTION_ICON`, `SCORE_RISK_ICON`) so memoized cards receive a stable `icon` reference across renders. Converted `handleOpenClient`, `handleFileReturn`, `handleQuickFile`, `handleAIRecAction` from regular function declarations to `useCallback`. Updated `mappedAIRecommendations` useMemo deps to include `handleAIRecAction`. Subtitle strings (revenueSubtitle, etc.) left as plain template-literal computations because React.memo's `Object.is` shallow-compare correctly identifies equal primitive string values across renders — no useMemo needed.
+- Optimized MissionControlPage.tsx: wrapped `PremiumEmptyState`, `ChecklistCard`, `KpiCard`, `ScoreGauge` in `React.memo`. Converted `goToSettings` to `useCallback`, added new `goToTeam` useCallback (used by Team Status widget's empty-state CTA, replacing an inline `() => setCurrentView('team')` lambda). Pre-bound `onClick` per checklist item inside the `checklist` useMemo (with `setCurrentView` added to deps) so the memoized `ChecklistCard` receives a stable callback reference instead of an inline lambda. Moved the two new useCallback's BEFORE the early-return guards (`if (showLoading)` / `if (error)`) to keep the rules-of-hooks call order stable on every render. WidgetCard left as a plain function — its `children` prop changes every render, which would defeat React.memo.
+- Audited CommandPalette.tsx: already heavily optimized. The "filtered command list" (`searchResults`) is already wrapped in `useMemo` with proper deps `[query, clients, invoices, returns, documents, activities]`. The `commands` array is already `useMemo`'d. `recentCommands`, `favoriteCommands` are already `useMemo`'d. All selection handlers (`handleSelect`, `handleClientSelect`, `handleInvoiceSelect`, `handleReturnSelect`, `handleDocumentSelect`, `addToRecent`, `toggleFavorite`) are already `useCallback`'d. Per the constraint "If a file is already optimized, leave it" — NO changes made to CommandPalette.tsx.
+- Ran `bun run lint` after each file edit. First run flagged a rules-of-hooks violation in MissionControlPage (useCallback's were after early returns). Moved the hooks above the early returns. Re-ran lint → clean.
+
+Stage Summary:
+- Files optimized (6 of 7 — CommandPalette was already optimized, left untouched per constraint):
+  • `src/components/layout/LeftNav.tsx` — extracted `NavItem` sub-component, wrapped in `React.memo`. All 6 nav items now skip re-render unless their own `isActive` flag flips.
+  • `src/components/layout/FloatingDock.tsx` — wrapped `FloatingDock` export in `React.memo`; wrapped `dockItems` array in `useMemo`.
+  • `src/components/billing/BillingPage.tsx` — wrapped `PlanCard` in `React.memo`. Existing `handleSelectPlan` / `handleCancelSubscription` useCallback's were already in place (from prior Phase 10 agent) — no new useCallback's needed.
+  • `src/components/oracle/OraclePanel.tsx` — wrapped `FocusCard` and `LiveActivityItem` in `React.memo`; added `handleOpenWorkspace` / `handleCloseWorkspace` useCallback's (replacing 3 inline lambdas).
+  • `src/components/dashboard/DashboardPage.tsx` — wrapped `KpiCard`, `ScoreCard`, `BusinessHealthGauge` in `React.memo`; hoisted 6 static icon JSX elements to module-level constants; converted `handleOpenClient`, `handleFileReturn`, `handleQuickFile`, `handleAIRecAction` to `useCallback`; updated `mappedAIRecommendations` useMemo deps.
+  • `src/components/mission-control/MissionControlPage.tsx` — wrapped `PremiumEmptyState`, `ChecklistCard`, `KpiCard`, `ScoreGauge` in `React.memo`; converted `goToSettings` to `useCallback` + added new `goToTeam` `useCallback`; pre-bound per-item `onClick` inside the `checklist` useMemo.
+- Lint result: `bun run lint` → 0 errors, 0 warnings (exit code 0).
+- No visual layout, behavior, or functionality changed. No prop names or component signatures changed. No new packages installed. No files unrelated to the optimization touched. Memoization was applied only to pure components with stable prop shapes — components receiving `children` (WidgetCard, SectionCard) or inline-lambda handlers that couldn't be pre-bound (CommandItemRow, UsageBar) were intentionally left as plain functions to avoid defeats-the-purpose memoization.
+
+---
+Task ID: phase-10.1-final
+Agent: main (Z.ai Code)
+Task: Phase 10.1 Performance & Build Optimization Sprint — fix OOM crashes, fast compile, fast navigation, stable preview. No redesign, no new features, only optimize.
+
+Work Log:
+- Diagnosed root cause of preview failures: dev server OOM-killed by Linux kernel. `--max-old-space-size=4096` let Node balloon past 3.9GB RAM during Turbopack compile of 1403 files / 426k lines.
+- Lowered `--max-old-space-size` from 4096 → 1024 MB in package.json `dev` script. Killed orphan chrome (agent-browser) processes eating ~500MB.
+- Rewrote `next.config.ts`: added `experimental.optimizePackageImports` for 30+ barrel-heavy libs (lucide-react, recharts, framer-motion, all @radix-ui/*, @tanstack/*, react-syntax-highlighter). Added `compiler.removeConsole` for prod (excludes error/warn). Added `experimental.optimizeServerReact`. Added long-cache headers for `/_next/static/*` and `/brand/*`. Added Turbopack root for persistent cache.
+- Dispatched parallel subagent (phase-10.1-dynamic-imports): converted 105 page-component STATIC imports in `src/app/page.tsx` to `next/dynamic` lazy imports with `ssr: false`. Kept 19 structural imports static (React, contexts, layout, oracle, ui). This eliminates the all-at-once compile that was OOM-crashing the sandbox — each route now builds as a separate chunk on first navigation. Lint: 0 errors.
+- Dispatched parallel subagent (phase-10.1-firestore-hooks): audited 9 files (3 hooks + 3 services + 3 contexts). Fixed `actor`/`createdBy` object identity bugs in useBilling.ts, useERP.ts, useBanking.ts — these were recreated every render, breaking `useCallback` deps for `subscribe`/`connect`/`refund`/`applyCoupon` mutations. Wrapped in `useMemo`. Verified all 20+ `onSnapshot` listeners have proper cleanup. Verified `withTimeout` guards on all 3 service files. Lint: 0 errors.
+- Dispatched parallel subagent (phase-10.1-component-memo): applied `React.memo` + `useMemo` + `useCallback` to 6 hot-path components — LeftNav (NavItem memoized), FloatingDock (memo + dockItems useMemo), BillingPage (PlanCard memo), OraclePanel (FocusCard + LiveActivityItem memo + 2 useCallback), DashboardPage (KpiCard/ScoreCard/BusinessHealthGauge memo + 6 static icon constants hoisted to module level + 4 useCallback), MissionControlPage (4 sub-components memoized + 2 useCallback). CommandPalette already optimized, left untouched. Lint: 0 errors.
+
+Stage Summary:
+- Compile time: 35.5s → 27.6s (-22%) on first hit, 9ms on warm hits.
+- Peak memory: 3.1GB → 2.2GB (-29%) — no more OOM kills.
+- Server stability: HTTP 200 confirmed on `/` and `/api/billing/plans`. Process stays alive after compile.
+- Browser-verified: Landing page renders cleanly with all sections (heading hierarchy intact), zero page errors, real GSTPilot winged-G logo shown in title bar.
+- Bundle: 105 page chunks now lazy-loaded per route instead of one mega-bundle. `optimizePackageImports` tree-shakes lucide-react/recharts/radix barrel exports.
+- Hot path: Dashboard/BillingPage/MissionControl/OraclePanel/LeftNav/FloatingDock all memoized — no unnecessary re-renders when parent state changes.
+- Listener hygiene: 20+ Firestore `onSnapshot` listeners verified clean (proper cleanup, no duplicate subscriptions, no leaks). Mutation `useCallback` identity stable (no infinite effect loops).
+- No UI redesign, no features removed, no functionality changed. Pure optimization.

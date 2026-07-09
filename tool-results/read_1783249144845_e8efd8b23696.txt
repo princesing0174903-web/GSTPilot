@@ -1,0 +1,603 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Button } from '@/components/ui/button'
+    14→import { Input } from '@/components/ui/input'
+    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    17→import {
+    18→  Upload,
+    19→  FileText,
+    20→  Download,
+    21→  Eye,
+    22→  Bell,
+    23→  Shield,
+    24→  Clock,
+    25→  CheckCircle2,
+    26→  AlertTriangle,
+    27→  TrendingUp,
+    28→  ArrowUpRight,
+    29→  FileDown,
+    30→  FileUp,
+    31→  LogOut,
+    32→  User,
+    33→} from 'lucide-react'
+    34→import { formatCurrency } from '@/lib/gst-utils'
+    35→
+    36→interface ClientData {
+    37→  id: string
+    38→  tradeName: string
+    39→  gstin: string
+    40→  healthScore: number
+    41→  status: string
+    42→}
+    43→
+    44→interface FilingStatus {
+    45→  id: string
+    46→  returnType: string
+    47→  period: string
+    48→  status: string
+    49→  filedDate?: string
+    50→  totalTax: number
+    51→}
+    52→
+    53→interface ClientNotice {
+    54→  id: string
+    55→  subject: string
+    56→  noticeType: string
+    57→  status: string
+    58→  priority: string
+    59→  dueDate?: string
+    60→}
+    61→
+    62→interface ClientDocument {
+    63→  id: string
+    64→  name: string
+    65→  fileType: string
+    66→  folder: string
+    67→  createdAt: string
+    68→  size: number
+    69→}
+    70→
+    71→export default function ClientPortalPage() {
+    72→  const [isLoggedIn, setIsLoggedIn] = useState(false)
+    73→  const [loginEmail, setLoginEmail] = useState('')
+    74→  const [loginPassword, setLoginPassword] = useState('')
+    75→  const [loginError, setLoginError] = useState('')
+    76→  const [isLoading, setIsLoading] = useState(false)
+    77→  const [clientData, setClientData] = useState<ClientData | null>(null)
+    78→  const [filings, setFilings] = useState<FilingStatus[]>([])
+    79→  const [notices, setNotices] = useState<ClientNotice[]>([])
+    80→  const [documents, setDocuments] = useState<ClientDocument[]>([])
+    81→  const [activeTab, setActiveTab] = useState('overview')
+    82→
+    83→  // DEMO DATA — not yet wired to backend
+    84→  // The client portal uses a placeholder login mechanism (no real client
+    85→  // authentication system yet). After login, real data IS fetched from
+    86→  // /api/clients, /api/gstr-filing, /api/notices, /api/documents.
+    87→  const demoClients = [
+    88→    { email: 'accounts@sharmaent.com', password: 'demo', name: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5', id: 'demo-1' },
+    89→    { email: 'gst@patelsons.com', password: 'demo', name: 'Patel & Sons', gstin: '24AABCP5678G1Z3', id: 'demo-2' },
+    90→    { email: 'gst@krishnatraders.in', password: 'demo', name: 'Krishna Traders', gstin: '06AABCK9012H1Z1', id: 'demo-3' },
+    91→  ]
+    92→
+    93→  const handleLogin = async (e: React.FormEvent) => {
+    94→    e.preventDefault()
+    95→    setLoginError('')
+    96→    setIsLoading(true)
+    97→
+    98→    // Simulate login delay
+    99→    await new Promise(resolve => setTimeout(resolve, 800))
+   100→
+   101→    const client = demoClients.find(c => c.email === loginEmail && c.password === loginPassword)
+   102→    if (client) {
+   103→      setIsLoggedIn(true)
+   104→      setClientData({
+   105→        id: client.id,
+   106→        tradeName: client.name,
+   107→        gstin: client.gstin,
+   108→        healthScore: 88,
+   109→        status: 'active',
+   110→      })
+   111→
+   112→      // Load client data
+   113→      try {
+   114→        const clientsRes = await fetch('/api/clients')
+   115→        if (clientsRes.ok) {
+   116→          const clientsData = await clientsRes.json()
+   117→          const matchedClient = clientsData.clients?.find((c: { gstin: string }) => c.gstin === client.gstin)
+   118→          if (matchedClient) {
+   119→            setClientData(matchedClient)
+   120→            
+   121→            // Fetch filings for this client
+   122→            const filingsRes = await fetch(`/api/gstr-filing?clientId=${matchedClient.id}`)
+   123→            if (filingsRes.ok) {
+   124→              const filingsData = await filingsRes.json()
+   125→              setFilings(filingsData.filings || [])
+   126→            }
+   127→
+   128→            // Fetch notices
+   129→            const noticesRes = await fetch(`/api/notices?clientId=${matchedClient.id}`)
+   130→            if (noticesRes.ok) {
+   131→              const noticesData = await noticesRes.json()
+   132→              setNotices(noticesData.notices || [])
+   133→            }
+   134→
+   135→            // Fetch documents
+   136→            const docsRes = await fetch(`/api/documents?clientId=${matchedClient.id}`)
+   137→            if (docsRes.ok) {
+   138→              const docsData = await docsRes.json()
+   139→              setDocuments(docsData.documents || [])
+   140→            }
+   141→          }
+   142→        }
+   143→      } catch {
+   144→        // PT-10.2: API fetch failed — leave filings/notices/documents empty.
+   145→        // The rendering already handles empty states ("No filings found", etc.).
+   146→      }
+   147→
+   148→      // Set fallback data if API didn't return enough
+   149→      // PT-10.2: Removed hardcoded fallback filings/notices arrays — the API
+   150→      // already returns real data; the rendering already handles empty states
+   151→      // ("No filings found" / "No notices found").
+   152→    } else {
+   153→      setLoginError('Invalid credentials. Try demo accounts below.')
+   154→    }
+   155→    setIsLoading(false)
+   156→  }
+   157→
+   158→  const handleDemoLogin = (email: string) => {
+   159→    setLoginEmail(email)
+   160→    setLoginPassword('demo')
+   161→  }
+   162→
+   163→  const handleLogout = () => {
+   164→    setIsLoggedIn(false)
+   165→    setClientData(null)
+   166→    setFilings([])
+   167→    setNotices([])
+   168→    setDocuments([])
+   169→    setLoginEmail('')
+   170→    setLoginPassword('')
+   171→  }
+   172→
+   173→  const getHealthColor = (score: number) => {
+   174→    if (score >= 80) return 'text-emerald-600'
+   175→    if (score >= 60) return 'text-amber-600'
+   176→    return 'text-red-600'
+   177→  }
+   178→
+   179→  const getHealthBg = (score: number) => {
+   180→    if (score >= 80) return 'bg-emerald-50 border-emerald-200'
+   181→    if (score >= 60) return 'bg-amber-50 border-amber-200'
+   182→    return 'bg-red-50 border-red-200'
+   183→  }
+   184→
+   185→  const getFilingStatusBadge = (status: string) => {
+   186→    const config: Record<string, { color: string; bg: string; label: string }> = {
+   187→      filed: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', label: 'Filed' },
+   188→      pending: { color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', label: 'Pending' },
+   189→      draft: { color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200', label: 'Draft' },
+   190→      prepared: { color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', label: 'Prepared' },
+   191→      validated: { color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200', label: 'Validated' },
+   192→    }
+   193→    const c = config[status] || config.draft
+   194→    return <Badge variant="outline" className={`${c.color} ${c.bg} text-[10px]`}>{c.label}</Badge>
+   195→  }
+   196→
+   197→  // ─── Login Screen ───
+   198→  if (!isLoggedIn) {
+   199→    return (
+   200→      <div className="min-h-[calc(100vh-52px)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/20 p-4">
+   201→        <motion.div
+   202→          initial={{ opacity: 0, y: 20 }}
+   203→          animate={{ opacity: 1, y: 0 }}
+   204→          transition={{ duration: 0.5 }}
+   205→          className="w-full max-w-md"
+   206→        >
+   207→          <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50">
+   208→            <CardHeader className="text-center pb-4">
+   209→              <div className="flex justify-center mb-3">
+   210→                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   211→                  <Shield className="h-6 w-6 text-white" />
+   212→                </div>
+   213→              </div>
+   214→              <CardTitle className="text-xl font-bold">Client Portal</CardTitle>
+   215→              <CardDescription>Access your GST filings and compliance data</CardDescription>
+   216→            </CardHeader>
+   217→            <CardContent>
+   218→              <form onSubmit={handleLogin} className="space-y-4">
+   219→                <div className="space-y-2">
+   220→                  <label className="text-sm font-medium text-foreground">Email</label>
+   221→                  <Input
+   222→                    type="email"
+   223→                    placeholder="Enter your email"
+   224→                    value={loginEmail}
+   225→                    onChange={(e) => setLoginEmail(e.target.value)}
+   226→                    className="h-10"
+   227→                    required
+   228→                  />
+   229→                </div>
+   230→                <div className="space-y-2">
+   231→                  <label className="text-sm font-medium text-foreground">Password</label>
+   232→                  <Input
+   233→                    type="password"
+   234→                    placeholder="Enter your password"
+   235→                    value={loginPassword}
+   236→                    onChange={(e) => setLoginPassword(e.target.value)}
+   237→                    className="h-10"
+   238→                    required
+   239→                  />
+   240→                </div>
+   241→                {loginError && (
+   242→                  <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{loginError}</p>
+   243→                )}
+   244→                <Button
+   245→                  type="submit"
+   246→                  className="w-full h-10 bg-emerald-600 hover:bg-emerald-700"
+   247→                  disabled={isLoading}
+   248→                >
+   249→                  {isLoading ? 'Signing in...' : 'Sign In'}
+   250→                </Button>
+   251→              </form>
+   252→
+   253→              <div className="mt-6 pt-4 border-t">
+   254→                <p className="text-xs text-muted-foreground text-center mb-3">Demo Accounts</p>
+   255→                <div className="space-y-2">
+   256→                  {demoClients.map((client) => (
+   257→                    <button
+   258→                      key={client.email}
+   259→                      onClick={() => handleDemoLogin(client.email)}
+   260→                      className="w-full text-left p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all text-sm"
+   261→                    >
+   262→                      <span className="font-medium text-foreground">{client.name}</span>
+   263→                      <span className="block text-xs text-muted-foreground">{client.email}</span>
+   264→                    </button>
+   265→                  ))}
+   266→                </div>
+   267→                <p className="text-[10px] text-muted-foreground text-center mt-3">Password: demo</p>
+   268→              </div>
+   269→            </CardContent>
+   270→          </Card>
+   271→        </motion.div>
+   272→      </div>
+   273→    )
+   274→  }
+   275→
+   276→  // ─── Client Dashboard ───
+   277→  const healthScore = clientData?.healthScore || 0
+   278→  const filedCount = filings.filter(f => f.status === 'filed').length
+   279→  const pendingCount = filings.filter(f => f.status !== 'filed').length
+   280→  const openNotices = notices.filter(n => n.status === 'open' || n.status === 'in_progress').length
+   281→
+   282→  return (
+   283→    <div className="min-h-[calc(100vh-52px)] bg-gradient-to-br from-slate-50 via-white to-emerald-50/20 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950/10">
+   284→      {/* Client Header Bar */}
+   285→      <div className="bg-white dark:bg-gray-900 border-b px-6 py-4">
+   286→        <div className="flex items-center justify-between">
+   287→          <div className="flex items-center gap-3">
+   288→            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md">
+   289→              <Shield className="h-5 w-5 text-white" />
+   290→            </div>
+   291→            <div>
+   292→              <h2 className="font-bold text-foreground">{clientData?.tradeName || 'Client'}</h2>
+   293→              <p className="text-xs text-muted-foreground">GSTIN: {clientData?.gstin}</p>
+   294→            </div>
+   295→          </div>
+   296→          <div className="flex items-center gap-3">
+   297→            <Badge variant="outline" className={`${getHealthColor(healthScore)} ${getHealthBg(healthScore)} text-xs`}>
+   298→              Health: {healthScore}%
+   299→            </Badge>
+   300→            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5 text-xs">
+   301→              <LogOut className="h-3.5 w-3.5" />
+   302→              Sign Out
+   303→            </Button>
+   304→          </div>
+   305→        </div>
+   306→      </div>
+   307→
+   308→      <div className="p-6 max-w-7xl mx-auto">
+   309→        {/* Quick Stats */}
+   310→        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+   311→          {[
+   312→            { label: 'Compliance Score', value: `${healthScore}%`, icon: TrendingUp, color: healthScore >= 80 ? 'emerald' : healthScore >= 60 ? 'amber' : 'red' },
+   313→            { label: 'Filed Returns', value: String(filedCount), icon: CheckCircle2, color: 'emerald' },
+   314→            { label: 'Pending Returns', value: String(pendingCount), icon: Clock, color: 'amber' },
+   315→            { label: 'Open Notices', value: String(openNotices), icon: Bell, color: openNotices > 0 ? 'red' : 'emerald' },
+   316→          ].map((stat, idx) => (
+   317→            <motion.div
+   318→              key={stat.label}
+   319→              initial={{ opacity: 0, y: 10 }}
+   320→              animate={{ opacity: 1, y: 0 }}
+   321→              transition={{ delay: idx * 0.1 }}
+   322→            >
+   323→              <Card className="border-0 shadow-sm">
+   324→                <CardContent className="p-4">
+   325→                  <div className="flex items-center justify-between mb-2">
+   326→                    <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
+   327→                    <stat.icon className={`h-4 w-4 text-${stat.color}-500`} />
+   328→                  </div>
+   329→                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+   330→                </CardContent>
+   331→              </Card>
+   332→            </motion.div>
+   333→          ))}
+   334→        </div>
+   335→
+   336→        {/* Main Tabs */}
+   337→        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+   338→          <TabsList className="bg-white dark:bg-gray-900 shadow-sm border">
+   339→            <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+   340→            <TabsTrigger value="filings" className="text-xs">Filing Status</TabsTrigger>
+   341→            <TabsTrigger value="documents" className="text-xs">Documents</TabsTrigger>
+   342→            <TabsTrigger value="notices" className="text-xs">Notices</TabsTrigger>
+   343→            <TabsTrigger value="upload" className="text-xs">Upload</TabsTrigger>
+   344→          </TabsList>
+   345→
+   346→          {/* Overview Tab */}
+   347→          <TabsContent value="overview">
+   348→            <div className="grid md:grid-cols-2 gap-4">
+   349→              <Card className="border-0 shadow-sm">
+   350→                <CardHeader className="pb-3">
+   351→                  <CardTitle className="text-sm font-semibold">Compliance Summary</CardTitle>
+   352→                </CardHeader>
+   353→                <CardContent className="space-y-3">
+   354→                  <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
+   355→                    <div className="flex items-center gap-2">
+   356→                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+   357→                      <span className="text-sm font-medium">Filed Returns</span>
+   358→                    </div>
+   359→                    <span className="text-lg font-bold text-emerald-600">{filedCount}</span>
+   360→                  </div>
+   361→                  <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30">
+   362→                    <div className="flex items-center gap-2">
+   363→                      <Clock className="h-4 w-4 text-amber-600" />
+   364→                      <span className="text-sm font-medium">Pending Returns</span>
+   365→                    </div>
+   366→                    <span className="text-lg font-bold text-amber-600">{pendingCount}</span>
+   367→                  </div>
+   368→                  <div className="flex items-center justify-between p-3 rounded-lg bg-red-50 dark:bg-red-950/30">
+   369→                    <div className="flex items-center gap-2">
+   370→                      <AlertTriangle className="h-4 w-4 text-red-600" />
+   371→                      <span className="text-sm font-medium">Open Notices</span>
+   372→                    </div>
+   373→                    <span className="text-lg font-bold text-red-600">{openNotices}</span>
+   374→                  </div>
+   375→                </CardContent>
+   376→              </Card>
+   377→
+   378→              <Card className="border-0 shadow-sm">
+   379→                <CardHeader className="pb-3">
+   380→                  <CardTitle className="text-sm font-semibold">Recent Filings</CardTitle>
+   381→                </CardHeader>
+   382→                <CardContent className="space-y-2">
+   383→                  {filings.slice(0, 4).map((filing) => (
+   384→                    <div key={filing.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+   385→                      <div className="flex items-center gap-2">
+   386→                        <FileText className="h-4 w-4 text-slate-400" />
+   387→                        <div>
+   388→                          <p className="text-sm font-medium">{filing.returnType}</p>
+   389→                          <p className="text-xs text-muted-foreground">{filing.period}</p>
+   390→                        </div>
+   391→                      </div>
+   392→                      <div className="text-right">
+   393→                        {getFilingStatusBadge(filing.status)}
+   394→                        {filing.totalTax > 0 && (
+   395→                          <p className="text-[10px] text-muted-foreground mt-0.5">
+   396→                            Tax: {formatCurrency(filing.totalTax)}
+   397→                          </p>
+   398→                        )}
+   399→                      </div>
+   400→                    </div>
+   401→                  ))}
+   402→                </CardContent>
+   403→              </Card>
+   404→            </div>
+   405→          </TabsContent>
+   406→
+   407→          {/* Filings Tab */}
+   408→          <TabsContent value="filings">
+   409→            <Card className="border-0 shadow-sm">
+   410→              <CardHeader className="pb-3">
+   411→                <CardTitle className="text-sm font-semibold">Filing Status</CardTitle>
+   412→                <CardDescription>View and download your filed GST returns</CardDescription>
+   413→              </CardHeader>
+   414→              <CardContent>
+   415→                <div className="space-y-3">
+   416→                  {filings.map((filing) => (
+   417→                    <div key={filing.id} className="flex items-center justify-between p-4 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+   418→                      <div className="flex items-center gap-3">
+   419→                        <div className="h-10 w-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
+   420→                          <FileText className="h-5 w-5 text-emerald-600" />
+   421→                        </div>
+   422→                        <div>
+   423→                          <p className="font-medium text-sm">{filing.returnType} — {filing.period}</p>
+   424→                          <div className="flex items-center gap-2 mt-0.5">
+   425→                            {getFilingStatusBadge(filing.status)}
+   426→                            {filing.filedDate && (
+   427→                              <span className="text-[10px] text-muted-foreground">Filed on {filing.filedDate}</span>
+   428→                            )}
+   429→                          </div>
+   430→                        </div>
+   431→                      </div>
+   432→                      <div className="flex items-center gap-2">
+   433→                        {filing.totalTax > 0 && (
+   434→                          <span className="text-sm font-semibold text-foreground">
+   435→                            {formatCurrency(filing.totalTax)}
+   436→                          </span>
+   437→                        )}
+   438→                        {filing.status === 'filed' && (
+   439→                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+   440→                            <Download className="h-3 w-3" />
+   441→                            Download
+   442→                          </Button>
+   443→                        )}
+   444→                      </div>
+   445→                    </div>
+   446→                  ))}
+   447→                  {filings.length === 0 && (
+   448→                    <div className="text-center py-8 text-muted-foreground">
+   449→                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   450→                      <p className="text-sm">No filings found</p>
+   451→                    </div>
+   452→                  )}
+   453→                </div>
+   454→              </CardContent>
+   455→            </Card>
+   456→          </TabsContent>
+   457→
+   458→          {/* Documents Tab */}
+   459→          <TabsContent value="documents">
+   460→            <Card className="border-0 shadow-sm">
+   461→              <CardHeader className="pb-3">
+   462→                <div className="flex items-center justify-between">
+   463→                  <div>
+   464→                    <CardTitle className="text-sm font-semibold">Documents</CardTitle>
+   465→                    <CardDescription>Download reports and filed returns</CardDescription>
+   466→                  </div>
+   467→                </div>
+   468→              </CardHeader>
+   469→              <CardContent>
+   470→                <div className="space-y-2">
+   471→                  {documents.map((doc) => (
+   472→                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+   473→                      <div className="flex items-center gap-3">
+   474→                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+   475→                          doc.fileType === 'pdf' ? 'bg-red-50 dark:bg-red-950/30' :
+   476→                          doc.fileType === 'xlsx' ? 'bg-emerald-50 dark:bg-emerald-950/30' :
+   477→                          'bg-blue-50 dark:bg-blue-950/30'
+   478→                        }`}>
+   479→                          <FileText className={`h-4 w-4 ${
+   480→                            doc.fileType === 'pdf' ? 'text-red-600' :
+   481→                            doc.fileType === 'xlsx' ? 'text-emerald-600' :
+   482→                            'text-blue-600'
+   483→                          }`} />
+   484→                        </div>
+   485→                        <div>
+   486→                          <p className="text-sm font-medium">{doc.name}</p>
+   487→                          <div className="flex items-center gap-2 mt-0.5">
+   488→                            <Badge variant="outline" className="text-[9px] px-1 py-0">{doc.fileType.toUpperCase()}</Badge>
+   489→                            <span className="text-[10px] text-muted-foreground">
+   490→                              {(doc.size / 1024).toFixed(0)} KB
+   491→                            </span>
+   492→                          </div>
+   493→                        </div>
+   494→                      </div>
+   495→                      <div className="flex items-center gap-1">
+   496→                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   497→                          <Eye className="h-3.5 w-3.5" />
+   498→                        </Button>
+   499→                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   500→                          <Download className="h-3.5 w-3.5" />
+   501→                        </Button>
+   502→                      </div>
+   503→                    </div>
+   504→                  ))}
+   505→                  {documents.length === 0 && (
+   506→                    <div className="text-center py-8 text-muted-foreground">
+   507→                      <FileDown className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   508→                      <p className="text-sm">No documents available</p>
+   509→                    </div>
+   510→                  )}
+   511→                </div>
+   512→              </CardContent>
+   513→            </Card>
+   514→          </TabsContent>
+   515→
+   516→          {/* Notices Tab */}
+   517→          <TabsContent value="notices">
+   518→            <Card className="border-0 shadow-sm">
+   519→              <CardHeader className="pb-3">
+   520→                <CardTitle className="text-sm font-semibold">Notices</CardTitle>
+   521→                <CardDescription>View GST notices and department queries</CardDescription>
+   522→              </CardHeader>
+   523→              <CardContent>
+   524→                <div className="space-y-3">
+   525→                  {notices.map((notice) => (
+   526→                    <div key={notice.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+   527→                      <div className="flex items-start justify-between">
+   528→                        <div className="flex items-start gap-3">
+   529→                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+   530→                            notice.priority === 'high' || notice.priority === 'urgent'
+   531→                              ? 'bg-red-50 dark:bg-red-950/30'
+   532→                              : 'bg-amber-50 dark:bg-amber-950/30'
+   533→                          }`}>
+   534→                            <Bell className={`h-4 w-4 ${
+   535→                              notice.priority === 'high' || notice.priority === 'urgent'
+   536→                                ? 'text-red-600'
+   537→                                : 'text-amber-600'
+   538→                            }`} />
+   539→                          </div>
+   540→                          <div>
+   541→                            <p className="text-sm font-medium">{notice.subject}</p>
+   542→                            <div className="flex items-center gap-2 mt-1">
+   543→                              <Badge variant="outline" className="text-[9px] px-1 py-0">
+   544→                                {notice.noticeType === 'gst_notice' ? 'GST Notice' :
+   545→                                 notice.noticeType === 'department_notice' ? 'Dept Notice' : 'Tax Query'}
+   546→                              </Badge>
+   547→                              <Badge variant="outline" className={`text-[9px] px-1 py-0 ${
+   548→                                notice.status === 'open' ? 'text-amber-700 border-amber-200 bg-amber-50' :
+   549→                                notice.status === 'in_progress' ? 'text-blue-700 border-blue-200 bg-blue-50' :
+   550→                                'text-emerald-700 border-emerald-200 bg-emerald-50'
+   551→                              }`}>
+   552→                                {notice.status === 'in_progress' ? 'In Progress' : notice.status.charAt(0).toUpperCase() + notice.status.slice(1)}
+   553→                              </Badge>
+   554→                            </div>
+   555→                          </div>
+   556→                        </div>
+   557→                        {notice.dueDate && (
+   558→                          <span className="text-[10px] text-muted-foreground">Due: {notice.dueDate}</span>
+   559→                        )}
+   560→                      </div>
+   561→                    </div>
+   562→                  ))}
+   563→                  {notices.length === 0 && (
+   564→                    <div className="text-center py-8 text-muted-foreground">
+   565→                      <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+   566→                      <p className="text-sm">No notices found</p>
+   567→                      <p className="text-xs mt-1">You&apos;re all caught up!</p>
+   568→                    </div>
+   569→                  )}
+   570→                </div>
+   571→              </CardContent>
+   572→            </Card>
+   573→          </TabsContent>
+   574→
+   575→          {/* Upload Tab */}
+   576→          <TabsContent value="upload">
+   577→            <Card className="border-0 shadow-sm">
+   578→              <CardHeader className="pb-3">
+   579→                <CardTitle className="text-sm font-semibold">Upload Documents</CardTitle>
+   580→                <CardDescription>Upload invoices, purchase registers, and other documents</CardDescription>
+   581→              </CardHeader>
+   582→              <CardContent>
+   583→                <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors cursor-pointer">
+   584→                  <FileUp className="h-10 w-10 mx-auto text-slate-400 mb-3" />
+   585→                  <p className="text-sm font-medium text-foreground">Drop files here or click to browse</p>
+   586→                  <p className="text-xs text-muted-foreground mt-1">Supports PDF, XLSX, DOCX, JPG, PNG (max 10MB)</p>
+   587→                </div>
+   588→                <div className="mt-4 space-y-2">
+   589→                  <p className="text-xs font-medium text-muted-foreground">Recently Uploaded</p>
+   590→                  <div className="text-center py-4">
+   591→                    <Upload className="h-6 w-6 mx-auto text-slate-300 mb-2" />
+   592→                    <p className="text-xs text-muted-foreground">No recent uploads</p>
+   593→                  </div>
+   594→                </div>
+   595→              </CardContent>
+   596→            </Card>
+   597→          </TabsContent>
+   598→        </Tabs>
+   599→      </div>
+   600→    </div>
+   601→  )
+   602→}
+   603→

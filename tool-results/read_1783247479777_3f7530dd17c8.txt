@@ -1,0 +1,1347 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→  CardHeader,
+     9→  CardTitle,
+    10→  CardDescription,
+    11→} from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→import { Input } from '@/components/ui/input';
+    16→import { Label } from '@/components/ui/label';
+    17→import { Textarea } from '@/components/ui/textarea';
+    18→import {
+    19→  Select,
+    20→  SelectContent,
+    21→  SelectItem,
+    22→  SelectTrigger,
+    23→  SelectValue,
+    24→} from '@/components/ui/select';
+    25→import {
+    26→  Dialog,
+    27→  DialogContent,
+    28→  DialogDescription,
+    29→  DialogHeader,
+    30→  DialogTitle,
+    31→} from '@/components/ui/dialog';
+    32→import { Separator } from '@/components/ui/separator';
+    33→import { ScrollArea } from '@/components/ui/scroll-area';
+    34→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    35→import {
+    36→  Bell,
+    37→  Plus,
+    38→  Search,
+    39→  Filter,
+    40→  Clock,
+    41→  AlertTriangle,
+    42→  CheckCircle2,
+    43→  XCircle,
+    44→  Eye,
+    45→  UserPlus,
+    46→  ShieldCheck,
+    47→  Loader2,
+    48→  Calendar,
+    49→  FileText,
+    50→  Building2,
+    51→  ArrowRight,
+    52→  RefreshCw,
+    53→  MessageSquare,
+    54→  ExternalLink,
+    55→  Zap,
+    56→} from 'lucide-react';
+    57→import { formatNumber } from '@/lib/gst-utils';
+    58→import { toast } from 'sonner';
+    59→import { useFireNotices, useFireClients } from '@/hooks/use-firestore';
+    60→import { createNotice, updateNotice } from '@/lib/firestore-service';
+    61→import { EmptyState } from '@/components/shared';
+    62→import { Bell as BellIcon } from 'lucide-react';
+    63→
+    64→// ─── Types ─────────────────────────────────────────────────────────────────
+    65→interface TeamMember {
+    66→  id: string;
+    67→  name: string;
+    68→  email: string;
+    69→  role: string;
+    70→  department: string | null;
+    71→  avatar: string | null;
+    72→}
+    73→
+    74→interface Notice {
+    75→  id: string;
+    76→  clientId: string;
+    77→  clientTradeName: string;
+    78→  clientGstin: string;
+    79→  noticeType: string;
+    80→  noticeNumber: string | null;
+    81→  noticeDate: string | null;
+    82→  subject: string;
+    83→  description: string | null;
+    84→  status: string;
+    85→  assignedTo: string | null;
+    86→  assigneeName: string | null;
+    87→  assigneeEmail: string | null;
+    88→  priority: string;
+    89→  dueDate: string | null;
+    90→  responseDate: string | null;
+    91→  resolution: string | null;
+    92→  createdAt: string;
+    93→  updatedAt: string;
+    94→}
+    95→
+    96→interface Client {
+    97→  id: string;
+    98→  tradeName: string;
+    99→  gstin: string;
+   100→}
+   101→
+   102→// ─── Animation Variants ───────────────────────────────────────────────────
+   103→const containerVariants = {
+   104→  hidden: { opacity: 0 },
+   105→  show: {
+   106→    opacity: 1,
+   107→    transition: { staggerChildren: 0.06, delayChildren: 0.08 },
+   108→  },
+   109→};
+   110→
+   111→const cardVariants = {
+   112→  hidden: { opacity: 0, y: 20, scale: 0.97 },
+   113→  show: {
+   114→    opacity: 1,
+   115→    y: 0,
+   116→    scale: 1,
+   117→    transition: { type: 'spring', stiffness: 260, damping: 24 },
+   118→  },
+   119→};
+   120→
+   121→const kpiVariants = {
+   122→  hidden: { opacity: 0, y: 12 },
+   123→  show: {
+   124→    opacity: 1,
+   125→    y: 0,
+   126→    transition: { type: 'spring', stiffness: 300, damping: 26 },
+   127→  },
+   128→};
+   129→
+   130→// ─── Helpers ───────────────────────────────────────────────────────────────
+   131→// P1-M2: Notice types now come from the FirestoreNotice.NoticeType enum
+   132→// (gst_show_cause, gst_demand, gst_assessment, gst_scrutiny,
+   133→// gst_refund_rejection, gst_cancellation, gst_3b_mismatch, roc_notice,
+   134→// income_tax_notice, tds_notice, other). The badge/icon helpers map each
+   135→// enum value to a human-readable label + Tailwind classes.
+   136→function getNoticeTypeBadge(type: string): { label: string; classes: string } {
+   137→  switch (type) {
+   138→    // GST-related — red family
+   139→    case 'gst_show_cause':
+   140→    case 'gst_demand':
+   141→    case 'gst_cancellation':
+   142→      return { label: 'GST Notice', classes: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' };
+   143→    case 'gst_assessment':
+   144→    case 'gst_scrutiny':
+   145→    case 'gst_3b_mismatch':
+   146→      return { label: 'GST Scrutiny', classes: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800' };
+   147→    case 'gst_refund_rejection':
+   148→      return { label: 'GST Refund', classes: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800' };
+   149→    // Non-GST department notices — amber family
+   150→    case 'roc_notice':
+   151→    case 'income_tax_notice':
+   152→    case 'tds_notice':
+   153→      return { label: 'Dept Notice', classes: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' };
+   154→    default:
+   155→      return { label: 'Notice', classes: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' };
+   156→  }
+   157→}
+   158→
+   159→function getNoticeTypeIcon(type: string) {
+   160→  switch (type) {
+   161→    case 'gst_show_cause':
+   162→    case 'gst_demand':
+   163→    case 'gst_assessment':
+   164→    case 'gst_scrutiny':
+   165→    case 'gst_cancellation':
+   166→    case 'gst_3b_mismatch':
+   167→    case 'gst_refund_rejection':
+   168→      return <AlertTriangle className="h-3.5 w-3.5" />;
+   169→    case 'roc_notice':
+   170→    case 'income_tax_notice':
+   171→    case 'tds_notice':
+   172→      return <FileText className="h-3.5 w-3.5" />;
+   173→    default:
+   174→      return <Bell className="h-3.5 w-3.5" />;
+   175→  }
+   176→}
+   177→
+   178→function getStatusBadge(status: string): string {
+   179→  switch (status) {
+   180→    case 'open': return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800';
+   181→    case 'in_progress': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800';
+   182→    case 'resolved': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800';
+   183→    default: return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+   184→  }
+   185→}
+   186→
+   187→function getStatusIcon(status: string) {
+   188→  switch (status) {
+   189→    case 'open': return <XCircle className="h-3 w-3" />;
+   190→    case 'in_progress': return <Clock className="h-3 w-3" />;
+   191→    case 'resolved': return <CheckCircle2 className="h-3 w-3" />;
+   192→    default: return <Clock className="h-3 w-3" />;
+   193→  }
+   194→}
+   195→
+   196→function getPriorityBadge(priority: string): string {
+   197→  switch (priority) {
+   198→    case 'urgent': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800';
+   199→    case 'high': return 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800';
+   200→    case 'medium': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800';
+   201→    case 'low': return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800';
+   202→    default: return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+   203→  }
+   204→}
+   205→
+   206→function getPriorityDot(priority: string): string {
+   207→  switch (priority) {
+   208→    case 'urgent': return 'bg-red-500 animate-pulse';
+   209→    case 'high': return 'bg-orange-500';
+   210→    case 'medium': return 'bg-amber-500';
+   211→    case 'low': return 'bg-emerald-500';
+   212→    default: return 'bg-slate-500';
+   213→  }
+   214→}
+   215→
+   216→function getCountdown(dueDate: string | null): { text: string; color: string; urgent: boolean } {
+   217→  if (!dueDate) return { text: 'No due date', color: 'text-muted-foreground', urgent: false };
+   218→  const now = new Date();
+   219→  const due = new Date(dueDate);
+   220→  const diff = due.getTime() - now.getTime();
+   221→  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+   222→
+   223→  if (days < 0) return { text: `${Math.abs(days)}d overdue`, color: 'text-red-600 dark:text-red-400', urgent: true };
+   224→  if (days === 0) return { text: 'Due today', color: 'text-red-600 dark:text-red-400', urgent: true };
+   225→  if (days <= 3) return { text: `${days}d left`, color: 'text-amber-600 dark:text-amber-400', urgent: true };
+   226→  if (days <= 7) return { text: `${days}d left`, color: 'text-amber-600 dark:text-amber-400', urgent: false };
+   227→  return { text: `${days}d left`, color: 'text-emerald-600 dark:text-emerald-400', urgent: false };
+   228→}
+   229→
+   230→function getInitials(name: string): string {
+   231→  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+   232→}
+   233→
+   234→// ─── Animated Card Wrapper ─────────────────────────────────────────────────
+   235→function AnimatedCard({
+   236→  children,
+   237→  delay = 0,
+   238→  className = '',
+   239→}: {
+   240→  children: React.ReactNode;
+   241→  delay?: number;
+   242→  className?: string;
+   243→}) {
+   244→  return (
+   245→    <motion.div
+   246→      initial={{ opacity: 0, y: 20 }}
+   247→      animate={{ opacity: 1, y: 0 }}
+   248→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   249→    >
+   250→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   251→        {children}
+   252→      </Card>
+   253→    </motion.div>
+   254→  );
+   255→}
+   256→
+   257→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   258→function KPISkeleton() {
+   259→  return (
+   260→    <Card>
+   261→      <CardContent className="p-6">
+   262→        <div className="flex items-center justify-between">
+   263→          <div className="space-y-2">
+   264→            <Skeleton className="h-4 w-24" />
+   265→            <Skeleton className="h-8 w-16" />
+   266→          </div>
+   267→          <Skeleton className="h-12 w-12 rounded-xl" />
+   268→        </div>
+   269→      </CardContent>
+   270→    </Card>
+   271→  );
+   272→}
+   273→
+   274→function NoticeSkeleton() {
+   275→  return (
+   276→    <Card>
+   277→      <CardContent className="p-5">
+   278→        <div className="space-y-3">
+   279→          <div className="flex items-center gap-2">
+   280→            <Skeleton className="h-5 w-16 rounded-full" />
+   281→            <Skeleton className="h-5 w-24 rounded-full" />
+   282→          </div>
+   283→          <Skeleton className="h-5 w-3/4" />
+   284→          <div className="flex items-center gap-3">
+   285→            <Skeleton className="h-4 w-24" />
+   286→            <Skeleton className="h-4 w-32" />
+   287→          </div>
+   288→          <div className="flex items-center justify-between">
+   289→            <Skeleton className="h-5 w-20 rounded-full" />
+   290→            <Skeleton className="h-8 w-24 rounded" />
+   291→          </div>
+   292→        </div>
+   293→      </CardContent>
+   294→    </Card>
+   295→  );
+   296→}
+   297→
+   298→// ─── Mock Data ─────────────────────────────────────────────────────────────
+   299→// mockNotices + mockClients removed in P1-M2 — notices now come from Firestore
+   300→// (useFireNotices) and clients come from useFireClients. Team members still
+   301→// come from REST because memberships are not one of the 15 collections.
+   302→const mockTeamMembers: TeamMember[] = [
+   303→  { id: 'tm1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'manager', department: 'compliance', avatar: null },
+   304→  { id: 'tm2', name: 'Rahul Mehta', email: 'rahul@firm.com', role: 'senior', department: 'filing', avatar: null },
+   305→  { id: 'tm3', name: 'Anita Desai', email: 'anita@firm.com', role: 'staff', department: 'compliance', avatar: null },
+   306→  { id: 'tm4', name: 'Vikram Singh', email: 'vikram@firm.com', role: 'senior', department: 'audit', avatar: null },
+   307→];
+   308→
+   309→// ═══════════════════════════════════════════════════════════════════════════
+   310→// MAIN COMPONENT
+   311→// ═══════════════════════════════════════════════════════════════════════════
+   312→export default function NoticeCenterPage() {
+   313→  // ── State ──────────────────────────────────────────────────────────────
+   314→  // P1-M2: notices + clients now come from Firestore hooks (real-time).
+   315→  // Team members still come from REST (memberships aren't one of the 15
+   316→  // collections the user requested to migrate to Firestore).
+   317→  const fireNoticesQ = useFireNotices();
+   318→  const fireClientsQ = useFireClients();
+   319→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+   320→  const [teamMembersLoading, setTeamMembersLoading] = useState(true);
+   321→
+   322→  // Map Firestore notices (noticeId → id, timestamps already ISO-stringified
+   323→  // by useFirestoreCollection's convertDoc helper).
+   324→  const notices: Notice[] = useMemo(() => {
+   325→    return (fireNoticesQ.data ?? []).map(n => ({
+   326→      id: n.noticeId,
+   327→      clientId: n.clientId ?? '',
+   328→      clientTradeName: n.clientTradeName ?? '',
+   329→      clientGstin: n.clientGstin ?? '',
+   330→      noticeType: n.noticeType ?? 'other',
+   331→      noticeNumber: n.noticeNumber ?? null,
+   332→      noticeDate: n.noticeDate ?? null,
+   333→      subject: n.subject ?? '',
+   334→      description: n.description ?? null,
+   335→      status: n.status ?? 'open',
+   336→      assignedTo: n.assignedTo ?? null,
+   337→      assigneeName: n.assigneeName ?? null,
+   338→      assigneeEmail: n.assigneeEmail ?? null,
+   339→      priority: n.priority ?? 'medium',
+   340→      dueDate: n.dueDate ?? null,
+   341→      responseDate: n.responseDate ?? null,
+   342→      resolution: n.resolution ?? null,
+   343→      createdAt: typeof n.createdAt === 'string' ? n.createdAt : new Date().toISOString(),
+   344→      updatedAt: typeof n.updatedAt === 'string' ? n.updatedAt : new Date().toISOString(),
+   345→    }));
+   346→  }, [fireNoticesQ.data]);
+   347→
+   348→  const clients: Client[] = useMemo(() => {
+   349→    return (fireClientsQ.data ?? []).map(c => ({
+   350→      id: c.clientId,
+   351→      tradeName: c.tradeName,
+   352→      gstin: c.gstin,
+   353→    }));
+   354→  }, [fireClientsQ.data]);
+   355→
+   356→  const loading = fireNoticesQ.loading || fireClientsQ.loading;
+   357→  const error = fireNoticesQ.error ?? fireClientsQ.error;
+   358→
+   359→  // Filters
+   360→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   361→  const [typeFilter, setTypeFilter] = useState<string>('all');
+   362→  const [searchQuery, setSearchQuery] = useState('');
+   363→
+   364→  // Dialogs
+   365→  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+   366→  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+   367→  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+   368→  const [submitting, setSubmitting] = useState(false);
+   369→
+   370→  // Create form state
+   371→  const [formClient, setFormClient] = useState('');
+   372→  const [formNoticeType, setFormNoticeType] = useState('gst_show_cause');
+   373→  const [formNoticeNumber, setFormNoticeNumber] = useState('');
+   374→  const [formNoticeDate, setFormNoticeDate] = useState('');
+   375→  const [formSubject, setFormSubject] = useState('');
+   376→  const [formDescription, setFormDescription] = useState('');
+   377→  const [formPriority, setFormPriority] = useState('medium');
+   378→  const [formDueDate, setFormDueDate] = useState('');
+   379→  const [formAssignTo, setFormAssignTo] = useState('');
+   380→
+   381→  // Detail dialog - resolution form
+   382→  const [resolutionText, setResolutionText] = useState('');
+   383→  const [reassignTo, setReassignTo] = useState('');
+   384→
+   385→  // ── Fetch Team Members (REST — kept as-is) ─────────────────────────────
+   386→  // Notices + clients come from Firestore; team members stay on REST because
+   387→  // memberships aren't one of the 15 collections the user requested to migrate.
+   388→  const fetchTeamMembers = useCallback(async () => {
+   389→    try {
+   390→      setTeamMembersLoading(true);
+   391→      const teamRes = await fetch('/api/team-members');
+   392→      let members: TeamMember[] = [];
+   393→      if (teamRes.ok) {
+   394→        const data = await teamRes.json();
+   395→        members = data.teamMembers ?? [];
+   396→      }
+   397→      setTeamMembers(members);
+   398→    } catch (err) {
+   399→      console.error('Team members fetch error:', err);
+   400→      setTeamMembers([]);
+   401→    } finally {
+   402→      setTeamMembersLoading(false);
+   403→    }
+   404→  }, []);
+   405→
+   406→  useEffect(() => {
+   407→    fetchTeamMembers();
+   408→  }, [fetchTeamMembers]);
+   409→
+   410→  // ── Derived Stats ──────────────────────────────────────────────────────
+   411→  const stats = useMemo(() => {
+   412→    const open = notices.filter(n => n.status === 'open').length;
+   413→    const inProgress = notices.filter(n => n.status === 'in_progress').length;
+   414→    const resolved = notices.filter(n => n.status === 'resolved').length;
+   415→    const urgent = notices.filter(n => n.priority === 'urgent' && n.status !== 'resolved').length;
+   416→    return { open, inProgress, resolved, total: notices.length, urgent };
+   417→  }, [notices]);
+   418→
+   419→  // ── Filtered Notices ──────────────────────────────────────────────────
+   420→  const filteredNotices = useMemo(() => {
+   421→    return notices.filter(notice => {
+   422→      // Status filter
+   423→      if (statusFilter !== 'all' && notice.status !== statusFilter) return false;
+   424→      // Type filter
+   425→      if (typeFilter !== 'all' && notice.noticeType !== typeFilter) return false;
+   426→      // Search filter
+   427→      if (searchQuery) {
+   428→        const q = searchQuery.toLowerCase();
+   429→        const matchSubject = notice.subject.toLowerCase().includes(q);
+   430→        const matchClient = notice.clientTradeName.toLowerCase().includes(q);
+   431→        const matchNumber = notice.noticeNumber?.toLowerCase().includes(q);
+   432→        const matchGstin = notice.clientGstin.toLowerCase().includes(q);
+   433→        if (!matchSubject && !matchClient && !matchNumber && !matchGstin) return false;
+   434→      }
+   435→      return true;
+   436→    });
+   437→  }, [notices, statusFilter, typeFilter, searchQuery]);
+   438→
+   439→  // ── Create Notice ─────────────────────────────────────────────────────
+   440→  const handleCreate = async () => {
+   441→    if (!formClient || !formSubject) return;
+   442→    try {
+   443→      setSubmitting(true);
+   444→      const selectedClient = clients.find(c => c.id === formClient);
+   445→      const selectedMember = teamMembers.find(m => m.id === formAssignTo);
+   446→      await createNotice({
+   447→        clientId: formClient,
+   448→        clientTradeName: selectedClient?.tradeName ?? null,
+   449→        clientGstin: selectedClient?.gstin ?? null,
+   450→        noticeType: formNoticeType as Notice['noticeType'],
+   451→        noticeNumber: formNoticeNumber || null,
+   452→        noticeDate: formNoticeDate || null,
+   453→        subject: formSubject,
+   454→        description: formDescription || null,
+   455→        status: 'open',
+   456→        priority: formPriority as Notice['priority'],
+   457→        assignedTo: formAssignTo || null,
+   458→        assigneeName: selectedMember?.name ?? null,
+   459→        assigneeEmail: selectedMember?.email ?? null,
+   460→        dueDate: formDueDate || null,
+   461→        responseDate: null,
+   462→        resolution: null,
+   463→        attachmentUrl: null,
+   464→      });
+   465→      toast.success('Notice created');
+   466→      setCreateDialogOpen(false);
+   467→      resetCreateForm();
+   468→    } catch (err) {
+   469→      console.error('Failed to create notice:', err);
+   470→      toast.error('Failed to create notice');
+   471→    } finally {
+   472→      setSubmitting(false);
+   473→    }
+   474→  };
+   475→
+   476→  // ── Update Notice (Resolve / Reassign) ────────────────────────────────
+   477→  const handleResolve = async () => {
+   478→    if (!selectedNotice) return;
+   479→    try {
+   480→      await updateNotice(selectedNotice.id, {
+   481→        status: 'resolved',
+   482→        resolution: resolutionText || 'Resolved',
+   483→        responseDate: new Date().toISOString(),
+   484→      });
+   485→      toast.success('Notice resolved');
+   486→      setDetailDialogOpen(false);
+   487→      setResolutionText('');
+   488→    } catch (err) {
+   489→      console.error('Failed to resolve notice:', err);
+   490→      toast.error('Failed to resolve notice');
+   491→    }
+   492→  };
+   493→
+   494→  const handleReassign = async () => {
+   495→    if (!selectedNotice || !reassignTo) return;
+   496→    try {
+   497→      const member = teamMembers.find(m => m.id === reassignTo);
+   498→      await updateNotice(selectedNotice.id, {
+   499→        assignedTo: reassignTo,
+   500→        assigneeName: member?.name ?? null,
+   501→        assigneeEmail: member?.email ?? null,
+   502→      });
+   503→      toast.success('Notice reassigned');
+   504→      setDetailDialogOpen(false);
+   505→      setReassignTo('');
+   506→    } catch (err) {
+   507→      console.error('Failed to reassign notice:', err);
+   508→      toast.error('Failed to reassign notice');
+   509→    }
+   510→  };
+   511→
+   512→  const handleQuickAction = async (noticeId: string, action: 'in_progress' | 'resolved', assignTo?: string) => {
+   513→    try {
+   514→      const updates: Record<string, unknown> = {};
+   515→      if (action) updates.status = action;
+   516→      if (assignTo) {
+   517→        const member = teamMembers.find(m => m.id === assignTo);
+   518→        updates.assignedTo = assignTo;
+   519→        updates.assigneeName = member?.name ?? null;
+   520→        updates.assigneeEmail = member?.email ?? null;
+   521→      }
+   522→      if (action === 'resolved') {
+   523→        updates.responseDate = new Date().toISOString();
+   524→      }
+   525→      await updateNotice(noticeId, updates);
+   526→      toast.success('Notice updated');
+   527→    } catch (err) {
+   528→      console.error('Failed to update notice:', err);
+   529→      toast.error('Failed to update notice');
+   530→    }
+   531→  };
+   532→
+   533→  const resetCreateForm = () => {
+   534→    setFormClient('');
+   535→    setFormNoticeType('gst_show_cause');
+   536→    setFormNoticeNumber('');
+   537→    setFormNoticeDate('');
+   538→    setFormSubject('');
+   539→    setFormDescription('');
+   540→    setFormPriority('medium');
+   541→    setFormDueDate('');
+   542→    setFormAssignTo('');
+   543→  };
+   544→
+   545→  const openDetail = (notice: Notice) => {
+   546→    setSelectedNotice(notice);
+   547→    setResolutionText(notice.resolution || '');
+   548→    setReassignTo(notice.assignedTo || '');
+   549→    setDetailDialogOpen(true);
+   550→  };
+   551→
+   552→  // ── Timeline generation for detail dialog ──────────────────────────────
+   553→  function generateTimeline(notice: Notice) {
+   554→    const timeline: { date: string; event: string; color: string }[] = [];
+   555→    timeline.push({
+   556→      date: notice.createdAt,
+   557→      event: 'Notice received',
+   558→      color: 'text-red-500',
+   559→    });
+   560→    if (notice.assignedTo && notice.assigneeName) {
+   561→      timeline.push({
+   562→        date: notice.createdAt,
+   563→        event: `Assigned to ${notice.assigneeName}`,
+   564→        color: 'text-amber-500',
+   565→      });
+   566→    }
+   567→    if (notice.status === 'in_progress') {
+   568→      timeline.push({
+   569→        date: notice.updatedAt,
+   570→        event: 'Work in progress',
+   571→        color: 'text-amber-500',
+   572→      });
+   573→    }
+   574→    if (notice.status === 'resolved' && notice.responseDate) {
+   575→      timeline.push({
+   576→        date: notice.responseDate,
+   577→        event: `Resolved${notice.resolution ? ': ' + notice.resolution.slice(0, 80) : ''}`,
+   578→        color: 'text-emerald-500',
+   579→      });
+   580→    }
+   581→    return timeline;
+   582→  }
+   583→
+   584→  // ═══════════════════════════════════════════════════════════════════════
+   585→  // RENDER
+   586→  // ═══════════════════════════════════════════════════════════════════════
+   587→  return (
+   588→    <div className="p-4 md:p-6 space-y-4">
+   589→      {/* ═══ PAGE HEADER ═══ */}
+   590→      <motion.div
+   591→        initial={{ opacity: 0, y: -10 }}
+   592→        animate={{ opacity: 1, y: 0 }}
+   593→        transition={{ duration: 0.4 }}
+   594→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   595→      >
+   596→        <div className="flex items-center gap-3">
+   597→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-600/20">
+   598→            <Bell className="h-5 w-5 text-white" />
+   599→          </div>
+   600→          <div>
+   601→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-700 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent">
+   602→              Notice Center
+   603→            </h1>
+   604→            <p className="text-sm text-muted-foreground mt-0.5">
+   605→              Track and manage GST notices and department queries
+   606→            </p>
+   607→          </div>
+   608→        </div>
+   609→        <div className="flex items-center gap-2">
+   610→          <Button
+   611→            variant="outline"
+   612→            size="sm"
+   613→            onClick={() => { fetchTeamMembers(); }}
+   614→            className="gap-1.5 h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   615→          >
+   616→            <RefreshCw className="h-3.5 w-3.5" />
+   617→            Refresh
+   618→          </Button>
+   619→          <Button
+   620→            size="sm"
+   621→            onClick={() => setCreateDialogOpen(true)}
+   622→            className="gap-1.5 h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+   623→          >
+   624→            <Plus className="h-4 w-4" />
+   625→            Create Notice
+   626→          </Button>
+   627→        </div>
+   628→      </motion.div>
+   629→
+   630→      {/* ═══ NOTICE STATS ROW ═══ */}
+   631→      {loading ? (
+   632→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   633→          {Array.from({ length: 3 }).map((_, i) => <KPISkeleton key={i} />)}
+   634→        </div>
+   635→      ) : (
+   636→        <motion.div
+   637→          variants={containerVariants}
+   638→          initial="hidden"
+   639→          animate="show"
+   640→          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+   641→        >
+   642→          {/* Open Notices */}
+   643→          <motion.div variants={kpiVariants}>
+   644→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   645→              <CardContent className="p-6">
+   646→                <div className="flex items-center justify-between">
+   647→                  <div className="space-y-1">
+   648→                    <p className="text-sm text-muted-foreground font-medium">Open Notices</p>
+   649→                    <p className="text-3xl font-bold text-red-600 dark:text-red-400">
+   650→                      {formatNumber(stats.open)}
+   651→                    </p>
+   652→                    <div className="flex items-center gap-1 text-xs">
+   653→                      <AlertTriangle className="h-3 w-3 text-red-500" />
+   654→                      <span className="text-red-600 dark:text-red-400 font-medium">
+   655→                        {stats.urgent} urgent
+   656→                      </span>
+   657→                    </div>
+   658→                  </div>
+   659→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-red-50 dark:bg-red-950/40">
+   660→                    <XCircle className="h-7 w-7 text-red-600 dark:text-red-400" />
+   661→                  </div>
+   662→                </div>
+   663→              </CardContent>
+   664→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-400 to-red-500" />
+   665→            </Card>
+   666→          </motion.div>
+   667→
+   668→          {/* In Progress */}
+   669→          <motion.div variants={kpiVariants}>
+   670→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   671→              <CardContent className="p-6">
+   672→                <div className="flex items-center justify-between">
+   673→                  <div className="space-y-1">
+   674→                    <p className="text-sm text-muted-foreground font-medium">In Progress</p>
+   675→                    <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+   676→                      {formatNumber(stats.inProgress)}
+   677→                    </p>
+   678→                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   679→                      <Clock className="h-3 w-3 text-amber-500" />
+   680→                      <span>Being worked on</span>
+   681→                    </div>
+   682→                  </div>
+   683→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-amber-50 dark:bg-amber-950/40">
+   684→                    <Clock className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+   685→                  </div>
+   686→                </div>
+   687→              </CardContent>
+   688→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+   689→            </Card>
+   690→          </motion.div>
+   691→
+   692→          {/* Resolved */}
+   693→          <motion.div variants={kpiVariants}>
+   694→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   695→              <CardContent className="p-6">
+   696→                <div className="flex items-center justify-between">
+   697→                  <div className="space-y-1">
+   698→                    <p className="text-sm text-muted-foreground font-medium">Resolved</p>
+   699→                    <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+   700→                      {formatNumber(stats.resolved)}
+   701→                    </p>
+   702→                    <div className="flex items-center gap-1 text-xs">
+   703→                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+   704→                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+   705→                        {stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0}% resolution rate
+   706→                      </span>
+   707→                    </div>
+   708→                  </div>
+   709→                  <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
+   710→                    <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+   711→                  </div>
+   712→                </div>
+   713→              </CardContent>
+   714→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   715→            </Card>
+   716→          </motion.div>
+   717→        </motion.div>
+   718→      )}
+   719→
+   720→      {/* ═══ FILTER BAR ═══ */}
+   721→      <AnimatedCard delay={0.15}>
+   722→        <CardContent className="p-4">
+   723→          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   724→            {/* Search */}
+   725→            <div className="relative flex-1 w-full sm:max-w-xs">
+   726→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   727→              <Input
+   728→                placeholder="Search notices..."
+   729→                value={searchQuery}
+   730→                onChange={e => setSearchQuery(e.target.value)}
+   731→                className="pl-8 h-9 text-sm"
+   732→              />
+   733→            </div>
+   734→
+   735→            {/* Status Filter */}
+   736→            <Select value={statusFilter} onValueChange={setStatusFilter}>
+   737→              <SelectTrigger className="w-full sm:w-40 h-9 text-sm">
+   738→                <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+   739→                <SelectValue placeholder="Status" />
+   740→              </SelectTrigger>
+   741→              <SelectContent>
+   742→                <SelectItem value="all">All Status</SelectItem>
+   743→                <SelectItem value="open">Open</SelectItem>
+   744→                <SelectItem value="in_progress">In Progress</SelectItem>
+   745→                <SelectItem value="resolved">Resolved</SelectItem>
+   746→              </SelectContent>
+   747→            </Select>
+   748→
+   749→            {/* Type Filter */}
+   750→            <Select value={typeFilter} onValueChange={setTypeFilter}>
+   751→              <SelectTrigger className="w-full sm:w-44 h-9 text-sm">
+   752→                <SelectValue placeholder="Type" />
+   753→              </SelectTrigger>
+   754→              <SelectContent>
+   755→                <SelectItem value="all">All Types</SelectItem>
+   756→                <SelectItem value="gst_show_cause">GST Show Cause</SelectItem>
+   757→                <SelectItem value="gst_demand">GST Demand</SelectItem>
+   758→                <SelectItem value="gst_assessment">GST Assessment</SelectItem>
+   759→                <SelectItem value="gst_scrutiny">GST Scrutiny</SelectItem>
+   760→                <SelectItem value="gst_refund_rejection">GST Refund Rejection</SelectItem>
+   761→                <SelectItem value="gst_cancellation">GST Cancellation</SelectItem>
+   762→                <SelectItem value="gst_3b_mismatch">GSTR-3B Mismatch</SelectItem>
+   763→                <SelectItem value="roc_notice">ROC Notice</SelectItem>
+   764→                <SelectItem value="income_tax_notice">Income Tax Notice</SelectItem>
+   765→                <SelectItem value="tds_notice">TDS Notice</SelectItem>
+   766→                <SelectItem value="other">Other</SelectItem>
+   767→              </SelectContent>
+   768→            </Select>
+   769→
+   770→            {/* Result count */}
+   771→            <span className="text-xs text-muted-foreground whitespace-nowrap">
+   772→              {filteredNotices.length} of {notices.length} notices
+   773→            </span>
+   774→          </div>
+   775→        </CardContent>
+   776→      </AnimatedCard>
+   777→
+   778→      {/* ═══ ERROR BANNER ═══ */}
+   779→      {error && !loading && (
+   780→        <AnimatedCard>
+   781→          <CardContent className="p-4 flex items-center justify-between gap-3 border-red-200 bg-red-50/50">
+   782→            <div className="flex items-center gap-2 text-sm text-red-700">
+   783→              <AlertTriangle className="h-4 w-4" />
+   784→              <span>Failed to load notices: {error}</span>
+   785→            </div>
+   786→            <Button
+   787→              variant="outline"
+   788→              size="sm"
+   789→              className="h-7 text-xs gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+   790→              onClick={() => window.location.reload()}
+   791→            >
+   792→              <RefreshCw className="h-3 w-3" />
+   793→              Retry
+   794→            </Button>
+   795→          </CardContent>
+   796→        </AnimatedCard>
+   797→      )}
+   798→
+   799→      {/* ═══ NOTICE LIST ═══ */}
+   800→      <div>
+   801→        {loading ? (
+   802→          <div className="space-y-3">
+   803→            {Array.from({ length: 4 }).map((_, i) => <NoticeSkeleton key={i} />)}
+   804→          </div>
+   805→        ) : filteredNotices.length === 0 ? (
+   806→          searchQuery || statusFilter !== 'all' || typeFilter !== 'all' ? (
+   807→            <AnimatedCard>
+   808→              <CardContent className="p-8 flex flex-col items-center text-center">
+   809→                <div className="flex items-center justify-center h-14 w-14 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 mb-3">
+   810→                  <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+   811→                </div>
+   812→                <h3 className="text-base font-semibold text-foreground mb-1">No notices found</h3>
+   813→                <p className="text-sm text-muted-foreground max-w-sm">
+   814→                  Try adjusting your search or filters to find notices.
+   815→                </p>
+   816→              </CardContent>
+   817→            </AnimatedCard>
+   818→          ) : (
+   819→            <AnimatedCard>
+   820→              <CardContent className="p-8">
+   821→                <EmptyState
+   822→                  icon={BellIcon}
+   823→                  title="No notices yet"
+   824→                  description="Regulatory and GST notices will appear here when received."
+   825→                />
+   826→              </CardContent>
+   827→            </AnimatedCard>
+   828→          )
+   829→        ) : (
+   830→          <motion.div
+   831→            variants={containerVariants}
+   832→            initial="hidden"
+   833→            animate="show"
+   834→            className="space-y-3"
+   835→          >
+   836→            <AnimatePresence mode="popLayout">
+   837→              {filteredNotices.map((notice, index) => {
+   838→                const typeBadge = getNoticeTypeBadge(notice.noticeType);
+   839→                const countdown = getCountdown(notice.dueDate);
+   840→
+   841→                return (
+   842→                  <motion.div
+   843→                    key={notice.id}
+   844→                    variants={cardVariants}
+   845→                    layout
+   846→                    exit={{ opacity: 0, scale: 0.95 }}
+   847→                    whileHover={{ y: -1 }}
+   848→                  >
+   849→                    <Card className="hover:shadow-lg transition-all duration-300 relative overflow-hidden group">
+   850→                      {/* Accent line */}
+   851→                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+   852→                        notice.status === 'open' ? 'bg-red-500' :
+   853→                        notice.status === 'in_progress' ? 'bg-amber-500' :
+   854→                        'bg-emerald-500'
+   855→                      }`} />
+   856→
+   857→                      <CardContent className="p-5 pl-6">
+   858→                        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+   859→                          {/* Left: Notice Info */}
+   860→                          <div className="flex-1 min-w-0 space-y-2">
+   861→                            {/* Top row: Type badge + Priority + Status */}
+   862→                            <div className="flex items-center flex-wrap gap-1.5">
+   863→                              <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 ${typeBadge.classes}`}>
+   864→                                {getNoticeTypeIcon(notice.noticeType)}
+   865→                                {typeBadge.label}
+   866→                              </Badge>
+   867→                              <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 capitalize ${getPriorityBadge(notice.priority)}`}>
+   868→                                <div className={`h-1.5 w-1.5 rounded-full ${getPriorityDot(notice.priority)}`} />
+   869→                                {notice.priority}
+   870→                              </Badge>
+   871→                              <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 capitalize ${getStatusBadge(notice.status)}`}>
+   872→                                {getStatusIcon(notice.status)}
+   873→                                {notice.status.replace('_', ' ')}
+   874→                              </Badge>
+   875→                            </div>
+   876→
+   877→                            {/* Subject */}
+   878→                            <h3 className="text-sm font-semibold text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors cursor-pointer" onClick={() => openDetail(notice)}>
+   879→                              {notice.subject}
+   880→                            </h3>
+   881→
+   882→                            {/* Client Info */}
+   883→                            <div className="flex items-center gap-3 flex-wrap">
+   884→                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   885→                                <Building2 className="h-3 w-3" />
+   886→                                <span className="font-medium text-foreground">{notice.clientTradeName}</span>
+   887→                              </div>
+   888→                              <span className="text-[10px] text-muted-foreground font-mono">{notice.clientGstin}</span>
+   889→                            </div>
+   890→
+   891→                            {/* Notice Number + Date */}
+   892→                            <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+   893→                              {notice.noticeNumber && (
+   894→                                <div className="flex items-center gap-1">
+   895→                                  <FileText className="h-3 w-3" />
+   896→                                  <span>#{notice.noticeNumber}</span>
+   897→                                </div>
+   898→                              )}
+   899→                              {notice.noticeDate && (
+   900→                                <div className="flex items-center gap-1">
+   901→                                  <Calendar className="h-3 w-3" />
+   902→                                  <span>{new Date(notice.noticeDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+   903→                                </div>
+   904→                              )}
+   905→                            </div>
+   906→
+   907→                            {/* Assigned To + Due Date */}
+   908→                            <div className="flex items-center gap-4 flex-wrap">
+   909→                              {notice.assigneeName ? (
+   910→                                <div className="flex items-center gap-1.5">
+   911→                                  <Avatar className="h-5 w-5">
+   912→                                    <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[8px] font-semibold dark:bg-emerald-950 dark:text-emerald-300">
+   913→                                      {getInitials(notice.assigneeName)}
+   914→                                    </AvatarFallback>
+   915→                                  </Avatar>
+   916→                                  <span className="text-xs text-muted-foreground">{notice.assigneeName}</span>
+   917→                                </div>
+   918→                              ) : (
+   919→                                <Badge variant="outline" className="text-[10px] px-2 py-0 bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700">
+   920→                                  Unassigned
+   921→                                </Badge>
+   922→                              )}
+   923→
+   924→                              {notice.dueDate && (
+   925→                                <div className={`flex items-center gap-1 text-xs font-medium ${countdown.color}`}>
+   926→                                  <Clock className="h-3 w-3" />
+   927→                                  <span>{countdown.text}</span>
+   928→                                  {countdown.urgent && (
+   929→                                    <div className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse ml-0.5" />
+   930→                                  )}
+   931→                                </div>
+   932→                              )}
+   933→                            </div>
+   934→                          </div>
+   935→
+   936→                          {/* Right: Quick Actions */}
+   937→                          <div className="flex items-center gap-1.5 lg:flex-col lg:items-end shrink-0">
+   938→                            <Button
+   939→                              variant="ghost"
+   940→                              size="sm"
+   941→                              className="h-8 text-xs gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   942→                              onClick={() => openDetail(notice)}
+   943→                            >
+   944→                              <Eye className="h-3.5 w-3.5" />
+   945→                              View
+   946→                            </Button>
+   947→                            {notice.status !== 'resolved' && !notice.assignedTo && teamMembers.length > 0 && (
+   948→                              <Button
+   949→                                variant="ghost"
+   950→                                size="sm"
+   951→                                className="h-8 text-xs gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+   952→                                onClick={() => handleQuickAction(notice.id, notice.status === 'open' ? 'open' : notice.status, teamMembers[0].id)}
+   953→                              >
+   954→                                <UserPlus className="h-3.5 w-3.5" />
+   955→                                Assign
+   956→                              </Button>
+   957→                            )}
+   958→                            {notice.status !== 'resolved' && (
+   959→                              <Button
+   960→                                variant="ghost"
+   961→                                size="sm"
+   962→                                className="h-8 text-xs gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+   963→                                onClick={() => handleQuickAction(notice.id, 'resolved')}
+   964→                              >
+   965→                                <ShieldCheck className="h-3.5 w-3.5" />
+   966→                                Resolve
+   967→                              </Button>
+   968→                            )}
+   969→                          </div>
+   970→                        </div>
+   971→                      </CardContent>
+   972→                    </Card>
+   973→                  </motion.div>
+   974→                );
+   975→              })}
+   976→            </AnimatePresence>
+   977→          </motion.div>
+   978→        )}
+   979→      </div>
+   980→
+   981→      {/* ═══ CREATE NOTICE DIALOG ═══ */}
+   982→      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+   983→        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+   984→          <DialogHeader>
+   985→            <DialogTitle className="flex items-center gap-2">
+   986→              <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950">
+   987→                <Plus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   988→              </div>
+   989→              Create New Notice
+   990→            </DialogTitle>
+   991→            <DialogDescription>
+   992→              Record a new GST notice or department query
+   993→            </DialogDescription>
+   994→          </DialogHeader>
+   995→
+   996→          <div className="space-y-4 py-2">
+   997→            {/* Client */}
+   998→            <div className="space-y-2">
+   999→              <Label className="text-sm font-medium">Client *</Label>
+  1000→              <Select value={formClient} onValueChange={setFormClient}>
+  1001→                <SelectTrigger className="h-9">
+  1002→                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+  1003→                  <SelectValue placeholder="Select client" />
+  1004→                </SelectTrigger>
+  1005→                <SelectContent>
+  1006→                  {clients.map(c => (
+  1007→                    <SelectItem key={c.id} value={c.id}>{c.tradeName}</SelectItem>
+  1008→                  ))}
+  1009→                </SelectContent>
+  1010→              </Select>
+  1011→            </div>
+  1012→
+  1013→            {/* Notice Type + Priority */}
+  1014→            <div className="grid grid-cols-2 gap-3">
+  1015→              <div className="space-y-2">
+  1016→                <Label className="text-sm font-medium">Notice Type</Label>
+  1017→                <Select value={formNoticeType} onValueChange={setFormNoticeType}>
+  1018→                  <SelectTrigger className="h-9">
+  1019→                    <SelectValue placeholder="Select type" />
+  1020→                  </SelectTrigger>
+  1021→                  <SelectContent>
+  1022→                    <SelectItem value="gst_show_cause">GST Show Cause</SelectItem>
+  1023→                    <SelectItem value="gst_demand">GST Demand</SelectItem>
+  1024→                    <SelectItem value="gst_assessment">GST Assessment</SelectItem>
+  1025→                    <SelectItem value="gst_scrutiny">GST Scrutiny</SelectItem>
+  1026→                    <SelectItem value="gst_refund_rejection">GST Refund Rejection</SelectItem>
+  1027→                    <SelectItem value="gst_cancellation">GST Cancellation</SelectItem>
+  1028→                    <SelectItem value="gst_3b_mismatch">GSTR-3B Mismatch</SelectItem>
+  1029→                    <SelectItem value="roc_notice">ROC Notice</SelectItem>
+  1030→                    <SelectItem value="income_tax_notice">Income Tax Notice</SelectItem>
+  1031→                    <SelectItem value="tds_notice">TDS Notice</SelectItem>
+  1032→                    <SelectItem value="other">Other</SelectItem>
+  1033→                  </SelectContent>
+  1034→                </Select>
+  1035→              </div>
+  1036→              <div className="space-y-2">
+  1037→                <Label className="text-sm font-medium">Priority</Label>
+  1038→                <Select value={formPriority} onValueChange={setFormPriority}>
+  1039→                  <SelectTrigger className="h-9">
+  1040→                    <SelectValue placeholder="Select priority" />
+  1041→                  </SelectTrigger>
+  1042→                  <SelectContent>
+  1043→                    <SelectItem value="urgent">Urgent</SelectItem>
+  1044→                    <SelectItem value="high">High</SelectItem>
+  1045→                    <SelectItem value="medium">Medium</SelectItem>
+  1046→                    <SelectItem value="low">Low</SelectItem>
+  1047→                  </SelectContent>
+  1048→                </Select>
+  1049→              </div>
+  1050→            </div>
+  1051→
+  1052→            {/* Notice Number + Notice Date */}
+  1053→            <div className="grid grid-cols-2 gap-3">
+  1054→              <div className="space-y-2">
+  1055→                <Label className="text-sm font-medium">Notice Number</Label>
+  1056→                <Input
+  1057→                  value={formNoticeNumber}
+  1058→                  onChange={e => setFormNoticeNumber(e.target.value)}
+  1059→                  placeholder="e.g., GST/2026/001"
+  1060→                  className="h-9"
+  1061→                />
+  1062→              </div>
+  1063→              <div className="space-y-2">
+  1064→                <Label className="text-sm font-medium">Notice Date</Label>
+  1065→                <Input
+  1066→                  type="date"
+  1067→                  value={formNoticeDate}
+  1068→                  onChange={e => setFormNoticeDate(e.target.value)}
+  1069→                  className="h-9"
+  1070→                />
+  1071→              </div>
+  1072→            </div>
+  1073→
+  1074→            {/* Subject */}
+  1075→            <div className="space-y-2">
+  1076→              <Label className="text-sm font-medium">Subject *</Label>
+  1077→              <Input
+  1078→                value={formSubject}
+  1079→                onChange={e => setFormSubject(e.target.value)}
+  1080→                placeholder="Enter notice subject..."
+  1081→                className="h-9"
+  1082→              />
+  1083→            </div>
+  1084→
+  1085→            {/* Description */}
+  1086→            <div className="space-y-2">
+  1087→              <Label className="text-sm font-medium">Description</Label>
+  1088→              <Textarea
+  1089→                value={formDescription}
+  1090→                onChange={e => setFormDescription(e.target.value)}
+  1091→                placeholder="Describe the notice details..."
+  1092→                className="min-h-[80px] text-sm"
+  1093→              />
+  1094→            </div>
+  1095→
+  1096→            {/* Due Date + Assign To */}
+  1097→            <div className="grid grid-cols-2 gap-3">
+  1098→              <div className="space-y-2">
+  1099→                <Label className="text-sm font-medium">Due Date</Label>
+  1100→                <Input
+  1101→                  type="date"
+  1102→                  value={formDueDate}
+  1103→                  onChange={e => setFormDueDate(e.target.value)}
+  1104→                  className="h-9"
+  1105→                />
+  1106→              </div>
+  1107→              <div className="space-y-2">
+  1108→                <Label className="text-sm font-medium">Assign To</Label>
+  1109→                <Select value={formAssignTo} onValueChange={setFormAssignTo}>
+  1110→                  <SelectTrigger className="h-9">
+  1111→                    <UserPlus className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+  1112→                    <SelectValue placeholder="Select member" />
+  1113→                  </SelectTrigger>
+  1114→                  <SelectContent>
+  1115→                    {teamMembers.map(m => (
+  1116→                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+  1117→                    ))}
+  1118→                  </SelectContent>
+  1119→                </Select>
+  1120→              </div>
+  1121→            </div>
+  1122→          </div>
+  1123→
+  1124→          <Separator />
+  1125→
+  1126→          <div className="flex items-center justify-end gap-2 pt-1">
+  1127→            <Button
+  1128→              variant="outline"
+  1129→              onClick={() => setCreateDialogOpen(false)}
+  1130→              className="h-9"
+  1131→            >
+  1132→              Cancel
+  1133→            </Button>
+  1134→            <Button
+  1135→              onClick={handleCreate}
+  1136→              disabled={!formClient || !formSubject || submitting}
+  1137→              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+  1138→            >
+  1139→              {submitting ? (
+  1140→                <Loader2 className="h-4 w-4 animate-spin" />
+  1141→              ) : (
+  1142→                <Plus className="h-4 w-4" />
+  1143→              )}
+  1144→              Create Notice
+  1145→            </Button>
+  1146→          </div>
+  1147→        </DialogContent>
+  1148→      </Dialog>
+  1149→
+  1150→      {/* ═══ NOTICE DETAIL DIALOG ═══ */}
+  1151→      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+  1152→        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+  1153→          {selectedNotice && (
+  1154→            <>
+  1155→              <DialogHeader>
+  1156→                <DialogTitle className="flex items-center gap-2">
+  1157→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950">
+  1158→                    <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+  1159→                  </div>
+  1160→                  Notice Details
+  1161→                </DialogTitle>
+  1162→                <DialogDescription>
+  1163→                  View full notice information and take action
+  1164→                </DialogDescription>
+  1165→              </DialogHeader>
+  1166→
+  1167→              <div className="space-y-4 py-2">
+  1168→                {/* Status + Type Badges */}
+  1169→                <div className="flex items-center flex-wrap gap-1.5">
+  1170→                  <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 ${getNoticeTypeBadge(selectedNotice.noticeType).classes}`}>
+  1171→                    {getNoticeTypeIcon(selectedNotice.noticeType)}
+  1172→                    {getNoticeTypeBadge(selectedNotice.noticeType).label}
+  1173→                  </Badge>
+  1174→                  <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 capitalize ${getStatusBadge(selectedNotice.status)}`}>
+  1175→                    {getStatusIcon(selectedNotice.status)}
+  1176→                    {selectedNotice.status.replace('_', ' ')}
+  1177→                  </Badge>
+  1178→                  <Badge variant="outline" className={`text-[10px] px-2 py-0 gap-1 capitalize ${getPriorityBadge(selectedNotice.priority)}`}>
+  1179→                    <div className={`h-1.5 w-1.5 rounded-full ${getPriorityDot(selectedNotice.priority)}`} />
+  1180→                    {selectedNotice.priority}
+  1181→                  </Badge>
+  1182→                </div>
+  1183→
+  1184→                {/* Subject */}
+  1185→                <div>
+  1186→                  <h3 className="text-base font-semibold text-foreground">{selectedNotice.subject}</h3>
+  1187→                </div>
+  1188→
+  1189→                {/* Details Grid */}
+  1190→                <div className="grid grid-cols-2 gap-3">
+  1191→                  <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+  1192→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Client</p>
+  1193→                    <p className="text-sm font-medium text-foreground">{selectedNotice.clientTradeName}</p>
+  1194→                    <p className="text-xs text-muted-foreground font-mono">{selectedNotice.clientGstin}</p>
+  1195→                  </div>
+  1196→                  <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+  1197→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Assigned To</p>
+  1198→                    {selectedNotice.assigneeName ? (
+  1199→                      <div className="flex items-center gap-1.5">
+  1200→                        <Avatar className="h-5 w-5">
+  1201→                          <AvatarFallback className="bg-emerald-100 text-emerald-700 text-[8px] font-semibold dark:bg-emerald-950 dark:text-emerald-300">
+  1202→                            {getInitials(selectedNotice.assigneeName)}
+  1203→                          </AvatarFallback>
+  1204→                        </Avatar>
+  1205→                        <span className="text-sm font-medium text-foreground">{selectedNotice.assigneeName}</span>
+  1206→                      </div>
+  1207→                    ) : (
+  1208→                      <p className="text-sm text-muted-foreground">Unassigned</p>
+  1209→                    )}
+  1210→                  </div>
+  1211→                  <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+  1212→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Notice Number</p>
+  1213→                    <p className="text-sm font-medium text-foreground">{selectedNotice.noticeNumber || '—'}</p>
+  1214→                  </div>
+  1215→                  <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+  1216→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Notice Date</p>
+  1217→                    <p className="text-sm font-medium text-foreground">
+  1218→                      {selectedNotice.noticeDate
+  1219→                        ? new Date(selectedNotice.noticeDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  1220→                        : '—'}
+  1221→                    </p>
+  1222→                  </div>
+  1223→                </div>
+  1224→
+  1225→                {/* Description */}
+  1226→                {selectedNotice.description && (
+  1227→                  <div>
+  1228→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Description</p>
+  1229→                    <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+  1230→                      <p className="text-sm text-foreground whitespace-pre-wrap">{selectedNotice.description}</p>
+  1231→                    </div>
+  1232→                  </div>
+  1233→                )}
+  1234→
+  1235→                {/* Due Date */}
+  1236→                {selectedNotice.dueDate && (
+  1237→                  <div className="flex items-center gap-2">
+  1238→                    <Calendar className="h-4 w-4 text-muted-foreground" />
+  1239→                    <span className="text-sm text-muted-foreground">Due: </span>
+  1240→                    <span className={`text-sm font-medium ${getCountdown(selectedNotice.dueDate).color}`}>
+  1241→                      {new Date(selectedNotice.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1242→                      {' '}({getCountdown(selectedNotice.dueDate).text})
+  1243→                    </span>
+  1244→                  </div>
+  1245→                )}
+  1246→
+  1247→                <Separator />
+  1248→
+  1249→                {/* Timeline / History */}
+  1250→                <div>
+  1251→                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Status History</p>
+  1252→                  <div className="space-y-2">
+  1253→                    {generateTimeline(selectedNotice).map((entry, i) => (
+  1254→                      <div key={i} className="flex items-start gap-3">
+  1255→                        <div className={`mt-1 h-2 w-2 rounded-full ${entry.color === 'text-red-500' ? 'bg-red-500' : entry.color === 'text-amber-500' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+  1256→                        <div className="flex-1">
+  1257→                          <p className="text-xs font-medium text-foreground">{entry.event}</p>
+  1258→                          <p className="text-[10px] text-muted-foreground">
+  1259→                            {new Date(entry.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  1260→                          </p>
+  1261→                        </div>
+  1262→                      </div>
+  1263→                    ))}
+  1264→                  </div>
+  1265→                </div>
+  1266→
+  1267→                {/* Resolution / Actions (only for non-resolved) */}
+  1268→                {selectedNotice.status !== 'resolved' && (
+  1269→                  <>
+  1270→                    <Separator />
+  1271→
+  1272→                    {/* Resolve Form */}
+  1273→                    <div>
+  1274→                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resolve Notice</p>
+  1275→                      <div className="space-y-3">
+  1276→                        <Textarea
+  1277→                          value={resolutionText}
+  1278→                          onChange={e => setResolutionText(e.target.value)}
+  1279→                          placeholder="Enter resolution details..."
+  1280→                          className="min-h-[70px] text-sm"
+  1281→                        />
+  1282→                        <Button
+  1283→                          onClick={handleResolve}
+  1284→                          disabled={!resolutionText.trim()}
+  1285→                          className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+  1286→                        >
+  1287→                          <ShieldCheck className="h-4 w-4" />
+  1288→                          Mark as Resolved
+  1289→                        </Button>
+  1290→                      </div>
+  1291→                    </div>
+  1292→
+  1293→                    {/* Reassign */}
+  1294→                    <div>
+  1295→                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Reassign</p>
+  1296→                      <div className="flex items-center gap-2">
+  1297→                        <Select value={reassignTo} onValueChange={setReassignTo}>
+  1298→                          <SelectTrigger className="h-9 flex-1">
+  1299→                            <UserPlus className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+  1300→                            <SelectValue placeholder="Select team member" />
+  1301→                          </SelectTrigger>
+  1302→                          <SelectContent>
+  1303→                            {teamMembers.map(m => (
+  1304→                              <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>
+  1305→                            ))}
+  1306→                          </SelectContent>
+  1307→                        </Select>
+  1308→                        <Button
+  1309→                          onClick={handleReassign}
+  1310→                          disabled={!reassignTo || reassignTo === selectedNotice.assignedTo}
+  1311→                          variant="outline"
+  1312→                          className="h-9 gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+  1313→                        >
+  1314→                          <ArrowRight className="h-3.5 w-3.5" />
+  1315→                          Reassign
+  1316→                        </Button>
+  1317→                      </div>
+  1318→                    </div>
+  1319→                  </>
+  1320→                )}
+  1321→
+  1322→                {/* Show resolution if resolved */}
+  1323→                {selectedNotice.status === 'resolved' && selectedNotice.resolution && (
+  1324→                  <>
+  1325→                    <Separator />
+  1326→                    <div>
+  1327→                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resolution</p>
+  1328→                      <div className="rounded-lg p-3 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+  1329→                        <p className="text-sm text-foreground whitespace-pre-wrap">{selectedNotice.resolution}</p>
+  1330→                        {selectedNotice.responseDate && (
+  1331→                          <p className="text-[10px] text-muted-foreground mt-2">
+  1332→                            Resolved on {new Date(selectedNotice.responseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+  1333→                          </p>
+  1334→                        )}
+  1335→                      </div>
+  1336→                    </div>
+  1337→                  </>
+  1338→                )}
+  1339→              </div>
+  1340→            </>
+  1341→          )}
+  1342→        </DialogContent>
+  1343→      </Dialog>
+  1344→    </div>
+  1345→  );
+  1346→}
+  1347→

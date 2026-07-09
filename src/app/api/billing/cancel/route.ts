@@ -1,0 +1,37 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot Billing™ — Cancel API
+// POST /api/billing/cancel
+//   Body: { organizationId, subscriptionId, immediately?, reason? }
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { NextRequest, NextResponse } from 'next/server';
+import { BillingError, friendlyBillingError } from '@/lib/billing-provider/errors';
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { organizationId, subscriptionId, immediately, reason } = body as {
+      organizationId?: string;
+      subscriptionId?: string;
+      immediately?: boolean;
+      reason?: string;
+    };
+
+    if (!organizationId) return NextResponse.json({ ok: false, error: 'organizationId is required.' }, { status: 400 });
+    if (!subscriptionId) return NextResponse.json({ ok: false, error: 'subscriptionId is required.' }, { status: 400 });
+
+    if (reason) console.log(`[api/billing/cancel] org=${organizationId} reason: ${reason}`);
+
+    const { cancelSubscription } = await import('@/lib/billing-provider/server/orchestrator');
+    const subscription = await cancelSubscription(organizationId, subscriptionId, immediately ?? false);
+    return NextResponse.json({ ok: true, subscription });
+  } catch (err) {
+    const statusCode = err instanceof BillingError ? err.statusCode : 500;
+    const code = err instanceof BillingError ? err.code : 'UNKNOWN';
+    console.error('[api/billing/cancel] error:', code, friendlyBillingError(err));
+    return NextResponse.json({ ok: false, error: friendlyBillingError(err), code }, { status: statusCode });
+  }
+}

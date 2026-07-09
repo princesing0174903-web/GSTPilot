@@ -1,0 +1,754 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Billing, Subscriptions & Payments™ — Client-Safe Firestore Service
+     3→//
+     4→// The single entry point for all billing Firestore operations on the CLIENT side.
+     5→// Mirrors the banking-provider / erp-provider service pattern:
+     6→//   • Real-time subscriptions via onSnapshot (org-scoped)
+     7→//   • CRUD writes via the Firebase client SDK (rules enforce org isolation)
+     8→//   • Multi-tenant — every function filters on `organizationId`
+     9→//
+    10→// This module is CLIENT-SAFE — it only imports from `firebase/firestore` and
+    11→// `@/lib/firebase` (the client SDK). It NEVER imports the provider, crypto, or
+    12→// any server-only code.
+    13→//
+    14→// The flow for each billing operation:
+    15→//   1. Client hook calls the appropriate API route (/api/billing/*) for the
+    16→//      provider work (subscribe, upgrade, pay, refund, etc.). The API route
+    17→//      returns plain data + the encrypted customer id / provider tokens.
+    18→//   2. The orchestrator (server-side) writes the result to Firestore directly.
+    19→//   3. Real-time onSnapshot subscriptions surface the change to every
+    20→//      connected client instantly.
+    21→//
+    22→// Firestore timeout guard: when the Firebase project has the Firestore API
+    23→// disabled, the SDK retries PERMISSION_DENIED for ~120s before rejecting.
+    24→// `withTimeout` races every op against a 6s deadline so the UI never hangs.
+    25→// ═══════════════════════════════════════════════════════════════════════════════
+    26→
+    27→import {
+    28→  collection,
+    29→  doc,
+    30→  getDoc,
+    31→  getDocs,
+    32→  setDoc,
+    33→  addDoc,
+    34→  updateDoc,
+    35→  deleteDoc,
+    36→  query,
+    37→  where,
+    38→  orderBy,
+    39→  limit as limitFn,
+    40→  serverTimestamp,
+    41→  onSnapshot,
+    42→  type Unsubscribe,
+    43→  type QueryConstraint,
+    44→} from 'firebase/firestore';
+    45→import { db } from '@/lib/firebase';
+    46→import type {
+    47→  BillingAccount,
+    48→  BillingInvoice,
+    49→  BillingSummary,
+    50→  Coupon,
+    51→  Payment,
+    52→  PaymentAttempt,
+    53→  PaymentProviderName,
+    54→  Receipt,
+    55→  Subscription,
+    56→  SubscriptionPlan,
+    57→  SubscriptionPlanId,
+    58→  UsageMetricType,
+    59→  UsageRecord,
+    60→} from './types';
+    61→import { BillingError } from './errors';
+    62→import { SUBSCRIPTION_PLANS, getPlan } from './server/plans';
+    63→
+    64→// ─── Collection names ────────────────────────────────────────────────────────
+    65→
+    66→/**
+    67→ * The 9 Firestore collections used by the billing provider.
+    68→ * `subscription_plans` is GLOBAL (read by everyone, written by admin seed).
+    69→ * The other 8 are ORG-SCOPED — every doc carries `organizationId`.
+    70→ */
+    71→export const BILLING_COLLECTIONS = {
+    72→  PLANS: 'subscription_plans', // global
+    73→  SUBSCRIPTIONS: 'subscriptions',
+    74→  BILLING_ACCOUNTS: 'billing_accounts',
+    75→  INVOICES: 'billing_invoices',
+    76→  PAYMENTS: 'payments',
+    77→  PAYMENT_ATTEMPTS: 'payment_attempts',
+    78→  RECEIPTS: 'receipts',
+    79→  COUPONS: 'coupons',
+    80→  USAGE_RECORDS: 'usage_records',
+    81→} as const;
+    82→
+    83→// ─── Org guard ───────────────────────────────────────────────────────────────
+    84→
+    85→function assertOrg(orgId: string | undefined | null): void {
+    86→  if (!orgId) {
+    87→    throw new BillingError(
+    88→      'You must belong to an organization to manage billing data.',
+    89→      { code: 'NO_ORGANIZATION', statusCode: 403 },
+    90→    );
+    91→  }
+    92→}
+    93→
+    94→// ─── Firestore timeout guard ─────────────────────────────────────────────────
+    95→
+    96→const FIRESTORE_TIMEOUT_MS = 6000;
+    97→
+    98→function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+    99→  promise.catch(() => {
+   100→    /* timed-out op — ignore late rejection */
+   101→  });
+   102→  return Promise.race([
+   103→    promise,
+   104→    new Promise<T>((_, reject) =>
+   105→      setTimeout(
+   106→        () =>
+   107→          reject(
+   108→            new BillingError(
+   109→              `${label} timed out — Firestore may be unreachable.`,
+   110→              { code: 'FIRESTORE_TIMEOUT', statusCode: 503, retryable: true },
+   111→            ),
+   112→          ),
+   113→        FIRESTORE_TIMEOUT_MS,
+   114→      ),
+   115→    ),
+   116→  ]);
+   117→}
+   118→
+   119→// ─── Subscription Plans (GLOBAL) ──────────────────────────────────────────────
+   120→
+   121→/**
+   122→ * Get the canonical 5 plans. The source of truth is the `SUBSCRIPTION_PLANS`
+   123→ * constant in `server/plans.ts` (re-exported here so the client can read it
+   124→ * without a Firestore round-trip). If a Firestore-seeded override exists it
+   125→ * would be merged in here in the future.
+   126→ */
+   127→export function getSubscriptionPlans(): SubscriptionPlan[] {
+   128→  return [...SUBSCRIPTION_PLANS].sort((a, b) => a.sortOrder - b.sortOrder);
+   129→}
+   130→
+   131→/** Get a single plan by id (synchronous — from the in-memory constant). */
+   132→export function getSubscriptionPlan(planId: SubscriptionPlanId): SubscriptionPlan | undefined {
+   133→  return getPlan(planId);
+   134→}
+   135→
+   136→// ─── Subscriptions ──────────────────────────────────────────────────────────
+   137→
+   138→export function toSubscription(id: string, raw: Record<string, unknown>): Subscription {
+   139→  return {
+   140→    id,
+   141→    organizationId: String(raw.organizationId ?? ''),
+   142→    planId: (raw.planId as SubscriptionPlanId) ?? 'free',
+   143→    planName: String(raw.planName ?? 'Free'),
+   144→    billingCycle: (raw.billingCycle as 'monthly' | 'yearly') ?? 'monthly',
+   145→    status: (raw.status as Subscription['status']) ?? 'active',
+   146→    startDate: String(raw.startDate ?? new Date().toISOString()),
+   147→    endDate: (raw.endDate as string | null) ?? null,
+   148→    trialEndDate: (raw.trialEndDate as string | null) ?? null,
+   149→    cancelledAt: (raw.cancelledAt as string | null) ?? null,
+   150→    pausedAt: (raw.pausedAt as string | null) ?? null,
+   151→    currentPeriodStart: String(raw.currentPeriodStart ?? new Date().toISOString()),
+   152→    currentPeriodEnd: String(raw.currentPeriodEnd ?? new Date().toISOString()),
+   153→    gracePeriodEnd: (raw.gracePeriodEnd as string | null) ?? null,
+   154→    customerId: String(raw.customerId ?? ''),
+   155→    paymentProvider: (raw.paymentProvider as PaymentProviderName) ?? 'mock-razorpay',
+   156→    defaultPaymentMethod: (raw.defaultPaymentMethod as Subscription['defaultPaymentMethod']) ?? null,
+   157→    couponCode: (raw.couponCode as string | null) ?? null,
+   158→    couponDiscountPercent: Number(raw.couponDiscountPercent ?? 0),
+   159→    mrr: Number(raw.mrr ?? 0),
+   160→    arr: Number(raw.arr ?? 0),
+   161→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   162→    updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+   163→  };
+   164→}
+   165→
+   166→/** Subscribe to the org's active subscription (one per org). */
+   167→export function subscribeToSubscription(
+   168→  organizationId: string,
+   169→  onData: (sub: Subscription | null) => void,
+   170→  opts?: { onError?: (err: Error) => void },
+   171→): Unsubscribe {
+   172→  assertOrg(organizationId);
+   173→  const q = query(
+   174→    collection(db, BILLING_COLLECTIONS.SUBSCRIPTIONS),
+   175→    where('organizationId', '==', organizationId),
+   176→    limitFn(1),
+   177→  );
+   178→  return onSnapshot(
+   179→    q,
+   180→    (snap) => {
+   181→      if (snap.empty) {
+   182→        onData(null);
+   183→        return;
+   184→      }
+   185→      const d = snap.docs[0];
+   186→      onData(toSubscription(d.id, d.data() as Record<string, unknown>));
+   187→    },
+   188→    (err) => opts?.onError?.(err as Error),
+   189→  );
+   190→}
+   191→
+   192→export async function getSubscription(organizationId: string): Promise<Subscription | null> {
+   193→  assertOrg(organizationId);
+   194→  const q = query(
+   195→    collection(db, BILLING_COLLECTIONS.SUBSCRIPTIONS),
+   196→    where('organizationId', '==', organizationId),
+   197→    limitFn(1),
+   198→  );
+   199→  const snap = await withTimeout(getDocs(q), 'billing.getSubscription');
+   200→  if (snap.empty) return null;
+   201→  const d = snap.docs[0];
+   202→  return toSubscription(d.id, d.data() as Record<string, unknown>);
+   203→}
+   204→
+   205→// ─── Billing Accounts ───────────────────────────────────────────────────────
+   206→
+   207→export function toBillingAccount(id: string, raw: Record<string, unknown>): BillingAccount {
+   208→  return {
+   209→    id,
+   210→    organizationId: String(raw.organizationId ?? ''),
+   211→    subscriptionId: (raw.subscriptionId as string | null) ?? null,
+   212→    email: String(raw.email ?? ''),
+   213→    phone: (raw.phone as string | null) ?? null,
+   214→    gstin: (raw.gstin as string | null) ?? null,
+   215→    billingAddress: (raw.billingAddress as BillingAccount['billingAddress']) ?? {
+   216→      name: '',
+   217→      line1: '',
+   218→      line2: null,
+   219→      city: '',
+   220→      state: '',
+   221→      postalCode: '',
+   222→      country: 'India',
+   223→    },
+   224→    taxId: (raw.taxId as string | null) ?? null,
+   225→    encryptedCustomerId: (raw.encryptedCustomerId as string | null) ?? null,
+   226→    encryptedProviderTokens: (raw.encryptedProviderTokens as string | null) ?? null,
+   227→    paymentProvider: (raw.paymentProvider as PaymentProviderName | null) ?? null,
+   228→    defaultPaymentMethod: (raw.defaultPaymentMethod as BillingAccount['defaultPaymentMethod']) ?? null,
+   229→    autoRenew: Boolean(raw.autoRenew ?? true),
+   230→    taxExempt: Boolean(raw.taxExempt ?? false),
+   231→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   232→    updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+   233→  };
+   234→}
+   235→
+   236→export function subscribeToBillingAccount(
+   237→  organizationId: string,
+   238→  onData: (account: BillingAccount | null) => void,
+   239→  opts?: { onError?: (err: Error) => void },
+   240→): Unsubscribe {
+   241→  assertOrg(organizationId);
+   242→  const q = query(
+   243→    collection(db, BILLING_COLLECTIONS.BILLING_ACCOUNTS),
+   244→    where('organizationId', '==', organizationId),
+   245→    limitFn(1),
+   246→  );
+   247→  return onSnapshot(
+   248→    q,
+   249→    (snap) => {
+   250→      if (snap.empty) {
+   251→        onData(null);
+   252→        return;
+   253→      }
+   254→      const d = snap.docs[0];
+   255→      onData(toBillingAccount(d.id, d.data() as Record<string, unknown>));
+   256→    },
+   257→    (err) => opts?.onError?.(err as Error),
+   258→  );
+   259→}
+   260→
+   261→// ─── Invoices ───────────────────────────────────────────────────────────────
+   262→
+   263→export function toInvoice(id: string, raw: Record<string, unknown>): BillingInvoice {
+   264→  return {
+   265→    id,
+   266→    organizationId: String(raw.organizationId ?? ''),
+   267→    subscriptionId: String(raw.subscriptionId ?? ''),
+   268→    invoiceNumber: String(raw.invoiceNumber ?? ''),
+   269→    type: (raw.type as BillingInvoice['type']) ?? 'tax_invoice',
+   270→    status: (raw.status as BillingInvoice['status']) ?? 'draft',
+   271→    issueDate: String(raw.issueDate ?? new Date().toISOString()),
+   272→    dueDate: String(raw.dueDate ?? new Date().toISOString()),
+   273→    paidDate: (raw.paidDate as string | null) ?? null,
+   274→    periodStart: String(raw.periodStart ?? new Date().toISOString()),
+   275→    periodEnd: String(raw.periodEnd ?? new Date().toISOString()),
+   276→    lineItems: (raw.lineItems as BillingInvoice['lineItems']) ?? [],
+   277→    subtotal: Number(raw.subtotal ?? 0),
+   278→    discount: Number(raw.discount ?? 0),
+   279→    tax: Number(raw.tax ?? 0),
+   280→    taxBreakdown: (raw.taxBreakdown as BillingInvoice['taxBreakdown']) ?? {
+   281→      cgst: 0,
+   282→      sgst: 0,
+   283→      igst: 0,
+   284→      cess: 0,
+   285→    },
+   286→    total: Number(raw.total ?? 0),
+   287→    amountPaid: Number(raw.amountPaid ?? 0),
+   288→    amountDue: Number(raw.amountDue ?? 0),
+   289→    currency: 'INR',
+   290→    notes: (raw.notes as string | null) ?? null,
+   291→    couponCode: (raw.couponCode as string | null) ?? null,
+   292→    linkedInvoiceId: (raw.linkedInvoiceId as string | null) ?? null,
+   293→    pdfReady: Boolean(raw.pdfReady ?? false),
+   294→    pdfPath: (raw.pdfPath as string | null) ?? null,
+   295→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   296→    updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+   297→  };
+   298→}
+   299→
+   300→export function subscribeToInvoices(
+   301→  organizationId: string,
+   302→  onData: (invoices: BillingInvoice[]) => void,
+   303→  opts?: { onError?: (err: Error) => void; limitCount?: number },
+   304→): Unsubscribe {
+   305→  assertOrg(organizationId);
+   306→  const constraints: QueryConstraint[] = [
+   307→    where('organizationId', '==', organizationId),
+   308→    orderBy('createdAt', 'desc'),
+   309→  ];
+   310→  if (opts?.limitCount) constraints.push(limitFn(opts.limitCount));
+   311→  const q = query(collection(db, BILLING_COLLECTIONS.INVOICES), ...constraints);
+   312→  return onSnapshot(
+   313→    q,
+   314→    (snap) => onData(snap.docs.map((d) => toInvoice(d.id, d.data() as Record<string, unknown>))),
+   315→    (err) => opts?.onError?.(err as Error),
+   316→  );
+   317→}
+   318→
+   319→export async function getInvoices(organizationId: string): Promise<BillingInvoice[]> {
+   320→  assertOrg(organizationId);
+   321→  const q = query(
+   322→    collection(db, BILLING_COLLECTIONS.INVOICES),
+   323→    where('organizationId', '==', organizationId),
+   324→    orderBy('createdAt', 'desc'),
+   325→  );
+   326→  const snap = await withTimeout(getDocs(q), 'billing.getInvoices');
+   327→  return snap.docs.map((d) => toInvoice(d.id, d.data() as Record<string, unknown>));
+   328→}
+   329→
+   330→// ─── Payments ───────────────────────────────────────────────────────────────
+   331→
+   332→export function toPayment(id: string, raw: Record<string, unknown>): Payment {
+   333→  return {
+   334→    id,
+   335→    organizationId: String(raw.organizationId ?? ''),
+   336→    subscriptionId: String(raw.subscriptionId ?? ''),
+   337→    invoiceId: (raw.invoiceId as string | null) ?? null,
+   338→    amount: Number(raw.amount ?? 0),
+   339→    currency: 'INR',
+   340→    status: (raw.status as Payment['status']) ?? 'pending',
+   341→    provider: (raw.provider as PaymentProviderName) ?? 'mock-razorpay',
+   342→    providerPaymentId: (raw.providerPaymentId as string | null) ?? null,
+   343→    providerOrderId: (raw.providerOrderId as string | null) ?? null,
+   344→    method: (raw.method as Payment['method']) ?? 'card',
+   345→    description: (raw.description as string | null) ?? null,
+   346→    failureReason: (raw.failureReason as string | null) ?? null,
+   347→    refundAmount: Number(raw.refundAmount ?? 0),
+   348→    refundedAt: (raw.refundedAt as string | null) ?? null,
+   349→    paidAt: (raw.paidAt as string | null) ?? null,
+   350→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   351→    updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+   352→  };
+   353→}
+   354→
+   355→export function subscribeToPayments(
+   356→  organizationId: string,
+   357→  onData: (payments: Payment[]) => void,
+   358→  opts?: { onError?: (err: Error) => void; limitCount?: number },
+   359→): Unsubscribe {
+   360→  assertOrg(organizationId);
+   361→  const constraints: QueryConstraint[] = [
+   362→    where('organizationId', '==', organizationId),
+   363→    orderBy('createdAt', 'desc'),
+   364→  ];
+   365→  if (opts?.limitCount) constraints.push(limitFn(opts.limitCount));
+   366→  const q = query(collection(db, BILLING_COLLECTIONS.PAYMENTS), ...constraints);
+   367→  return onSnapshot(
+   368→    q,
+   369→    (snap) => onData(snap.docs.map((d) => toPayment(d.id, d.data() as Record<string, unknown>))),
+   370→    (err) => opts?.onError?.(err as Error),
+   371→  );
+   372→}
+   373→
+   374→// ─── Payment Attempts ───────────────────────────────────────────────────────
+   375→
+   376→export function toPaymentAttempt(id: string, raw: Record<string, unknown>): PaymentAttempt {
+   377→  return {
+   378→    id,
+   379→    organizationId: String(raw.organizationId ?? ''),
+   380→    paymentId: (raw.paymentId as string | null) ?? null,
+   381→    subscriptionId: String(raw.subscriptionId ?? ''),
+   382→    invoiceId: String(raw.invoiceId ?? ''),
+   383→    amount: Number(raw.amount ?? 0),
+   384→    provider: (raw.provider as PaymentProviderName) ?? 'mock-razorpay',
+   385→    status: (raw.status as PaymentAttempt['status']) ?? 'initiated',
+   386→    errorCode: (raw.errorCode as string | null) ?? null,
+   387→    errorMessage: (raw.errorMessage as string | null) ?? null,
+   388→    providerRequestId: (raw.providerRequestId as string | null) ?? null,
+   389→    attemptNumber: Number(raw.attemptNumber ?? 1),
+   390→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   391→  };
+   392→}
+   393→
+   394→export function subscribeToPaymentAttempts(
+   395→  organizationId: string,
+   396→  onData: (attempts: PaymentAttempt[]) => void,
+   397→  opts?: { onError?: (err: Error) => void; limitCount?: number },
+   398→): Unsubscribe {
+   399→  assertOrg(organizationId);
+   400→  const constraints: QueryConstraint[] = [
+   401→    where('organizationId', '==', organizationId),
+   402→    orderBy('createdAt', 'desc'),
+   403→  ];
+   404→  if (opts?.limitCount) constraints.push(limitFn(opts.limitCount));
+   405→  const q = query(collection(db, BILLING_COLLECTIONS.PAYMENT_ATTEMPTS), ...constraints);
+   406→  return onSnapshot(
+   407→    q,
+   408→    (snap) =>
+   409→      onData(snap.docs.map((d) => toPaymentAttempt(d.id, d.data() as Record<string, unknown>))),
+   410→    (err) => opts?.onError?.(err as Error),
+   411→  );
+   412→}
+   413→
+   414→// ─── Receipts ───────────────────────────────────────────────────────────────
+   415→
+   416→export function toReceipt(id: string, raw: Record<string, unknown>): Receipt {
+   417→  return {
+   418→    id,
+   419→    organizationId: String(raw.organizationId ?? ''),
+   420→    paymentId: String(raw.paymentId ?? ''),
+   421→    invoiceId: (raw.invoiceId as string | null) ?? null,
+   422→    receiptNumber: String(raw.receiptNumber ?? ''),
+   423→    amount: Number(raw.amount ?? 0),
+   424→    currency: 'INR',
+   425→    method: (raw.method as Receipt['method']) ?? 'card',
+   426→    provider: (raw.provider as PaymentProviderName) ?? 'mock-razorpay',
+   427→    issuedTo: (raw.issuedTo as Receipt['issuedTo']) ?? { name: '', email: '', phone: null },
+   428→    notes: (raw.notes as string | null) ?? null,
+   429→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   430→  };
+   431→}
+   432→
+   433→export function subscribeToReceipts(
+   434→  organizationId: string,
+   435→  onData: (receipts: Receipt[]) => void,
+   436→  opts?: { onError?: (err: Error) => void; limitCount?: number },
+   437→): Unsubscribe {
+   438→  assertOrg(organizationId);
+   439→  const constraints: QueryConstraint[] = [
+   440→    where('organizationId', '==', organizationId),
+   441→    orderBy('createdAt', 'desc'),
+   442→  ];
+   443→  if (opts?.limitCount) constraints.push(limitFn(opts.limitCount));
+   444→  const q = query(collection(db, BILLING_COLLECTIONS.RECEIPTS), ...constraints);
+   445→  return onSnapshot(
+   446→    q,
+   447→    (snap) => onData(snap.docs.map((d) => toReceipt(d.id, d.data() as Record<string, unknown>))),
+   448→    (err) => opts?.onError?.(err as Error),
+   449→  );
+   450→}
+   451→
+   452→// ─── Coupons ────────────────────────────────────────────────────────────────
+   453→
+   454→export function toCoupon(id: string, raw: Record<string, unknown>): Coupon {
+   455→  return {
+   456→    id,
+   457→    organizationId: (raw.organizationId as string | null) ?? null,
+   458→    code: String(raw.code ?? ''),
+   459→    type: (raw.type as Coupon['type']) ?? 'percent',
+   460→    value: Number(raw.value ?? 0),
+   461→    currency: 'INR',
+   462→    maxRedemptions: Number(raw.maxRedemptions ?? 0),
+   463→    redemptionsCount: Number(raw.redemptionsCount ?? 0),
+   464→    validFrom: String(raw.validFrom ?? new Date().toISOString()),
+   465→    validUntil: (raw.validUntil as string | null) ?? null,
+   466→    applicablePlans: (raw.applicablePlans as Coupon['applicablePlans']) ?? 'all',
+   467→    isActive: Boolean(raw.isActive ?? true),
+   468→    createdBy: (raw.createdBy as Coupon['createdBy']) ?? { uid: '', name: '', email: '' },
+   469→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   470→    updatedAt: String(raw.updatedAt ?? new Date().toISOString()),
+   471→  };
+   472→}
+   473→
+   474→export function subscribeToCoupons(
+   475→  organizationId: string,
+   476→  onData: (coupons: Coupon[]) => void,
+   477→  opts?: { onError?: (err: Error) => void },
+   478→): Unsubscribe {
+   479→  assertOrg(organizationId);
+   480→  // Both global (organizationId == null) and org-private coupons.
+   481→  const q = query(
+   482→    collection(db, BILLING_COLLECTIONS.COUPONS),
+   483→    where('isActive', '==', true),
+   484→    orderBy('createdAt', 'desc'),
+   485→  );
+   486→  return onSnapshot(
+   487→    q,
+   488→    (snap) => {
+   489→      const all = snap.docs.map((d) => toCoupon(d.id, d.data() as Record<string, unknown>));
+   490→      // Filter: global coupons OR this org's coupons.
+   491→      onData(
+   492→        all.filter(
+   493→          (c) => c.organizationId === null || c.organizationId === organizationId,
+   494→        ),
+   495→      );
+   496→    },
+   497→    (err) => opts?.onError?.(err as Error),
+   498→  );
+   499→}
+   500→
+   501→// ─── Usage Records ──────────────────────────────────────────────────────────
+   502→
+   503→export function toUsageRecord(id: string, raw: Record<string, unknown>): UsageRecord {
+   504→  return {
+   505→    id,
+   506→    organizationId: String(raw.organizationId ?? ''),
+   507→    subscriptionId: String(raw.subscriptionId ?? ''),
+   508→    metric: (raw.metric as UsageMetricType) ?? 'oracle_requests',
+   509→    quantity: Number(raw.quantity ?? 0),
+   510→    periodStart: String(raw.periodStart ?? new Date().toISOString()),
+   511→    periodEnd: String(raw.periodEnd ?? new Date().toISOString()),
+   512→    metadata: (raw.metadata as Record<string, unknown>) ?? {},
+   513→    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+   514→  };
+   515→}
+   516→
+   517→export function subscribeToUsageRecords(
+   518→  organizationId: string,
+   519→  onData: (records: UsageRecord[]) => void,
+   520→  opts?: { onError?: (err: Error) => void; limitCount?: number },
+   521→): Unsubscribe {
+   522→  assertOrg(organizationId);
+   523→  const constraints: QueryConstraint[] = [
+   524→    where('organizationId', '==', organizationId),
+   525→    orderBy('createdAt', 'desc'),
+   526→  ];
+   527→  if (opts?.limitCount) constraints.push(limitFn(opts.limitCount));
+   528→  const q = query(collection(db, BILLING_COLLECTIONS.USAGE_RECORDS), ...constraints);
+   529→  return onSnapshot(
+   530→    q,
+   531→    (snap) =>
+   532→      onData(snap.docs.map((d) => toUsageRecord(d.id, d.data() as Record<string, unknown>))),
+   533→    (err) => opts?.onError?.(err as Error),
+   534→  );
+   535→}
+   536→
+   537→/**
+   538→ * Get the current period's usage records (org-scoped, current billing period).
+   539→ * Pure read — no subscription.
+   540→ */
+   541→export async function getUsageForPeriod(
+   542→  organizationId: string,
+   543→  periodStart: string,
+   544→  periodEnd: string,
+   545→): Promise<UsageRecord[]> {
+   546→  assertOrg(organizationId);
+   547→  const q = query(
+   548→    collection(db, BILLING_COLLECTIONS.USAGE_RECORDS),
+   549→    where('organizationId', '==', organizationId),
+   550→    where('periodStart', '>=', periodStart),
+   551→    where('periodEnd', '<=', periodEnd),
+   552→  );
+   553→  const snap = await withTimeout(getDocs(q), 'billing.getUsageForPeriod');
+   554→  return snap.docs.map((d) => toUsageRecord(d.id, d.data() as Record<string, unknown>));
+   555→}
+   556→
+   557→/**
+   558→ * Write a usage record directly (used by usage metering on the client for
+   559→ * low-stakes events like oracle_requests). High-stakes events go through the
+   560→ * /api/billing/usage route which calls the server-side usage meter.
+   561→ */
+   562→export async function recordUsage(
+   563→  organizationId: string,
+   564→  subscriptionId: string,
+   565→  metric: UsageMetricType,
+   566→  quantity: number,
+   567→  metadata?: Record<string, unknown>,
+   568→): Promise<string> {
+   569→  assertOrg(organizationId);
+   570→  const now = new Date();
+   571→  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+   572→  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+   573→  const ref = await withTimeout(
+   574→    addDoc(collection(db, BILLING_COLLECTIONS.USAGE_RECORDS), {
+   575→      organizationId,
+   576→      subscriptionId,
+   577→      metric,
+   578→      quantity,
+   579→      periodStart,
+   580→      periodEnd,
+   581→      metadata: metadata ?? {},
+   582→      createdAt: serverTimestamp(),
+   583→    }),
+   584→    'billing.recordUsage',
+   585→  );
+   586→  return ref.id;
+   587→}
+   588→
+   589→// ─── Billing Summary (pure function, dashboard-facing) ──────────────────────
+   590→
+   591→/**
+   592→ * Aggregate the org's billing state into a single `BillingSummary` for the
+   593→ * dashboard. Pure function — takes the already-subscribed collections and
+   594→ * returns the computed summary. The `useBilling()` hook calls this on every
+   595→ * real-time update so the dashboard always reflects current data.
+   596→ */
+   597→export function computeBillingSummary(
+   598→  subscription: Subscription | null,
+   599→  invoices: BillingInvoice[],
+   600→  payments: Payment[],
+   601→  usageRecords: UsageRecord[],
+   602→): BillingSummary {
+   603→  const now = new Date();
+   604→  const plan = subscription ? getPlan(subscription.planId) : null;
+   605→
+   606→  // MRR / ARR
+   607→  const mrr = subscription?.mrr ?? 0;
+   608→  const arr = subscription?.arr ?? 0;
+   609→
+   610→  // Renewal date
+   611→  const nextRenewalDate = subscription?.currentPeriodEnd ?? null;
+   612→  const daysToRenewal = nextRenewalDate
+   613→    ? Math.max(
+   614→        0,
+   615→        Math.round(
+   616→          (new Date(nextRenewalDate).getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+   617→        ),
+   618→      )
+   619→    : null;
+   620→
+   621→  // Trial days
+   622→  const trialDaysLeft = subscription?.trialEndDate
+   623→    ? Math.max(
+   624→        0,
+   625→        Math.round(
+   626→          (new Date(subscription.trialEndDate).getTime() - now.getTime()) /
+   627→            (24 * 60 * 60 * 1000),
+   628→        ),
+   629→      )
+   630→    : null;
+   631→
+   632→  // Outstanding amount — sum of unpaid invoices
+   633→  const outstandingAmount = invoices
+   634→    .filter((i) => i.status === 'sent' || i.status === 'overdue')
+   635→    .reduce((sum, i) => sum + i.amountDue, 0);
+   636→
+   637→  // Failed payments in last 30 days
+   638→  const failedPayments = payments.filter(
+   639→    (p) =>
+   640→      p.status === 'failed' &&
+   641→      new Date(p.createdAt).getTime() > now.getTime() - 30 * 24 * 60 * 60 * 1000,
+   642→  ).length;
+   643→
+   644→  // Usage this period — aggregate by metric
+   645→  const usageThisPeriod: Record<UsageMetricType, number> = {
+   646→    oracle_requests: 0,
+   647→    storage_bytes: 0,
+   648→    ai_tokens: 0,
+   649→    invoices_generated: 0,
+   650→    returns_filed: 0,
+   651→    api_calls: 0,
+   652→    automation_runs: 0,
+   653→  };
+   654→  const periodStart = subscription?.currentPeriodStart ?? null;
+   655→  const periodEnd = subscription?.currentPeriodEnd ?? null;
+   656→  for (const r of usageRecords) {
+   657→    if (periodStart && periodEnd) {
+   658→      // Only count records in the current billing period.
+   659→      if (r.periodStart < periodStart || r.periodEnd > periodEnd) continue;
+   660→    }
+   661→    if (r.metric in usageThisPeriod) {
+   662→      usageThisPeriod[r.metric] += r.quantity;
+   663→    }
+   664→  }
+   665→
+   666→  // Plan limits
+   667→  const usageLimits: Record<UsageMetricType, number> | null = plan
+   668→    ? {
+   669→        oracle_requests: plan.limits.oracleRequestsMonthly,
+   670→        storage_bytes: plan.limits.storageBytes,
+   671→        ai_tokens: plan.limits.aiCreditsMonthly,
+   672→        invoices_generated: plan.limits.invoicesMonthly,
+   673→        returns_filed: plan.limits.returnsMonthly,
+   674→        api_calls: plan.limits.apiCallsMonthly,
+   675→        automation_runs: plan.limits.automationRunsMonthly,
+   676→      }
+   677→    : null;
+   678→
+   679→  // Usage percentage (0..100; Infinity if limit is Infinity)
+   680→  const usagePercent: Record<UsageMetricType, number> = {
+   681→    oracle_requests: 0,
+   682→    storage_bytes: 0,
+   683→    ai_tokens: 0,
+   684→    invoices_generated: 0,
+   685→    returns_filed: 0,
+   686→    api_calls: 0,
+   687→    automation_runs: 0,
+   688→  };
+   689→  if (usageLimits) {
+   690→    (Object.keys(usageThisPeriod) as UsageMetricType[]).forEach((metric) => {
+   691→      const used = usageThisPeriod[metric];
+   692→      const limit = usageLimits[metric];
+   693→      usagePercent[metric] =
+   694→        limit === Infinity ? 0 : Math.min(100, Math.round((used / limit) * 100));
+   695→    });
+   696→  }
+   697→
+   698→  // Recent invoices (newest 10)
+   699→  const recentInvoices = [...invoices]
+   700→    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+   701→    .slice(0, 10);
+   702→
+   703→  // Recent payments (newest 10)
+   704→  const recentPayments = [...payments]
+   705→    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+   706→    .slice(0, 10);
+   707→
+   708→  // Connected providers
+   709→  const connectedProviders: PaymentProviderName[] = subscription
+   710→    ? [subscription.paymentProvider]
+   711→    : [];
+   712→
+   713→  return {
+   714→    currentPlan: subscription?.planId ?? null,
+   715→    planName: subscription?.planName ?? plan?.name ?? null,
+   716→    subscriptionStatus: subscription?.status ?? null,
+   717→    mrr,
+   718→    arr,
+   719→    nextRenewalDate,
+   720→    daysToRenewal,
+   721→    trialDaysLeft,
+   722→    outstandingAmount,
+   723→    failedPayments,
+   724→    usageThisPeriod,
+   725→    usageLimits,
+   726→    usagePercent,
+   727→    recentInvoices,
+   728→    recentPayments,
+   729→    connectedProviders,
+   730→  };
+   731→}
+   732→
+   733→// ─── Cascade cancel (used on cancelSubscription) ────────────────────────────
+   734→
+   735→/**
+   736→ * Mark all org billing data as cancelled/expired. Does NOT delete — billing
+   737→ * records must be retained for audit. Called by the client after a successful
+   738→ * /api/billing/cancel call to provide instant UI feedback.
+   739→ */
+   740→export async function markSubscriptionCancelled(
+   741→  organizationId: string,
+   742→  subscriptionId: string,
+   743→): Promise<void> {
+   744→  assertOrg(organizationId);
+   745→  await withTimeout(
+   746→    updateDoc(doc(db, BILLING_COLLECTIONS.SUBSCRIPTIONS, subscriptionId), {
+   747→      status: 'cancelled',
+   748→      cancelledAt: new Date().toISOString(),
+   749→      updatedAt: serverTimestamp(),
+   750→    }),
+   751→    'billing.markSubscriptionCancelled',
+   752→  );
+   753→}
+   754→

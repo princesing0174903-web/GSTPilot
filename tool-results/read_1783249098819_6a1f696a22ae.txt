@@ -1,0 +1,686 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+     8→import { ScrollArea } from '@/components/ui/scroll-area'
+     9→import { Separator } from '@/components/ui/separator'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Progress } from '@/components/ui/progress'
+    12→import {
+    13→  Play, Zap, CheckCircle, Clock, Activity,
+    14→  FileText, Search, FileScan, FileCheck,
+    15→  Users, Bell, BarChart3, Brain, LayoutDashboard,
+    16→  Radio, ArrowRight, RotateCcw, Calendar,
+    17→  ChevronRight, Settings, TrendingUp, Timer,
+    18→  AlertCircle, Package,
+    19→} from 'lucide-react'
+    20→
+    21→// ── Workflow Steps ──
+    22→const workflowSteps = [
+    23→  { id: 1, name: 'Read Documents', desc: 'Scan cloud storage for new uploads', icon: Search, subActions: ['Scanning Google Drive', 'Scanning Dropbox', 'Scanning email attachments'] },
+    24→  { id: 2, name: 'Extract Invoices', desc: 'OCR and extract data from all invoices', icon: FileScan, subActions: ['Running OCR on 47 documents', 'Extracting GSTIN & amounts', 'Validating invoice data'] },
+    25→  { id: 3, name: 'Prepare Returns', desc: 'Auto-prepare GSTR-1 and GSTR-3B', icon: FileText, subActions: ['Preparing GSTR-1 for 47 clients', 'Preparing GSTR-3B for 47 clients', 'Cross-validating data'] },
+    26→  { id: 4, name: 'Reconcile Books', desc: 'Match 2A/2B data with books', icon: CheckCircle, subActions: ['Downloading 2A/2B data', 'Matching with book entries', 'Flagging mismatches'] },
+    27→  { id: 5, name: 'Generate Notices', desc: 'Create required notices or responses', icon: AlertCircle, subActions: ['Checking for new notices', 'Drafting responses', 'Queueing for review'] },
+    28→  { id: 6, name: 'Assign Tasks', desc: 'Assign work to team members', icon: Users, subActions: ['Analyzing workload', 'Assigning 12 tasks', 'Sending notifications'] },
+    29→  { id: 7, name: 'Send Reminders', desc: 'Notify clients for pending items', icon: Bell, subActions: ['Checking pending documents', 'Sending 8 reminders', 'Logging communications'] },
+    30→  { id: 8, name: 'Prepare Reports', desc: 'Generate daily/weekly/monthly reports', icon: BarChart3, subActions: ['Generating daily summary', 'Preparing weekly metrics', 'Creating monthly P&L'] },
+    31→  { id: 9, name: 'AI Recommendations', desc: 'AI CFO/CEO generate recommendations', icon: Brain, subActions: ['Analyzing financial trends', 'Generating cost savings tips', 'Identifying growth opportunities'] },
+    32→  { id: 10, name: 'Update Dashboards', desc: 'Refresh all dashboards with latest data', icon: LayoutDashboard, subActions: ['Refreshing revenue metrics', 'Updating client health scores', 'Syncing real-time data'] },
+    33→]
+    34→
+    35→// ── Sample Execution Log ──
+    36→// DEMO DATA — not yet wired to backend. The "RUN MY FIRM" execution engine
+    37→// has no backend collection yet; these log entries illustrate what a real
+    38→// run would emit. workflowSteps above are configuration, not data.
+    39→const sampleLogEntries = [
+    40→  { time: '06:00:01', step: 1, msg: 'Starting document scan across 3 cloud accounts', type: 'info' as const },
+    41→  { time: '06:00:34', step: 1, msg: 'Found 47 new documents uploaded since last run', type: 'success' as const },
+    42→  { time: '06:01:02', step: 2, msg: 'OCR processing initiated for 47 documents', type: 'info' as const },
+    43→  { time: '06:02:15', step: 2, msg: 'Extracted 94 invoices with 99.2% accuracy', type: 'success' as const },
+    44→  { time: '06:03:00', step: 3, msg: 'Preparing GSTR-1 for 47 clients', type: 'info' as const },
+    45→  { time: '06:04:22', step: 3, msg: 'GSTR-1 prepared for all clients. Total taxable: ₹2,34,56,789', type: 'success' as const },
+    46→  { time: '06:05:10', step: 3, msg: 'GSTR-3B prepared. Net tax liability: ₹18,45,230', type: 'success' as const },
+    47→  { time: '06:06:00', step: 4, msg: 'Downloading 2A/2B data from GST portal', type: 'info' as const },
+    48→  { time: '06:07:45', step: 4, msg: 'Reconciliation complete. 3 mismatches found', type: 'warning' as const },
+    49→  { time: '06:08:20', step: 5, msg: 'No new notices from GST department', type: 'success' as const },
+    50→  { time: '06:09:05', step: 6, msg: 'Assigned 12 tasks across 5 team members', type: 'success' as const },
+    51→  { time: '06:10:00', step: 7, msg: 'Sent 8 reminders to clients for pending documents', type: 'success' as const },
+    52→  { time: '06:11:30', step: 8, msg: 'Generated 3 reports: daily, weekly, monthly', type: 'success' as const },
+    53→  { time: '06:12:15', step: 9, msg: 'AI identified ₹1,23,000 in potential savings', type: 'success' as const },
+    54→  { time: '06:13:00', step: 10, msg: 'All dashboards updated with latest data', type: 'success' as const },
+    55→]
+    56→
+    57→// ── Sample Past Runs ──
+    58→// DEMO DATA — not yet wired to backend. Past-run history has no API route yet.
+    59→const pastRuns = [
+    60→  { id: 1, date: '03/03/2026', startTime: '06:00 AM', duration: '13m 02s', items: 47, status: 'completed' as const },
+    61→  { id: 2, date: '02/03/2026', startTime: '06:00 AM', duration: '11m 48s', items: 43, status: 'completed' as const },
+    62→  { id: 3, date: '01/03/2026', startTime: '06:00 AM', duration: '14m 22s', items: 51, status: 'completed' as const },
+    63→  { id: 4, date: '28/02/2026', startTime: '06:00 AM', duration: '09m 55s', items: 38, status: 'completed' as const },
+    64→  { id: 5, date: '27/02/2026', startTime: '06:00 AM', duration: '—', items: 0, status: 'failed' as const },
+    65→]
+    66→
+    67→// ── Helpers ──
+    68→const logColors = {
+    69→  info: 'text-slate-500',
+    70→  success: 'text-emerald-600',
+    71→  warning: 'text-amber-600',
+    72→  error: 'text-red-600',
+    73→}
+    74→const logBgColors = {
+    75→  info: 'bg-slate-50',
+    76→  success: 'bg-emerald-50/50',
+    77→  warning: 'bg-amber-50/50',
+    78→  error: 'bg-red-50/50',
+    79→}
+    80→
+    81→// ── Animation ──
+    82→const fadeUp = {
+    83→  hidden: { opacity: 0, y: 16 },
+    84→  visible: (i: number) => ({
+    85→    opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.4, ease: 'easeOut' },
+    86→  }),
+    87→}
+    88→
+    89→// ── Main Component ──
+    90→export default function AutopilotPage() {
+    91→  const [activeTab, setActiveTab] = useState('run')
+    92→  const [runState, setRunState] = useState<'idle' | 'running' | 'complete'>('idle')
+    93→  const [currentStep, setCurrentStep] = useState(0)
+    94→  const [stepProgress, setStepProgress] = useState(0)
+    95→  const [logEntries, setLogEntries] = useState(sampleLogEntries)
+    96→  const [schedule, setSchedule] = useState({
+    97→    enabled: true, time: '06:00', days: 'weekdays', timezone: 'IST (UTC+5:30)',
+    98→  })
+    99→
+   100→  // Auto-step through workflow when running
+   101→  useEffect(() => {
+   102→    if (runState !== 'running') return
+   103→
+   104→    const stepDuration = 1200 // ms per step
+   105→    const progressInterval = 50
+   106→    let elapsed = 0
+   107→
+   108→    const progressTimer = setInterval(() => {
+   109→      elapsed += progressInterval
+   110→      const progress = Math.min((elapsed / stepDuration) * 100, 100)
+   111→      setStepProgress(progress)
+   112→
+   113→      if (elapsed >= stepDuration) {
+   114→        clearInterval(progressTimer)
+   115→        if (currentStep < workflowSteps.length - 1) {
+   116→          setCurrentStep(prev => prev + 1)
+   117→          setStepProgress(0)
+   118→        } else {
+   119→          setRunState('complete')
+   120→          setStepProgress(100)
+   121→        }
+   122→      }
+   123→    }, progressInterval)
+   124→
+   125→    return () => clearInterval(progressTimer)
+   126→  }, [runState, currentStep])
+   127→
+   128→  const handleRun = useCallback(() => {
+   129→    if (runState === 'running') return
+   130→    setRunState('running')
+   131→    setCurrentStep(0)
+   132→    setStepProgress(0)
+   133→  }, [runState])
+   134→
+   135→  const handleReset = useCallback(() => {
+   136→    setRunState('idle')
+   137→    setCurrentStep(0)
+   138→    setStepProgress(0)
+   139→  }, [])
+   140→
+   141→  const overallProgress = runState === 'complete'
+   142→    ? 100
+   143→    : runState === 'running'
+   144→      ? ((currentStep + stepProgress / 100) / workflowSteps.length) * 100
+   145→      : 0
+   146→
+   147→  const buttonLabel = runState === 'idle'
+   148→    ? 'RUN MY FIRM\u2122'
+   149→    : runState === 'running'
+   150→      ? 'RUNNING...'
+   151→      : 'COMPLETE \u2713'
+   152→
+   153→  const buttonBg = runState === 'idle'
+   154→    ? 'bg-gradient-to-br from-emerald-500 to-emerald-700'
+   155→    : runState === 'running'
+   156→      ? 'bg-gradient-to-br from-amber-500 to-amber-600'
+   157→      : 'bg-gradient-to-br from-emerald-600 to-emerald-800'
+   158→
+   159→  // KPI metrics
+   160→  const metrics = {
+   161→    runsToday: runState === 'complete' ? 1 : 0,
+   162→    itemsProcessed: runState === 'complete' ? 47 : 0,
+   163→    timeSaved: runState === 'complete' ? '3h 42m' : '0m',
+   164→    successRate: 98.6,
+   165→    nextRun: schedule.enabled ? '04/03/2026 06:00 AM' : 'Not scheduled',
+   166→  }
+   167→
+   168→  return (
+   169→    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
+   170→      {/* Header */}
+   171→      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0}
+   172→        className="flex items-center justify-between">
+   173→        <div className="flex items-center gap-3">
+   174→          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20">
+   175→            <Play className="h-5 w-5 text-white" />
+   176→          </div>
+   177→          <div>
+   178→            <h1 className="text-xl font-bold text-slate-900">Self-Operating Mode</h1>
+   179→            <p className="text-xs text-slate-500">RUN MY FIRM\u2122 — One button runs everything</p>
+   180→          </div>
+   181→        </div>
+   182→        <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
+   183→          <Radio className="h-3 w-3 animate-pulse" /> Autonomous
+   184→        </Badge>
+   185→      </motion.div>
+   186→
+   187→      {/* KPI Row */}
+   188→      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1}
+   189→        className="grid grid-cols-2 md:grid-cols-5 gap-3">
+   190→        {[
+   191→          { label: 'Runs Today', value: String(metrics.runsToday), icon: Play, color: 'text-emerald-600' },
+   192→          { label: 'Items Processed', value: String(metrics.itemsProcessed), icon: Package, color: 'text-emerald-600' },
+   193→          { label: 'Time Saved', value: metrics.timeSaved, icon: Timer, color: 'text-emerald-600' },
+   194→          { label: 'Success Rate', value: `${metrics.successRate}%`, icon: TrendingUp, color: 'text-emerald-600' },
+   195→          { label: 'Next Run', value: '06:00 AM', icon: Calendar, color: 'text-slate-600' },
+   196→        ].map((kpi, i) => (
+   197→          <Card key={i} className="border-slate-200/60 shadow-sm">
+   198→            <CardContent className="p-3">
+   199→              <div className="flex items-center gap-1.5 mb-1">
+   200→                <kpi.icon className={`h-3.5 w-3.5 ${kpi.color}`} />
+   201→                <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{kpi.label}</span>
+   202→              </div>
+   203→              <p className="text-xl font-bold text-slate-900">{kpi.value}</p>
+   204→            </CardContent>
+   205→          </Card>
+   206→        ))}
+   207→      </motion.div>
+   208→
+   209→      {/* RUN MY FIRM Button */}
+   210→      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}
+   211→        className="flex flex-col items-center py-6">
+   212→        <div className="relative">
+   213→          {/* Pulsing ring when running */}
+   214→          {runState === 'running' && (
+   215→            <motion.div
+   216→              className="absolute inset-0 rounded-full bg-amber-400/20"
+   217→              animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+   218→              transition={{ duration: 2, repeat: Infinity }}
+   219→            />
+   220→          )}
+   221→          {runState === 'complete' && (
+   222→            <motion.div
+   223→              className="absolute inset-0 rounded-full bg-emerald-400/20"
+   224→              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+   225→              transition={{ duration: 1.5, repeat: 2 }}
+   226→            />
+   227→          )}
+   228→          <motion.button
+   229→            whileHover={runState === 'idle' ? { scale: 1.05 } : {}}
+   230→            whileTap={runState === 'idle' ? { scale: 0.95 } : {}}
+   231→            onClick={handleRun}
+   232→            disabled={runState === 'running'}
+   233→            className={`relative h-[120px] w-[120px] md:h-[140px] md:w-[140px] rounded-full ${buttonBg} shadow-2xl shadow-emerald-600/30 flex flex-col items-center justify-center text-white transition-all duration-500 cursor-pointer disabled:cursor-wait`}
+   234→          >
+   235→            <AnimatePresence mode="wait">
+   236→              {runState === 'idle' && (
+   237→                <motion.div key="idle" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+   238→                  className="flex flex-col items-center gap-1">
+   239→                  <Play className="h-8 w-8 md:h-10 md:w-10" fill="white" />
+   240→                  <span className="text-[10px] md:text-xs font-bold tracking-wide">{buttonLabel}</span>
+   241→                </motion.div>
+   242→              )}
+   243→              {runState === 'running' && (
+   244→                <motion.div key="running" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+   245→                  className="flex flex-col items-center gap-1">
+   246→                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
+   247→                    <Zap className="h-8 w-8 md:h-10 md:w-10" fill="white" />
+   248→                  </motion.div>
+   249→                  <span className="text-[10px] md:text-xs font-bold tracking-wide">{buttonLabel}</span>
+   250→                </motion.div>
+   251→              )}
+   252→              {runState === 'complete' && (
+   253→                <motion.div key="complete" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+   254→                  className="flex flex-col items-center gap-1">
+   255→                  <CheckCircle className="h-8 w-8 md:h-10 md:w-10" />
+   256→                  <span className="text-[10px] md:text-xs font-bold tracking-wide">{buttonLabel}</span>
+   257→                </motion.div>
+   258→              )}
+   259→            </AnimatePresence>
+   260→          </motion.button>
+   261→        </div>
+   262→
+   263→        {/* Overall Progress */}
+   264→        {(runState === 'running' || runState === 'complete') && (
+   265→          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+   266→            className="mt-6 w-full max-w-xl">
+   267→            <div className="flex items-center justify-between mb-2">
+   268→              <span className="text-xs font-medium text-slate-600">
+   269→                {runState === 'complete' ? 'All steps completed' : `Step ${currentStep + 1}/${workflowSteps.length}: ${workflowSteps[currentStep].name}`}
+   270→              </span>
+   271→              <span className="text-xs font-bold text-emerald-600">{Math.round(overallProgress)}%</span>
+   272→            </div>
+   273→            <Progress value={overallProgress} className="h-2.5" />
+   274→          </motion.div>
+   275→        )}
+   276→
+   277→        {runState === 'complete' && (
+   278→          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+   279→            className="mt-4">
+   280→            <Button variant="outline" onClick={handleReset} className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+   281→              <RotateCcw className="h-4 w-4" /> Run Again
+   282→            </Button>
+   283→          </motion.div>
+   284→        )}
+   285→      </motion.div>
+   286→
+   287→      {/* Tabs */}
+   288→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   289→        <TabsList className="bg-slate-100/80">
+   290→          {['run', 'progress', 'log', 'schedule', 'history'].map(t => (
+   291→            <TabsTrigger key={t} value={t} className="text-xs capitalize data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+   292→              {t}
+   293→            </TabsTrigger>
+   294→          ))}
+   295→        </TabsList>
+   296→
+   297→        {/* ── Run Tab ── */}
+   298→        <TabsContent value="run" className="space-y-4 mt-4">
+   299→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   300→            {/* Workflow Steps */}
+   301→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   302→              <Card className="border-slate-200/60 shadow-sm">
+   303→                <CardHeader className="pb-2">
+   304→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   305→                    <Zap className="h-4 w-4 text-emerald-600" /> 10-Step Workflow
+   306→                  </CardTitle>
+   307→                </CardHeader>
+   308→                <CardContent>
+   309→                  <div className="space-y-2">
+   310→                    {workflowSteps.map((step, i) => {
+   311→                      const stepState = runState === 'complete' ? 'done'
+   312→                        : runState === 'running' && i < currentStep ? 'done'
+   313→                        : runState === 'running' && i === currentStep ? 'active'
+   314→                        : 'pending'
+   315→
+   316→                      return (
+   317→                        <motion.div key={step.id}
+   318→                          initial={{ opacity: 0, x: -8 }}
+   319→                          animate={{ opacity: 1, x: 0 }}
+   320→                          transition={{ delay: i * 0.04 }}
+   321→                          className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all ${
+   322→                            stepState === 'active' ? 'border-emerald-300 bg-emerald-50/50' :
+   323→                            stepState === 'done' ? 'border-emerald-100 bg-emerald-50/30' :
+   324→                            'border-slate-100 bg-slate-50/30'
+   325→                          }`}>
+   326→                          <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold shrink-0 ${
+   327→                            stepState === 'active' ? 'bg-emerald-500 text-white' :
+   328→                            stepState === 'done' ? 'bg-emerald-100 text-emerald-700' :
+   329→                            'bg-slate-100 text-slate-400'
+   330→                          }`}>
+   331→                            {stepState === 'done' ? <CheckCircle className="h-4 w-4" /> : step.id}
+   332→                          </div>
+   333→                          <div className="flex-1 min-w-0">
+   334→                            <div className="flex items-center gap-2">
+   335→                              <step.icon className={`h-3.5 w-3.5 ${stepState === 'active' ? 'text-emerald-600' : stepState === 'done' ? 'text-emerald-500' : 'text-slate-400'}`} />
+   336→                              <p className={`text-xs font-medium ${stepState === 'active' ? 'text-emerald-700' : stepState === 'done' ? 'text-slate-700' : 'text-slate-500'}`}>
+   337→                                {step.name}
+   338→                              </p>
+   339→                            </div>
+   340→                            <p className="text-[10px] text-slate-400">{step.desc}</p>
+   341→                          </div>
+   342→                          {stepState === 'active' && (
+   343→                            <div className="shrink-0">
+   344→                              <Progress value={stepProgress} className="h-1.5 w-16" />
+   345→                            </div>
+   346→                          )}
+   347→                          {stepState === 'done' && (
+   348→                            <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+   349→                          )}
+   350→                        </motion.div>
+   351→                      )
+   352→                    })}
+   353→                  </div>
+   354→                </CardContent>
+   355→              </Card>
+   356→            </motion.div>
+   357→
+   358→            {/* Results Summary */}
+   359→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={4}>
+   360→              <Card className="border-slate-200/60 shadow-sm h-full">
+   361→                <CardHeader className="pb-2">
+   362→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   363→                    <BarChart3 className="h-4 w-4 text-emerald-600" /> Results Summary
+   364→                  </CardTitle>
+   365→                </CardHeader>
+   366→                <CardContent>
+   367→                  <div className="grid grid-cols-2 gap-3">
+   368→                    {[
+   369→                      { label: 'Docs Processed', value: runState === 'complete' ? '47' : '—', icon: Search, color: 'text-emerald-600' },
+   370→                      { label: 'Returns Prepared', value: runState === 'complete' ? '94' : '—', icon: FileText, color: 'text-emerald-600' },
+   371→                      { label: 'Reconciliations', value: runState === 'complete' ? '47' : '—', icon: CheckCircle, color: 'text-emerald-600' },
+   372→                      { label: 'Tasks Assigned', value: runState === 'complete' ? '12' : '—', icon: Users, color: 'text-emerald-600' },
+   373→                      { label: 'Reminders Sent', value: runState === 'complete' ? '8' : '—', icon: Bell, color: 'text-emerald-600' },
+   374→                      { label: 'Reports Generated', value: runState === 'complete' ? '3' : '—', icon: BarChart3, color: 'text-emerald-600' },
+   375→                    ].map((item, i) => (
+   376→                      <div key={i} className="p-3 rounded-lg bg-slate-50/80 border border-slate-100">
+   377→                        <div className="flex items-center gap-1.5 mb-1">
+   378→                          <item.icon className={`h-3.5 w-3.5 ${item.color}`} />
+   379→                          <span className="text-[10px] text-slate-500 uppercase">{item.label}</span>
+   380→                        </div>
+   381→                        <p className="text-lg font-bold text-slate-900">{item.value}</p>
+   382→                      </div>
+   383→                    ))}
+   384→                  </div>
+   385→
+   386→                  {runState === 'complete' && (
+   387→                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+   388→                      className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   389→                      <div className="flex items-center gap-2 mb-1">
+   390→                        <CheckCircle className="h-4 w-4 text-emerald-600" />
+   391→                        <span className="text-xs font-semibold text-emerald-700">Run Complete</span>
+   392→                      </div>
+   393→                      <p className="text-[11px] text-emerald-600">
+   394→                        All 10 steps completed successfully in 13m 02s. 47 clients processed, 94 returns prepared, ₹1,23,000 potential savings identified.
+   395→                      </p>
+   396→                    </motion.div>
+   397→                  )}
+   398→
+   399→                  {runState === 'idle' && (
+   400→                    <div className="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
+   401→                      <div className="flex items-center gap-2 mb-1">
+   402→                        <Play className="h-4 w-4 text-slate-400" />
+   403→                        <span className="text-xs font-semibold text-slate-500">Ready to Run</span>
+   404→                      </div>
+   405→                      <p className="text-[11px] text-slate-400">
+   406→                        Click the RUN MY FIRM\u2122 button above to execute all 10 workflow steps automatically.
+   407→                      </p>
+   408→                    </div>
+   409→                  )}
+   410→                </CardContent>
+   411→              </Card>
+   412→            </motion.div>
+   413→          </div>
+   414→        </TabsContent>
+   415→
+   416→        {/* ── Progress Tab ── */}
+   417→        <TabsContent value="progress" className="space-y-4 mt-4">
+   418→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   419→            <Card className="border-slate-200/60 shadow-sm">
+   420→              <CardHeader className="pb-2">
+   421→                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   422→                  <Activity className="h-4 w-4 text-emerald-600" /> Step-by-Step Progress
+   423→                </CardTitle>
+   424→              </CardHeader>
+   425→              <CardContent>
+   426→                <div className="space-y-4">
+   427→                  {workflowSteps.map((step, i) => {
+   428→                    const stepState = runState === 'complete' ? 'done'
+   429→                      : runState === 'running' && i < currentStep ? 'done'
+   430→                      : runState === 'running' && i === currentStep ? 'active'
+   431→                      : 'pending'
+   432→
+   433→                    return (
+   434→                      <div key={step.id} className={`p-4 rounded-xl border transition-all ${
+   435→                        stepState === 'active' ? 'border-emerald-300 bg-emerald-50/50 shadow-sm' :
+   436→                        stepState === 'done' ? 'border-emerald-100 bg-white' :
+   437→                        'border-slate-100 bg-slate-50/30'
+   438→                      }`}>
+   439→                        <div className="flex items-center justify-between mb-2">
+   440→                          <div className="flex items-center gap-3">
+   441→                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${
+   442→                              stepState === 'active' ? 'bg-emerald-500 text-white' :
+   443→                              stepState === 'done' ? 'bg-emerald-100 text-emerald-700' :
+   444→                              'bg-slate-100 text-slate-400'
+   445→                            }`}>
+   446→                              {stepState === 'done' ? <CheckCircle className="h-5 w-5" /> :
+   447→                               stepState === 'active' ? <Zap className="h-5 w-5" /> :
+   448→                               <span className="text-sm font-bold">{step.id}</span>}
+   449→                            </div>
+   450→                            <div>
+   451→                              <p className={`text-sm font-semibold ${stepState === 'active' ? 'text-emerald-700' : 'text-slate-900'}`}>
+   452→                                {step.name}
+   453→                              </p>
+   454→                              <p className="text-[10px] text-slate-500">{step.desc}</p>
+   455→                            </div>
+   456→                          </div>
+   457→                          <Badge variant={stepState === 'done' ? 'default' : stepState === 'active' ? 'default' : 'secondary'}
+   458→                            className={`text-[10px] ${stepState === 'done' ? 'bg-emerald-100 text-emerald-700' : stepState === 'active' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+   459→                            {stepState === 'done' ? 'Complete' : stepState === 'active' ? 'In Progress' : 'Pending'}
+   460→                          </Badge>
+   461→                        </div>
+   462→                        {stepState === 'active' && (
+   463→                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2">
+   464→                            <Progress value={stepProgress} className="h-2 mb-2" />
+   465→                            <div className="space-y-1">
+   466→                              {step.subActions.map((sub, j) => (
+   467→                                <div key={j} className="flex items-center gap-2 text-[10px]">
+   468→                                  <ArrowRight className="h-3 w-3 text-emerald-500" />
+   469→                                  <span className={`${stepProgress > ((j + 1) / step.subActions.length) * 100 ? 'text-emerald-600' : 'text-slate-400'}`}>
+   470→                                    {sub}
+   471→                                  </span>
+   472→                                </div>
+   473→                              ))}
+   474→                            </div>
+   475→                          </motion.div>
+   476→                        )}
+   477→                      </div>
+   478→                    )
+   479→                  })}
+   480→                </div>
+   481→              </CardContent>
+   482→            </Card>
+   483→          </motion.div>
+   484→        </TabsContent>
+   485→
+   486→        {/* ── Log Tab ── */}
+   487→        <TabsContent value="log" className="space-y-4 mt-4">
+   488→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   489→            <Card className="border-slate-200/60 shadow-sm">
+   490→              <CardHeader className="pb-2">
+   491→                <div className="flex items-center justify-between">
+   492→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   493→                    <FileText className="h-4 w-4 text-emerald-600" /> Execution Log
+   494→                  </CardTitle>
+   495→                  <Badge variant="outline" className="text-[10px]">{logEntries.length} entries</Badge>
+   496→                </div>
+   497→              </CardHeader>
+   498→              <CardContent>
+   499→                <ScrollArea className="max-h-[520px]">
+   500→                  <div className="space-y-1">
+   501→                    {logEntries.map((entry, i) => (
+   502→                      <motion.div key={i}
+   503→                        initial={{ opacity: 0 }}
+   504→                        animate={{ opacity: 1 }}
+   505→                        transition={{ delay: i * 0.03 }}
+   506→                        className={`flex items-start gap-3 p-2.5 rounded-lg ${logBgColors[entry.type]} hover:bg-slate-50 transition-colors`}>
+   507→                        <span className="text-[10px] font-mono text-slate-400 shrink-0 pt-0.5">{entry.time}</span>
+   508→                        <Badge variant="outline" className="text-[9px] shrink-0 py-0 px-1.5">
+   509→                          Step {entry.step}
+   510→                        </Badge>
+   511→                        <p className={`text-[11px] ${logColors[entry.type]}`}>{entry.msg}</p>
+   512→                      </motion.div>
+   513→                    ))}
+   514→                  </div>
+   515→                </ScrollArea>
+   516→              </CardContent>
+   517→            </Card>
+   518→          </motion.div>
+   519→        </TabsContent>
+   520→
+   521→        {/* ── Schedule Tab ── */}
+   522→        <TabsContent value="schedule" className="space-y-4 mt-4">
+   523→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   524→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   525→              <Card className="border-slate-200/60 shadow-sm">
+   526→                <CardHeader className="pb-2">
+   527→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   528→                    <Calendar className="h-4 w-4 text-emerald-600" /> Schedule Settings
+   529→                  </CardTitle>
+   530→                </CardHeader>
+   531→                <CardContent className="space-y-4">
+   532→                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80">
+   533→                    <div>
+   534→                      <p className="text-xs font-medium text-slate-900">Auto-Run</p>
+   535→                      <p className="text-[10px] text-slate-500">Enable scheduled automatic runs</p>
+   536→                    </div>
+   537→                    <Badge className={schedule.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}>
+   538→                      {schedule.enabled ? 'Enabled' : 'Disabled'}
+   539→                    </Badge>
+   540→                  </div>
+   541→
+   542→                  <div className="space-y-3">
+   543→                    <div className="p-3 rounded-lg border border-slate-200/80">
+   544→                      <p className="text-[10px] text-slate-500 uppercase mb-1">Run Time</p>
+   545→                      <div className="flex items-center gap-2">
+   546→                        <Clock className="h-4 w-4 text-emerald-600" />
+   547→                        <span className="text-sm font-bold text-slate-900">{schedule.time}</span>
+   548→                        <span className="text-[10px] text-slate-400">IST</span>
+   549→                      </div>
+   550→                    </div>
+   551→
+   552→                    <div className="p-3 rounded-lg border border-slate-200/80">
+   553→                      <p className="text-[10px] text-slate-500 uppercase mb-1">Frequency</p>
+   554→                      <div className="flex items-center gap-2">
+   555→                        <Calendar className="h-4 w-4 text-emerald-600" />
+   556→                        <span className="text-sm font-bold text-slate-900 capitalize">{schedule.days}</span>
+   557→                      </div>
+   558→                    </div>
+   559→
+   560→                    <div className="p-3 rounded-lg border border-slate-200/80">
+   561→                      <p className="text-[10px] text-slate-500 uppercase mb-1">Timezone</p>
+   562→                      <div className="flex items-center gap-2">
+   563→                        <Settings className="h-4 w-4 text-emerald-600" />
+   564→                        <span className="text-sm font-bold text-slate-900">{schedule.timezone}</span>
+   565→                      </div>
+   566→                    </div>
+   567→                  </div>
+   568→
+   569→                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   570→                    <p className="text-xs font-semibold text-emerald-700">Next Scheduled Run</p>
+   571→                    <p className="text-sm font-bold text-emerald-800 mt-1">{metrics.nextRun}</p>
+   572→                  </div>
+   573→                </CardContent>
+   574→              </Card>
+   575→            </motion.div>
+   576→
+   577→            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   578→              <Card className="border-slate-200/60 shadow-sm">
+   579→                <CardHeader className="pb-2">
+   580→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   581→                    <Settings className="h-4 w-4 text-emerald-600" /> Run Configuration
+   582→                  </CardTitle>
+   583→                </CardHeader>
+   584→                <CardContent className="space-y-3">
+   585→                  {[
+   586→                    { label: 'Skip steps with no new data', enabled: true },
+   587→                    { label: 'Send email on completion', enabled: true },
+   588→                    { label: 'Send Slack notification', enabled: false },
+   589→                    { label: 'Auto-assign tasks after run', enabled: true },
+   590→                    { label: 'Generate AI recommendations', enabled: true },
+   591→                    { label: 'Pause on critical errors', enabled: true },
+   592→                    { label: 'Retry failed steps', enabled: false },
+   593→                    { label: 'Log all sub-actions', enabled: true },
+   594→                  ].map((config, i) => (
+   595→                    <div key={i} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+   596→                      <span className="text-xs text-slate-700">{config.label}</span>
+   597→                      <Badge className={config.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}>
+   598→                        {config.enabled ? 'On' : 'Off'}
+   599→                      </Badge>
+   600→                    </div>
+   601→                  ))}
+   602→                </CardContent>
+   603→              </Card>
+   604→            </motion.div>
+   605→          </div>
+   606→        </TabsContent>
+   607→
+   608→        {/* ── History Tab ── */}
+   609→        <TabsContent value="history" className="space-y-4 mt-4">
+   610→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2}>
+   611→            <Card className="border-slate-200/60 shadow-sm">
+   612→              <CardHeader className="pb-2">
+   613→                <div className="flex items-center justify-between">
+   614→                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+   615→                    <Clock className="h-4 w-4 text-emerald-600" /> Last 10 Runs
+   616→                  </CardTitle>
+   617→                  <Badge variant="outline" className="text-[10px]">{pastRuns.length} runs</Badge>
+   618→                </div>
+   619→              </CardHeader>
+   620→              <CardContent>
+   621→                <div className="space-y-2">
+   622→                  {pastRuns.map((run, i) => (
+   623→                    <motion.div key={run.id}
+   624→                      initial={{ opacity: 0, x: -8 }}
+   625→                      animate={{ opacity: 1, x: 0 }}
+   626→                      transition={{ delay: i * 0.05 }}
+   627→                      className="flex items-center justify-between p-3 rounded-lg bg-slate-50/60 border border-slate-100 hover:bg-slate-50 transition-colors">
+   628→                      <div className="flex items-center gap-3">
+   629→                        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${run.status === 'completed' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+   630→                          {run.status === 'completed' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+   631→                        </div>
+   632→                        <div>
+   633→                          <p className="text-xs font-medium text-slate-900">{run.date}</p>
+   634→                          <p className="text-[10px] text-slate-400">Started at {run.startTime}</p>
+   635→                        </div>
+   636→                      </div>
+   637→                      <div className="flex items-center gap-4">
+   638→                        <div className="text-right hidden sm:block">
+   639→                          <p className="text-[10px] text-slate-500">Duration</p>
+   640→                          <p className="text-xs font-medium text-slate-700">{run.duration}</p>
+   641→                        </div>
+   642→                        <div className="text-right hidden sm:block">
+   643→                          <p className="text-[10px] text-slate-500">Items</p>
+   644→                          <p className="text-xs font-medium text-slate-700">{run.items}</p>
+   645→                        </div>
+   646→                        <Badge className={run.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>
+   647→                          {run.status === 'completed' ? 'Success' : 'Failed'}
+   648→                        </Badge>
+   649→                      </div>
+   650→                    </motion.div>
+   651→                  ))}
+   652→                </div>
+   653→              </CardContent>
+   654→            </Card>
+   655→          </motion.div>
+   656→
+   657→          {/* History Stats */}
+   658→          <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3}>
+   659→            <Card className="border-slate-200/60 shadow-sm">
+   660→              <CardHeader className="pb-2">
+   661→                <CardTitle className="text-sm font-semibold">Run Statistics</CardTitle>
+   662→              </CardHeader>
+   663→              <CardContent>
+   664→                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   665→                  {[
+   666→                    { label: 'Total Runs', value: '28', sub: 'this month' },
+   667→                    { label: 'Success Rate', value: '96.4%', sub: '27/28 runs' },
+   668→                    { label: 'Avg Duration', value: '12m 18s', sub: 'per run' },
+   669→                    { label: 'Total Items', value: '1,234', sub: 'processed' },
+   670→                  ].map((stat, i) => (
+   671→                    <div key={i} className="text-center p-3 rounded-lg bg-slate-50/80">
+   672→                      <p className="text-[10px] text-slate-500 uppercase">{stat.label}</p>
+   673→                      <p className="text-xl font-bold text-slate-900 mt-1">{stat.value}</p>
+   674→                      <p className="text-[10px] text-slate-400">{stat.sub}</p>
+   675→                    </div>
+   676→                  ))}
+   677→                </div>
+   678→              </CardContent>
+   679→            </Card>
+   680→          </motion.div>
+   681→        </TabsContent>
+   682→      </Tabs>
+   683→    </div>
+   684→  )
+   685→}
+   686→

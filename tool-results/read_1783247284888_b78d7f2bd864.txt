@@ -1,0 +1,691 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→import {
+    15→  Table,
+    16→  TableBody,
+    17→  TableCell,
+    18→  TableHead,
+    19→  TableHeader,
+    20→  TableRow,
+    21→} from '@/components/ui/table';
+    22→import {
+    23→  Dialog,
+    24→  DialogContent,
+    25→  DialogHeader,
+    26→  DialogTitle,
+    27→  DialogDescription,
+    28→  DialogFooter,
+    29→  DialogTrigger,
+    30→} from '@/components/ui/dialog';
+    31→import {
+    32→  Select,
+    33→  SelectContent,
+    34→  SelectItem,
+    35→  SelectTrigger,
+    36→  SelectValue,
+    37→} from '@/components/ui/select';
+    38→import {
+    39→  FileBarChart2,
+    40→  Sparkles,
+    41→  HeartPulse,
+    42→  ShieldCheck,
+    43→  CheckCircle,
+    44→  TrendingUp,
+    45→  Building2,
+    46→  Download,
+    47→  Loader2,
+    48→  FileText,
+    49→  FileSpreadsheet,
+    50→  Clock,
+    51→  Eye,
+    52→} from 'lucide-react';
+    53→import { motion, AnimatePresence } from 'framer-motion';
+    54→import { EmptyState } from '@/components/shared/EmptyState';
+    55→
+    56→// ─── Color Palette (Emerald) ──────────────────────────────────────────────
+    57→const COLORS = {
+    58→  emerald: '#10b981',
+    59→  emeraldDark: '#059669',
+    60→  emeraldLight: '#d1fae5',
+    61→  teal: '#14b8a6',
+    62→  amber: '#f59e0b',
+    63→  red: '#ef4444',
+    64→  purple: '#8b5cf6',
+    65→  blue: '#3b82f6',
+    66→  slate: '#64748b',
+    67→};
+    68→
+    69→// ─── Types ─────────────────────────────────────────────────────────────────
+    70→interface ReportType {
+    71→  id: string;
+    72→  title: string;
+    73→  description: string;
+    74→  icon: React.ElementType;
+    75→  accentColor: string;
+    76→  accentBg: string;
+    77→  accentBorder: string;
+    78→  gradientFrom: string;
+    79→  gradientTo: string;
+    80→  lastGenerated: string | null;
+    81→}
+    82→
+    83→interface GeneratedReport {
+    84→  id: string;
+    85→  title: string;
+    86→  type: string;
+    87→  period: string;
+    88→  format: 'PDF' | 'Excel';
+    89→  generatedDate: string;
+    90→  status: 'generated' | 'processing';
+    91→}
+    92→
+    93→// ─── Report Type Definitions ───────────────────────────────────────────────
+    94→const reportTypes: ReportType[] = [
+    95→  {
+    96→    id: 'client-health',
+    97→    title: 'Client Health Report',
+    98→    description: 'Comprehensive health analysis of all clients with compliance scores, risk factors, and improvement recommendations.',
+    99→    icon: HeartPulse,
+   100→    accentColor: 'text-emerald-600 dark:text-emerald-400',
+   101→    accentBg: 'bg-emerald-100 dark:bg-emerald-950/50',
+   102→    accentBorder: 'border-emerald-200 dark:border-emerald-800',
+   103→    gradientFrom: 'from-emerald-500',
+   104→    gradientTo: 'to-emerald-600',
+   105→    lastGenerated: '2025-03-04',
+   106→  },
+   107→  {
+   108→    id: 'gst-risk',
+   109→    title: 'GST Risk Report',
+   110→    description: 'Detailed risk assessment covering ITC mismatches, filing delays, and potential audit triggers for the selected period.',
+   111→    icon: ShieldCheck,
+   112→    accentColor: 'text-red-600 dark:text-red-400',
+   113→    accentBg: 'bg-red-100 dark:bg-red-950/50',
+   114→    accentBorder: 'border-red-200 dark:border-red-800',
+   115→    gradientFrom: 'from-red-500',
+   116→    gradientTo: 'to-red-600',
+   117→    lastGenerated: '2025-03-03',
+   118→  },
+   119→  {
+   120→    id: 'compliance',
+   121→    title: 'Compliance Report',
+   122→    description: 'Filing compliance overview with match rates, deadline adherence, and regulatory compliance metrics across clients.',
+   123→    icon: CheckCircle,
+   124→    accentColor: 'text-blue-600 dark:text-blue-400',
+   125→    accentBg: 'bg-blue-100 dark:bg-blue-950/50',
+   126→    accentBorder: 'border-blue-200 dark:border-blue-800',
+   127→    gradientFrom: 'from-blue-500',
+   128→    gradientTo: 'to-blue-600',
+   129→    lastGenerated: '2025-03-02',
+   130→  },
+   131→  {
+   132→    id: 'firm-performance',
+   133→    title: 'Firm Performance Report',
+   134→    description: 'Practice performance analytics including revenue per client, team productivity, filing efficiency, and growth metrics.',
+   135→    icon: TrendingUp,
+   136→    accentColor: 'text-purple-600 dark:text-purple-400',
+   137→    accentBg: 'bg-purple-100 dark:bg-purple-950/50',
+   138→    accentBorder: 'border-purple-200 dark:border-purple-800',
+   139→    gradientFrom: 'from-purple-500',
+   140→    gradientTo: 'to-purple-600',
+   141→    lastGenerated: '2025-03-01',
+   142→  },
+   143→  {
+   144→    id: 'board-report',
+   145→    title: 'Board Report',
+   146→    description: 'Executive summary for board presentations with KPIs, trend analysis, risk highlights, and strategic recommendations.',
+   147→    icon: Building2,
+   148→    accentColor: 'text-amber-600 dark:text-amber-400',
+   149→    accentBg: 'bg-amber-100 dark:bg-amber-950/50',
+   150→    accentBorder: 'border-amber-200 dark:border-amber-800',
+   151→    gradientFrom: 'from-amber-500',
+   152→    gradientTo: 'to-amber-600',
+   153→    lastGenerated: '2025-02-28',
+   154→  },
+   155→];
+   156→
+   157→// ─── Mock Generated Reports ────────────────────────────────────────────────
+   158→// PT-1-a: Real reports are now sourced from /api/ai-reports. The previous mock
+   159→// list is removed; an empty state is shown until the first report is generated.
+   160→const mockReports: GeneratedReport[] = [];
+   161→
+   162→const periodOptions = [
+   163→  'Mar 2025', 'Feb 2025', 'Jan 2025',
+   164→  'Q3 2025 (Jan-Mar)', 'Q2 2025 (Oct-Dec)', 'Q1 2025 (Jul-Sep)',
+   165→  'FY 2024-25', 'FY 2023-24',
+   166→];
+   167→
+   168→// ─── Animated Card ─────────────────────────────────────────────────────────
+   169→function AnimatedCard({
+   170→  children,
+   171→  delay = 0,
+   172→  className = '',
+   173→}: {
+   174→  children: React.ReactNode;
+   175→  delay?: number;
+   176→  className?: string;
+   177→}) {
+   178→  return (
+   179→    <motion.div
+   180→      initial={{ opacity: 0, y: 20 }}
+   181→      animate={{ opacity: 1, y: 0 }}
+   182→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   183→    >
+   184→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   185→        {children}
+   186→      </Card>
+   187→    </motion.div>
+   188→  );
+   189→}
+   190→
+   191→// ─── Skeletons ─────────────────────────────────────────────────────────────
+   192→function ReportCardSkeleton() {
+   193→  return (
+   194→    <div className="p-6 space-y-4">
+   195→      <div className="flex items-center gap-3">
+   196→        <Skeleton className="h-10 w-10 rounded-xl" />
+   197→        <div className="space-y-1.5">
+   198→          <Skeleton className="h-4 w-32" />
+   199→          <Skeleton className="h-3 w-24" />
+   200→        </div>
+   201→      </div>
+   202→      <Skeleton className="h-3 w-full" />
+   203→      <Skeleton className="h-8 w-24 rounded-lg" />
+   204→    </div>
+   205→  );
+   206→}
+   207→
+   208→function TableSkeleton() {
+   209→  return (
+   210→    <div className="space-y-3">
+   211→      {[1, 2, 3, 4].map(i => (
+   212→        <Skeleton key={i} className="h-12 w-full rounded-lg" />
+   213→      ))}
+   214→    </div>
+   215→  );
+   216→}
+   217→
+   218→// ─── Format date ───────────────────────────────────────────────────────────
+   219→function formatDate(dateStr: string): string {
+   220→  return new Date(dateStr).toLocaleDateString('en-IN', {
+   221→    day: 'numeric',
+   222→    month: 'short',
+   223→    year: 'numeric',
+   224→  });
+   225→}
+   226→
+   227→// ═══════════════════════════════════════════════════════════════════════════
+   228→// MAIN COMPONENT
+   229→// ═══════════════════════════════════════════════════════════════════════════
+   230→export default function AIExecutiveReportsPage() {
+   231→  // ── State ────────────────────────────────────────────────────────────────
+   232→  const [reports, setReports] = useState<GeneratedReport[]>([]);
+   233→  const [loading, setLoading] = useState(true);
+   234→  const [dialogOpen, setDialogOpen] = useState(false);
+   235→  const [selectedType, setSelectedType] = useState<string>('');
+   236→  const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+   237→  const [selectedFormat, setSelectedFormat] = useState<'PDF' | 'Excel'>('PDF');
+   238→  const [generating, setGenerating] = useState(false);
+   239→  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+   240→
+   241→  // ── Fetch reports ────────────────────────────────────────────────────────
+   242→  const fetchReports = useCallback(async () => {
+   243→    try {
+   244→      setLoading(true);
+   245→      const res = await fetch('/api/ai-reports');
+   246→      if (res.ok) {
+   247→        const data = await res.json();
+   248→        // PT-1-a: Use only real reports from the API. No mock fallback.
+   249→        const list: GeneratedReport[] = Array.isArray(data.reports)
+   250→          ? data.reports.map((r: any) => ({
+   251→              id: String(r.id ?? `r-${Math.random().toString(36).slice(2)}`),
+   252→              title: r.title ?? r.reportType ?? 'Untitled report',
+   253→              type: r.reportType ?? r.type ?? 'business_snapshot',
+   254→              period: r.period ?? '',
+   255→              format: r.format === 'Excel' || r.format === 'excel' ? 'Excel' : 'PDF',
+   256→              generatedDate: r.generatedDate ?? new Date().toISOString().split('T')[0],
+   257→              status: r.status === 'processing' ? 'processing' : 'generated',
+   258→            }))
+   259→          : [];
+   260→        setReports(list);
+   261→      } else {
+   262→        setReports([]);
+   263→      }
+   264→    } catch {
+   265→      setReports([]);
+   266→    } finally {
+   267→      setLoading(false);
+   268→    }
+   269→  }, []);
+   270→
+   271→  useEffect(() => {
+   272→    fetchReports();
+   273→  }, [fetchReports]);
+   274→
+   275→  // ── Generate report ──────────────────────────────────────────────────────
+   276→  const handleGenerate = useCallback(async () => {
+   277→    if (!selectedType || !selectedPeriod) return;
+   278→
+   279→    setGenerating(true);
+   280→    setGeneratedLink(null);
+   281→
+   282→    try {
+   283→      const res = await fetch('/api/ai-reports', {
+   284→        method: 'POST',
+   285→        headers: { 'Content-Type': 'application/json' },
+   286→        body: JSON.stringify({
+   287→          type: selectedType,
+   288→          period: selectedPeriod,
+   289→          format: selectedFormat,
+   290→        }),
+   291→      });
+   292→
+   293→      if (res.ok) {
+   294→        const data = await res.json();
+   295→        setGeneratedLink(data.downloadUrl || `/reports/${selectedType}-${Date.now()}.${selectedFormat === 'PDF' ? 'pdf' : 'xlsx'}`);
+   296→
+   297→        // Add to reports list
+   298→        const newReport: GeneratedReport = {
+   299→          id: `r-${Date.now()}`,
+   300→          title: `${reportTypes.find(r => r.id === selectedType)?.title || 'Report'} — ${selectedPeriod}`,
+   301→          type: selectedType,
+   302→          period: selectedPeriod,
+   303→          format: selectedFormat,
+   304→          generatedDate: new Date().toISOString().split('T')[0],
+   305→          status: 'generated',
+   306→        };
+   307→        setReports(prev => [newReport, ...prev]);
+   308→      } else {
+   309→        // PT-1-a: API failed — surface a no-op state instead of simulating generation.
+   310→        setGeneratedLink(null);
+   311→      }
+   312→    } catch {
+   313→      // PT-1-a: Network error — do not simulate generation.
+   314→      setGeneratedLink(null);
+   315→    } finally {
+   316→      setGenerating(false);
+   317→    }
+   318→  }, [selectedType, selectedPeriod, selectedFormat]);
+   319→
+   320→  // ── Open generate dialog for a specific type ─────────────────────────────
+   321→  const openGenerateDialog = (typeId: string) => {
+   322→    setSelectedType(typeId);
+   323→    setSelectedPeriod('');
+   324→    setSelectedFormat('PDF');
+   325→    setGeneratedLink(null);
+   326→    setDialogOpen(true);
+   327→  };
+   328→
+   329→  // ── Render ───────────────────────────────────────────────────────────────
+   330→  return (
+   331→    <div className="p-4 md:p-6 space-y-4">
+   332→      {/* ═══ PAGE HEADER ═══ */}
+   333→      <motion.div
+   334→        initial={{ opacity: 0, y: -10 }}
+   335→        animate={{ opacity: 1, y: 0 }}
+   336→        transition={{ duration: 0.4 }}
+   337→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   338→      >
+   339→        <div className="flex items-center gap-3">
+   340→          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950/50">
+   341→            <FileBarChart2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   342→          </div>
+   343→          <div>
+   344→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+   345→              AI Executive Reports
+   346→            </h1>
+   347→            <p className="text-sm text-muted-foreground mt-0.5">
+   348→              One-click intelligent report generation
+   349→            </p>
+   350→          </div>
+   351→        </div>
+   352→        <Badge
+   353→          variant="outline"
+   354→          className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
+   355→        >
+   356→          <Sparkles className="h-3.5 w-3.5" />
+   357→          AI Powered
+   358→        </Badge>
+   359→      </motion.div>
+   360→
+   361→      {/* ═══ REPORT TYPES GRID ═══ */}
+   362→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+   363→        {reportTypes.map((type, index) => (
+   364→          <AnimatedCard key={type.id} delay={0.05 + index * 0.05}>
+   365→            <CardContent className="p-5">
+   366→              <div className="space-y-4">
+   367→                {/* Icon with gradient */}
+   368→                <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${type.gradientFrom} ${type.gradientTo} shadow-sm`}>
+   369→                  <type.icon className="h-5 w-5 text-white" />
+   370→                </div>
+   371→
+   372→                {/* Title & Description */}
+   373→                <div>
+   374→                  <h3 className="text-sm font-semibold text-foreground">
+   375→                    {type.title}
+   376→                  </h3>
+   377→                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+   378→                    {type.description}
+   379→                  </p>
+   380→                </div>
+   381→
+   382→                {/* Last Generated */}
+   383→                {type.lastGenerated && (
+   384→                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+   385→                    <Clock className="h-3 w-3" />
+   386→                    Last: {formatDate(type.lastGenerated)}
+   387→                  </div>
+   388→                )}
+   389→
+   390→                {/* Generate Button */}
+   391→                <div className="flex items-center gap-2">
+   392→                  <Button
+   393→                    size="sm"
+   394→                    onClick={() => openGenerateDialog(type.id)}
+   395→                    className={`gap-1.5 h-8 bg-gradient-to-r ${type.gradientFrom} ${type.gradientTo} hover:opacity-90 text-white text-xs flex-1`}
+   396→                  >
+   397→                    <Sparkles className="h-3 w-3" />
+   398→                    Generate
+   399→                  </Button>
+   400→                  <select
+   401→                    className="h-8 rounded-md border border-border/50 bg-background text-[10px] text-foreground px-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+   402→                    onChange={(e) => {
+   403→                      setSelectedFormat(e.target.value as 'PDF' | 'Excel');
+   404→                      openGenerateDialog(type.id);
+   405→                    }}
+   406→                    defaultValue="PDF"
+   407→                    onClick={(e) => e.stopPropagation()}
+   408→                  >
+   409→                    <option value="PDF">PDF</option>
+   410→                    <option value="Excel">Excel</option>
+   411→                  </select>
+   412→                </div>
+   413→              </div>
+   414→            </CardContent>
+   415→          </AnimatedCard>
+   416→        ))}
+   417→      </div>
+   418→
+   419→      {/* ═══ GENERATION DIALOG ═══ */}
+   420→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   421→        <DialogContent className="sm:max-w-md">
+   422→          <DialogHeader>
+   423→            <DialogTitle className="flex items-center gap-2">
+   424→              <Sparkles className="h-5 w-5 text-emerald-500" />
+   425→              Generate Report
+   426→            </DialogTitle>
+   427→            <DialogDescription>
+   428→              Configure and generate an AI-powered executive report.
+   429→            </DialogDescription>
+   430→          </DialogHeader>
+   431→
+   432→          <div className="space-y-4 py-2">
+   433→            {/* Report Type */}
+   434→            <div className="space-y-2">
+   435→              <label className="text-sm font-medium text-foreground">Report Type</label>
+   436→              <Select value={selectedType} onValueChange={setSelectedType}>
+   437→                <SelectTrigger className="border-emerald-200 focus:border-emerald-500 dark:border-emerald-800">
+   438→                  <SelectValue placeholder="Select report type" />
+   439→                </SelectTrigger>
+   440→                <SelectContent>
+   441→                  {reportTypes.map(type => (
+   442→                    <SelectItem key={type.id} value={type.id}>
+   443→                      <div className="flex items-center gap-2">
+   444→                        <type.icon className="h-3.5 w-3.5 text-muted-foreground" />
+   445→                        {type.title}
+   446→                      </div>
+   447→                    </SelectItem>
+   448→                  ))}
+   449→                </SelectContent>
+   450→              </Select>
+   451→            </div>
+   452→
+   453→            {/* Period */}
+   454→            <div className="space-y-2">
+   455→              <label className="text-sm font-medium text-foreground">Period</label>
+   456→              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+   457→                <SelectTrigger className="border-emerald-200 focus:border-emerald-500 dark:border-emerald-800">
+   458→                  <SelectValue placeholder="Select period" />
+   459→                </SelectTrigger>
+   460→                <SelectContent>
+   461→                  {periodOptions.map(period => (
+   462→                    <SelectItem key={period} value={period}>{period}</SelectItem>
+   463→                  ))}
+   464→                </SelectContent>
+   465→              </Select>
+   466→            </div>
+   467→
+   468→            {/* Format */}
+   469→            <div className="space-y-2">
+   470→              <label className="text-sm font-medium text-foreground">Format</label>
+   471→              <div className="flex gap-3">
+   472→                <button
+   473→                  onClick={() => setSelectedFormat('PDF')}
+   474→                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+   475→                    selectedFormat === 'PDF'
+   476→                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+   477→                      : 'border-border text-muted-foreground hover:border-emerald-300 dark:hover:border-emerald-800'
+   478→                  }`}
+   479→                >
+   480→                  <FileText className="h-4 w-4" />
+   481→                  PDF
+   482→                </button>
+   483→                <button
+   484→                  onClick={() => setSelectedFormat('Excel')}
+   485→                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+   486→                    selectedFormat === 'Excel'
+   487→                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+   488→                      : 'border-border text-muted-foreground hover:border-emerald-300 dark:hover:border-emerald-800'
+   489→                  }`}
+   490→                >
+   491→                  <FileSpreadsheet className="h-4 w-4" />
+   492→                  Excel
+   493→                </button>
+   494→              </div>
+   495→            </div>
+   496→
+   497→            {/* Success - Download Link */}
+   498→            {generatedLink && (
+   499→              <motion.div
+   500→                initial={{ opacity: 0, y: 10 }}
+   501→                animate={{ opacity: 1, y: 0 }}
+   502→                className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800"
+   503→              >
+   504→                <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+   505→                <div className="flex-1 min-w-0">
+   506→                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+   507→                    Report generated successfully!
+   508→                  </p>
+   509→                  <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
+   510→                    Your {selectedFormat} report is ready to download.
+   511→                  </p>
+   512→                </div>
+   513→                <Button
+   514→                  size="sm"
+   515→                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0"
+   516→                  asChild
+   517→                >
+   518→                  <a href={generatedLink} download>
+   519→                    <Download className="h-3 w-3" />
+   520→                    Download
+   521→                  </a>
+   522→                </Button>
+   523→              </motion.div>
+   524→            )}
+   525→          </div>
+   526→
+   527→          <DialogFooter>
+   528→            <Button
+   529→              variant="outline"
+   530→              onClick={() => setDialogOpen(false)}
+   531→              className="text-xs"
+   532→            >
+   533→              Close
+   534→            </Button>
+   535→            <Button
+   536→              onClick={handleGenerate}
+   537→              disabled={!selectedType || !selectedPeriod || generating}
+   538→              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+   539→            >
+   540→              {generating ? (
+   541→                <>
+   542→                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   543→                  Generating...
+   544→                </>
+   545→              ) : (
+   546→                <>
+   547→                  <Sparkles className="h-3.5 w-3.5" />
+   548→                  Generate Report
+   549→                </>
+   550→              )}
+   551→            </Button>
+   552→          </DialogFooter>
+   553→        </DialogContent>
+   554→      </Dialog>
+   555→
+   556→      {/* ═══ RECENT REPORTS TABLE ═══ */}
+   557→      <AnimatedCard delay={0.35}>
+   558→        <CardHeader className="pb-3">
+   559→          <div className="flex items-center justify-between">
+   560→            <div>
+   561→              <CardTitle className="flex items-center gap-2 text-base">
+   562→                <FileText className="h-4 w-4 text-emerald-500" />
+   563→                Recent Reports
+   564→              </CardTitle>
+   565→              <CardDescription>Previously generated executive reports</CardDescription>
+   566→            </div>
+   567→            <Badge
+   568→              variant="outline"
+   569→              className="text-[10px] px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
+   570→            >
+   571→              {reports.length} reports
+   572→            </Badge>
+   573→          </div>
+   574→        </CardHeader>
+   575→        <CardContent>
+   576→          {loading ? (
+   577→            <TableSkeleton />
+   578→          ) : reports.length === 0 ? (
+   579→            <EmptyState
+   580→              icon={FileBarChart2}
+   581→              title="No reports generated yet"
+   582→              description="Pick a report type above and click Generate to create your first AI executive report."
+   583→              action={{ label: 'Generate Report', onClick: () => openGenerateDialog(reportTypes[0]?.id ?? ''), icon: Sparkles }}
+   584→            />
+   585→          ) : (
+   586→            <div className="overflow-x-auto">
+   587→              <Table>
+   588→                <TableHeader>
+   589→                  <TableRow className="hover:bg-transparent">
+   590→                    <TableHead className="text-xs font-semibold">Report Title</TableHead>
+   591→                    <TableHead className="text-xs font-semibold">Type</TableHead>
+   592→                    <TableHead className="text-xs font-semibold">Period</TableHead>
+   593→                    <TableHead className="text-xs font-semibold">Format</TableHead>
+   594→                    <TableHead className="text-xs font-semibold">Generated Date</TableHead>
+   595→                    <TableHead className="text-xs font-semibold">Status</TableHead>
+   596→                    <TableHead className="text-xs font-semibold text-right">Download</TableHead>
+   597→                  </TableRow>
+   598→                </TableHeader>
+   599→                <TableBody>
+   600→                  <AnimatePresence>
+   601→                    {reports.map((report, index) => {
+   602→                      const typeInfo = reportTypes.find(t => t.id === report.type);
+   603→                      return (
+   604→                        <motion.tr
+   605→                          key={report.id}
+   606→                          initial={{ opacity: 0, x: -10 }}
+   607→                          animate={{ opacity: 1, x: 0 }}
+   608→                          transition={{ delay: 0.05 + index * 0.03, duration: 0.3 }}
+   609→                          className="group hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors"
+   610→                        >
+   611→                          <TableCell className="text-sm font-medium">
+   612→                            <div className="flex items-center gap-2">
+   613→                              {typeInfo && (
+   614→                                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${typeInfo.accentBg}`}>
+   615→                                  <typeInfo.icon className={`h-3.5 w-3.5 ${typeInfo.accentColor}`} />
+   616→                                </div>
+   617→                              )}
+   618→                              <span className="truncate max-w-[200px]">{report.title}</span>
+   619→                            </div>
+   620→                          </TableCell>
+   621→                          <TableCell className="text-xs text-muted-foreground">
+   622→                            {typeInfo?.title?.replace(' Report', '') || report.type}
+   623→                          </TableCell>
+   624→                          <TableCell className="text-xs text-muted-foreground">
+   625→                            {report.period}
+   626→                          </TableCell>
+   627→                          <TableCell>
+   628→                            <Badge
+   629→                              variant="outline"
+   630→                              className="text-[10px] px-2 py-0.5 border-border/50"
+   631→                            >
+   632→                              {report.format === 'PDF' ? (
+   633→                                <FileText className="h-2.5 w-2.5 mr-1 text-red-500" />
+   634→                              ) : (
+   635→                                <FileSpreadsheet className="h-2.5 w-2.5 mr-1 text-emerald-600" />
+   636→                              )}
+   637→                              {report.format}
+   638→                            </Badge>
+   639→                          </TableCell>
+   640→                          <TableCell className="text-xs text-muted-foreground">
+   641→                            {formatDate(report.generatedDate)}
+   642→                          </TableCell>
+   643→                          <TableCell>
+   644→                            <Badge
+   645→                              className={`text-[10px] px-2 py-0.5 font-semibold border-0 ${
+   646→                                report.status === 'generated'
+   647→                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+   648→                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+   649→                              }`}
+   650→                            >
+   651→                              {report.status === 'generated' ? (
+   652→                                <CheckCircle className="h-2.5 w-2.5 mr-1" />
+   653→                              ) : (
+   654→                                <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+   655→                              )}
+   656→                              {report.status === 'generated' ? 'Generated' : 'Processing'}
+   657→                            </Badge>
+   658→                          </TableCell>
+   659→                          <TableCell className="text-right">
+   660→                            <Button
+   661→                              size="sm"
+   662→                              variant="ghost"
+   663→                              disabled={report.status === 'processing'}
+   664→                              className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
+   665→                              asChild={report.status === 'generated'}
+   666→                            >
+   667→                              {report.status === 'generated' ? (
+   668→                                <a href={`/reports/${report.id}.${report.format === 'PDF' ? 'pdf' : 'xlsx'}`} download>
+   669→                                  <Download className="h-3.5 w-3.5" />
+   670→                                </a>
+   671→                              ) : (
+   672→                                <span>
+   673→                                  <Eye className="h-3.5 w-3.5" />
+   674→                                </span>
+   675→                              )}
+   676→                            </Button>
+   677→                          </TableCell>
+   678→                        </motion.tr>
+   679→                      );
+   680→                    })}
+   681→                  </AnimatePresence>
+   682→                </TableBody>
+   683→              </Table>
+   684→            </div>
+   685→          )}
+   686→        </CardContent>
+   687→      </AnimatedCard>
+   688→    </div>
+   689→  );
+   690→}
+   691→

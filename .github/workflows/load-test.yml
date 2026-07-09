@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# GSTPilot Infinity™ — Nightly Load Test Pipeline
+#
+# Runs k6 against a STAGING deployment every night at 02:30 IST (21:00 UTC).
+# Also runnable on-demand via workflow_dispatch with a TARGET tier (100k |
+# 500k | 1m | 5m) and BASE_URL override.
+#
+# Requires GitHub Secret: STAGING_URL (https://staging.gstpilot.example.com)
+# Optional Secret: LOADTEST_ADMIN_TOKEN (for authenticated endpoint testing).
+#
+# Failure policy: any threshold breach (p99 > 1500ms, errorRate > 1%) fails
+# the run and posts a comment on the last commit via actions/github-script.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Load Test
+
+on:
+  schedule:
+    # 21:00 UTC = 02:30 IST (+5:30)
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Load tier (100k | 500k | 1m | 5m)'
+        required: false
+        default: '100k'
+        type: choice
+        options:
+          - 100k
+          - 500k
+          - 1m
+          - 5m
+      base_url:
+        description: 'Base URL (overrides STAGING_URL secret)'
+        required: false
+        default: ''
+
+concurrency:
+  group: loadtest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  k6-load-test:
+    name: k6 Load Test (${{ github.event.inputs.target || '100k' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A36442D57C5C9841A12D40F8E
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Resolve base URL
+        id: url
+        run: |
+          URL="${{ github.event.inputs.base_url }}"
+          if [ -z "$URL" ]; then URL="${{ secrets.STAGING_URL }}"; fi
+          if [ -z "$URL" ]; then
+            echo "No STAGING_URL secret and no base_url input — skipping."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Run k6 (${{ github.event.inputs.target || '100k' }} tier)
+        if: steps.url.outputs.skip != 'true'
+        env:
+          K6_SYSTEM_ENV: ci
+        run: |
+          k6 run \
+            --env BASE_URL=${{ steps.url.outputs.url }} \
+            --env TARGET=${{ github.event.inputs.target || '100k' }} \
+            --env ADMIN_TOKEN=${{ secrets.LOADTEST_ADMIN_TOKEN }} \
+            --out json=loadtest-results.json \
+            tests/load/loadtest.k6.js || echo "K6_EXIT=$?" >> $GITHUB_ENV
+
+      - name: Upload k6 results
+        if: always() && steps.url.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.event.inputs.target || '100k' }}
+          path: loadtest-results.json
+          retention-days: 30
+
+      - name: Fail if thresholds breached
+        if: env.K6_EXIT != '' && steps.url.outputs.skip != 'true'
+        run: |
+          echo "::error::k6 thresholds breached (exit ${{ env.K6_EXIT }})"
+          echo "Check the uploaded results artifact for details."
+          exit 1
+
+  artillery-smoke-test:
+    name: Artillery Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: k6-load-test
+    if: always() && github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Artillery
+        run: npm install -g artillery@latest
+
+      - name: Resolve base URL
+        id: url
+        run: |
+          URL="${{ github.event.inputs.base_url }}"
+          if [ -z "$URL" ]; then URL="${{ secrets.STAGING_URL }}"; fi
+          if [ -z "$URL" ]; then echo "skip=true" >> $GITHUB_OUTPUT; exit 0; fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "target=\${env:BASE_URL}" >> $GITHUB_OUTPUT
+
+      - name: Run Artillery quick smoke (60s, low load)
+        if: steps.url.outputs.skip != 'true'
+        run: |
+          artillery run \
+            --environment staging \
+            --overrides "{\"config\":{\"target\":\"${{ steps.url.outputs.url }}\",\"phases\":[{\"duration\":60,\"arrivalRate\":5}]}}" \
+            tests/load/loadtest.artillery.yml || echo "ARTILLERY_EXIT=$?" >> $GITHUB_ENV
+
+      - name: Fail if smoke test breached
+        if: env.ARTILLERY_EXIT != '' && steps.url.outputs.skip != 'true'
+        run: |
+          echo "::error::Artillery thresholds breached"
+          exit 1

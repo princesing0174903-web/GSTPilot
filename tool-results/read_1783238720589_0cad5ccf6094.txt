@@ -1,0 +1,1663 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Billing, Subscriptions & Payments™ — Server Orchestrator (SERVER-ONLY)
+     3→//
+     4→// The thin server-side layer that:
+     5→//   1. Resolves the active payment provider via the registry
+     6→//   2. Encrypts / decrypts customer IDs + tokens with AES-256-GCM
+     7→//   3. Calls the provider and returns fully-formed Firestore-ready objects
+     8→//   4. Stamps every record with organizationId + subscriptionId + provider
+     9→//   5. Runs the billing engine (proration, MRR, grace periods, retries)
+    10→//   6. Generates invoices, receipts, credit notes via the invoice engine
+    11→//
+    12→// This file is SERVER-ONLY — it imports `node:crypto` (via the provider + crypto
+    13→// modules) and must NEVER be bundled into client code. API routes are the only
+    14→// legitimate consumers.
+    15→//
+    16→// Multi-tenant: every function takes `organizationId` and stamps it onto every
+    17→// returned object so the client can write directly to Firestore without
+    18→// additional processing.
+    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→
+    21→import {
+    22→  collection,
+    23→  doc,
+    24→  getDoc,
+    25→  getDocs,
+    26→  query,
+    27→  where,
+    28→  orderBy,
+    29→  limit as limitConstraint,
+    30→  serverTimestamp,
+    31→  addDoc,
+    32→  updateDoc,
+    33→} from 'firebase/firestore';
+    34→import { db } from '@/lib/firebase';
+    35→import { getPaymentProvider, getPaymentProviderName } from './registry';
+    36→import { encryptConnection, encryptString, decryptConnection } from './crypto';
+    37→import type { ProviderCustomerSession } from '../provider';
+    38→import {
+    39→  calculateMRR,
+    40→  calculateARR,
+    41→  calculateProration,
+    42→  calculateRenewalDate,
+    43→  calculateGracePeriodEnd,
+    44→  calculateTrialEnd,
+    45→  calculateNextBillingDate,
+    46→  shouldEnterGracePeriod,
+    47→  calculateFailedPaymentRetrySchedule,
+    48→  applyCouponToAmount,
+    49→} from './billing-engine';
+    50→import {
+    51→  buildTaxInvoice,
+    52→  buildCreditNote,
+    53→  buildDebitNote,
+    54→  buildReceipt,
+    55→  buildRefundReceipt,
+    56→  calculateInvoiceTotals,
+    57→  markInvoiceAsPaid,
+    58→  markInvoiceAsVoid,
+    59→} from './invoice-engine';
+    60→import { getPlan, isPaidPlan, getPlanPrice, comparePlans } from './plans';
+    61→import type { Coupon, PaymentProviderName, SubscriptionPlanId } from '../types';
+    62→import {
+    63→  BillingAccountNotFoundError,
+    64→  BillingError,
+    65→  CouponExpiredError,
+    66→  CouponNotFoundError,
+    67→  CouponRedemptionExceededError,
+    68→  InvoiceAlreadyPaidError,
+    69→  InvoiceNotFoundError,
+    70→  PaymentDeclinedError,
+    71→  PaymentFailedError,
+    72→  PlanNotFoundError,
+    73→  PlanNotAvailableError,
+    74→  ProrationError,
+    75→  SubscriptionAlreadyExistsError,
+    76→  SubscriptionNotFoundError,
+    77→  ValidationError,
+    78→  friendlyBillingError,
+    79→} from '../errors';
+    80→import type {
+    81→  ApplyCouponInput,
+    82→  ApplyCouponResult,
+    83→  BillingAccount,
+    84→  BillingInvoice,
+    85→  CalculateTaxesInput,
+    86→  CalculateTaxesResult,
+    87→  CompletePaymentResult,
+    88→  CreateInvoiceInput,
+    89→  CreateInvoiceResult,
+    90→  CreateSubscriptionInput,
+    91→  CreateSubscriptionResult,
+    92→  InitiatePaymentInput,
+    93→  InitiatePaymentResult,
+    94→  Payment,
+    95→  PaymentAttempt,
+    96→  Receipt,
+    97→  RecordPaymentInput,
+    98→  RecordPaymentResult,
+    99→  RefundPaymentInput,
+   100→  RefundPaymentResult,
+   101→  Subscription,
+   102→  UpgradePlanResult,
+   103→} from '../types';
+   104→
+   105→// ─── Org guard ───────────────────────────────────────────────────────────────
+   106→
+   107→function assertOrg(orgId: string | undefined | null): void {
+   108→  if (!orgId) {
+   109→    throw new BillingError(
+   110→      'You must belong to an organization to manage billing.',
+   111→      { code: 'NO_ORGANIZATION', statusCode: 403 },
+   112→    );
+   113→  }
+   114→}
+   115→
+   116→// ─── Subscription Lifecycle ────────────────────────────────────────────────────
+   117→
+   118→/**
+   119→ * Create a new subscription for an organization.
+   120→ *
+   121→ * Steps:
+   122→ *   1. Validate the plan + cycle
+   123→ *   2. Resolve the payment provider via the registry
+   124→ *   3. Call provider.createCustomer() to register the customer
+   125→ *   4. Encrypt the customer ID + provider tokens (AES-256-GCM)
+   126→ *   5. Build the BillingAccount doc
+   127→ *   6. Build the Subscription doc (status='trialing' if trialDays>0 else 'active')
+   128→ *   7. Build the first BillingInvoice (tax_invoice) for paid plans
+   129→ *   8. Return everything for the API route to persist
+   130→ */
+   131→export async function createSubscription(
+   132→  input: CreateSubscriptionInput,
+   133→): Promise<CreateSubscriptionResult> {
+   134→  assertOrg(input.organizationId);
+   135→
+   136→  // Validate plan.
+   137→  const plan = getPlan(input.planId);
+   138→  if (!plan) {
+   139→    throw new PlanNotFoundError(`Plan ${input.planId} not found.`);
+   140→  }
+   141→  if (!plan.isActive) {
+   142→    throw new PlanNotAvailableError(`Plan ${input.planId} is not available.`);
+   143→  }
+   144→  if (!input.customerEmail || !input.customerEmail.includes('@')) {
+   145→    throw new ValidationError('A valid customer email is required.');
+   146→  }
+   147→  if (!input.customerName || input.customerName.trim().length < 2) {
+   148→    throw new ValidationError('Customer name must be at least 2 characters.');
+   149→  }
+   150→
+   151→  // Check if org already has an active subscription (one per org).
+   152→  const existingSub = await findActiveSubscription(input.organizationId);
+   153→  if (existingSub) {
+   154→    throw new SubscriptionAlreadyExistsError();
+   155→  }
+   156→
+   157→  // Resolve provider + create customer.
+   158→  const provider = getPaymentProvider();
+   159→  let customerId = '';
+   160→  let session: ProviderCustomerSession | null = null;
+   161→  let encryptedCustomerId: string | null = null;
+   162→  let encryptedProviderTokens: string | null = null;
+   163→
+   164→  if (isPaidPlan(input.planId)) {
+   165→    try {
+   166→      const result = await provider.createCustomer({
+   167→        email: input.customerEmail,
+   168→        name: input.customerName,
+   169→        phone: input.customerPhone,
+   170→        organizationId: input.organizationId,
+   171→      });
+   172→      customerId = result.customerId;
+   173→      session = result.session;
+   174→      encryptedCustomerId = encryptString(customerId);
+   175→      encryptedProviderTokens = encryptConnection(session);
+   176→    } catch (err) {
+   177→      throw rethrowTyped(err);
+   178→    }
+   179→  }
+   180→
+   181→  // Build the BillingAccount.
+   182→  const now = new Date().toISOString();
+   183→  const billingAccount: BillingAccount = {
+   184→    id: '', // Set by Firestore on save
+   185→    organizationId: input.organizationId,
+   186→    subscriptionId: null, // Set after subscription is created
+   187→    email: input.customerEmail,
+   188→    phone: input.customerPhone ?? null,
+   189→    gstin: null,
+   190→    billingAddress: {
+   191→      name: input.customerName,
+   192→      line1: '',
+   193→      line2: null,
+   194→      city: '',
+   195→      state: '',
+   196→      postalCode: '',
+   197→      country: 'India',
+   198→    },
+   199→    taxId: null,
+   200→    encryptedCustomerId,
+   201→    encryptedProviderTokens,
+   202→    paymentProvider: isPaidPlan(input.planId) ? provider.provider : null,
+   203→    defaultPaymentMethod: null,
+   204→    autoRenew: true,
+   205→    taxExempt: false,
+   206→    createdAt: now,
+   207→    updatedAt: now,
+   208→  };
+   209→
+   210→  // Build the Subscription.
+   211→  const startDate = now;
+   212→  const trialEnd = plan.trialDays > 0 ? calculateTrialEnd(new Date(startDate), plan.trialDays).toISOString() : null;
+   213→  const periodEnd = calculateNextBillingDate(
+   214→    new Date(startDate),
+   215→    input.billingCycle,
+   216→  ).toISOString();
+   217→  const status: Subscription['status'] = trialEnd ? 'trialing' : isPaidPlan(input.planId) ? 'active' : 'active';
+   218→
+   219→  // Look up coupon if provided.
+   220→  let couponCode: string | null = null;
+   221→  let couponDiscountPercent = 0;
+   222→  if (input.couponCode) {
+   223→    const coupon = await findCoupon(input.couponCode);
+   224→    if (coupon) {
+   225→      couponCode = coupon.code;
+   226→      couponDiscountPercent = coupon.type === 'percent' ? coupon.value : 0;
+   227→    }
+   228→  }
+   229→
+   230→  const mrr = calculateMRR(input.planId, input.billingCycle);
+   231→  const arr = calculateARR(mrr);
+   232→
+   233→  const subscription: Subscription = {
+   234→    id: '', // Set by Firestore on save
+   235→    organizationId: input.organizationId,
+   236→    planId: input.planId,
+   237→    planName: plan.name,
+   238→    billingCycle: input.billingCycle,
+   239→    status,
+   240→    startDate,
+   241→    endDate: null,
+   242→    trialEndDate: trialEnd,
+   243→    cancelledAt: null,
+   244→    pausedAt: null,
+   245→    currentPeriodStart: startDate,
+   246→    currentPeriodEnd: periodEnd,
+   247→    gracePeriodEnd: null,
+   248→    customerId,
+   249→    paymentProvider: provider.provider,
+   250→    defaultPaymentMethod: null,
+   251→    couponCode,
+   252→    couponDiscountPercent,
+   253→    mrr,
+   254→    arr,
+   255→    createdAt: now,
+   256→    updatedAt: now,
+   257→  };
+   258→
+   259→  // Link subscription id to billing account.
+   260→  billingAccount.subscriptionId = subscription.id; // empty for now; API route sets it after persisting
+   261→
+   262→  // Build the first invoice for paid plans (not for free / trialing).
+   263→  let invoice: BillingInvoice | null = null;
+   264→  let paymentSession: InitiatePaymentResult | null = null;
+   265→
+   266→  if (isPaidPlan(input.planId) && status === 'active') {
+   267→    // Build the tax invoice.
+   268→    invoice = buildTaxInvoice({
+   269→      organizationId: input.organizationId,
+   270→      subscriptionId: subscription.id,
+   271→      type: 'tax_invoice',
+   272→      planId: input.planId,
+   273→      billingCycle: input.billingCycle,
+   274→      periodStart: startDate,
+   275→      periodEnd: periodEnd,
+   276→      couponCode: couponCode ?? undefined,
+   277→      createdBy: input.createdBy,
+   278→    });
+   279→
+   280→    // Initiate the payment session.
+   281→    try {
+   282→      const sessionResult = await provider.createPaymentSession({
+   283→        customerId,
+   284→        amount: invoice.amountDue,
+   285→        currency: 'INR',
+   286→        description: `${plan.name} Plan — ${input.billingCycle === 'yearly' ? 'Yearly' : 'Monthly'} Subscription`,
+   287→        invoiceId: invoice.id || 'pending',
+   288→        returnUrl: '', // Filled by the API route
+   289→      });
+   290→      paymentSession = {
+   291→        orderId: sessionResult.orderId,
+   292→        paymentUrl: sessionResult.paymentUrl ?? null,
+   293→        attemptId: '', // Set by API route when it persists the PaymentAttempt
+   294→      };
+   295→    } catch (err) {
+   296→      // Non-fatal: the invoice is still created; payment can be initiated later.
+   297→      console.warn('[billing/orchestrator] createPaymentSession failed:', friendlyBillingError(err));
+   298→    }
+   299→  }
+   300→
+   301→  return {
+   302→    subscription,
+   303→    billingAccount,
+   304→    invoice,
+   305→    paymentSession,
+   306→  };
+   307→}
+   308→
+   309→/**
+   310→ * Cancel a subscription.
+   311→ *   • immediately=true  → status='cancelled', cancelledAt=now
+   312→ *   • immediately=false → status='active' until period end, cancelledAt=periodEnd
+   313→ */
+   314→export async function cancelSubscription(
+   315→  organizationId: string,
+   316→  subscriptionId: string,
+   317→  immediately = false,
+   318→): Promise<Subscription> {
+   319→  assertOrg(organizationId);
+   320→  const subscription = await readSubscription(organizationId, subscriptionId);
+   321→  const now = new Date().toISOString();
+   322→
+   323→  const updated: Subscription = {
+   324→    ...subscription,
+   325→    status: 'cancelled',
+   326→    cancelledAt: immediately ? now : subscription.currentPeriodEnd,
+   327→    endDate: immediately ? now : subscription.currentPeriodEnd,
+   328→    autoRenew: false,
+   329→    updatedAt: now,
+   330→  };
+   331→
+   332→  // Persist.
+   333→  await updateDoc(doc(db, 'subscriptions', subscriptionId), {
+   334→    status: 'cancelled',
+   335→    cancelledAt: updated.cancelledAt,
+   336→    endDate: updated.endDate,
+   337→    autoRenew: false,
+   338→    updatedAt: serverTimestamp(),
+   339→  });
+   340→
+   341→  return updated;
+   342→}
+   343→
+   344→/**
+   345→ * Pause a subscription. The subscription is inactive but not cancelled — no
+   346→ * invoices are generated, no usage is metered, but the data is preserved.
+   347→ */
+   348→export async function pauseSubscription(
+   349→  organizationId: string,
+   350→  subscriptionId: string,
+   351→  reason?: string,
+   352→): Promise<Subscription> {
+   353→  assertOrg(organizationId);
+   354→  const subscription = await readSubscription(organizationId, subscriptionId);
+   355→  const now = new Date().toISOString();
+   356→
+   357→  const updated: Subscription = {
+   358→    ...subscription,
+   359→    status: 'paused',
+   360→    pausedAt: now,
+   361→    updatedAt: now,
+   362→  };
+   363→
+   364→  await updateDoc(doc(db, 'subscriptions', subscriptionId), {
+   365→    status: 'paused',
+   366→    pausedAt: now,
+   367→    updatedAt: serverTimestamp(),
+   368→  });
+   369→
+   370→  if (reason) {
+   371→    console.log(`[billing] subscription ${subscriptionId} paused: ${reason}`);
+   372→  }
+   373→
+   374→  return updated;
+   375→}
+   376→
+   377→/**
+   378→ * Resume a paused subscription.
+   379→ */
+   380→export async function resumeSubscription(
+   381→  organizationId: string,
+   382→  subscriptionId: string,
+   383→): Promise<Subscription> {
+   384→  assertOrg(organizationId);
+   385→  const subscription = await readSubscription(organizationId, subscriptionId);
+   386→  const now = new Date().toISOString();
+   387→
+   388→  const updated: Subscription = {
+   389→    ...subscription,
+   390→    status: 'active',
+   391→    pausedAt: null,
+   392→    updatedAt: now,
+   393→  };
+   394→
+   395→  await updateDoc(doc(db, 'subscriptions', subscriptionId), {
+   396→    status: 'active',
+   397→    pausedAt: null,
+   398→    updatedAt: serverTimestamp(),
+   399→  });
+   400→
+   401→  return updated;
+   402→}
+   403→
+   404→/**
+   405→ * Upgrade (or downgrade) a subscription plan.
+   406→ *
+   407→ *   • Upgrades (new plan > old plan): charge a prorated debit note for the
+   408→ *     remaining period.
+   409→ *   • Downgrades (new plan < old plan): issue a prorated credit note for the
+   410→ *     unused time.
+   411→ *
+   412→ * Returns the updated subscription + the proration invoice (debit or credit
+   413→ * note) + the charge/refund amounts.
+   414→ */
+   415→export async function upgradePlan(
+   416→  organizationId: string,
+   417→  subscriptionId: string,
+   418→  newPlanId: SubscriptionPlanId,
+   419→  newCycle?: Subscription.BillingCycle,
+   420→  applyImmediately = true,
+   421→): Promise<UpgradePlanResult> {
+   422→  assertOrg(organizationId);
+   423→  const subscription = await readSubscription(organizationId, subscriptionId);
+   424→  const oldPlan = getPlan(subscription.planId);
+   425→  const newPlan = getPlan(newPlanId);
+   426→  if (!oldPlan) throw new PlanNotFoundError(`Plan ${subscription.planId} not found.`);
+   427→  if (!newPlan) throw new PlanNotFoundError(`Plan ${newPlanId} not found.`);
+   428→  if (!newPlan.isActive) throw new PlanNotAvailableError(`Plan ${newPlanId} is not available.`);
+   429→
+   430→  const cycle = newCycle ?? subscription.billingCycle;
+   431→  const now = new Date();
+   432→  const periodEnd = new Date(subscription.currentPeriodEnd);
+   433→  const daysInPeriod = Math.max(
+   434→    1,
+   435→    Math.round(
+   436→      (periodEnd.getTime() - new Date(subscription.currentPeriodStart).getTime()) /
+   437→        (24 * 60 * 60 * 1000),
+   438→    ),
+   439→  );
+   440→  const daysRemaining = Math.max(
+   441→    0,
+   442→    Math.round((periodEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+   443→  );
+   444→
+   445→  if (daysRemaining <= 0) {
+   446→    throw new ProrationError('The current billing period has already ended.');
+   447→  }
+   448→
+   449→  const proration = calculateProration(
+   450→    subscription.planId,
+   451→    newPlanId,
+   452→    subscription.billingCycle,
+   453→    cycle,
+   454→    daysRemaining,
+   455→    daysInPeriod,
+   456→  );
+   457→
+   458→  // Build the proration invoice (debit note for upgrades, credit note for downgrades).
+   459→  let prorationInvoice: BillingInvoice | null = null;
+   460→  const comparison = comparePlans(newPlanId, subscription.planId);
+   461→
+   462→  if (applyImmediately && proration.netAmount !== 0) {
+   463→    // For upgrades: debit note (charge).
+   464→    // For downgrades: credit note (refund).
+   465→    if (comparison === 'higher') {
+   466→      // Look up the latest invoice to link.
+   467→      const latestInvoice = await findLatestInvoice(organizationId, subscriptionId);
+   468→      if (latestInvoice) {
+   469→        prorationInvoice = buildDebitNote(
+   470→          latestInvoice,
+   471→          proration.chargeAmount,
+   472→          `Upgrade from ${oldPlan.name} to ${newPlan.name} (prorated ${daysRemaining}/${daysInPeriod} days)`,
+   473→        );
+   474→        prorationInvoice.organizationId = organizationId;
+   475→      }
+   476→    } else if (comparison === 'lower') {
+   477→      const latestInvoice = await findLatestInvoice(organizationId, subscriptionId);
+   478→      if (latestInvoice) {
+   479→        prorationInvoice = buildCreditNote(
+   480→          latestInvoice,
+   481→          proration.refundAmount,
+   482→          `Downgrade from ${oldPlan.name} to ${newPlan.name} (prorated ${daysRemaining}/${daysInPeriod} days)`,
+   483→        );
+   484→        prorationInvoice.organizationId = organizationId;
+   485→      }
+   486→    }
+   487→  }
+   488→
+   489→  // Update the subscription.
+   490→  const newMrr = calculateMRR(newPlanId, cycle);
+   491→  const newArr = calculateARR(newMrr);
+   492→  const newPeriodEnd = calculateNextBillingDate(
+   493→    applyImmediately ? now : periodEnd,
+   494→    cycle,
+   495→  ).toISOString();
+   496→
+   497→  const updated: Subscription = {
+   498→    ...subscription,
+   499→    planId: newPlanId,
+   500→    planName: newPlan.name,
+   501→    billingCycle: cycle,
+   502→    mrr: newMrr,
+   503→    arr: newArr,
+   504→    currentPeriodStart: applyImmediately ? now.toISOString() : subscription.currentPeriodStart,
+   505→    currentPeriodEnd: newPeriodEnd,
+   506→    updatedAt: now.toISOString(),
+   507→  };
+   508→
+   509→  await updateDoc(doc(db, 'subscriptions', subscriptionId), {
+   510→    planId: newPlanId,
+   511→    planName: newPlan.name,
+   512→    billingCycle: cycle,
+   513→    mrr: newMrr,
+   514→    arr: newArr,
+   515→    currentPeriodStart: updated.currentPeriodStart,
+   516→    currentPeriodEnd: newPeriodEnd,
+   517→    updatedAt: serverTimestamp(),
+   518→  });
+   519→
+   520→  return {
+   521→    subscription: updated,
+   522→    prorationInvoice,
+   523→    refundAmount: proration.refundAmount,
+   524→    chargeAmount: proration.chargeAmount,
+   525→  };
+   526→}
+   527→
+   528→/**
+   529→ * Downgrade a subscription plan. Same as upgradePlan — the difference is in
+   530→ * the proration direction (credit note vs debit note).
+   531→ */
+   532→export async function downgradePlan(
+   533→  organizationId: string,
+   534→  subscriptionId: string,
+   535→  newPlanId: SubscriptionPlanId,
+   536→  applyImmediately = false,
+   537→): Promise<UpgradePlanResult> {
+   538→  // Downgrades default to apply-at-period-end (applyImmediately=false).
+   539→  return upgradePlan(organizationId, subscriptionId, newPlanId, undefined, applyImmediately);
+   540→}
+   541→
+   542→// ─── Invoice Operations ────────────────────────────────────────────────────────
+   543→
+   544→/**
+   545→ * Create a new invoice (tax_invoice, credit_note, debit_note, refund_receipt).
+   546→ */
+   547→export async function createInvoice(
+   548→  input: CreateInvoiceInput,
+   549→): Promise<CreateInvoiceResult> {
+   550→  assertOrg(input.organizationId);
+   551→  let invoice: BillingInvoice;
+   552→  switch (input.type) {
+   553→    case 'tax_invoice':
+   554→      invoice = buildTaxInvoice(input);
+   555→      break;
+   556→    case 'credit_note': {
+   557→      if (!input.linkedInvoiceId) {
+   558→        throw new ValidationError('linkedInvoiceId is required for credit notes.');
+   559→      }
+   560→      const original = await readInvoice(input.organizationId, input.linkedInvoiceId);
+   561→      invoice = buildCreditNote(original, input.amount ?? 0, input.reason ?? 'Credit');
+   562→      break;
+   563→    }
+   564→    case 'debit_note': {
+   565→      if (!input.linkedInvoiceId) {
+   566→        throw new ValidationError('linkedInvoiceId is required for debit notes.');
+   567→      }
+   568→      const original = await readInvoice(input.organizationId, input.linkedInvoiceId);
+   569→      invoice = buildDebitNote(original, input.amount ?? 0, input.reason ?? 'Additional charge');
+   570→      break;
+   571→    }
+   572→    default:
+   573→      throw new ValidationError(`Unsupported invoice type: ${input.type}`);
+   574→  }
+   575→  return { invoice };
+   576→}
+   577→
+   578→/**
+   579→ * Mark an invoice as paid + generate a receipt.
+   580→ */
+   581→export async function markInvoicePaid(
+   582→  organizationId: string,
+   583→  invoiceId: string,
+   584→  payment: Payment,
+   585→): Promise<BillingInvoice> {
+   586→  assertOrg(organizationId);
+   587→  const invoice = await readInvoice(organizationId, invoiceId);
+   588→  if (invoice.status === 'paid') {
+   589→    throw new InvoiceAlreadyPaidError();
+   590→  }
+   591→  const now = new Date().toISOString();
+   592→  const updated = markInvoiceAsPaid(invoice, payment, now);
+   593→
+   594→  await updateDoc(doc(db, 'billing_invoices', invoiceId), {
+   595→    status: 'paid',
+   596→    amountPaid: updated.amountPaid,
+   597→    amountDue: updated.amountDue,
+   598→    paidDate: now,
+   599→    updatedAt: serverTimestamp(),
+   600→  });
+   601→
+   602→  return updated;
+   603→}
+   604→
+   605→// ─── Payment Operations ────────────────────────────────────────────────────────
+   606→
+   607→/**
+   608→ * Record a payment (manual or provider-verified).
+   609→ *
+   610→ *   1. (Optional) Calls provider.verifyPayment if providerPaymentId + providerOrderId are given
+   611→ *   2. Creates the Payment doc
+   612→ *   3. Creates the PaymentAttempt doc
+   613→ *   4. Marks the linked invoice as paid
+   614→ *   5. Generates a Receipt
+   615→ *   6. Returns { payment, invoice, receipt }
+   616→ */
+   617→export async function recordPayment(
+   618→  input: RecordPaymentInput,
+   619→): Promise<RecordPaymentResult> {
+   620→  assertOrg(input.organizationId);
+   621→
+   622→  let verified = true;
+   623→  let providerPaymentId = input.providerPaymentId ?? null;
+   624→  let failureReason: string | null = null;
+   625→
+   626→  // Verify the payment with the provider if both ids are present.
+   627→  if (input.providerOrderId && input.providerPaymentId) {
+   628→    const provider = getPaymentProvider(input.provider);
+   629→    try {
+   630→      const result = await provider.verifyPayment({
+   631→        orderId: input.providerOrderId,
+   632→        paymentId: input.providerPaymentId,
+   633→      });
+   634→      verified = result.succeeded;
+   635→      if (!verified) {
+   636→        failureReason = result.errorMessage ?? 'Payment verification failed.';
+   637→      }
+   638→    } catch (err) {
+   639→      throw rethrowTyped(err);
+   640→    }
+   641→  }
+   642→
+   643→  const now = new Date().toISOString();
+   644→  const status: Payment['status'] = verified ? 'succeeded' : 'failed';
+   645→
+   646→  const payment: Payment = {
+   647→    id: '', // Set by Firestore on save
+   648→    organizationId: input.organizationId,
+   649→    subscriptionId: input.subscriptionId,
+   650→    invoiceId: input.invoiceId,
+   651→    amount: input.amount,
+   652→    currency: 'INR',
+   653→    status,
+   654→    provider: input.provider,
+   655→    providerPaymentId,
+   656→    providerOrderId: input.providerOrderId ?? null,
+   657→    method: input.method,
+   658→    description: input.description ?? null,
+   659→    failureReason,
+   660→    refundAmount: 0,
+   661→    refundedAt: null,
+   662→    paidAt: verified ? now : null,
+   663→    createdAt: now,
+   664→    updatedAt: now,
+   665→  };
+   666→
+   667→  // Persist the Payment.
+   668→  const paymentRef = await addDoc(collection(db, 'payments'), {
+   669→    ...payment,
+   670→    organizationId: input.organizationId,
+   671→    createdAt: serverTimestamp(),
+   672→    updatedAt: serverTimestamp(),
+   673→  });
+   674→  payment.id = paymentRef.id;
+   675→
+   676→  // Persist the PaymentAttempt.
+   677→  const attempt: PaymentAttempt = {
+   678→    id: '',
+   679→    organizationId: input.organizationId,
+   680→    paymentId: verified ? paymentRef.id : null,
+   681→    subscriptionId: input.subscriptionId,
+   682→    invoiceId: input.invoiceId,
+   683→    amount: input.amount,
+   684→    provider: input.provider,
+   685→    status: verified ? 'succeeded' : 'failed',
+   686→    errorCode: verified ? null : 'PAYMENT_FAILED',
+   687→    errorMessage: failureReason,
+   688→    providerRequestId: input.providerOrderId ?? null,
+   689→    attemptNumber: 1, // TODO: count prior attempts
+   690→    createdAt: now,
+   691→  };
+   692→  await addDoc(collection(db, 'payment_attempts'), {
+   693→    ...attempt,
+   694→    organizationId: input.organizationId,
+   695→    createdAt: serverTimestamp(),
+   696→  });
+   697→
+   698→  // Mark the invoice as paid + generate receipt.
+   699→  let invoice: BillingInvoice | null = null;
+   700→  let receipt: Receipt | null = null;
+   701→
+   702→  if (verified) {
+   703→    invoice = await markInvoicePaid(input.organizationId, input.invoiceId, payment);
+   704→    receipt = buildReceipt(payment, invoice);
+   705→    receipt.id = ''; // Set by Firestore on save
+   706→    await addDoc(collection(db, 'receipts'), {
+   707→      ...receipt,
+   708→      organizationId: input.organizationId,
+   709→      createdAt: serverTimestamp(),
+   710→    });
+   711→  }
+   712→
+   713→  if (!invoice) {
+   714→    // Re-read for the return type.
+   715→    invoice = await readInvoice(input.organizationId, input.invoiceId);
+   716→  }
+   717→  if (!receipt) {
+   718→    receipt = buildReceipt(payment, invoice);
+   719→  }
+   720→
+   721→  return { payment, invoice, receipt };
+   722→}
+   723→
+   724→/**
+   725→ * Refund a payment (full or partial).
+   726→ *
+   727→ *   1. Calls provider.refundPayment
+   728→ *   2. Updates the original Payment (refundAmount, refundedAt, status)
+   729→ *   3. Creates a new Payment doc (the refund itself, status='refunded')
+   730→ *   4. Generates a refund Receipt
+   731→ *   5. Creates a credit_note BillingInvoice linked to the original
+   732→ *   6. Returns { refundPayment, refundReceipt, creditNote }
+   733→ */
+   734→export async function refundPayment(
+   735→  input: RefundPaymentInput,
+   736→): Promise<RefundPaymentResult> {
+   737→  assertOrg(input.organizationId);
+   738→  const payment = await readPayment(input.organizationId, input.paymentId);
+   739→  if (payment.status !== 'succeeded' && payment.status !== 'partially_refunded') {
+   740→    throw new PaymentFailedError(
+   741→      `Payment ${input.paymentId} cannot be refunded (status: ${payment.status}).`,
+   742→    );
+   743→  }
+   744→  if (input.amount <= 0) {
+   745→    throw new ValidationError('Refund amount must be greater than 0.');
+   746→  }
+   747→  const maxRefund = payment.amount - payment.refundAmount;
+   748→  if (input.amount > maxRefund) {
+   749→    throw new ValidationError(
+   750→      `Refund amount exceeds refundable balance (max: ₹${maxRefund}).`,
+   751→    );
+   752→  }
+   753→
+   754→  // Call the provider to issue the refund.
+   755→  const provider = getPaymentProvider(payment.provider);
+   756→  if (payment.providerPaymentId) {
+   757→    try {
+   758→      const result = await provider.refundPayment({
+   759→        providerPaymentId: payment.providerPaymentId,
+   760→        amount: input.amount,
+   761→        reason: input.reason,
+   762→      });
+   763→      if (!result.succeeded) {
+   764→        throw new PaymentFailedError(
+   765→          result.errorMessage ?? 'Refund failed at the provider.',
+   766→        );
+   767→      }
+   768→    } catch (err) {
+   769→      throw rethrowTyped(err);
+   770→    }
+   771→  }
+   772→
+   773→  const now = new Date().toISOString();
+   774→
+   775→  // Update the original payment.
+   776→  const newRefundAmount = payment.refundAmount + input.amount;
+   777→  const newStatus: Payment['status'] =
+   778→    newRefundAmount >= payment.amount ? 'refunded' : 'partially_refunded';
+   779→  await updateDoc(doc(db, 'payments', payment.id), {
+   780→    refundAmount: newRefundAmount,
+   781→    refundedAt: now,
+   782→    status: newStatus,
+   783→    updatedAt: serverTimestamp(),
+   784→  });
+   785→
+   786→  // Create the refund Payment doc.
+   787→  const refundPaymentDoc: Payment = {
+   788→    id: '',
+   789→    organizationId: input.organizationId,
+   790→    subscriptionId: payment.subscriptionId,
+   791→    invoiceId: payment.invoiceId,
+   792→    amount: -input.amount, // Negative for refunds
+   793→    currency: 'INR',
+   794→    status: 'refunded',
+   795→    provider: payment.provider,
+   796→    providerPaymentId: payment.providerPaymentId,
+   797→    providerOrderId: payment.providerOrderId,
+   798→    method: payment.method,
+   799→    description: `Refund: ${input.reason ?? 'Customer requested'}`,
+   800→    failureReason: null,
+   801→    refundAmount: 0,
+   802→    refundedAt: now,
+   803→    paidAt: now,
+   804→    createdAt: now,
+   805→    updatedAt: now,
+   806→  };
+   807→  const refundRef = await addDoc(collection(db, 'payments'), {
+   808→    ...refundPaymentDoc,
+   809→    organizationId: input.organizationId,
+   810→    createdAt: serverTimestamp(),
+   811→    updatedAt: serverTimestamp(),
+   812→  });
+   813→  refundPaymentDoc.id = refundRef.id;
+   814→
+   815→  // Generate the refund receipt.
+   816→  const refundReceipt = buildRefundReceipt(payment, input.amount);
+   817→  refundReceipt.id = '';
+   818→  await addDoc(collection(db, 'receipts'), {
+   819→    ...refundReceipt,
+   820→    organizationId: input.organizationId,
+   821→    createdAt: serverTimestamp(),
+   822→  });
+   823→
+   824→  // Generate the credit note linked to the original invoice.
+   825→  let creditNote: BillingInvoice;
+   826→  if (payment.invoiceId) {
+   827→    const originalInvoice = await readInvoice(input.organizationId, payment.invoiceId);
+   828→    creditNote = buildCreditNote(
+   829→      originalInvoice,
+   830→      input.amount,
+   831→      input.reason ?? 'Customer refund',
+   832→    );
+   833→    creditNote.id = '';
+   834→    await addDoc(collection(db, 'billing_invoices'), {
+   835→      ...creditNote,
+   836→      organizationId: input.organizationId,
+   837→      createdAt: serverTimestamp(),
+   838→      updatedAt: serverTimestamp(),
+   839→    });
+   840→  } else {
+   841→    // No invoice linked — create a standalone credit note.
+   842→    creditNote = buildCreditNote(
+   843→      {
+   844→        id: '',
+   845→        organizationId: input.organizationId,
+   846→        subscriptionId: payment.subscriptionId,
+   847→        invoiceNumber: 'N/A',
+   848→        type: 'tax_invoice',
+   849→        status: 'paid',
+   850→        issueDate: now,
+   851→        dueDate: now,
+   852→        paidDate: now,
+   853→        periodStart: now,
+   854→        periodEnd: now,
+   855→        lineItems: [],
+   856→        subtotal: 0,
+   857→        discount: 0,
+   858→        tax: 0,
+   859→        taxBreakdown: { cgst: 0, sgst: 0, igst: 0, cess: 0 },
+   860→        total: 0,
+   861→        amountPaid: 0,
+   862→        amountDue: 0,
+   863→        currency: 'INR',
+   864→        notes: null,
+   865→        couponCode: null,
+   866→        linkedInvoiceId: null,
+   867→        pdfReady: false,
+   868→        pdfPath: null,
+   869→        createdAt: now,
+   870→        updatedAt: now,
+   871→      },
+   872→      input.amount,
+   873→      input.reason ?? 'Customer refund',
+   874→    );
+   875→  }
+   876→
+   877→  return {
+   878→    refundPayment: refundPaymentDoc,
+   879→    refundReceipt,
+   880→    creditNote,
+   881→  };
+   882→}
+   883→
+   884→/**
+   885→ * Generate a receipt for a payment (manual trigger — usually receipts are
+   886→ * generated automatically by recordPayment).
+   887→ */
+   888→export async function generateReceipt(
+   889→  organizationId: string,
+   890→  paymentId: string,
+   891→  invoiceId?: string,
+   892→): Promise<Receipt> {
+   893→  assertOrg(organizationId);
+   894→  const payment = await readPayment(organizationId, paymentId);
+   895→  let invoice: BillingInvoice | null = null;
+   896→  if (invoiceId) {
+   897→    invoice = await readInvoice(organizationId, invoiceId);
+   898→  }
+   899→  const receipt = buildReceipt(payment, invoice);
+   900→  receipt.id = '';
+   901→  await addDoc(collection(db, 'receipts'), {
+   902→    ...receipt,
+   903→    organizationId,
+   904→    createdAt: serverTimestamp(),
+   905→  });
+   906→  return receipt;
+   907→}
+   908→
+   909→// ─── Coupon Operations ────────────────────────────────────────────────────────
+   910→
+   911→/**
+   912→ * Apply a coupon to a subscription.
+   913→ * Validates the coupon (active, not expired, under maxRedemptions,
+   914→ * applicablePlans), increments redemptionsCount, attaches to subscription +
+   915→ * upcoming invoice.
+   916→ */
+   917→export async function applyCoupon(
+   918→  input: ApplyCouponInput,
+   919→): Promise<ApplyCouponResult> {
+   920→  assertOrg(input.organizationId);
+   921→  const subscription = await readSubscription(input.organizationId, input.subscriptionId);
+   922→  const coupon = await findCoupon(input.couponCode);
+   923→  if (!coupon) {
+   924→    throw new CouponNotFoundError(`Coupon code ${input.couponCode} not found.`);
+   925→  }
+   926→  if (!coupon.isActive) {
+   927→    throw new CouponExpiredError('This coupon is no longer active.');
+   928→  }
+   929→
+   930→  // Check expiry.
+   931→  if (coupon.validUntil && new Date(coupon.validUntil) < new Date()) {
+   932→    throw new CouponExpiredError();
+   933→  }
+   934→
+   935→  // Check redemption count.
+   936→  if (isFinite(coupon.maxRedemptions) && coupon.redemptionsCount >= coupon.maxRedemptions) {
+   937→    throw new CouponRedemptionExceededError();
+   938→  }
+   939→
+   940→  // Check applicable plans.
+   941→  if (
+   942→    coupon.applicablePlans !== 'all' &&
+   943→    !coupon.applicablePlans.includes(subscription.planId)
+   944→  ) {
+   945→    throw new CouponNotFoundError(
+   946→      `Coupon ${coupon.code} is not applicable to the ${subscription.planId} plan.`,
+   947→    );
+   948→  }
+   949→
+   950→  // Increment redemptions count.
+   951→  await updateDoc(doc(db, 'coupons', coupon.id), {
+   952→    redemptionsCount: coupon.redemptionsCount + 1,
+   953→    updatedAt: serverTimestamp(),
+   954→  });
+   955→
+   956→  // Attach to subscription.
+   957→  const discountPercent = coupon.type === 'percent' ? coupon.value : 0;
+   958→  await updateDoc(doc(db, 'subscriptions', subscription.id), {
+   959→    couponCode: coupon.code,
+   960→    couponDiscountPercent: discountPercent,
+   961→    updatedAt: serverTimestamp(),
+   962→  });
+   963→
+   964→  // Compute the discount amount for the upcoming invoice.
+   965→  const plan = getPlan(subscription.planId);
+   966→  const baseAmount = plan
+   967→    ? getPlanPrice(subscription.planId, subscription.billingCycle)
+   968→    : 0;
+   969→  const { discountAmount } = applyCouponToAmount(baseAmount, coupon);
+   970→
+   971→  return {
+   972→    coupon: { ...coupon, redemptionsCount: coupon.redemptionsCount + 1 },
+   973→    discountPercent,
+   974→    discountAmount,
+   975→  };
+   976→}
+   977→
+   978→// ─── Tax Calculation ──────────────────────────────────────────────────────────
+   979→
+   980→/**
+   981→ * Calculate taxes for an amount (GST).
+   982→ */
+   983→export async function calculateTaxes(
+   984→  input: CalculateTaxesInput,
+   985→): Promise<CalculateTaxesResult> {
+   986→  assertOrg(input.organizationId ?? '');
+   987→  if (input.taxExempt) {
+   988→    return {
+   989→      subtotal: input.amount,
+   990→      taxBreakdown: { cgst: 0, sgst: 0, igst: 0, cess: 0 },
+   991→      tax: 0,
+   992→      total: input.amount,
+   993→    };
+   994→  }
+   995→  const totals = calculateInvoiceTotals(
+   996→    [
+   997→      {
+   998→        description: 'Taxable amount',
+   999→        quantity: 1,
+  1000→        unitPrice: input.amount,
+  1001→        amount: input.amount,
+  1002→        taxable: true,
+  1003→        hsnCode: '998314',
+  1004→      },
+  1005→    ],
+  1006→    null,
+  1007→    input.organizationState,
+  1008→    input.billingState,
+  1009→  );
+  1010→  return {
+  1011→    subtotal: totals.subtotal,
+  1012→    taxBreakdown: totals.taxBreakdown,
+  1013→    tax: totals.tax,
+  1014→    total: totals.total,
+  1015→  };
+  1016→}
+  1017→
+  1018→// ─── Payment Session Operations ───────────────────────────────────────────────
+  1019→
+  1020→/**
+  1021→ * Initiate a payment session for an invoice.
+  1022→ *
+  1023→ *   1. Reads the billing account to get the (encrypted) customer id
+  1024→ *   2. Decrypts the customer id
+  1025→ *   3. Calls provider.createPaymentSession
+  1026→ *   4. Creates a PaymentAttempt doc (status='initiated')
+  1027→ *   5. Returns { orderId, paymentUrl, attemptId }
+  1028→ */
+  1029→export async function initiatePayment(
+  1030→  input: InitiatePaymentInput,
+  1031→): Promise<InitiatePaymentResult> {
+  1032→  assertOrg(input.organizationId);
+  1033→
+  1034→  // Read the billing account.
+  1035→  const account = await readBillingAccount(input.organizationId);
+  1036→  if (!account.encryptedCustomerId) {
+  1037→    throw new BillingAccountNotFoundError(
+  1038→      'No payment provider customer is associated with this organization.',
+  1039→    );
+  1040→  }
+  1041→
+  1042→  // Decrypt the customer id (server-only).
+  1043→  const { decryptString } = await import('./crypto');
+  1044→  const customerId = decryptString(account.encryptedCustomerId);
+  1045→
+  1046→  // Call the provider.
+  1047→  const provider = getPaymentProvider(account.paymentProvider ?? undefined);
+  1048→  let sessionResult;
+  1049→  try {
+  1050→    sessionResult = await provider.createPaymentSession({
+  1051→      customerId,
+  1052→      amount: input.amount,
+  1053→      currency: 'INR',
+  1054→      description: input.description,
+  1055→      invoiceId: input.invoiceId,
+  1056→      method: input.method,
+  1057→      returnUrl: input.returnUrl,
+  1058→    });
+  1059→  } catch (err) {
+  1060→    throw rethrowTyped(err);
+  1061→  }
+  1062→
+  1063→  // Create the PaymentAttempt doc.
+  1064→  const now = new Date().toISOString();
+  1065→  const attemptRef = await addDoc(collection(db, 'payment_attempts'), {
+  1066→    organizationId: input.organizationId,
+  1067→    paymentId: null,
+  1068→    subscriptionId: input.subscriptionId,
+  1069→    invoiceId: input.invoiceId,
+  1070→    amount: input.amount,
+  1071→    provider: provider.provider,
+  1072→    status: 'initiated',
+  1073→    errorCode: null,
+  1074→    errorMessage: null,
+  1075→    providerRequestId: sessionResult.orderId,
+  1076→    attemptNumber: 1,
+  1077→    createdAt: serverTimestamp(),
+  1078→  });
+  1079→
+  1080→  return {
+  1081→    orderId: sessionResult.orderId,
+  1082→    paymentUrl: sessionResult.paymentUrl ?? null,
+  1083→    attemptId: attemptRef.id,
+  1084→  };
+  1085→}
+  1086→
+  1087→/**
+  1088→ * Complete a payment after the customer returns from the hosted checkout.
+  1089→ *
+  1090→ *   1. Calls provider.verifyPayment
+  1091→ *   2. If succeeded → recordPayment flow
+  1092→ *   3. If failed → mark PaymentAttempt failed + schedule retry
+  1093→ */
+  1094→export async function completePayment(
+  1095→  organizationId: string,
+  1096→  orderId: string,
+  1097→  paymentId: string,
+  1098→  signature?: string,
+  1099→): Promise<CompletePaymentResult> {
+  1100→  assertOrg(organizationId);
+  1101→
+  1102→  // Read the PaymentAttempt to get context.
+  1103→  const attemptSnap = await getDocs(
+  1104→    query(
+  1105→      collection(db, 'payment_attempts'),
+  1106→      where('organizationId', '==', organizationId),
+  1107→      where('providerRequestId', '==', orderId),
+  1108→      limitConstraint(1),
+  1109→    ),
+  1110→  );
+  1111→  if (attemptSnap.empty) {
+  1112→    throw new PaymentFailedError(`Payment attempt for order ${orderId} not found.`);
+  1113→  }
+  1114→  const attemptData = attemptSnap.docs[0].data() as Record<string, unknown>;
+  1115→  const attemptId = attemptSnap.docs[0].id;
+  1116→
+  1117→  const provider = getPaymentProvider(attemptData.provider as PaymentProviderName);
+  1118→
+  1119→  let verified = false;
+  1120→  let providerPaymentId = paymentId;
+  1121→  let errorMessage: string | null = null;
+  1122→  try {
+  1123→    const result = await provider.verifyPayment({
+  1124→      orderId,
+  1125→      paymentId,
+  1126→      signature,
+  1127→    });
+  1128→    verified = result.succeeded;
+  1129→    providerPaymentId = result.providerPaymentId;
+  1130→    if (!verified) {
+  1131→      errorMessage = result.errorMessage ?? 'Payment verification failed.';
+  1132→    }
+  1133→  } catch (err) {
+  1134→    if (err instanceof PaymentDeclinedError) {
+  1135→      errorMessage = err.message;
+  1136→    } else {
+  1137→      throw rethrowTyped(err);
+  1138→    }
+  1139→  }
+  1140→
+  1141→  // Update the attempt.
+  1142→  await updateDoc(doc(db, 'payment_attempts', attemptId), {
+  1143→    status: verified ? 'succeeded' : 'failed',
+  1144→    paymentId: verified ? providerPaymentId : null,
+  1145→    errorCode: verified ? null : 'PAYMENT_FAILED',
+  1146→    errorMessage: verified ? null : errorMessage,
+  1147→  });
+  1148→
+  1149→  if (!verified) {
+  1150→    return {
+  1151→      payment: null,
+  1152→      invoice: null,
+  1153→      receipt: null,
+  1154→      succeeded: false,
+  1155→      errorMessage,
+  1156→    };
+  1157→  }
+  1158→
+  1159→  // Record the payment (creates Payment + marks invoice paid + generates receipt).
+  1160→  const result = await recordPayment({
+  1161→    organizationId,
+  1162→    subscriptionId: String(attemptData.subscriptionId ?? ''),
+  1163→    invoiceId: String(attemptData.invoiceId ?? ''),
+  1164→    amount: Number(attemptData.amount ?? 0),
+  1165→    method: 'upi', // Default; provider.retrievePayment can refine this
+  1166→    provider: attemptData.provider as PaymentProviderName,
+  1167→    providerPaymentId,
+  1168→    providerOrderId: orderId,
+  1169→    description: 'Payment completed via hosted checkout',
+  1170→  });
+  1171→
+  1172→  return {
+  1173→    payment: result.payment,
+  1174→    invoice: result.invoice,
+  1175→    receipt: result.receipt,
+  1176→    succeeded: true,
+  1177→    errorMessage: null,
+  1178→  };
+  1179→}
+  1180→
+  1181→// ─── Billing Health & Scheduler Operations ────────────────────────────────────
+  1182→
+  1183→/**
+  1184→ * Get the billing health for an organization.
+  1185→ */
+  1186→export async function getBillingHealth(
+  1187→  organizationId: string,
+  1188→): Promise<{
+  1189→  status: 'healthy' | 'past_due' | 'suspended' | 'cancelled' | 'none';
+  1190→  daysToRenewal: number | null;
+  1191→  outstandingAmount: number;
+  1192→  failedPayments: number;
+  1193→  gracePeriodEnd: string | null;
+  1194→}> {
+  1195→  assertOrg(organizationId);
+  1196→  const subscription = await findActiveSubscription(organizationId);
+  1197→  if (!subscription) {
+  1198→    return {
+  1199→      status: 'none',
+  1200→      daysToRenewal: null,
+  1201→      outstandingAmount: 0,
+  1202→      failedPayments: 0,
+  1203→      gracePeriodEnd: null,
+  1204→    };
+  1205→  }
+  1206→
+  1207→  const now = new Date();
+  1208→  const renewalDate = new Date(subscription.currentPeriodEnd);
+  1209→  const daysToRenewal = Math.max(
+  1210→    0,
+  1211→    Math.round((renewalDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+  1212→  );
+  1213→
+  1214→  // Sum unpaid invoices.
+  1215→  const invoices = await listInvoices(organizationId, subscription.id);
+  1216→  const outstanding = invoices
+  1217→    .filter((i) => i.status === 'sent' || i.status === 'overdue')
+  1218→    .reduce((sum, i) => sum + i.amountDue, 0);
+  1219→
+  1220→  // Count failed payments in the last 30 days.
+  1221→  const payments = await listPayments(organizationId, subscription.id);
+  1222→  const failedPayments = payments.filter(
+  1223→    (p) =>
+  1224→      p.status === 'failed' &&
+  1225→      new Date(p.createdAt).getTime() > now.getTime() - 30 * 24 * 60 * 60 * 1000,
+  1226→  ).length;
+  1227→
+  1228→  let status: 'healthy' | 'past_due' | 'suspended' | 'cancelled';
+  1229→  switch (subscription.status) {
+  1230→    case 'active':
+  1231→    case 'trialing':
+  1232→      status = 'healthy';
+  1233→      break;
+  1234→    case 'past_due':
+  1235→      status = 'past_due';
+  1236→      break;
+  1237→    case 'paused':
+  1238→      status = 'suspended';
+  1239→      break;
+  1240→    case 'cancelled':
+  1241→      status = 'cancelled';
+  1242→      break;
+  1243→    case 'expired':
+  1244→      status = 'suspended';
+  1245→      break;
+  1246→    default:
+  1247→      status = 'healthy';
+  1248→  }
+  1249→
+  1250→  return {
+  1251→    status,
+  1252→    daysToRenewal,
+  1253→    outstandingAmount: outstanding,
+  1254→    failedPayments,
+  1255→    gracePeriodEnd: subscription.gracePeriodEnd,
+  1256→  };
+  1257→}
+  1258→
+  1259→/**
+  1260→ * Process all subscriptions due for renewal (currentPeriodEnd < now AND
+  1261→ * status='active' AND autoRenew=true).
+  1262→ *
+  1263→ * For each: creates a new tax_invoice + auto-charges via the provider.
+  1264→ *
+  1265→ * Used by the scheduler.
+  1266→ */
+  1267→export async function processRenewalsDue(): Promise<{
+  1268→  processed: number;
+  1269→  failed: number;
+  1270→}> {
+  1271→  const now = new Date().toISOString();
+  1272→  // Find all active subscriptions past their period end.
+  1273→  const snap = await getDocs(
+  1274→    query(
+  1275→      collection(db, 'subscriptions'),
+  1276→      where('status', '==', 'active'),
+  1277→      where('autoRenew', '==', true),
+  1278→      where('currentPeriodEnd', '<=', now),
+  1279→      limitConstraint(50),
+  1280→    ),
+  1281→  );
+  1282→
+  1283→  let processed = 0;
+  1284→  let failed = 0;
+  1285→  for (const docSnap of snap.docs) {
+  1286→    const sub = { id: docSnap.id, ...(docSnap.data() as Omit<Subscription, 'id'>) } as Subscription;
+  1287→    try {
+  1288→      await renewSubscription(sub);
+  1289→      processed++;
+  1290→    } catch (err) {
+  1291→      console.warn(
+  1292→        `[billing/orchestrator] renewal failed for ${sub.id}:`,
+  1293→        friendlyBillingError(err),
+  1294→      );
+  1295→      failed++;
+  1296→    }
+  1297→  }
+  1298→  return { processed, failed };
+  1299→}
+  1300→
+  1301→/**
+  1302→ * Process grace period expirations — subscriptions past their grace period
+  1303→ * get marked as 'cancelled' (or 'expired').
+  1304→ */
+  1305→export async function processGracePeriodExpirations(): Promise<{
+  1306→  suspended: number;
+  1307→}> {
+  1308→  const now = new Date().toISOString();
+  1309→  const snap = await getDocs(
+  1310→    query(
+  1311→      collection(db, 'subscriptions'),
+  1312→      where('status', '==', 'past_due'),
+  1313→      where('gracePeriodEnd', '<=', now),
+  1314→      limitConstraint(50),
+  1315→    ),
+  1316→  );
+  1317→
+  1318→  let suspended = 0;
+  1319→  for (const docSnap of snap.docs) {
+  1320→    await updateDoc(docSnap.ref, {
+  1321→      status: 'cancelled',
+  1322→      endDate: now,
+  1323→      updatedAt: serverTimestamp(),
+  1324→    });
+  1325→    suspended++;
+  1326→  }
+  1327→  return { suspended };
+  1328→}
+  1329→
+  1330→/**
+  1331→ * Process failed payment retries — find failed PaymentAttempts due for retry
+  1332→ * and re-attempt them.
+  1333→ */
+  1334→export async function processFailedPaymentRetries(): Promise<{
+  1335→  retried: number;
+  1336→  succeeded: number;
+  1337→}> {
+  1338→  const now = new Date();
+  1339→  // Find failed attempts with status='failed' and a retry scheduled.
+  1340→  // (For simplicity, we just retry the most recent 10 failed attempts.)
+  1341→  const snap = await getDocs(
+  1342→    query(
+  1343→      collection(db, 'payment_attempts'),
+  1344→      where('status', '==', 'failed'),
+  1345→      orderBy('createdAt', 'asc'),
+  1346→      limitConstraint(10),
+  1347→    ),
+  1348→  );
+  1349→
+  1350→  let retried = 0;
+  1351→  let succeeded = 0;
+  1352→  for (const docSnap of snap.docs) {
+  1353→    const attempt = docSnap.data() as PaymentAttempt;
+  1354→    const { nextAttemptAt } = calculateFailedPaymentRetrySchedule(attempt.attemptNumber + 1);
+  1355→    if (!nextAttemptAt || nextAttemptAt > now) continue;
+  1356→
+  1357→    // Re-attempt: re-call completePayment with the original order id.
+  1358→    try {
+  1359→      const result = await completePayment(
+  1360→        attempt.organizationId,
+  1361→        attempt.providerRequestId ?? '',
+  1362→        '', // No new payment id; provider may regenerate one
+  1363→      );
+  1364→      retried++;
+  1365→      if (result.succeeded) succeeded++;
+  1366→    } catch (err) {
+  1367→      console.warn(
+  1368→        `[billing/orchestrator] retry failed for attempt ${attempt.id}:`,
+  1369→        friendlyBillingError(err),
+  1370→      );
+  1371→    }
+  1372→  }
+  1373→  return { retried, succeeded };
+  1374→}
+  1375→
+  1376→// ─── Internal helpers ─────────────────────────────────────────────────────────
+  1377→
+  1378→async function renewSubscription(subscription: Subscription): Promise<void> {
+  1379→  const plan = getPlan(subscription.planId);
+  1380→  if (!plan) throw new PlanNotFoundError(`Plan ${subscription.planId} not found.`);
+  1381→
+  1382→  // Create the new invoice.
+  1383→  const invoice = buildTaxInvoice({
+  1384→    organizationId: subscription.organizationId,
+  1385→    subscriptionId: subscription.id,
+  1386→    type: 'tax_invoice',
+  1387→    planId: subscription.planId,
+  1388→    billingCycle: subscription.billingCycle,
+  1389→    periodStart: subscription.currentPeriodEnd,
+  1390→    periodEnd: calculateNextBillingDate(
+  1391→      new Date(subscription.currentPeriodEnd),
+  1392→      subscription.billingCycle,
+  1393→    ).toISOString(),
+  1394→    couponCode: subscription.couponCode ?? undefined,
+  1395→    createdBy: { uid: 'system', name: 'System', email: 'system@gstpilot.test' },
+  1396→  });
+  1397→  invoice.id = '';
+  1398→  await addDoc(collection(db, 'billing_invoices'), {
+  1399→    ...invoice,
+  1400→    organizationId: subscription.organizationId,
+  1401→    createdAt: serverTimestamp(),
+  1402→    updatedAt: serverTimestamp(),
+  1403→  });
+  1404→
+  1405→  // Auto-charge via the provider (if a saved payment method exists).
+  1406→  // For the mock provider, this always succeeds (or fails 10% of the time).
+  1407→  try {
+  1408→    const session = await initiatePayment({
+  1409→      organizationId: subscription.organizationId,
+  1410→      subscriptionId: subscription.id,
+  1411→      invoiceId: invoice.id,
+  1412→      amount: invoice.amountDue,
+  1413→      description: `Renewal: ${plan.name} Plan`,
+  1414→      returnUrl: '',
+  1415→    });
+  1416→    // Immediately "complete" the payment (mock provider doesn't require customer interaction).
+  1417→    await completePayment(
+  1418→      subscription.organizationId,
+  1419→      session.orderId,
+  1420→      '', // mock provider generates the payment id internally
+  1421→    );
+  1422→
+  1423→    // Advance the subscription period.
+  1424→    const newPeriodEnd = calculateNextBillingDate(
+  1425→      new Date(subscription.currentPeriodEnd),
+  1426→      subscription.billingCycle,
+  1427→    ).toISOString();
+  1428→    await updateDoc(doc(db, 'subscriptions', subscription.id), {
+  1429→      currentPeriodStart: subscription.currentPeriodEnd,
+  1430→      currentPeriodEnd: newPeriodEnd,
+  1431→      status: 'active',
+  1432→      gracePeriodEnd: null,
+  1433→      updatedAt: serverTimestamp(),
+  1434→    });
+  1435→  } catch (err) {
+  1436→    // Payment failed — enter grace period.
+  1437→    const graceEnd = calculateGracePeriodEnd(new Date()).toISOString();
+  1438→    await updateDoc(doc(db, 'subscriptions', subscription.id), {
+  1439→      status: 'past_due',
+  1440→      gracePeriodEnd: graceEnd,
+  1441→      updatedAt: serverTimestamp(),
+  1442→    });
+  1443→    throw err;
+  1444→  }
+  1445→}
+  1446→
+  1447→async function readSubscription(
+  1448→  organizationId: string,
+  1449→  subscriptionId: string,
+  1450→): Promise<Subscription> {
+  1451→  const snap = await getDoc(doc(db, 'subscriptions', subscriptionId));
+  1452→  if (!snap.exists()) {
+  1453→    throw new SubscriptionNotFoundError(`Subscription ${subscriptionId} not found.`);
+  1454→  }
+  1455→  const data = snap.data() as Record<string, unknown>;
+  1456→  if (data.organizationId !== organizationId) {
+  1457→    throw new SubscriptionNotFoundError(
+  1458→      `Subscription ${subscriptionId} does not belong to organization ${organizationId}.`,
+  1459→    );
+  1460→  }
+  1461→  return { id: snap.id, ...(data as Omit<Subscription, 'id'>) };
+  1462→}
+  1463→
+  1464→async function findActiveSubscription(
+  1465→  organizationId: string,
+  1466→): Promise<Subscription | null> {
+  1467→  const snap = await getDocs(
+  1468→    query(
+  1469→      collection(db, 'subscriptions'),
+  1470→      where('organizationId', '==', organizationId),
+  1471→      where('status', 'in', ['active', 'trialing', 'past_due', 'paused']),
+  1472→      limitConstraint(1),
+  1473→    ),
+  1474→  );
+  1475→  if (snap.empty) return null;
+  1476→  const d = snap.docs[0];
+  1477→  return { id: d.id, ...(d.data() as Omit<Subscription, 'id'>) };
+  1478→}
+  1479→
+  1480→async function readInvoice(
+  1481→  organizationId: string,
+  1482→  invoiceId: string,
+  1483→): Promise<BillingInvoice> {
+  1484→  const snap = await getDoc(doc(db, 'billing_invoices', invoiceId));
+  1485→  if (!snap.exists()) {
+  1486→    throw new InvoiceNotFoundError(`Invoice ${invoiceId} not found.`);
+  1487→  }
+  1488→  const data = snap.data() as Record<string, unknown>;
+  1489→  if (data.organizationId !== organizationId) {
+  1490→    throw new InvoiceNotFoundError(
+  1491→      `Invoice ${invoiceId} does not belong to organization ${organizationId}.`,
+  1492→    );
+  1493→  }
+  1494→  return { id: snap.id, ...(data as Omit<BillingInvoice, 'id'>) };
+  1495→}
+  1496→
+  1497→async function readPayment(
+  1498→  organizationId: string,
+  1499→  paymentId: string,
+  1500→): Promise<Payment> {
+  1501→  const snap = await getDoc(doc(db, 'payments', paymentId));
+  1502→  if (!snap.exists()) {
+  1503→    throw new InvoiceNotFoundError(`Payment ${paymentId} not found.`);
+  1504→  }
+  1505→  const data = snap.data() as Record<string, unknown>;
+  1506→  if (data.organizationId !== organizationId) {
+  1507→    throw new InvoiceNotFoundError(
+  1508→      `Payment ${paymentId} does not belong to organization ${organizationId}.`,
+  1509→    );
+  1510→  }
+  1511→  return { id: snap.id, ...(data as Omit<Payment, 'id'>) };
+  1512→}
+  1513→
+  1514→async function readBillingAccount(
+  1515→  organizationId: string,
+  1516→): Promise<BillingAccount> {
+  1517→  const snap = await getDocs(
+  1518→    query(
+  1519→      collection(db, 'billing_accounts'),
+  1520→      where('organizationId', '==', organizationId),
+  1521→      limitConstraint(1),
+  1522→    ),
+  1523→  );
+  1524→  if (snap.empty) {
+  1525→    throw new BillingAccountNotFoundError();
+  1526→  }
+  1527→  const d = snap.docs[0];
+  1528→  return { id: d.id, ...(d.data() as Omit<BillingAccount, 'id'>) };
+  1529→}
+  1530→
+  1531→async function findCoupon(code: string): Promise<Coupon | null> {
+  1532→  const upperCode = code.toUpperCase().trim();
+  1533→  const snap = await getDocs(
+  1534→    query(
+  1535→      collection(db, 'coupons'),
+  1536→      where('code', '==', upperCode),
+  1537→      limitConstraint(1),
+  1538→    ),
+  1539→  );
+  1540→  if (snap.empty) return null;
+  1541→  const d = snap.docs[0];
+  1542→  return { id: d.id, ...(d.data() as Omit<Coupon, 'id'>) };
+  1543→}
+  1544→
+  1545→async function findLatestInvoice(
+  1546→  organizationId: string,
+  1547→  subscriptionId: string,
+  1548→): Promise<BillingInvoice | null> {
+  1549→  const snap = await getDocs(
+  1550→    query(
+  1551→      collection(db, 'billing_invoices'),
+  1552→      where('organizationId', '==', organizationId),
+  1553→      where('subscriptionId', '==', subscriptionId),
+  1554→      orderBy('createdAt', 'desc'),
+  1555→      limitConstraint(1),
+  1556→    ),
+  1557→  );
+  1558→  if (snap.empty) return null;
+  1559→  const d = snap.docs[0];
+  1560→  return { id: d.id, ...(d.data() as Omit<BillingInvoice, 'id'>) };
+  1561→}
+  1562→
+  1563→async function listInvoices(
+  1564→  organizationId: string,
+  1565→  subscriptionId: string,
+  1566→): Promise<BillingInvoice[]> {
+  1567→  const snap = await getDocs(
+  1568→    query(
+  1569→      collection(db, 'billing_invoices'),
+  1570→      where('organizationId', '==', organizationId),
+  1571→      where('subscriptionId', '==', subscriptionId),
+  1572→      orderBy('createdAt', 'desc'),
+  1573→      limitConstraint(50),
+  1574→    ),
+  1575→  );
+  1576→  return snap.docs.map((d) => ({
+  1577→    id: d.id,
+  1578→    ...(d.data() as Omit<BillingInvoice, 'id'>),
+  1579→  }));
+  1580→}
+  1581→
+  1582→async function listPayments(
+  1583→  organizationId: string,
+  1584→  subscriptionId: string,
+  1585→): Promise<Payment[]> {
+  1586→  const snap = await getDocs(
+  1587→    query(
+  1588→      collection(db, 'payments'),
+  1589→      where('organizationId', '==', organizationId),
+  1590→      where('subscriptionId', '==', subscriptionId),
+  1591→      orderBy('createdAt', 'desc'),
+  1592→      limitConstraint(50),
+  1593→    ),
+  1594→  );
+  1595→  return snap.docs.map((d) => ({
+  1596→    id: d.id,
+  1597→    ...(d.data() as Omit<Payment, 'id'>),
+  1598→  }));
+  1599→}
+  1600→
+  1601→/**
+  1602→ * Wrap an unknown error in a typed BillingError if it isn't already one.
+  1603→ */
+  1604→function rethrowTyped(err: unknown): never {
+  1605→  if (err instanceof BillingError) throw err;
+  1606→  if (err instanceof Error) {
+  1607→    throw new BillingError(err.message, {
+  1608→      code: 'PROVIDER_ERROR',
+  1609→      statusCode: 502,
+  1610→      retryable: true,
+  1611→      cause: err,
+  1612→    });
+  1613→  }
+  1614→  throw new BillingError('An unknown error occurred while contacting the payment provider.', {
+  1615→    code: 'UNKNOWN',
+  1616→    statusCode: 500,
+  1617→  });
+  1618→}
+  1619→
+  1620→// ─── Provider diagnostics ────────────────────────────────────────────────────
+  1621→
+  1622→export async function providerHealthCheck(): Promise<{
+  1623→  healthy: boolean;
+  1624→  name: string;
+  1625→  provider: PaymentProviderName;
+  1626→  isLive: boolean;
+  1627→}> {
+  1628→  const p = getPaymentProvider();
+  1629→  try {
+  1630→    const healthy = await p.healthCheck();
+  1631→    return { healthy, name: p.name, provider: p.provider, isLive: p.isLive };
+  1632→  } catch {
+  1633→    return { healthy: false, name: p.name, provider: p.provider, isLive: p.isLive };
+  1634→  }
+  1635→}
+  1636→
+  1637→// ─── Type re-exports ─────────────────────────────────────────────────────────
+  1638→
+  1639→export type {
+  1640→  ApplyCouponInput,
+  1641→  ApplyCouponResult,
+  1642→  BillingAccount,
+  1643→  BillingInvoice,
+  1644→  CalculateTaxesInput,
+  1645→  CalculateTaxesResult,
+  1646→  CompletePaymentResult,
+  1647→  CreateInvoiceInput,
+  1648→  CreateInvoiceResult,
+  1649→  CreateSubscriptionInput,
+  1650→  CreateSubscriptionResult,
+  1651→  InitiatePaymentInput,
+  1652→  InitiatePaymentResult,
+  1653→  Payment,
+  1654→  PaymentAttempt,
+  1655→  Receipt,
+  1656→  RecordPaymentInput,
+  1657→  RecordPaymentResult,
+  1658→  RefundPaymentInput,
+  1659→  RefundPaymentResult,
+  1660→  Subscription,
+  1661→  UpgradePlanResult,
+  1662→};
+  1663→

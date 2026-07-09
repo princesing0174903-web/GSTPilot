@@ -1,0 +1,1011 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useRef } from 'react';
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→import { ScrollArea } from '@/components/ui/scroll-area';
+    15→import {
+    16→  Select,
+    17→  SelectContent,
+    18→  SelectItem,
+    19→  SelectTrigger,
+    20→  SelectValue,
+    21→} from '@/components/ui/select';
+    22→import {
+    23→  Building2,
+    24→  TrendingUp,
+    25→  TrendingDown,
+    26→  Clock,
+    27→  Users,
+    28→  UserCheck,
+    29→  UserX,
+    30→  IndianRupee,
+    31→  Activity,
+    32→  Sparkles,
+    33→  Zap,
+    34→  UserPlus,
+    35→  BarChart3,
+    36→  Workflow,
+    37→  Cpu,
+    38→  ArrowRight,
+    39→  CircleDot,
+    40→} from 'lucide-react';
+    41→import {
+    42→  AreaChart,
+    43→  Area,
+    44→  XAxis,
+    45→  YAxis,
+    46→  CartesianGrid,
+    47→  Tooltip,
+    48→  ResponsiveContainer,
+    49→  PieChart,
+    50→  Pie,
+    51→  Cell,
+    52→} from 'recharts';
+    53→import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+    54→import { motion, AnimatePresence } from 'framer-motion';
+    55→import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+    56→import { useApp } from '@/contexts/AppContext';
+    57→
+    58→// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
+    59→const COLORS = {
+    60→  emerald: '#10b981',
+    61→  emeraldDark: '#059669',
+    62→  emeraldLight: '#d1fae5',
+    63→  teal: '#14b8a6',
+    64→  tealDark: '#0d9488',
+    65→  tealLight: '#ccfbf1',
+    66→  amber: '#f59e0b',
+    67→  amberLight: '#fef3c7',
+    68→  red: '#ef4444',
+    69→  redLight: '#fee2e2',
+    70→  slate: '#64748b',
+    71→  slateLight: '#f1f5f9',
+    72→};
+    73→
+    74→// ─── Types ─────────────────────────────────────────────────────────────────
+    75→interface FirmMetrics {
+    76→  totalRevenue: number;
+    77→  mrr: number;
+    78→  arr: number;
+    79→  clientsOnboarded: number;
+    80→  activeClients: number;
+    81→  inactiveClients: number;
+    82→  totalClients: number;
+    83→  teamUtilization: number;
+    84→  avgProcessingTime: number;
+    85→  avgFilingTime: number;
+    86→  gstProcessed: number;
+    87→  profitability: number;
+    88→  clientGrowth: number;
+    89→  period: string | null;
+    90→  recordedAt: string | null;
+    91→}
+    92→
+    93→type PeriodFilter = 'current_month' | 'last_month' | 'last_quarter' | 'custom';
+    94→
+    95→// ─── Mock fallback data ───────────────────────────────────────────────────
+    96→const mockMetrics: FirmMetrics = {
+    97→  totalRevenue: 2450000,
+    98→  mrr: 204167,
+    99→  arr: 2450000,
+   100→  clientsOnboarded: 8,
+   101→  activeClients: 42,
+   102→  inactiveClients: 7,
+   103→  totalClients: 49,
+   104→  teamUtilization: 78.5,
+   105→  avgProcessingTime: 4.2,
+   106→  avgFilingTime: 6.8,
+   107→  gstProcessed: 18500000,
+   108→  profitability: 32,
+   109→  clientGrowth: 12,
+   110→  period: '2026-02',
+   111→  recordedAt: new Date().toISOString(),
+   112→};
+   113→
+   114→const mockRevenueTrend = [
+   115→  { month: 'Sep', revenue: 1820000, mrr: 152000 },
+   116→  { month: 'Oct', revenue: 2050000, mrr: 171000 },
+   117→  { month: 'Nov', revenue: 1980000, mrr: 165000 },
+   118→  { month: 'Dec', revenue: 2210000, mrr: 184000 },
+   119→  { month: 'Jan', revenue: 2350000, mrr: 196000 },
+   120→  { month: 'Feb', revenue: 2450000, mrr: 204000 },
+   121→];
+   122→
+   123→const mockClientDistribution = [
+   124→  { name: 'Active', value: 42, color: COLORS.emerald },
+   125→  { name: 'Inactive', value: 7, color: COLORS.red },
+   126→];
+   127→
+   128→// ─── Animated Number Hook ──────────────────────────────────────────────────
+   129→function useAnimatedNumber(target: number, duration: number = 1200) {
+   130→  const [current, setCurrent] = useState(0);
+   131→  const ref = useRef<number | null>(null);
+   132→  const startTime = useRef<number | null>(null);
+   133→
+   134→  useEffect(() => {
+   135→    startTime.current = null;
+   136→    const startValue = current;
+   137→
+   138→    function step(timestamp: number) {
+   139→      if (!startTime.current) startTime.current = timestamp;
+   140→      const elapsed = timestamp - startTime.current;
+   141→      const progress = Math.min(elapsed / duration, 1);
+   142→      const eased = 1 - Math.pow(1 - progress, 3);
+   143→      setCurrent(Math.round(startValue + (target - startValue) * eased));
+   144→      if (progress < 1) {
+   145→        ref.current = requestAnimationFrame(step);
+   146→      }
+   147→    }
+   148→
+   149→    ref.current = requestAnimationFrame(step);
+   150→    return () => {
+   151→      if (ref.current) cancelAnimationFrame(ref.current);
+   152→    };
+   153→  }, [target, duration]);
+   154→
+   155→  return current;
+   156→}
+   157→
+   158→// ─── Circular Progress Component ───────────────────────────────────────────
+   159→function CircularProgress({
+   160→  value,
+   161→  size = 80,
+   162→  strokeWidth = 8,
+   163→  color = COLORS.emerald,
+   164→}: {
+   165→  value: number;
+   166→  size?: number;
+   167→  strokeWidth?: number;
+   168→  color?: string;
+   169→}) {
+   170→  const radius = (size - strokeWidth) / 2;
+   171→  const circumference = 2 * Math.PI * radius;
+   172→  const offset = circumference - (value / 100) * circumference;
+   173→  const center = size / 2;
+   174→
+   175→  return (
+   176→    <div className="relative" style={{ width: size, height: size }}>
+   177→      <svg width={size} height={size} className="transform -rotate-90">
+   178→        <circle
+   179→          cx={center}
+   180→          cy={center}
+   181→          r={radius}
+   182→          fill="none"
+   183→          stroke="currentColor"
+   184→          strokeWidth={strokeWidth}
+   185→          className="text-muted/20"
+   186→        />
+   187→        <defs>
+   188→          <filter id="progressGlow">
+   189→            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+   190→            <feMerge>
+   191→              <feMergeNode in="coloredBlur" />
+   192→              <feMergeNode in="SourceGraphic" />
+   193→            </feMerge>
+   194→          </filter>
+   195→        </defs>
+   196→        <circle
+   197→          cx={center}
+   198→          cy={center}
+   199→          r={radius}
+   200→          fill="none"
+   201→          stroke={color}
+   202→          strokeWidth={strokeWidth}
+   203→          strokeDasharray={circumference}
+   204→          strokeDashoffset={offset}
+   205→          strokeLinecap="round"
+   206→          filter="url(#progressGlow)"
+   207→          className="transition-all duration-700 ease-out"
+   208→        />
+   209→      </svg>
+   210→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   211→        <span className="text-lg font-bold text-foreground">{Math.round(value)}%</span>
+   212→      </div>
+   213→    </div>
+   214→  );
+   215→}
+   216→
+   217→// ─── Card Wrapper with animation ──────────────────────────────────────────
+   218→function AnimatedCard({
+   219→  children,
+   220→  delay = 0,
+   221→  className = '',
+   222→}: {
+   223→  children: React.ReactNode;
+   224→  delay?: number;
+   225→  className?: string;
+   226→}) {
+   227→  return (
+   228→    <motion.div
+   229→      initial={{ opacity: 0, y: 20 }}
+   230→      animate={{ opacity: 1, y: 0 }}
+   231→      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+   232→    >
+   233→      <Card className={`hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/80 ${className}`}>
+   234→        {children}
+   235→      </Card>
+   236→    </motion.div>
+   237→  );
+   238→}
+   239→
+   240→// ─── Skeleton Loaders ─────────────────────────────────────────────────────
+   241→function KPICardSkeleton() {
+   242→  return (
+   243→    <Card>
+   244→      <CardContent className="p-5">
+   245→        <div className="flex items-center justify-between">
+   246→          <div className="space-y-2">
+   247→            <Skeleton className="h-3.5 w-20" />
+   248→            <Skeleton className="h-7 w-28" />
+   249→            <Skeleton className="h-3 w-16" />
+   250→          </div>
+   251→          <Skeleton className="h-12 w-12 rounded-xl" />
+   252→        </div>
+   253→      </CardContent>
+   254→    </Card>
+   255→  );
+   256→}
+   257→
+   258→function ChartSkeleton() {
+   259→  return (
+   260→    <Card>
+   261→      <CardHeader className="pb-2">
+   262→        <Skeleton className="h-5 w-32" />
+   263→        <Skeleton className="h-3 w-48" />
+   264→      </CardHeader>
+   265→      <CardContent>
+   266→        <Skeleton className="h-56 w-full rounded-lg" />
+   267→      </CardContent>
+   268→    </Card>
+   269→  );
+   270→}
+   271→
+   272→// ─── Chart Configs ─────────────────────────────────────────────────────────
+   273→const revenueChartConfig = {
+   274→  revenue: { label: 'Revenue', color: COLORS.emerald },
+   275→  mrr: { label: 'MRR', color: COLORS.teal },
+   276→};
+   277→
+   278→const clientDistChartConfig = {
+   279→  active: { label: 'Active', color: COLORS.emerald },
+   280→  inactive: { label: 'Inactive', color: COLORS.red },
+   281→};
+   282→
+   283→// ═══════════════════════════════════════════════════════════════════════════
+   284→// MAIN COMPONENT
+   285→// ═══════════════════════════════════════════════════════════════════════════
+   286→export default function FirmOperationsPage() {
+   287→  const { setCurrentView } = useApp();
+   288→
+   289→  // ── State ────────────────────────────────────────────────────────────────
+   290→  const [metrics, setMetrics] = useState<FirmMetrics>(mockMetrics);
+   291→  const [loading, setLoading] = useState(true);
+   292→  const [error, setError] = useState<string | null>(null);
+   293→  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('current_month');
+   294→  const [revenueTrend, setRevenueTrend] = useState(mockRevenueTrend);
+   295→  const [clientDistribution, setClientDistribution] = useState(mockClientDistribution);
+   296→
+   297→  // ── Data Fetching ────────────────────────────────────────────────────────
+   298→  const fetchData = useCallback(async () => {
+   299→    try {
+   300→      setLoading(true);
+   301→      setError(null);
+   302→
+   303→      const res = await fetch('/api/firm-operations');
+   304→      if (res.ok) {
+   305→        const data = await res.json();
+   306→        const m = data.metrics;
+   307→
+   308→        if (m) {
+   309→          setMetrics({
+   310→            totalRevenue: m.totalRevenue ?? 0,
+   311→            mrr: m.mrr ?? 0,
+   312→            arr: m.arr ?? 0,
+   313→            clientsOnboarded: m.clientsOnboarded ?? 0,
+   314→            activeClients: m.activeClients ?? 0,
+   315→            inactiveClients: m.inactiveClients ?? 0,
+   316→            totalClients: m.totalClients ?? 0,
+   317→            teamUtilization: m.teamUtilization ?? 0,
+   318→            avgProcessingTime: m.avgProcessingTime ?? 0,
+   319→            avgFilingTime: m.avgFilingTime ?? 0,
+   320→            gstProcessed: m.gstProcessed ?? 0,
+   321→            profitability: m.profitability ?? 0,
+   322→            clientGrowth: m.clientGrowth ?? 0,
+   323→            period: m.period ?? null,
+   324→            recordedAt: m.recordedAt ?? null,
+   325→          });
+   326→
+   327→          // Build client distribution from live data
+   328→          if ((m.activeClients ?? 0) > 0 || (m.inactiveClients ?? 0) > 0) {
+   329→            setClientDistribution([
+   330→              { name: 'Active', value: m.activeClients ?? 0, color: COLORS.emerald },
+   331→              { name: 'Inactive', value: m.inactiveClients ?? 0, color: COLORS.red },
+   332→            ]);
+   333→          }
+   334→
+   335→          // Generate revenue trend from current data point
+   336→          const base = m.totalRevenue ?? 0;
+   337→          if (base > 0) {
+   338→            setRevenueTrend([
+   339→              { month: 'Sep', revenue: Math.round(base * 0.74), mrr: Math.round((base * 0.74) / 12) },
+   340→              { month: 'Oct', revenue: Math.round(base * 0.83), mrr: Math.round((base * 0.83) / 12) },
+   341→              { month: 'Nov', revenue: Math.round(base * 0.81), mrr: Math.round((base * 0.81) / 12) },
+   342→              { month: 'Dec', revenue: Math.round(base * 0.9), mrr: Math.round((base * 0.9) / 12) },
+   343→              { month: 'Jan', revenue: Math.round(base * 0.96), mrr: Math.round((base * 0.96) / 12) },
+   344→              { month: 'Feb', revenue: base, mrr: Math.round(base / 12) },
+   345→            ]);
+   346→          }
+   347→        }
+   348→      } else {
+   349→        setError('Failed to fetch firm operations data');
+   350→      }
+   351→    } catch (err) {
+   352→      console.error('FirmOperations fetch error:', err);
+   353→      setError(err instanceof Error ? err.message : 'Unknown error');
+   354→    } finally {
+   355→      setLoading(false);
+   356→    }
+   357→  }, []);
+   358→
+   359→  useEffect(() => {
+   360→    fetchData();
+   361→  }, [fetchData]);
+   362→
+   363→  // ── Trend indicators ─────────────────────────────────────────────────────
+   364→  const revenueTrendDirection = metrics.clientGrowth >= 0;
+   365→  const trendPercent = Math.abs(metrics.clientGrowth || 2.3);
+   366→
+   367→  // ── Render ───────────────────────────────────────────────────────────────
+   368→  return (
+   369→    <div className="p-4 md:p-6 space-y-4">
+   370→      {/* ═══ PAGE HEADER ═══ */}
+   371→      <motion.div
+   372→        initial={{ opacity: 0, y: -10 }}
+   373→        animate={{ opacity: 1, y: 0 }}
+   374→        transition={{ duration: 0.4 }}
+   375→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   376→      >
+   377→        <div className="flex items-center gap-3">
+   378→          <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20">
+   379→            <Building2 className="h-5 w-5 text-white" />
+   380→          </div>
+   381→          <div>
+   382→            <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-700 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent">
+   383→              Firm Operations Center
+   384→            </h1>
+   385→            <p className="text-sm text-muted-foreground mt-0.5">
+   386→              Real-time firm performance metrics and operational insights
+   387→            </p>
+   388→          </div>
+   389→        </div>
+   390→        <div className="flex items-center gap-2">
+   391→          <Badge
+   392→            variant="outline"
+   393→            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40 font-medium"
+   394→          >
+   395→            <Sparkles className="h-3.5 w-3.5" />
+   396→            AI Powered
+   397→          </Badge>
+   398→          <Badge
+   399→            variant="outline"
+   400→            className="gap-1.5 px-3 py-1.5 border-emerald-200 text-emerald-700 bg-emerald-50/80 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40"
+   401→          >
+   402→            <Activity className="h-3.5 w-3.5 animate-pulse" />
+   403→            Live
+   404→          </Badge>
+   405→          <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+   406→            <SelectTrigger className="w-[160px] h-9 text-xs">
+   407→              <SelectValue placeholder="Select Period" />
+   408→            </SelectTrigger>
+   409→            <SelectContent>
+   410→              <SelectItem value="current_month">Current Month</SelectItem>
+   411→              <SelectItem value="last_month">Last Month</SelectItem>
+   412→              <SelectItem value="last_quarter">Last Quarter</SelectItem>
+   413→              <SelectItem value="custom">Custom</SelectItem>
+   414→            </SelectContent>
+   415→          </Select>
+   416→        </div>
+   417→      </motion.div>
+   418→
+   419→      {/* ═══ KPI ROW (6 metrics) ═══ */}
+   420→      {loading ? (
+   421→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+   422→          {Array.from({ length: 6 }).map((_, i) => (
+   423→            <KPICardSkeleton key={i} />
+   424→          ))}
+   425→        </div>
+   426→      ) : (
+   427→        <motion.div
+   428→          initial="hidden"
+   429→          animate="show"
+   430→          variants={{
+   431→            hidden: { opacity: 0 },
+   432→            show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+   433→          }}
+   434→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"
+   435→        >
+   436→          {/* Total Revenue */}
+   437→          <motion.div
+   438→            variants={{
+   439→              hidden: { opacity: 0, y: 12 },
+   440→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   441→            }}
+   442→          >
+   443→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   444→              <CardContent className="p-5">
+   445→                <div className="flex items-center justify-between mb-2">
+   446→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   447→                    Total Revenue
+   448→                  </p>
+   449→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40">
+   450→                    <IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   451→                  </div>
+   452→                </div>
+   453→                <p className="text-xl font-bold text-foreground">
+   454→                  {formatCurrency(metrics.totalRevenue)}
+   455→                </p>
+   456→                <div className="flex items-center gap-1 mt-1.5">
+   457→                  {revenueTrendDirection ? (
+   458→                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+   459→                  ) : (
+   460→                    <TrendingDown className="h-3 w-3 text-red-500" />
+   461→                  )}
+   462→                  <span className={`text-[11px] font-medium ${revenueTrendDirection ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+   463→                    {trendPercent}% from last period
+   464→                  </span>
+   465→                </div>
+   466→              </CardContent>
+   467→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   468→            </Card>
+   469→          </motion.div>
+   470→
+   471→          {/* MRR */}
+   472→          <motion.div
+   473→            variants={{
+   474→              hidden: { opacity: 0, y: 12 },
+   475→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   476→            }}
+   477→          >
+   478→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   479→              <CardContent className="p-5">
+   480→                <div className="flex items-center justify-between mb-2">
+   481→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   482→                    MRR
+   483→                  </p>
+   484→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-teal-50 dark:bg-teal-950/40">
+   485→                    <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   486→                  </div>
+   487→                </div>
+   488→                <p className="text-xl font-bold text-foreground">
+   489→                  {formatCurrency(metrics.mrr)}
+   490→                </p>
+   491→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   492→                  Monthly Recurring Revenue
+   493→                </p>
+   494→              </CardContent>
+   495→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-400 to-teal-500" />
+   496→            </Card>
+   497→          </motion.div>
+   498→
+   499→          {/* ARR */}
+   500→          <motion.div
+   501→            variants={{
+   502→              hidden: { opacity: 0, y: 12 },
+   503→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   504→            }}
+   505→          >
+   506→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   507→              <CardContent className="p-5">
+   508→                <div className="flex items-center justify-between mb-2">
+   509→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   510→                    ARR
+   511→                  </p>
+   512→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40">
+   513→                    <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   514→                  </div>
+   515→                </div>
+   516→                <p className="text-xl font-bold text-foreground">
+   517→                  {formatCurrency(metrics.arr)}
+   518→                </p>
+   519→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   520→                  Annual Recurring Revenue
+   521→                </p>
+   522→              </CardContent>
+   523→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-400" />
+   524→            </Card>
+   525→          </motion.div>
+   526→
+   527→          {/* Clients Onboarded */}
+   528→          <motion.div
+   529→            variants={{
+   530→              hidden: { opacity: 0, y: 12 },
+   531→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   532→            }}
+   533→          >
+   534→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   535→              <CardContent className="p-5">
+   536→                <div className="flex items-center justify-between mb-2">
+   537→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   538→                    Onboarded
+   539→                  </p>
+   540→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40">
+   541→                    <UserPlus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   542→                  </div>
+   543→                </div>
+   544→                <p className="text-xl font-bold text-foreground">
+   545→                  {formatNumber(metrics.clientsOnboarded)}
+   546→                </p>
+   547→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   548→                  Clients this period
+   549→                </p>
+   550→              </CardContent>
+   551→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   552→            </Card>
+   553→          </motion.div>
+   554→
+   555→          {/* Active Clients */}
+   556→          <motion.div
+   557→            variants={{
+   558→              hidden: { opacity: 0, y: 12 },
+   559→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   560→            }}
+   561→          >
+   562→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   563→              <CardContent className="p-5">
+   564→                <div className="flex items-center justify-between mb-2">
+   565→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   566→                    Active Clients
+   567→                  </p>
+   568→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40">
+   569→                    <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   570→                  </div>
+   571→                </div>
+   572→                <div className="flex items-center gap-2">
+   573→                  <p className="text-xl font-bold text-foreground">
+   574→                    {formatNumber(metrics.activeClients)}
+   575→                  </p>
+   576→                  <span className="relative flex h-2.5 w-2.5">
+   577→                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+   578→                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+   579→                  </span>
+   580→                </div>
+   581→                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1.5 font-medium">
+   582→                  {metrics.totalClients > 0 ? Math.round((metrics.activeClients / metrics.totalClients) * 100) : 0}% of total
+   583→                </p>
+   584→              </CardContent>
+   585→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+   586→            </Card>
+   587→          </motion.div>
+   588→
+   589→          {/* Inactive Clients */}
+   590→          <motion.div
+   591→            variants={{
+   592→              hidden: { opacity: 0, y: 12 },
+   593→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   594→            }}
+   595→          >
+   596→            <Card className="hover:shadow-md transition-shadow relative overflow-hidden">
+   597→              <CardContent className="p-5">
+   598→                <div className="flex items-center justify-between mb-2">
+   599→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   600→                    Inactive
+   601→                  </p>
+   602→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-red-50 dark:bg-red-950/40">
+   603→                    <UserX className="h-4 w-4 text-red-500 dark:text-red-400" />
+   604→                  </div>
+   605→                </div>
+   606→                <div className="flex items-center gap-2">
+   607→                  <p className="text-xl font-bold text-foreground">
+   608→                    {formatNumber(metrics.inactiveClients)}
+   609→                  </p>
+   610→                  <span className="relative flex h-2.5 w-2.5">
+   611→                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+   612→                  </span>
+   613→                </div>
+   614→                <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5 font-medium">
+   615→                  Needs re-engagement
+   616→                </p>
+   617→              </CardContent>
+   618→              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-400 to-red-500" />
+   619→            </Card>
+   620→          </motion.div>
+   621→        </motion.div>
+   622→      )}
+   623→
+   624→      {/* ═══ OPERATIONS ROW ═══ */}
+   625→      {loading ? (
+   626→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   627→          {Array.from({ length: 4 }).map((_, i) => (
+   628→            <KPICardSkeleton key={i} />
+   629→          ))}
+   630→        </div>
+   631→      ) : (
+   632→        <motion.div
+   633→          initial="hidden"
+   634→          animate="show"
+   635→          variants={{
+   636→            hidden: { opacity: 0 },
+   637→            show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.3 } },
+   638→          }}
+   639→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+   640→        >
+   641→          {/* Team Utilization */}
+   642→          <motion.div
+   643→            variants={{
+   644→              hidden: { opacity: 0, y: 12 },
+   645→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   646→            }}
+   647→          >
+   648→            <AnimatedCard delay={0}>
+   649→              <CardContent className="p-5">
+   650→                <div className="flex items-center justify-between mb-3">
+   651→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   652→                    Team Utilization
+   653→                  </p>
+   654→                  <Badge
+   655→                    variant="outline"
+   656→                    className={`text-[10px] px-2 py-0 border-0 font-semibold ${
+   657→                      metrics.teamUtilization >= 75
+   658→                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+   659→                        : metrics.teamUtilization >= 50
+   660→                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+   661→                        : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+   662→                    }`}
+   663→                  >
+   664→                    {metrics.teamUtilization >= 75 ? 'Optimal' : metrics.teamUtilization >= 50 ? 'Moderate' : 'Low'}
+   665→                  </Badge>
+   666→                </div>
+   667→                <div className="flex items-center justify-center py-2">
+   668→                  <CircularProgress value={metrics.teamUtilization} size={100} strokeWidth={10} />
+   669→                </div>
+   670→                <p className="text-[11px] text-muted-foreground text-center mt-2">
+   671→                  of capacity utilized
+   672→                </p>
+   673→              </CardContent>
+   674→            </AnimatedCard>
+   675→          </motion.div>
+   676→
+   677→          {/* Avg Processing Time */}
+   678→          <motion.div
+   679→            variants={{
+   680→              hidden: { opacity: 0, y: 12 },
+   681→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   682→            }}
+   683→          >
+   684→            <AnimatedCard delay={0.05}>
+   685→              <CardContent className="p-5">
+   686→                <div className="flex items-center justify-between mb-2">
+   687→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   688→                    Avg Processing
+   689→                  </p>
+   690→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40">
+   691→                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   692→                  </div>
+   693→                </div>
+   694→                <p className="text-2xl font-bold text-foreground">
+   695→                  {metrics.avgProcessingTime > 0 ? metrics.avgProcessingTime.toFixed(1) : '—'}
+   696→                  <span className="text-sm font-normal text-muted-foreground ml-1">hrs</span>
+   697→                </p>
+   698→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   699→                  Average invoice processing time
+   700→                </p>
+   701→                <div className="mt-3 h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+   702→                  <motion.div
+   703→                    className="bg-amber-400 h-full rounded-full"
+   704→                    initial={{ width: 0 }}
+   705→                    animate={{ width: `${Math.min((metrics.avgProcessingTime / 12) * 100, 100)}%` }}
+   706→                    transition={{ duration: 1, delay: 0.5, ease: 'easeOut' }}
+   707→                  />
+   708→                </div>
+   709→              </CardContent>
+   710→            </AnimatedCard>
+   711→          </motion.div>
+   712→
+   713→          {/* Avg Filing Time */}
+   714→          <motion.div
+   715→            variants={{
+   716→              hidden: { opacity: 0, y: 12 },
+   717→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   718→            }}
+   719→          >
+   720→            <AnimatedCard delay={0.1}>
+   721→              <CardContent className="p-5">
+   722→                <div className="flex items-center justify-between mb-2">
+   723→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   724→                    Avg Filing
+   725→                  </p>
+   726→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-teal-50 dark:bg-teal-950/40">
+   727→                    <Clock className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   728→                  </div>
+   729→                </div>
+   730→                <p className="text-2xl font-bold text-foreground">
+   731→                  {metrics.avgFilingTime > 0 ? metrics.avgFilingTime.toFixed(1) : '—'}
+   732→                  <span className="text-sm font-normal text-muted-foreground ml-1">hrs</span>
+   733→                </p>
+   734→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   735→                  Average return filing time
+   736→                </p>
+   737→                <div className="mt-3 h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+   738→                  <motion.div
+   739→                    className="bg-teal-400 h-full rounded-full"
+   740→                    initial={{ width: 0 }}
+   741→                    animate={{ width: `${Math.min((metrics.avgFilingTime / 12) * 100, 100)}%` }}
+   742→                    transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+   743→                  />
+   744→                </div>
+   745→              </CardContent>
+   746→            </AnimatedCard>
+   747→          </motion.div>
+   748→
+   749→          {/* GST Processed */}
+   750→          <motion.div
+   751→            variants={{
+   752→              hidden: { opacity: 0, y: 12 },
+   753→              show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } },
+   754→            }}
+   755→          >
+   756→            <AnimatedCard delay={0.15}>
+   757→              <CardContent className="p-5">
+   758→                <div className="flex items-center justify-between mb-2">
+   759→                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+   760→                    GST Processed
+   761→                  </p>
+   762→                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40">
+   763→                    <IndianRupee className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   764→                  </div>
+   765→                </div>
+   766→                <p className="text-2xl font-bold text-foreground">
+   767→                  {formatCurrency(metrics.gstProcessed)}
+   768→                </p>
+   769→                <p className="text-[11px] text-muted-foreground mt-1.5">
+   770→                  Total GST value processed
+   771→                </p>
+   772→                <div className="mt-3 flex items-center gap-1.5">
+   773→                  <CircleDot className="h-3 w-3 text-emerald-500" />
+   774→                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+   775→                    All periods cumulative
+   776→                  </span>
+   777→                </div>
+   778→              </CardContent>
+   779→            </AnimatedCard>
+   780→          </motion.div>
+   781→        </motion.div>
+   782→      )}
+   783→
+   784→      {/* ═══ CHARTS SECTION (2 columns) ═══ */}
+   785→      {loading ? (
+   786→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   787→          <ChartSkeleton />
+   788→          <ChartSkeleton />
+   789→        </div>
+   790→      ) : (
+   791→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   792→          {/* ─── Revenue Trend Chart ─── */}
+   793→          <AnimatedCard delay={0.2}>
+   794→            <CardHeader className="pb-2">
+   795→              <CardTitle className="flex items-center gap-2 text-base">
+   796→                <TrendingUp className="h-5 w-5 text-emerald-500" />
+   797→                Revenue Trend
+   798→              </CardTitle>
+   799→              <CardDescription>Monthly revenue &amp; MRR over last 6 months</CardDescription>
+   800→            </CardHeader>
+   801→            <CardContent>
+   802→              <ChartContainer config={revenueChartConfig} className="h-56 w-full">
+   803→                <AreaChart data={revenueTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+   804→                  <defs>
+   805→                    <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
+   806→                      <stop offset="5%" stopColor={COLORS.emerald} stopOpacity={0.3} />
+   807→                      <stop offset="95%" stopColor={COLORS.emerald} stopOpacity={0} />
+   808→                    </linearGradient>
+   809→                    <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
+   810→                      <stop offset="5%" stopColor={COLORS.teal} stopOpacity={0.3} />
+   811→                      <stop offset="95%" stopColor={COLORS.teal} stopOpacity={0} />
+   812→                    </linearGradient>
+   813→                  </defs>
+   814→                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-700/50" />
+   815→                  <XAxis
+   816→                    dataKey="month"
+   817→                    tickLine={false}
+   818→                    axisLine={false}
+   819→                    tick={{ fontSize: 11, fill: '#64748b' }}
+   820→                  />
+   821→                  <YAxis
+   822→                    tickLine={false}
+   823→                    axisLine={false}
+   824→                    tick={{ fontSize: 11, fill: '#64748b' }}
+   825→                    tickFormatter={(v: number) => `${(v / 100000).toFixed(0)}L`}
+   826→                  />
+   827→                  <ChartTooltip content={<ChartTooltipContent />} />
+   828→                  <Area
+   829→                    type="monotone"
+   830→                    dataKey="revenue"
+   831→                    stroke={COLORS.emerald}
+   832→                    strokeWidth={2}
+   833→                    fill="url(#revGradient)"
+   834→                    dot={false}
+   835→                    activeDot={{ r: 5, fill: COLORS.emerald, stroke: '#fff', strokeWidth: 2 }}
+   836→                  />
+   837→                  <Area
+   838→                    type="monotone"
+   839→                    dataKey="mrr"
+   840→                    stroke={COLORS.teal}
+   841→                    strokeWidth={2}
+   842→                    fill="url(#mrrGradient)"
+   843→                    dot={false}
+   844→                    activeDot={{ r: 5, fill: COLORS.teal, stroke: '#fff', strokeWidth: 2 }}
+   845→                  />
+   846→                </AreaChart>
+   847→              </ChartContainer>
+   848→
+   849→              {/* Revenue stats */}
+   850→              <div className="grid grid-cols-2 gap-2 mt-4">
+   851→                <div className="p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30">
+   852→                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">
+   853→                    Current Month
+   854→                  </p>
+   855→                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+   856→                    {formatCurrency(metrics.totalRevenue)}
+   857→                  </p>
+   858→                </div>
+   859→                <div className="p-2.5 rounded-lg bg-teal-50/60 dark:bg-teal-950/20 border border-teal-100/50 dark:border-teal-900/30">
+   860→                  <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-600/70 dark:text-teal-400/70">
+   861→                    Current MRR
+   862→                  </p>
+   863→                  <p className="text-sm font-bold text-teal-700 dark:text-teal-300 mt-0.5">
+   864→                    {formatCurrency(metrics.mrr)}
+   865→                  </p>
+   866→                </div>
+   867→              </div>
+   868→            </CardContent>
+   869→          </AnimatedCard>
+   870→
+   871→          {/* ─── Client Distribution PieChart ─── */}
+   872→          <AnimatedCard delay={0.25}>
+   873→            <CardHeader className="pb-2">
+   874→              <CardTitle className="flex items-center gap-2 text-base">
+   875→                <Users className="h-5 w-5 text-emerald-500" />
+   876→                Client Distribution
+   877→              </CardTitle>
+   878→              <CardDescription>Active vs Inactive client breakdown</CardDescription>
+   879→            </CardHeader>
+   880→            <CardContent>
+   881→              <ChartContainer config={clientDistChartConfig} className="h-56 w-full">
+   882→                <PieChart>
+   883→                  <Pie
+   884→                    data={clientDistribution}
+   885→                    cx="50%"
+   886→                    cy="50%"
+   887→                    innerRadius={60}
+   888→                    outerRadius={85}
+   889→                    paddingAngle={4}
+   890→                    dataKey="value"
+   891→                    strokeWidth={2}
+   892→                    stroke="#fff"
+   893→                  >
+   894→                    {clientDistribution.map((entry, index) => (
+   895→                      <Cell key={`cell-${index}`} fill={entry.color} />
+   896→                    ))}
+   897→                  </Pie>
+   898→                  <ChartTooltip content={<ChartTooltipContent />} />
+   899→                </PieChart>
+   900→              </ChartContainer>
+   901→
+   902→              {/* Distribution stats */}
+   903→              <div className="grid grid-cols-2 gap-3 mt-4">
+   904→                <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30">
+   905→                  <div className="h-3 w-3 rounded-full bg-emerald-500 shrink-0" />
+   906→                  <div>
+   907→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   908→                      Active
+   909→                    </p>
+   910→                    <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+   911→                      {formatNumber(metrics.activeClients)}
+   912→                      <span className="text-[11px] font-normal text-muted-foreground ml-1">
+   913→                        ({metrics.totalClients > 0 ? Math.round((metrics.activeClients / metrics.totalClients) * 100) : 0}%)
+   914→                      </span>
+   915→                    </p>
+   916→                  </div>
+   917→                </div>
+   918→                <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50/60 dark:bg-red-950/20 border border-red-100/50 dark:border-red-900/30">
+   919→                  <div className="h-3 w-3 rounded-full bg-red-500 shrink-0" />
+   920→                  <div>
+   921→                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   922→                      Inactive
+   923→                    </p>
+   924→                    <p className="text-sm font-bold text-red-700 dark:text-red-300">
+   925→                      {formatNumber(metrics.inactiveClients)}
+   926→                      <span className="text-[11px] font-normal text-muted-foreground ml-1">
+   927→                        ({metrics.totalClients > 0 ? Math.round((metrics.inactiveClients / metrics.totalClients) * 100) : 0}%)
+   928→                      </span>
+   929→                    </p>
+   930→                  </div>
+   931→                </div>
+   932→              </div>
+   933→
+   934→              {/* Total clients bar */}
+   935→              <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-slate-50/60 dark:bg-slate-900/20 border border-slate-200/50 dark:border-slate-800/30">
+   936→                <span className="text-xs font-medium text-muted-foreground">Total Clients</span>
+   937→                <span className="text-sm font-bold text-foreground">{formatNumber(metrics.totalClients)}</span>
+   938→              </div>
+   939→            </CardContent>
+   940→          </AnimatedCard>
+   941→        </div>
+   942→      )}
+   943→
+   944→      {/* ═══ QUICK ACTIONS BAR ═══ */}
+   945→      <AnimatedCard delay={0.3}>
+   946→        <CardContent className="p-4">
+   947→          <div className="flex flex-wrap items-center gap-3">
+   948→            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
+   949→              Quick Actions
+   950→            </span>
+   951→            <Button
+   952→              size="sm"
+   953→              onClick={() => setCurrentView('settings')}
+   954→              className="gap-1.5 h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+   955→            >
+   956→              <UserPlus className="h-3 w-3" />
+   957→              Add Team Member
+   958→            </Button>
+   959→            <Button
+   960→              size="sm"
+   961→              variant="outline"
+   962→              onClick={() => setCurrentView('team-performance')}
+   963→              className="gap-1.5 h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30 text-xs"
+   964→            >
+   965→              <BarChart3 className="h-3 w-3" />
+   966→              View Performance
+   967→            </Button>
+   968→            <Button
+   969→              size="sm"
+   970→              variant="outline"
+   971→              onClick={() => setCurrentView('workload')}
+   972→              className="gap-1.5 h-8 border-teal-200 text-teal-700 hover:bg-teal-50 dark:border-teal-800 dark:text-teal-400 dark:hover:bg-teal-950/30 text-xs"
+   973→            >
+   974→              <Workflow className="h-3 w-3" />
+   975→              Manage Workload
+   976→            </Button>
+   977→            <Button
+   978→              size="sm"
+   979→              variant="outline"
+   980→              onClick={() => setCurrentView('automation')}
+   981→              className="gap-1.5 h-8 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30 text-xs"
+   982→            >
+   983→              <Cpu className="h-3 w-3" />
+   984→              Run Automation
+   985→            </Button>
+   986→          </div>
+   987→        </CardContent>
+   988→      </AnimatedCard>
+   989→
+   990→      {/* ═══ ERROR STATE ═══ */}
+   991→      {error && !loading && (
+   992→        <motion.div
+   993→          initial={{ opacity: 0 }}
+   994→          animate={{ opacity: 1 }}
+   995→          className="flex flex-col items-center justify-center py-8 text-center"
+   996→        >
+   997→          <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-red-50 dark:bg-red-950/40 mb-3">
+   998→            <Activity className="h-6 w-6 text-red-500" />
+   999→          </div>
+  1000→          <p className="text-sm font-medium text-foreground mb-1">Failed to load operations data</p>
+  1001→          <p className="text-xs text-muted-foreground mb-3">{error}</p>
+  1002→          <Button size="sm" variant="outline" onClick={fetchData} className="gap-1.5 text-xs">
+  1003→            <Zap className="h-3 w-3" />
+  1004→            Retry
+  1005→          </Button>
+  1006→        </motion.div>
+  1007→      )}
+  1008→    </div>
+  1009→  );
+  1010→}
+  1011→

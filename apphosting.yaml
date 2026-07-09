@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Firebase App Hosting configuration for GSTPilot Infinity™
+#
+# IMPORTANT: This requires the Firebase BLAZE (pay-as-you-go) billing plan.
+# The Spark (free) plan does NOT support App Hosting.
+#
+# To deploy:
+#   1. Upgrade to Firebase Blaze plan: https://console.firebase.google.com/project/gstpilot1/usage/details
+#   2. Install the Firebase CLI: npm i -g firebase-tools
+#   3. Login: firebase login
+#   4. Initialize App Hosting backend (one-time):
+#        firebase apphosting:backends:create --project gstpilot1 --location asia-south1
+#   5. Deploy:
+#        firebase apphosting:backends:deploy gstpilot-backend --project gstpilot1
+#
+# Alternative deployment options (no Blaze required):
+#   • Vercel — connect the GitHub repo, set env vars, deploy.
+#   • Cloud Run — `gcloud run deploy gstpilot --source . --region asia-south1`
+#   • Self-host — `bun run build && bun run start` on any Node 20+ server.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+runConfig:
+  # Next.js 16 with 586 API routes + large bundle — needs ≥2GB RAM.
+  #
+  # High-Availability / Phase 12 settings:
+  #   • minInstances: 3  — keeps a warm pool across 3 instances to eliminate
+  #     cold starts for paying customers. Firebase App Hosting spreads
+  #     instances across zones in the chosen region automatically.
+  #   • maxInstances: 100 — global cap; sufficient for ~100K concurrent users
+  #     at 80 concurrency each (8K rps sustained).
+  #   • concurrency: 80  — Firebase App Hosting default; tune down to 40 if
+  #     AI/dashboard endpoints show p99 > 1s under load.
+  #   • cpu: 2 / memoryMiB: 4096 — handles heavy dashboard renders + AI
+  #     context gathering on the same instance.
+  #
+  # Multi-region: deploy a SECOND backend in a different region (e.g.
+  # `gstpilot-backend-eu` in europe-west1) and front both with Firebase
+  # Hosting multi-site + Cloud Load Balancer for global latency-based routing.
+  # See docs/PHASE-12-PRODUCTION.md §2 (High Availability Architecture).
+  minInstances: 3
+  maxInstances: 100
+  concurrency: 80
+  cpu: 2
+  memoryMiB: 4096
+
+# Environment variables (set via `firebase apphosting:secrets:set` for secrets).
+env:
+  - variable: NODE_OPTIONS
+    value: '--max-old-space-size=2048'
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: 'AIzaSyAcq3nU7qOhi7zn0_2gYqamnmk-BZNTP24'
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: 'gstpilot1.firebaseapp.com'
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: 'gstpilot1'
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: 'gstpilot1.firebasestorage.app'
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: '44040248808'
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: '1:44040248808:web:466c38a29dd3f7a8dd185d'
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: 'G-RN53TNYCK5'
+
+  # ─── Secrets (set with `firebase apphosting:secrets:set SECRET_NAME`) ────────
+  # The following secrets MUST be set before deployment:
+  #   - BILLING_ENCRYPTION_KEY        (openssl rand -hex 32)
+  #   - BANKING_ENCRYPTION_KEY        (openssl rand -hex 32)
+  #   - ERP_ENCRYPTION_KEY            (openssl rand -hex 32)
+  #   - GSTN_ENCRYPTION_KEY           (openssl rand -hex 32)
+  #   - COMMUNICATION_ENCRYPTION_KEY  (openssl rand -hex 32)
+  #   - AI_PIPELINE_ENCRYPTION_KEY    (openssl rand -hex 32)
+  #   - INTEGRATIONS_ENCRYPTION_KEY   (openssl rand -hex 32)
+  #   - BILLING_PROVIDER              (auto | mock | razorpay-future | stripe-future)
+  #   - ERP_PROVIDER                  (auto | mock | tally-future | ...)
+  #   - FIREBASE_PROJECT_ID           (gstpilot1)
+  #   - FIREBASE_CLIENT_EMAIL         (from service account JSON)
+  #   - FIREBASE_PRIVATE_KEY          (from service account JSON, \n escapes)
+  #   - NEXTAUTH_SECRET               (openssl rand -hex 32)
+  #   - NEXTAUTH_URL                  (https://your-app-domain.com)
+  #   - ADMIN_TOKEN                   (openssl rand -hex 32 — guards /api/queue/stats,
+  #                                     /api/scaling/*, /api/analytics/production)

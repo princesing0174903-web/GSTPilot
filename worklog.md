@@ -509,3 +509,29 @@ Stage Summary:
 - Preview mode: Firestore security rules deny writes without auth. The engine attempts REAL provider calls (which would succeed with real credentials), catches Firestore PERMISSION_DENIED, and returns clear messages. Webhook endpoints process events best-effort. In the authenticated app with real SMTP/Resend/SendGrid/Gmail/Mailgun + WhatsApp Cloud API/Twilio/Gupshup credentials, the full flow works: real email/WhatsApp sent → persisted → webhook updates delivery status → retry on failure → audit log.
 - Constraint note: 4GB sandbox — Turbopack 1800MB heap stable for API routes. Root page compile 36s (heavy, 146 dynamic imports) but renders correctly. Background processes die when shell session ends — use foreground single-command testing pattern for E2E.
 - Server: verified running on port 3000 (Turbopack, 1800MB heap). All communication APIs verified responding HTTP 200. Root page verified HTTP 200 with correct title.
+
+---
+Task ID: PREVIEW-FIX
+Agent: Main (Z.ai Code)
+Task: Fix broken preview — dev server was OOM-killed during compilation, causing blank preview panel.
+
+Work Log:
+- Investigated dev.log: server kept dying during "○ Compiling / ..." with no error output
+- Checked dmesg: confirmed OOM killer was killing next-server process (anon-rss: 2.8-3.5GB)
+- Identified root cause: src/app/page.tsx had 153 module-level next/dynamic() imports, causing Turbopack to exceed the 4GB sandbox cgroup limit during initial compilation
+- Created src/components/DashboardViews.tsx: isolates all 150 dashboard view dynamic imports + view→component map into a single lazily-loaded registry
+- Created src/components/DashboardShell.tsx: isolates heavy dashboard layout (top bar, LeftNav, FloatingDock, OraclePanel, OracleDockSidebar, NotificationsSheet, CommandPalette, AmbientBackground, BrandLogo) and all their static imports into a lazily-loaded module
+- Refactored src/app/page.tsx: from 1134 lines / 153 dynamic imports → 334 lines / 5 dynamic imports (Landing, Login, Onboarding, DashboardContent, EmailVerificationBanner)
+- Updated start-dev-daemon.py: switched from --webpack to --turbo (Turbopack), set NODE_OPTIONS="--max-old-space-size=1800 --max-semi-space-size=48", truncates dev.log on each start
+- Started dev server via Python double-fork daemon (setsid + fork) for true background detachment
+- Verified with Agent Browser: page title "GSTPilot™ — The Financial Brain of India", landing page renders hero + nav + features, zero console errors, HMR connected, Fast Refresh working
+- Verified server stability: 5 consecutive curl requests all return HTTP 200, cached requests ~50-80ms, watchdog auto-restarts on crash
+
+Stage Summary:
+- Preview is FIXED and stable. Dev server runs on port 3000 with Turbopack.
+- Initial compile: ~33s (large project, acceptable). Cached: ~50-80ms.
+- Architecture: page.tsx (lightweight router) → DashboardShell (heavy layout, lazy) → DashboardViews (150 views, lazy)
+- The 4GB sandbox can now handle compilation because the root route only compiles 5 dynamic imports instead of 153
+- Watchdog daemon (pid 7039, parent=init) auto-restarts next-server if OOM-killed
+- Key files created: src/components/DashboardViews.tsx, src/components/DashboardShell.tsx
+- Key files modified: src/app/page.tsx (334 lines, down from 1134), start-dev-daemon.py (Turbopack), start-dev.sh (Turbopack)

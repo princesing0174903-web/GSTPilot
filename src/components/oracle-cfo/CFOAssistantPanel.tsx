@@ -34,7 +34,10 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  Download,
+  FileSpreadsheet,
   FileText,
+  FileBarChart,
   Loader2,
   Mail,
   MessageCircle,
@@ -42,6 +45,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Table,
   X,
   Zap,
   type LucideIcon,
@@ -101,7 +105,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   Receipt,
   CheckCircle2,
   CheckSquare: CheckCircle2,
-  FileBarChart: FileText,
+  FileBarChart,
   CreditCard: Zap,
 };
 
@@ -117,6 +121,633 @@ function riskColor(sev: 'low' | 'medium' | 'high'): string {
   if (sev === 'high') return '#ef4444';
   if (sev === 'medium') return '#f59e0b';
   return '#10b981';
+}
+
+// ─── GST Report Payload type (mirror of gst-report-engine.ts GSTReport) ──────
+
+interface GSTSlabBreakdown {
+  gstRate: number;
+  invoiceCount: number;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  totalTax: number;
+  totalAmount: number;
+}
+
+interface GSTReportPayload {
+  reportId: string;
+  intent: {
+    reportType: string;
+    periodLabel: string;
+    startDate: string;
+    endDate: string;
+    periodKey: string;
+  };
+  generatedAt: string;
+  generatedBy: string;
+  dataSummary: {
+    salesInvoiceCount: number;
+    purchaseInvoiceCount: number;
+    creditNoteCount: number;
+    debitNoteCount: number;
+    expenseCount: number;
+    paymentCount: number;
+    priorPeriodInvoiceCount: number;
+  };
+  validation: {
+    totalChecked: number;
+    passed: number;
+    criticalCount: number;
+    warningCount: number;
+    infoCount: number;
+    duplicateInvoiceNumbers: string[];
+    invalidGstins: string[];
+    futureDatedInvoices: string[];
+    reverseChargeInvoices: string[];
+    exemptInvoices: string[];
+    zeroRatedInvoices: string[];
+    exportInvoices: string[];
+    issues: Array<{
+      invoiceId: string;
+      invoiceNumber: string;
+      severity: 'critical' | 'warning' | 'info';
+      field: string;
+      message: string;
+      value: string;
+    }>;
+  };
+  calculations: {
+    totalTaxableTurnover: number;
+    totalExempt: number;
+    totalZeroRated: number;
+    totalExport: number;
+    outputCGST: number;
+    outputSGST: number;
+    outputIGST: number;
+    outputCess: number;
+    totalOutputTax: number;
+    itcAvailable: number;
+    itcCGST: number;
+    itcSGST: number;
+    itcIGST: number;
+    itcCess: number;
+    itcReversed: number;
+    itcUtilized: number;
+    netCGSTPayable: number;
+    netSGSTPayable: number;
+    netIGSTPayable: number;
+    netCessPayable: number;
+    netPayable: number;
+    refundEligible: number;
+    salesBySlab: GSTSlabBreakdown[];
+    purchasesBySlab: GSTSlabBreakdown[];
+    priorPeriodOutputTax: number;
+    deltaOutputTax: number;
+    deltaPercent: number;
+    crossChecks: Array<{ label: string; expected: string; actual: string; match: boolean }>;
+  };
+  topCustomers: Array<{
+    id: string;
+    name: string;
+    gstin: string | null;
+    invoiceCount: number;
+    taxableValue: number;
+    taxAmount: number;
+    totalAmount: number;
+  }>;
+  topVendors: Array<{
+    id: string;
+    name: string;
+    gstin: string | null;
+    invoiceCount: number;
+    taxableValue: number;
+    taxAmount: number;
+    totalAmount: number;
+  }>;
+  monthlyComparison: Array<{
+    periodKey: string;
+    periodLabel: string;
+    taxableValue: number;
+    outputTax: number;
+    itc: number;
+    netPayable: number;
+  }>;
+}
+
+// ─── Report Result Card (Phase 1.2) ────────────────────────────────────────
+// Renders below the standard result block when generate-gst-report executed.
+// Shows: KPI grid, sales/purchase slab breakdown, GST liability, ITC summary,
+// validation summary, top customers/vendors, Oracle insights, and three
+// download buttons (PDF / Excel / CSV) that POST the inline reportPayload
+// to /api/oracle/cfo/report/export.
+
+function ReportResultCard({
+  report,
+  reportId,
+  insights,
+  recommendations,
+}: {
+  report: GSTReportPayload;
+  reportId: string;
+  insights: string[];
+  recommendations: string[];
+}) {
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [showAllIssues, setShowAllIssues] = useState(false);
+
+  const handleDownload = useCallback(async (format: 'pdf' | 'excel' | 'csv') => {
+    setDownloading(format);
+    setDownloadError(null);
+    try {
+      // POST the inline payload so the export works even when the report
+      // couldn't be persisted (preview mode — Firestore security rules).
+      const res = await fetch('/api/oracle/cfo/report/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportPayload: report, format }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const periodSlug = report.intent.periodKey.replace(/[^a-zA-Z0-9-]/g, '-');
+      const typeSlug = report.intent.reportType.replace(/[^a-zA-Z0-9-]/g, '-');
+      const ext = format === 'excel' ? 'xlsx' : format;
+      a.download = `GST-${typeSlug}-${periodSlug}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setDownloadError(msg);
+    } finally {
+      setDownloading(null);
+    }
+  }, [report]);
+
+  const calc = report.calculations;
+  const val = report.validation;
+  const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ borderColor: 'rgba(16,185,129,0.2)', background: '#0d0d0d' }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-3"
+        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <FileBarChart className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-white">
+              GST Report — {report.intent.reportType.toUpperCase()} · {report.intent.periodLabel}
+            </div>
+            <div className="text-xs text-white/50">
+              {report.dataSummary.salesInvoiceCount} sales + {report.dataSummary.purchaseInvoiceCount} purchase invoices ·
+              {' '}{val.criticalCount} critical / {val.warningCount} warnings · ID {reportId.slice(-12)}
+            </div>
+          </div>
+        </div>
+        <code className="text-[10px] text-white/40 font-mono shrink-0 hidden sm:block">
+          {report.intent.startDate} → {report.intent.endDate}
+        </code>
+      </div>
+
+      <div className="px-4 py-4 space-y-4">
+        {/* KPI grid */}
+        <section>
+          <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Executive Summary" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <KpiCell label="Taxable Turnover" value={inr(calc.totalTaxableTurnover)} />
+            <KpiCell label="Total Output Tax" value={inr(calc.totalOutputTax)} />
+            <KpiCell label="ITC Available" value={inr(calc.itcAvailable)} />
+            <KpiCell label="Net GST Payable" value={inr(calc.netPayable)} highlight />
+            <KpiCell label="Exempt Supplies" value={inr(calc.totalExempt)} />
+            <KpiCell label="Zero-Rated + Export" value={inr(calc.totalZeroRated + calc.totalExport)} />
+          </div>
+        </section>
+
+        {/* Sales by Slab */}
+        <section>
+          <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Sales Summary (by GST Slab)" />
+          <SlabTable rows={calc.salesBySlab} />
+        </section>
+
+        {/* Purchases by Slab */}
+        {calc.purchasesBySlab.some((s) => s.invoiceCount > 0) && (
+          <section>
+            <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Purchase Summary (ITC by Slab)" />
+            <SlabTable rows={calc.purchasesBySlab} itcMode />
+          </section>
+        )}
+
+        {/* GST Liability */}
+        <section>
+          <SectionLabel icon={<Zap className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />} label="GST Liability Breakdown" />
+          <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <KeyValueRow label="Output CGST" value={inr(calc.outputCGST)} />
+            <KeyValueRow label="Output SGST" value={inr(calc.outputSGST)} />
+            <KeyValueRow label="Output IGST" value={inr(calc.outputIGST)} />
+            <KeyValueRow label="Output Cess" value={inr(calc.outputCess)} />
+            <KeyValueRow label="Total Output Tax" value={inr(calc.totalOutputTax)} bold />
+            <KeyValueRow label="Less: ITC Utilized" value={`−${inr(calc.itcUtilized)}`} />
+            <KeyValueRow label="Net CGST Payable" value={inr(calc.netCGSTPayable)} />
+            <KeyValueRow label="Net SGST Payable" value={inr(calc.netSGSTPayable)} />
+            <KeyValueRow label="Net IGST Payable" value={inr(calc.netIGSTPayable)} />
+            <KeyValueRow label="Net Cess Payable" value={inr(calc.netCessPayable)} />
+            <KeyValueRow label="Net GST Payable" value={inr(calc.netPayable)} bold highlight />
+          </div>
+        </section>
+
+        {/* ITC Summary */}
+        <section>
+          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="ITC Summary" />
+          <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <KeyValueRow label="ITC Available (CGST + SGST + IGST + Cess)" value={inr(calc.itcAvailable)} bold />
+            <KeyValueRow label="ITC Reversed (Rule 42/43 — exempt supplies)" value={`−${inr(calc.itcReversed)}`} />
+            <KeyValueRow label="ITC Utilized" value={inr(calc.itcUtilized)} />
+            <KeyValueRow label="Refund Eligible" value={inr(calc.refundEligible)} />
+          </div>
+        </section>
+
+        {/* Period delta */}
+        {calc.priorPeriodOutputTax > 0 && (
+          <section>
+            <SectionLabel icon={<TrendingDelta percent={calc.deltaPercent} />} label="Period-over-Period Comparison" />
+            <div
+              className="rounded-lg border px-3 py-2.5"
+              style={{
+                borderColor: calc.deltaPercent > 20 || calc.deltaPercent < -20 ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.06)',
+                background: calc.deltaPercent > 20 || calc.deltaPercent < -20 ? 'rgba(245,158,11,0.05)' : '#111111',
+              }}
+            >
+              <div className="text-sm text-white/85">
+                Output tax {calc.deltaOutputTax > 0 ? 'increased' : calc.deltaOutputTax < 0 ? 'decreased' : 'stayed flat'} by{' '}
+                <span className="font-semibold" style={{ color: calc.deltaOutputTax > 0 ? '#f59e0b' : '#10b981' }}>
+                  {inr(Math.abs(calc.deltaOutputTax))} ({calc.deltaPercent > 0 ? '+' : ''}{calc.deltaPercent}%)
+                </span>{' '}
+                vs prior period.
+              </div>
+              <div className="text-xs text-white/50 mt-1">
+                Prior: {inr(calc.priorPeriodOutputTax)} → Current: {inr(calc.totalOutputTax)}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Top customers */}
+        {report.topCustomers.length > 0 && (
+          <section>
+            <SectionLabel icon={<Database className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Top Customers (by tax contribution)" />
+            <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {report.topCustomers.slice(0, 10).map((c, i) => (
+                <ContributorRow key={i} name={c.name} gstin={c.gstin} count={c.invoiceCount} taxable={c.taxableValue} tax={c.taxAmount} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Top vendors */}
+        {report.topVendors.length > 0 && (
+          <section>
+            <SectionLabel icon={<Database className="h-3.5 w-3.5" style={{ color: '#a78bfa' }} />} label="Top Vendors (by ITC contribution)" />
+            <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {report.topVendors.slice(0, 10).map((v, i) => (
+                <ContributorRow key={i} name={v.name} gstin={v.gstin} count={v.invoiceCount} taxable={v.taxableValue} tax={v.taxAmount} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Validation report */}
+        <section>
+          <SectionLabel
+            icon={<AlertTriangle className="h-3.5 w-3.5" style={{ color: val.criticalCount > 0 ? '#ef4444' : '#10b981' }} />}
+            label={`Validation Report — ${val.passed}/${val.totalChecked} passed · ${val.criticalCount} critical · ${val.warningCount} warnings`}
+          />
+          <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <KeyValueRow label="Invoices checked" value={String(val.totalChecked)} />
+            <KeyValueRow label="Passed validation" value={String(val.passed)} />
+            <KeyValueRow
+              label="Critical issues"
+              value={String(val.criticalCount)}
+              bold={val.criticalCount > 0}
+              valueColor={val.criticalCount > 0 ? '#ef4444' : undefined}
+            />
+            <KeyValueRow label="Warnings" value={String(val.warningCount)} valueColor={val.warningCount > 0 ? '#f59e0b' : undefined} />
+            <KeyValueRow label="Duplicate invoice numbers" value={String(val.duplicateInvoiceNumbers.length)} valueColor={val.duplicateInvoiceNumbers.length > 0 ? '#ef4444' : undefined} />
+            <KeyValueRow label="Invalid GSTINs" value={String(val.invalidGstins.length)} valueColor={val.invalidGstins.length > 0 ? '#ef4444' : undefined} />
+            <KeyValueRow label="Future-dated invoices" value={String(val.futureDatedInvoices.length)} valueColor={val.futureDatedInvoices.length > 0 ? '#f59e0b' : undefined} />
+            <KeyValueRow label="Reverse-charge invoices" value={String(val.reverseChargeInvoices.length)} />
+            <KeyValueRow label="Exempt / nil-rated invoices" value={String(val.exemptInvoices.length)} />
+            <KeyValueRow label="Zero-rated invoices" value={String(val.zeroRatedInvoices.length)} />
+            <KeyValueRow label="Export invoices" value={String(val.exportInvoices.length)} />
+          </div>
+
+          {/* Top critical issues */}
+          {val.issues.filter((i) => i.severity === 'critical').length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              <div className="text-xs text-white/60 font-bold uppercase tracking-wide">Top Critical Issues</div>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {val.issues
+                  .filter((i) => i.severity === 'critical')
+                  .slice(0, showAllIssues ? undefined : 5)
+                  .map((issue, i) => (
+                    <div
+                      key={i}
+                      className="rounded-lg border px-3 py-2 text-xs"
+                      style={{ borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.04)' }}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-mono text-white/80">{issue.invoiceNumber}</span>
+                        <span className="text-[10px] font-bold uppercase" style={{ color: '#ef4444' }}>{issue.field}</span>
+                      </div>
+                      <div className="text-white/70">{issue.message}</div>
+                    </div>
+                  ))}
+              </div>
+              {val.issues.filter((i) => i.severity === 'critical').length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllIssues((v) => !v)}
+                  className="text-xs text-white/60 hover:text-white underline mt-1"
+                >
+                  {showAllIssues ? 'Show fewer' : `Show all ${val.issues.filter((i) => i.severity === 'critical').length} critical issues`}
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Cross-checks */}
+        <section>
+          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Cross-Checks" />
+          <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            {calc.crossChecks.map((c, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between px-3 py-2 text-xs"
+                style={{ background: i % 2 === 0 ? '#0d0d0d' : '#111111' }}
+              >
+                <span className="text-white/70">{c.label}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-white/50 font-mono">{c.expected} / {c.actual}</span>
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                    style={{
+                      background: c.match ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                      color: c.match ? '#10b981' : '#ef4444',
+                    }}
+                  >
+                    {c.match ? 'Pass' : 'Fail'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Oracle insights */}
+        {insights.length > 0 && (
+          <section>
+            <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Oracle Insights" />
+            <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+              {insights.map((insight, i) => (
+                <li key={i} className="flex gap-2 text-xs text-white/80">
+                  <span style={{ color: '#10b981' }}>•</span>
+                  <span className="leading-relaxed">{insight}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Recommendations */}
+        {recommendations.length > 0 && (
+          <section>
+            <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#a78bfa' }} />} label="Recommended Actions" />
+            <ul className="space-y-1.5">
+              {recommendations.map((rec, i) => (
+                <li key={i} className="flex gap-2 text-xs text-white/80">
+                  <span style={{ color: '#10b981' }}>→</span>
+                  <span className="leading-relaxed">{rec}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Download buttons */}
+        <section>
+          <SectionLabel icon={<Download className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Download Report" />
+          <div className="flex flex-wrap gap-2">
+            <DownloadButton
+              format="pdf"
+              label="PDF"
+              icon={<FileText className="h-3.5 w-3.5" />}
+              loading={downloading === 'pdf'}
+              disabled={downloading !== null}
+              onClick={() => handleDownload('pdf')}
+            />
+            <DownloadButton
+              format="excel"
+              label="Excel"
+              icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
+              loading={downloading === 'excel'}
+              disabled={downloading !== null}
+              onClick={() => handleDownload('excel')}
+            />
+            <DownloadButton
+              format="csv"
+              label="CSV"
+              icon={<Table className="h-3.5 w-3.5" />}
+              loading={downloading === 'csv'}
+              disabled={downloading !== null}
+              onClick={() => handleDownload('csv')}
+            />
+          </div>
+          {downloadError && (
+            <div className="mt-2 text-xs text-rose-400 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" /> {downloadError}
+            </div>
+          )}
+          <div className="mt-1.5 text-[10px] text-white/40">
+            Files are generated from the live invoice data shown above — no fake values.
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ─── Report sub-components ──────────────────────────────────────────────────
+
+function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 mb-1.5">
+      {icon}
+      <h4 className="text-xs font-bold uppercase tracking-wide text-white/60">{label}</h4>
+    </div>
+  );
+}
+
+function KpiCell({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div
+      className="rounded-lg border px-3 py-2"
+      style={{
+        borderColor: highlight ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.06)',
+        background: highlight ? 'rgba(16,185,129,0.08)' : '#111111',
+      }}
+    >
+      <div className="text-[10px] font-bold uppercase tracking-wide text-white/50">{label}</div>
+      <div className="text-sm font-bold font-mono" style={{ color: highlight ? '#10b981' : '#ffffff' }}>{value}</div>
+    </div>
+  );
+}
+
+function SlabTable({ rows, itcMode }: { rows: GSTSlabBreakdown[]; itcMode?: boolean }) {
+  return (
+    <div className="rounded-lg border overflow-hidden overflow-x-auto" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+      <div className="grid grid-cols-7 gap-1 px-2 py-1.5 text-[10px] font-bold uppercase text-white/50" style={{ background: '#111111' }}>
+        <div>Slab</div>
+        <div className="text-right">Count</div>
+        <div className="text-right">Taxable</div>
+        <div className="text-right">CGST</div>
+        <div className="text-right">SGST</div>
+        <div className="text-right">IGST</div>
+        <div className="text-right">{itcMode ? 'ITC' : 'Tax'}</div>
+      </div>
+      {rows.map((r, i) => (
+        <div
+          key={i}
+          className="grid grid-cols-7 gap-1 px-2 py-1.5 text-xs font-mono"
+          style={{ background: i % 2 === 0 ? '#0d0d0d' : '#111111' }}
+        >
+          <div className="text-white/80">{r.gstRate}%</div>
+          <div className="text-right text-white/60">{r.invoiceCount}</div>
+          <div className="text-right text-white">{r.taxableValue.toLocaleString('en-IN')}</div>
+          <div className="text-right text-white/70">{r.cgst.toLocaleString('en-IN')}</div>
+          <div className="text-right text-white/70">{r.sgst.toLocaleString('en-IN')}</div>
+          <div className="text-right text-white/70">{r.igst.toLocaleString('en-IN')}</div>
+          <div className="text-right font-bold" style={{ color: '#10b981' }}>{r.totalTax.toLocaleString('en-IN')}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KeyValueRow({
+  label,
+  value,
+  bold,
+  highlight,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+  highlight?: boolean;
+  valueColor?: string;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between px-3 py-1.5 text-sm"
+      style={{
+        background: highlight ? '#10b981' : bold ? 'rgba(255,255,255,0.04)' : 'transparent',
+      }}
+    >
+      <span style={{ color: highlight ? '#ffffff' : 'rgba(255,255,255,0.6)', fontWeight: bold ? 600 : 400 }}>
+        {label}
+      </span>
+      <span
+        className="font-mono font-semibold"
+        style={{ color: valueColor ?? (highlight ? '#ffffff' : '#ffffff'), fontWeight: bold ? 700 : 600 }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ContributorRow({
+  name,
+  gstin,
+  count,
+  taxable,
+  tax,
+}: {
+  name: string;
+  gstin: string | null;
+  count: number;
+  taxable: number;
+  tax: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-white truncate">{name}</div>
+        <div className="text-[10px] text-white/40 font-mono truncate">{gstin ?? 'No GSTIN'}</div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-white/70 font-mono">{count} inv · ₹{taxable.toLocaleString('en-IN')}</div>
+        <div className="font-mono font-bold" style={{ color: '#10b981' }}>₹{tax.toLocaleString('en-IN')}</div>
+      </div>
+    </div>
+  );
+}
+
+function TrendingDelta({ percent }: { percent: number }) {
+  const up = percent > 0;
+  const flat = percent === 0;
+  const color = flat ? '#10b981' : up ? '#f59e0b' : '#10b981';
+  return (
+    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: `${color}20`, color }}>
+      {flat ? '→' : up ? '▲' : '▼'} {Math.abs(percent)}%
+    </span>
+  );
+}
+
+function DownloadButton({
+  format,
+  label,
+  icon,
+  loading,
+  disabled,
+  onClick,
+}: {
+  format: 'pdf' | 'excel' | 'csv';
+  label: string;
+  icon: React.ReactNode;
+  loading: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const accent = format === 'pdf' ? '#ef4444' : format === 'excel' ? '#10b981' : '#f59e0b';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ borderColor: `${accent}40`, background: `${accent}10`, color: accent }}
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+      {loading ? 'Generating…' : `Download ${label}`}
+    </button>
+  );
 }
 
 // ─── Single Approval Card ───────────────────────────────────────────────────
@@ -485,6 +1116,16 @@ function ApprovalCard({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* GST REPORT RESULT CARD (Phase 1.2) — shows when generate-gst-report executed */}
+              {result?.output?.reportPayload && approval.toolId === 'generate-gst-report' && (
+                <ReportResultCard
+                  report={result.output.reportPayload as GSTReportPayload}
+                  reportId={String(result.output.reportId ?? '')}
+                  insights={(result.output.insights as string[]) ?? []}
+                  recommendations={(result.output.recommendations as string[]) ?? []}
+                />
               )}
 
               {/* ERROR */}

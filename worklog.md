@@ -284,3 +284,35 @@ Stage Summary:
 - Files created: invoice-engine.ts (560 lines), invoice-pdf.ts (300 lines), invoice-comms.ts (220 lines), 3 API routes, InvoiceActionCard.tsx (970 lines). ~2500 lines total. Files modified: OracleWorkspace.tsx (wiring), next.config.ts (serverExternalPackages).
 - Preview mode: Firestore security rules deny writes without auth. The invoice engine attempts REAL writes, catches PERMISSION_DENIED, rolls back, and returns "sign in to persist" messages. In the authenticated app, writes succeed and the dashboard auto-refreshes via onSnapshot.
 - Server: running on port 3000 (Turbopack, warm cache, root compiles in 1-2s). Ready for preview.
+
+---
+Task ID: p1-2-audit-ui
+Agent: Explore (CFO panel + invoice routes audit)
+Task: Audit CFO panel + Oracle CFO routes/lib for Phase 1.2 GST report generation
+
+Work Log:
+- Read worklog.md to absorb prior Phase Alpha context (infra good, dev server on :3000, 20+ Firestore collections, full CRUD + workflow engine)
+- Read all 10 target files end-to-end: CFOAssistantPanel.tsx, execute/route.ts, invoice/execute/route.ts, invoice/create/route.ts, invoice/pdf/route.ts, invoice-pdf.ts, invoice-comms.ts, approval.ts, audit.ts, engine.ts
+- Read supporting files for dispatch context: tools.ts (CFO_TOOLS registry), intent.ts (routeIntent), explain.ts (buildDecisionCard), analyze/route.ts (returns decisionCards + approvalRequests), OracleWorkspace.tsx (consumer)
+- Verified package.json: pdfkit + qrcode present; xlsx NOT present (confirmed NO_XLSX_FOUND)
+- Counted lines per file (totals in Stage Summary)
+- Mapped the analyze→execute dispatch chain and confirmed decisionCards is dead on the client
+
+Stage Summary:
+- Files audited (lines): CFOAssistantPanel.tsx (569), execute/route.ts (209), invoice/execute/route.ts (270), invoice/create/route.ts (290), invoice/pdf/route.ts (51), invoice-pdf.ts (370), invoice-comms.ts (248), approval.ts (275), audit.ts (105), engine.ts (350). Supporting: tools.ts (1184), explain.ts (371), intent.ts (110), analyze/route.ts (149), OracleWorkspace.tsx (consumer).
+- CFOAssistantPanel.tsx exports `CFOAssistantPanel`. Props take `approvalRequests[]` only. Renders one ApprovalCard per approval with sections: Why / Supporting Records / Calculation / Confidence Factors / Risks / Alternatives / Missing Params / Result / Approve+Reject. NO ReportActionCard, NO multi-section report renderer, NO download buttons. Calls `POST /api/oracle/cfo/execute` with `{approvalId, decision, organizationId, userId, userEmail, approval (inline)}`. Icons map is generic (FileText, Mail, Receipt, etc.) — no report-specific UI.
+- execute/route.ts: dispatches by `getTool(approval.toolId)` from CFO_TOOLS in tools.ts. Loads approval from Firestore OR accepts inline approval (preview-mode fallback). Permission check (viewer/staff/manager/admin). Calls `tool.execute(input, ctx)`, writes audit via `writeCfoAudit`. Unaware of `generate-gst-report` — returns 400 if toolId not in registry.
+- tools.ts CFO_TOOLS registry has 7 tools: `create-invoice`, `send-reminder-email`, `send-reminder-whatsapp`, `create-payment-link`, `generate-collection-report`, `prepare-gst-return`, `create-task`. NO `generate-gst-report`.
+- prepare-gst-return (tools.ts:865): writes a draft to `gst_returns` collection. NAIVE BUG: backs out GST as `totalAmount - totalAmount/1.18` on EVERY invoice (assumes 18% flat, ignores actual GST rate / HSN). `inputTaxCredit: 0`, `netPayable: outputLiability`. No ITC computation, no PDF, no Excel, no per-slab breakdown. Returns a single message string + recordsAffected.
+- generate-collection-report (tools.ts:768): writes a single doc to `reports` with aging buckets + client breakdown + recommendations. No PDF/Excel export, no multi-section card.
+- explain.ts buildDecisionCard has case branches for collection-report, prepare-gst-return, create-task, mark-invoice-paid — NO `generate-gst-report` branch (will hit default).
+- analyze/route.ts returns BOTH `decisionCards[]` and `approvalRequests[]`. OracleWorkspace.tsx (line 630) ONLY reads `data.approvalRequests` and passes them as `cfoApprovals` to CFOAssistantPanel. `decisionCards` is dead — never consumed on the client. The rendered card data comes from `approval.decisionCard` embedded in each approvalRequest.
+- invoice/execute/route.ts: hardcoded `create-invoice` flow (bypasses CFO_TOOLS dispatch). Writes invoice → generates PDF → email → WhatsApp → audit. Returns `pdfBase64` inline for instant download.
+- invoice-pdf.ts: exports `generateInvoicePDF(data: InvoicePDFData)` → `{buffer, base64}`. Invoice-specific (branding, GSTIN, HSN, QR, CGST/SGST/IGST breakup, signature, T&Cs, number-to-words). NOT reusable for GST reports — would need a separate report PDF generator.
+- invoice/pdf/route.ts: 51-line POST that wraps `generateInvoicePDF` and returns binary PDF. Invoice-specific.
+- invoice-comms.ts: exports `checkEmailIntegration`, `checkWhatsAppIntegration`, `sendInvoiceEmail`, `sendInvoiceWhatsApp`. Real Firestore read on `integrations/{email|whatsapp}_{orgId}`. If not connected → clear "what to connect" message. If connected → writes a `notifications` doc with `status:'queued'` (no actual SMTP/WhatsApp send in sandbox). Invoice-specific naming but pattern is reusable.
+- approval.ts: exports `ApprovalRequest`, `ApprovalResult`, `CfoAuditEntry`, `createApprovalRequest`, `getApprovalRequest`, `decideApproval`, `completeApproval`, `writeCfoAudit`, `getRecentCfoAudit`, `getPendingApprovals`. Generic, tool-agnostic. Client SDK with preview-mode graceful fallback (best-effort writes).
+- audit.ts: exports `AuditContext`, `logOracleOperation`, `getRecentAuditLogs`, `updateAuditEntry`. Uses adminDb() (Admin SDK). PARALLEL audit system to approval.ts#writeCfoAudit — TWO audit paths exist (client-SDK `oracle_cfo_actions` vs admin-SDK `oracle_audit_logs`).
+- engine.ts: exports `askCFO(request)`. OLD orchestrator using `detectActionIntent`/`createPendingApproval` + ZAI glm-4.6. NOT used by /api/oracle/cfo/analyze (which uses routeIntent + buildDecisionCard). Likely dead or used by a different /api/oracle/ask route — confirms two parallel CFO pipelines exist.
+- No code that crashes / OOMs / hydrates incorrectly was observed in the audited files. Preview-mode fallbacks are consistent. invoice-pdf.ts uses dynamic imports for pdfkit/qrcode (correct, keeps bundle small).
+- xlsx library NOT available (package.json has pdfkit, qrcode, but no xlsx/exceljs). Phase 1.2 Excel export will need `xlsx` (SheetJS) or `exceljs` added as a dependency.

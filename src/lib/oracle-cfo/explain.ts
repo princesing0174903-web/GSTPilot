@@ -345,6 +345,68 @@ export function buildDecisionCard(
       break;
     }
 
+    case 'generate-gst-report': {
+      const totalSales = liveData.recentInvoices.reduce((s, i) => s + i.totalAmount, 0);
+      const periodParam = detected.extractedParams.find((p) => p.key === 'period');
+      const reportTypeParam = detected.extractedParams.find((p) => p.key === 'reportType');
+      const periodLabel =
+        periodParam?.value === 'last' ? 'last month' :
+        periodParam?.value === 'quarter' ? 'this quarter' :
+        periodParam?.value === 'fy' ? 'this financial year' :
+        'this month';
+      const reportTypeLabel =
+        reportTypeParam?.value === 'gstr-1' ? 'GSTR-1 (outward supplies)' :
+        reportTypeParam?.value === 'gstr-3b' ? 'GSTR-3B (summary return)' :
+        reportTypeParam?.value === 'sales-tax' ? 'sales tax breakdown' :
+        reportTypeParam?.value === 'purchase-tax' ? 'purchase tax / ITC breakdown' :
+        reportTypeParam?.value === 'gst-liability' ? 'GST liability focus' :
+        'executive GST summary';
+
+      why = `Generating a ${reportTypeLabel} report for ${periodLabel} pulls every live invoice in the period, validates GSTIN formats / duplicates / dates / reverse-charge flags, then computes per-slab CGST/SGST/IGST, ITC available + utilized, and net payable. Every number references a real invoice ID — no estimates, no simulations. The report is saved to the reports collection (version history) and downloadable as PDF / Excel / CSV.`;
+
+      // Surface the recent sales invoices that will be in the report
+      liveData.recentInvoices.slice(0, 5).forEach((inv) => {
+        records.push({
+          collection: 'invoices',
+          id: inv.id,
+          label: inv.invoiceNumber,
+          detail: `${inv.clientName} · ₹${inv.totalAmount.toLocaleString('en-IN')} · ${inv.status}`,
+        });
+      });
+
+      // Estimate output tax assuming 18% flat (the real engine computes per-slab)
+      const estOutputTax = Math.round(totalSales - totalSales / 1.18);
+
+      calculation.push(
+        { label: 'Report Type', value: reportTypeLabel },
+        { label: 'Period', value: periodLabel },
+        { label: 'Live Invoices in Scope', value: String(liveData.recentInvoices.length) },
+        { label: 'Total Sales (live, recent)', value: `₹${totalSales.toLocaleString('en-IN')}` },
+        { label: 'Est. Output GST (18% proxy)', value: `₹${estOutputTax.toLocaleString('en-IN')} — actual computed per-slab on execution` },
+        { label: 'Validation Checks', value: 'GSTIN format, duplicates, future dates, tax split, RCM, exempt, zero-rated, export' },
+        { label: 'Outputs', value: 'Per-slab CGST/SGST/IGST/Cess, ITC, net payable, top customers/vendors, monthly comparison, insights' },
+        { label: 'Download Formats', value: 'PDF · Excel · CSV' },
+      );
+
+      risks.push(
+        { severity: 'medium', description: 'Estimate shown here assumes 18% flat GST — the actual report uses each invoice\'s real GST slab.', mitigation: 'Approve to run the full per-slab calculation against live invoice data.' },
+        { severity: 'low', description: 'Preview-mode permission may block saving the report to Firestore.', mitigation: 'The report is still returned in-memory for download — sign in to persist.' },
+      );
+
+      alternatives.push(
+        { title: 'Draft a GST return instead', tradeOff: 'A return prepares a filing-ready payload; a report is a downloadable analysis. Use prepare-gst-return if you want to file.', recommended: false },
+        { title: 'Different period', tradeOff: 'Last month / quarter / FY available — pick the one matching your filing cycle.', recommended: false },
+      );
+
+      confidenceFactors.push(
+        { label: 'Live invoice data available', weight: 0.5, score: liveData.recentInvoices.length > 0 ? 1 : 0.3 },
+        { label: 'Report type specified', weight: 0.25, score: reportTypeParam ? 1 : 0.5 },
+        { label: 'Period specified', weight: 0.15, score: periodParam ? 1 : 0.5 },
+        { label: 'Intent clarity', weight: 0.1, score: detected.confidence },
+      );
+      break;
+    }
+
     default: {
       why = 'This action will perform a real business operation. Review the details below before approving.';
       confidenceFactors.push({ label: 'Intent clarity', weight: 1, score: detected.confidence });

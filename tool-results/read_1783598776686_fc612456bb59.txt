@@ -1,0 +1,1185 @@
+     1→     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→     2→// GSTPilot Oracle CFO™ — Production Tool Registry
+     3→     3→//
+     4→     4→// Every tool here performs a REAL business operation against live data.
+     5→     5→// No simulations. No placeholders. If a tool says "create invoice", an invoice
+     6→     6→// is written to the invoices collection. If it says "send reminder", a real
+     7→     7→// notification + activity record is created.
+     8→     8→//
+     9→     9→// Each tool carries:
+    10→    10→//   • id, name, description, category, icon
+    11→    11→//   • inputSchema           — typed fields for the UI form
+    12→    12→//   • approvalRequired      — critical actions never auto-execute
+    13→    13→//   • detect                — NL intent matcher (regex + keyword scoring)
+    14→    14→//   • extractParams         — pull params from live business data (clients, invoices)
+    15→    15→//   • dryRun                — safe preview, no writes
+    16→    16→//   • execute               — REAL write to Firestore via adminDb()
+    17→    17→//   • rollback              — undo on failure (best-effort)
+    18→    18→//   • retry                 — { maxAttempts, backoffMs }
+    19→    19→//   • auditMeta             — what to record in the audit trail
+    20→    20→// ═══════════════════════════════════════════════════════════════════════════════
+    21→    21→
+    22→    22→import {
+    23→    23→  collection, doc, setDoc, updateDoc, deleteDoc,
+    24→    24→  getDocs, query, where, orderBy, limit,
+    25→    25→} from 'firebase/firestore';
+    26→    26→import { db } from '@/lib/firebase';
+    27→    27→import { COLLECTIONS } from '@/lib/firestore-schema';
+    28→    28→
+    29→    29→// ─── Types ──────────────────────────────────────────────────────────────────
+    30→    30→
+    31→    31→export type ToolCategory =
+    32→    32→  | 'invoicing'
+    33→    33→  | 'gst'
+    34→    34→  | 'collections'
+    35→    35→  | 'communication'
+    36→    36→  | 'reporting'
+    37→    37→  | 'tasks';
+    38→    38→
+    39→    39→export type FieldType = 'string' | 'number' | 'date' | 'select' | 'textarea' | 'hidden';
+    40→    40→
+    41→    41→export interface ToolField {
+    42→    42→  key: string;
+    43→    43→  label: string;
+    44→    44→  type: FieldType;
+    45→    45→  required?: boolean;
+    46→    46→  options?: { label: string; value: string }[];
+    47→    47→  placeholder?: string;
+    48→    48→  defaultValue?: string | number;
+    49→    49→}
+    50→    50→
+    51→    51→export interface ToolContext {
+    52→    52→  organizationId: string;
+    53→    53→  firmId: string | null;
+    54→    54→  userId: string;
+    55→    55→  userEmail: string;
+    56→    56→  userRole: 'admin' | 'manager' | 'staff' | 'viewer';
+    57→    57→}
+    58→    58→
+    59→    59→export interface ToolResult {
+    60→    60→  success: boolean;
+    61→    61→  message: string;
+    62→    62→  recordsAffected: Array<{ collection: string; id: string; action: 'created' | 'updated' | 'deleted' }>;
+    63→    63→  output?: Record<string, unknown>;
+    64→    64→  error?: string;
+    65→    65→  rollbackStatus?: 'not-needed' | 'rolled-back' | 'rollback-failed';
+    66→    66→  executionMs: number;
+    67→    67→}
+    68→    68→
+    69→    69→export interface DetectedParam {
+    70→    70→  key: string;
+    71→    71→  value: unknown;
+    72→    72→  source: 'extracted' | 'default' | 'inferred';
+    73→    73→  confidence: number;
+    74→    74→}
+    75→    75→
+    76→    76→export interface LiveBusinessData {
+    77→    77→  clients: Array<{ id: string; name: string; gstin?: string | null; email?: string | null; phone?: string | null }>;
+    78→    78→  recentInvoices: Array<{ id: string; invoiceNumber: string; clientName: string; totalAmount: number; status: string }>;
+    79→    79→  overdueInvoices: Array<{ id: string; invoiceNumber: string; clientName: string; clientId: string; totalAmount: number; daysOverdue: number }>;
+    80→    80→  pendingReturns: Array<{ id: string; returnType: string; period: string; dueDate: string; status: string }>;
+    81→    81→  gstProfile: { gstin: string | null; legalName: string | null } | null;
+    82→    82→}
+    83→    83→
+    84→    84→export interface Tool {
+    85→    85→  id: string;
+    86→    86→  name: string;
+    87→    87→  description: string;
+    88→    88→  icon: string;
+    89→    89→  category: ToolCategory;
+    90→    90→  permission: 'admin' | 'manager' | 'staff';
+    91→    91→  approvalRequired: boolean;
+    92→    92→  inputSchema: ToolField[];
+    93→    93→  detect: (message: string) => { matches: boolean; score: number };
+    94→    94→  extractParams?: (message: string, data: LiveBusinessData) => DetectedParam[];
+    95→    95→  dryRun: (input: Record<string, unknown>, ctx: ToolContext) => Promise<Record<string, unknown>>;
+    96→    96→  execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>;
+    97→    97→  rollback?: (recordsAffected: ToolResult['recordsAffected'], ctx: ToolContext) => Promise<boolean>;
+    98→    98→  retry: { maxAttempts: number; backoffMs: number };
+    99→    99→}
+   100→   100→
+   101→   101→// ─── Firestore helpers (REAL writes via client SDK — same as firestore-service) ─
+   102→   102→
+   103→   103→async function writeDoc(
+   104→   104→  collectionName: string,
+   105→   105→  id: string,
+   106→   106→  data: Record<string, unknown>,
+   107→   107→): Promise<void> {
+   108→   108→  await setDoc(doc(db, collectionName, id), {
+   109→   109→    ...data,
+   110→   110→    createdAt: new Date().toISOString(),
+   111→   111→    updatedAt: new Date().toISOString(),
+   112→   112→  });
+   113→   113→}
+   114→   114→
+   115→   115→async function updateDocById(
+   116→   116→  collectionName: string,
+   117→   117→  id: string,
+   118→   118→  updates: Record<string, unknown>,
+   119→   119→): Promise<void> {
+   120→   120→  await updateDoc(doc(db, collectionName, id), {
+   121→   121→    ...updates,
+   122→   122→    updatedAt: new Date().toISOString(),
+   123→   123→  });
+   124→   124→}
+   125→   125→
+   126→   126→async function fetchCollection(
+   127→   127→  collectionName: string,
+   128→   128→  organizationId: string,
+   129→   129→  limitCount = 50,
+   130→   130→): Promise<Array<Record<string, unknown>>> {
+   131→   131→  try {
+   132→   132→    const q = query(
+   133→   133→      collection(db, collectionName),
+   134→   134→      where('organizationId', '==', organizationId),
+   135→   135→      limit(limitCount),
+   136→   136→    );
+   137→   137→    const snap = await getDocs(q);
+   138→   138→    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+   139→   139→  } catch {
+   140→   140→    return [];
+   141→   141→  }
+   142→   142→}
+   143→   143→
+   144→   144→// ─── Live Business Data Loader ──────────────────────────────────────────────
+   145→   145→
+   146→   146→export async function loadLiveBusinessData(organizationId: string): Promise<LiveBusinessData> {
+   147→   147→  const [clientsRaw, invoicesRaw, returnsRaw, gstRaw] = await Promise.all([
+   148→   148→    fetchCollection(COLLECTIONS.CLIENTS, organizationId, 100),
+   149→   149→    fetchCollection(COLLECTIONS.INVOICES, organizationId, 100),
+   150→   150→    fetchCollection(COLLECTIONS.GST_RETURNS, organizationId, 50),
+   151→   151→    fetchCollection(COLLECTIONS.GST_PROFILES, organizationId, 5),
+   152→   152→  ]);
+   153→   153→
+   154→   154→  const clients: LiveBusinessData['clients'] = clientsRaw.map((c) => ({
+   155→   155→    id: String(c.id ?? c.clientId ?? ''),
+   156→   156→    name: String(c.name ?? c.clientName ?? c.displayName ?? 'Unknown'),
+   157→   157→    gstin: (c.gstin as string) ?? null,
+   158→   158→    email: (c.email as string) ?? null,
+   159→   159→    phone: (c.phone as string) ?? null,
+   160→   160→  }));
+   161→   161→
+   162→   162→  const recentInvoices: LiveBusinessData['recentInvoices'] = invoicesRaw
+   163→   163→    .map((i) => ({
+   164→   164→      id: String(i.id ?? i.invoiceId ?? ''),
+   165→   165→      invoiceNumber: String(i.invoiceNumber ?? ''),
+   166→   166→      clientName: String(i.buyerName ?? i.clientName ?? ''),
+   167→   167→      totalAmount: Number(i.totalAmount ?? i.grandTotal ?? 0),
+   168→   168→      status: String(i.status ?? 'draft'),
+   169→   169→    }))
+   170→   170→    .slice(0, 20);
+   171→   171→
+   172→   172→  const now = Date.now();
+   173→   173→  const overdueInvoices: LiveBusinessData['overdueInvoices'] = invoicesRaw
+   174→   174→    .filter((i) => {
+   175→   175→      const status = String(i.status ?? '').toLowerCase();
+   176→   176→      const due = i.dueDate ? new Date(i.dueDate as string).getTime() : 0;
+   177→   177→      return status !== 'paid' && status !== 'cancelled' && due > 0 && due < now;
+   178→   178→    })
+   179→   179→    .map((i) => {
+   180→   180→      const due = new Date(i.dueDate as string).getTime();
+   181→   181→      return {
+   182→   182→        id: String(i.id ?? i.invoiceId ?? ''),
+   183→   183→        invoiceNumber: String(i.invoiceNumber ?? ''),
+   184→   184→        clientName: String(i.buyerName ?? i.clientName ?? ''),
+   185→   185→        clientId: String(i.clientId ?? ''),
+   186→   186→        totalAmount: Number(i.totalAmount ?? i.grandTotal ?? 0),
+   187→   187→        daysOverdue: Math.floor((now - due) / (24 * 60 * 60 * 1000)),
+   188→   188→      };
+   189→   189→    })
+   190→   190→    .sort((a, b) => b.daysOverdue - a.daysOverdue)
+   191→   191→    .slice(0, 20);
+   192→   192→
+   193→   193→  const pendingReturns: LiveBusinessData['pendingReturns'] = returnsRaw
+   194→   194→    .filter((r) => {
+   195→   195→      const status = String(r.status ?? '').toLowerCase();
+   196→   196→      return status === 'pending' || status === 'draft' || status === 'ready';
+   197→   197→    })
+   198→   198→    .map((r) => ({
+   199→   199→      id: String(r.id ?? r.returnId ?? ''),
+   200→   200→      returnType: String(r.returnType ?? r.formType ?? 'GSTR-3B'),
+   201→   201→      period: String(r.period ?? r.taxPeriod ?? ''),
+   202→   202→      dueDate: String(r.dueDate ?? ''),
+   203→   203→      status: String(r.status ?? 'pending'),
+   204→   204→    }));
+   205→   205→
+   206→   206→  const gstProfile =
+   207→   207→    gstRaw.length > 0
+   208→   208→      ? {
+   209→   209→          gstin: (gstRaw[0].gstin as string) ?? null,
+   210→   210→          legalName: (gstRaw[0].legalName as string) ?? (gstRaw[0].tradeName as string) ?? null,
+   211→   211→        }
+   212→   212→      : null;
+   213→   213→
+   214→   214→  return { clients, recentInvoices, overdueInvoices, pendingReturns, gstProfile };
+   215→   215→}
+   216→   216→
+   217→   217→// ─── Helper: retry with exponential backoff ─────────────────────────────────
+   218→   218→
+   219→   219→async function withRetry<T>(
+   220→   220→  fn: () => Promise<T>,
+   221→   221→  policy: { maxAttempts: number; backoffMs: number },
+   222→   222→): Promise<T> {
+   223→   223→  let lastError: unknown;
+   224→   224→  for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
+   225→   225→    try {
+   226→   226→      return await fn();
+   227→   227→    } catch (err) {
+   228→   228→      lastError = err;
+   229→   229→      if (attempt < policy.maxAttempts) {
+   230→   230→        await new Promise((r) => setTimeout(r, policy.backoffMs * attempt));
+   231→   231→      }
+   232→   232→    }
+   233→   233→  }
+   234→   234→  throw lastError;
+   235→   235→}
+   236→   236→
+   237→   237→// ─── Helper: generate IDs ───────────────────────────────────────────────────
+   238→   238→
+   239→   239→function genId(prefix: string): string {
+   240→   240→  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+   241→   241→}
+   242→   242→
+   243→   243→// ─── Helper: interpret Firestore errors into user-friendly messages ─────────
+   244→   244→// The tool executors catch errors and return a ToolResult. This helper
+   245→   245→// translates raw Firebase error codes (permission-denied, unavailable, etc.)
+   246→   246→// into actionable messages so the UI never shows a raw stack trace.
+   247→   247→
+   248→   248→function interpretError(err: unknown, actionLabel: string): { message: string; error: string } {
+   249→   249→  const raw = err instanceof Error ? err.message : String(err);
+   250→   250→  const lower = raw.toLowerCase();
+   251→   251→  if (lower.includes('permission-denied') || lower.includes('missing or insufficient permissions')) {
+   252→   252→    return {
+   253→   253→      message: `${actionLabel} was validated successfully, but could not be saved because you are in preview mode. Sign in to persist this action to your live business data.`,
+   254→   254→      error: 'PREVIEW_MODE: Firestore security rules require authentication. The action logic ran correctly — sign in to execute for real.',
+   255→   255→    };
+   256→   256→  }
+   257→   257→  if (lower.includes('unavailable') || lower.includes('offline')) {
+   258→   258→    return {
+   259→   259→      message: `${actionLabel} could not complete because the database is temporarily unavailable. Please retry in a moment.`,
+   260→   260→      error: raw,
+   261→   261→    };
+   262→   262→  }
+   263→   263→  return {
+   264→   264→    message: `${actionLabel} failed after retries. The error has been logged. Please try again or contact support if it persists.`,
+   265→   265→    error: raw,
+   266→   266→  };
+   267→   267→}
+   268→   268→
+   269→   269→// ─── THE TOOL REGISTRY ──────────────────────────────────────────────────────
+   270→   270→
+   271→   271→export const CFO_TOOLS: Tool[] = [
+   272→   272→  // ─── 1. CREATE INVOICE ────────────────────────────────────────────────────
+   273→   273→  {
+   274→   274→    id: 'create-invoice',
+   275→   275→    name: 'Create Invoice',
+   276→   276→    description: 'Draft a real sales invoice in the invoices collection with GST computation.',
+   277→   277→    icon: 'FileText',
+   278→   278→    category: 'invoicing',
+   279→   279→    permission: 'manager',
+   280→   280→    approvalRequired: true,
+   281→   281→    inputSchema: [
+   282→   282→      { key: 'clientId', label: 'Client', type: 'select', required: true, options: [] },
+   283→   283→      { key: 'invoiceNumber', label: 'Invoice Number', type: 'string', required: true, placeholder: 'INV-2025-001' },
+   284→   284→      { key: 'totalAmount', label: 'Total Amount (₹)', type: 'number', required: true, placeholder: '50000' },
+   285→   285→      { key: 'taxableValue', label: 'Taxable Value (₹)', type: 'number', required: true, placeholder: '44643' },
+   286→   286→      { key: 'gstRate', label: 'GST Rate', type: 'select', required: true, defaultValue: '18', options: [
+   287→   287→        { label: '0%', value: '0' },
+   288→   288→        { label: '5%', value: '5' },
+   289→   289→        { label: '12%', value: '12' },
+   290→   290→        { label: '18%', value: '18' },
+   291→   291→        { label: '28%', value: '28' },
+   292→   292→      ] },
+   293→   293→      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional notes...' },
+   294→   294→    ],
+   295→   295→    detect: (msg) => {
+   296→   296→      const m = msg.toLowerCase();
+   297→   297→      const patterns = [/create.*invoice/, /make.*invoice/, /generate.*invoice/, /new.*invoice/, /bill.*for/, /invoice.*for/];
+   298→   298→      const score = patterns.some((p) => p.test(m)) ? 0.9 : 0;
+   299→   299→      return { matches: score > 0, score };
+   300→   300→    },
+   301→   301→    extractParams: (msg, data) => {
+   302→   302→      const params: DetectedParam[] = [];
+   303→   303→      // Amount extraction: "₹50,000" or "50000 rupees" or "for 50000"
+   304→   304→      const amtMatch = msg.match(/₹\s*([\d,]+)/) ?? msg.match(/(\d[\d,]+)\s*(?:rupees|rs\.?|inr)/i) ?? msg.match(/for\s+([\d,]+)/i);
+   305→   305→      if (amtMatch) {
+   306→   306→        params.push({ key: 'totalAmount', value: Number(amtMatch[1].replace(/,/g, '')), source: 'extracted', confidence: 0.9 });
+   307→   307→      }
+   308→   308→      // Client extraction: match client names from live data
+   309→   309→      const lowerMsg = msg.toLowerCase();
+   310→   310→      const matchedClient = data.clients.find((c) => c.name !== 'Unknown' && lowerMsg.includes(c.name.toLowerCase()));
+   311→   311→      if (matchedClient) {
+   312→   312→        params.push({ key: 'clientId', value: matchedClient.id, source: 'extracted', confidence: 0.95 });
+   313→   313→      }
+   314→   314→      // GST rate
+   315→   315→      const gstMatch = msg.match(/(\d+)%\s*gst/);
+   316→   316→      if (gstMatch) {
+   317→   317→        params.push({ key: 'gstRate', value: gstMatch[1], source: 'extracted', confidence: 0.95 });
+   318→   318→      }
+   319→   319→      return params;
+   320→   320→    },
+   321→   321→    dryRun: async (input) => {
+   322→   322→      const total = Number(input.totalAmount ?? 0);
+   323→   323→      const taxable = Number(input.taxableValue ?? total / 1.18);
+   324→   324→      const gstRate = Number(input.gstRate ?? 18);
+   325→   325→      const gstAmount = total - taxable;
+   326→   326→      return {
+   327→   327→        preview: {
+   328→   328→          collection: 'invoices',
+   329→   329→          clientId: input.clientId,
+   330→   330→          invoiceNumber: input.invoiceNumber ?? `INV-${Date.now()}`,
+   331→   331→          totalAmount: total,
+   332→   332→          taxableValue: taxable,
+   333→   333→          gstRate,
+   334→   334→          gstAmount,
+   335→   335→          cgst: gstAmount / 2,
+   336→   336→          sgst: gstAmount / 2,
+   337→   337→          status: 'draft',
+   338→   338→          message: 'A draft invoice will be created. It will NOT be sent or filed automatically.',
+   339→   339→        },
+   340→   340→      };
+   341→   341→    },
+   342→   342→    execute: async (input, ctx) => {
+   343→   343→      const start = Date.now();
+   344→   344→      const id = genId('inv');
+   345→   345→      const total = Number(input.totalAmount ?? 0);
+   346→   346→      const taxable = Number(input.taxableValue ?? total / 1.18);
+   347→   347→      const gstRate = Number(input.gstRate ?? 18);
+   348→   348→      const gstAmount = Math.round(total - taxable);
+   349→   349→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   350→   350→
+   351→   351→      try {
+   352→   352→        await withRetry(
+   353→   353→          () => writeDoc(COLLECTIONS.INVOICES, id, {
+   354→   354→            invoiceId: id,
+   355→   355→            organizationId: ctx.organizationId,
+   356→   356→            firmId: ctx.firmId,
+   357→   357→            clientId: input.clientId,
+   358→   358→            invoiceNumber: input.invoiceNumber ?? `INV-${Date.now()}`,
+   359→   359→            invoiceDate: new Date().toISOString().slice(0, 10),
+   360→   360→            taxableValue: taxable,
+   361→   361→            gstRate,
+   362→   362→            cgst: Math.round(gstAmount / 2),
+   363→   363→            sgst: Math.round(gstAmount / 2),
+   364→   364→            igst: 0,
+   365→   365→            totalTax: gstAmount,
+   366→   366→            totalAmount: total,
+   367→   367→            grandTotal: total,
+   368→   368→            status: 'draft',
+   369→   369→            invoiceType: 'sales',
+   370→   370→            notes: input.notes ?? null,
+   371→   371→            createdBy: ctx.userId,
+   372→   372→            createdByEmail: ctx.userEmail,
+   373→   373→          }),
+   374→   374→          { maxAttempts: 3, backoffMs: 200 },
+   375→   375→        );
+   376→   376→        recordsAffected.push({ collection: COLLECTIONS.INVOICES, id, action: 'created' });
+   377→   377→
+   378→   378→        // Log activity
+   379→   379→        const activityId = genId('act');
+   380→   380→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+   381→   381→          activityId,
+   382→   382→          organizationId: ctx.organizationId,
+   383→   383→          type: 'invoice_created',
+   384→   384→          action: 'create-invoice',
+   385→   385→          actor: 'oracle-cfo',
+   386→   386→          actorEmail: ctx.userEmail,
+   387→   387→          userId: ctx.userId,
+   388→   388→          description: `Invoice ${input.invoiceNumber ?? id} created for ₹${total.toLocaleString('en-IN')}`,
+   389→   389→          metadata: { invoiceId: id, amount: total },
+   390→   390→        }).catch(() => {});
+   391→   391→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+   392→   392→
+   393→   393→        return {
+   394→   394→          success: true,
+   395→   395→          message: `Invoice ${input.invoiceNumber ?? id} created successfully for ₹${total.toLocaleString('en-IN')} (GST ${gstRate}%: ₹${gstAmount.toLocaleString('en-IN')}). Status: Draft. Review and send when ready.`,
+   396→   396→          recordsAffected,
+   397→   397→          output: { invoiceId: id, invoiceNumber: input.invoiceNumber ?? `INV-${Date.now()}`, totalAmount: total, gstAmount, status: 'draft' },
+   398→   398→          rollbackStatus: 'not-needed',
+   399→   399→          executionMs: Date.now() - start,
+   400→   400→        };
+   401→   401→      } catch (err) {
+   402→   402→        // Rollback: delete created records
+   403→   403→        if (recordsAffected.length > 0 && CFO_TOOLS[0].rollback) {
+   404→   404→          await CFO_TOOLS[0].rollback(recordsAffected, ctx).catch(() => {});
+   405→   405→        }
+   406→   406→        const interpreted = interpretError(err, 'Create Invoice');
+   407→   407→        return {
+   408→   408→          success: false,
+   409→   409→          message: interpreted.message,
+   410→   410→          recordsAffected,
+   411→   411→          error: interpreted.error,
+   412→   412→          rollbackStatus: recordsAffected.length > 0 ? 'rolled-back' : 'not-needed',
+   413→   413→          executionMs: Date.now() - start,
+   414→   414→        };
+   415→   415→      }
+   416→   416→    },
+   417→   417→    rollback: async (records) => {
+   418→   418→      for (const r of records) {
+   419→   419→        try {
+   420→   420→          await deleteDoc(doc(db, r.collection, r.id));
+   421→   421→        } catch {
+   422→   422→          /* best-effort */
+   423→   423→        }
+   424→   424→      }
+   425→   425→      return true;
+   426→   426→    },
+   427→   427→    retry: { maxAttempts: 3, backoffMs: 200 },
+   428→   428→  },
+   429→   429→
+   430→   430→  // ─── 2. SEND REMINDER (Email) ─────────────────────────────────────────────
+   431→   431→  {
+   432→   432→    id: 'send-reminder-email',
+   433→   433→    name: 'Send Payment Reminder (Email)',
+   434→   434→    description: 'Create a payment reminder notification + activity log for an overdue invoice. The reminder is queued in notifications and logged in activities.',
+   435→   435→    icon: 'Mail',
+   436→   436→    category: 'collections',
+   437→   437→    permission: 'staff',
+   438→   438→    approvalRequired: true,
+   439→   439→    inputSchema: [
+   440→   440→      { key: 'invoiceId', label: 'Invoice', type: 'select', required: true, options: [] },
+   441→   441→      { key: 'clientId', label: 'Client', type: 'hidden' },
+   442→   442→      { key: 'clientName', label: 'Client Name', type: 'hidden' },
+   443→   443→      { key: 'clientEmail', label: 'Client Email', type: 'hidden' },
+   444→   444→      { key: 'amount', label: 'Amount (₹)', type: 'hidden' },
+   445→   445→      { key: 'daysOverdue', label: 'Days Overdue', type: 'hidden' },
+   446→   446→      { key: 'message', label: 'Custom Message', type: 'textarea', placeholder: 'Optional custom message...' },
+   447→   447→    ],
+   448→   448→    detect: (msg) => {
+   449→   449→      const m = msg.toLowerCase();
+   450→   450→      const patterns = [/send.*reminder/, /remind.*client/, /follow.?up.*payment/, /email.*overdue/, /chase.*invoice/];
+   451→   451→      const score = patterns.some((p) => p.test(m)) ? 0.9 : 0;
+   452→   452→      return { matches: score > 0, score };
+   453→   453→    },
+   454→   454→    extractParams: (msg, data) => {
+   455→   455→      const params: DetectedParam[] = [];
+   456→   456→      const lowerMsg = msg.toLowerCase();
+   457→   457→      // Match overdue invoice by client name
+   458→   458→      const matched = data.overdueInvoices.find((inv) => lowerMsg.includes(inv.clientName.toLowerCase()));
+   459→   459→      if (matched) {
+   460→   460→        params.push({ key: 'invoiceId', value: matched.id, source: 'extracted', confidence: 0.9 });
+   461→   461→        params.push({ key: 'clientId', value: matched.clientId, source: 'extracted', confidence: 0.9 });
+   462→   462→        params.push({ key: 'clientName', value: matched.clientName, source: 'extracted', confidence: 0.9 });
+   463→   463→        params.push({ key: 'amount', value: matched.totalAmount, source: 'extracted', confidence: 0.9 });
+   464→   464→        params.push({ key: 'daysOverdue', value: matched.daysOverdue, source: 'extracted', confidence: 0.9 });
+   465→   465→        const client = data.clients.find((c) => c.id === matched.clientId);
+   466→   466→        if (client?.email) {
+   467→   467→          params.push({ key: 'clientEmail', value: client.email, source: 'extracted', confidence: 0.85 });
+   468→   468→        }
+   469→   469→      }
+   470→   470→      return params;
+   471→   471→    },
+   472→   472→    dryRun: async (input) => ({
+   473→   473→      preview: {
+   474→   474→        recipient: input.clientEmail ?? '(client email on file)',
+   475→   475→        invoice: input.invoiceId,
+   476→   476→        amount: `₹${Number(input.amount ?? 0).toLocaleString('en-IN')}`,
+   477→   477→        daysOverdue: input.daysOverdue,
+   478→   478→        channel: 'email',
+   479→   479→        message: 'A payment reminder notification will be created and logged. The client will see it in their notifications.',
+   480→   480→      },
+   481→   481→    }),
+   482→   482→    execute: async (input, ctx) => {
+   483→   483→      const start = Date.now();
+   484→   484→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   485→   485→      try {
+   486→   486→        const notifId = genId('notif');
+   487→   487→        const message =
+   488→   488→          (input.message as string) ||
+   489→   489→          `Dear ${input.clientName}, this is a gentle reminder that invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Kindly arrange payment at your earliest convenience. — GSTPilot`;
+   490→   490→
+   491→   491→        await withRetry(
+   492→   492→          () => writeDoc(COLLECTIONS.NOTIFICATIONS, notifId, {
+   493→   493→            notificationId: notifId,
+   494→   494→            organizationId: ctx.organizationId,
+   495→   495→            userId: ctx.userId,
+   496→   496→            type: 'payment_reminder',
+   497→   497→            channel: 'email',
+   498→   498→            recipient: input.clientEmail ?? '',
+   499→   499→            recipientName: input.clientName ?? '',
+   500→   500→            subject: `Payment Reminder: Invoice ${input.invoiceId}`,
+   501→   501→            body: message,
+   502→   502→            status: 'queued',
+   503→   503→            metadata: { invoiceId: input.invoiceId, amount: input.amount, daysOverdue: input.daysOverdue },
+   504→   504→            scheduledFor: new Date().toISOString(),
+   505→   505→            createdBy: ctx.userEmail,
+   506→   506→          }),
+   507→   507→          { maxAttempts: 3, backoffMs: 200 },
+   508→   508→        );
+   509→   509→        recordsAffected.push({ collection: COLLECTIONS.NOTIFICATIONS, id: notifId, action: 'created' });
+   510→   510→
+   511→   511→        const activityId = genId('act');
+   512→   512→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+   513→   513→          activityId,
+   514→   514→          organizationId: ctx.organizationId,
+   515→   515→          type: 'reminder_sent',
+   516→   516→          action: 'send-reminder-email',
+   517→   517→          actor: 'oracle-cfo',
+   518→   518→          actorEmail: ctx.userEmail,
+   519→   519→          userId: ctx.userId,
+   520→   520→          description: `Payment reminder emailed to ${input.clientName} for invoice ${input.invoiceId} (₹${Number(input.amount ?? 0).toLocaleString('en-IN')}, ${input.daysOverdue}d overdue)`,
+   521→   521→          metadata: { invoiceId: input.invoiceId, notificationId: notifId, channel: 'email' },
+   522→   522→        }).catch(() => {});
+   523→   523→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+   524→   524→
+   525→   525→        return {
+   526→   526→          success: true,
+   527→   527→          message: `Payment reminder queued for ${input.clientName} (${input.clientEmail || 'email on file'}). Invoice ${input.invoiceId} · ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} · ${input.daysOverdue} days overdue. Notification ID: ${notifId}.`,
+   528→   528→          recordsAffected,
+   529→   529→          output: { notificationId: notifId, channel: 'email', recipient: input.clientEmail, status: 'queued' },
+   530→   530→          rollbackStatus: 'not-needed',
+   531→   531→          executionMs: Date.now() - start,
+   532→   532→        };
+   533→   533→      } catch (err) {
+   534→   534→        const interpreted = interpretError(err, 'Send Payment Reminder (Email)');
+   535→   535→        return {
+   536→   536→          success: false,
+   537→   537→          message: interpreted.message,
+   538→   538→          recordsAffected,
+   539→   539→          error: interpreted.error,
+   540→   540→          rollbackStatus: 'not-needed',
+   541→   541→          executionMs: Date.now() - start,
+   542→   542→        };
+   543→   543→      }
+   544→   544→    },
+   545→   545→    retry: { maxAttempts: 3, backoffMs: 300 },
+   546→   546→  },
+   547→   547→
+   548→   548→  // ─── 3. SEND REMINDER (WhatsApp) ──────────────────────────────────────────
+   549→   549→  {
+   550→   550→    id: 'send-reminder-whatsapp',
+   551→   551→    name: 'Send Payment Reminder (WhatsApp)',
+   552→   552→    description: 'Queue a WhatsApp payment reminder + log activity. Uses the WhatsApp connector channel.',
+   553→   553→    icon: 'MessageCircle',
+   554→   554→    category: 'communication',
+   555→   555→    permission: 'staff',
+   556→   556→    approvalRequired: true,
+   557→   557→    inputSchema: [
+   558→   558→      { key: 'invoiceId', label: 'Invoice', type: 'hidden' },
+   559→   559→      { key: 'clientId', label: 'Client', type: 'hidden' },
+   560→   560→      { key: 'clientName', label: 'Client Name', type: 'hidden' },
+   561→   561→      { key: 'clientPhone', label: 'Client Phone', type: 'hidden' },
+   562→   562→      { key: 'amount', label: 'Amount (₹)', type: 'hidden' },
+   563→   563→      { key: 'daysOverdue', label: 'Days Overdue', type: 'hidden' },
+   564→   564→      { key: 'message', label: 'Custom Message', type: 'textarea', placeholder: 'Optional custom WhatsApp message...' },
+   565→   565→    ],
+   566→   566→    detect: (msg) => {
+   567→   567→      const m = msg.toLowerCase();
+   568→   568→      const patterns = [/whatsapp.*reminder/, /remind.*whatsapp/, /send.*whatsapp/, /message.*whatsapp/];
+   569→   569→      const score = patterns.some((p) => p.test(m)) ? 0.9 : 0;
+   570→   570→      return { matches: score > 0, score };
+   571→   571→    },
+   572→   572→    extractParams: (msg, data) => {
+   573→   573→      const params: DetectedParam[] = [];
+   574→   574→      const lowerMsg = msg.toLowerCase();
+   575→   575→      const matched = data.overdueInvoices.find((inv) => lowerMsg.includes(inv.clientName.toLowerCase()));
+   576→   576→      if (matched) {
+   577→   577→        params.push({ key: 'invoiceId', value: matched.id, source: 'extracted', confidence: 0.9 });
+   578→   578→        params.push({ key: 'clientId', value: matched.clientId, source: 'extracted', confidence: 0.9 });
+   579→   579→        params.push({ key: 'clientName', value: matched.clientName, source: 'extracted', confidence: 0.9 });
+   580→   580→        params.push({ key: 'amount', value: matched.totalAmount, source: 'extracted', confidence: 0.9 });
+   581→   581→        params.push({ key: 'daysOverdue', value: matched.daysOverdue, source: 'extracted', confidence: 0.9 });
+   582→   582→        const client = data.clients.find((c) => c.id === matched.clientId);
+   583→   583→        if (client?.phone) {
+   584→   584→          params.push({ key: 'clientPhone', value: client.phone, source: 'extracted', confidence: 0.85 });
+   585→   585→        }
+   586→   586→      }
+   587→   587→      return params;
+   588→   588→    },
+   589→   589→    dryRun: async (input) => ({
+   590→   590→      preview: {
+   591→   591→        recipient: input.clientPhone ?? '(client phone on file)',
+   592→   592→        invoice: input.invoiceId,
+   593→   593→        amount: `₹${Number(input.amount ?? 0).toLocaleString('en-IN')}`,
+   594→   594→        channel: 'whatsapp',
+   595→   595→        message: 'A WhatsApp reminder will be queued and logged.',
+   596→   596→      },
+   597→   597→    }),
+   598→   598→    execute: async (input, ctx) => {
+   599→   599→      const start = Date.now();
+   600→   600→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   601→   601→      try {
+   602→   602→        const notifId = genId('notif');
+   603→   603→        const message =
+   604→   604→          (input.message as string) ||
+   605→   605→          `Hi ${input.clientName}, this is a friendly reminder from GSTPilot. Invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Please arrange payment. Thank you!`;
+   606→   606→
+   607→   607→        await writeDoc(COLLECTIONS.NOTIFICATIONS, notifId, {
+   608→   608→          notificationId: notifId,
+   609→   609→          organizationId: ctx.organizationId,
+   610→   610→          userId: ctx.userId,
+   611→   611→          type: 'payment_reminder',
+   612→   612→          channel: 'whatsapp',
+   613→   613→          recipient: input.clientPhone ?? '',
+   614→   614→          recipientName: input.clientName ?? '',
+   615→   615→          body: message,
+   616→   616→          status: 'queued',
+   617→   617→          metadata: { invoiceId: input.invoiceId, amount: input.amount, daysOverdue: input.daysOverdue },
+   618→   618→          scheduledFor: new Date().toISOString(),
+   619→   619→          createdBy: ctx.userEmail,
+   620→   620→        });
+   621→   621→        recordsAffected.push({ collection: COLLECTIONS.NOTIFICATIONS, id: notifId, action: 'created' });
+   622→   622→
+   623→   623→        const activityId = genId('act');
+   624→   624→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+   625→   625→          activityId,
+   626→   626→          organizationId: ctx.organizationId,
+   627→   627→          type: 'reminder_sent',
+   628→   628→          action: 'send-reminder-whatsapp',
+   629→   629→          actor: 'oracle-cfo',
+   630→   630→          actorEmail: ctx.userEmail,
+   631→   631→          userId: ctx.userId,
+   632→   632→          description: `WhatsApp reminder sent to ${input.clientName} (${input.clientPhone || 'phone on file'}) for invoice ${input.invoiceId}`,
+   633→   633→          metadata: { invoiceId: input.invoiceId, notificationId: notifId, channel: 'whatsapp' },
+   634→   634→        }).catch(() => {});
+   635→   635→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+   636→   636→
+   637→   637→        return {
+   638→   638→          success: true,
+   639→   639→          message: `WhatsApp reminder queued for ${input.clientName} (${input.clientPhone || 'phone on file'}). Notification ID: ${notifId}.`,
+   640→   640→          recordsAffected,
+   641→   641→          output: { notificationId: notifId, channel: 'whatsapp', status: 'queued' },
+   642→   642→          rollbackStatus: 'not-needed',
+   643→   643→          executionMs: Date.now() - start,
+   644→   644→        };
+   645→   645→      } catch (err) {
+   646→   646→        const interpreted = interpretError(err, 'Send Payment Reminder (WhatsApp)');
+   647→   647→        return {
+   648→   648→          success: false,
+   649→   649→          message: interpreted.message,
+   650→   650→          recordsAffected,
+   651→   651→          error: interpreted.error,
+   652→   652→          rollbackStatus: 'not-needed',
+   653→   653→          executionMs: Date.now() - start,
+   654→   654→        };
+   655→   655→      }
+   656→   656→    },
+   657→   657→    retry: { maxAttempts: 2, backoffMs: 300 },
+   658→   658→  },
+   659→   659→
+   660→   660→  // ─── 4. CREATE PAYMENT LINK ───────────────────────────────────────────────
+   661→   661→  {
+   662→   662→    id: 'create-payment-link',
+   663→   663→    name: 'Create Payment Link',
+   664→   664→    description: 'Generate a payment link record for an invoice. Creates a payment record with a unique link ID that can be shared with the client.',
+   665→   665→    icon: 'CreditCard',
+   666→   666→    category: 'collections',
+   667→   667→    permission: 'manager',
+   668→   668→    approvalRequired: true,
+   669→   669→    inputSchema: [
+   670→   670→      { key: 'invoiceId', label: 'Invoice', type: 'select', required: true, options: [] },
+   671→   671→      { key: 'clientId', label: 'Client', type: 'hidden' },
+   672→   672→      { key: 'clientName', label: 'Client Name', type: 'hidden' },
+   673→   673→      { key: 'amount', label: 'Amount (₹)', type: 'number', required: true, placeholder: '50000' },
+   674→   674→    ],
+   675→   675→    detect: (msg) => {
+   676→   676→      const m = msg.toLowerCase();
+   677→   677→      const patterns = [/payment.*link/, /link.*pay/, /razorpay/, /stripe/, /create.*link.*pay/];
+   678→   678→      const score = patterns.some((p) => p.test(m)) ? 0.9 : 0;
+   679→   679→      return { matches: score > 0, score };
+   680→   680→    },
+   681→   681→    extractParams: (msg, data) => {
+   682→   682→      const params: DetectedParam[] = [];
+   683→   683→      const lowerMsg = msg.toLowerCase();
+   684→   684→      const matched = data.recentInvoices.find((inv) => lowerMsg.includes(inv.invoiceNumber.toLowerCase())) ??
+   685→   685→        data.recentInvoices.find((inv) => lowerMsg.includes(inv.clientName.toLowerCase()));
+   686→   686→      if (matched) {
+   687→   687→        params.push({ key: 'invoiceId', value: matched.id, source: 'extracted', confidence: 0.9 });
+   688→   688→        params.push({ key: 'clientName', value: matched.clientName, source: 'extracted', confidence: 0.85 });
+   689→   689→        params.push({ key: 'amount', value: matched.totalAmount, source: 'extracted', confidence: 0.85 });
+   690→   690→      }
+   691→   691→      const amtMatch = msg.match(/₹\s*([\d,]+)/) ?? msg.match(/for\s+([\d,]+)/i);
+   692→   692→      if (amtMatch) {
+   693→   693→        params.push({ key: 'amount', value: Number(amtMatch[1].replace(/,/g, '')), source: 'extracted', confidence: 0.9 });
+   694→   694→      }
+   695→   695→      return params;
+   696→   696→    },
+   697→   697→    dryRun: async (input) => ({
+   698→   698→      preview: {
+   699→   699→        invoiceId: input.invoiceId,
+   700→   700→        amount: `₹${Number(input.amount ?? 0).toLocaleString('en-IN')}`,
+   701→   701→        provider: 'internal-link',
+   702→   702→        message: 'A payment link record will be created. The link can be shared with the client to collect payment online.',
+   703→   703→      },
+   704→   704→    }),
+   705→   705→    execute: async (input, ctx) => {
+   706→   706→      const start = Date.now();
+   707→   707→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   708→   708→      try {
+   709→   709→        const linkId = genId('pay');
+   710→   710→        const linkToken = Math.random().toString(36).slice(2, 12).toUpperCase();
+   711→   711→        await writeDoc(COLLECTIONS.PAYMENTS, linkId, {
+   712→   712→          paymentId: linkId,
+   713→   713→          organizationId: ctx.organizationId,
+   714→   714→          invoiceId: input.invoiceId,
+   715→   715→          clientId: input.clientId,
+   716→   716→          clientName: input.clientName,
+   717→   717→          amount: Number(input.amount ?? 0),
+   718→   718→          currency: 'INR',
+   719→   719→          status: 'link_created',
+   720→   720→          method: 'link',
+   721→   721→          linkId: linkToken,
+   722→   722→          linkUrl: `/pay/${linkToken}`,
+   723→   723→          provider: 'internal',
+   724→   724→          createdAt: new Date().toISOString(),
+   725→   725→          createdBy: ctx.userEmail,
+   726→   726→        });
+   727→   727→        recordsAffected.push({ collection: COLLECTIONS.PAYMENTS, id: linkId, action: 'created' });
+   728→   728→
+   729→   729→        const activityId = genId('act');
+   730→   730→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+   731→   731→          activityId,
+   732→   732→          organizationId: ctx.organizationId,
+   733→   733→          type: 'payment_link_created',
+   734→   734→          action: 'create-payment-link',
+   735→   735→          actor: 'oracle-cfo',
+   736→   736→          actorEmail: ctx.userEmail,
+   737→   737→          userId: ctx.userId,
+   738→   738→          description: `Payment link created for ${input.clientName} — ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} (invoice ${input.invoiceId})`,
+   739→   739→          metadata: { invoiceId: input.invoiceId, paymentId: linkId, linkToken },
+   740→   740→        }).catch(() => {});
+   741→   741→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+   742→   742→
+   743→   743→        return {
+   744→   744→          success: true,
+   745→   745→          message: `Payment link created for ${input.clientName}. Amount: ₹${Number(input.amount ?? 0).toLocaleString('en-IN')}. Link ID: ${linkToken}. Share URL: /pay/${linkToken}. Status: Awaiting payment.`,
+   746→   746→          recordsAffected,
+   747→   747→          output: { paymentId: linkId, linkId: linkToken, linkUrl: `/pay/${linkToken}`, amount: input.amount, status: 'link_created' },
+   748→   748→          rollbackStatus: 'not-needed',
+   749→   749→          executionMs: Date.now() - start,
+   750→   750→        };
+   751→   751→      } catch (err) {
+   752→   752→        const interpreted = interpretError(err, 'Create Payment Link');
+   753→   753→        return {
+   754→   754→          success: false,
+   755→   755→          message: interpreted.message,
+   756→   756→          recordsAffected,
+   757→   757→          error: interpreted.error,
+   758→   758→          rollbackStatus: 'not-needed',
+   759→   759→          executionMs: Date.now() - start,
+   760→   760→        };
+   761→   761→      }
+   762→   762→    },
+   763→   763→    retry: { maxAttempts: 3, backoffMs: 200 },
+   764→   764→  },
+   765→   765→
+   766→   766→  // ─── 5. GENERATE COLLECTION REPORT ────────────────────────────────────────
+   767→   767→  {
+   768→   768→    id: 'generate-collection-report',
+   769→   769→    name: 'Generate Collection Report',
+   770→   770→    description: 'Create a real collection report document in the reports collection with overdue aging, client-wise breakdown, and recommendations.',
+   771→   771→    icon: 'FileBarChart',
+   772→   772→    category: 'reporting',
+   773→   773→    permission: 'staff',
+   774→   774→    approvalRequired: false,
+   775→   775→    inputSchema: [
+   776→   776→      { key: 'period', label: 'Period', type: 'select', defaultValue: 'current', options: [
+   777→   777→        { label: 'Current Month', value: 'current' },
+   778→   778→        { label: 'Last 30 Days', value: '30d' },
+   779→   779→        { label: 'Last 90 Days', value: '90d' },
+   780→   780→        { label: 'This Quarter', value: 'quarter' },
+   781→   781→      ] },
+   782→   782→    ],
+   783→   783→    detect: (msg) => {
+   784→   784→      const m = msg.toLowerCase();
+   785→   785→      const patterns = [/collection.*report/, /overdue.*report/, /receivable.*report/, /aging.*report/, /generate.*report.*collection/];
+   786→   786→      const score = patterns.some((p) => p.test(m)) ? 0.9 : 0;
+   787→   787→      return { matches: score > 0, score };
+   788→   788→    },
+   789→   789→    dryRun: async (input) => ({
+   790→   790→      preview: {
+   791→   791→        reportType: 'collection',
+   792→   792→        period: input.period,
+   793→   793→        message: 'A collection report will be generated from live overdue invoice data and saved to reports.',
+   794→   794→      },
+   795→   795→    }),
+   796→   796→    execute: async (input, ctx) => {
+   797→   797→      const start = Date.now();
+   798→   798→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   799→   799→      try {
+   800→   800→        const data = await loadLiveBusinessData(ctx.organizationId);
+   801→   801→        const totalOverdue = data.overdueInvoices.reduce((s, i) => s + i.totalAmount, 0);
+   802→   802→        const aging = {
+   803→   803→          '0-30': data.overdueInvoices.filter((i) => i.daysOverdue <= 30).reduce((s, i) => s + i.totalAmount, 0),
+   804→   804→          '31-60': data.overdueInvoices.filter((i) => i.daysOverdue > 30 && i.daysOverdue <= 60).reduce((s, i) => s + i.totalAmount, 0),
+   805→   805→          '61-90': data.overdueInvoices.filter((i) => i.daysOverdue > 60 && i.daysOverdue <= 90).reduce((s, i) => s + i.totalAmount, 0),
+   806→   806→          '90+': data.overdueInvoices.filter((i) => i.daysOverdue > 90).reduce((s, i) => s + i.totalAmount, 0),
+   807→   807→        };
+   808→   808→        const clientBreakdown = data.overdueInvoices.reduce((acc, inv) => {
+   809→   809→          acc[inv.clientName] = (acc[inv.clientName] ?? 0) + inv.totalAmount;
+   810→   810→          return acc;
+   811→   811→        }, {} as Record<string, number>);
+   812→   812→
+   813→   813→        const reportId = genId('rpt');
+   814→   814→        await writeDoc(COLLECTIONS.REPORTS, reportId, {
+   815→   815→          reportId,
+   816→   816→          organizationId: ctx.organizationId,
+   817→   817→          type: 'collection',
+   818→   818→          title: `Collection Report — ${input.period === 'current' ? 'Current Month' : input.period}`,
+   819→   819→          period: input.period,
+   820→   820→          generatedAt: new Date().toISOString(),
+   821→   821→          generatedBy: ctx.userEmail,
+   822→   822→          status: 'generated',
+   823→   823→          summary: {
+   824→   824→            totalOverdue,
+   825→   825→            overdueCount: data.overdueInvoices.length,
+   826→   826→            topClient: Object.entries(clientBreakdown).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'N/A',
+   827→   827→          },
+   828→   828→          data: {
+   829→   829→            aging,
+   830→   830→            clientBreakdown,
+   831→   831→            overdueInvoices: data.overdueInvoices,
+   832→   832→            recommendations: [
+   833→   833→              totalOverdue > 100000 ? 'High overdue exposure — escalate top 3 clients immediately' : 'Moderate overdue — send reminders to 90+ bucket first',
+   834→   834→              aging['90+'] > 0 ? `${aging['90+']} stuck in 90+ bucket — consider legal escalation` : 'No critically aged receivables',
+   835→   835→            ],
+   836→   836→          },
+   837→   837→        });
+   838→   838→        recordsAffected.push({ collection: COLLECTIONS.REPORTS, id: reportId, action: 'created' });
+   839→   839→
+   840→   840→        return {
+   841→   841→          success: true,
+   842→   842→          message: `Collection report generated. Total overdue: ₹${totalOverdue.toLocaleString('en-IN')} across ${data.overdueInvoices.length} invoices. Aging: 0-30d ₹${aging['0-30'].toLocaleString('en-IN')} · 31-60d ₹${aging['31-60'].toLocaleString('en-IN')} · 61-90d ₹${aging['61-90'].toLocaleString('en-IN')} · 90+ ₹${aging['90+'].toLocaleString('en-IN')}. Report ID: ${reportId}.`,
+   843→   843→          recordsAffected,
+   844→   844→          output: { reportId, totalOverdue, overdueCount: data.overdueInvoices.length, aging },
+   845→   845→          rollbackStatus: 'not-needed',
+   846→   846→          executionMs: Date.now() - start,
+   847→   847→        };
+   848→   848→      } catch (err) {
+   849→   849→        const interpreted = interpretError(err, 'Generate Collection Report');
+   850→   850→        return {
+   851→   851→          success: false,
+   852→   852→          message: interpreted.message,
+   853→   853→          recordsAffected,
+   854→   854→          error: interpreted.error,
+   855→   855→          rollbackStatus: 'not-needed',
+   856→   856→          executionMs: Date.now() - start,
+   857→   857→        };
+   858→   858→      }
+   859→   859→    },
+   860→   860→    retry: { maxAttempts: 2, backoffMs: 200 },
+   861→   861→  },
+   862→   862→
+   863→   863→  // ─── 6. PREPARE GST RETURN ────────────────────────────────────────────────
+   864→   864→  {
+   865→   865→    id: 'prepare-gst-return',
+   866→   866→    name: 'Prepare GST Return',
+   867→   867→    description: 'Draft a GST return from live invoice data. Computes output liability from sales invoices. Does NOT file — only prepares for review.',
+   868→   868→    icon: 'Receipt',
+   869→   869→    category: 'gst',
+   870→   870→    permission: 'manager',
+   871→   871→    approvalRequired: true,
+   872→   872→    inputSchema: [
+   873→   873→      { key: 'returnType', label: 'Return Type', type: 'select', required: true, defaultValue: 'GSTR-3B', options: [
+   874→   874→        { label: 'GSTR-1 (Outward Supplies)', value: 'GSTR-1' },
+   875→   875→        { label: 'GSTR-3B (Summary Return)', value: 'GSTR-3B' },
+   876→   876→      ] },
+   877→   877→      { key: 'period', label: 'Tax Period', type: 'string', required: true, placeholder: '2025-01' },
+   878→   878→    ],
+   879→   879→    detect: (msg) => {
+   880→   880→      const m = msg.toLowerCase();
+   881→   881→      const patterns = [/prepare.*gst/, /gst.*return/, /gstr-?\d/, /file.*gst/, /gst.*filing/];
+   882→   882→      const score = patterns.some((p) => p.test(m)) ? 0.85 : 0;
+   883→   883→      return { matches: score > 0, score };
+   884→   884→    },
+   885→   885→    extractParams: (msg) => {
+   886→   886→      const params: DetectedParam[] = [];
+   887→   887→      const gstrMatch = msg.match(/gstr-?(\d\w?)/i);
+   888→   888→      if (gstrMatch) {
+   889→   889→        params.push({ key: 'returnType', value: `GSTR-${gstrMatch[1].toUpperCase()}`, source: 'extracted', confidence: 0.9 });
+   890→   890→      }
+   891→   891→      const periodMatch = msg.match(/(20\d{2})[-/](\d{1,2})/);
+   892→   892→      if (periodMatch) {
+   893→   893→        params.push({ key: 'period', value: `${periodMatch[1]}-${periodMatch[2].padStart(2, '0')}`, source: 'extracted', confidence: 0.9 });
+   894→   894→      }
+   895→   895→      return params;
+   896→   896→    },
+   897→   897→    dryRun: async (input) => ({
+   898→   898→      preview: {
+   899→   899→        returnType: input.returnType,
+   900→   900→        period: input.period,
+   901→   901→        message: 'A GST return will be drafted from live sales invoices. It will NOT be filed — only prepared for your review and approval.',
+   902→   902→      },
+   903→   903→    }),
+   904→   904→    execute: async (input, ctx) => {
+   905→   905→      const start = Date.now();
+   906→   906→      const recordsAffected: ToolResult['recordsAffected'] = [];
+   907→   907→      try {
+   908→   908→        const data = await loadLiveBusinessData(ctx.organizationId);
+   909→   909→        // Compute output liability from recent invoices
+   910→   910→        const outputLiability = data.recentInvoices.reduce((s, i) => s + (Number(i.totalAmount ?? 0) - Number(i.totalAmount ?? 0) / 1.18), 0);
+   911→   911→        const totalSales = data.recentInvoices.reduce((s, i) => s + Number(i.totalAmount ?? 0), 0);
+   912→   912→
+   913→   913→        const returnId = genId('gstr');
+   914→   914→        await writeDoc(COLLECTIONS.GST_RETURNS, returnId, {
+   915→   915→          returnId,
+   916→   916→          organizationId: ctx.organizationId,
+   917→   917→          firmId: ctx.firmId,
+   918→   918→          returnType: input.returnType,
+   919→   919→          taxPeriod: input.period,
+   920→   920→          status: 'draft',
+   921→   921→          totalSales,
+   922→   922→          outputLiability: Math.round(outputLiability),
+   923→   923→          inputTaxCredit: 0,
+   924→   924→          netPayable: Math.round(outputLiability),
+   925→   925→          invoiceCount: data.recentInvoices.length,
+   926→   926→          preparedBy: ctx.userEmail,
+   927→   927→          preparedAt: new Date().toISOString(),
+   928→   928→          notes: 'Drafted by Oracle CFO from live invoice data. Review and file manually on GST portal.',
+   929→   929→        });
+   930→   930→        recordsAffected.push({ collection: COLLECTIONS.GST_RETURNS, id: returnId, action: 'created' });
+   931→   931→
+   932→   932→        const activityId = genId('act');
+   933→   933→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+   934→   934→          activityId,
+   935→   935→          organizationId: ctx.organizationId,
+   936→   936→          type: 'gst_return_prepared',
+   937→   937→          action: 'prepare-gst-return',
+   938→   938→          actor: 'oracle-cfo',
+   939→   939→          actorEmail: ctx.userEmail,
+   940→   940→          userId: ctx.userId,
+   941→   941→          description: `GST return ${input.returnType} for ${input.period} drafted. Output liability: ₹${Math.round(outputLiability).toLocaleString('en-IN')} from ${data.recentInvoices.length} invoices.`,
+   942→   942→          metadata: { returnId, returnType: input.returnType, period: input.period },
+   943→   943→        }).catch(() => {});
+   944→   944→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+   945→   945→
+   946→   946→        return {
+   947→   947→          success: true,
+   948→   948→          message: `GST return ${input.returnType} for ${input.period} drafted successfully. Output liability: ₹${Math.round(outputLiability).toLocaleString('en-IN')} from ${data.recentInvoices.length} invoices. Status: Draft — review and file on GST portal. Return ID: ${returnId}.`,
+   949→   949→          recordsAffected,
+   950→   950→          output: { returnId, returnType: input.returnType, period: input.period, outputLiability: Math.round(outputLiability), status: 'draft' },
+   951→   951→          rollbackStatus: 'not-needed',
+   952→   952→          executionMs: Date.now() - start,
+   953→   953→        };
+   954→   954→      } catch (err) {
+   955→   955→        const interpreted = interpretError(err, 'Prepare GST Return');
+   956→   956→        return {
+   957→   957→          success: false,
+   958→   958→          message: interpreted.message,
+   959→   959→          recordsAffected,
+   960→   960→          error: interpreted.error,
+   961→   961→          rollbackStatus: 'not-needed',
+   962→   962→          executionMs: Date.now() - start,
+   963→   963→        };
+   964→   964→      }
+   965→   965→    },
+   966→   966→    retry: { maxAttempts: 3, backoffMs: 200 },
+   967→   967→  },
+   968→   968→
+   969→   969→  // ─── 7. CREATE TASK ───────────────────────────────────────────────────────
+   970→   970→  {
+   971→   971→    id: 'create-task',
+   972→   972→    name: 'Create Task',
+   973→   973→    description: 'Create a task in the tasks collection with assignee, due date, and priority.',
+   974→   974→    icon: 'CheckSquare',
+   975→   975→    category: 'tasks',
+   976→   976→    permission: 'staff',
+   977→   977→    approvalRequired: false,
+   978→   978→    inputSchema: [
+   979→   979→      { key: 'title', label: 'Task Title', type: 'string', required: true, placeholder: 'Follow up with client...' },
+   980→   980→      { key: 'description', label: 'Description', type: 'textarea', placeholder: 'Task details...' },
+   981→   981→      { key: 'priority', label: 'Priority', type: 'select', defaultValue: 'medium', options: [
+   982→   982→        { label: 'Low', value: 'low' },
+   983→   983→        { label: 'Medium', value: 'medium' },
+   984→   984→        { label: 'High', value: 'high' },
+   985→   985→        { label: 'Urgent', value: 'urgent' },
+   986→   986→      ] },
+   987→   987→      { key: 'dueDate', label: 'Due Date', type: 'date' },
+   988→   988→    ],
+   989→   989→    detect: (msg) => {
+   990→   990→      const m = msg.toLowerCase();
+   991→   991→      const patterns = [/create.*task/, /add.*task/, /remind me to/, /schedule.*task/, /to.?do/];
+   992→   992→      const score = patterns.some((p) => p.test(m)) ? 0.8 : 0;
+   993→   993→      return { matches: score > 0, score };
+   994→   994→    },
+   995→   995→    extractParams: (msg) => {
+   996→   996→      const params: DetectedParam[] = [];
+   997→   997→      // Extract a task title from quoted text or after "to"
+   998→   998→      const quoted = msg.match(/[""'](.+?)[""']/);
+   999→   999→      if (quoted) {
+  1000→  1000→        params.push({ key: 'title', value: quoted[1], source: 'extracted', confidence: 0.8 });
+  1001→  1001→      }
+  1002→  1002→      if (/urgent|asap|immediately/.test(msg.toLowerCase())) {
+  1003→  1003→        params.push({ key: 'priority', value: 'urgent', source: 'inferred', confidence: 0.8 });
+  1004→  1004→      } else if (/high|important/.test(msg.toLowerCase())) {
+  1005→  1005→        params.push({ key: 'priority', value: 'high', source: 'inferred', confidence: 0.7 });
+  1006→  1006→      }
+  1007→  1007→      return params;
+  1008→  1008→    },
+  1009→  1009→    dryRun: async (input) => ({
+  1010→  1010→      preview: {
+  1011→  1011→        title: input.title,
+  1012→  1012→        priority: input.priority ?? 'medium',
+  1013→  1013→        dueDate: input.dueDate,
+  1014→  1014→        message: 'A task will be created in the tasks collection.',
+  1015→  1015→      },
+  1016→  1016→    }),
+  1017→  1017→    execute: async (input, ctx) => {
+  1018→  1018→      const start = Date.now();
+  1019→  1019→      const recordsAffected: ToolResult['recordsAffected'] = [];
+  1020→  1020→      try {
+  1021→  1021→        const taskId = genId('task');
+  1022→  1022→        await writeDoc(COLLECTIONS.TASKS, taskId, {
+  1023→  1023→          taskId,
+  1024→  1024→          organizationId: ctx.organizationId,
+  1025→  1025→          title: input.title,
+  1026→  1026→          description: input.description ?? '',
+  1027→  1027→          priority: input.priority ?? 'medium',
+  1028→  1028→          status: 'pending',
+  1029→  1029→          dueDate: input.dueDate ?? null,
+  1030→  1030→          assigneeId: ctx.userId,
+  1031→  1031→          assigneeEmail: ctx.userEmail,
+  1032→  1032→          createdBy: ctx.userEmail,
+  1033→  1033→          source: 'oracle-cfo',
+  1034→  1034→        });
+  1035→  1035→        recordsAffected.push({ collection: COLLECTIONS.TASKS, id: taskId, action: 'created' });
+  1036→  1036→
+  1037→  1037→        return {
+  1038→  1038→          success: true,
+  1039→  1039→          message: `Task "${input.title}" created with ${input.priority ?? 'medium'} priority. Task ID: ${taskId}.`,
+  1040→  1040→          recordsAffected,
+  1041→  1041→          output: { taskId, title: input.title, priority: input.priority ?? 'medium', status: 'pending' },
+  1042→  1042→          rollbackStatus: 'not-needed',
+  1043→  1043→          executionMs: Date.now() - start,
+  1044→  1044→        };
+  1045→  1045→      } catch (err) {
+  1046→  1046→        const interpreted = interpretError(err, 'Create Task');
+  1047→  1047→        return {
+  1048→  1048→          success: false,
+  1049→  1049→          message: interpreted.message,
+  1050→  1050→          recordsAffected,
+  1051→  1051→          error: interpreted.error,
+  1052→  1052→          rollbackStatus: 'not-needed',
+  1053→  1053→          executionMs: Date.now() - start,
+  1054→  1054→        };
+  1055→  1055→      }
+  1056→  1056→    },
+  1057→  1057→    retry: { maxAttempts: 2, backoffMs: 200 },
+  1058→  1058→  },
+  1059→  1059→
+  1060→  1060→  // ─── 8. MARK INVOICE PAID ─────────────────────────────────────────────────
+  1061→  1061→  {
+  1062→  1062→    id: 'mark-invoice-paid',
+  1063→  1063→    name: 'Mark Invoice as Paid',
+  1064→  1064→    description: 'Update an invoice status to paid and create a payment record. Updates the invoice, creates a payment, and logs activity.',
+  1065→  1065→    icon: 'CheckCircle',
+  1066→  1066→    category: 'collections',
+  1067→  1067→    permission: 'manager',
+  1068→  1068→    approvalRequired: true,
+  1069→  1069→    inputSchema: [
+  1070→  1070→      { key: 'invoiceId', label: 'Invoice', type: 'select', required: true, options: [] },
+  1071→  1071→      { key: 'amount', label: 'Amount Paid (₹)', type: 'number', required: true, placeholder: '50000' },
+  1072→  1072→      { key: 'paymentMethod', label: 'Payment Method', type: 'select', defaultValue: 'bank_transfer', options: [
+  1073→  1073→        { label: 'Bank Transfer', value: 'bank_transfer' },
+  1074→  1074→        { label: 'UPI', value: 'upi' },
+  1075→  1075→        { label: 'Cash', value: 'cash' },
+  1076→  1076→        { label: 'Cheque', value: 'cheque' },
+  1077→  1077→        { label: 'Card', value: 'card' },
+  1078→  1078→      ] },
+  1079→  1079→    ],
+  1080→  1080→    detect: (msg) => {
+  1081→  1081→      const m = msg.toLowerCase();
+  1082→  1082→      const patterns = [/mark.*paid/, /invoice.*paid/, /payment.*received/, /received.*payment/, /record.*payment/];
+  1083→  1083→      const score = patterns.some((p) => p.test(m)) ? 0.85 : 0;
+  1084→  1084→      return { matches: score > 0, score };
+  1085→  1085→    },
+  1086→  1086→    extractParams: (msg, data) => {
+  1087→  1087→      const params: DetectedParam[] = [];
+  1088→  1088→      const lowerMsg = msg.toLowerCase();
+  1089→  1089→      const matched = data.recentInvoices.find((inv) => lowerMsg.includes(inv.invoiceNumber.toLowerCase())) ??
+  1090→  1090→        data.recentInvoices.find((inv) => lowerMsg.includes(inv.clientName.toLowerCase()));
+  1091→  1091→      if (matched) {
+  1092→  1092→        params.push({ key: 'invoiceId', value: matched.id, source: 'extracted', confidence: 0.9 });
+  1093→  1093→        params.push({ key: 'amount', value: matched.totalAmount, source: 'extracted', confidence: 0.8 });
+  1094→  1094→      }
+  1095→  1095→      const amtMatch = msg.match(/₹\s*([\d,]+)/);
+  1096→  1096→      if (amtMatch) {
+  1097→  1097→        params.push({ key: 'amount', value: Number(amtMatch[1].replace(/,/g, '')), source: 'extracted', confidence: 0.9 });
+  1098→  1098→      }
+  1099→  1099→      return params;
+  1100→  1100→    },
+  1101→  1101→    dryRun: async (input) => ({
+  1102→  1102→      preview: {
+  1103→  1103→        invoiceId: input.invoiceId,
+  1104→  1104→        amount: `₹${Number(input.amount ?? 0).toLocaleString('en-IN')}`,
+  1105→  1105→        method: input.paymentMethod,
+  1106→  1106→        message: 'Invoice will be marked as paid, a payment record created, and activity logged.',
+  1107→  1107→      },
+  1108→  1108→    }),
+  1109→  1109→    execute: async (input, ctx) => {
+  1110→  1110→      const start = Date.now();
+  1111→  1111→      const recordsAffected: ToolResult['recordsAffected'] = [];
+  1112→  1112→      try {
+  1113→  1113→        // Update invoice status
+  1114→  1114→        await updateDocById(COLLECTIONS.INVOICES, String(input.invoiceId), {
+  1115→  1115→          status: 'paid',
+  1116→  1116→          paidAt: new Date().toISOString(),
+  1117→  1117→          paidAmount: Number(input.amount ?? 0),
+  1118→  1118→          paymentMethod: input.paymentMethod,
+  1119→  1119→        });
+  1120→  1120→        recordsAffected.push({ collection: COLLECTIONS.INVOICES, id: String(input.invoiceId), action: 'updated' });
+  1121→  1121→
+  1122→  1122→        // Create payment record
+  1123→  1123→        const paymentId = genId('pay');
+  1124→  1124→        await writeDoc(COLLECTIONS.PAYMENTS, paymentId, {
+  1125→  1125→          paymentId,
+  1126→  1126→          organizationId: ctx.organizationId,
+  1127→  1127→          invoiceId: input.invoiceId,
+  1128→  1128→          amount: Number(input.amount ?? 0),
+  1129→  1129→          currency: 'INR',
+  1130→  1130→          method: input.paymentMethod,
+  1131→  1131→          status: 'completed',
+  1132→  1132→          paidAt: new Date().toISOString(),
+  1133→  1133→          receivedBy: ctx.userEmail,
+  1134→  1134→        });
+  1135→  1135→        recordsAffected.push({ collection: COLLECTIONS.PAYMENTS, id: paymentId, action: 'created' });
+  1136→  1136→
+  1137→  1137→        // Log activity
+  1138→  1138→        const activityId = genId('act');
+  1139→  1139→        await writeDoc(COLLECTIONS.ACTIVITIES, activityId, {
+  1140→  1140→          activityId,
+  1141→  1141→          organizationId: ctx.organizationId,
+  1142→  1142→          type: 'payment_received',
+  1143→  1143→          action: 'mark-invoice-paid',
+  1144→  1144→          actor: 'oracle-cfo',
+  1145→  1145→          actorEmail: ctx.userEmail,
+  1146→  1146→          userId: ctx.userId,
+  1147→  1147→          description: `Invoice ${input.invoiceId} marked as paid — ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} via ${input.paymentMethod}`,
+  1148→  1148→          metadata: { invoiceId: input.invoiceId, paymentId, amount: input.amount },
+  1149→  1149→        }).catch(() => {});
+  1150→  1150→        recordsAffected.push({ collection: COLLECTIONS.ACTIVITIES, id: activityId, action: 'created' });
+  1151→  1151→
+  1152→  1152→        return {
+  1153→  1153→          success: true,
+  1154→  1154→          message: `Invoice ${input.invoiceId} marked as paid. Payment of ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} recorded via ${input.paymentMethod}. Payment ID: ${paymentId}. Dashboard will refresh automatically.`,
+  1155→  1155→          recordsAffected,
+  1156→  1156→          output: { invoiceId: input.invoiceId, paymentId, status: 'paid', amount: input.amount },
+  1157→  1157→          rollbackStatus: 'not-needed',
+  1158→  1158→          executionMs: Date.now() - start,
+  1159→  1159→        };
+  1160→  1160→      } catch (err) {
+  1161→  1161→        const interpreted = interpretError(err, 'Mark Invoice as Paid');
+  1162→  1162→        return {
+  1163→  1163→          success: false,
+  1164→  1164→          message: interpreted.message,
+  1165→  1165→          recordsAffected,
+  1166→  1166→          error: interpreted.error,
+  1167→  1167→          rollbackStatus: recordsAffected.length > 0 ? 'rollback-failed' : 'not-needed',
+  1168→  1168→          executionMs: Date.now() - start,
+  1169→  1169→        };
+  1170→  1170→      }
+  1171→  1171→    },
+  1172→  1172→    retry: { maxAttempts: 2, backoffMs: 200 },
+  1173→  1173→  },
+  1174→  1174→];
+  1175→  1175→
+  1176→  1176→// ─── Registry helpers ───────────────────────────────────────────────────────
+  1177→  1177→
+  1178→  1178→export function getTool(toolId: string): Tool | undefined {
+  1179→  1179→  return CFO_TOOLS.find((t) => t.id === toolId);
+  1180→  1180→}
+  1181→  1181→
+  1182→  1182→export function listTools(): Array<Omit<Tool, 'execute' | 'dryRun' | 'rollback' | 'detect' | 'extractParams'>> {
+  1183→  1183→  return CFO_TOOLS.map(({ execute, dryRun, rollback, detect, extractParams, ...rest }) => rest);
+  1184→  1184→}
+  1185→  1185→

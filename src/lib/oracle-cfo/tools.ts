@@ -1171,6 +1171,269 @@ export const CFO_TOOLS: Tool[] = [
     },
     retry: { maxAttempts: 2, backoffMs: 200 },
   },
+
+  // ─── 9. GENERATE GST REPORT (Phase 1.2 — Production) ──────────────────────
+  {
+    id: 'generate-gst-report',
+    name: 'Generate GST Report',
+    description:
+      'Generate a real, downloadable GST report from live invoice data. Validates every invoice, calculates per-slab CGST/SGST/IGST + ITC + net liability, surfaces Oracle insights, and persists the report with PDF/Excel/CSV export.',
+    icon: 'FileBarChart',
+    category: 'reporting',
+    permission: 'staff',
+    approvalRequired: true,
+    inputSchema: [
+      { key: 'reportType', label: 'Report Type', type: 'select', required: true, defaultValue: 'gst-summary', options: [
+        { label: 'GST Summary (executive)', value: 'gst-summary' },
+        { label: 'GSTR-1 (Outward Supplies)', value: 'gstr-1' },
+        { label: 'GSTR-3B (Summary Return)', value: 'gstr-3b' },
+        { label: 'Sales Tax Report', value: 'sales-tax' },
+        { label: 'Purchase Tax / ITC Report', value: 'purchase-tax' },
+        { label: 'GST Liability Report', value: 'gst-liability' },
+      ] },
+      { key: 'period', label: 'Period', type: 'select', defaultValue: 'current', options: [
+        { label: 'Current Month', value: 'current' },
+        { label: 'Last Month', value: 'last' },
+        { label: 'This Quarter', value: 'quarter' },
+        { label: 'This FY', value: 'fy' },
+      ] },
+    ],
+    detect: (msg) => {
+      const m = msg.toLowerCase();
+      const patterns = [
+        /generate.*gst.*report/i,
+        /gst.*report/i,
+        /gst.*summary/i,
+        /gstr-?1\b/i,
+        /gstr-?3b\b/i,
+        /sales\s+tax\s+report/i,
+        /purchase\s+tax\s+report/i,
+        /itc\s+report/i,
+        /gst\s+liability/i,
+        /monthly\s+gst/i,
+        /this\s+month.*gst/i,
+      ];
+      // Avoid collision with prepare-gst-return (which is the "draft return" tool)
+      const isReturnPrep = /prepare.*gst.*return|file.*gst.*return|gst.*return.*draft/i.test(m);
+      const score = patterns.some((p) => p.test(m)) && !isReturnPrep ? 0.92 : 0;
+      return { matches: score > 0, score };
+    },
+    extractParams: (msg) => {
+      const params: DetectedParam[] = [];
+      const lower = msg.toLowerCase();
+      // Report type
+      if (/gstr-?1\b/.test(lower)) {
+        params.push({ key: 'reportType', value: 'gstr-1', source: 'extracted', confidence: 0.95 });
+      } else if (/gstr-?3b\b/.test(lower)) {
+        params.push({ key: 'reportType', value: 'gstr-3b', source: 'extracted', confidence: 0.95 });
+      } else if (/sales\s+tax/.test(lower)) {
+        params.push({ key: 'reportType', value: 'sales-tax', source: 'extracted', confidence: 0.9 });
+      } else if (/purchase\s+tax|itc\s+report|input\s+tax/.test(lower)) {
+        params.push({ key: 'reportType', value: 'purchase-tax', source: 'extracted', confidence: 0.9 });
+      } else if (/liability/.test(lower)) {
+        params.push({ key: 'reportType', value: 'gst-liability', source: 'extracted', confidence: 0.85 });
+      } else if (/gst\s+(report|summary)|generate.*gst/.test(lower)) {
+        params.push({ key: 'reportType', value: 'gst-summary', source: 'extracted', confidence: 0.85 });
+      }
+      // Period
+      if (/this\s+month|current\s+month/.test(lower)) {
+        params.push({ key: 'period', value: 'current', source: 'extracted', confidence: 0.9 });
+      } else if (/last\s+month|previous\s+month/.test(lower)) {
+        params.push({ key: 'period', value: 'last', source: 'extracted', confidence: 0.9 });
+      } else if (/this\s+quarter|current\s+quarter/.test(lower)) {
+        params.push({ key: 'period', value: 'quarter', source: 'extracted', confidence: 0.9 });
+      } else if (/this\s+(?:fy|year)|current\s+(?:fy|year)/.test(lower)) {
+        params.push({ key: 'period', value: 'fy', source: 'extracted', confidence: 0.9 });
+      }
+      return params;
+    },
+    dryRun: async (input) => {
+      // Defer the engine import to avoid circular deps at module load
+      const { extractGSTReportIntent } = await import('./gst-report-engine');
+      const intent = extractGSTReportIntent(`generate ${input.reportType ?? 'gst-summary'} report for ${input.period ?? 'current'} month`);
+      return {
+        preview: {
+          reportType: intent.reportType,
+          periodLabel: intent.periodLabel,
+          dateRange: `${intent.startDate} → ${intent.endDate}`,
+          message:
+            'A real GST report will be generated from live invoice data. Every number traces back to actual invoices. Validation runs on every invoice; calculations cover per-slab CGST/SGST/IGST, ITC, and net liability. The report is saved to the reports collection and is downloadable as PDF / Excel / CSV.',
+        },
+      };
+    },
+    execute: async (input, ctx) => {
+      const start = Date.now();
+      const recordsAffected: ToolResult['recordsAffected'] = [];
+      try {
+        // ── Import the engine + explain + persist ──
+        const {
+          extractGSTReportIntent,
+          loadReportData,
+          validateInvoices,
+          calculateGST,
+          buildGSTReport,
+          computeTopCustomers,
+          computeTopVendors,
+          computeMonthlyComparison,
+          persistGSTReport,
+          genReportId,
+        } = await import('./gst-report-engine');
+        const { explainGSTReport } = await import('./gst-report-explain');
+
+        // ── Build the intent from the chosen report type + period ──
+        // Re-extract from the user-typed period token to get the right date range.
+        const periodToken = String(input.period ?? 'current');
+        const periodPhrase =
+          periodToken === 'current' ? 'this month' :
+          periodToken === 'last' ? 'last month' :
+          periodToken === 'quarter' ? 'this quarter' :
+          periodToken === 'fy' ? 'this fy' :
+          'this month';
+        const reportType = String(input.reportType ?? 'gst-summary');
+        const intent = extractGSTReportIntent(`generate ${reportType} report for ${periodPhrase}`);
+
+        // ── Step 2: load real data ──
+        const data = await loadReportData(ctx.organizationId, intent);
+
+        // ── Step 3: validate ──
+        const validation = validateInvoices(data.salesInvoices, data.gstProfile?.gstin ?? null);
+
+        // ── Step 4: calculate ──
+        const calc = calculateGST(data, intent);
+
+        // ── Top contributors + monthly comparison ──
+        const topCustomers = computeTopCustomers(data.salesInvoices, 10);
+        const topVendors = computeTopVendors(data.purchaseInvoices, 10);
+        const monthlyComparison = await computeMonthlyComparison(ctx.organizationId, intent.endDate);
+
+        // ── Build the structured report shell ──
+        const reportId = genReportId();
+        const partialReport = {
+          reportId,
+          intent,
+          generatedAt: new Date().toISOString(),
+          generatedBy: ctx.userEmail,
+          organizationId: ctx.organizationId,
+          dataSummary: {
+            salesInvoiceCount: data.salesInvoices.length,
+            purchaseInvoiceCount: data.purchaseInvoices.length,
+            creditNoteCount: data.creditNotes.length,
+            debitNoteCount: data.debitNotes.length,
+            expenseCount: data.expenses.length,
+            paymentCount: data.payments.length,
+            priorPeriodInvoiceCount: data.priorPeriodSalesInvoices.length,
+          },
+          validation,
+          calculations: calc,
+          topCustomers,
+          topVendors,
+          monthlyComparison,
+          sections: [],
+          insights: [],
+          recommendations: [],
+          status: 'generated' as const,
+        };
+
+        // ── Step 6: explain ──
+        const explanation = explainGSTReport(partialReport as any);
+
+        // ── Step 5: assemble full report ──
+        const report = buildGSTReport(
+          intent,
+          data,
+          validation,
+          calc,
+          topCustomers,
+          topVendors,
+          monthlyComparison,
+          explanation.insights,
+          explanation.recommendations,
+          { reportId, organizationId: ctx.organizationId, generatedBy: ctx.userEmail },
+        );
+
+        // ── Persist (real Firestore write) ──
+        const persistResult = await persistGSTReport(report, ctx);
+        if (!persistResult.success) {
+          // Even if persistence fails (preview-mode permission), return the report
+          // so the user sees the data and can download it from the in-memory result.
+          return {
+            success: false,
+            message: `Report computed from real data but could not be saved to the database (preview mode). Output tax ₹${calc.totalOutputTax.toLocaleString('en-IN')} · Net payable ₹${calc.netPayable.toLocaleString('en-IN')} · ${validation.criticalCount} critical issues. The report is available for download in this session.`,
+            recordsAffected,
+            output: {
+              reportId,
+              reportType: intent.reportType,
+              periodLabel: intent.periodLabel,
+              netPayable: calc.netPayable,
+              outputTax: calc.totalOutputTax,
+              itcAvailable: calc.itcAvailable,
+              salesInvoiceCount: data.salesInvoices.length,
+              purchaseInvoiceCount: data.purchaseInvoices.length,
+              criticalIssues: validation.criticalCount,
+              warningCount: validation.warningCount,
+              topCustomer: topCustomers[0]?.name ?? null,
+              insights: explanation.insights,
+              recommendations: explanation.recommendations,
+              downloadFormats: ['pdf', 'excel', 'csv'],
+              // Embed the full report payload so the panel can offer download
+              // without re-fetching from Firestore (preview mode safe).
+              reportPayload: report,
+            },
+            rollbackStatus: 'not-needed',
+            executionMs: Date.now() - start,
+            error: persistResult.error,
+          };
+        }
+        recordsAffected.push(...persistResult.recordsAffected);
+
+        return {
+          success: true,
+          message: `GST report generated for ${intent.periodLabel}. Taxable turnover ₹${calc.totalTaxableTurnover.toLocaleString('en-IN')} · Output tax ₹${calc.totalOutputTax.toLocaleString('en-IN')} · ITC ₹${calc.itcAvailable.toLocaleString('en-IN')} · Net payable ₹${calc.netPayable.toLocaleString('en-IN')}. Validation: ${validation.criticalCount} critical / ${validation.warningCount} warnings across ${validation.totalChecked} invoices. Report ID: ${reportId}. Download as PDF / Excel / CSV below.`,
+          recordsAffected,
+          output: {
+            reportId,
+            reportType: intent.reportType,
+            periodLabel: intent.periodLabel,
+            netPayable: calc.netPayable,
+            outputTax: calc.totalOutputTax,
+            itcAvailable: calc.itcAvailable,
+            salesInvoiceCount: data.salesInvoices.length,
+            purchaseInvoiceCount: data.purchaseInvoices.length,
+            criticalIssues: validation.criticalCount,
+            warningCount: validation.warningCount,
+            topCustomer: topCustomers[0]?.name ?? null,
+            insights: explanation.insights,
+            recommendations: explanation.recommendations,
+            downloadFormats: ['pdf', 'excel', 'csv'],
+            reportPayload: report,
+          },
+          rollbackStatus: 'not-needed',
+          executionMs: Date.now() - start,
+        };
+      } catch (err) {
+        const interpreted = interpretError(err, 'Generate GST Report');
+        return {
+          success: false,
+          message: interpreted.message,
+          recordsAffected,
+          error: interpreted.error,
+          rollbackStatus: 'not-needed',
+          executionMs: Date.now() - start,
+        };
+      }
+    },
+    rollback: async (records) => {
+      for (const r of records) {
+        try {
+          await deleteDoc(doc(db, r.collection, r.id));
+        } catch {
+          /* best-effort */
+        }
+      }
+      return true;
+    },
+    retry: { maxAttempts: 2, backoffMs: 200 },
+  },
 ];
 
 // ─── Registry helpers ───────────────────────────────────────────────────────

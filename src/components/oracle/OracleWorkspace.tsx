@@ -46,6 +46,8 @@ import {
 import { detectBrandQuestion } from './oracle-brand';
 import { ExecutiveBrief } from './ExecutiveBrief';
 import { OracleEvolutionPanel } from '@/components/oracle-evolution/OracleEvolutionPanel';
+import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
+import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -121,6 +123,16 @@ export function OracleWorkspace({
   const [historyOpen, setHistoryOpen] = useState(false);
   // Oracle AI Evolution panel (Upgrade Phase 1) — overlay, not a nav change
   const [evolutionOpen, setEvolutionOpen] = useState(false);
+  // Oracle CFO production layer — approval requests keyed by assistant message ID
+  // (Upgrade Phase 1: Production Functionality). Rendered inline below each
+  // assistant message when an actionable intent is detected.
+  const [cfoApprovalRequests, setCfoApprovalRequests] = useState<
+    Record<string, Array<{ approvalId: string; toolId: string; toolName: string; toolIcon: string; category: string; input: Record<string, unknown>; decisionCard: any; missingParams: string[]; createdAt: string }>>
+  >({});
+  const [cfoAnalyzing, setCfoAnalyzing] = useState<string | null>(null);
+
+  // ── Org context (for CFO tool execution: organizationId, userId, role)
+  const orgCtx = useOrg();
 
   // ── Oracle Context Engine™ — live dashboard metrics from Firestore are
   //    forwarded to the API as context.dashboardMetrics so the model can
@@ -489,6 +501,11 @@ export function OracleWorkspace({
                 ),
               );
               setLastEmotion(detectEmotion(acc));
+              // ─── Oracle CFO: analyze the user's message for actionable intents.
+              //     Fires in parallel after the chat answer completes. If an
+              //     actionable tool is detected, an approval card renders inline
+              //     below this assistant message. Best-effort — never blocks chat.
+              void analyzeWithCfo(text, oracleId);
             }
             if (chunk.error) {
               setMessages((prev) =>
@@ -549,13 +566,54 @@ export function OracleWorkspace({
         requestAnimationFrame(() => inputRef.current?.focus());
       }
     },
-    [isStreaming, messages, userName, firmName, gstin, userId, activeLanguage, scrollToBottom, dashboardMetrics],
+    [isStreaming, messages, userName, firmName, gstin, userId, activeLanguage, scrollToBottom, dashboardMetrics, analyzeWithCfo],
   );
 
   // ─── Stop streaming ────────────────────────────────────────────────────────
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  // ─── Oracle CFO — Analyze the user's last message for actionable intents ───
+  //     After Oracle finishes streaming its answer, we fire a parallel request
+  //     to /api/oracle/cfo/analyze. If it detects an actionable tool (create
+  //     invoice, send reminder, etc.), the approval cards render inline below
+  //     the assistant message. This does NOT replace the chat — it augments it
+  //     with real, executable, audited business actions.
+  const analyzeWithCfo = useCallback(
+    async (userMessage: string, oracleMessageId: string) => {
+      const orgId = orgCtx.organization?.id ?? 'preview-org';
+      const role = (orgCtx.membership?.role ?? 'manager') as 'admin' | 'manager' | 'staff' | 'viewer';
+      try {
+        setCfoAnalyzing(oracleMessageId);
+        const res = await fetch('/api/oracle/cfo/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: userMessage,
+            organizationId: orgId,
+            firmId: orgCtx.organization?.firmId ?? null,
+            userId: userId ?? 'preview-user',
+            userEmail: userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in',
+            userRole: role,
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.approvalRequests && data.approvalRequests.length > 0) {
+          setCfoApprovalRequests((prev) => ({
+            ...prev,
+            [oracleMessageId]: data.approvalRequests,
+          }));
+        }
+      } catch {
+        // CFO analyze is best-effort — never block the chat on it
+      } finally {
+        setCfoAnalyzing(null);
+      }
+    },
+    [orgCtx.organization, orgCtx.membership, userId, userName],
+  );
 
   // ─── Input handling ────────────────────────────────────────────────────────
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -890,6 +948,15 @@ export function OracleWorkspace({
                       message={m}
                       onPickFollowUp={sendMessage}
                       onNavigate={(v) => { onNavigate(v as AppView); onClose(); }}
+                      cfoApprovals={cfoApprovalRequests[m.id]}
+                      cfoAnalyzing={cfoAnalyzing === m.id}
+                      cfoOrgId={orgCtx.organization?.id ?? 'preview-org'}
+                      cfoUserId={userId ?? 'preview-user'}
+                      cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in'}
+                      onCfoExecuted={() => {
+                        // Refresh dashboard metrics after a real tool execution
+                        // so the UI reflects the new data immediately.
+                      }}
                     />
                   ))}
                 </div>
@@ -1099,10 +1166,22 @@ function MessageBubble({
   message,
   onPickFollowUp,
   onNavigate,
+  cfoApprovals,
+  cfoAnalyzing,
+  cfoOrgId,
+  cfoUserId,
+  cfoUserEmail,
+  onCfoExecuted,
 }: {
   message: OracleMessage;
   onPickFollowUp: (prompt: string) => void;
   onNavigate?: (view: string) => void;
+  cfoApprovals?: Array<{ approvalId: string; toolId: string; toolName: string; toolIcon: string; category: string; input: Record<string, unknown>; decisionCard: any; missingParams: string[]; createdAt: string }>;
+  cfoAnalyzing?: boolean;
+  cfoOrgId?: string;
+  cfoUserId?: string;
+  cfoUserEmail?: string;
+  onCfoExecuted?: () => void;
 }) {
   const isUser = message.role === 'user';
   const emotionGlyph = !isUser && message.emotion ? ORACLE_EMOTIONS[message.emotion]?.glyph : null;
@@ -1205,6 +1284,31 @@ function MessageBubble({
               </button>
             ))}
           </div>
+        )}
+
+        {/* ─── Oracle CFO Production Layer (Upgrade Phase 1) ──────────────────
+            After Oracle answers, the CFO analyze endpoint checks the user's
+            message for actionable intents. If found, an explainable decision
+            card with Approve/Reject buttons renders here — turning the chat
+            answer into a real, audited business action. */}
+        {!message.streaming && cfoAnalyzing && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-white/50"
+            style={{ borderColor: 'rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.03)' }}>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            <span className="animate-pulse">Oracle CFO is analyzing your request…</span>
+          </div>
+        )}
+        {!message.streaming && cfoApprovals && cfoApprovals.length > 0 && (
+          <CFOAssistantPanel
+            approvalRequests={cfoApprovals}
+            organizationId={cfoOrgId ?? 'preview-org'}
+            userId={cfoUserId ?? 'preview-user'}
+            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            onExecuted={onCfoExecuted}
+          />
         )}
       </div>
     </motion.div>

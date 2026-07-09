@@ -1,0 +1,811 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot — Firestore Schema Types & Collection Definitions
+     3→// All 10 collections with relationships and workflow state machines
+     4→// ═══════════════════════════════════════════════════════════════════════════════
+     5→
+     6→import type {
+     7→  InvoiceType, GSTR1Section, MatchStatus, WorkflowStatus,
+     8→  ReconSourceType, AIRecommendationType, RiskLevel, IssueSeverity,
+     9→  FilingStatus, InvoiceStatus, ClientStatus, EventType,
+    10→} from '@/types/gst';
+    11→
+    12→// ─── Firestore Collection Names ──────────────────────────────────────────────
+    13→
+    14→export const COLLECTIONS = {
+    15→  USERS: 'users',
+    16→  FIRMS: 'firms',
+    17→  CLIENTS: 'clients',
+    18→  DOCUMENTS: 'documents',
+    19→  INVOICES: 'invoices',
+    20→  RETURNS: 'returns',
+    21→  RECONCILIATIONS: 'reconciliations',
+    22→  NOTIFICATIONS: 'notifications',
+    23→  ACTIVITIES: 'activities',
+    24→  AI_RECOMMENDATIONS: 'aiRecommendations',
+    25→  // AI Executive Layer
+    26→  PREDICTIONS: 'predictions',
+    27→  PRIORITY_QUEUE: 'priorityQueue',
+    28→  ORGANIZATIONS: 'organizations',
+    29→  MEMBERSHIPS: 'memberships',
+    30→  // The canonical multi-tenant membership collection. Join docs live at
+    31→  // `organization_members/{orgId}_{uid}` and carry role + status per user.
+    32→  // `memberships` above is the vestigial alias kept only for legacy callers.
+    33→  ORGANIZATION_MEMBERS: 'organization_members',
+    34→  // CRM & Productivity (recovered)
+    35→  LEADS: 'leads',
+    36→  DEALS: 'deals',
+    37→  MEETINGS: 'meetings',
+    38→  TASKS: 'tasks',
+    39→  // Banking, GST, Finance & AI Memory (PT-3-5)
+    40→  BANK_ACCOUNTS: 'bank_accounts',
+    41→  BANK_TRANSACTIONS: 'bank_transactions',
+    42→  GST_PROFILES: 'gst_profiles',
+    43→  GST_RETURNS: 'gst_returns',
+    44→  EXPENSES: 'expenses',
+    45→  PAYMENTS: 'payments',
+    46→  AI_MEMORY: 'ai_memory',
+    47→  // Phase 1 — Notices & Reports (regulatory notices + generated business reports)
+    48→  NOTICES: 'notices',
+    49→  REPORTS: 'reports',
+    50→  // Manual journal entries (adjusting entries, depreciation, accruals, etc.)
+    51→  JOURNAL_ENTRIES: 'journal_entries',
+    52→} as const;
+    53→
+    54→export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
+    55→
+    56→// ─── User (top-level: users/{uid}) ──────────────────────────────────────────
+    57→
+    58→export interface FirestoreUser {
+    59→  uid: string;
+    60→  email: string;
+    61→  displayName: string;
+    62→  photoURL: string | null;
+    63→  provider: 'google' | 'email';
+    64→  role: 'admin' | 'manager' | 'staff' | 'viewer';
+    65→  firmId: string | null;
+    66→  organizationId: string;  firmName: string | null;
+    67→  phone: string | null;
+    68→  onboardingCompleted: boolean;
+    69→  emailVerified: boolean;
+    70→  plan: 'free' | 'pro' | 'enterprise';
+    71→  createdAt: unknown; // serverTimestamp
+    72→  updatedAt: unknown;
+    73→}
+    74→
+    75→// ─── Firm (top-level: firms/{firmId}) ───────────────────────────────────────
+    76→
+    77→export interface FirestoreFirm {
+    78→  firmId: string;
+    79→  organizationId: string;  ownerId: string;
+    80→  firmName: string;
+    81→  gstin: string | null;
+    82→  state: string | null;
+    83→  stateCode: string | null;
+    84→  organizationType: string | null;
+    85→  icaiMembershipNo: string | null;
+    86→  officeAddress: string | null;
+    87→  activeClientCount: number;
+    88→  totalReturnCount: number;
+    89→  filedReturnCount: number;
+    90→  totalTaxVolume: number;
+    91→  complianceScore: number;
+    92→  createdAt: unknown;
+    93→  updatedAt: unknown;
+    94→}
+    95→
+    96→// ─── Client (top-level: clients/{clientId}) ─────────────────────────────────
+    97→
+    98→export interface FirestoreClient {
+    99→  clientId: string;
+   100→  firmId: string;
+   101→  organizationId: string;  gstin: string;
+   102→  tradeName: string;
+   103→  legalName: string;
+   104→  address: string | null;
+   105→  state: string | null;
+   106→  stateCode: string | null;
+   107→  contactEmail: string | null;
+   108→  contactPhone: string | null;
+   109→  entityType: string;
+   110→  returnPeriod: string | null;
+   111→  lastFilingDate: string | null;
+   112→  status: ClientStatus;
+   113→  healthScore: number;
+   114→  // Compliance profile (auto-generated)
+   115→  complianceProfile: {
+   116→    filingCompliance: number;    // 0-100
+   117→    gstinValidity: boolean;
+   118→    lastFilingStatus: string | null;
+   119→    overdueReturns: number;
+   120→    totalReturnsFiled: number;
+   121→    averageFilingDelay: number;  // days
+   122→  };
+   123→  // Counters
+   124→  invoiceCount: number;
+   125→  totalTaxPaid: number;
+   126→  pendingReturnCount: number;
+   127→  documentCount: number;
+   128→  createdAt: unknown;
+   129→  updatedAt: unknown;
+   130→}
+   131→
+   132→// ─── Document (top-level: documents/{docId}) ────────────────────────────────
+   133→
+   134→export type DocumentStatus = 'uploading' | 'processing' | 'extracted' | 'reviewed' | 'archived' | 'failed';
+   135→export type DocumentType = 'purchase_register' | 'sales_register' | 'gstr1' | 'gstr2b' | 'gstr3b' | 'invoice' | 'other';
+   136→
+   137→export interface FirestoreDocument {
+   138→  docId: string;
+   139→  firmId: string;
+   140→  organizationId: string;  clientId: string;
+   141→  uploadedBy: string;
+   142→  fileName: string;
+   143→  filePath: string | null;     // Firebase Storage path
+   144→  fileSize: number;
+   145→  fileType: string;            // mime type
+   146→  documentType: DocumentType;
+   147→  status: DocumentStatus;
+   148→  extractionStatus: 'pending' | 'in_progress' | 'completed' | 'failed';
+   149→  extractedInvoiceCount: number;
+   150→  extractionAccuracy: number;  // 0-100
+   151→  extractionError: string | null;
+   152→  period: string | null;       // MM-YYYY
+   153→  metadata: Record<string, string>;
+   154→  createdAt: unknown;
+   155→  updatedAt: unknown;
+   156→}
+   157→
+   158→// ─── Invoice (top-level: invoices/{invoiceId}) ──────────────────────────────
+   159→
+   160→export interface FirestoreInvoice {
+   161→  invoiceId: string;
+   162→  firmId: string;
+   163→  organizationId: string;  clientId: string;
+   164→  documentId: string | null;   // source document
+   165→  invoiceNumber: string;
+   166→  invoiceDate: string;
+   167→  sellerGstin: string;
+   168→  buyerGstin: string | null;
+   169→  buyerName: string | null;
+   170→  invoiceType: InvoiceType;
+   171→  gstr1Section: GSTR1Section;
+   172→  taxableValue: number;
+   173→  cgst: number;
+   174→  sgst: number;
+   175→  igst: number;
+   176→  cess: number;
+   177→  totalAmount: number;
+   178→  hsnCode: string | null;
+   179→  reverseCharge: boolean;
+   180→  placeOfSupply: string | null;
+   181→  status: InvoiceStatus;
+   182→  matchStatus: MatchStatus;
+   183→  riskLevel: RiskLevel;
+   184→  riskScore: number;           // 0-100
+   185→  aiExplanation: string | null;
+   186→  notes: string | null;
+   187→  period: string | null;
+   188→  createdAt: unknown;
+   189→  updatedAt: unknown;
+   190→}
+   191→
+   192→// ─── Return (top-level: returns/{returnId}) ─────────────────────────────────
+   193→
+   194→export interface FirestoreReturn {
+   195→  returnId: string;
+   196→  firmId: string;
+   197→  organizationId: string;  clientId: string;
+   198→  returnType: 'GSTR-1' | 'GSTR-3B';
+   199→  period: string;              // MM-YYYY
+   200→  financialYear: string;
+   201→  status: FilingStatus;
+   202→  filedDate: string | null;
+   203→  acknowledgmentNumber: string | null;
+   204→  // Aggregate metrics
+   205→  totalInvoices: number;
+   206→  readyForFiling: number;
+   207→  issuesFound: number;
+   208→  criticalErrors: number;
+   209→  warnings: number;
+   210→  totalTaxableValue: number;
+   211→  totalTax: number;
+   212→  jsonPayload: string | null;  // Generated JSON for filing
+   213→  // Workflow
+   214→  assignedTo: string | null;
+   215→  reviewedBy: string | null;
+   216→  createdAt: unknown;
+   217→  updatedAt: unknown;
+   218→}
+   219→
+   220→// ─── Reconciliation (top-level: reconciliations/{reconId}) ──────────────────
+   221→
+   222→export type ReconStatus = 'running' | 'completed' | 'failed';
+   223→
+   224→export interface FirestoreReconciliation {
+   225→  reconId: string;
+   226→  firmId: string;
+   227→  organizationId: string;  clientId: string;
+   228→  period: string;
+   229→  sources: string;             // e.g., "GSTR-2B vs Purchase Register"
+   230→  status: ReconStatus;
+   231→  // Match stats
+   232→  totalRecords: number;
+   233→  matched: number;
+   234→  unmatched: number;
+   235→  partialMatches: number;
+   236→  highRisk: number;
+   237→  gstDifference: number;       // ITC difference amount
+   238→  // Mismatch details
+   239→  mismatches: ReconMismatch[];
+   240→  runBy: string | null;
+   241→  createdAt: unknown;
+   242→  updatedAt: unknown;
+   243→}
+   244→
+   245→export interface ReconMismatch {
+   246→  invoiceNumber: string;
+   247→  invoiceDate: string;
+   248→  sourceGstin: string;
+   249→  matchedGstin: string | null;
+   250→  matchStatus: MatchStatus;
+   251→  matchScore: number;
+   252→  booksAmount: number;
+   253→  portalAmount: number;
+   254→  difference: number;
+   255→  reason: string;
+   256→  resolved: boolean;
+   257→  resolvedBy: string | null;
+   258→  resolvedAt: string | null;
+   259→}
+   260→
+   261→// ─── Notification (top-level: notifications/{notifId}) ──────────────────────
+   262→
+   263→export type NotificationType = 'filing_due' | 'filing_overdue' | 'filing_completed' | 'extraction_complete' | 'mismatch_found' | 'issue_detected' | 'return_reviewed' | 'system' | 'ai_insight';
+   264→export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+   265→
+   266→export interface FirestoreNotification {
+   267→  notifId: string;
+   268→  firmId: string;
+   269→  organizationId: string;  userId: string;
+   270→  type: NotificationType;
+   271→  priority: NotificationPriority;
+   272→  title: string;
+   273→  message: string;
+   274→  entityType: CollectionName | null;
+   275→  entityId: string | null;
+   276→  read: boolean;
+   277→  actionUrl: string | null;
+   278→  createdAt: unknown;
+   279→}
+   280→
+   281→// ─── Activity (top-level: activities/{activityId}) ──────────────────────────
+   282→
+   283→export type ActivityType =
+   284→  | 'client_created' | 'client_updated' | 'client_deleted'
+   285→  | 'document_uploaded' | 'document_processed' | 'document_failed'
+   286→  | 'invoice_extracted' | 'invoice_approved' | 'invoice_corrected'
+   287→  | 'return_prepared' | 'return_reviewed' | 'return_filed' | 'return_reopened'
+   288→  | 'reconciliation_run' | 'mismatch_resolved'
+   289→  | 'user_login' | 'user_signup'
+   290→  | 'system';
+   291→
+   292→export interface FirestoreActivity {
+   293→  activityId: string;
+   294→  firmId: string;
+   295→  organizationId: string;  userId: string;
+   296→  clientId: string | null;
+   297→  type: ActivityType;
+   298→  title: string;
+   299→  description: string;
+   300→  entityType: CollectionName | null;
+   301→  entityId: string | null;
+   302→  metadata: Record<string, string | number | boolean>;
+   303→  createdAt: unknown;
+   304→}
+   305→
+   306→// ─── AI Recommendation (top-level: aiRecommendations/{recId}) ───────────────
+   307→
+   308→export interface FirestoreAIRecommendation {
+   309→  recId: string;
+   310→  firmId: string;
+   311→  organizationId: string;  clientId: string | null;
+   312→  invoiceId: string | null;
+   313→  reconId: string | null;
+   314→  type: AIRecommendationType;
+   315→  title: string;
+   316→  description: string;
+   317→  suggestedAction: string;
+   318→  confidenceScore: number;     // 0-100
+   319→  riskLevel: RiskLevel;
+   320→  status: 'active' | 'dismissed' | 'applied';
+   321→  dismissedBy: string | null;
+   322→  appliedBy: string | null;
+   323→  createdAt: unknown;
+   324→  updatedAt: unknown;
+   325→}
+   326→
+   327→// ─── Prediction (top-level: predictions/{predictionId}) ────────────────────
+   328→
+   329→export type PredictionType =
+   330→  | 'revenue' | 'client_churn' | 'late_filing' | 'team_burnout'
+   331→  | 'cash_collection' | 'compliance_risk';
+   332→
+   333→export interface FirestorePrediction {
+   334→  predictionId: string;
+   335→  firmId: string;
+   336→  organizationId: string;  type: PredictionType;
+   337→  entityId: string | null;        // clientId, userId, etc.
+   338→  score: number;                   // 0-100
+   339→  confidence: number;              // 0-100
+   340→  recommendation: string;
+   341→  metadata: Record<string, string | number | boolean>;
+   342→  createdAt: unknown;
+   343→  updatedAt: unknown;
+   344→}
+   345→
+   346→// ─── Priority Queue (top-level: priorityQueue/{priorityId}) ─────────────────
+   347→
+   348→export type PriorityCategory = 'filing' | 'follow_up' | 'review' | 'upload' | 'call' | 'reconciliation' | 'payment';
+   349→
+   350→export interface FirestorePriority {
+   351→  priorityId: string;
+   352→  firmId: string;
+   353→  organizationId: string;  clientId: string | null;
+   354→  category: PriorityCategory;
+   355→  title: string;
+   356→  description: string;
+   357→  urgency: number;                 // 1-10
+   358→  revenueImpact: number;           // 1-10
+   359→  complianceRisk: number;          // 1-10
+   360→  clientValue: number;             // 1-10
+   361→  priorityScore: number;           // computed: urgency × revenueImpact × complianceRisk × clientValue
+   362→  status: 'pending' | 'in_progress' | 'completed' | 'dismissed';
+   363→  assignedTo: string | null;
+   364→  dueDate: string | null;
+   365→  createdAt: unknown;
+   366→  updatedAt: unknown;
+   367→}
+   368→
+   369→// ─── Organization (top-level: organizations/{orgId}) ────────────────────────
+   370→
+   371→export interface FirestoreOrganization {
+   372→  orgId: string;
+   373→  name: string;
+   374→  ownerId: string;
+   375→  plan: 'starter' | 'professional' | 'enterprise';
+   376→  firmIds: string[];
+   377→  createdAt: unknown;
+   378→  updatedAt: unknown;
+   379→}
+   380→
+   381→// ─── Membership (top-level: memberships/{membershipId}) ─────────────────────
+   382→
+   383→export type MembershipRole = 'owner' | 'partner' | 'manager' | 'staff' | 'client';
+   384→
+   385→export interface FirestoreMembership {
+   386→  membershipId: string;
+   387→  orgId: string;
+   388→  firmId: string;
+   389→  organizationId: string;  userId: string;
+   390→  role: MembershipRole;
+   391→  permissions: string[];
+   392→  invitedBy: string;
+   393→  status: 'active' | 'invited' | 'suspended';
+   394→  createdAt: unknown;
+   395→  updatedAt: unknown;
+   396→}
+   397→
+   398→// ─── Lead (CRM: leads/{leadId}) ──────────────────────────────────────────────
+   399→
+   400→export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal_sent' | 'negotiation' | 'converted' | 'lost';
+   401→export type LeadSource = 'website' | 'referral' | 'advertisement' | 'cold_call' | 'event' | 'social_media' | 'other';
+   402→
+   403→export interface FirestoreLead {
+   404→  leadId: string;
+   405→  firmId: string;
+   406→  organizationId: string;  contactName: string;
+   407→  contactEmail: string;
+   408→  contactPhone: string;
+   409→  company: string;
+   410→  gstin: string | null;
+   411→  source: LeadSource;
+   412→  status: LeadStatus;
+   413→  leadScore: number;
+   414→  estimatedValue: number;
+   415→  notes: string;
+   416→  assignedTo: string | null;
+   417→  nextFollowUp: string | null;
+   418→  convertedClientId: string | null;
+   419→  tags: string[];
+   420→  createdAt: unknown;
+   421→  updatedAt: unknown;
+   422→}
+   423→
+   424→// ─── Deal (CRM: deals/{dealId}) ──────────────────────────────────────────────
+   425→
+   426→export type DealStage = 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';
+   427→
+   428→export interface FirestoreDeal {
+   429→  dealId: string;
+   430→  firmId: string;
+   431→  organizationId: string;  leadId: string | null;
+   432→  clientId: string | null;
+   433→  title: string;
+   434→  description: string;
+   435→  value: number;
+   436→  stage: DealStage;
+   437→  probability: number;
+   438→  expectedCloseDate: string | null;
+   439→  assignedTo: string | null;
+   440→  createdAt: unknown;
+   441→  updatedAt: unknown;
+   442→}
+   443→
+   444→// ─── Meeting (CRM: meetings/{meetingId}) ─────────────────────────────────────
+   445→
+   446→export type MeetingType = 'in_person' | 'video_call' | 'phone_call';
+   447→export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+   448→
+   449→export interface FirestoreMeeting {
+   450→  meetingId: string;
+   451→  firmId: string;
+   452→  organizationId: string;  clientId: string | null;
+   453→  leadId: string | null;
+   454→  title: string;
+   455→  description: string;
+   456→  dateTime: string;
+   457→  duration: number;
+   458→  type: MeetingType;
+   459→  status: MeetingStatus;
+   460→  attendees: string[];
+   461→  notes: string;
+   462→  createdAt: unknown;
+   463→  updatedAt: unknown;
+   464→}
+   465→
+   466→// ─── Task (tasks/{taskId}) ───────────────────────────────────────────────────
+   467→
+   468→export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+   469→// 'review' added in P1-M2 so the TasksPage 4-column board (Todo / In Progress /
+   470→// Review / Completed) maps 1:1 to Firestore statuses without coercion.
+   471→export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'completed' | 'cancelled';
+   472→
+   473→export interface FirestoreTask {
+   474→  taskId: string;
+   475→  firmId: string;
+   476→  organizationId: string;  title: string;
+   477→  description: string;
+   478→  status: TaskStatus;
+   479→  priority: TaskPriority;
+   480→  assignedTo: string | null;
+   481→  clientId: string | null;
+   482→  dueDate: string | null;
+   483→  tags: string[];
+   484→  createdAt: unknown;
+   485→  updatedAt: unknown;
+   486→}
+   487→
+   488→// ─── Bank Account (bank_accounts/{bankAccountId}) ──────────────────────────
+   489→// Firm's connected bank accounts (linked via DataConnection / aggregator).
+   490→
+   491→export type BankAccountType = 'savings' | 'current' | 'od' | 'cc';
+   492→export type BankAccountStatus = 'connected' | 'disconnected' | 'syncing' | 'error';
+   493→
+   494→export interface FirestoreBankAccount {
+   495→  bankAccountId: string;
+   496→  firmId: string;
+   497→  organizationId: string;  userId: string;                 // Firebase UID of the user who linked the account
+   498→  bankName: string;
+   499→  accountNumberMasked: string;    // e.g. "XXXX1234"
+   500→  accountType: BankAccountType;
+   501→  ifsc: string | null;
+   502→  currentBalance: number;
+   503→  availableBalance: number;
+   504→  currency: string;               // default 'INR'
+   505→  status: BankAccountStatus;
+   506→  lastSyncAt: unknown;            // serverTimestamp
+   507→  connectionId: string | null;    // links to DataConnection
+   508→  createdAt: unknown;
+   509→  updatedAt: unknown;
+   510→}
+   511→
+   512→// ─── Bank Transaction (bank_transactions/{bankTxnId}) ──────────────────────
+   513→// Transactions pulled from a connected bank account.
+   514→
+   515→export type BankTransactionType = 'credit' | 'debit';
+   516→
+   517→export interface FirestoreBankTransaction {
+   518→  bankTxnId: string;
+   519→  firmId: string;
+   520→  organizationId: string;  bankAccountId: string;
+   521→  date: string;                   // ISO date string
+   522→  description: string;
+   523→  amount: number;                 // positive = credit, negative = debit
+   524→  type: BankTransactionType;
+   525→  balanceAfter: number | null;
+   526→  category: string | null;
+   527→  referenceNo: string | null;
+   528→  reconciled: boolean;
+   529→  reconciledWith: string | null;  // invoiceId / paymentId
+   530→  metadata: Record<string, unknown>;
+   531→  createdAt: unknown;
+   532→}
+   533→
+   534→// ─── GST Profile (gst_profiles/{gstProfileId}) ─────────────────────────────
+   535→// Firm's own GSTN profile (separate from client RETURNS collection).
+   536→
+   537→export type GstProfileStatus = 'active' | 'suspended' | 'cancelled';
+   538→export type GstTaxpayerType = 'regular' | 'composition' | 'casual' | 'non_resident' | 'input_service_distributor' | 'tcs' | 'tds';
+   539→export type GstFilingFrequency = 'monthly' | 'quarterly';
+   540→
+   541→export interface FirestoreGstProfile {
+   542→  gstProfileId: string;
+   543→  firmId: string;
+   544→  organizationId: string;  userId: string;
+   545→  gstin: string;
+   546→  legalName: string;
+   547→  tradeName: string | null;
+   548→  constitution: string | null;
+   549→  status: GstProfileStatus;
+   550→  taxpayerType: GstTaxpayerType;
+   551→  jurisdiction: {
+   552→    state: string;
+   553→    center: string;
+   554→  };
+   555→  filingFrequency: GstFilingFrequency;
+   556→  lastReturnPeriod: string | null;     // MM-YYYY
+   557→  complianceRating: number;            // 0-100
+   558→  connectionId: string | null;
+   559→  lastSyncAt: unknown;
+   560→  createdAt: unknown;
+   561→  updatedAt: unknown;
+   562→}
+   563→
+   564→// ─── GST Return (gst_returns/{gstReturnId}) ────────────────────────────────
+   565→// Firm's own GST returns (different from client-facing RETURNS collection).
+   566→
+   567→export type GstReturnType = 'GSTR-1' | 'GSTR-3B' | 'GSTR-9' | 'GSTR-2B';
+   568→export type GstReturnStatus = 'draft' | 'prepared' | 'filed' | 'acknowledged' | 'overdue';
+   569→
+   570→export interface FirestoreGstReturn {
+   571→  gstReturnId: string;
+   572→  firmId: string;
+   573→  organizationId: string;  gstProfileId: string;
+   574→  returnType: GstReturnType;
+   575→  period: string;                 // MM-YYYY
+   576→  financialYear: string;
+   577→  status: GstReturnStatus;
+   578→  totalTaxableValue: number;
+   579→  totalTax: number;
+   580→  totalItc: number;
+   581→  netPayable: number;
+   582→  filingDate: string | null;
+   583→  acknowledgmentNumber: string | null;
+   584→  dueDate: string;
+   585→  jsonPayload: string | null;
+   586→  createdAt: unknown;
+   587→  updatedAt: unknown;
+   588→}
+   589→
+   590→// ─── Expense (expenses/{expenseId}) ────────────────────────────────────────
+   591→// Operational expenses logged against a firm (optionally a client).
+   592→
+   593→export type ExpenseStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'paid';
+   594→
+   595→export interface FirestoreExpense {
+   596→  expenseId: string;
+   597→  firmId: string;
+   598→  organizationId: string;  clientId: string | null;
+   599→  category: string;
+   600→  description: string | null;
+   601→  vendor: string | null;
+   602→  amount: number;
+   603→  gst: number;
+   604→  gstClaimable: boolean;
+   605→  date: string;                   // ISO date string
+   606→  paymentMode: string | null;
+   607→  status: ExpenseStatus;
+   608→  receiptUrl: string | null;
+   609→  ocrExtracted: boolean;
+   610→  notes: string | null;
+   611→  createdAt: unknown;
+   612→  updatedAt: unknown;
+   613→}
+   614→
+   615→// ─── Payment (payments/{paymentId}) ────────────────────────────────────────
+   616→// Customer + vendor payments (linkable to invoice / purchase bill).
+   617→
+   618→export type PaymentPartyType = 'customer' | 'vendor';
+   619→export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+   620→
+   621→export interface FirestorePayment {
+   622→  paymentId: string;
+   623→  firmId: string;
+   624→  organizationId: string;  clientId: string | null;
+   625→  invoiceId: string | null;
+   626→  purchaseBillId: string | null;
+   627→  partyName: string;
+   628→  partyType: PaymentPartyType;
+   629→  amount: number;
+   630→  paymentDate: string;            // ISO date string
+   631→  paymentMode: string;
+   632→  referenceNo: string | null;
+   633→  status: PaymentStatus;
+   634→  reconciled: boolean;
+   635→  /**
+   636→   * The bank transaction this payment was reconciled against (null if not
+   637→   * linked to a bank transaction). Persisted when a user clicks "Match" /
+   638→   * "Resolve" so the reconciliation link survives refreshes — fixes audit 1d
+   639→   * issue #8 (boolean flip without linking).
+   640→   */
+   641→  reconciledTransactionId?: string | null;
+   642→  notes: string | null;
+   643→  createdAt: unknown;
+   644→  updatedAt: unknown;
+   645→}
+   646→
+   647→// ─── AI Memory (ai_memory/{memoryId}) ──────────────────────────────────────
+   648→// Persistent agent memory entries (facts / preferences / patterns / outcomes).
+   649→
+   650→export type AiMemoryAgent =
+   651→  | 'gst_agent' | 'cfo_agent' | 'collection_agent' | 'compliance_agent'
+   652→  | 'oracle' | 'reporting_agent' | 'finance_agent';
+   653→
+   654→export type AiMemoryType = 'fact' | 'preference' | 'pattern' | 'outcome' | 'skill';
+   655→
+   656→export interface FirestoreAiMemory {
+   657→  memoryId: string;
+   658→  firmId: string;
+   659→  organizationId: string;  agent: AiMemoryAgent;
+   660→  memoryType: AiMemoryType;
+   661→  key: string;
+   662→  value: string;
+   663→  importance: number;             // 0-1
+   664→  lastUsedAt: unknown;            // serverTimestamp
+   665→  createdAt: unknown;
+   666→  updatedAt: unknown;
+   667→}
+   668→
+   669→// ─── Notice (notices/{noticeId}) ──────────────────────────────────────────────
+   670→// Regulatory / GST / ROC / Income-Tax notices received by or served on a client.
+   671→// Each notice tracks ownership, priority, due date and resolution.
+   672→
+   673→export type NoticeType =
+   674→  | 'gst_show_cause' | 'gst_demand' | 'gst_assessment' | 'gst_scrutiny'
+   675→  | 'gst_refund_rejection' | 'gst_cancellation' | 'gst_3b_mismatch'
+   676→  | 'roc_notice' | 'income_tax_notice' | 'tds_notice' | 'other';
+   677→
+   678→export type NoticeStatus = 'open' | 'acknowledged' | 'in_progress' | 'responded' | 'resolved' | 'closed';
+   679→export type NoticePriority = 'low' | 'medium' | 'high' | 'urgent';
+   680→
+   681→export interface FirestoreNotice {
+   682→  noticeId: string;
+   683→  firmId: string;
+   684→  organizationId: string;  clientId: string | null;
+   685→  clientTradeName: string | null;
+   686→  clientGstin: string | null;
+   687→  noticeType: NoticeType;
+   688→  noticeNumber: string | null;
+   689→  noticeDate: string | null;        // ISO date — when the notice was issued
+   690→  subject: string;
+   691→  description: string | null;
+   692→  status: NoticeStatus;
+   693→  priority: NoticePriority;
+   694→  assignedTo: string | null;        // Firebase UID of the assignee
+   695→  assigneeName: string | null;
+   696→  assigneeEmail: string | null;
+   697→  dueDate: string | null;           // ISO date — response deadline
+   698→  responseDate: string | null;      // ISO date — when response was filed
+   699→  resolution: string | null;
+   700→  attachmentUrl: string | null;
+   701→  createdAt: unknown;
+   702→  updatedAt: unknown;
+   703→}
+   704→
+   705→// ─── Report (reports/{reportId}) ──────────────────────────────────────────────
+   706→// Generated business / compliance / financial reports (GSTR-1 JSON, working
+   707→// papers, compliance reports, cash-flow reports, etc.). Persisted so the user
+   708→// can re-download or audit them later.
+   709→
+   710→export type ReportType =
+   711→  | 'gstr1_json' | 'gstr1_excel' | 'gstr3b_json'
+   712→  | 'filing_summary_pdf' | 'working_papers_pdf'
+   713→  | 'gst_summary_pdf' | 'compliance_report_pdf'
+   714→  | 'financial_report_pdf' | 'cash_flow_report_pdf' | 'custom';
+   715→
+   716→export type ReportFormat = 'json' | 'pdf' | 'excel' | 'csv';
+   717→
+   718→export interface FirestoreReport {
+   719→  reportId: string;
+   720→  firmId: string;
+   721→  organizationId: string;  clientId: string | null;
+   722→  clientTradeName: string | null;
+   723→  reportType: ReportType;
+   724→  format: ReportFormat;
+   725→  title: string;
+   726→  period: string | null;            // MM-YYYY or FY-YYYY
+   727→  description: string | null;
+   728→  status: 'generating' | 'ready' | 'failed' | 'archived';
+   729→  fileSize: number;                 // bytes
+   730→  storageUrl: string | null;        // Firebase Storage path or download URL
+   731→  generatedBy: string;              // Firebase UID
+   732→  generatedAt: unknown;             // serverTimestamp
+   733→  metadata: Record<string, string | number | boolean>;
+   734→  createdAt: unknown;
+   735→  updatedAt: unknown;
+   736→}
+   737→
+   738→// ─── Manual Journal Entry (journal_entries/{jeId}) ───────────────────────────
+   739→// Adjusting entries, depreciation, accruals, and other manual postings that
+   740→// supplement the auto-generated entries derived from invoices/expenses/payments.
+   741→
+   742→export interface FirestoreJournalEntry {
+   743→  jeId: string;
+   744→  organizationId: string;
+   745→  entryDate: string;             // ISO date
+   746→  description: string;
+   747→  debitAccount: string;          // account name (e.g. "Cash & Bank")
+   748→  creditAccount: string;         // account name (e.g. "Sales Revenue")
+   749→  amount: number;
+   750→  status: 'posted' | 'pending';
+   751→  source: 'manual';
+   752→  createdBy: string;             // Firebase UID
+   753→  createdByName: string | null;
+   754→  createdAt: unknown;
+   755→  updatedAt: unknown;
+   756→}
+   757→
+   758→// ─── AI Executive Scores (computed from live data) ───────────────────────────
+   759→
+   760→export interface FirmExecutiveScores {
+   761→  firmHealth: number;             // 0-100
+   762→  revenue: number;                // 0-100
+   763→  compliance: number;             // 0-100
+   764→  teamEfficiency: number;         // 0-100
+   765→  clientSatisfaction: number;     // 0-100
+   766→  cashFlow: number;               // 0-100
+   767→}
+   768→
+   769→// ─── Dashboard Metrics (computed, not stored — derived from live data) ──────
+   770→
+   771→export interface LiveDashboardMetrics {
+   772→  totalClients: number;
+   773→  activeClients: number;
+   774→  totalInvoices: number;
+   775→  totalTaxVolume: number;
+   776→  filedReturns: number;
+   777→  pendingReturns: number;
+   778→  overdueReturns: number;
+   779→  readyToFile: number;
+   780→  criticalIssues: number;
+   781→  warnings: number;
+   782→  averageHealthScore: number;
+   783→  matchPercentage: number;
+   784→  riskPercentage: number;
+   785→  documentsProcessed: number;
+   786→  extractionsPending: number;
+   787→  recentActivities: FirestoreActivity[];
+   788→  upcomingFilings: FirestoreReturn[];
+   789→}
+   790→
+   791→// ─── Firestore Data Converter Helpers ───────────────────────────────────────
+   792→
+   793→/** Convert Firestore timestamps to ISO strings for UI consumption */
+   794→export function withId<T extends Record<string, unknown>>(doc: { id: string; data: () => T }): T & { id: string } {
+   795→  const data = doc.data();
+   796→  const converted: Record<string, unknown> = {};
+   797→  for (const [key, value] of Object.entries(data)) {
+   798→    if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+   799→      converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+   800→    } else {
+   801→      converted[key] = value;
+   802→    }
+   803→  }
+   804→  return { id: doc.id, ...converted } as T & { id: string };
+   805→}
+   806→
+   807→/** Convert an array of Firestore docs with timestamp conversion */
+   808→export function convertDocs<T extends Record<string, unknown>>(docs: Array<{ id: string; data: () => T }>): Array<T & { id: string }> {
+   809→  return docs.map(withId);
+   810→}
+   811→

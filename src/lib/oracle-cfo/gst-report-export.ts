@@ -25,11 +25,109 @@ const BG_LIGHT = '#f9fafb';
 const AMBER = '#f59e0b';
 const ROSE = '#ef4444';
 
+// ─── Defensive normalizer ───────────────────────────────────────────────────
+// Ensures every array/object the exporter touches actually exists. The engine
+// always produces a fully-populated GSTReport, but inline POST payloads (e.g.
+// from the browser, warmup requests, or older cached reports) may omit fields.
+// This guard prevents "X is not iterable" crashes — production code never
+// throws on a missing field, it renders an empty section instead.
+
+function normalizeReport(report: GSTReport): GSTReport {
+  const safe = (arr: unknown) => (Array.isArray(arr) ? arr : []);
+  const safeNum = (n: unknown) => (typeof n === 'number' && isFinite(n) ? n : 0);
+  const calc = (report.calculations ?? {}) as Record<string, unknown>;
+  const validation = (report.validation ?? {}) as Record<string, unknown>;
+  const dataSummary = (report.dataSummary ?? {}) as Record<string, unknown>;
+  const intent = (report.intent ?? {}) as Record<string, unknown>;
+
+  return {
+    ...report,
+    intent: {
+      reportType: String(intent.reportType ?? 'gst-summary'),
+      startDate: String(intent.startDate ?? ''),
+      endDate: String(intent.endDate ?? ''),
+      periodLabel: String(intent.periodLabel ?? ''),
+      periodKey: String(intent.periodKey ?? ''),
+      branch: intent.branch ?? null,
+      filters: (intent.filters ?? {}) as Record<string, unknown>,
+      missingFields: safe(intent.missingFields) as string[],
+      rawExtraction: (intent.rawExtraction ?? {}) as Record<string, unknown>,
+    } as GSTReport['intent'],
+    generatedAt: report.generatedAt ?? new Date().toISOString(),
+    generatedBy: report.generatedBy ?? 'oracle-cfo',
+    organizationId: report.organizationId ?? '',
+    reportId: report.reportId ?? '',
+    dataSummary: {
+      salesInvoiceCount: safeNum(dataSummary.salesInvoiceCount),
+      purchaseInvoiceCount: safeNum(dataSummary.purchaseInvoiceCount),
+      creditNoteCount: safeNum(dataSummary.creditNoteCount),
+      debitNoteCount: safeNum(dataSummary.debitNoteCount),
+      expenseCount: safeNum(dataSummary.expenseCount),
+      paymentCount: safeNum(dataSummary.paymentCount),
+      priorPeriodInvoiceCount: safeNum(dataSummary.priorPeriodInvoiceCount),
+    } as GSTReport['dataSummary'],
+    validation: {
+      totalChecked: safeNum(validation.totalChecked),
+      passed: safeNum(validation.passed),
+      criticalCount: safeNum(validation.criticalCount),
+      warningCount: safeNum(validation.warningCount),
+      infoCount: safeNum(validation.infoCount),
+      issues: safe(validation.issues) as GSTReport['validation']['issues'],
+      duplicateInvoiceNumbers: safe(validation.duplicateInvoiceNumbers) as string[],
+      invalidGstins: safe(validation.invalidGstins) as string[],
+      futureDatedInvoices: safe(validation.futureDatedInvoices) as unknown[],
+      reverseChargeInvoices: safe(validation.reverseChargeInvoices) as unknown[],
+      exemptInvoices: safe(validation.exemptInvoices) as unknown[],
+      zeroRatedInvoices: safe(validation.zeroRatedInvoices) as unknown[],
+      exportInvoices: safe(validation.exportInvoices) as unknown[],
+    } as GSTReport['validation'],
+    calculations: {
+      ...calc,
+      totalTaxableTurnover: safeNum(calc.totalTaxableTurnover),
+      totalExempt: safeNum(calc.totalExempt),
+      totalZeroRated: safeNum(calc.totalZeroRated),
+      totalExport: safeNum(calc.totalExport),
+      outputCGST: safeNum(calc.outputCGST),
+      outputSGST: safeNum(calc.outputSGST),
+      outputIGST: safeNum(calc.outputIGST),
+      outputCess: safeNum(calc.outputCess),
+      totalOutputTax: safeNum(calc.totalOutputTax),
+      itcAvailable: safeNum(calc.itcAvailable),
+      itcCGST: safeNum(calc.itcCGST),
+      itcSGST: safeNum(calc.itcSGST),
+      itcIGST: safeNum(calc.itcIGST),
+      itcCess: safeNum(calc.itcCess),
+      itcReversed: safeNum(calc.itcReversed),
+      itcUtilized: safeNum(calc.itcUtilized),
+      netCGSTPayable: safeNum(calc.netCGSTPayable),
+      netSGSTPayable: safeNum(calc.netSGSTPayable),
+      netIGSTPayable: safeNum(calc.netIGSTPayable),
+      netCessPayable: safeNum(calc.netCessPayable),
+      netPayable: safeNum(calc.netPayable),
+      refundEligible: safeNum(calc.refundEligible),
+      priorPeriodOutputTax: safeNum(calc.priorPeriodOutputTax),
+      deltaOutputTax: safeNum(calc.deltaOutputTax),
+      deltaPercent: safeNum(calc.deltaPercent),
+      salesBySlab: safe(calc.salesBySlab) as GSTReport['calculations']['salesBySlab'],
+      purchasesBySlab: safe(calc.purchasesBySlab) as GSTReport['calculations']['purchasesBySlab'],
+      crossChecks: safe(calc.crossChecks) as GSTReport['calculations']['crossChecks'],
+    } as GSTReport['calculations'],
+    topCustomers: safe(report.topCustomers) as GSTReport['topCustomers'],
+    topVendors: safe(report.topVendors) as GSTReport['topVendors'],
+    monthlyComparison: safe(report.monthlyComparison) as GSTReport['monthlyComparison'],
+    sections: safe(report.sections) as GSTReport['sections'],
+    insights: safe(report.insights) as string[],
+    recommendations: safe(report.recommendations) as string[],
+    status: (report.status ?? 'generated') as GSTReport['status'],
+  } as GSTReport;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PDF EXPORT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function generateGSTReportPDF(report: GSTReport): Promise<{ buffer: Buffer; base64: string }> {
+  report = normalizeReport(report);
   const PDFDocument = (await import('pdfkit')).default;
   const doc = new PDFDocument({ size: 'A4', margin: 50 });
   const chunks: Buffer[] = [];
@@ -437,6 +535,7 @@ function ensureSpace(doc: any, y: number, needed: number): number {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function generateGSTReportExcel(report: GSTReport): Promise<{ buffer: Buffer; base64: string }> {
+  report = normalizeReport(report);
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
@@ -614,6 +713,7 @@ export async function generateGSTReportExcel(report: GSTReport): Promise<{ buffe
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function generateGSTReportCSV(report: GSTReport): { buffer: Buffer; base64: string } {
+  report = normalizeReport(report);
   const lines: string[] = [];
   const calc = report.calculations;
 

@@ -48,6 +48,7 @@ import { ExecutiveBrief } from './ExecutiveBrief';
 import { OracleEvolutionPanel } from '@/components/oracle-evolution/OracleEvolutionPanel';
 import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
 import { InvoiceActionCard } from '@/components/oracle-cfo/InvoiceActionCard';
+import { PaymentLinkActionCard } from '@/components/oracle-cfo/PaymentLinkActionCard';
 import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
@@ -81,6 +82,27 @@ const INVOICE_INTENT_PATTERNS = [
 ];
 function isInvoiceCreationIntent(text: string): boolean {
   return INVOICE_INTENT_PATTERNS.some((p) => p.test(text));
+}
+
+// ─── Payment link intent detection (client-side pre-filter) ──────────────────
+// Matches phrases like "create payment link", "send payment request",
+// "generate UPI payment", "create Razorpay link", "collect payment".
+const PAYMENT_LINK_INTENT_PATTERNS = [
+  /create.*payment.*link/i,
+  /payment.*link/i,
+  /send.*payment.*request/i,
+  /generate.*payment/i,
+  /collect.*payment/i,
+  /create.*razorpay/i,
+  /create.*stripe/i,
+  /razorpay.*link/i,
+  /stripe.*link/i,
+  /upi.*payment.*link/i,
+  /payment.*link.*for/i,
+  /send.*payment.*link/i,
+];
+function isPaymentLinkIntent(text: string): boolean {
+  return PAYMENT_LINK_INTENT_PATTERNS.some((p) => p.test(text));
 }
 
 // ─── Conversation store types ─────────────────────────────────────────────────
@@ -147,6 +169,11 @@ export function OracleWorkspace({
   // dedicated InvoiceActionCard (production invoice flow) instead of the
   // generic CFO panel. Keyed by assistant message ID → user message text.
   const [invoiceUserMessages, setInvoiceUserMessages] = useState<Record<string, string>>({});
+
+  // Upgrade Phase 1.3: when the user asks to create a payment link, we render
+  // the dedicated PaymentLinkActionCard (production payment link flow) instead
+  // of the generic CFO panel. Keyed by assistant message ID → user message text.
+  const [paymentLinkUserMessages, setPaymentLinkUserMessages] = useState<Record<string, string>>({});
 
   // ── Org context (for CFO tool execution: organizationId, userId, role)
   const orgCtx = useOrg();
@@ -612,6 +639,15 @@ export function OracleWorkspace({
           return; // Skip the generic analyze — invoice card handles it
         }
 
+        // ─── Upgrade Phase 1.3: Real Payment Link Creation ──────────────
+        // If the user's message is a payment-link request, render the dedicated
+        // production PaymentLinkActionCard instead of the generic CFO panel.
+        if (isPaymentLinkIntent(userMessage)) {
+          setPaymentLinkUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — payment link card handles it
+        }
+
         setCfoAnalyzing(oracleMessageId);
         const res = await fetch('/api/oracle/cfo/analyze', {
           method: 'POST',
@@ -977,6 +1013,7 @@ export function OracleWorkspace({
                       cfoApprovals={cfoApprovalRequests[m.id]}
                       cfoAnalyzing={cfoAnalyzing === m.id}
                       invoiceUserMessage={invoiceUserMessages[m.id]}
+                      paymentLinkUserMessage={paymentLinkUserMessages[m.id]}
                       cfoOrgId={orgCtx.organization?.id ?? 'preview-org'}
                       cfoUserId={userId ?? 'preview-user'}
                       cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in'}
@@ -1198,6 +1235,7 @@ function MessageBubble({
   cfoApprovals,
   cfoAnalyzing,
   invoiceUserMessage,
+  paymentLinkUserMessage,
   cfoOrgId,
   cfoUserId,
   cfoUserEmail,
@@ -1211,6 +1249,7 @@ function MessageBubble({
   cfoApprovals?: Array<{ approvalId: string; toolId: string; toolName: string; toolIcon: string; category: string; input: Record<string, unknown>; decisionCard: any; missingParams: string[]; createdAt: string }>;
   cfoAnalyzing?: boolean;
   invoiceUserMessage?: string;
+  paymentLinkUserMessage?: string;
   cfoOrgId?: string;
   cfoUserId?: string;
   cfoUserEmail?: string;
@@ -1357,7 +1396,22 @@ function MessageBubble({
             }}
           />
         )}
-        {!message.streaming && !invoiceUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
+        {/* ─── Upgrade Phase 1.3: Production Payment Link Creation ────────
+            When the user asks to create a payment link, this dedicated card
+            handles the FULL production flow: intent extraction → invoice
+            lookup → validation → provider detection → approval → REAL
+            Razorpay/Stripe API → persist → email + WhatsApp → webhook
+            monitoring → audit log. No fake links. */}
+        {!message.streaming && !invoiceUserMessage && paymentLinkUserMessage && (
+          <PaymentLinkActionCard
+            userMessage={paymentLinkUserMessage}
+            organizationId={cfoOrgId ?? 'preview-org'}
+            firmId={null}
+            userId={cfoUserId ?? 'preview-user'}
+            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+          />
+        )}
+        {!message.streaming && !invoiceUserMessage && !paymentLinkUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
           <CFOAssistantPanel
             approvalRequests={cfoApprovals}
             organizationId={cfoOrgId ?? 'preview-org'}

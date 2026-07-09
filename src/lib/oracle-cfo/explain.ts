@@ -174,7 +174,7 @@ export function buildDecisionCard(
       const invoiceParam = detected.extractedParams.find((p) => p.key === 'invoiceId');
       const invoice = liveData.recentInvoices.find((i) => i.id === invoiceParam?.value);
 
-      why = `A payment link lets the client pay instantly via UPI/card without manual reconciliation. This reduces collection time by an average of 40% for invoices under ₹2L.`;
+      why = `A payment link lets the client pay instantly via UPI/card without manual reconciliation. Oracle looks up the real invoice, validates it's unpaid, detects the connected provider (Razorpay/Stripe), and creates a REAL payment link via the provider API. The link is then emailed and WhatsApp'd to the customer, with webhook monitoring for automatic status updates.`;
 
       if (invoice) {
         records.push({
@@ -187,18 +187,22 @@ export function buildDecisionCard(
 
       calculation.push(
         { label: 'Payment Amount', value: `₹${Number(amountParam?.value ?? 0).toLocaleString('en-IN')}` },
-        { label: 'Link Provider', value: 'Internal (GSTPilot)' },
-        { label: 'Payment Methods', value: 'UPI, Card, Net Banking' },
+        { label: 'Provider', value: 'Razorpay or Stripe (auto-detected from integrations)' },
+        { label: 'Payment Methods', value: 'UPI, Card, Net Banking, Wallet, EMI' },
         { label: 'Link Expiry', value: '30 days' },
+        { label: 'Delivery', value: 'Email + WhatsApp (if connected)' },
+        { label: 'Webhook Monitoring', value: 'Paid / Failed / Expired / Refunded auto-update' },
       );
 
       risks.push(
+        { severity: 'medium', description: 'No payment provider connected (preview mode).', mitigation: 'Go to Settings → Integrations → Razorpay or Stripe and add API credentials to create real links.' },
         { severity: 'low', description: 'Link may expire before payment.', mitigation: 'Regenerate if client delays beyond 30 days.' },
-        { severity: 'medium', description: 'No payment gateway fee validation.', mitigation: 'Confirm gateway charges with finance before large transactions.' },
+        { severity: 'low', description: 'Gateway fees apply (≈2% + ₹3).', mitigation: 'Fees are estimated in the approval summary before creation.' },
       );
 
       alternatives.push(
         { title: 'Send bank transfer details instead', tradeOff: 'No gateway fees but slower collection and manual reconciliation.', recommended: false },
+        { title: 'Use the production Payment Link card', tradeOff: 'Type "Create a payment link for Invoice XXX" — Oracle opens a dedicated approval card with real provider integration.', recommended: true },
       );
 
       confidenceFactors.push(

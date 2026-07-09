@@ -47,6 +47,7 @@ import { detectBrandQuestion } from './oracle-brand';
 import { ExecutiveBrief } from './ExecutiveBrief';
 import { OracleEvolutionPanel } from '@/components/oracle-evolution/OracleEvolutionPanel';
 import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
+import { InvoiceActionCard } from '@/components/oracle-cfo/InvoiceActionCard';
 import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
@@ -69,6 +70,18 @@ interface OracleWorkspaceProps {
 
 const STORE_KEY = 'gstpilot-oracle-conversations-v2';
 const LEGACY_KEY = 'gstpilot-oracle-conversation-v1';
+
+// ─── Invoice intent detection (client-side pre-filter) ──────────────────────
+// Matches phrases like "create an invoice", "make a bill for", "generate invoice".
+const INVOICE_INTENT_PATTERNS = [
+  /create.*invoice/i, /make.*invoice/i, /generate.*invoice/i,
+  /new.*invoice/i, /issue.*invoice/i, /draft.*invoice/i,
+  /create.*bill/i, /make.*bill/i, /generate.*bill/i,
+  /raise.*invoice/i, /prepare.*invoice/i,
+];
+function isInvoiceCreationIntent(text: string): boolean {
+  return INVOICE_INTENT_PATTERNS.some((p) => p.test(text));
+}
 
 // ─── Conversation store types ─────────────────────────────────────────────────
 
@@ -130,6 +143,10 @@ export function OracleWorkspace({
     Record<string, Array<{ approvalId: string; toolId: string; toolName: string; toolIcon: string; category: string; input: Record<string, unknown>; decisionCard: any; missingParams: string[]; createdAt: string }>>
   >({});
   const [cfoAnalyzing, setCfoAnalyzing] = useState<string | null>(null);
+  // Upgrade Phase 1.1: when the user asks to create an invoice, we render the
+  // dedicated InvoiceActionCard (production invoice flow) instead of the
+  // generic CFO panel. Keyed by assistant message ID → user message text.
+  const [invoiceUserMessages, setInvoiceUserMessages] = useState<Record<string, string>>({});
 
   // ── Org context (for CFO tool execution: organizationId, userId, role)
   const orgCtx = useOrg();
@@ -585,6 +602,16 @@ export function OracleWorkspace({
       const orgId = orgCtx.organization?.id ?? 'preview-org';
       const role = (orgCtx.membership?.role ?? 'manager') as 'admin' | 'manager' | 'staff' | 'viewer';
       try {
+        // ─── Upgrade Phase 1.1: Real Invoice Creation ───────────────────
+        // If the user's message is an invoice-creation request, render the
+        // dedicated production InvoiceActionCard instead of the generic CFO
+        // panel. The card makes its own API call to the invoice engine.
+        if (isInvoiceCreationIntent(userMessage)) {
+          setInvoiceUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — invoice card handles it
+        }
+
         setCfoAnalyzing(oracleMessageId);
         const res = await fetch('/api/oracle/cfo/analyze', {
           method: 'POST',
@@ -614,7 +641,6 @@ export function OracleWorkspace({
     },
     [orgCtx.organization, orgCtx.membership, userId, userName],
   );
-
   // ─── Input handling ────────────────────────────────────────────────────────
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -950,9 +976,12 @@ export function OracleWorkspace({
                       onNavigate={(v) => { onNavigate(v as AppView); onClose(); }}
                       cfoApprovals={cfoApprovalRequests[m.id]}
                       cfoAnalyzing={cfoAnalyzing === m.id}
+                      invoiceUserMessage={invoiceUserMessages[m.id]}
                       cfoOrgId={orgCtx.organization?.id ?? 'preview-org'}
                       cfoUserId={userId ?? 'preview-user'}
                       cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in'}
+                      cfoFirmName={firmName}
+                      cfoGstin={gstin}
                       onCfoExecuted={() => {
                         // Refresh dashboard metrics after a real tool execution
                         // so the UI reflects the new data immediately.
@@ -1168,9 +1197,12 @@ function MessageBubble({
   onNavigate,
   cfoApprovals,
   cfoAnalyzing,
+  invoiceUserMessage,
   cfoOrgId,
   cfoUserId,
   cfoUserEmail,
+  cfoFirmName,
+  cfoGstin,
   onCfoExecuted,
 }: {
   message: OracleMessage;
@@ -1178,9 +1210,12 @@ function MessageBubble({
   onNavigate?: (view: string) => void;
   cfoApprovals?: Array<{ approvalId: string; toolId: string; toolName: string; toolIcon: string; category: string; input: Record<string, unknown>; decisionCard: any; missingParams: string[]; createdAt: string }>;
   cfoAnalyzing?: boolean;
+  invoiceUserMessage?: string;
   cfoOrgId?: string;
   cfoUserId?: string;
   cfoUserEmail?: string;
+  cfoFirmName?: string;
+  cfoGstin?: string;
   onCfoExecuted?: () => void;
 }) {
   const isUser = message.role === 'user';
@@ -1301,7 +1336,28 @@ function MessageBubble({
             <span className="animate-pulse">Oracle CFO is analyzing your request…</span>
           </div>
         )}
-        {!message.streaming && cfoApprovals && cfoApprovals.length > 0 && (
+        {/* ─── Upgrade Phase 1.1: Production Invoice Creation ─────────────
+            When the user asks to create an invoice, this dedicated card
+            handles the FULL production flow: intent extraction → customer
+            lookup → GST calc → invoice number → approval → real DB write →
+            PDF → email → WhatsApp → audit log. No simulations. */}
+        {!message.streaming && invoiceUserMessage && (
+          <InvoiceActionCard
+            userMessage={invoiceUserMessage}
+            organizationId={cfoOrgId ?? 'preview-org'}
+            firmId={null}
+            userId={cfoUserId ?? 'preview-user'}
+            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            sellerDetails={{
+              tradeName: cfoFirmName ?? 'GSTPilot',
+              gstin: cfoGstin ?? '',
+              state: null,
+              stateCode: cfoGstin ? cfoGstin.slice(0, 2) : null,
+              email: cfoUserEmail ?? 'preview@gstpilot.in',
+            }}
+          />
+        )}
+        {!message.streaming && !invoiceUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
           <CFOAssistantPanel
             approvalRequests={cfoApprovals}
             organizationId={cfoOrgId ?? 'preview-org'}

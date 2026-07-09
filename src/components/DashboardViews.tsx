@@ -118,6 +118,14 @@ const TasksPage = dynamic(() => import('@/components/tasks/TasksPage'), { loadin
 const DocumentVaultPage = dynamic(() => import('@/components/documents/DocumentVaultPage'), { loading: PageLoader, ssr: false })
 const CollaborationPage = dynamic(() => import('@/components/collaboration/CollaborationPage'), { loading: PageLoader, ssr: false })
 const CRMPage = dynamic(() => import('@/components/crm/CRMPage'), { loading: PageLoader, ssr: false })
+
+// ── GSTPilot Firestore-connected modules ─────────────────────────────────────
+// These three views replace the mock-data pages with real Firestore CRUD at:
+//   organizations/GSTpilot_SAAS/{customers,products,invoices}
+// Live lists via onSnapshot. No demo data. Firestore is the only source of truth.
+const GSTpilotCustomersView = dynamic(() => import('@/components/gstpilot-data/CustomersView'), { loading: PageLoader, ssr: false })
+const GSTpilotProductsView = dynamic(() => import('@/components/gstpilot-data/ProductsView'), { loading: PageLoader, ssr: false })
+const GSTpilotInvoicesView = dynamic(() => import('@/components/gstpilot-data/InvoicesView'), { loading: PageLoader, ssr: false })
 const ApprovalsPage = dynamic(() => import('@/components/approvals/ApprovalsPage'), { loading: PageLoader, ssr: false })
 const AutomationsPage = dynamic(() => import('@/components/automations/AutomationsPage'), { loading: PageLoader, ssr: false })
 const AutomationCenterPage = dynamic(() => import('@/components/automation/AutomationCenterPage'), { loading: PageLoader, ssr: false })
@@ -201,7 +209,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   dashboard: MissionControlPage,
   returns: ReturnsPage,
   reconcile: ReconciliationPage,
-  invoices: InvoiceWorkspacePage,
+  invoices: GSTpilotInvoicesView,
   clients: ClientRegistryPage,
   'client-workspace': ClientWorkspacePage,
   'return-prep': ReturnPrepWorkspace,
@@ -263,7 +271,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   accounting: AccountingPage,
   payroll: PayrollPage,
   hrms: HRMSPage,
-  inventory: InventoryPage,
+  inventory: GSTpilotProductsView,
   banking: BankingPage,
   payments: PaymentsPage,
   'e-invoicing': EInvoicingPage,
@@ -283,7 +291,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   tasks: TasksPage,
   documents: DocumentVaultPage,
   collaboration: CollaborationPage,
-  crm: CRMPage,
+  crm: GSTpilotCustomersView,
   approvals: ApprovalsPage,
   automations: AutomationsPage,
   'automation-center': AutomationCenterPage,

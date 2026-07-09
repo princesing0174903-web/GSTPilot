@@ -1,0 +1,815 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useCallback, useMemo, useRef } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Card,
+     7→  CardContent,
+     8→} from '@/components/ui/card';
+     9→import {
+    10→  Badge,
+    11→} from '@/components/ui/badge';
+    12→import {
+    13→  Button,
+    14→} from '@/components/ui/button';
+    15→import {
+    16→  Input,
+    17→} from '@/components/ui/input';
+    18→import {
+    19→  Skeleton,
+    20→} from '@/components/ui/skeleton';
+    21→import {
+    22→  ScrollArea,
+    23→} from '@/components/ui/scroll-area';
+    24→import {
+    25→  Select,
+    26→  SelectContent,
+    27→  SelectItem,
+    28→  SelectTrigger,
+    29→  SelectValue,
+    30→} from '@/components/ui/select';
+    31→import {
+    32→  Table,
+    33→  TableBody,
+    34→  TableCell,
+    35→  TableHead,
+    36→  TableHeader,
+    37→  TableRow,
+    38→} from '@/components/ui/table';
+    39→import {
+    40→  CloudUpload,
+    41→  FileText,
+    42→  CheckCircle2,
+    43→  AlertTriangle,
+    44→  XCircle,
+    45→  ShieldCheck,
+    46→  FileUp,
+    47→  Upload,
+    48→  AlertCircle,
+    49→  ThumbsUp,
+    50→  Inbox,
+    51→  Loader2,
+    52→  Search,
+    53→  Trash2,
+    54→  FileSpreadsheet,
+    55→  FileJson,
+    56→  TrendingUp,
+    57→  Clock,
+    58→  ShieldAlert,
+    59→} from 'lucide-react';
+    60→import type {
+    61→  FirestoreInvoice,
+    62→  FirestoreClient,
+    63→  FirestoreDocument,
+    64→} from '@/lib/firestore-schema';
+    65→import type {
+    66→  InvoiceStatus,
+    67→  RiskLevel,
+    68→  MatchStatus,
+    69→  InvoiceType,
+    70→} from '@/types/gst';
+    71→import {
+    72→  MATCH_STATUS_CONFIG,
+    73→  RISK_LEVEL_CONFIG,
+    74→  INVOICE_TYPE_TO_SECTION,
+    75→} from '@/types/gst';
+    76→import {
+    77→  formatCurrency,
+    78→  formatNumber,
+    79→} from '@/lib/gst-utils';
+    80→import {
+    81→  useFireInvoices,
+    82→  useFireClients,
+    83→  useFireDocuments,
+    84→} from '@/hooks/use-firestore';
+    85→import {
+    86→  createInvoice,
+    87→  approveInvoice,
+    88→  deleteInvoice,
+    89→} from '@/lib/firestore-service';
+    90→import { useDocuments } from '@/hooks/useDocuments';
+    91→import { validateFile } from '@/lib/firebase/storage-service';
+    92→import { toast } from 'sonner';
+    93→import { EmptyState } from '@/components/shared/EmptyState';
+    94→import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
+    95→import { useApp } from '@/contexts/AppContext';
+    96→
+    97→// ─── Animation Variants ───────────────────────────────────────────────────────
+    98→
+    99→const fadeInUp = {
+   100→  hidden: { opacity: 0, y: 16 },
+   101→  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' as const } },
+   102→};
+   103→
+   104→const staggerContainer = {
+   105→  hidden: { opacity: 0 },
+   106→  visible: {
+   107→    opacity: 1,
+   108→    transition: { staggerChildren: 0.07 },
+   109→  },
+   110→};
+   111→
+   112→const staggerItem = {
+   113→  hidden: { opacity: 0, y: 12 },
+   114→  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
+   115→};
+   116→
+   117→// ─── Status Badge Configs ─────────────────────────────────────────────────────
+   118→
+   119→const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> = {
+   120→  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+   121→  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+   122→  filed: { label: 'Filed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+   123→  cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+   124→};
+   125→
+   126→const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
+   127→  low: { label: 'Low', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+   128→  medium: { label: 'Medium', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+   129→  high: { label: 'High', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+   130→  critical: { label: 'Critical', className: 'bg-red-50 text-red-700 border-red-200' },
+   131→};
+   132→
+   133→// ─── Helper ───────────────────────────────────────────────────────────────────
+   134→
+   135→function formatFileSize(bytes: number): string {
+   136→  if (bytes < 1024) return `${bytes} B`;
+   137→  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+   138→  return `${(bytes / 1048576).toFixed(1)} MB`;
+   139→}
+   140→
+   141→function getFileIcon(fileName: string) {
+   142→  const ext = fileName.split('.').pop()?.toLowerCase();
+   143→  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
+   144→  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
+   145→  return <FileText className="size-4 text-slate-500" />;
+   146→}
+   147→
+   148→// ─── Main Component ───────────────────────────────────────────────────────────
+   149→
+   150→export default function InvoiceWorkspacePage() {
+   151→  // ── App navigation ──
+   152→  const { setCurrentView } = useApp();
+   153→
+   154→  // ── Firestore data hooks ──
+   155→  const { data: invoices, loading: invoicesLoading, error: invoicesError } = useFireInvoices();
+   156→  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
+   157→  const { data: documents, loading: documentsLoading } = useFireDocuments();
+   158→
+   159→  // ── Client map for name lookups ──
+   160→  const clientMap = useMemo(() => {
+   161→    const map = new Map<string, FirestoreClient & { id: string }>();
+   162→    for (const c of clients) {
+   163→      map.set(c.clientId, c);
+   164→    }
+   165→    return map;
+   166→  }, [clients]);
+   167→
+   168→  // ── Upload State ──
+   169→  // useDocuments() drives real uploads to Firebase Storage (org-isolated,
+   170→  // category='invoices') and surfaces live per-file progress through the
+   171→  // `uploads` array. We project that array into the legacy {id,name,progress}
+   172→  // shape so the existing progress UI stays untouched.
+   173→  const { uploads, uploadMany, isUploading } = useDocuments('invoices');
+   174→  const uploadingFiles = useMemo(
+   175→    () => uploads.map(u => ({ id: u.id, name: u.fileName, progress: Math.round(u.progress) })),
+   176→    [uploads],
+   177→  );
+   178→  const [isDragging, setIsDragging] = useState(false);
+   179→  const fileInputRef = useRef<HTMLInputElement>(null);
+   180→
+   181→  // ── Filter State ──
+   182→  const [clientFilter, setClientFilter] = useState<string>('all');
+   183→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   184→  const [riskFilter, setRiskFilter] = useState<string>('all');
+   185→  const [typeFilter, setTypeFilter] = useState<string>('all');
+   186→  const [searchQuery, setSearchQuery] = useState('');
+   187→
+   188→  // ── Action State ──
+   189→  const [approvingId, setApprovingId] = useState<string | null>(null);
+   190→  const [deletingId, setDeletingId] = useState<string | null>(null);
+   191→
+   192→  // ── Loading ──
+   193→  const loading = invoicesLoading || clientsLoading;
+   194→
+   195→  // ── Summary Metrics ──
+   196→  const summary = useMemo(() => {
+   197→    const total = invoices.length;
+   198→    const approved = invoices.filter(i => i.status === 'approved').length;
+   199→    const pending = invoices.filter(i => i.status === 'draft').length;
+   200→    const taxVolume = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
+   201→    const riskItems = invoices.filter(i => i.riskLevel === 'high' || i.riskLevel === 'critical').length;
+   202→    return { total, approved, pending, taxVolume, riskItems };
+   203→  }, [invoices]);
+   204→
+   205→  // ── Filtered Invoices ──
+   206→  const filteredInvoices = useMemo(() => {
+   207→    return invoices.filter(inv => {
+   208→      if (clientFilter !== 'all' && inv.clientId !== clientFilter) return false;
+   209→      if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+   210→      if (riskFilter !== 'all' && inv.riskLevel !== riskFilter) return false;
+   211→      if (typeFilter !== 'all' && inv.invoiceType !== typeFilter) return false;
+   212→      if (searchQuery) {
+   213→        const q = searchQuery.toLowerCase();
+   214→        const clientName = clientMap.get(inv.clientId)?.tradeName ?? '';
+   215→        const matchesNumber = inv.invoiceNumber.toLowerCase().includes(q);
+   216→        const matchesBuyer = (inv.buyerName ?? '').toLowerCase().includes(q);
+   217→        const matchesClient = clientName.toLowerCase().includes(q);
+   218→        if (!matchesNumber && !matchesBuyer && !matchesClient) return false;
+   219→      }
+   220→      return true;
+   221→    });
+   222→  }, [invoices, clientFilter, statusFilter, riskFilter, typeFilter, searchQuery, clientMap]);
+   223→
+   224→  // ── Upload Handlers ──
+   225→  // Pre-flight each file with the shared `validateFile` helper (100 MB cap +
+   226→  // supported extensions), then delegate to useDocuments().uploadMany() which
+   227→  // uploads to Firebase Storage (organizations/{orgId}/invoices/...) and writes
+   228→  // a Firestore `documents` metadata row. Live progress is tracked in the
+   229→  // `uploads` array and surfaced through `uploadingFiles` above.
+   230→  const handleUpload = useCallback(async (files: File[]) => {
+   231→    const valid: File[] = [];
+   232→    for (const file of files) {
+   233→      const err = validateFile(file);
+   234→      if (err) {
+   235→        toast.error(`${file.name}: ${err}`);
+   236→        continue;
+   237→      }
+   238→      valid.push(file);
+   239→    }
+   240→    if (valid.length === 0) return;
+   241→
+   242→    try {
+   243→      const uploaded = await uploadMany(valid, { category: 'invoices' });
+   244→      const failed = valid.length - uploaded.length;
+   245→      if (uploaded.length > 0) {
+   246→        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded to Firebase Storage`);
+   247→      }
+   248→      if (failed > 0) {
+   249→        toast.error(`${failed} file${failed !== 1 ? 's' : ''} failed to upload`);
+   250→      }
+   251→    } catch (err) {
+   252→      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+   253→    }
+   254→  }, [uploadMany]);
+   255→
+   256→  const handleDragOver = (e: React.DragEvent) => {
+   257→    e.preventDefault();
+   258→    e.stopPropagation();
+   259→    setIsDragging(true);
+   260→  };
+   261→
+   262→  const handleDragLeave = (e: React.DragEvent) => {
+   263→    e.preventDefault();
+   264→    e.stopPropagation();
+   265→    setIsDragging(false);
+   266→  };
+   267→
+   268→  const handleDrop = (e: React.DragEvent) => {
+   269→    e.preventDefault();
+   270→    e.stopPropagation();
+   271→    setIsDragging(false);
+   272→    const files = Array.from(e.dataTransfer.files);
+   273→    if (files.length > 0) handleUpload(files);
+   274→  };
+   275→
+   276→  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+   277→    const files = Array.from(e.target.files || []);
+   278→    if (files.length > 0) handleUpload(files);
+   279→    e.target.value = '';
+   280→  };
+   281→
+   282→  // ── Invoice action handlers ──
+   283→  const handleApprove = async (invoiceId: string, invoiceNumber: string) => {
+   284→    setApprovingId(invoiceId);
+   285→    try {
+   286→      await approveInvoice(invoiceId);
+   287→      toast.success(`Invoice ${invoiceNumber} approved`);
+   288→    } catch (err) {
+   289→      toast.error(`Failed to approve: ${err instanceof Error ? err.message : 'Unknown error'}`);
+   290→    } finally {
+   291→      setApprovingId(null);
+   292→    }
+   293→  };
+   294→
+   295→  const handleDelete = async (invoiceId: string, invoiceNumber: string) => {
+   296→    setDeletingId(invoiceId);
+   297→    try {
+   298→      await deleteInvoice(invoiceId);
+   299→      toast.success(`Invoice ${invoiceNumber} deleted`);
+   300→    } catch (err) {
+   301→      toast.error(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`);
+   302→    } finally {
+   303→      setDeletingId(null);
+   304→    }
+   305→  };
+   306→
+   307→  // ── Loading Skeleton ──
+   308→  if (loading) {
+   309→    return (
+   310→      <div className="space-y-6 p-4 md:p-6">
+   311→        <div className="flex items-center justify-between">
+   312→          <div className="space-y-2">
+   313→            <Skeleton className="h-7 w-56" />
+   314→            <Skeleton className="h-4 w-72" />
+   315→          </div>
+   316→          <Skeleton className="h-9 w-48" />
+   317→        </div>
+   318→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+   319→          {Array.from({ length: 5 }).map((_, i) => (
+   320→            <Skeleton key={i} className="h-24 rounded-xl" />
+   321→          ))}
+   322→        </div>
+   323→        <Skeleton className="h-96 rounded-xl" />
+   324→      </div>
+   325→    );
+   326→  }
+   327→
+   328→  // ── Error state ──
+   329→  if (invoicesError || clientsError) {
+   330→    return (
+   331→      <div className="flex flex-col items-center justify-center py-20 text-center">
+   332→        <AlertCircle className="size-10 text-red-400 mb-4" />
+   333→        <h3 className="text-lg font-semibold text-foreground">Failed to load data</h3>
+   334→        <p className="text-sm text-muted-foreground mt-1 max-w-md">
+   335→          {invoicesError || clientsError}
+   336→        </p>
+   337→      </div>
+   338→    );
+   339→  }
+   340→
+   341→  // ── Empty state when no invoices exist ──
+   342→  // `isUploading` is true while any file is mid-upload, so we never flash the
+   343→  // empty state at the user while their first upload is in flight.
+   344→  if (invoices.length === 0 && !isUploading) {
+   345→    return (
+   346→      <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+   347→        <div className="space-y-6 p-4 md:p-6 lg:p-8">
+   348→          <motion.div
+   349→            initial={{ opacity: 0, y: -12 }}
+   350→            animate={{ opacity: 1, y: 0 }}
+   351→            transition={{ duration: 0.4 }}
+   352→            className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   353→          >
+   354→            <div>
+   355→              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+   356→                Invoice Workspace
+   357→              </h1>
+   358→              <p className="mt-1 text-sm text-muted-foreground">
+   359→                Upload, extract, and validate GST invoices
+   360→              </p>
+   361→            </div>
+   362→          </motion.div>
+   363→
+   364→          <ProfessionalEmptyState
+   365→            icon={FileUp}
+   366→            title="No invoices yet"
+   367→            description="Upload your first purchase or sales document — GSTPilot will extract, validate, and match each invoice automatically."
+   368→            accent="emerald"
+   369→            action={{
+   370→              label: 'Upload your first document',
+   371→              onClick: () => fileInputRef.current?.click(),
+   372→              icon: Upload,
+   373→            }}
+   374→            secondaryAction={{
+   375→              label: 'Add a client first',
+   376→              onClick: () => setCurrentView('clients'),
+   377→            }}
+   378→          />
+   379→        </div>
+   380→        <input
+   381→          ref={fileInputRef}
+   382→          type="file"
+   383→          multiple
+   384→          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
+   385→          className="hidden"
+   386→          onChange={handleFileSelect}
+   387→        />
+   388→      </div>
+   389→    );
+   390→  }
+   391→
+   392→  // ─── Summary Cards ────────────────────────────────────────────────────────────
+   393→
+   394→  const summaryCards = [
+   395→    {
+   396→      title: 'Total Invoices',
+   397→      value: formatNumber(summary.total),
+   398→      icon: FileText,
+   399→      color: 'text-slate-600',
+   400→      bgColor: 'bg-slate-50',
+   401→    },
+   402→    {
+   403→      title: 'Approved',
+   404→      value: formatNumber(summary.approved),
+   405→      icon: CheckCircle2,
+   406→      color: 'text-emerald-600',
+   407→      bgColor: 'bg-emerald-50',
+   408→    },
+   409→    {
+   410→      title: 'Pending',
+   411→      value: formatNumber(summary.pending),
+   412→      icon: Clock,
+   413→      color: 'text-amber-600',
+   414→      bgColor: 'bg-amber-50',
+   415→    },
+   416→    {
+   417→      title: 'Tax Volume',
+   418→      value: formatCurrency(summary.taxVolume),
+   419→      icon: TrendingUp,
+   420→      color: 'text-teal-600',
+   421→      bgColor: 'bg-teal-50',
+   422→    },
+   423→    {
+   424→      title: 'Risk Items',
+   425→      value: formatNumber(summary.riskItems),
+   426→      icon: ShieldAlert,
+   427→      color: summary.riskItems > 0 ? 'text-red-600' : 'text-slate-600',
+   428→      bgColor: summary.riskItems > 0 ? 'bg-red-50' : 'bg-slate-50',
+   429→    },
+   430→  ];
+   431→
+   432→  return (
+   433→    <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+   434→      <div className="space-y-6 p-4 md:p-6 lg:p-8">
+   435→        {/* ── Header ── */}
+   436→        <motion.div
+   437→          initial={{ opacity: 0, y: -12 }}
+   438→          animate={{ opacity: 1, y: 0 }}
+   439→          transition={{ duration: 0.4 }}
+   440→          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+   441→        >
+   442→          <div>
+   443→            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+   444→              Invoice Workspace
+   445→            </h1>
+   446→            <p className="mt-1 text-sm text-muted-foreground">
+   447→              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {documents.length} document{documents.length !== 1 ? 's' : ''}
+   448→            </p>
+   449→          </div>
+   450→          <Button
+   451→            onClick={() => fileInputRef.current?.click()}
+   452→            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+   453→          >
+   454→            <Upload className="size-4" />
+   455→            Upload Document
+   456→          </Button>
+   457→        </motion.div>
+   458→
+   459→        {/* ── Summary Cards ── */}
+   460→        <motion.div
+   461→          variants={staggerContainer}
+   462→          initial="hidden"
+   463→          animate="visible"
+   464→          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
+   465→        >
+   466→          {summaryCards.map((card) => (
+   467→            <motion.div key={card.title} variants={staggerItem}>
+   468→              <Card className="border-0 shadow-sm">
+   469→                <CardContent className="p-4">
+   470→                  <div className="flex items-center gap-3">
+   471→                    <div className={`flex items-center justify-center size-9 rounded-lg ${card.bgColor}`}>
+   472→                      <card.icon className={`size-4 ${card.color}`} />
+   473→                    </div>
+   474→                    <div>
+   475→                      <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
+   476→                      <p className="text-lg font-bold tracking-tight">{card.value}</p>
+   477→                    </div>
+   478→                  </div>
+   479→                </CardContent>
+   480→              </Card>
+   481→            </motion.div>
+   482→          ))}
+   483→        </motion.div>
+   484→
+   485→        {/* ── Upload Area ── */}
+   486→        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+   487→          <Card className={`border-2 border-dashed transition-colors ${
+   488→            isDragging ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 bg-white'
+   489→          }`}>
+   490→            <CardContent className="p-6">
+   491→              <div
+   492→                onDragOver={handleDragOver}
+   493→                onDragLeave={handleDragLeave}
+   494→                onDrop={handleDrop}
+   495→                className="flex flex-col items-center gap-3 text-center"
+   496→              >
+   497→                <div className="flex items-center justify-center size-12 rounded-xl bg-slate-50">
+   498→                  <CloudUpload className="size-6 text-slate-400" />
+   499→                </div>
+   500→                <div>
+   501→                  <p className="text-sm font-medium text-foreground">
+   502→                    Drag & drop files here, or{' '}
+   503→                    <button
+   504→                      onClick={() => fileInputRef.current?.click()}
+   505→                      className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2"
+   506→                    >
+   507→                      browse
+   508→                    </button>
+   509→                  </p>
+   510→                  <p className="text-xs text-muted-foreground mt-1">
+   511→                    Supports JSON, CSV, XLSX, PDF &middot; Max 10MB per file
+   512→                  </p>
+   513→                </div>
+   514→
+   515→                {/* Uploading files indicator */}
+   516→                <AnimatePresence>
+   517→                  {uploadingFiles.length > 0 && (
+   518→                    <motion.div
+   519→                      initial={{ opacity: 0, height: 0 }}
+   520→                      animate={{ opacity: 1, height: 'auto' }}
+   521→                      exit={{ opacity: 0, height: 0 }}
+   522→                      className="w-full max-w-md mt-2 space-y-2"
+   523→                    >
+   524→                      {uploadingFiles.map(f => (
+   525→                        <div key={f.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+   526→                          {getFileIcon(f.name)}
+   527→                          <div className="flex-1 min-w-0">
+   528→                            <p className="text-xs font-medium truncate">{f.name}</p>
+   529→                            <div className="w-full h-1.5 bg-slate-200 rounded-full mt-1">
+   530→                              <motion.div
+   531→                                className="h-full bg-emerald-500 rounded-full"
+   532→                                initial={{ width: 0 }}
+   533→                                animate={{ width: `${f.progress}%` }}
+   534→                                transition={{ duration: 0.3 }}
+   535→                              />
+   536→                            </div>
+   537→                          </div>
+   538→                          <span className="text-xs text-muted-foreground">{f.progress}%</span>
+   539→                        </div>
+   540→                      ))}
+   541→                    </motion.div>
+   542→                  )}
+   543→                </AnimatePresence>
+   544→              </div>
+   545→            </CardContent>
+   546→          </Card>
+   547→        </motion.div>
+   548→
+   549→        <input
+   550→          ref={fileInputRef}
+   551→          type="file"
+   552→          multiple
+   553→          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
+   554→          className="hidden"
+   555→          onChange={handleFileSelect}
+   556→        />
+   557→
+   558→        {/* ── Filters ── */}
+   559→        <motion.div
+   560→          variants={fadeInUp}
+   561→          initial="hidden"
+   562→          animate="visible"
+   563→          className="flex flex-col sm:flex-row gap-3"
+   564→        >
+   565→          <div className="relative flex-1">
+   566→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+   567→            <Input
+   568→              placeholder="Search by invoice # or buyer name..."
+   569→              value={searchQuery}
+   570→              onChange={(e) => setSearchQuery(e.target.value)}
+   571→              className="pl-9 bg-white"
+   572→            />
+   573→          </div>
+   574→          <Select value={clientFilter} onValueChange={setClientFilter}>
+   575→            <SelectTrigger className="w-full sm:w-[180px] bg-white">
+   576→              <SelectValue placeholder="All Clients" />
+   577→            </SelectTrigger>
+   578→            <SelectContent>
+   579→              <SelectItem value="all">All Clients</SelectItem>
+   580→              {clients.map(c => (
+   581→                <SelectItem key={c.clientId} value={c.clientId}>
+   582→                  {c.tradeName}
+   583→                </SelectItem>
+   584→              ))}
+   585→            </SelectContent>
+   586→          </Select>
+   587→          <Select value={statusFilter} onValueChange={setStatusFilter}>
+   588→            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+   589→              <SelectValue placeholder="All Status" />
+   590→            </SelectTrigger>
+   591→            <SelectContent>
+   592→              <SelectItem value="all">All Status</SelectItem>
+   593→              <SelectItem value="draft">Draft</SelectItem>
+   594→              <SelectItem value="approved">Approved</SelectItem>
+   595→              <SelectItem value="filed">Filed</SelectItem>
+   596→              <SelectItem value="cancelled">Cancelled</SelectItem>
+   597→            </SelectContent>
+   598→          </Select>
+   599→          <Select value={riskFilter} onValueChange={setRiskFilter}>
+   600→            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+   601→              <SelectValue placeholder="All Risk" />
+   602→            </SelectTrigger>
+   603→            <SelectContent>
+   604→              <SelectItem value="all">All Risk</SelectItem>
+   605→              <SelectItem value="low">Low</SelectItem>
+   606→              <SelectItem value="medium">Medium</SelectItem>
+   607→              <SelectItem value="high">High</SelectItem>
+   608→              <SelectItem value="critical">Critical</SelectItem>
+   609→            </SelectContent>
+   610→          </Select>
+   611→          <Select value={typeFilter} onValueChange={setTypeFilter}>
+   612→            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+   613→              <SelectValue placeholder="All Types" />
+   614→            </SelectTrigger>
+   615→            <SelectContent>
+   616→              <SelectItem value="all">All Types</SelectItem>
+   617→              {Object.keys(INVOICE_TYPE_TO_SECTION).map(t => (
+   618→                <SelectItem key={t} value={t}>{t}</SelectItem>
+   619→              ))}
+   620→            </SelectContent>
+   621→          </Select>
+   622→        </motion.div>
+   623→
+   624→        {/* ── Invoice Table ── */}
+   625→        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+   626→          <Card className="border-0 shadow-sm">
+   627→            <CardContent className="p-0">
+   628→              {filteredInvoices.length === 0 ? (
+   629→                <div className="flex flex-col items-center justify-center py-16 text-center">
+   630→                  <Inbox className="size-10 text-slate-300 mb-3" />
+   631→                  <p className="text-sm font-medium text-foreground">No invoices match your filters</p>
+   632→                  <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filter criteria</p>
+   633→                </div>
+   634→              ) : (
+   635→                <ScrollArea className="max-h-[600px]">
+   636→                  <Table>
+   637→                    <TableHeader>
+   638→                      <TableRow className="bg-slate-50/50">
+   639→                        <TableHead className="text-xs font-semibold">Invoice #</TableHead>
+   640→                        <TableHead className="text-xs font-semibold">Date</TableHead>
+   641→                        <TableHead className="text-xs font-semibold">Client</TableHead>
+   642→                        <TableHead className="text-xs font-semibold">Type</TableHead>
+   643→                        <TableHead className="text-xs font-semibold text-right">Taxable Value</TableHead>
+   644→                        <TableHead className="text-xs font-semibold text-right">Tax</TableHead>
+   645→                        <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+   646→                        <TableHead className="text-xs font-semibold">Status</TableHead>
+   647→                        <TableHead className="text-xs font-semibold">Risk</TableHead>
+   648→                        <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
+   649→                      </TableRow>
+   650→                    </TableHeader>
+   651→                    <TableBody>
+   652→                      <AnimatePresence>
+   653→                        {filteredInvoices.map((inv) => {
+   654→                          const client = clientMap.get(inv.clientId);
+   655→                          const clientName = client?.tradeName ?? inv.buyerName ?? 'Unknown';
+   656→                          const statusCfg = STATUS_BADGE[inv.status as InvoiceStatus] ?? STATUS_BADGE.draft;
+   657→                          const riskCfg = RISK_BADGE[inv.riskLevel as RiskLevel] ?? RISK_BADGE.low;
+   658→                          const matchCfg = MATCH_STATUS_CONFIG[inv.matchStatus as MatchStatus];
+   659→                          const totalTax = inv.cgst + inv.sgst + inv.igst + inv.cess;
+   660→                          const isApproving = approvingId === inv.id;
+   661→                          const isDeleting = deletingId === inv.id;
+   662→                          const isActionLoading = isApproving || isDeleting;
+   663→
+   664→                          return (
+   665→                            <motion.tr
+   666→                              key={inv.id}
+   667→                              initial={{ opacity: 0, y: 8 }}
+   668→                              animate={{ opacity: 1, y: 0 }}
+   669→                              exit={{ opacity: 0, x: -20 }}
+   670→                              transition={{ duration: 0.2 }}
+   671→                              className="hover:bg-slate-50/50 border-b transition-colors"
+   672→                            >
+   673→                              <TableCell>
+   674→                                <div className="flex flex-col">
+   675→                                  <span className="font-medium text-sm">{inv.invoiceNumber}</span>
+   676→                                  {matchCfg && (
+   677→                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border inline-block w-fit mt-0.5 ${matchCfg.bgColor} ${matchCfg.color}`}>
+   678→                                      {matchCfg.label}
+   679→                                    </span>
+   680→                                  )}
+   681→                                </div>
+   682→                              </TableCell>
+   683→                              <TableCell className="text-sm text-muted-foreground">
+   684→                                {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+   685→                              </TableCell>
+   686→                              <TableCell>
+   687→                                <div className="flex flex-col">
+   688→                                  <span className="text-sm font-medium">{clientName}</span>
+   689→                                  {inv.buyerGstin && (
+   690→                                    <span className="text-[10px] text-muted-foreground">{inv.buyerGstin}</span>
+   691→                                  )}
+   692→                                </div>
+   693→                              </TableCell>
+   694→                              <TableCell>
+   695→                                <Badge variant="outline" className="text-[10px] font-medium bg-slate-50">
+   696→                                  {inv.invoiceType}
+   697→                                </Badge>
+   698→                              </TableCell>
+   699→                              <TableCell className="text-right text-sm">
+   700→                                {formatCurrency(inv.taxableValue)}
+   701→                              </TableCell>
+   702→                              <TableCell className="text-right text-sm">
+   703→                                {formatCurrency(totalTax)}
+   704→                              </TableCell>
+   705→                              <TableCell className="text-right text-sm font-semibold">
+   706→                                {formatCurrency(inv.totalAmount)}
+   707→                              </TableCell>
+   708→                              <TableCell>
+   709→                                <Badge variant="outline" className={`text-[10px] font-medium ${statusCfg.className}`}>
+   710→                                  {statusCfg.label}
+   711→                                </Badge>
+   712→                              </TableCell>
+   713→                              <TableCell>
+   714→                                <Badge variant="outline" className={`text-[10px] font-medium ${riskCfg.className}`}>
+   715→                                  {RISK_LEVEL_CONFIG[inv.riskLevel as RiskLevel]?.icon ?? ''} {riskCfg.label}
+   716→                                </Badge>
+   717→                              </TableCell>
+   718→                              <TableCell className="text-right">
+   719→                                <div className="flex items-center justify-end gap-1">
+   720→                                  {inv.status === 'draft' && (
+   721→                                    <Button
+   722→                                      size="sm"
+   723→                                      variant="ghost"
+   724→                                      className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+   725→                                      onClick={() => handleApprove(inv.id, inv.invoiceNumber)}
+   726→                                      disabled={isActionLoading}
+   727→                                    >
+   728→                                      {isApproving ? (
+   729→                                        <Loader2 className="size-3.5 animate-spin" />
+   730→                                      ) : (
+   731→                                        <ThumbsUp className="size-3.5" />
+   732→                                      )}
+   733→                                    </Button>
+   734→                                  )}
+   735→                                  {(inv.status === 'draft' || inv.status === 'approved') && (
+   736→                                    <Button
+   737→                                      size="sm"
+   738→                                      variant="ghost"
+   739→                                      className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+   740→                                      onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
+   741→                                      disabled={isActionLoading}
+   742→                                    >
+   743→                                      {isDeleting ? (
+   744→                                        <Loader2 className="size-3.5 animate-spin" />
+   745→                                      ) : (
+   746→                                        <Trash2 className="size-3.5" />
+   747→                                      )}
+   748→                                    </Button>
+   749→                                  )}
+   750→                                </div>
+   751→                              </TableCell>
+   752→                            </motion.tr>
+   753→                          );
+   754→                        })}
+   755→                      </AnimatePresence>
+   756→                    </TableBody>
+   757→                  </Table>
+   758→                </ScrollArea>
+   759→              )}
+   760→            </CardContent>
+   761→          </Card>
+   762→        </motion.div>
+   763→
+   764→        {/* ── Recent Documents ── */}
+   765→        {documents.length > 0 && (
+   766→          <motion.div variants={fadeInUp} initial="hidden" animate="visible">
+   767→            <Card className="border-0 shadow-sm">
+   768→              <CardContent className="p-4">
+   769→                <h3 className="text-sm font-semibold text-foreground mb-3">Recent Documents</h3>
+   770→                <ScrollArea className="max-h-48">
+   771→                  <div className="space-y-2">
+   772→                    {documents.slice(0, 10).map((doc) => {
+   773→                      const client = clientMap.get(doc.clientId);
+   774→                      return (
+   775→                        <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
+   776→                          {getFileIcon(doc.fileName)}
+   777→                          <div className="flex-1 min-w-0">
+   778→                            <p className="text-sm font-medium truncate">{doc.fileName}</p>
+   779→                            <p className="text-[10px] text-muted-foreground">
+   780→                              {client?.tradeName ?? 'Unknown'} &middot; {formatFileSize(doc.fileSize)} &middot; {doc.documentType.replace(/_/g, ' ')}
+   781→                            </p>
+   782→                          </div>
+   783→                          <Badge
+   784→                            variant="outline"
+   785→                            className={`text-[10px] ${
+   786→                              doc.status === 'extracted'
+   787→                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+   788→                                : doc.status === 'processing'
+   789→                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+   790→                                : doc.status === 'failed'
+   791→                                ? 'bg-red-50 text-red-700 border-red-200'
+   792→                                : 'bg-slate-50 text-slate-700 border-slate-200'
+   793→                            }`}
+   794→                          >
+   795→                            {doc.status}
+   796→                          </Badge>
+   797→                          {doc.extractedInvoiceCount > 0 && (
+   798→                            <span className="text-[10px] text-muted-foreground">
+   799→                              {doc.extractedInvoiceCount} invoice{doc.extractedInvoiceCount !== 1 ? 's' : ''}
+   800→                            </span>
+   801→                          )}
+   802→                        </div>
+   803→                      );
+   804→                    })}
+   805→                  </div>
+   806→                </ScrollArea>
+   807→              </CardContent>
+   808→            </Card>
+   809→          </motion.div>
+   810→        )}
+   811→      </div>
+   812→    </div>
+   813→  );
+   814→}
+   815→

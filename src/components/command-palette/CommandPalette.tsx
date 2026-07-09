@@ -44,6 +44,7 @@ import {
   Languages,
   Plane,
   FileBarChart,
+  Package,
   Server,
   Calculator,
   Code2,
@@ -66,6 +67,9 @@ import {
   useFireDocuments,
   useFireRecentActivities,
 } from '@/hooks/use-firestore';
+import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
+import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
+import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
 import {
   CommandDialog,
   CommandInput,
@@ -173,6 +177,11 @@ export default function CommandPalette() {
   const { data: returns } = useFireReturns();
   const { data: documents } = useFireDocuments();
   const { data: activities } = useFireRecentActivities(20);
+
+  // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+  const { customers: gstCustomers } = useGSTpilotCustomers();
+  const { products: gstProducts } = useGSTpilotProducts();
+  const { invoices: gstInvoices } = useGSTpilotInvoices();
 
   // ─── Keyboard shortcut: Ctrl+K ───────────────────────────────────────────
   useEffect(() => {
@@ -883,7 +892,18 @@ export default function CommandPalette() {
 
   // ─── Search results grouped by type ──────────────────────────────────────
   const searchResults = useMemo(() => {
-    if (!query.trim()) return { clients: [], invoices: [], returns: [], documents: [], activities: [] };
+    if (!query.trim()) {
+      return {
+        clients: [],
+        invoices: [],
+        returns: [],
+        documents: [],
+        activities: [],
+        gstCustomers: [],
+        gstProducts: [],
+        gstInvoices: [],
+      };
+    }
 
     const q = query.toLowerCase();
 
@@ -931,21 +951,59 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
+    // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+    const matchedGstCustomers = gstCustomers
+      .filter(
+        (c) =>
+          c.name?.toLowerCase().includes(q) ||
+          (c.gstin ?? '')?.toLowerCase().includes(q) ||
+          (c.email ?? '')?.toLowerCase().includes(q) ||
+          (c.phone ?? '')?.toLowerCase().includes(q) ||
+          (c.state ?? '')?.toLowerCase().includes(q) ||
+          (c.pan ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
+    const matchedGstProducts = gstProducts
+      .filter(
+        (p) =>
+          p.name?.toLowerCase().includes(q) ||
+          (p.sku ?? '')?.toLowerCase().includes(q) ||
+          (p.hsnSac ?? '')?.toLowerCase().includes(q) ||
+          (p.description ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
+    const matchedGstInvoices = gstInvoices
+      .filter(
+        (inv) =>
+          inv.invoiceNumber?.toLowerCase().includes(q) ||
+          (inv.customerName ?? '')?.toLowerCase().includes(q) ||
+          (inv.customerGstin ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
     return {
       clients: matchedClients,
       invoices: matchedInvoices,
       returns: matchedReturns,
       documents: matchedDocuments,
       activities: matchedActivities,
+      gstCustomers: matchedGstCustomers,
+      gstProducts: matchedGstProducts,
+      gstInvoices: matchedGstInvoices,
     };
-  }, [query, clients, invoices, returns, documents, activities]);
+  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices]);
 
   const hasSearchResults =
     searchResults.clients.length > 0 ||
     searchResults.invoices.length > 0 ||
     searchResults.returns.length > 0 ||
     searchResults.documents.length > 0 ||
-    searchResults.activities.length > 0;
+    searchResults.activities.length > 0 ||
+    searchResults.gstCustomers.length > 0 ||
+    searchResults.gstProducts.length > 0 ||
+    searchResults.gstInvoices.length > 0;
 
   // ─── Handle item selection ───────────────────────────────────────────────
   const handleSelect = useCallback(
@@ -1154,6 +1212,87 @@ export default function CommandPalette() {
                         isFavorite={favorites.some((f) => f.id === cmd.id)}
                         onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
                         onSelect={() => handleSelect(cmd.action)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Customers ─────────────────── */}
+                {isSearching && searchResults.gstCustomers.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <Users className="h-3 w-3 text-emerald-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Customers
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstCustomers.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstCustomers.map((c) => (
+                      <CommandItemRow
+                        key={c.id}
+                        icon={Users}
+                        label={c.name}
+                        description={`${c.gstin || 'No GSTIN'}${c.state ? ` · ${c.state}` : ''}`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('crm');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Products ──────────────────── */}
+                {isSearching && searchResults.gstProducts.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <Package className="h-3 w-3 text-emerald-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Products
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstProducts.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstProducts.map((p) => (
+                      <CommandItemRow
+                        key={p.id}
+                        icon={Package}
+                        label={p.name}
+                        description={`${p.sku || 'No SKU'} · ${p.hsnSac} · GST ${p.gstRate}%`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('inventory');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Invoices ──────────────────── */}
+                {isSearching && searchResults.gstInvoices.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <FileText className="h-3 w-3 text-cyan-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Invoices
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstInvoices.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstInvoices.map((inv) => (
+                      <CommandItemRow
+                        key={inv.id}
+                        icon={FileText}
+                        label={inv.invoiceNumber}
+                        description={`${inv.customerName} · ₹${inv.grandTotal.toLocaleString('en-IN')} · ${inv.status}`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('invoices');
+                        }}
                       />
                     ))}
                   </div>

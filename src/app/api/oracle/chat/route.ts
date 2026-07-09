@@ -54,6 +54,7 @@ import { getTimelineSummary } from '@/lib/execution/timeline';
 import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock, formatDynamicRecommendationsBlock } from '@/lib/oracle/real-data';
+import { buildGSTpilotContextBlock } from '@/lib/oracle-cfo/gstpilot-context';
 import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
 import type { TwinOracleContext } from '@/lib/twin/types';
 import { computeCEOOracleContext } from '@/lib/ceo/orchestrator';
@@ -828,6 +829,18 @@ User identity not provided — cannot fetch real connected data. Encourage the u
 Dynamic recommendation engine is not available right now. If the user asks for recommendations, suggest running the RMB agents (Collections / Compliance / Finance / Reporting / GST) from the Run-My-Business page.`;
   }
 
+  // Fetch GSTPILOT LIVE REGISTRY — real Firestore data from
+  // organizations/GSTpilot_SAAS/{customers,products,invoices}. Powers "Show
+  // customers / invoices / products" commands with REAL data. Fail-safe.
+  let gstpilotContextBlock = '';
+  try {
+    gstpilotContextBlock = await buildGSTpilotContextBlock();
+  } catch (err) {
+    console.warn('[Oracle] GSTPilot context unavailable:', err);
+    gstpilotContextBlock = `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
+The live GSTPilot registry could not be loaded. If the user asks to "show customers / invoices / products", say the registry is temporarily unavailable. NEVER fabricate records.`;
+  }
+
   return `${BRAND_IDENTITY_PROMPT_BLOCK}
 
 ## WHO YOU ARE
@@ -919,6 +932,17 @@ When the user types an imperative command, treat it as a delegation and respond 
 - "Show risky clients." → Reply with the ranked list from the live state (client name, outstanding, avg delay).
 - "Prepare next month forecast." → Finance Agent. Reply: "I've generated the forecast for the next 30 days." Then cite the forecast numbers from LIVE CFO CONTEXT.
 - "Run my business today." → Trigger the ORCHESTRATOR (see below).
+
+### GSTPILOT LIVE REGISTRY COMMANDS (CRITICAL — REAL DATA ONLY)
+When the user asks to see their actual customers, products, or invoices, answer DIRECTLY from the **GSTPILOT LIVE REGISTRY** section near the end of this prompt. These are read-only queries — do NOT delegate to an agent, do NOT fabricate, do NOT use the legacy client/invoice collections. The GSTPILOT LIVE REGISTRY is the single source of truth.
+
+- "Show customers." / "List customers." / "Who are my customers?" / "Show me my clients." → Reply with a concise list from the CUSTOMERS section of the GSTPILOT LIVE REGISTRY. For each: name, GSTIN (or "unregistered"), state, outstanding balance. Lead with the spoken ack: "I've pulled your live customer list from Firestore." If the registry is empty, say so plainly and suggest adding customers from the CRM page.
+- "Show invoices." / "List invoices." / "Recent invoices." / "Show me my invoices." → Reply with a concise list from the INVOICES section of the GSTPILOT LIVE REGISTRY. For each: invoice number, customer, total, balance due, status. Lead with: "I've pulled your live invoices from Firestore." If empty, suggest the Invoices page.
+- "Show products." / "List products." / "What do I sell?" / "Show my catalog." → Reply with a concise list from the PRODUCTS section of the GSTPILOT LIVE REGISTRY. For each: name, HSN/SAC, GST rate, price, stock (or "service"). Lead with: "I've pulled your live product catalog from Firestore." If empty, suggest the Inventory page.
+- "How many customers do I have?" / "Total customers?" → Cite the AGGREGATE KPIs exactly.
+- "What's my revenue?" / "Total invoiced?" / "Outstanding amount?" → Cite the AGGREGATE KPIs exactly (Total Invoiced, Total Outstanding, Total Tax Collected). Round to rupees.
+
+NEVER invent customer names, GSTINs, invoice numbers, or product names. If the GSTPILOT LIVE REGISTRY section says it is empty or unavailable, say so honestly.
 
 For any other imperative ("Prepare monthly compliance report", "Generate P&L", "Send reminders", "Reconcile", "Escalate clients", "Prepare GSTR-1", "Prepare GSTR-3B"), map to the closest agent and confirm with the appropriate spoken ack.
 
@@ -1235,6 +1259,8 @@ ${dynamicRecsBlock}
 ${twinContextBlock}
 
 ${ceoContextBlock}
+
+${gstpilotContextBlock}
 
 Remember: you are Oracle — the AI CFO + COO + Business Graph of India. You understand the business, predict the future, recommend the next move, execute real work via your AI Employees Team, AND traverse the full relationship graph to explain causes and predict outcomes. Observe. Think. Decide. Execute. Learn. Ask Anything. Delegate Everything. Be fast, reliable, professional, and always ready.`;
 }

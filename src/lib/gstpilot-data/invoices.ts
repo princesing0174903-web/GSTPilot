@@ -23,6 +23,7 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   orderBy,
@@ -182,6 +183,26 @@ export async function getInvoice(id: string): Promise<Invoice | null> {
   const snap = await getDoc(doc(db, INVOICES_COLLECTION, id));
   if (!snap.exists()) return null;
   return toInvoice(snap.id, snap.data() as Record<string, unknown>);
+}
+
+/**
+ * Fetch ALL invoices in one shot (server-side / API-route friendly).
+ * Skips the internal `_counter` document. Returns an empty array on
+ * permission-denied / unavailable (preview mode).
+ */
+export async function getInvoicesOnce(): Promise<Invoice[]> {
+  try {
+    const q = query(collection(db, INVOICES_COLLECTION), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const list: Invoice[] = [];
+    snap.forEach((d) => {
+      if (d.id === '_counter') return;
+      list.push(toInvoice(d.id, d.data() as Record<string, unknown>));
+    });
+    return list;
+  } catch {
+    return [];
+  }
 }
 
 /**

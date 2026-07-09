@@ -15,6 +15,7 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   orderBy,
@@ -115,6 +116,23 @@ export async function getCustomer(id: string): Promise<Customer | null> {
   const snap = await getDoc(doc(db, CUSTOMERS_COLLECTION, id));
   if (!snap.exists()) return null;
   return toCustomer(snap.id, snap.data() as Record<string, unknown>);
+}
+
+/**
+ * Fetch ALL customers in one shot (server-side / API-route friendly).
+ * Use this when you need a snapshot without a real-time listener (e.g. Oracle).
+ * Returns an empty array on permission-denied / unavailable (preview mode).
+ */
+export async function getCustomersOnce(): Promise<Customer[]> {
+  try {
+    const q = query(collection(db, CUSTOMERS_COLLECTION), orderBy('name'));
+    const snap = await getDocs(q);
+    const list: Customer[] = [];
+    snap.forEach((d) => list.push(toCustomer(d.id, d.data() as Record<string, unknown>)));
+    return list;
+  } catch {
+    return [];
+  }
 }
 
 /**

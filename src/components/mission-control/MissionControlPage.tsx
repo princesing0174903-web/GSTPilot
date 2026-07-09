@@ -23,6 +23,7 @@ import { motion } from 'framer-motion';
 import {
   Brain, ListTodo, Clock, Plug, Users, Lightbulb, CheckCircle2, ArrowRight,
   Sparkles, TrendingDown, AlertTriangle, Wallet, IndianRupee, ShieldAlert,
+  Package, FileText, Database,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,9 @@ import {
   useFireActivities,
   useFireClients,
 } from '@/hooks/use-firestore';
+import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
+import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
+import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
 import { TrustBar } from '@/components/shared/TrustBar';
 import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
 
@@ -501,6 +505,63 @@ function WidgetCard({
   );
 }
 
+// ─── Registry Stat Card ───────────────────────────────────────────────────────
+// Compact 5-per-row stat card for the Live Business Registry section.
+// Backed by real-time Firestore onSnapshot via the useGSTpilot* hooks.
+// `value === null` renders a skeleton (while the first snapshot loads).
+
+function RegistryStatCard({
+  icon: Icon,
+  label,
+  value,
+  onClick,
+  delay,
+  accent = 'emerald',
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | null;
+  onClick: () => void;
+  delay: number;
+  accent?: 'emerald' | 'amber';
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay, ease: 'easeOut' as const }}
+      className="glass-surface rounded-2xl p-4 flex flex-col gap-2 min-h-[110px] text-left hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 group"
+    >
+      <div className="flex items-center justify-between">
+        <div
+          className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+            accent === 'amber' ? 'bg-amber-500/10' : 'accent-gradient-soft'
+          }`}
+        >
+          <Icon
+            className={`h-3.5 w-3.5 ${accent === 'amber' ? 'text-amber-400' : 'accent-text'}`}
+          />
+        </div>
+        <ArrowRight className="h-3 w-3 text-muted-foreground/30 group-hover:text-emerald-400/70 transition-colors" />
+      </div>
+      <div className="flex-1 flex flex-col justify-end">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+        {value === null ? (
+          <Skeleton className="h-5 w-20 mt-1.5" />
+        ) : (
+          <p className="text-xl font-bold text-foreground tracking-tight leading-tight mt-0.5 tabular-nums truncate">
+            {value}
+          </p>
+        )}
+      </div>
+    </motion.button>
+  );
+}
+
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 
 function MissionControlSkeleton() {
@@ -561,6 +622,14 @@ export default function MissionControlPage() {
   // the same Firestore subscription useLiveDashboardMetrics opens internally;
   // Firestore multiplexes the listener so there is no extra cost.
   const { data: fireClients } = useFireClients();
+
+  // ── GSTPilot live registry (organizations/GSTpilot_SAAS/{customers,products,invoices}) ──
+  // Real-time onSnapshot — Firestore is the only source of truth for these.
+  // Each hook opens its own listener; Firestore multiplexes them server-side.
+  const { stats: customerStats, loading: customersLoading } = useGSTpilotCustomers();
+  const { stats: productStats, loading: productsLoading } = useGSTpilotProducts();
+  const { stats: invoiceStats, loading: invoicesLoading } = useGSTpilotInvoices();
+  const registryLoading = customersLoading || productsLoading || invoicesLoading;
 
   // ── Priority checkbox toggle state (visual only, local to Today's Priorities widget) ──
   const [done, setDone] = useState<Record<string, boolean>>({});
@@ -910,6 +979,73 @@ export default function MissionControlPage() {
           onCta={goToSettings}
         />
       </section>
+
+      {/* ═══ 3c. LIVE BUSINESS REGISTRY — real Firestore data (organizations/GSTpilot_SAAS) ═══ */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4, ease: 'easeOut' as const }}
+        className="space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 accent-text" />
+            <h2 className="text-sm font-semibold text-foreground">Live Business Registry</h2>
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider hidden sm:inline">
+              organizations/GSTpilot_SAAS · real-time
+            </span>
+          </div>
+          {!registryLoading && (
+            <span className="text-[10px] text-emerald-400/70 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              synced
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {/* 1. Total Customers */}
+          <RegistryStatCard
+            icon={Users}
+            label="Total Customers"
+            value={customersLoading ? null : String(customerStats.count)}
+            onClick={() => setCurrentView('crm')}
+            delay={0.42}
+          />
+          {/* 2. Total Products */}
+          <RegistryStatCard
+            icon={Package}
+            label="Total Products"
+            value={productsLoading ? null : String(productStats.count)}
+            onClick={() => setCurrentView('inventory')}
+            delay={0.46}
+          />
+          {/* 3. Total Invoices */}
+          <RegistryStatCard
+            icon={FileText}
+            label="Total Invoices"
+            value={invoicesLoading ? null : String(invoiceStats.count)}
+            onClick={() => setCurrentView('invoices')}
+            delay={0.50}
+          />
+          {/* 4. Revenue (total invoiced, ₹ INR) */}
+          <RegistryStatCard
+            icon={IndianRupee}
+            label="Revenue"
+            value={invoicesLoading ? null : formatINR(invoiceStats.totalInvoiced)}
+            onClick={() => setCurrentView('invoices')}
+            delay={0.54}
+          />
+          {/* 5. Outstanding Amount (₹ INR) — amber accent when > 0 */}
+          <RegistryStatCard
+            icon={Wallet}
+            label="Outstanding"
+            value={invoicesLoading ? null : formatINR(invoiceStats.totalOutstanding)}
+            onClick={() => setCurrentView('invoices')}
+            delay={0.58}
+            accent={!invoicesLoading && invoiceStats.totalOutstanding > 0 ? 'amber' : 'emerald'}
+          />
+        </div>
+      </motion.section>
 
       {/* ═══ 3b. SCORES — Collection Score + Risk Score (restored) ═══ */}
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,0 +1,504 @@
+     1→     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→     2→// GSTPilot Oracle CFO™ — Explainable Decision Card Builder
+     3→     3→//
+     4→     4→// Every recommendation Oracle makes is accompanied by a structured decision
+     5→     5→// card containing:
+     6→     6→//   • why          — the business reasoning (1-3 sentences)
+     7→     7→//   • records      — supporting records with real IDs from the DB
+     8→     8→//   • confidence   — 0-100, with factor breakdown
+     9→     9→//   • calculation  — line-by-line math that led to the recommendation
+    10→    10→//   • risks        — what could go wrong
+    11→    11→//   • alternatives — 1-2 other options with trade-offs
+    12→    12→//
+    13→    13→// No unexplained AI responses. Every number traces back to a record.
+    14→    14→// ═══════════════════════════════════════════════════════════════════════════════
+    15→    15→
+    16→    16→import type { DetectedToolCall } from './intent';
+    17→    17→import type { LiveBusinessData, ToolContext } from './tools';
+    18→    18→
+    19→    19→export interface SupportingRecord {
+    20→    20→  collection: string;
+    21→    21→  id: string;
+    22→    22→  label: string;
+    23→    23→  detail: string;
+    24→    24→}
+    25→    25→
+    26→    26→export interface CalculationLine {
+    27→    27→  label: string;
+    28→    28→  value: string;
+    29→    29→}
+    30→    30→
+    31→    31→export interface RiskItem {
+    32→    32→  severity: 'low' | 'medium' | 'high';
+    33→    33→  description: string;
+    34→    34→  mitigation?: string;
+    35→    35→}
+    36→    36→
+    37→    37→export interface Alternative {
+    38→    38→  title: string;
+    39→    39→  tradeOff: string;
+    40→    40→  recommended: boolean;
+    41→    41→}
+    42→    42→
+    43→    43→export interface ConfidenceFactor {
+    44→    44→  label: string;
+    45→    45→  weight: number; // 0-1
+    46→    46→  score: number; // 0-1
+    47→    47→}
+    48→    48→
+    49→    49→export interface DecisionCard {
+    50→    50→  toolId: string;
+    51→    51→  toolName: string;
+    52→    52→  why: string;
+    53→    53→  records: SupportingRecord[];
+    54→    54→  confidence: number; // 0-100
+    55→    55→  confidenceFactors: ConfidenceFactor[];
+    56→    56→  calculation: CalculationLine[];
+    57→    57→  risks: RiskItem[];
+    58→    58→  alternatives: Alternative[];
+    59→    59→  generatedAt: string;
+    60→    60→}
+    61→    61→
+    62→    62→/**
+    63→    63→ * Build an explainable decision card for a detected tool call.
+    64→    64→ */
+    65→    65→export function buildDecisionCard(
+    66→    66→  detected: DetectedToolCall,
+    67→    67→  liveData: LiveBusinessData,
+    68→    68→  ctx: ToolContext,
+    69→    69→): DecisionCard {
+    70→    70→  const records: SupportingRecord[] = [];
+    71→    71→  const calculation: CalculationLine[] = [];
+    72→    72→  const risks: RiskItem[] = [];
+    73→    73→  const alternatives: Alternative[] = [];
+    74→    74→  const confidenceFactors: ConfidenceFactor[] = [];
+    75→    75→  let why = '';
+    76→    76→
+    77→    77→  // ─── Per-tool explanation logic ─────────────────────────────────────────
+    78→    78→  switch (detected.toolId) {
+    79→    79→    case 'create-invoice': {
+    80→    80→      const clientParam = detected.extractedParams.find((p) => p.key === 'clientId');
+    81→    81→      const amountParam = detected.extractedParams.find((p) => p.key === 'totalAmount');
+    82→    82→      const gstParam = detected.extractedParams.find((p) => p.key === 'gstRate');
+    83→    83→      const client = liveData.clients.find((c) => c.id === clientParam?.value);
+    84→    84→      const amount = Number(amountParam?.value ?? 0);
+    85→    85→      const gstRate = Number(gstParam?.value ?? 18);
+    86→    86→      const taxable = amount / (1 + gstRate / 100);
+    87→    87→      const gstAmount = amount - taxable;
+    88→    88→
+    89→    89→      why = `You asked to create an invoice${client ? ` for ${client.name}` : ''}. I found the client in your live client list and computed the GST breakdown at ${gstRate}% so the invoice is filing-ready.`;
+    90→    90→
+    91→    91→      if (client) {
+    92→    92→        records.push({
+    93→    93→          collection: 'clients',
+    94→    94→          id: client.id,
+    95→    95→          label: client.name,
+    96→    96→          detail: `Client${client.gstin ? ` · GSTIN: ${client.gstin}` : ''}${client.email ? ` · ${client.email}` : ''}`,
+    97→    97→        });
+    98→    98→      }
+    99→    99→
+   100→   100→      calculation.push(
+   101→   101→        { label: 'Total Amount (incl. GST)', value: `₹${amount.toLocaleString('en-IN')}` },
+   102→   102→        { label: 'GST Rate', value: `${gstRate}%` },
+   103→   103→        { label: 'Taxable Value', value: `₹${Math.round(taxable).toLocaleString('en-IN')}` },
+   104→   104→        { label: 'GST Amount', value: `₹${Math.round(gstAmount).toLocaleString('en-IN')}` },
+   105→   105→        { label: 'CGST (50%)', value: `₹${Math.round(gstAmount / 2).toLocaleString('en-IN')}` },
+   106→   106→        { label: 'SGST (50%)', value: `₹${Math.round(gstAmount / 2).toLocaleString('en-IN')}` },
+   107→   107→      );
+   108→   108→
+   109→   109→      risks.push(
+   110→   110→        { severity: 'low', description: 'Invoice is created as draft — not sent or filed.', mitigation: 'Review the draft and send when ready.' },
+   111→   111→        { severity: 'medium', description: 'GST rate assumption may not match the actual supply category.', mitigation: 'Confirm the HSN/SAC code and applicable rate before filing.' },
+   112→   112→      );
+   113→   113→
+   114→   114→      alternatives.push(
+   115→   115→        { title: 'Create as Quotation instead', tradeOff: 'A quote is non-binding and won\'t affect GST liability until converted.', recommended: false },
+   116→   116→        { title: 'Use a different GST rate', tradeOff: '5% or 12% may apply depending on the goods/services supplied.', recommended: false },
+   117→   117→      );
+   118→   118→
+   119→   119→      confidenceFactors.push(
+   120→   120→        { label: 'Client matched from live data', weight: 0.4, score: client ? 1 : 0 },
+   121→   121→        { label: 'Amount explicitly stated', weight: 0.3, score: amountParam ? 1 : 0 },
+   122→   122→        { label: 'GST rate specified', weight: 0.2, score: gstParam ? 1 : 0.5 },
+   123→   123→        { label: 'Intent clarity', weight: 0.1, score: detected.confidence },
+   124→   124→      );
+   125→   125→      break;
+   126→   126→    }
+   127→   127→
+   128→   128→    case 'send-reminder-email':
+   129→   129→    case 'send-reminder-whatsapp': {
+   130→   130→      const channel = detected.toolId.includes('whatsapp') ? 'WhatsApp' : 'email';
+   131→   131→      const invoiceParam = detected.extractedParams.find((p) => p.key === 'invoiceId');
+   132→   132→      const amountParam = detected.extractedParams.find((p) => p.key === 'amount');
+   133→   133→      const daysParam = detected.extractedParams.find((p) => p.key === 'daysOverdue');
+   134→   134→      const invoice = liveData.overdueInvoices.find((i) => i.id === invoiceParam?.value);
+   135→   135→
+   136→   136→      why = `This client has an overdue invoice${invoice ? ` (${invoice.invoiceNumber}, ${invoice.daysOverdue} days past due)` : ''}. A ${channel} reminder is the appropriate next step in the collection ladder before escalation.`;
+   137→   137→
+   138→   138→      if (invoice) {
+   139→   139→        records.push({
+   140→   140→          collection: 'invoices',
+   141→   141→          id: invoice.id,
+   142→   142→          label: invoice.invoiceNumber,
+   143→   143→          detail: `${invoice.clientName} · ₹${invoice.totalAmount.toLocaleString('en-IN')} · ${invoice.daysOverdue} days overdue`,
+   144→   144→        });
+   145→   145→      }
+   146→   146→
+   147→   147→      calculation.push(
+   148→   148→        { label: 'Outstanding Amount', value: `₹${Number(amountParam?.value ?? 0).toLocaleString('en-IN')}` },
+   149→   149→        { label: 'Days Overdue', value: `${daysParam?.value ?? '?'} days` },
+   150→   150→        { label: 'Channel', value: channel },
+   151→   151→        { label: 'Escalation Level', value: invoice && invoice.daysOverdue > 14 ? 'Level 2 (formal)' : 'Level 1 (gentle)' },
+   152→   152→      );
+   153→   153→
+   154→   154→      risks.push(
+   155→   155→        { severity: 'medium', description: 'Over-aggressive reminders can damage client relationships.', mitigation: 'Keep the tone professional and offer payment plan options.' },
+   156→   156→        { severity: 'low', description: 'Email may land in spam.', mitigation: 'Follow up via WhatsApp if no response in 3 days.' },
+   157→   157→      );
+   158→   158→
+   159→   159→      alternatives.push(
+   160→   160→        { title: `Send via ${channel === 'WhatsApp' ? 'Email' : 'WhatsApp'} instead`, tradeOff: 'Different channel may get better response depending on client preference.', recommended: false },
+   161→   161→        { title: 'Call the client directly', tradeOff: 'More personal but time-consuming; reserve for high-value or 90+ day overdue.', recommended: invoice?.daysOverdue > 30 },
+   162→   162→      );
+   163→   163→
+   164→   164→      confidenceFactors.push(
+   165→   165→        { label: 'Overdue invoice matched', weight: 0.5, score: invoice ? 1 : 0 },
+   166→   166→        { label: 'Client contact available', weight: 0.3, score: 0.8 },
+   167→   167→        { label: 'Intent clarity', weight: 0.2, score: detected.confidence },
+   168→   168→      );
+   169→   169→      break;
+   170→   170→    }
+   171→   171→
+   172→   172→    case 'create-payment-link': {
+   173→   173→      const amountParam = detected.extractedParams.find((p) => p.key === 'amount');
+   174→   174→      const invoiceParam = detected.extractedParams.find((p) => p.key === 'invoiceId');
+   175→   175→      const invoice = liveData.recentInvoices.find((i) => i.id === invoiceParam?.value);
+   176→   176→
+   177→   177→      why = `A payment link lets the client pay instantly via UPI/card without manual reconciliation. Oracle looks up the real invoice, validates it's unpaid, detects the connected provider (Razorpay/Stripe), and creates a REAL payment link via the provider API. The link is then emailed and WhatsApp'd to the customer, with webhook monitoring for automatic status updates.`;
+   178→   178→
+   179→   179→      if (invoice) {
+   180→   180→        records.push({
+   181→   181→          collection: 'invoices',
+   182→   182→          id: invoice.id,
+   183→   183→          label: invoice.invoiceNumber,
+   184→   184→          detail: `${invoice.clientName} · ₹${invoice.totalAmount.toLocaleString('en-IN')} · ${invoice.status}`,
+   185→   185→        });
+   186→   186→      }
+   187→   187→
+   188→   188→      calculation.push(
+   189→   189→        { label: 'Payment Amount', value: `₹${Number(amountParam?.value ?? 0).toLocaleString('en-IN')}` },
+   190→   190→        { label: 'Provider', value: 'Razorpay or Stripe (auto-detected from integrations)' },
+   191→   191→        { label: 'Payment Methods', value: 'UPI, Card, Net Banking, Wallet, EMI' },
+   192→   192→        { label: 'Link Expiry', value: '30 days' },
+   193→   193→        { label: 'Delivery', value: 'Email + WhatsApp (if connected)' },
+   194→   194→        { label: 'Webhook Monitoring', value: 'Paid / Failed / Expired / Refunded auto-update' },
+   195→   195→      );
+   196→   196→
+   197→   197→      risks.push(
+   198→   198→        { severity: 'medium', description: 'No payment provider connected (preview mode).', mitigation: 'Go to Settings → Integrations → Razorpay or Stripe and add API credentials to create real links.' },
+   199→   199→        { severity: 'low', description: 'Link may expire before payment.', mitigation: 'Regenerate if client delays beyond 30 days.' },
+   200→   200→        { severity: 'low', description: 'Gateway fees apply (≈2% + ₹3).', mitigation: 'Fees are estimated in the approval summary before creation.' },
+   201→   201→      );
+   202→   202→
+   203→   203→      alternatives.push(
+   204→   204→        { title: 'Send bank transfer details instead', tradeOff: 'No gateway fees but slower collection and manual reconciliation.', recommended: false },
+   205→   205→        { title: 'Use the production Payment Link card', tradeOff: 'Type "Create a payment link for Invoice XXX" — Oracle opens a dedicated approval card with real provider integration.', recommended: true },
+   206→   206→      );
+   207→   207→
+   208→   208→      confidenceFactors.push(
+   209→   209→        { label: 'Invoice matched', weight: 0.4, score: invoice ? 1 : 0 },
+   210→   210→        { label: 'Amount specified', weight: 0.4, score: amountParam ? 1 : 0 },
+   211→   211→        { label: 'Intent clarity', weight: 0.2, score: detected.confidence },
+   212→   212→      );
+   213→   213→      break;
+   214→   214→    }
+   215→   215→
+   216→   216→    case 'generate-collection-report': {
+   217→   217→      const totalOverdue = liveData.overdueInvoices.reduce((s, i) => s + i.totalAmount, 0);
+   218→   218→      why = `You currently have ${liveData.overdueInvoices.length} overdue invoices worth ₹${totalOverdue.toLocaleString('en-IN')}. A structured collection report with aging buckets will help prioritize recovery efforts.`;
+   219→   219→
+   220→   220→      liveData.overdueInvoices.slice(0, 5).forEach((inv) => {
+   221→   221→        records.push({
+   222→   222→          collection: 'invoices',
+   223→   223→          id: inv.id,
+   224→   224→          label: inv.invoiceNumber,
+   225→   225→          detail: `${inv.clientName} · ₹${inv.totalAmount.toLocaleString('en-IN')} · ${inv.daysOverdue}d overdue`,
+   226→   226→        });
+   227→   227→      });
+   228→   228→
+   229→   229→      const aging = {
+   230→   230→        '0-30': liveData.overdueInvoices.filter((i) => i.daysOverdue <= 30).reduce((s, i) => s + i.totalAmount, 0),
+   231→   231→        '31-60': liveData.overdueInvoices.filter((i) => i.daysOverdue > 30 && i.daysOverdue <= 60).reduce((s, i) => s + i.totalAmount, 0),
+   232→   232→        '61-90': liveData.overdueInvoices.filter((i) => i.daysOverdue > 60 && i.daysOverdue <= 90).reduce((s, i) => s + i.totalAmount, 0),
+   233→   233→        '90+': liveData.overdueInvoices.filter((i) => i.daysOverdue > 90).reduce((s, i) => s + i.totalAmount, 0),
+   234→   234→      };
+   235→   235→
+   236→   236→      calculation.push(
+   237→   237→        { label: 'Total Overdue', value: `₹${totalOverdue.toLocaleString('en-IN')}` },
+   238→   238→        { label: 'Overdue Invoice Count', value: String(liveData.overdueInvoices.length) },
+   239→   239→        { label: '0-30 days', value: `₹${aging['0-30'].toLocaleString('en-IN')}` },
+   240→   240→        { label: '31-60 days', value: `₹${aging['31-60'].toLocaleString('en-IN')}` },
+   241→   241→        { label: '61-90 days', value: `₹${aging['61-90'].toLocaleString('en-IN')}` },
+   242→   242→        { label: '90+ days', value: `₹${aging['90+'].toLocaleString('en-IN')}` },
+   243→   243→      );
+   244→   244→
+   245→   245→      risks.push(
+   246→   246→        { severity: 'medium', description: 'Aging buckets may miss partial payments.', mitigation: 'Reconcile with bank transactions before acting.' },
+   247→   247→      );
+   248→   248→
+   249→   249→      alternatives.push(
+   250→   250→        { title: 'Client-wise report instead', tradeOff: 'Better for relationship management; worse for prioritization.', recommended: false },
+   251→   251→      );
+   252→   252→
+   253→   253→      confidenceFactors.push(
+   254→   254→        { label: 'Live overdue data available', weight: 0.6, score: liveData.overdueInvoices.length > 0 ? 1 : 0.3 },
+   255→   255→        { label: 'Intent clarity', weight: 0.4, score: detected.confidence },
+   256→   256→      );
+   257→   257→      break;
+   258→   258→    }
+   259→   259→
+   260→   260→    case 'prepare-gst-return': {
+   261→   261→      const totalSales = liveData.recentInvoices.reduce((s, i) => s + i.totalAmount, 0);
+   262→   262→      const outputLiability = liveData.recentInvoices.reduce((s, i) => s + (i.totalAmount - i.totalAmount / 1.18), 0);
+   263→   263→      why = `Your recent sales invoices show ₹${Math.round(totalSales).toLocaleString('en-IN')} in total sales with an estimated output GST liability of ₹${Math.round(outputLiability).toLocaleString('en-IN')}. Drafting a return prepares the data for your review without filing.`;
+   264→   264→
+   265→   265→      liveData.recentInvoices.slice(0, 5).forEach((inv) => {
+   266→   266→        records.push({
+   267→   267→          collection: 'invoices',
+   268→   268→          id: inv.id,
+   269→   269→          label: inv.invoiceNumber,
+   270→   270→          detail: `${inv.clientName} · ₹${inv.totalAmount.toLocaleString('en-IN')} · ${inv.status}`,
+   271→   271→        });
+   272→   272→      });
+   273→   273→
+   274→   274→      calculation.push(
+   275→   275→        { label: 'Total Sales (from live invoices)', value: `₹${Math.round(totalSales).toLocaleString('en-IN')}` },
+   276→   276→        { label: 'Invoice Count', value: String(liveData.recentInvoices.length) },
+   277→   277→        { label: 'Output GST Liability (est.)', value: `₹${Math.round(outputLiability).toLocaleString('en-IN')}` },
+   278→   278→        { label: 'Input Tax Credit', value: '₹0 (to be computed from GSTR-2B)' },
+   279→   279→        { label: 'Net Payable (est.)', value: `₹${Math.round(outputLiability).toLocaleString('en-IN')}` },
+   280→   280→      );
+   281→   281→
+   282→   282→      risks.push(
+   283→   283→        { severity: 'high', description: 'This is a DRAFT — do not file without verifying ITC from GSTR-2B.', mitigation: 'Reconcile purchase ITC before filing on the GST portal.' },
+   284→   284→        { severity: 'medium', description: 'GST rate assumption (18%) may not apply to all invoices.', mitigation: 'Verify HSN/SAC codes and recompute liability per slab.' },
+   285→   285→      );
+   286→   286→
+   287→   287→      alternatives.push(
+   288→   288→        { title: 'Wait for GSTR-2B reconciliation first', tradeOff: 'More accurate ITC but delays filing preparation.', recommended: true },
+   289→   289→      );
+   290→   290→
+   291→   291→      confidenceFactors.push(
+   292→   292→        { label: 'Live invoice data', weight: 0.5, score: liveData.recentInvoices.length > 0 ? 1 : 0.3 },
+   293→   293→        { label: 'Period specified', weight: 0.3, score: detected.extractedParams.some((p) => p.key === 'period') ? 1 : 0.3 },
+   294→   294→        { label: 'Intent clarity', weight: 0.2, score: detected.confidence },
+   295→   295→      );
+   296→   296→      break;
+   297→   297→    }
+   298→   298→
+   299→   299→    case 'create-task': {
+   300→   300→      const titleParam = detected.extractedParams.find((p) => p.key === 'title');
+   301→   301→      why = `Creating a tracked task ensures this action doesn't get forgotten. Tasks appear in the priority queue and can be assigned, scheduled, and monitored.`;
+   302→   302→
+   303→   303→      calculation.push(
+   304→   304→        { label: 'Task Title', value: String(titleParam?.value ?? 'Untitled task') },
+   305→   305→        { label: 'Default Priority', value: 'Medium' },
+   306→   306→        { label: 'Assignee', value: ctx.userEmail },
+   307→   307→      );
+   308→   308→
+   309→   309→      risks.push({ severity: 'low', description: 'Task may be ignored if not prioritized.', mitigation: 'Set a due date and check the priority queue daily.' });
+   310→   310→
+   311→   311→      confidenceFactors.push(
+   312→   312→        { label: 'Task title extracted', weight: 0.6, score: titleParam ? 1 : 0.3 },
+   313→   313→        { label: 'Intent clarity', weight: 0.4, score: detected.confidence },
+   314→   314→      );
+   315→   315→      break;
+   316→   316→    }
+   317→   317→
+   318→   318→    case 'mark-invoice-paid': {
+   319→   319→      const invoiceParam = detected.extractedParams.find((p) => p.key === 'invoiceId');
+   320→   320→      const amountParam = detected.extractedParams.find((p) => p.key === 'amount');
+   321→   321→      const invoice = liveData.recentInvoices.find((i) => i.id === invoiceParam?.value);
+   322→   322→
+   323→   323→      why = `Recording this payment closes the receivable, updates your cash position, and ensures accurate financial reporting. The invoice status, a payment record, and an activity log are all updated atomically.`;
+   324→   324→
+   325→   325→      if (invoice) {
+   326→   326→        records.push({
+   327→   327→          collection: 'invoices',
+   328→   328→          id: invoice.id,
+   329→   329→          label: invoice.invoiceNumber,
+   330→   330→          detail: `${invoice.clientName} · ₹${invoice.totalAmount.toLocaleString('en-IN')}`,
+   331→   331→        });
+   332→   332→      }
+   333→   333→
+   334→   334→      calculation.push(
+   335→   335→        { label: 'Invoice', value: String(invoiceParam?.value ?? '?') },
+   336→   336→        { label: 'Amount Paid', value: `₹${Number(amountParam?.value ?? 0).toLocaleString('en-IN')}` },
+   337→   337→        { label: 'New Invoice Status', value: 'Paid' },
+   338→   338→      );
+   339→   339→
+   340→   340→      risks.push(
+   341→   341→        { severity: 'high', description: 'Marking paid before funds clear can cause reconciliation errors.', mitigation: 'Confirm the payment has settled in your bank account first.' },
+   342→   342→      );
+   343→   343→
+   344→   344→      confidenceFactors.push(
+   345→   345→        { label: 'Invoice matched', weight: 0.5, score: invoice ? 1 : 0.3 },
+   346→   346→        { label: 'Amount verified', weight: 0.3, score: amountParam ? 1 : 0.3 },
+   347→   347→        { label: 'Intent clarity', weight: 0.2, score: detected.confidence },
+   348→   348→      );
+   349→   349→      break;
+   350→   350→    }
+   351→   351→
+   352→   352→    case 'generate-gst-report': {
+   353→   353→      const totalSales = liveData.recentInvoices.reduce((s, i) => s + i.totalAmount, 0);
+   354→   354→      const periodParam = detected.extractedParams.find((p) => p.key === 'period');
+   355→   355→      const reportTypeParam = detected.extractedParams.find((p) => p.key === 'reportType');
+   356→   356→      const periodLabel =
+   357→   357→        periodParam?.value === 'last' ? 'last month' :
+   358→   358→        periodParam?.value === 'quarter' ? 'this quarter' :
+   359→   359→        periodParam?.value === 'fy' ? 'this financial year' :
+   360→   360→        'this month';
+   361→   361→      const reportTypeLabel =
+   362→   362→        reportTypeParam?.value === 'gstr-1' ? 'GSTR-1 (outward supplies)' :
+   363→   363→        reportTypeParam?.value === 'gstr-3b' ? 'GSTR-3B (summary return)' :
+   364→   364→        reportTypeParam?.value === 'sales-tax' ? 'sales tax breakdown' :
+   365→   365→        reportTypeParam?.value === 'purchase-tax' ? 'purchase tax / ITC breakdown' :
+   366→   366→        reportTypeParam?.value === 'gst-liability' ? 'GST liability focus' :
+   367→   367→        'executive GST summary';
+   368→   368→
+   369→   369→      why = `Generating a ${reportTypeLabel} report for ${periodLabel} pulls every live invoice in the period, validates GSTIN formats / duplicates / dates / reverse-charge flags, then computes per-slab CGST/SGST/IGST, ITC available + utilized, and net payable. Every number references a real invoice ID — no estimates, no simulations. The report is saved to the reports collection (version history) and downloadable as PDF / Excel / CSV.`;
+   370→   370→
+   371→   371→      // Surface the recent sales invoices that will be in the report
+   372→   372→      liveData.recentInvoices.slice(0, 5).forEach((inv) => {
+   373→   373→        records.push({
+   374→   374→          collection: 'invoices',
+   375→   375→          id: inv.id,
+   376→   376→          label: inv.invoiceNumber,
+   377→   377→          detail: `${inv.clientName} · ₹${inv.totalAmount.toLocaleString('en-IN')} · ${inv.status}`,
+   378→   378→        });
+   379→   379→      });
+   380→   380→
+   381→   381→      // Estimate output tax assuming 18% flat (the real engine computes per-slab)
+   382→   382→      const estOutputTax = Math.round(totalSales - totalSales / 1.18);
+   383→   383→
+   384→   384→      calculation.push(
+   385→   385→        { label: 'Report Type', value: reportTypeLabel },
+   386→   386→        { label: 'Period', value: periodLabel },
+   387→   387→        { label: 'Live Invoices in Scope', value: String(liveData.recentInvoices.length) },
+   388→   388→        { label: 'Total Sales (live, recent)', value: `₹${totalSales.toLocaleString('en-IN')}` },
+   389→   389→        { label: 'Est. Output GST (18% proxy)', value: `₹${estOutputTax.toLocaleString('en-IN')} — actual computed per-slab on execution` },
+   390→   390→        { label: 'Validation Checks', value: 'GSTIN format, duplicates, future dates, tax split, RCM, exempt, zero-rated, export' },
+   391→   391→        { label: 'Outputs', value: 'Per-slab CGST/SGST/IGST/Cess, ITC, net payable, top customers/vendors, monthly comparison, insights' },
+   392→   392→        { label: 'Download Formats', value: 'PDF · Excel · CSV' },
+   393→   393→      );
+   394→   394→
+   395→   395→      risks.push(
+   396→   396→        { severity: 'medium', description: 'Estimate shown here assumes 18% flat GST — the actual report uses each invoice\'s real GST slab.', mitigation: 'Approve to run the full per-slab calculation against live invoice data.' },
+   397→   397→        { severity: 'low', description: 'Preview-mode permission may block saving the report to Firestore.', mitigation: 'The report is still returned in-memory for download — sign in to persist.' },
+   398→   398→      );
+   399→   399→
+   400→   400→      alternatives.push(
+   401→   401→        { title: 'Draft a GST return instead', tradeOff: 'A return prepares a filing-ready payload; a report is a downloadable analysis. Use prepare-gst-return if you want to file.', recommended: false },
+   402→   402→        { title: 'Different period', tradeOff: 'Last month / quarter / FY available — pick the one matching your filing cycle.', recommended: false },
+   403→   403→      );
+   404→   404→
+   405→   405→      confidenceFactors.push(
+   406→   406→        { label: 'Live invoice data available', weight: 0.5, score: liveData.recentInvoices.length > 0 ? 1 : 0.3 },
+   407→   407→        { label: 'Report type specified', weight: 0.25, score: reportTypeParam ? 1 : 0.5 },
+   408→   408→        { label: 'Period specified', weight: 0.15, score: periodParam ? 1 : 0.5 },
+   409→   409→        { label: 'Intent clarity', weight: 0.1, score: detected.confidence },
+   410→   410→      );
+   411→   411→      break;
+   412→   412→    }
+   413→   413→
+   414→   414→    case 'send-communication': {
+   415→   415→      const channelParam = detected.extractedParams.find((p) => p.key === 'channel');
+   416→   416→      const typeParam = detected.extractedParams.find((p) => p.key === 'messageType');
+   417→   417→      const recipientParam = detected.extractedParams.find((p) => p.key === 'recipient');
+   418→   418→      const channelLabel = channelParam?.value === 'whatsapp' ? 'WhatsApp' :
+   419→   419→                           channelParam?.value === 'both' ? 'Email + WhatsApp' :
+   420→   420→                           'Email';
+   421→   421→      const typeLabel = typeParam?.value === 'payment_link' ? 'a payment link' :
+   422→   422→                        typeParam?.value === 'gst_report' ? 'this month\'s GST report' :
+   423→   423→                        typeParam?.value === 'invoice' ? 'an invoice' :
+   424→   424→                        typeParam?.value === 'payment_reminder' ? 'a payment reminder' :
+   425→   425→                        typeParam?.value === 'receipt' ? 'a payment receipt' :
+   426→   426→                        typeParam?.value === 'outstanding_statement' ? 'an outstanding statement' :
+   427→   427→                        typeParam?.value === 'welcome' ? 'a welcome email' :
+   428→   428→                        typeParam?.value === 'compliance_reminder' ? 'a compliance reminder' :
+   429→   429→                        'a custom message';
+   430→   430→
+   431→   431→      why = `Sending ${typeLabel} via ${channelLabel} resolves the recipient from the real clients database, validates their email/phone + active status + communication preferences, detects the connected provider (SMTP/Resend/SendGrid/Gmail/Mailgun for email; WhatsApp Cloud API/Twilio/Gupshup for WhatsApp), generates a branded message with dynamic placeholders, attaches the relevant document (invoice PDF / GST report PDF / payment link), and dispatches via the provider's REAL API. Delivery is tracked through provider webhooks — Sent / Delivered / Opened / Clicked / Bounced / Failed for email; Sent / Delivered / Read / Failed for WhatsApp. Failed sends retry automatically with exponential backoff.`;
+   432→   432→
+   433→   433→      if (recipientParam) {
+   434→   434→        records.push({
+   435→   435→          collection: 'clients',
+   436→   436→          id: String(recipientParam.value),
+   437→   437→          label: String(recipientParam.value),
+   438→   438→          detail: `Resolved from live clients database · ${channelLabel}`,
+   439→   439→        });
+   440→   440→      } else {
+   441→   441→        records.push({
+   442→   442→          collection: 'clients',
+   443→   443→          id: '(auto-resolved)',
+   444→   444→          label: 'Recipient will be resolved from message',
+   445→   445→          detail: 'Oracle looks up the customer by name, email, or phone in the real clients collection',
+   446→   446→        });
+   447→   447→      }
+   448→   448→
+   449→   449→      calculation.push(
+   450→   450→        { label: 'Delivery Channel', value: channelLabel },
+   451→   451→        { label: 'Message Type', value: typeLabel },
+   452→   452→        { label: 'Email Provider', value: 'SMTP / Resend / SendGrid / Gmail / Mailgun (auto-detected from integrations)' },
+   453→   453→        { label: 'WhatsApp Provider', value: 'WhatsApp Cloud API / Twilio / Gupshup (auto-detected)' },
+   454→   454→        { label: 'Message Generation', value: 'Branded HTML email + plain-text WhatsApp template with dynamic placeholders' },
+   455→   455→        { label: 'Attachments', value: 'Invoice PDF · GST Report PDF · Payment Link (auto-generated from real data)' },
+   456→   456→        { label: 'Webhook Tracking', value: 'Sent / Delivered / Opened / Clicked / Bounced / Failed (email); Sent / Delivered / Read / Failed (WhatsApp)' },
+   457→   457→        { label: 'Retry Engine', value: 'Exponential backoff (2s, 4s, 8s, 16s, 32s) up to 5 attempts for transient failures' },
+   458→   458→      );
+   459→   459→
+   460→   460→      risks.push(
+   461→   461→        { severity: 'medium', description: 'No email/WhatsApp provider connected (preview mode).', mitigation: 'Go to Settings → Integrations → Email or WhatsApp and add real provider credentials to dispatch messages.' },
+   462→   462→        { severity: 'low', description: 'Recipient may have opted out of the channel.', mitigation: 'Oracle checks communication preferences and warns before sending.' },
+   463→   463→        { severity: 'low', description: 'Provider may rate-limit or temporarily fail.', mitigation: 'Retry engine automatically re-attempts with exponential backoff; escalates after 5 failed attempts.' },
+   464→   464→      );
+   465→   465→
+   466→   466→      alternatives.push(
+   467→   467→        { title: 'Send via a different channel', tradeOff: 'Email is more formal and supports attachments; WhatsApp is faster and has higher open rates.', recommended: false },
+   468→   468→        { title: 'Use the production Communication card', tradeOff: 'Type "Email the GST report to ABC Traders" or "WhatsApp the payment link" — Oracle opens a dedicated approval card with real provider integration.', recommended: true },
+   469→   469→      );
+   470→   470→
+   471→   471→      confidenceFactors.push(
+   472→   472→        { label: 'Channel specified', weight: 0.4, score: channelParam ? 1 : 0.3 },
+   473→   473→        { label: 'Message type specified', weight: 0.3, score: typeParam ? 1 : 0.5 },
+   474→   474→        { label: 'Recipient resolved', weight: 0.2, score: recipientParam ? 1 : 0.4 },
+   475→   475→        { label: 'Intent clarity', weight: 0.1, score: detected.confidence },
+   476→   476→      );
+   477→   477→      break;
+   478→   478→    }
+   479→   479→
+   480→   480→    default: {
+   481→   481→      why = 'This action will perform a real business operation. Review the details below before approving.';
+   482→   482→      confidenceFactors.push({ label: 'Intent clarity', weight: 1, score: detected.confidence });
+   483→   483→    }
+   484→   484→  }
+   485→   485→
+   486→   486→  // Compute overall confidence (0-100)
+   487→   487→  const overall = confidenceFactors.length > 0
+   488→   488→    ? Math.round(confidenceFactors.reduce((s, f) => s + f.score * f.weight, 0) * 100)
+   489→   489→    : Math.round(detected.confidence * 100);
+   490→   490→
+   491→   491→  return {
+   492→   492→    toolId: detected.toolId,
+   493→   493→    toolName: detected.toolName,
+   494→   494→    why,
+   495→   495→    records,
+   496→   496→    confidence: overall,
+   497→   497→    confidenceFactors,
+   498→   498→    calculation,
+   499→   499→    risks,
+   500→   500→    alternatives,
+   501→   501→    generatedAt: new Date().toISOString(),
+   502→   502→  };
+   503→   503→}
+   504→   504→

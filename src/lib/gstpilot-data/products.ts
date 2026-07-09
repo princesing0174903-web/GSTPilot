@@ -14,6 +14,7 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   orderBy,
@@ -103,6 +104,22 @@ export async function getProduct(id: string): Promise<Product | null> {
   const snap = await getDoc(doc(db, PRODUCTS_COLLECTION, id));
   if (!snap.exists()) return null;
   return toProduct(snap.id, snap.data() as Record<string, unknown>);
+}
+
+/**
+ * Fetch ALL products in one shot (server-side / API-route friendly).
+ * Returns an empty array on permission-denied / unavailable (preview mode).
+ */
+export async function getProductsOnce(): Promise<Product[]> {
+  try {
+    const q = query(collection(db, PRODUCTS_COLLECTION), orderBy('name'));
+    const snap = await getDocs(q);
+    const list: Product[] = [];
+    snap.forEach((d) => list.push(toProduct(d.id, d.data() as Record<string, unknown>)));
+    return list;
+  } catch {
+    return [];
+  }
 }
 
 /** Create a new product. */

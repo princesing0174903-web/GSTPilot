@@ -25,6 +25,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/firestore-schema';
+import {
+  getCustomersOnce,
+  getInvoicesOnce,
+} from '@/lib/gstpilot-data';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -144,14 +148,20 @@ async function fetchCollection(
 // ─── Live Business Data Loader ──────────────────────────────────────────────
 
 export async function loadLiveBusinessData(organizationId: string): Promise<LiveBusinessData> {
-  const [clientsRaw, invoicesRaw, returnsRaw, gstRaw] = await Promise.all([
+  const [clientsRaw, invoicesRaw, returnsRaw, gstRaw, gstCustomers, gstInvoices] = await Promise.all([
     fetchCollection(COLLECTIONS.CLIENTS, organizationId, 100),
     fetchCollection(COLLECTIONS.INVOICES, organizationId, 100),
     fetchCollection(COLLECTIONS.GST_RETURNS, organizationId, 50),
     fetchCollection(COLLECTIONS.GST_PROFILES, organizationId, 5),
+    // ── REAL gstpilot-data (organizations/GSTpilot_SAAS/*) ──
+    // These are the user's actual customers + invoices. Merge them in so the
+    // tool extractParams can resolve real names/numbers. Fail-safe (→ []).
+    getCustomersOnce(),
+    getInvoicesOnce(),
   ]);
 
-  const clients: LiveBusinessData['clients'] = clientsRaw.map((c) => ({
+  // Legacy clients (firestore-schema) — mapped as before.
+  const legacyClients: LiveBusinessData['clients'] = clientsRaw.map((c) => ({
     id: String(c.id ?? c.clientId ?? ''),
     name: String(c.name ?? c.clientName ?? c.displayName ?? 'Unknown'),
     gstin: (c.gstin as string) ?? null,
@@ -159,31 +169,69 @@ export async function loadLiveBusinessData(organizationId: string): Promise<Live
     phone: (c.phone as string) ?? null,
   }));
 
-  const recentInvoices: LiveBusinessData['recentInvoices'] = invoicesRaw
+  // ── REAL gstpilot-data customers — mapped into the same client shape ──
+  const gstpilotClients: LiveBusinessData['clients'] = gstCustomers.map((c) => ({
+    id: c.id,
+    name: c.name,
+    gstin: c.gstin,
+    email: c.email,
+    phone: c.phone,
+  }));
+
+  // Merge + dedupe by id (gstpilot-data wins on conflict).
+  const seen = new Set<string>();
+  const clients: LiveBusinessData['clients'] = [];
+  for (const c of [...gstpilotClients, ...legacyClients]) {
+    if (!c.id || seen.has(c.id)) continue;
+    seen.add(c.id);
+    clients.push(c);
+  }
+
+  // Legacy invoices — mapped as before.
+  const legacyRecent: LiveBusinessData['recentInvoices'] = invoicesRaw
     .map((i) => ({
       id: String(i.id ?? i.invoiceId ?? ''),
       invoiceNumber: String(i.invoiceNumber ?? ''),
       clientName: String(i.buyerName ?? i.clientName ?? ''),
       totalAmount: Number(i.totalAmount ?? i.grandTotal ?? 0),
       status: String(i.status ?? 'draft'),
-    }))
-    .slice(0, 20);
+    }));
 
+  // ── REAL gstpilot-data invoices — mapped into the same shape ──
+  const gstpilotRecent: LiveBusinessData['recentInvoices'] = gstInvoices.map((i) => ({
+    id: i.id,
+    invoiceNumber: i.invoiceNumber,
+    clientName: i.customerName,
+    totalAmount: i.grandTotal,
+    status: i.status,
+  }));
+
+  // Merge + dedupe by id (gstpilot-data wins), most recent first, top 20.
+  const seenInv = new Set<string>();
+  const recentInvoices: LiveBusinessData['recentInvoices'] = [];
+  for (const i of [...gstpilotRecent, ...legacyRecent]) {
+    if (!i.id || seenInv.has(i.id)) continue;
+    seenInv.add(i.id);
+    recentInvoices.push(i);
+  }
+  recentInvoices.splice(20);
+
+  // ── Overdue invoices (from REAL gstpilot-data, computed from dueDate + status) ──
   const now = Date.now();
-  const overdueInvoices: LiveBusinessData['overdueInvoices'] = invoicesRaw
+  const overdueInvoices: LiveBusinessData['overdueInvoices'] = gstInvoices
     .filter((i) => {
       const status = String(i.status ?? '').toLowerCase();
-      const due = i.dueDate ? new Date(i.dueDate as string).getTime() : 0;
+      const due = i.dueDate ? new Date(i.dueDate).getTime() : 0;
       return status !== 'paid' && status !== 'cancelled' && due > 0 && due < now;
     })
     .map((i) => {
       const due = new Date(i.dueDate as string).getTime();
       return {
-        id: String(i.id ?? i.invoiceId ?? ''),
-        invoiceNumber: String(i.invoiceNumber ?? ''),
-        clientName: String(i.buyerName ?? i.clientName ?? ''),
-        clientId: String(i.clientId ?? ''),
-        totalAmount: Number(i.totalAmount ?? i.grandTotal ?? 0),
+        id: i.id,
+        invoiceNumber: i.invoiceNumber,
+        clientName: i.customerName,
+        clientId: i.customerId ?? '',
+        totalAmount: i.grandTotal,
         daysOverdue: Math.floor((now - due) / (24 * 60 * 60 * 1000)),
       };
     })

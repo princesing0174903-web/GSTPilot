@@ -1,0 +1,1235 @@
+     1→'use client';
+     2→
+     3→// ═══════════════════════════════════════════════════════════════════════════════
+     4→// GSTPilot Infinity™ V16 — Mission Control
+     5→// Obsidian Black 2.0 · Glass 28px blur · Emerald → Cyan → Blue accent
+     6→//
+     7→// Sections:
+     8→//   1. Hero — Greeting + Business Status pill + "X steps away" line + 4 checklist cards
+     9→//   2. Business Health Score — Gauge OR premium empty state with [ Connect Data ] CTA
+    10→//   3. KPI — exactly 3 cards (Revenue / Cash Position / Compliance), premium empty states
+    11→//   4. Widgets — exactly 5 (Today's Priorities · Timeline · Services · Team · AI Recommendations)
+    12→//
+    13→// Design principles:
+    14→//   • No red / orange / purple anywhere. Only Emerald / Cyan / Blue.
+    15→//   • Every empty state is helpful, premium, and has a clear CTA button.
+    16→//   • Calm framer-motion fade-up (opacity 0, y 12 → 1, 0), staggered 0–0.56s.
+    17→//   • 3.5s graceful loading timeout — never make the user stare at a skeleton.
+    18→//   • Honest data: never fake connected services, team members, or AI insights.
+    19→// ═══════════════════════════════════════════════════════════════════════════════
+    20→
+    21→import { useMemo, useState, useEffect, type ReactNode } from 'react';
+    22→import { motion } from 'framer-motion';
+    23→import {
+    24→  Brain, ListTodo, Clock, Plug, Users, Lightbulb, CheckCircle2, ArrowRight,
+    25→  Sparkles, TrendingDown, AlertTriangle, Wallet, IndianRupee, ShieldAlert,
+    26→  type LucideIcon,
+    27→} from 'lucide-react';
+    28→import { Button } from '@/components/ui/button';
+    29→import { Skeleton } from '@/components/ui/skeleton';
+    30→import { useApp, type AppView } from '@/contexts/AppContext';
+    31→import { useAuth } from '@/contexts/AuthContext';
+    32→import {
+    33→  useLiveDashboardMetrics,
+    34→  useFireActivities,
+    35→  useFireClients,
+    36→} from '@/hooks/use-firestore';
+    37→import { TrustBar } from '@/components/shared/TrustBar';
+    38→import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
+    39→
+    40→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    41→
+    42→function formatINR(amount: number): string {
+    43→  if (!isFinite(amount) || isNaN(amount)) return '₹0';
+    44→  return '₹' + Math.round(amount).toLocaleString('en-IN');
+    45→}
+    46→
+    47→function greeting(): string {
+    48→  const h = new Date().getHours();
+    49→  if (h < 12) return 'Good Morning';
+    50→  if (h < 17) return 'Good Afternoon';
+    51→  return 'Good Evening';
+    52→}
+    53→
+    54→function firstName(name?: string): string {
+    55→  if (!name) return 'there';
+    56→  return name.split(' ')[0];
+    57→}
+    58→
+    59→// Relative time formatter — defensively handles ISO string / Date / Firestore Timestamp.
+    60→function timeAgo(createdAt: unknown): string {
+    61→  if (!createdAt) return 'just now';
+    62→  let date: Date;
+    63→  if (createdAt instanceof Date) {
+    64→    date = createdAt;
+    65→  } else if (typeof createdAt === 'string') {
+    66→    date = new Date(createdAt);
+    67→  } else if (
+    68→    typeof createdAt === 'object' &&
+    69→    createdAt !== null &&
+    70→    'toDate' in createdAt &&
+    71→    typeof (createdAt as { toDate: () => Date }).toDate === 'function'
+    72→  ) {
+    73→    date = (createdAt as { toDate: () => Date }).toDate();
+    74→  } else {
+    75→    return 'just now';
+    76→  }
+    77→  if (isNaN(date.getTime())) return 'just now';
+    78→  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    79→  if (seconds < 60) return 'just now';
+    80→  const minutes = Math.floor(seconds / 60);
+    81→  if (minutes < 60) return `${minutes}m ago`;
+    82→  const hours = Math.floor(minutes / 60);
+    83→  if (hours < 24) return `${hours}h ago`;
+    84→  const days = Math.floor(hours / 24);
+    85→  if (days < 7) return `${days}d ago`;
+    86→  const weeks = Math.floor(days / 7);
+    87→  if (weeks < 5) return `${weeks}w ago`;
+    88→  const months = Math.floor(days / 30);
+    89→  if (months < 12) return `${months}mo ago`;
+    90→  const years = Math.floor(days / 365);
+    91→  return `${years}y ago`;
+    92→}
+    93→
+    94→// ─── Business Score computation ───────────────────────────────────────────────
+    95→// Start at 100. Subtract weighted penalties for risk signals. Clamp 0–100.
+    96→// If there is no data at all, return null (UI shows premium empty state).
+    97→
+    98→function computeBusinessScore(opts: {
+    99→  totalClients: number;
+   100→  criticalIssues: number;
+   101→  warnings: number;
+   102→  pendingReturns: number;
+   103→  overdueReturns: number;
+   104→  averageHealthScore: number;
+   105→  matchPercentage: number;
+   106→}): number | null {
+   107→  const { totalClients, criticalIssues, warnings, pendingReturns, overdueReturns, averageHealthScore, matchPercentage } = opts;
+   108→  if (totalClients === 0 && pendingReturns === 0 && overdueReturns === 0) return null;
+   109→
+   110→  let score = 100;
+   111→  score -= criticalIssues * 6;
+   112→  score -= warnings * 2;
+   113→  score -= overdueReturns * 8;
+   114→  score -= pendingReturns * 2;
+   115→  if (averageHealthScore > 0) {
+   116→    score -= Math.max(0, 80 - averageHealthScore) * 0.6;
+   117→  }
+   118→  score -= Math.max(0, 100 - matchPercentage) * 0.3;
+   119→  return Math.max(0, Math.min(100, Math.round(score)));
+   120→}
+   121→
+   122→// V16 palette — only Emerald / Cyan / Blue. No amber, no red.
+   123→function scoreTier(score: number | null): { label: string; color: string } {
+   124→  if (score === null) return { label: '—', color: 'text-muted-foreground' };
+   125→  if (score >= 85) return { label: 'Excellent', color: 'text-emerald-400' };
+   126→  if (score >= 70) return { label: 'Healthy', color: 'text-cyan-400' };
+   127→  if (score >= 50) return { label: 'At Risk', color: 'text-blue-400' };
+   128→  return { label: 'Critical', color: 'text-blue-300' };
+   129→}
+   130→
+   131→// ─── AI Insight engine ────────────────────────────────────────────────────────
+   132→// Each insight: { icon, tone, what, why, action (label + view) }
+   133→// Answers the 3 questions: What happened? Why? What should I do next?
+   134→
+   135→interface AIInsight {
+   136→  id: string;
+   137→  icon: LucideIcon;
+   138→  tone: 'risk' | 'info' | 'success';
+   139→  what: string;
+   140→  why: string;
+   141→  actionLabel: string;
+   142→  actionView: AppView;
+   143→}
+   144→
+   145→function buildInsights(opts: {
+   146→  metrics: {
+   147→    totalClients: number;
+   148→    pendingReturns: number;
+   149→    overdueReturns: number;
+   150→    criticalIssues: number;
+   151→    warnings: number;
+   152→    totalTaxVolume: number;
+   153→    averageHealthScore: number;
+   154→    matchPercentage: number;
+   155→    upcomingFilings: FirestoreReturn[];
+   156→  };
+   157→  clients: Array<FirestoreClient & { id: string }>;
+   158→  /** True when the firm has real Firestore data. Gates the "all clear" insight
+   159→   *  so we never say "Everything looks good today" when there's no data at all. */
+   160→  hasData: boolean;
+   161→}): AIInsight[] {
+   162→  const { metrics, clients, hasData } = opts;
+   163→  const insights: AIInsight[] = [];
+   164→
+   165→  // 1. Overdue returns — most urgent
+   166→  if (metrics.overdueReturns > 0) {
+   167→    insights.push({
+   168→      id: 'overdue-returns',
+   169→      icon: AlertTriangle,
+   170→      tone: 'risk',
+   171→      what: `${metrics.overdueReturns} GST return${metrics.overdueReturns > 1 ? 's are' : ' is'} overdue`,
+   172→      why: 'Overdue returns trigger notices and late fees. File immediately to avoid penalties.',
+   173→      actionLabel: 'File Now',
+   174→      actionView: 'returns',
+   175→    });
+   176→  }
+   177→
+   178→  // 2. Pending returns due soon
+   179→  const nextFiling = metrics.upcomingFilings[0];
+   180→  if (nextFiling && metrics.pendingReturns > 0 && metrics.overdueReturns === 0) {
+   181→    insights.push({
+   182→      id: 'gst-due',
+   183→      icon: Clock,
+   184→      tone: 'info',
+   185→      what: `GST filing due — ${nextFiling.returnType} for ${nextFiling.period}`,
+   186→      why: `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} pending. Filing on time keeps compliance score high.`,
+   187→      actionLabel: 'File GST',
+   188→      actionView: 'returns',
+   189→    });
+   190→  }
+   191→
+   192→  // 3. Critical issues / risky clients
+   193→  const riskyClients = clients.filter(c => (c.healthScore ?? 100) < 60);
+   194→  if (metrics.criticalIssues > 0 || riskyClients.length > 0) {
+   195→    insights.push({
+   196→      id: 'churn-risk',
+   197→      icon: TrendingDown,
+   198→      tone: 'risk',
+   199→      what: riskyClients.length > 0
+   200→        ? `${riskyClients.length} client${riskyClients.length > 1 ? 's may' : ' may'} churn`
+   201→        : `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''} need attention`,
+   202→      why: riskyClients.length > 0
+   203→        ? 'Low health scores signal dissatisfaction. Reach out before they leave.'
+   204→        : 'Critical issues compound into bigger problems if left unaddressed.',
+   205→      actionLabel: riskyClients.length > 0 ? 'View Clients' : 'Review Issues',
+   206→      actionView: riskyClients.length > 0 ? 'clients' : 'ai-operating-room',
+   207→    });
+   208→  }
+   209→
+   210→  // 4. Cash position / collections
+   211→  if (metrics.totalTaxVolume > 0) {
+   212→    insights.push({
+   213→      id: 'collections',
+   214→      icon: Wallet,
+   215→      tone: metrics.matchPercentage < 90 ? 'risk' : 'info',
+   216→      what: metrics.matchPercentage < 90
+   217→        ? 'Collections may drop — reconciliation gaps detected'
+   218→        : 'Cash position is healthy',
+   219→      why: metrics.matchPercentage < 90
+   220→        ? `${metrics.matchPercentage.toFixed(0)}% of invoices reconciled. Unmatched invoices mean uncollected revenue.`
+   221→        : `${metrics.matchPercentage.toFixed(0)}% invoice match rate. Keep chasing pending collections to maintain runway.`,
+   222→      actionLabel: 'Fix Collections',
+   223→      actionView: 'reconcile',
+   224→    });
+   225→  }
+   226→
+   227→  // 5. Compliance score insight
+   228→  if (metrics.averageHealthScore > 0) {
+   229→    const tier = metrics.averageHealthScore >= 80 ? 'success' : 'info';
+   230→    insights.push({
+   231→      id: 'compliance',
+   232→      icon: ShieldAlert,
+   233→      tone: tier,
+   234→      what: `Compliance health at ${metrics.averageHealthScore.toFixed(0)}%`,
+   235→      why: metrics.averageHealthScore >= 80
+   236→        ? 'Strong compliance posture. Maintain by filing on time and resolving warnings.'
+   237→        : 'Below optimal. Address pending returns and warnings to lift your score.',
+   238→      actionLabel: 'View Compliance',
+   239→      actionView: 'returns',
+   240→    });
+   241→  }
+   242→
+   243→  // 6. Always-on "all clear" nudge — only when we actually have data.
+   244→  // Never say "Everything looks good today" when there is no data at all;
+   245→  // in that case the widget shows its own honest empty state instead.
+   246→  if (hasData && insights.length === 0) {
+   247→    insights.push({
+   248→      id: 'all-clear',
+   249→      icon: Sparkles,
+   250→      tone: 'success',
+   251→      what: 'Everything looks good today',
+   252→      why: 'No urgent issues. Hand control to Oracle and let it run the routine work.',
+   253→      actionLabel: 'Run My Business',
+   254→      actionView: 'run-my-business',
+   255→    });
+   256→  }
+   257→
+   258→  return insights.slice(0, 6);
+   259→}
+   260→
+   261→// ─── Business Score Gauge (SVG) ───────────────────────────────────────────────
+   262→
+   263→function ScoreGauge({ score }: { score: number | null }) {
+   264→  const size = 220;
+   265→  const stroke = 14;
+   266→  const r = (size - stroke) / 2;
+   267→  const c = 2 * Math.PI * r;
+   268→  const pct = score === null ? 0 : score / 100;
+   269→  const offset = c * (1 - pct);
+   270→
+   271→  return (
+   272→    <div className="relative" style={{ width: size, height: size }}>
+   273→      <svg width={size} height={size} className="-rotate-90">
+   274→        <defs>
+   275→          <linearGradient id="missionScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+   276→            <stop offset="0%" stopColor="#10b981" />
+   277→            <stop offset="50%" stopColor="#06b6d4" />
+   278→            <stop offset="100%" stopColor="#3b82f6" />
+   279→          </linearGradient>
+   280→        </defs>
+   281→        <circle
+   282→          cx={size / 2}
+   283→          cy={size / 2}
+   284→          r={r}
+   285→          fill="none"
+   286→          stroke="rgba(255,255,255,0.06)"
+   287→          strokeWidth={stroke}
+   288→        />
+   289→        {score !== null && (
+   290→          <motion.circle
+   291→            cx={size / 2}
+   292→            cy={size / 2}
+   293→            r={r}
+   294→            fill="none"
+   295→            stroke="url(#missionScoreGradient)"
+   296→            strokeWidth={stroke}
+   297→            strokeLinecap="round"
+   298→            strokeDasharray={c}
+   299→            initial={{ strokeDashoffset: c }}
+   300→            animate={{ strokeDashoffset: offset }}
+   301→            transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.2 }}
+   302→          />
+   303→        )}
+   304→      </svg>
+   305→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   306→        {score === null ? (
+   307→          <span className="text-4xl font-bold text-muted-foreground">—</span>
+   308→        ) : (
+   309→          <motion.span
+   310→            initial={{ opacity: 0, scale: 0.8 }}
+   311→            animate={{ opacity: 1, scale: 1 }}
+   312→            transition={{ duration: 0.5, delay: 0.6 }}
+   313→            className={`text-6xl font-bold tracking-tight ${scoreTier(score).color}`}
+   314→          >
+   315→            {score}
+   316→          </motion.span>
+   317→        )}
+   318→        <span className="text-xs text-muted-foreground tracking-wider uppercase mt-1">
+   319→          / 100
+   320→        </span>
+   321→      </div>
+   322→    </div>
+   323→  );
+   324→}
+   325→
+   326→// ─── Premium Empty State (V16 differentiator) ─────────────────────────────────
+   327→// Helpful · Premium · Intentional. Every empty state has a clear CTA.
+   328→
+   329→function PremiumEmptyState({
+   330→  icon: Icon,
+   331→  title,
+   332→  description,
+   333→  ctaLabel,
+   334→  onCta,
+   335→}: {
+   336→  icon: LucideIcon;
+   337→  title: string;
+   338→  description: string;
+   339→  ctaLabel?: string;
+   340→  onCta?: () => void;
+   341→}) {
+   342→  return (
+   343→    <div className="flex flex-col items-center justify-center gap-3 py-8 px-4 text-center">
+   344→      <div className="flex h-12 w-12 items-center justify-center rounded-2xl glass-surface">
+   345→        <Icon className="h-5 w-5 text-muted-foreground" />
+   346→      </div>
+   347→      <div className="space-y-1">
+   348→        <p className="text-sm font-medium text-foreground">{title}</p>
+   349→        <p className="text-xs text-muted-foreground max-w-[240px] mx-auto leading-relaxed">{description}</p>
+   350→      </div>
+   351→      {ctaLabel && onCta && (
+   352→        <button
+   353→          type="button"
+   354→          onClick={onCta}
+   355→          className="accent-gradient rounded-2xl px-4 py-2 text-xs font-semibold text-white hover-lift mt-1"
+   356→        >
+   357→          {ctaLabel}
+   358→        </button>
+   359→      )}
+   360→    </div>
+   361→  );
+   362→}
+   363→
+   364→// ─── Checklist Card (Hero Getting Started) ────────────────────────────────────
+   365→// Clickable card. Checkbox state is derived from live data — clicking navigates
+   366→// the user to the right place to complete that step (it never fakes completion).
+   367→
+   368→function ChecklistCard({
+   369→  label,
+   370→  description,
+   371→  checked,
+   372→  delay,
+   373→  onClick,
+   374→}: {
+   375→  label: string;
+   376→  description: string;
+   377→  checked: boolean;
+   378→  delay: number;
+   379→  onClick: () => void;
+   380→}) {
+   381→  return (
+   382→    <motion.button
+   383→      type="button"
+   384→      onClick={onClick}
+   385→      initial={{ opacity: 0, y: 12 }}
+   386→      animate={{ opacity: 1, y: 0 }}
+   387→      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
+   388→      className={`group glass-surface rounded-2xl p-4 text-left hover-lift transition-colors w-full ${
+   389→        checked ? 'ring-1 ring-emerald-400/20' : 'hover:bg-white/[0.05]'
+   390→      }`}
+   391→    >
+   392→      <div className="flex items-start gap-3">
+   393→        <div
+   394→          className={`flex h-6 w-6 items-center justify-center rounded-lg shrink-0 transition-all ${
+   395→            checked
+   396→              ? 'accent-gradient'
+   397→              : 'border border-white/[0.15] bg-white/[0.02] group-hover:border-emerald-400/40'
+   398→          }`}
+   399→        >
+   400→          {checked && <CheckCircle2 className="h-4 w-4 text-white" />}
+   401→        </div>
+   402→        <div className="flex-1 min-w-0">
+   403→          <div className="flex items-center justify-between gap-2">
+   404→            <p className="text-sm font-semibold text-foreground truncate">{label}</p>
+   405→            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+   406→          </div>
+   407→          <p className={`text-[11px] mt-0.5 truncate ${checked ? 'text-emerald-400/80' : 'text-muted-foreground'}`}>
+   408→            {checked ? 'Connected' : description}
+   409→          </p>
+   410→        </div>
+   411→      </div>
+   412→    </motion.button>
+   413→  );
+   414→}
+   415→
+   416→// ─── KPI Card ─────────────────────────────────────────────────────────────────
+   417→// Tall card with header (icon + label) and either the value or premium empty state.
+   418→
+   419→function KpiCard({
+   420→  icon: Icon,
+   421→  label,
+   422→  value,
+   423→  hint,
+   424→  delay,
+   425→  hasData,
+   426→  emptyTitle,
+   427→  emptyDescription,
+   428→  ctaLabel,
+   429→  onCta,
+   430→}: {
+   431→  icon: LucideIcon;
+   432→  label: string;
+   433→  value: string;
+   434→  hint?: string;
+   435→  delay: number;
+   436→  hasData: boolean;
+   437→  emptyTitle: string;
+   438→  emptyDescription: string;
+   439→  ctaLabel: string;
+   440→  onCta: () => void;
+   441→}) {
+   442→  return (
+   443→    <motion.div
+   444→      initial={{ opacity: 0, y: 12 }}
+   445→      animate={{ opacity: 1, y: 0 }}
+   446→      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
+   447→      className="glass-surface rounded-3xl p-5 flex flex-col min-h-[160px]"
+   448→    >
+   449→      <div className="flex items-center gap-2 mb-2">
+   450→        <div className="flex h-9 w-9 items-center justify-center rounded-xl accent-gradient-soft shrink-0">
+   451→          <Icon className="h-4 w-4 accent-text" />
+   452→        </div>
+   453→        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+   454→      </div>
+   455→      {hasData ? (
+   456→        <div className="flex-1 flex flex-col justify-end">
+   457→          <p className="text-2xl font-bold text-foreground tracking-tight leading-tight">{value}</p>
+   458→          {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
+   459→        </div>
+   460→      ) : (
+   461→        <div className="flex-1 flex items-center justify-center">
+   462→          <PremiumEmptyState
+   463→            icon={Icon}
+   464→            title={emptyTitle}
+   465→            description={emptyDescription}
+   466→            ctaLabel={ctaLabel}
+   467→            onCta={onCta}
+   468→          />
+   469→        </div>
+   470→      )}
+   471→    </motion.div>
+   472→  );
+   473→}
+   474→
+   475→// ─── Widget Card wrapper ──────────────────────────────────────────────────────
+   476→
+   477→function WidgetCard({
+   478→  icon: Icon, title, children, delay = 0, className,
+   479→}: {
+   480→  icon: LucideIcon;
+   481→  title: string;
+   482→  children: ReactNode;
+   483→  delay?: number;
+   484→  className?: string;
+   485→}) {
+   486→  return (
+   487→    <motion.div
+   488→      initial={{ opacity: 0, y: 12 }}
+   489→      animate={{ opacity: 1, y: 0 }}
+   490→      transition={{ duration: 0.5, delay, ease: 'easeOut' as const }}
+   491→      className={`glass-surface rounded-3xl p-5 flex flex-col ${className ?? ''}`}
+   492→    >
+   493→      <div className="flex items-center gap-2 mb-4">
+   494→        <div className="flex h-7 w-7 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+   495→          <Icon className="h-4 w-4 accent-text" />
+   496→        </div>
+   497→        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+   498→      </div>
+   499→      <div className="flex-1 min-h-0">{children}</div>
+   500→    </motion.div>
+   501→  );
+   502→}
+   503→
+   504→// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+   505→
+   506→function MissionControlSkeleton() {
+   507→  return (
+   508→    <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
+   509→      {/* Hero skeleton */}
+   510→      <div className="space-y-4">
+   511→        <Skeleton className="h-10 w-72" />
+   512→        <Skeleton className="h-5 w-96" />
+   513→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+   514→          {[1, 2, 3, 4].map(i => (
+   515→            <Skeleton key={i} className="h-20 rounded-2xl" />
+   516→          ))}
+   517→        </div>
+   518→      </div>
+   519→      {/* Score skeleton */}
+   520→      <div className="flex justify-center">
+   521→        <Skeleton className="h-56 w-56 rounded-full" />
+   522→      </div>
+   523→      {/* KPI skeleton */}
+   524→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   525→        {[1, 2, 3].map(i => (
+   526→          <Skeleton key={i} className="h-40 rounded-3xl" />
+   527→        ))}
+   528→      </div>
+   529→      {/* Widgets skeleton */}
+   530→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+   531→        <Skeleton className="h-48 rounded-3xl" />
+   532→        <Skeleton className="h-48 rounded-3xl" />
+   533→        <Skeleton className="h-48 rounded-3xl" />
+   534→        <Skeleton className="h-48 rounded-3xl" />
+   535→        <Skeleton className="h-56 rounded-3xl lg:col-span-2" />
+   536→      </div>
+   537→    </div>
+   538→  );
+   539→}
+   540→
+   541→// ─── Connected Services catalog ───────────────────────────────────────────────
+   542→// Honest: all "Not connected" by default. V16 does not fake integrations.
+   543→
+   544→const CONNECTED_SERVICES: Array<{ id: string; name: string; initial: string }> = [
+   545→  { id: 'google',   name: 'Google',     initial: 'G' },
+   546→  { id: 'gmail',    name: 'Gmail',      initial: 'M' },
+   547→  { id: 'outlook',  name: 'Outlook',    initial: 'O' },
+   548→  { id: 'gstn',     name: 'GSTN',       initial: 'G' },
+   549→  { id: 'whatsapp', name: 'WhatsApp',   initial: 'W' },
+   550→  { id: 'bank',     name: 'Bank APIs',  initial: 'B' },
+   551→];
+   552→
+   553→// ─── Main Component ───────────────────────────────────────────────────────────
+   554→
+   555→export default function MissionControlPage() {
+   556→  const { setCurrentView } = useApp();
+   557→  const { user } = useAuth();
+   558→  const { metrics, loading, error } = useLiveDashboardMetrics();
+   559→  const { data: activities } = useFireActivities();
+   560→  // Real clients list — used by buildInsights() to detect churn-risk. This is
+   561→  // the same Firestore subscription useLiveDashboardMetrics opens internally;
+   562→  // Firestore multiplexes the listener so there is no extra cost.
+   563→  const { data: fireClients } = useFireClients();
+   564→
+   565→  // ── Priority checkbox toggle state (visual only, local to Today's Priorities widget) ──
+   566→  const [done, setDone] = useState<Record<string, boolean>>({});
+   567→
+   568→  // ── Graceful loading timeout ──
+   569→  // If live data hasn't arrived in 3.5s (e.g. slow backend or offline), stop
+   570→  // blocking the UI — render with whatever metrics we have (empty → null score
+   571→  // + premium empty states). Premium UX never makes the user stare at a skeleton.
+   572→  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+   573→  useEffect(() => {
+   574→    if (!loading) return;
+   575→    const t = setTimeout(() => setLoadingTimedOut(true), 3500);
+   576→    return () => clearTimeout(t);
+   577→  }, [loading]);
+   578→  const showLoading = loading && !loadingTimedOut;
+   579→
+   580→  // ── Trust indicator: last sync time ──
+   581→  // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers
+   582→  // a fresh snapshot on every backend write, so this reflects the true last
+   583→  // update from Firestore — not a polling interval.
+   584→  const [lastSync, setLastSync] = useState<Date | null>(null);
+   585→  useEffect(() => {
+   586→    if (loading) return;
+   587→    setLastSync(new Date());
+   588→  }, [metrics, loading]);
+   589→
+   590→  // ── Business Score ──
+   591→  const businessScore = useMemo(() => computeBusinessScore({
+   592→    totalClients: metrics.totalClients,
+   593→    criticalIssues: metrics.criticalIssues,
+   594→    warnings: metrics.warnings,
+   595→    pendingReturns: metrics.pendingReturns,
+   596→    overdueReturns: metrics.overdueReturns,
+   597→    averageHealthScore: metrics.averageHealthScore,
+   598→    matchPercentage: metrics.matchPercentage,
+   599→  }), [metrics]);
+   600→
+   601→  // ── "Has data" flag — drives honest empty vs premium states ──
+   602→  const hasData = useMemo(() => (
+   603→    metrics.totalClients > 0 ||
+   604→    metrics.pendingReturns > 0 ||
+   605→    metrics.overdueReturns > 0 ||
+   606→    metrics.totalTaxVolume > 0
+   607→  ), [metrics]);
+   608→
+   609→  // ── AI Insights ──
+   610→  // Real clients feed the churn-risk detector. hasData gates the "all clear"
+   611→  // insight so we never claim "Everything looks good today" when the firm has
+   612→  // no Firestore data at all.
+   613→  const insights = useMemo(() => buildInsights({
+   614→    metrics: {
+   615→      totalClients: metrics.totalClients,
+   616→      pendingReturns: metrics.pendingReturns,
+   617→      overdueReturns: metrics.overdueReturns,
+   618→      criticalIssues: metrics.criticalIssues,
+   619→      warnings: metrics.warnings,
+   620→      totalTaxVolume: metrics.totalTaxVolume,
+   621→      averageHealthScore: metrics.averageHealthScore,
+   622→      matchPercentage: metrics.matchPercentage,
+   623→      upcomingFilings: metrics.upcomingFilings,
+   624→    },
+   625→    clients: fireClients as Array<FirestoreClient & { id: string }>,
+   626→    hasData,
+   627→  }), [metrics, fireClients, hasData]);
+   628→
+   629→  // V16: AI Recommendations widget shows up to 4 insights (no hero insight slice —
+   630→  // the hero is now the Getting Started checklist, so all insights go to the widget).
+   631→  const recommendations = useMemo(() => insights.slice(0, 4), [insights]);
+   632→
+   633→  const tier = scoreTier(businessScore);
+   634→
+   635→  // ── Collection Score (0-100): how well are receivables being recovered ──
+   636→  const collectionScore = useMemo(() => {
+   637→    if (!hasData) return null;
+   638→    const matchRate = metrics.matchPercentage;
+   639→    const invoiceCoverage = metrics.totalInvoices > 0
+   640→      ? Math.min(100, (metrics.documentsProcessed / Math.max(metrics.totalInvoices, 1)) * 100)
+   641→      : 50;
+   642→    return Math.round(matchRate * 0.6 + invoiceCoverage * 0.4);
+   643→  }, [metrics, hasData]);
+   644→
+   645→  // ── Risk Score (0-100, higher = safer): inverse of risk indicators ──
+   646→  const riskScore = useMemo(() => {
+   647→    if (!hasData) return null;
+   648→    let score = 100;
+   649→    score -= Math.min(40, metrics.criticalIssues * 8);
+   650→    score -= Math.min(30, metrics.overdueReturns * 10);
+   651→    score -= Math.min(20, metrics.riskPercentage * 0.2);
+   652→    return Math.max(0, Math.round(score));
+   653→  }, [metrics, hasData]);
+   654→
+   655→  // ── Getting Started checklist (derived from live data per spec) ──
+   656→  // totalClients > 0 → "Connect GSTN" is checked as a proxy for "GSTN connected".
+   657→  // The other three (Connect Bank, Invite Team, Activate Oracle) are never checked
+   658→  // in this version — we don't fabricate connection state.
+   659→  const checklist = useMemo(() => {
+   660→    const gstnConnected = metrics.totalClients > 0;
+   661→    return [
+   662→      {
+   663→        id: 'gstn',
+   664→        label: 'Connect GSTN',
+   665→        description: 'Link your GST account',
+   666→        checked: gstnConnected,
+   667→        view: 'returns' as AppView,
+   668→      },
+   669→      {
+   670→        id: 'bank',
+   671→        label: 'Connect Bank',
+   672→        description: 'Link your bank account',
+   673→        checked: false,
+   674→        view: 'banking' as AppView,
+   675→      },
+   676→      {
+   677→        id: 'team',
+   678→        label: 'Invite Team',
+   679→        description: 'Add team members',
+   680→        checked: false,
+   681→        view: 'team' as AppView,
+   682→      },
+   683→      {
+   684→        id: 'oracle',
+   685→        label: 'Activate Oracle',
+   686→        description: 'Turn on AI autopilot',
+   687→        checked: false,
+   688→        view: 'ai-operating-room' as AppView,
+   689→      },
+   690→    ];
+   691→  }, [metrics.totalClients]);
+   692→
+   693→  const completedCount = checklist.filter(c => c.checked).length;
+   694→  const stepsAway = checklist.length - completedCount;
+   695→  const allComplete = completedCount === checklist.length;
+   696→  const businessStatus = allComplete ? 'Operational' : 'Getting Started';
+   697→
+   698→  // ── Cash position label ──
+   699→  const cashLabel = useMemo(() => {
+   700→    if (!hasData) return '—';
+   701→    if (businessScore === null) return '—';
+   702→    if (businessScore >= 80) return 'Healthy';
+   703→    if (businessScore >= 60) return 'Stable';
+   704→    if (businessScore >= 40) return 'Tight';
+   705→    return 'Strained';
+   706→  }, [hasData, businessScore]);
+   707→
+   708→  // ── Today's Priorities (derived from live data) ──
+   709→  const priorities = useMemo<Array<{ id: string; label: string; view: AppView }>>(() => {
+   710→    if (!hasData) return [];
+   711→    const list: Array<{ id: string; label: string; view: AppView }> = [];
+   712→    if (metrics.matchPercentage < 95 || metrics.criticalIssues > 0) {
+   713→      list.push({ id: 'collections', label: 'Recover Collections', view: 'reconcile' });
+   714→    }
+   715→    if (metrics.pendingReturns > 0 || metrics.overdueReturns > 0) {
+   716→      list.push({ id: 'gst', label: 'File GST Returns', view: 'returns' });
+   717→    }
+   718→    // Gentle nudge — always shown when there's data
+   719→    list.push({ id: 'expenses', label: 'Review Expenses', view: 'invoices' });
+   720→    return list.slice(0, 4);
+   721→  }, [hasData, metrics.matchPercentage, metrics.criticalIssues, metrics.pendingReturns, metrics.overdueReturns]);
+   722→
+   723→  // ── Business Timeline (top 5 recent activities) ──
+   724→  const timelineActivities = useMemo(() => activities.slice(0, 5), [activities]);
+   725→
+   726→  // ── Loading ──
+   727→  if (showLoading) return <MissionControlSkeleton />;
+   728→
+   729→  // ── Error ──
+   730→  // Permission errors are NEVER shown as a wall. The firestore hooks already
+   731→  // degrade permission errors to empty data, but if a residual permission
+   732→  // error string reaches here, treat it as "no data" and render the dashboard
+   733→  // with premium empty states instead of blocking the user.
+   734→  const isPermissionErr = !!error && (
+   735→    /permission|insufficient|unauthenticated|not authorized|missing or/i.test(error)
+   736→  );
+   737→  if (error && !isPermissionErr) {
+   738→    return (
+   739→      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+   740→        <div className="glass-surface rounded-3xl p-8">
+   741→          <div className="flex h-12 w-12 items-center justify-center rounded-2xl glass-surface mx-auto mb-4">
+   742→            <AlertTriangle className="h-5 w-5 text-blue-300" />
+   743→          </div>
+   744→          <h3 className="text-lg font-semibold text-foreground">Couldn&apos;t load your mission control</h3>
+   745→          <p className="text-sm text-muted-foreground mt-1.5">{error}</p>
+   746→          <Button variant="outline" className="mt-5" onClick={() => window.location.reload()}>
+   747→            Retry
+   748→          </Button>
+   749→        </div>
+   750→      </div>
+   751→    );
+   752→  }
+   753→
+   754→  // ── Helpers for navigation ──
+   755→  const goToSettings = () => setCurrentView('settings');
+   756→
+   757→  // ── Trust indicator derived state ──
+   758→  // Permission errors are swallowed by the hooks (never reach `error`), so a
+   759→  // non-null `error` here is always a genuine network/index failure — surface
+   760→  // it to TrustBar so the user sees the red "Connection error" state.
+   761→  const trustError = isPermissionErr ? null : error;
+   762→  const trustConnected = !loading && !trustError;
+   763→  const trustConnecting = loading;
+   764→
+   765→  return (
+   766→    <div className="relative max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-12">
+   767→
+   768→      {/* ═══ 0. TRUST BAR — connection status, last sync, activity count ═══ */}
+   769→      <TrustBar
+   770→        lastSync={lastSync}
+   771→        connected={trustConnected}
+   772→        connecting={trustConnecting}
+   773→        error={trustError}
+   774→        activityCount={activities.length}
+   775→        onRefresh={() => window.location.reload()}
+   776→      />
+   777→
+   778→      {/* ═══ 1. HERO — Greeting + Business Status + Getting Started checklist ═══ */}
+   779→      <motion.section
+   780→        initial={{ opacity: 0, y: 12 }}
+   781→        animate={{ opacity: 1, y: 0 }}
+   782→        transition={{ duration: 0.5, ease: 'easeOut' as const }}
+   783→        className="space-y-6"
+   784→      >
+   785→        {/* Eyebrow + status pill */}
+   786→        <div className="flex items-center gap-2.5">
+   787→          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   788→            Business Status
+   789→          </span>
+   790→          <span
+   791→            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
+   792→              allComplete
+   793→                ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+   794→                : 'border-cyan-400/25 bg-cyan-500/10 text-cyan-300'
+   795→            }`}
+   796→          >
+   797→            <span
+   798→              className={`h-1.5 w-1.5 rounded-full ${
+   799→                allComplete ? 'bg-emerald-400' : 'bg-cyan-400 animate-pulse'
+   800→              }`}
+   801→            />
+   802→            {businessStatus}
+   803→          </span>
+   804→        </div>
+   805→
+   806→        {/* Greeting */}
+   807→        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+   808→          {greeting()}, {firstName(user?.name)} <span className="inline-block">👋</span>
+   809→        </h1>
+   810→
+   811→        {/* Steps-away line */}
+   812→        <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+   813→          You are{' '}
+   814→          <span className="accent-text font-semibold">
+   815→            {stepsAway} step{stepsAway !== 1 ? 's' : ''}
+   816→          </span>
+   817→          {' '}away from activating your Financial Brain.
+   818→        </p>
+   819→
+   820→        {/* 4 clickable checklist cards */}
+   821→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   822→          {checklist.map((item, i) => (
+   823→            <ChecklistCard
+   824→              key={item.id}
+   825→              label={item.label}
+   826→              description={item.description}
+   827→              checked={item.checked}
+   828→              delay={0.05 * (i + 1)}
+   829→              onClick={() => setCurrentView(item.view)}
+   830→            />
+   831→          ))}
+   832→        </div>
+   833→      </motion.section>
+   834→
+   835→      {/* ═══ 2. BUSINESS HEALTH SCORE ═══ */}
+   836→      <motion.section
+   837→        initial={{ opacity: 0, y: 12 }}
+   838→        animate={{ opacity: 1, y: 0 }}
+   839→        transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' as const }}
+   840→      >
+   841→        <div className="glass-surface rounded-3xl p-6 md:p-8 flex flex-col items-center justify-center min-h-[260px]">
+   842→          {businessScore === null || businessScore === 0 ? (
+   843→            <PremiumEmptyState
+   844→              icon={Brain}
+   845→              title="Activate your Financial Brain"
+   846→              description="Connect your business data to unlock AI insights and your real-time business health score."
+   847→              ctaLabel="[ Connect Data ]"
+   848→              onCta={goToSettings}
+   849→            />
+   850→          ) : (
+   851→            <>
+   852→              <ScoreGauge score={businessScore} />
+   853→              <div className="text-center mt-3">
+   854→                <span className={`text-sm font-semibold ${tier.color}`}>{tier.label}</span>
+   855→                <p className="text-[11px] text-muted-foreground mt-0.5 tracking-wider uppercase">
+   856→                  Business Health Score
+   857→                </p>
+   858→              </div>
+   859→            </>
+   860→          )}
+   861→        </div>
+   862→      </motion.section>
+   863→
+   864→      {/* ═══ 3. KPI SECTION — exactly 3 cards ═══ */}
+   865→      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   866→        <KpiCard
+   867→          icon={IndianRupee}
+   868→          label="Revenue"
+   869→          value={metrics.totalTaxVolume > 0 ? formatINR(metrics.totalTaxVolume) : '—'}
+   870→          hint={metrics.totalTaxVolume > 0 ? 'Total tax volume' : undefined}
+   871→          delay={0.16}
+   872→          hasData={metrics.totalTaxVolume > 0}
+   873→          emptyTitle="Revenue awaits your data"
+   874→          emptyDescription="Connect GSTN and Banking to unlock live financial insights."
+   875→          ctaLabel="[ Connect Data ]"
+   876→          onCta={goToSettings}
+   877→        />
+   878→        <KpiCard
+   879→          icon={Wallet}
+   880→          label="Cash Position"
+   881→          value={cashLabel}
+   882→          hint={hasData
+   883→            ? (metrics.matchPercentage < 100
+   884→              ? `${metrics.matchPercentage.toFixed(0)}% reconciled`
+   885→              : 'Fully reconciled')
+   886→            : undefined}
+   887→          delay={0.24}
+   888→          hasData={hasData && businessScore !== null}
+   889→          emptyTitle="Cash position awaits"
+   890→          emptyDescription="Connect your bank account to monitor cash position."
+   891→          ctaLabel="[ Connect Bank ]"
+   892→          onCta={goToSettings}
+   893→        />
+   894→        <KpiCard
+   895→          icon={ShieldAlert}
+   896→          label="Compliance"
+   897→          value={metrics.pendingReturns + metrics.overdueReturns > 0
+   898→            ? `${metrics.pendingReturns + metrics.overdueReturns} pending`
+   899→            : (hasData ? 'Safe' : '—')}
+   900→          hint={hasData
+   901→            ? (metrics.overdueReturns > 0
+   902→              ? `${metrics.overdueReturns} overdue`
+   903→              : `${metrics.filedReturns} filed`)
+   904→            : undefined}
+   905→          delay={0.32}
+   906→          hasData={hasData}
+   907→          emptyTitle="Compliance awaits GSTN"
+   908→          emptyDescription="Connect GSTN to track compliance score."
+   909→          ctaLabel="[ Connect GSTN ]"
+   910→          onCta={goToSettings}
+   911→        />
+   912→      </section>
+   913→
+   914→      {/* ═══ 3b. SCORES — Collection Score + Risk Score (restored) ═══ */}
+   915→      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   916→        {/* Collection Score */}
+   917→        <motion.div
+   918→          initial={{ opacity: 0, y: 12 }}
+   919→          animate={{ opacity: 1, y: 0 }}
+   920→          transition={{ duration: 0.4, delay: 0.36 }}
+   921→          className="glass-surface rounded-3xl p-5"
+   922→        >
+   923→          <div className="flex items-center justify-between mb-3">
+   924→            <div className="flex items-center gap-2">
+   925→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10">
+   926→                <Wallet className="h-4 w-4 text-cyan-400" />
+   927→              </div>
+   928→              <span className="text-sm font-medium text-foreground">Collection Score</span>
+   929→            </div>
+   930→          </div>
+   931→          {hasData && collectionScore !== null ? (
+   932→            <div>
+   933→              <div className="flex items-baseline gap-2">
+   934→                <span className="text-3xl font-semibold text-foreground">{collectionScore}</span>
+   935→                <span className="text-sm text-muted-foreground">/ 100</span>
+   936→              </div>
+   937→              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+   938→                <div
+   939→                  className="h-full rounded-full"
+   940→                  style={{
+   941→                    width: `${collectionScore}%`,
+   942→                    background: 'linear-gradient(90deg, #06b6d4 0%, #0891b2 100%)',
+   943→                  }}
+   944→                />
+   945→              </div>
+   946→              <p className="mt-2 text-[11px] text-muted-foreground">
+   947→                {metrics.matchPercentage.toFixed(0)}% invoices reconciled
+   948→              </p>
+   949→            </div>
+   950→          ) : (
+   951→            <p className="text-sm text-muted-foreground">Connect data to measure collections.</p>
+   952→          )}
+   953→        </motion.div>
+   954→
+   955→        {/* Risk Score */}
+   956→        <motion.div
+   957→          initial={{ opacity: 0, y: 12 }}
+   958→          animate={{ opacity: 1, y: 0 }}
+   959→          transition={{ duration: 0.4, delay: 0.40 }}
+   960→          className="glass-surface rounded-3xl p-5"
+   961→        >
+   962→          <div className="flex items-center justify-between mb-3">
+   963→            <div className="flex items-center gap-2">
+   964→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+   965→                <ShieldAlert className="h-4 w-4 text-blue-400" />
+   966→              </div>
+   967→              <span className="text-sm font-medium text-foreground">Risk Score</span>
+   968→            </div>
+   969→          </div>
+   970→          {hasData && riskScore !== null ? (
+   971→            <div>
+   972→              <div className="flex items-baseline gap-2">
+   973→                <span className="text-3xl font-semibold text-foreground">{riskScore}</span>
+   974→                <span className="text-sm text-muted-foreground">/ 100 · safer</span>
+   975→              </div>
+   976→              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+   977→                <div
+   978→                  className="h-full rounded-full"
+   979→                  style={{
+   980→                    width: `${riskScore}%`,
+   981→                    background: 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)',
+   982→                  }}
+   983→                />
+   984→              </div>
+   985→              <p className="mt-2 text-[11px] text-muted-foreground">
+   986→                {metrics.criticalIssues} critical · {metrics.overdueReturns} overdue
+   987→              </p>
+   988→            </div>
+   989→          ) : (
+   990→            <p className="text-sm text-muted-foreground">Connect data to assess risk.</p>
+   991→          )}
+   992→        </motion.div>
+   993→      </section>
+   994→
+   995→      {/* ═══ 4. WIDGETS — exactly 5 (2-col grid, 5th spans full width) ═══ */}
+   996→      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+   997→
+   998→        {/* Widget 1: Today's Priorities */}
+   999→        <WidgetCard icon={ListTodo} title="Today's Priorities" delay={0.40}>
+  1000→          {hasData && priorities.length > 0 ? (
+  1001→            <div className="space-y-1">
+  1002→              {priorities.map((p) => {
+  1003→                const isDone = !!done[p.id];
+  1004→                return (
+  1005→                  <div
+  1006→                    key={p.id}
+  1007→                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.03] transition-colors"
+  1008→                  >
+  1009→                    <button
+  1010→                      type="button"
+  1011→                      aria-label={`Mark ${p.label} as ${isDone ? 'incomplete' : 'complete'}`}
+  1012→                      aria-pressed={isDone}
+  1013→                      onClick={() => {
+  1014→                        setDone((d) => ({ ...d, [p.id]: !d[p.id] }));
+  1015→                      }}
+  1016→                      className={`flex h-5 w-5 items-center justify-center rounded-full border shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 ${
+  1017→                        isDone
+  1018→                          ? 'accent-gradient border-transparent'
+  1019→                          : 'border-white/[0.15] hover:border-emerald-400/40'
+  1020→                      }`}
+  1021→                    >
+  1022→                      {isDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+  1023→                    </button>
+  1024→                    <button
+  1025→                      type="button"
+  1026→                      onClick={() => setCurrentView(p.view)}
+  1027→                      className="flex flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 rounded-md"
+  1028→                      aria-label={`Open ${p.label}`}
+  1029→                    >
+  1030→                      <span className={`text-sm flex-1 ${isDone ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+  1031→                        {p.label}
+  1032→                      </span>
+  1033→                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+  1034→                    </button>
+  1035→                  </div>
+  1036→                );
+  1037→              })}
+  1038→            </div>
+  1039→          ) : hasData ? (
+  1040→            <PremiumEmptyState
+  1041→              icon={CheckCircle2}
+  1042→              title="You're all caught up"
+  1043→              description="No priorities right now. Oracle will surface new ones as your business changes."
+  1044→            />
+  1045→          ) : (
+  1046→            <PremiumEmptyState
+  1047→              icon={ListTodo}
+  1048→              title="GSTPilot Oracle is ready"
+  1049→              description="Connect your business data to receive priorities."
+  1050→              ctaLabel="[ Connect Services ]"
+  1051→              onCta={goToSettings}
+  1052→            />
+  1053→          )}
+  1054→        </WidgetCard>
+  1055→
+  1056→        {/* Widget 2: Business Timeline */}
+  1057→        <WidgetCard icon={Clock} title="Business Timeline" delay={0.48}>
+  1058→          {timelineActivities.length > 0 ? (
+  1059→            <div className="relative">
+  1060→              {timelineActivities.map((act, i) => {
+  1061→                const isLast = i === timelineActivities.length - 1;
+  1062→                return (
+  1063→                  <div key={act.id} className="relative flex gap-3 pb-4 last:pb-0">
+  1064→                    {!isLast && (
+  1065→                      <span
+  1066→                        className="absolute left-[9px] top-6 bottom-0 w-px bg-white/[0.08]"
+  1067→                        aria-hidden
+  1068→                      />
+  1069→                    )}
+  1070→                    <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-background shrink-0 mt-0.5">
+  1071→                      <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
+  1072→                    </span>
+  1073→                    <div className="flex-1 min-w-0 pt-0.5">
+  1074→                      <p className="text-sm text-foreground leading-snug">{act.title}</p>
+  1075→                      <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(act.createdAt)}</p>
+  1076→                    </div>
+  1077→                  </div>
+  1078→                );
+  1079→              })}
+  1080→            </div>
+  1081→          ) : (
+  1082→            <PremiumEmptyState
+  1083→              icon={Clock}
+  1084→              title="No activity yet"
+  1085→              description="Connect your services to see live business timeline."
+  1086→            />
+  1087→          )}
+  1088→        </WidgetCard>
+  1089→
+  1090→        {/* Widget 3: Connected Services */}
+  1091→        <WidgetCard icon={Plug} title="Connected Services" delay={0.56}>
+  1092→          <div className="space-y-3">
+  1093→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+  1094→              {CONNECTED_SERVICES.map((s) => (
+  1095→                <div
+  1096→                  key={s.id}
+  1097→                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
+  1098→                >
+  1099→                  <div className="flex items-center gap-2">
+  1100→                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
+  1101→                      {s.initial}
+  1102→                    </div>
+  1103→                    <div className="flex-1 min-w-0">
+  1104→                      <p className="text-xs font-medium text-foreground truncate">{s.name}</p>
+  1105→                      <div className="flex items-center gap-1 mt-0.5">
+  1106→                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+  1107→                        <span className="text-[10px] text-muted-foreground">Not connected</span>
+  1108→                      </div>
+  1109→                    </div>
+  1110→                  </div>
+  1111→                  <button
+  1112→                    type="button"
+  1113→                    onClick={goToSettings}
+  1114→                    className="self-start text-[11px] font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+  1115→                  >
+  1116→                    [ Connect ]
+  1117→                  </button>
+  1118→                </div>
+  1119→              ))}
+  1120→            </div>
+  1121→            <p className="text-[11px] text-muted-foreground text-center pt-1">
+  1122→              Connect services to sync automatically.
+  1123→            </p>
+  1124→          </div>
+  1125→        </WidgetCard>
+  1126→
+  1127→        {/* Widget 4: Team Status */}
+  1128→        <WidgetCard icon={Users} title="Team Status" delay={0.64}>
+  1129→          {/* Honest empty state — we don't have team data yet */}
+  1130→          <PremiumEmptyState
+  1131→            icon={Users}
+  1132→            title="No team members yet"
+  1133→            description="Invite your team to collaborate on clients, returns, and reconciliations."
+  1134→            ctaLabel="[ Invite your team ]"
+  1135→            onCta={() => setCurrentView('team')}
+  1136→          />
+  1137→        </WidgetCard>
+  1138→
+  1139→        {/* Widget 5: AI Recommendations — full width */}
+  1140→        <WidgetCard icon={Lightbulb} title="AI Recommendations" delay={0.72} className="lg:col-span-2">
+  1141→          {hasData && recommendations.length > 0 ? (
+  1142→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  1143→              {recommendations.map((insight) => {
+  1144→                const Icon = insight.icon;
+  1145→                // V16 palette: only Emerald / Cyan / Blue. No amber, no red.
+  1146→                const toneColor =
+  1147→                  insight.tone === 'risk' ? 'text-blue-400' :
+  1148→                  insight.tone === 'success' ? 'text-emerald-400' :
+  1149→                  'text-cyan-400';
+  1150→                return (
+  1151→                  <div
+  1152→                    key={insight.id}
+  1153→                    className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors"
+  1154→                  >
+  1155→                    <div className="flex items-start gap-3">
+  1156→                      <div className="flex h-8 w-8 items-center justify-center rounded-lg accent-gradient-soft shrink-0">
+  1157→                        <Icon className={`h-4 w-4 ${toneColor}`} />
+  1158→                      </div>
+  1159→                      <div className="flex-1 min-w-0">
+  1160→                        <p className="text-sm font-medium text-foreground leading-snug">{insight.what}</p>
+  1161→                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.why}</p>
+  1162→                      </div>
+  1163→                    </div>
+  1164→                    <button
+  1165→                      onClick={() => setCurrentView(insight.actionView)}
+  1166→                      className="self-start inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20"
+  1167→                    >
+  1168→                      {insight.actionLabel}
+  1169→                      <ArrowRight className="h-3 w-3" />
+  1170→                    </button>
+  1171→                  </div>
+  1172→                );
+  1173→              })}
+  1174→            </div>
+  1175→          ) : hasData ? (
+  1176→            <PremiumEmptyState
+  1177→              icon={CheckCircle2}
+  1178→              title="No recommendations right now"
+  1179→              description="Your business is in good shape — Oracle will surface new guidance as it learns."
+  1180→            />
+  1181→          ) : (
+  1182→            <PremiumEmptyState
+  1183→              icon={Lightbulb}
+  1184→              title="GSTPilot Oracle is ready"
+  1185→              description="Connect your business data to receive AI recommendations."
+  1186→              ctaLabel="[ Connect Services ]"
+  1187→              onCta={goToSettings}
+  1188→            />
+  1189→          )}
+  1190→        </WidgetCard>
+  1191→
+  1192→        {/* Widget 6: Ask Oracle (restored) */}
+  1193→        <WidgetCard icon={Brain} title="Ask Oracle" delay={0.80} className="lg:col-span-2">
+  1194→          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+  1195→            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl accent-gradient shadow-lg shadow-emerald-500/20">
+  1196→              <Sparkles className="h-5 w-5 text-white" />
+  1197→            </div>
+  1198→            <div className="flex-1 min-w-0">
+  1199→              <p className="text-sm font-medium text-foreground">
+  1200→                Ask GSTPilot Oracle anything
+  1201→              </p>
+  1202→              <p className="text-xs text-muted-foreground mt-0.5">
+  1203→                GST · ITC · Cash flow · Compliance — replies in your language, 24/7.
+  1204→              </p>
+  1205→              <div className="mt-2 flex flex-wrap gap-1.5">
+  1206→                {['What is my compliance score?', 'GST kya hota hai?', 'How do I file GSTR-3B?'].map((q) => (
+  1207→                  <button
+  1208→                    key={q}
+  1209→                    onClick={() => {
+  1210→                      window.dispatchEvent(new CustomEvent('oracle-ask', { detail: q }));
+  1211→                    }}
+  1212→                    className="rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/30 hover:text-foreground"
+  1213→                  >
+  1214→                    {q}
+  1215→                  </button>
+  1216→                ))}
+  1217→              </div>
+  1218→            </div>
+  1219→            <Button
+  1220→              onClick={() => {
+  1221→                window.dispatchEvent(new CustomEvent('oracle-ask', { detail: '' }));
+  1222→              }}
+  1223→              className="shrink-0 accent-gradient text-white border-0 hover:opacity-90"
+  1224→            >
+  1225→              Ask Oracle
+  1226→              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+  1227→            </Button>
+  1228→          </div>
+  1229→        </WidgetCard>
+  1230→
+  1231→      </section>
+  1232→    </div>
+  1233→  );
+  1234→}
+  1235→

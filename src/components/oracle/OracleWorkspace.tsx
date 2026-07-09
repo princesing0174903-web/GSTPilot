@@ -49,6 +49,7 @@ import { OracleEvolutionPanel } from '@/components/oracle-evolution/OracleEvolut
 import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
 import { InvoiceActionCard } from '@/components/oracle-cfo/InvoiceActionCard';
 import { PaymentLinkActionCard } from '@/components/oracle-cfo/PaymentLinkActionCard';
+import { CommunicationActionCard } from '@/components/oracle-cfo/CommunicationActionCard';
 import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
@@ -103,6 +104,41 @@ const PAYMENT_LINK_INTENT_PATTERNS = [
 ];
 function isPaymentLinkIntent(text: string): boolean {
   return PAYMENT_LINK_INTENT_PATTERNS.some((p) => p.test(text));
+}
+
+// ─── Communication intent detection (client-side pre-filter) ─────────────────
+// Matches phrases like "email the invoice", "WhatsApp the payment link",
+// "send the GST report", "share the receipt", "send reminder to".
+// Excludes pure invoice/payment-link CREATION phrases (those are handled by
+// the dedicated InvoiceActionCard / PaymentLinkActionCard).
+const COMMUNICATION_INTENT_PATTERNS = [
+  /\bemail\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder|payment)/i,
+  /\bwhatsapp\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder|payment)/i,
+  /\bsend\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder|payment)/i,
+  /\bshare\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link)/i,
+  /\bdeliver\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link)/i,
+  /\bsend\s+(?:the\s+)?(?:payment\s+)?link\s+(?:to|on|via)/i,
+  /\bwhatsapp\s+(?:the\s+)?(?:payment\s+)?link/i,
+  /\bemail\s+(?:this\s+month'?s\s+)?gst\s+report/i,
+  /\bwhatsapp\s+(?:this\s+month'?s\s+)?gst\s+report/i,
+  /\bsend\s+(?:a\s+)?(?:payment\s+)?reminder/i,
+  /\bemail\s+(?:a\s+)?reminder/i,
+  /\bwhatsapp\s+(?:a\s+)?reminder/i,
+  /\bemail\s+(?:the\s+)?(?:outstanding\s+)?statement/i,
+  /\bwhatsapp\s+(?:the\s+)?(?:outstanding\s+)?statement/i,
+  /\bshare\s+(?:the\s+)?gst\s+report/i,
+  /\bsend\s+(?:the\s+)?gst\s+report/i,
+];
+function isCommunicationIntent(text: string): boolean {
+  // Must match a communication phrase AND NOT be a pure invoice/payment-link creation request.
+  const isComm = COMMUNICATION_INTENT_PATTERNS.some((p) => p.test(text));
+  if (!isComm) return false;
+  // Exclude pure creation phrases (no "send"/"email"/"whatsapp"/"share" verb with invoice/payment-link)
+  // If the message starts with "create"/"generate"/"make" + invoice/payment-link, treat as creation.
+  if (/^(?:create|generate|make|issue|draft|prepare)\s+(?:an?\s+)?(?:invoice|bill|payment\s*link)/i.test(text.trim())) {
+    return false;
+  }
+  return true;
 }
 
 // ─── Conversation store types ─────────────────────────────────────────────────
@@ -174,6 +210,12 @@ export function OracleWorkspace({
   // the dedicated PaymentLinkActionCard (production payment link flow) instead
   // of the generic CFO panel. Keyed by assistant message ID → user message text.
   const [paymentLinkUserMessages, setPaymentLinkUserMessages] = useState<Record<string, string>>({});
+
+  // Upgrade Phase 1.4: when the user asks to send an email or WhatsApp message
+  // (invoice / GST report / payment link / reminder / statement), we render the
+  // dedicated CommunicationActionCard (production communication flow) instead
+  // of the generic CFO panel. Keyed by assistant message ID → user message text.
+  const [communicationUserMessages, setCommunicationUserMessages] = useState<Record<string, string>>({});
 
   // ── Org context (for CFO tool execution: organizationId, userId, role)
   const orgCtx = useOrg();
@@ -648,6 +690,17 @@ export function OracleWorkspace({
           return; // Skip the generic analyze — payment link card handles it
         }
 
+        // ─── Upgrade Phase 1.4: Real Email & WhatsApp Execution ─────────
+        // If the user's message is a communication request (email/WhatsApp an
+        // invoice, GST report, payment link, reminder, or statement), render the
+        // dedicated production CommunicationActionCard instead of the generic
+        // CFO panel. The card makes its own API call to the communication engine.
+        if (isCommunicationIntent(userMessage)) {
+          setCommunicationUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — communication card handles it
+        }
+
         setCfoAnalyzing(oracleMessageId);
         const res = await fetch('/api/oracle/cfo/analyze', {
           method: 'POST',
@@ -1014,6 +1067,7 @@ export function OracleWorkspace({
                       cfoAnalyzing={cfoAnalyzing === m.id}
                       invoiceUserMessage={invoiceUserMessages[m.id]}
                       paymentLinkUserMessage={paymentLinkUserMessages[m.id]}
+                      communicationUserMessage={communicationUserMessages[m.id]}
                       cfoOrgId={orgCtx.organization?.id ?? 'preview-org'}
                       cfoUserId={userId ?? 'preview-user'}
                       cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in'}
@@ -1236,6 +1290,7 @@ function MessageBubble({
   cfoAnalyzing,
   invoiceUserMessage,
   paymentLinkUserMessage,
+  communicationUserMessage,
   cfoOrgId,
   cfoUserId,
   cfoUserEmail,
@@ -1250,6 +1305,7 @@ function MessageBubble({
   cfoAnalyzing?: boolean;
   invoiceUserMessage?: string;
   paymentLinkUserMessage?: string;
+  communicationUserMessage?: string;
   cfoOrgId?: string;
   cfoUserId?: string;
   cfoUserEmail?: string;
@@ -1411,7 +1467,26 @@ function MessageBubble({
             userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
           />
         )}
-        {!message.streaming && !invoiceUserMessage && !paymentLinkUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
+        {/* ─── Upgrade Phase 1.4: Production Email & WhatsApp Execution ──
+            When the user asks to email or WhatsApp an invoice, GST report,
+            payment link, reminder, or statement, this dedicated card handles
+            the FULL production flow: intent extraction → recipient lookup →
+            validation → provider detection (SMTP/Resend/SendGrid/Gmail/Mailgun
+            for email; WhatsApp Cloud API/Twilio/Gupshup for WhatsApp) →
+            approval → REAL provider API → persist → webhook monitoring →
+            retry engine → audit log. No simulated sends. */}
+        {!message.streaming && !invoiceUserMessage && !paymentLinkUserMessage && communicationUserMessage && (
+          <CommunicationActionCard
+            userMessage={communicationUserMessage}
+            organizationId={cfoOrgId ?? 'preview-org'}
+            firmId={null}
+            userId={cfoUserId ?? 'preview-user'}
+            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            sellerName={cfoFirmName ?? 'GSTPilot'}
+            sellerEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+          />
+        )}
+        {!message.streaming && !invoiceUserMessage && !paymentLinkUserMessage && !communicationUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
           <CFOAssistantPanel
             approvalRequests={cfoApprovals}
             organizationId={cfoOrgId ?? 'preview-org'}

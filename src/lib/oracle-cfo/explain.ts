@@ -411,6 +411,72 @@ export function buildDecisionCard(
       break;
     }
 
+    case 'send-communication': {
+      const channelParam = detected.extractedParams.find((p) => p.key === 'channel');
+      const typeParam = detected.extractedParams.find((p) => p.key === 'messageType');
+      const recipientParam = detected.extractedParams.find((p) => p.key === 'recipient');
+      const channelLabel = channelParam?.value === 'whatsapp' ? 'WhatsApp' :
+                           channelParam?.value === 'both' ? 'Email + WhatsApp' :
+                           'Email';
+      const typeLabel = typeParam?.value === 'payment_link' ? 'a payment link' :
+                        typeParam?.value === 'gst_report' ? 'this month\'s GST report' :
+                        typeParam?.value === 'invoice' ? 'an invoice' :
+                        typeParam?.value === 'payment_reminder' ? 'a payment reminder' :
+                        typeParam?.value === 'receipt' ? 'a payment receipt' :
+                        typeParam?.value === 'outstanding_statement' ? 'an outstanding statement' :
+                        typeParam?.value === 'welcome' ? 'a welcome email' :
+                        typeParam?.value === 'compliance_reminder' ? 'a compliance reminder' :
+                        'a custom message';
+
+      why = `Sending ${typeLabel} via ${channelLabel} resolves the recipient from the real clients database, validates their email/phone + active status + communication preferences, detects the connected provider (SMTP/Resend/SendGrid/Gmail/Mailgun for email; WhatsApp Cloud API/Twilio/Gupshup for WhatsApp), generates a branded message with dynamic placeholders, attaches the relevant document (invoice PDF / GST report PDF / payment link), and dispatches via the provider's REAL API. Delivery is tracked through provider webhooks — Sent / Delivered / Opened / Clicked / Bounced / Failed for email; Sent / Delivered / Read / Failed for WhatsApp. Failed sends retry automatically with exponential backoff.`;
+
+      if (recipientParam) {
+        records.push({
+          collection: 'clients',
+          id: String(recipientParam.value),
+          label: String(recipientParam.value),
+          detail: `Resolved from live clients database · ${channelLabel}`,
+        });
+      } else {
+        records.push({
+          collection: 'clients',
+          id: '(auto-resolved)',
+          label: 'Recipient will be resolved from message',
+          detail: 'Oracle looks up the customer by name, email, or phone in the real clients collection',
+        });
+      }
+
+      calculation.push(
+        { label: 'Delivery Channel', value: channelLabel },
+        { label: 'Message Type', value: typeLabel },
+        { label: 'Email Provider', value: 'SMTP / Resend / SendGrid / Gmail / Mailgun (auto-detected from integrations)' },
+        { label: 'WhatsApp Provider', value: 'WhatsApp Cloud API / Twilio / Gupshup (auto-detected)' },
+        { label: 'Message Generation', value: 'Branded HTML email + plain-text WhatsApp template with dynamic placeholders' },
+        { label: 'Attachments', value: 'Invoice PDF · GST Report PDF · Payment Link (auto-generated from real data)' },
+        { label: 'Webhook Tracking', value: 'Sent / Delivered / Opened / Clicked / Bounced / Failed (email); Sent / Delivered / Read / Failed (WhatsApp)' },
+        { label: 'Retry Engine', value: 'Exponential backoff (2s, 4s, 8s, 16s, 32s) up to 5 attempts for transient failures' },
+      );
+
+      risks.push(
+        { severity: 'medium', description: 'No email/WhatsApp provider connected (preview mode).', mitigation: 'Go to Settings → Integrations → Email or WhatsApp and add real provider credentials to dispatch messages.' },
+        { severity: 'low', description: 'Recipient may have opted out of the channel.', mitigation: 'Oracle checks communication preferences and warns before sending.' },
+        { severity: 'low', description: 'Provider may rate-limit or temporarily fail.', mitigation: 'Retry engine automatically re-attempts with exponential backoff; escalates after 5 failed attempts.' },
+      );
+
+      alternatives.push(
+        { title: 'Send via a different channel', tradeOff: 'Email is more formal and supports attachments; WhatsApp is faster and has higher open rates.', recommended: false },
+        { title: 'Use the production Communication card', tradeOff: 'Type "Email the GST report to ABC Traders" or "WhatsApp the payment link" — Oracle opens a dedicated approval card with real provider integration.', recommended: true },
+      );
+
+      confidenceFactors.push(
+        { label: 'Channel specified', weight: 0.4, score: channelParam ? 1 : 0.3 },
+        { label: 'Message type specified', weight: 0.3, score: typeParam ? 1 : 0.5 },
+        { label: 'Recipient resolved', weight: 0.2, score: recipientParam ? 1 : 0.4 },
+        { label: 'Intent clarity', weight: 0.1, score: detected.confidence },
+      );
+      break;
+    }
+
     default: {
       why = 'This action will perform a real business operation. Review the details below before approving.';
       confidenceFactors.push({ label: 'Intent clarity', weight: 1, score: detected.confidence });

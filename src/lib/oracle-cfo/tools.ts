@@ -1434,6 +1434,99 @@ export const CFO_TOOLS: Tool[] = [
     },
     retry: { maxAttempts: 2, backoffMs: 200 },
   },
+
+  // ─── 10. SEND COMMUNICATION (Phase 1.4 — Production) ───────────────────────
+  // Light registration so the tool appears in the registry + explain layer.
+  // The actual production flow is handled by the dedicated CommunicationActionCard
+  // which calls /api/oracle/cfo/communicate/{create,execute} directly.
+  {
+    id: 'send-communication',
+    name: 'Send Email / WhatsApp',
+    description:
+      'Send a real email or WhatsApp message to a customer via the connected provider (SMTP/Resend/SendGrid/Gmail/Mailgun for email; WhatsApp Cloud API/Twilio/Gupshup for WhatsApp). Generates a branded message, attaches the invoice/report/payment link, dispatches via the provider API, and tracks delivery through webhooks. No simulated sends.',
+    icon: 'Send',
+    category: 'communication',
+    permission: 'staff',
+    approvalRequired: true,
+    inputSchema: [
+      { key: 'channel', label: 'Channel', type: 'select', required: true, options: [
+        { label: 'Email', value: 'email' },
+        { label: 'WhatsApp', value: 'whatsapp' },
+        { label: 'Both', value: 'both' },
+      ] },
+      { key: 'messageType', label: 'Message Type', type: 'select', required: true, options: [
+        { label: 'Payment Link', value: 'payment_link' },
+        { label: 'Invoice', value: 'invoice' },
+        { label: 'GST Report', value: 'gst_report' },
+        { label: 'Payment Reminder', value: 'payment_reminder' },
+        { label: 'Receipt', value: 'receipt' },
+        { label: 'Outstanding Statement', value: 'outstanding_statement' },
+        { label: 'Welcome', value: 'welcome' },
+        { label: 'Compliance Reminder', value: 'compliance_reminder' },
+        { label: 'Custom', value: 'custom' },
+      ] },
+      { key: 'recipient', label: 'Recipient', type: 'string', required: true, placeholder: 'Customer name, email, or phone' },
+      { key: 'invoiceNumber', label: 'Invoice #', type: 'string', placeholder: 'INV-2026-000001 (if applicable)' },
+      { key: 'customMessage', label: 'Custom Message', type: 'textarea', placeholder: 'Optional override message' },
+    ],
+    detect: (msg) => {
+      const m = msg.toLowerCase();
+      const patterns = [
+        /\bemail\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder)/i,
+        /\bwhatsapp\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder)/i,
+        /\bsend\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link|reminder)/i,
+        /\bshare\s+(?:the\s+)?(?:invoice|bill|report|receipt|statement|link)/i,
+        /\bemail\s+(?:this\s+month'?s\s+)?gst\s+report/i,
+        /\bwhatsapp\s+(?:this\s+month'?s\s+)?gst\s+report/i,
+        /\bsend\s+(?:a\s+)?(?:payment\s+)?reminder/i,
+      ];
+      const score = patterns.some((p) => p.test(m)) ? 0.92 : 0;
+      // Exclude pure creation phrases (handled by other tools)
+      if (/^(?:create|generate|make|issue|draft|prepare)\s+(?:an?\s+)?(?:invoice|bill|payment\s*link)/i.test(msg.trim())) {
+        return { matches: false, score: 0 };
+      }
+      return { matches: score > 0, score };
+    },
+    extractParams: (msg, data) => {
+      const params: DetectedParam[] = [];
+      const lowerMsg = msg.toLowerCase();
+      // Channel
+      if (/\bwhatsapp\b/i.test(msg)) params.push({ key: 'channel', value: 'whatsapp', source: 'extracted', confidence: 0.92 });
+      else if (/\bemail\b/i.test(msg)) params.push({ key: 'channel', value: 'email', source: 'extracted', confidence: 0.92 });
+      // Message type
+      if (/payment\s*link/i.test(msg)) params.push({ key: 'messageType', value: 'payment_link', source: 'extracted', confidence: 0.9 });
+      else if (/gst\s*report/i.test(msg)) params.push({ key: 'messageType', value: 'gst_report', source: 'extracted', confidence: 0.9 });
+      else if (/\binvoice\b/i.test(msg)) params.push({ key: 'messageType', value: 'invoice', source: 'extracted', confidence: 0.85 });
+      else if (/reminder/i.test(msg)) params.push({ key: 'messageType', value: 'payment_reminder', source: 'extracted', confidence: 0.85 });
+      // Recipient — try to match a client name
+      const matched = data.clients.find((c) => lowerMsg.includes(c.name.toLowerCase()));
+      if (matched) {
+        params.push({ key: 'recipient', value: matched.name, source: 'extracted', confidence: 0.85 });
+      }
+      return params;
+    },
+    dryRun: async (input) => ({
+      preview: {
+        channel: input.channel ?? '(unspecified)',
+        messageType: input.messageType ?? '(unspecified)',
+        recipient: input.recipient ?? '(unspecified)',
+        note: 'Oracle will resolve the recipient from the real clients database, detect the connected email/WhatsApp provider, generate a branded message, attach the relevant document, and dispatch via the provider API. Delivery is tracked through webhooks.',
+      },
+    }),
+    execute: async (input, ctx) => {
+      // Stub — actual execution happens through the dedicated CommunicationActionCard
+      // which calls /api/oracle/cfo/communicate/{create,execute} directly.
+      return {
+        success: false,
+        message: 'Communication is handled by the dedicated production card. Type "Email the GST report to ABC Traders" or "WhatsApp the payment link" to trigger the production flow.',
+        recordsAffected: [],
+        output: { note: 'Use the CommunicationActionCard for real sends.', redirect: 'communication-action-card' },
+        rollbackStatus: 'not-needed',
+        executionMs: 0,
+      };
+    },
+    retry: { maxAttempts: 3, backoffMs: 500 },
+  },
 ];
 
 // ─── Registry helpers ───────────────────────────────────────────────────────

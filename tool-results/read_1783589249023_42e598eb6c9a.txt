@@ -1,0 +1,757 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot Oracle Intelligence Core™ — Enterprise Reasoning Engine™
+     3→//
+     4→// Every AI decision must contain:
+     5→//   • business reasoning    • financial reasoning    • risk reasoning
+     6→//   • compliance reasoning  • operational reasoning  • legal reasoning
+     7→//   • historical evidence   • supporting data        • confidence (0-100)
+     8→//   • 2-3 alternatives with pros/cons/ROI
+     9→//   • expected ROI           • rollback strategy     • final answer
+    10→//
+    11→// Pipeline:
+    12→//   1. gatherBusinessContext(req.firmId)     — Context Engine™
+    13→//   2. chooseModel({purpose:'reasoning'})    — Multi-Model AI Router™
+    14→//   3. renderPrompt('oracle_orchestrate')    — Enterprise Prompt Engine™
+    15→//   4. optional z-ai-web-dev-sdk LLM call (skip if req.callLLM===false or on failure)
+    16→//   5. parse 6 reasoning dimensions; fall back to deterministic structured reasoning
+    17→//   6. generate 2-3 alternatives with heuristic templates
+    18→//   7. compute confidence from data completeness + historical evidence + LLM success
+    19→//   8. persist to db.oracleReasoning + log model call + write memory record
+    20→//   9. return ReasoningResult
+    21→//
+    22→// Never throws — always returns a valid ReasoningResult (with deterministic
+    23→// fallback reasoning built from the gathered context).
+    24→// ═══════════════════════════════════════════════════════════════════════════════
+    25→
+    26→import type {
+    27→  AIModuleId,
+    28→  AIProvider,
+    29→  ModelTier,
+    30→  ReasoningRequest,
+    31→  ReasoningResult,
+    32→} from './types';
+    33→import { db } from '@/lib/db';
+    34→import { gatherBusinessContext, formatContextForPrompt } from './context';
+    35→import { chooseModel, logModelCall } from './router';
+    36→import { renderPrompt } from './prompts';
+    37→import { writeMemory } from './memory';
+    38→
+    39→const FIRM_ID = process.env.NEXT_PUBLIC_FIRM_ID || 'gstpilot-default-firm';
+    40→
+    41→// ─── Helpers ────────────────────────────────────────────────────────────────
+    42→
+    43→function safeParseJSON<T>(raw: string | null, fallback: T): T {
+    44→  if (!raw) return fallback;
+    45→  try {
+    46→    return JSON.parse(raw) as T;
+    47→  } catch {
+    48→    return fallback;
+    49→  }
+    50→}
+    51→
+    52→function inr(n: number): string {
+    53→  return `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
+    54→}
+    55→
+    56→// ─── LLM call (optional) ────────────────────────────────────────────────────
+    57→
+    58→interface LLMOutcome {
+    59→  answer: string;
+    60→  success: boolean;
+    61→  promptTokens: number;
+    62→  outputTokens: number;
+    63→  latencyMs: number;
+    64→  error?: string;
+    65→}
+    66→
+    67→async function callLLM(
+    68→  systemPrompt: string,
+    69→  userPrompt: string,
+    70→): Promise<LLMOutcome> {
+    71→  const start = Date.now();
+    72→  try {
+    73→    // Dynamic import so this module can load even if the SDK isn't ready.
+    74→    const ZAIModule = await import('z-ai-web-dev-sdk');
+    75→    const ZAI = (ZAIModule as any).default ?? ZAIModule;
+    76→    const zai = await ZAI.create();
+    77→    const completion = await zai.chat.completions.create({
+    78→      messages: [
+    79→        { role: 'system', content: systemPrompt },
+    80→        { role: 'user', content: userPrompt },
+    81→      ],
+    82→      temperature: 0.4,
+    83→      max_tokens: 2000,
+    84→    });
+    85→    const answer: string = completion?.choices?.[0]?.message?.content ?? '';
+    86→    return {
+    87→      answer,
+    88→      success: answer.length > 0,
+    89→      promptTokens: Math.ceil(systemPrompt.length / 4) + Math.ceil(userPrompt.length / 4),
+    90→      outputTokens: Math.ceil(answer.length / 4),
+    91→      latencyMs: Date.now() - start,
+    92→    };
+    93→  } catch (err: any) {
+    94→    return {
+    95→      answer: '',
+    96→      success: false,
+    97→      promptTokens: 0,
+    98→      outputTokens: 0,
+    99→      latencyMs: Date.now() - start,
+   100→      error: err?.message ?? String(err),
+   101→    };
+   102→  }
+   103→}
+   104→
+   105→// ─── Deterministic fallback reasoning (built from real context) ─────────────
+   106→
+   107→interface ContextSlice {
+   108→  hasCash: boolean;
+   109→  hasRevenue: boolean;
+   110→  cashBalance: number;
+   111→  monthlyRevenue: number;
+   112→  monthlyExpenses: number;
+   113→  receivables: number;
+   114→  payables: number;
+   115→  gstCollected: number;
+   116→  gstPaid: number;
+   117→  healthScore: number;
+   118→  runwayDays: number;
+   119→  anomalies: number;
+   120→  pendingApprovals: number;
+   121→  goalsCount: number;
+   122→  strategiesCount: number;
+   123→  modulesWithData: number;
+   124→}
+   125→
+   126→function assessContext(ctx: Awaited<ReturnType<typeof gatherBusinessContext>>): ContextSlice {
+   127→  let modulesWithData = 0;
+   128→  if (ctx.graph.nodeCount > 0) modulesWithData++;
+   129→  if (ctx.twin.healthScore > 0 || ctx.twin.cashRunwayDays > 0) modulesWithData++;
+   130→  if (ctx.finance.cashBalance > 0 || ctx.finance.monthlyRevenue > 0) modulesWithData++;
+   131→  if (ctx.connectedSystems.total > 0) modulesWithData++;
+   132→  if (ctx.recentInvoices.length > 0) modulesWithData++;
+   133→  if (ctx.pendingApprovals.length > 0) modulesWithData++;
+   134→  if (ctx.goals.length > 0) modulesWithData++;
+   135→  if (ctx.previousConversations.length > 0) modulesWithData++;
+   136→  if (ctx.knowledge.entityCount > 0) modulesWithData++;
+   137→
+   138→  return {
+   139→    hasCash: ctx.finance.cashBalance > 0,
+   140→    hasRevenue: ctx.finance.monthlyRevenue > 0,
+   141→    cashBalance: ctx.finance.cashBalance,
+   142→    monthlyRevenue: ctx.finance.monthlyRevenue,
+   143→    monthlyExpenses: ctx.finance.monthlyExpenses,
+   144→    receivables: ctx.finance.receivables,
+   145→    payables: ctx.finance.payables,
+   146→    gstCollected: ctx.finance.gstCollected,
+   147→    gstPaid: ctx.finance.gstPaid,
+   148→    healthScore: ctx.twin.healthScore,
+   149→    runwayDays: ctx.twin.cashRunwayDays,
+   150→    anomalies: ctx.twin.anomalies,
+   151→    pendingApprovals: ctx.pendingApprovals.length,
+   152→    goalsCount: ctx.goals.length,
+   153→    strategiesCount: ctx.strategies.length,
+   154→    modulesWithData,
+   155→  };
+   156→}
+   157→
+   158→function buildDeterministicReasoning(
+   159→  req: ReasoningRequest,
+   160→  ctx: Awaited<ReturnType<typeof gatherBusinessContext>>,
+   161→  slice: ContextSlice,
+   162→): {
+   163→  business: string;
+   164→  financial: string;
+   165→  risk: string;
+   166→  compliance: string;
+   167→  operational: string;
+   168→  legal: string;
+   169→  historical: string;
+   170→  finalAnswer: string;
+   171→  expectedRoi: string | null;
+   172→  rollback: string;
+   173→} {
+   174→  const business = `Based on the live business context, the question "${req.request.slice(0, 160)}" is evaluated against ${slice.modulesWithData} connected data sources. The firm currently has ${slice.goalsCount} active goal(s) and ${slice.strategiesCount} active strategy/strategies, with ${slice.pendingApprovals} pending executive approval(s). Business health score is ${slice.healthScore}/100 and the Digital Twin reports ${slice.anomalies} anomaly(ies). Recommendation should align with existing strategic objectives and avoid introducing conflicting priorities.`;
+   175→
+   176→  const financial = slice.hasCash
+   177→    ? `Current cash position is ${inr(slice.cashBalance)} with ${slice.runwayDays} days of runway. Monthly revenue is ${inr(slice.monthlyRevenue)} against ${inr(slice.monthlyExpenses)} in expenses. Receivables of ${inr(slice.receivables)} and payables of ${inr(slice.payables)} imply net working capital of ${inr(slice.receivables - slice.payables)}. GST liability is approximately ${inr(slice.gstCollected)} with ${inr(slice.gstPaid)} in ITC available. Any recommendation must preserve liquidity — do not commit to outflows exceeding 25% of available cash without explicit approval.`
+   178→    : `Cash position data is unavailable from connected systems. Treat any financial commitment as high-risk until banking/ERP data is connected. Recommend conservative posture: defer non-essential outflows, accelerate receivables, and prioritize connecting bank + ERP data sources via the Connectivity Fabric™.`;
+   179→
+   180→  const risk = slice.anomalies > 0
+   181→    ? `The Digital Twin has flagged ${slice.anomalies} anomaly(ies) requiring attention. With health score at ${slice.healthScore}/100 and ${slice.pendingApprovals} pending decision(s), the principal risks are: (1) anomaly escalation, (2) decision backlog creating execution drag, (3) runway compression if expenses exceed revenue. Risk-mitigation gates: require CFO sign-off for any commitment >25% of cash, freeze discretionary spend until anomalies clear, and review pending approvals within 24h.`
+   182→    : `No active anomalies detected. Health score is ${slice.healthScore}/100. Principal risks remain: (1) data-source gaps that limit visibility, (2) decision backlog (${slice.pendingApprovals} pending), (3) runway compression if monthly expenses exceed revenue. Recommend monthly risk review and weekly cash-position check.`;
+   183→
+   184→  const compliance = `GST position: ${inr(slice.gstCollected)} collected vs ${inr(slice.gstPaid)} in ITC available. Ensure GSTR-1 and GSTR-3B are filed on time for the current period; review GSTR-2B reconciliation for any unmatched ITC. All decisions that affect GST liability must be logged for audit. If the action involves payments above ₹1L or sensitive customer/vendor data, flag for compliance review before execution.`;
+   185→
+   186→  const operational = `Operational state: ${slice.goalsCount} active goals, ${slice.strategiesCount} active strategies, ${slice.pendingApprovals} pending approvals. Recommend sequencing the requested action AFTER clearing critical pending approvals (oldest first) to prevent execution backlog. If the request maps to an existing goal/strategy, attach it as a milestone; otherwise classify it as a new initiative requiring owner assignment and a 30-day review checkpoint.`;
+   187→
+   188→  const legal = `From a legal standpoint, ensure the proposed action complies with the Indian Companies Act, GST Act, and any contractual obligations with vendors/customers. If the action involves new contracts, vendor onboarding, or regulatory filings, route through AI Legal™ for clause review. Flag high-stakes items (penalty > ₹1L, regulatory exposure, litigation risk) for human counsel review before execution. No irreversible legal action should be taken without explicit human approval.`;
+   189→
+   190→  const historical = ctx.previousConversations.length > 0
+   191→    ? `Previous Oracle conversations on related topics: ${ctx.previousConversations.slice(0, 3).map((c) => `"${c.topic}"${c.consensus ? ` (consensus: ${c.consensus.slice(0, 100)})` : ''}`).join('; ')}. ${ctx.recentReports.length > 0 ? `Recent reports/documents also reference: ${ctx.recentReports.slice(0, 3).map((r) => r.title).join(', ')}.` : ''} Use this history to avoid re-litigating settled decisions and to maintain strategic continuity.`
+   192→    : `No prior Oracle conversations on this topic were found in unified memory. ${ctx.recentReports.length > 0 ? `Recent documents: ${ctx.recentReports.slice(0, 3).map((r) => r.title).join(', ')}.` : 'Recommend establishing a baseline by connecting more data sources.'}`;
+   193→
+   194→  const finalAnswer = `Recommendation: ${req.requestType === 'decide' ? 'Proceed with the action subject to the risk gates above.' : req.requestType === 'simulate' ? 'Simulation result depends on the assumptions; see the financial and risk reasoning for projected outcomes.' : 'Analyzed using live business context. See the 6 reasoning dimensions above for the full picture.'} Confidence reflects data completeness (${slice.modulesWithData}/9 sources) and historical evidence availability. Execute only after the rollback strategy is acknowledged by the responsible owner.`;
+   195→
+   196→  const expectedRoi = slice.hasRevenue
+   197→    ? `+${inr(slice.monthlyRevenue * 0.05)} to +${inr(slice.monthlyRevenue * 0.15)} over 90 days (5-15% revenue uplift assumption)`
+   198→    : null;
+   199→
+   200→  const rollback = `Rollback strategy: (1) Time-box the action to 30 days with a checkpoint review. (2) Define a clear abort trigger — e.g., cash balance drops below ${inr(slice.cashBalance * 0.8)}, anomaly count doubles, or GST compliance is at risk. (3) Pre-stage the rollback procedure: halt new commitments, revert configuration changes, notify affected stakeholders via the Connectivity Fabric. (4) Document the rollback in Oracle Memory for future learning. (5) If rollback is not possible (irreversible action), require explicit board-level approval before execution.`;
+   201→
+   202→  return {
+   203→    business,
+   204→    financial,
+   205→    risk,
+   206→    compliance,
+   207→    operational,
+   208→    legal,
+   209→    historical,
+   210→    finalAnswer,
+   211→    expectedRoi,
+   212→    rollback,
+   213→  };
+   214→}
+   215→
+   216→// ─── LLM output parsing ─────────────────────────────────────────────────────
+   217→
+   218→interface ParsedReasoning {
+   219→  business: string;
+   220→  financial: string;
+   221→  risk: string;
+   222→  compliance: string;
+   223→  operational: string;
+   224→  legal: string;
+   225→  finalAnswer: string;
+   226→}
+   227→
+   228→/**
+   229→ * Parse the 6 reasoning dimensions out of the LLM answer.
+   230→ * Tries (a) JSON, (b) markdown section headers, (c) plain keyword prefixes.
+   231→ * On any failure, returns null and the caller falls back to deterministic.
+   232→ */
+   233→function parseReasoningFromAnswer(answer: string): ParsedReasoning | null {
+   234→  if (!answer || answer.trim().length === 0) return null;
+   235→
+   236→  // (a) Try JSON first
+   237→  const jsonStart = answer.indexOf('{');
+   238→  const jsonEnd = answer.lastIndexOf('}');
+   239→  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+   240→    try {
+   241→      const obj = JSON.parse(answer.slice(jsonStart, jsonEnd + 1));
+   242→      const fields = ['businessReasoning', 'financialReasoning', 'riskReasoning', 'complianceReasoning', 'operationalReasoning', 'legalReasoning', 'finalAnswer'];
+   243→      if (fields.every((f) => typeof (obj as any)[f] === 'string' && (obj as any)[f].length > 0)) {
+   244→        return {
+   245→          business: obj.businessReasoning,
+   246→          financial: obj.financialReasoning,
+   247→          risk: obj.riskReasoning,
+   248→          compliance: obj.complianceReasoning,
+   249→          operational: obj.operationalReasoning,
+   250→          legal: obj.legalReasoning,
+   251→          finalAnswer: obj.finalAnswer,
+   252→        };
+   253→      }
+   254→    } catch {
+   255→      /* fall through */
+   256→    }
+   257→  }
+   258→
+   259→  // (b) Try markdown headers
+   260→  const headerRe = /(?:^|\n)#{1,4}\s*([A-Za-z][A-Za-z &/\-]{2,40})\s*\n([\s\S]*?)(?=\n#{1,4}\s|$)/g;
+   261→  const sections: Record<string, string> = {};
+   262→  let m: RegExpExecArray | null;
+   263→  while ((m = headerRe.exec(answer)) !== null) {
+   264→    const label = m[1].toLowerCase().trim();
+   265→    const body = m[2].trim();
+   266→    if (label.includes('business')) sections.business = body;
+   267→    else if (label.includes('financial')) sections.financial = body;
+   268→    else if (label.includes('risk') && !label.includes('compliance')) sections.risk = body;
+   269→    else if (label.includes('compliance')) sections.compliance = body;
+   270→    else if (label.includes('operation')) sections.operational = body;
+   271→    else if (label.includes('legal')) sections.legal = body;
+   272→    else if (label.includes('final') || label.includes('recommendation') || label.includes('answer')) sections.finalAnswer = body;
+   273→  }
+   274→
+   275→  if (sections.business && sections.financial && sections.risk) {
+   276→    return {
+   277→      business: sections.business,
+   278→      financial: sections.financial,
+   279→      risk: sections.risk,
+   280→      compliance: sections.compliance || '',
+   281→      operational: sections.operational || '',
+   282→      legal: sections.legal || '',
+   283→      finalAnswer: sections.finalAnswer || answer.slice(0, 500),
+   284→    };
+   285→  }
+   286→
+   287→  // (c) Try keyword-prefixed lines
+   288→  const lines = answer.split('\n');
+   289→  const grab = (kw: string): string => {
+   290→    const ln = lines.find((l) => l.toLowerCase().includes(kw));
+   291→    return ln ? ln.replace(/^[\s>*\-\d.]+/, '').trim() : '';
+   292→  };
+   293→  const business = grab('business reasoning');
+   294→  const financial = grab('financial reasoning');
+   295→  const risk = grab('risk reasoning');
+   296→  const compliance = grab('compliance reasoning');
+   297→  const operational = grab('operational reasoning');
+   298→  const legal = grab('legal reasoning');
+   299→  if (business && financial && risk) {
+   300→    return {
+   301→      business,
+   302→      financial,
+   303→      risk,
+   304→      compliance: compliance || '',
+   305→      operational: operational || '',
+   306→      legal: legal || '',
+   307→      finalAnswer: answer.slice(0, 800),
+   308→    };
+   309→  }
+   310→
+   311→  return null;
+   312→}
+   313→
+   314→// ─── Alternatives generator (heuristic) ─────────────────────────────────────
+   315→
+   316→function generateAlternatives(
+   317→  req: ReasoningRequest,
+   318→  slice: ContextSlice,
+   319→): ReasoningResult['alternatives'] {
+   320→  const alts: ReasoningResult['alternatives'] = [];
+   321→
+   322→  // Alt 1: Do nothing / maintain status quo
+   323→  alts.push({
+   324→    label: 'Maintain status quo — do nothing',
+   325→    pros: [
+   326→      'No new risk introduced',
+   327→      'No additional capital commitment',
+   328→      'Team focus stays on current priorities',
+   329→    ],
+   330→    cons: [
+   331→      'Opportunity cost — competitor may act first',
+   332→      `${slice.pendingApprovals} pending approval(s) remain unaddressed`,
+   333→      slice.anomalies > 0 ? `${slice.anomalies} active anomaly(ies) may escalate` : 'No active anomalies, but no progress either',
+   334→    ],
+   335→    estimatedRoi: '0% short-term; risk of -5% to -10% if competitors act',
+   336→  });
+   337→
+   338→  // Alt 2: Aggressive approach
+   339→  alts.push({
+   340→    label: 'Aggressive approach — accelerate the recommendation',
+   341→    pros: [
+   342→      'Captures upside sooner',
+   343→      slice.hasRevenue ? `Potential +${inr(slice.monthlyRevenue * 0.15)} revenue within 60 days` : 'Establishes market position early',
+   344→      'Forces decision backlog clearance',
+   345→    ],
+   346→    cons: [
+   347→      `Requires up to 40% of available cash (${inr(slice.cashBalance * 0.4)})`,
+   348→      'Higher execution risk — limited rollback window',
+   349→      slice.runwayDays > 0 && slice.runwayDays < 60 ? `Runway (${slice.runwayDays}d) is tight — aggressive spend is risky` : 'May strain team capacity',
+   350→    ],
+   351→    estimatedRoi: slice.hasRevenue
+   352→      ? `+${inr(slice.monthlyRevenue * 0.2)} to +${inr(slice.monthlyRevenue * 0.3)} over 90 days (20-30% uplift)`
+   353→      : 'High variance — could be +30% or -15%',
+   354→  });
+   355→
+   356→  // Alt 3: Conservative approach (phased)
+   357→  alts.push({
+   358→    label: 'Conservative approach — phase it over 90 days',
+   359→    pros: [
+   360→      'Limits cash exposure to <15% per phase',
+   361→      'Allows learning between phases',
+   362→      'Easy rollback at each phase gate',
+   363→      'Aligns with quarterly review cadence',
+   364→    ],
+   365→    cons: [
+   366→      'Slower to realize full benefit',
+   367→      'Requires 3 review checkpoints (overhead)',
+   368→      'Competitor may outpace if market moves fast',
+   369→    ],
+   370→    estimatedRoi: slice.hasRevenue
+   371→      ? `+${inr(slice.monthlyRevenue * 0.08)} to +${inr(slice.monthlyRevenue * 0.12)} over 90 days (8-12% uplift, lower risk)`
+   372→      : 'Modest but stable: +5% to +10% over 90 days',
+   373→  });
+   374→
+   375→  return alts;
+   376→}
+   377→
+   378→// ─── Confidence computation ─────────────────────────────────────────────────
+   379→
+   380→function computeConfidence(
+   381→  slice: ContextSlice,
+   382→  historicalAvailable: boolean,
+   383→  llmSuccess: boolean,
+   384→): number {
+   385→  // Base: data completeness (0-50 pts, 9 modules max)
+   386→  const dataCompleteness = Math.min(50, Math.round((slice.modulesWithData / 9) * 50));
+   387→
+   388→  // Historical evidence (0-25 pts)
+   389→  const historical = historicalAvailable ? 25 : 5;
+   390→
+   391→  // LLM success (0-25 pts)
+   392→  const llm = llmSuccess ? 25 : 10;
+   393→
+   394→  // Penalty for anomalies (max -10)
+   395→  const anomalyPenalty = Math.min(10, slice.anomalies * 2);
+   396→
+   397→  const total = Math.max(0, Math.min(100, dataCompleteness + historical + llm - anomalyPenalty));
+   398→  return total;
+   399→}
+   400→
+   401→// ─── Main entry: reason() ───────────────────────────────────────────────────
+   402→
+   403→export async function reason(req: ReasoningRequest): Promise<ReasoningResult> {
+   404→  const firmId = req.firmId || FIRM_ID;
+   405→
+   406→  // Step 1 — gather context (never throws)
+   407→  const ctx = await gatherBusinessContext(firmId).catch(() => null);
+   408→  const safeCtx = ctx ?? (await gatherBusinessContext(firmId));
+   409→  const slice = assessContext(safeCtx);
+   410→
+   411→  // Step 2 — choose model
+   412→  const tier: ModelTier = req.preferredTier || 'standard';
+   413→  const modelChoice = chooseModel({
+   414→    purpose: 'reasoning',
+   415→    tier,
+   416→    inputTokensEstimate: safeCtx.estimatedTokens + Math.ceil(req.request.length / 4),
+   417→  });
+   418→
+   419→  // Step 3 — render prompt
+   420→  const rendered = renderPrompt('oracle_orchestrate', {
+   421→    context: formatContextForPrompt(safeCtx),
+   422→    question: req.request,
+   423→  });
+   424→  const systemPrompt = rendered?.system ?? 'You are Oracle™ — the unified AI brain of GSTPilot Infinity™.';
+   425→  const userPrompt = rendered?.user ?? `CONTEXT:\n${formatContextForPrompt(safeCtx)}\n\nQUESTION:\n${req.request}`;
+   426→
+   427→  // Step 4 — optional LLM call
+   428→  const shouldCallLLM = req.callLLM !== false;
+   429→  let llmOutcome: LLMOutcome | null = null;
+   430→  if (shouldCallLLM) {
+   431→    llmOutcome = await callLLM(systemPrompt, userPrompt);
+   432→  }
+   433→
+   434→  // Step 5 — build the 6 reasoning dimensions
+   435→  const fallback = buildDeterministicReasoning(req, safeCtx, slice);
+   436→  let business = fallback.business;
+   437→  let financial = fallback.financial;
+   438→  let risk = fallback.risk;
+   439→  let compliance = fallback.compliance;
+   440→  let operational = fallback.operational;
+   441→  let legal = fallback.legal;
+   442→  let historical = fallback.historical;
+   443→  let finalAnswer = fallback.finalAnswer;
+   444→
+   445→  if (llmOutcome?.success) {
+   446→    const parsed = parseReasoningFromAnswer(llmOutcome.answer);
+   447→    if (parsed) {
+   448→      // Use parsed LLM output, but never accept empty strings — fall back to deterministic.
+   449→      business = parsed.business || fallback.business;
+   450→      financial = parsed.financial || fallback.financial;
+   451→      risk = parsed.risk || fallback.risk;
+   452→      compliance = parsed.compliance || fallback.compliance;
+   453→      operational = parsed.operational || fallback.operational;
+   454→      legal = parsed.legal || fallback.legal;
+   455→      finalAnswer = parsed.finalAnswer || fallback.finalAnswer;
+   456→      // If LLM didn't surface historical evidence, keep our deterministic version.
+   457→      if (!historical || historical.length < 20) historical = fallback.historical;
+   458→    } else {
+   459→      // Parsing failed — put the full answer in business reasoning (per spec) but keep the rest deterministic.
+   460→      business = `${llmOutcome.answer.slice(0, 1200)}\n\n[Structured parse failed — showing raw LLM output. Deterministic reasoning used for other dimensions.]`;
+   461→    }
+   462→  }
+   463→
+   464→  // Step 6 — alternatives
+   465→  const alternatives = generateAlternatives(req, slice);
+   466→
+   467→  // Step 7 — confidence
+   468→  const confidence = computeConfidence(slice, safeCtx.previousConversations.length > 0, llmOutcome?.success ?? false);
+   469→
+   470→  // Step 8 — supporting data (real context snapshot)
+   471→  const supportingData: Record<string, unknown> = {
+   472→    firmId,
+   473→    contextGatheredAt: safeCtx.gatheredAt,
+   474→    estimatedContextTokens: safeCtx.estimatedTokens,
+   475→    finance: safeCtx.finance,
+   476→    twin: safeCtx.twin,
+   477→    graph: {
+   478→      nodeCount: safeCtx.graph.nodeCount,
+   479→      edgeCount: safeCtx.graph.edgeCount,
+   480→      topRisks: safeCtx.graph.topRisks,
+   481→    },
+   482→    connectedSystems: safeCtx.connectedSystems,
+   483→    pendingApprovals: safeCtx.pendingApprovals.length,
+   484→    activeGoals: safeCtx.goals.length,
+   485→    activeStrategies: safeCtx.strategies.length,
+   486→    recentInvoicesCount: safeCtx.recentInvoices.length,
+   487→    modulesWithData: slice.modulesWithData,
+   488→    modelChoice: {
+   489→      provider: modelChoice.provider,
+   490→      model: modelChoice.model,
+   491→      tier: modelChoice.tier,
+   492→      rationale: modelChoice.rationale,
+   493→      costPer1kUsd: modelChoice.costPer1kUsd,
+   494→      estimatedLatencyMs: modelChoice.estimatedLatencyMs,
+   495→    },
+   496→    llmCalled: shouldCallLLM,
+   497→    llmSuccess: llmOutcome?.success ?? false,
+   498→    llmLatencyMs: llmOutcome?.latencyMs ?? 0,
+   499→  };
+   500→
+   501→  const executivesConsulted: AIModuleId[] = req.executives && req.executives.length > 0
+   502→    ? req.executives
+   503→    : ['oracle', 'ceo', 'cfo', 'cro'];
+   504→
+   505→  // Step 9 — persist to db.oracleReasoning
+   506→  let reasoningId = '';
+   507→  let createdAt = new Date().toISOString();
+   508→  try {
+   509→    const created = await (db as any).oracleReasoning.create({
+   510→      data: {
+   511→        firmId,
+   512→        userId: req.userId ?? null,
+   513→        request: req.request,
+   514→        requestType: req.requestType,
+   515→        businessReasoning: business,
+   516→        financialReasoning: financial,
+   517→        riskReasoning: risk,
+   518→        complianceReasoning: compliance,
+   519→        operationalReasoning: operational,
+   520→        legalReasoning: legal,
+   521→        historicalEvidence: historical,
+   522→        supportingData: JSON.stringify(supportingData),
+   523→        confidence,
+   524→        alternatives: JSON.stringify(alternatives),
+   525→        expectedRoi: fallback.expectedRoi,
+   526→        rollbackStrategy: fallback.rollback,
+   527→        finalAnswer,
+   528→        modelUsed: modelChoice.provider,
+   529→        modelTier: modelChoice.tier,
+   530→        executivesConsulted: JSON.stringify(executivesConsulted),
+   531→        approved: false,
+   532→        rejected: false,
+   533→        outcome: 'pending',
+   534→        outcomeNote: null,
+   535→      },
+   536→    });
+   537→    reasoningId = created.id;
+   538→    createdAt = created.createdAt instanceof Date ? created.createdAt.toISOString() : String(created.createdAt);
+   539→  } catch (err) {
+   540→    console.warn('[Reasoning Engine] failed to persist OracleReasoning:', err);
+   541→  }
+   542→
+   543→  // Step 10 — log the model call (for audit + cost tracking)
+   544→  try {
+   545→    await logModelCall({
+   546→      firmId,
+   547→      userId: req.userId ?? null,
+   548→      provider: modelChoice.provider as AIProvider,
+   549→      model: modelChoice.model,
+   550→      tier: modelChoice.tier,
+   551→      purpose: 'reasoning',
+   552→      promptTokens: llmOutcome?.promptTokens ?? safeCtx.estimatedTokens,
+   553→      outputTokens: llmOutcome?.outputTokens ?? Math.ceil(finalAnswer.length / 4),
+   554→      latencyMs: llmOutcome?.latencyMs ?? 0,
+   555→      success: shouldCallLLM ? (llmOutcome?.success ?? false) : true,
+   556→      errorMessage: llmOutcome?.error ?? (shouldCallLLM ? null : 'LLM call skipped (callLLM=false)'),
+   557→      reasoningId: reasoningId || null,
+   558→    });
+   559→  } catch (err) {
+   560→    console.warn('[Reasoning Engine] failed to log model call:', err);
+   561→  }
+   562→
+   563→  // Step 11 — write memory record
+   564→  try {
+   565→    await writeMemory({
+   566→      firmId,
+   567→      userId: req.userId ?? null,
+   568→      category: 'reasoning',
+   569→      entityType: 'reasoning',
+   570→      entityId: reasoningId || null,
+   571→      title: `Oracle reasoning: ${req.request.slice(0, 80)}`,
+   572→      summary: finalAnswer.slice(0, 500),
+   573→      payload: {
+   574→        requestType: req.requestType,
+   575→        confidence,
+   576→        modelUsed: modelChoice.provider,
+   577→        modelTier: modelChoice.tier,
+   578→        llmCalled: shouldCallLLM,
+   579→        llmSuccess: llmOutcome?.success ?? false,
+   580→        executivesConsulted,
+   581→        expectedRoi: fallback.expectedRoi,
+   582→      },
+   583→      tags: ['oracle', 'reasoning', req.requestType],
+   584→      importance: confidence >= 70 ? 80 : 60,
+   585→      source: 'oracle',
+   586→    });
+   587→  } catch (err) {
+   588→    console.warn('[Reasoning Engine] failed to write memory:', err);
+   589→  }
+   590→
+   591→  // Step 12 — assemble & return
+   592→  const result: ReasoningResult = {
+   593→    id: reasoningId,
+   594→    firmId,
+   595→    userId: req.userId ?? null,
+   596→    request: req.request,
+   597→    requestType: req.requestType,
+   598→    businessReasoning: business,
+   599→    financialReasoning: financial,
+   600→    riskReasoning: risk,
+   601→    complianceReasoning: compliance,
+   602→    operationalReasoning: operational,
+   603→    legalReasoning: legal,
+   604→    historicalEvidence: historical,
+   605→    supportingData,
+   606→    confidence,
+   607→    alternatives,
+   608→    expectedRoi: fallback.expectedRoi,
+   609→    rollbackStrategy: fallback.rollback,
+   610→    finalAnswer,
+   611→    modelUsed: modelChoice.provider,
+   612→    modelTier: modelChoice.tier,
+   613→    executivesConsulted,
+   614→    approved: false,
+   615→    rejected: false,
+   616→    outcome: 'pending',
+   617→    outcomeNote: null,
+   618→    createdAt,
+   619→  };
+   620→
+   621→  return result;
+   622→}
+   623→
+   624→// ─── Read helpers ───────────────────────────────────────────────────────────
+   625→
+   626→function serializeReasoning(r: any): ReasoningResult {
+   627→  return {
+   628→    id: r.id,
+   629→    firmId: r.firmId,
+   630→    userId: r.userId,
+   631→    request: r.request,
+   632→    requestType: r.requestType as ReasoningRequest['requestType'],
+   633→    businessReasoning: r.businessReasoning,
+   634→    financialReasoning: r.financialReasoning,
+   635→    riskReasoning: r.riskReasoning,
+   636→    complianceReasoning: r.complianceReasoning,
+   637→    operationalReasoning: r.operationalReasoning,
+   638→    legalReasoning: r.legalReasoning,
+   639→    historicalEvidence: r.historicalEvidence,
+   640→    supportingData: safeParseJSON<Record<string, unknown>>(r.supportingData, {}),
+   641→    confidence: r.confidence,
+   642→    alternatives: safeParseJSON<ReasoningResult['alternatives']>(r.alternatives, []),
+   643→    expectedRoi: r.expectedRoi,
+   644→    rollbackStrategy: r.rollbackStrategy,
+   645→    finalAnswer: r.finalAnswer,
+   646→    modelUsed: r.modelUsed as AIProvider,
+   647→    modelTier: r.modelTier as ModelTier,
+   648→    executivesConsulted: safeParseJSON<AIModuleId[]>(r.executivesConsulted, []),
+   649→    approved: r.approved,
+   650→    rejected: r.rejected,
+   651→    outcome: r.outcome as ReasoningResult['outcome'],
+   652→    outcomeNote: r.outcomeNote,
+   653→    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+   654→  };
+   655→}
+   656→
+   657→/** Fetch a single reasoning record by id. */
+   658→export async function getReasoning(id: string): Promise<ReasoningResult | null> {
+   659→  try {
+   660→    const row = await (db as any).oracleReasoning.findUnique({ where: { id } });
+   661→    if (!row) return null;
+   662→    return serializeReasoning(row);
+   663→  } catch (err) {
+   664→    console.warn('[Reasoning Engine] getReasoning failed:', err);
+   665→    return null;
+   666→  }
+   667→}
+   668→
+   669→/** List the most recent N reasoning records. */
+   670→export async function listReasoning(limit = 20): Promise<ReasoningResult[]> {
+   671→  try {
+   672→    const rows = await (db as any).oracleReasoning.findMany({
+   673→      orderBy: { createdAt: 'desc' },
+   674→      take: Math.min(limit, 200),
+   675→    });
+   676→    return rows.map(serializeReasoning);
+   677→  } catch (err) {
+   678→    console.warn('[Reasoning Engine] listReasoning failed:', err);
+   679→    return [];
+   680→  }
+   681→}
+   682→
+   683→/** Update a reasoning record's outcome — used by the Self-Improvement Engine. */
+   684→export async function updateReasoningOutcome(
+   685→  id: string,
+   686→  outcome: 'success' | 'failure' | 'partial',
+   687→  note: string,
+   688→): Promise<void> {
+   689→  try {
+   690→    await (db as any).oracleReasoning.update({
+   691→      where: { id },
+   692→      data: { outcome, outcomeNote: note },
+   693→    });
+   694→  } catch (err) {
+   695→    console.warn('[Reasoning Engine] updateReasoningOutcome failed:', err);
+   696→  }
+   697→}
+   698→
+   699→// ─── Dashboard stats (last 24h) ─────────────────────────────────────────────
+   700→
+   701→export interface ReasoningStats {
+   702→  total: number;
+   703→  approved: number;
+   704→  rejected: number;
+   705→  pending: number;
+   706→  byType: Record<string, number>;
+   707→  avgConfidence: number;
+   708→}
+   709→
+   710→export async function getReasoningStats(): Promise<ReasoningStats> {
+   711→  const firmId = FIRM_ID;
+   712→  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+   713→  const where = { firmId, createdAt: { gte: since } };
+   714→
+   715→  try {
+   716→    const [total, approved, rejected, pending, byTypeRows, confAgg] = await Promise.all([
+   717→      (db as any).oracleReasoning.count({ where }),
+   718→      (db as any).oracleReasoning.count({ where: { ...where, approved: true } }),
+   719→      (db as any).oracleReasoning.count({ where: { ...where, rejected: true } }),
+   720→      (db as any).oracleReasoning.count({
+   721→        where: { ...where, approved: false, rejected: false },
+   722→      }),
+   723→      (db as any).oracleReasoning.groupBy({
+   724→        by: ['requestType'],
+   725→        where,
+   726→        _count: { _all: true },
+   727→      }),
+   728→      (db as any).oracleReasoning.aggregate({
+   729→        where,
+   730→        _avg: { confidence: true },
+   731→      }),
+   732→    ]);
+   733→
+   734→    const byType: Record<string, number> = {};
+   735→    for (const r of byTypeRows ?? []) byType[r.requestType] = r._count._all;
+   736→
+   737→    return {
+   738→      total: total ?? 0,
+   739→      approved: approved ?? 0,
+   740→      rejected: rejected ?? 0,
+   741→      pending: pending ?? 0,
+   742→      byType,
+   743→      avgConfidence: Math.round(confAgg?._avg?.confidence ?? 0),
+   744→    };
+   745→  } catch (err) {
+   746→    console.warn('[Reasoning Engine] getReasoningStats failed:', err);
+   747→    return {
+   748→      total: 0,
+   749→      approved: 0,
+   750→      rejected: 0,
+   751→      pending: 0,
+   752→      byType: {},
+   753→      avgConfidence: 0,
+   754→    };
+   755→  }
+   756→}
+   757→

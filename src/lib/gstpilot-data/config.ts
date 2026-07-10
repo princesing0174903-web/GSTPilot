@@ -30,6 +30,9 @@ export const ORG_PATH = `organizations/${ORG_ID}`;
 export const CUSTOMERS_COLLECTION = `${ORG_PATH}/customers`;
 export const PRODUCTS_COLLECTION = `${ORG_PATH}/products`;
 export const INVOICES_COLLECTION = `${ORG_PATH}/invoices`;
+export const VENDORS_COLLECTION = `${ORG_PATH}/vendors`;
+export const EXPENSES_COLLECTION = `${ORG_PATH}/expenses`;
+export const PAYMENTS_COLLECTION = `${ORG_PATH}/payments`;
 
 /** Standard GST rates (%) supported by the invoice line items. */
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28] as const;

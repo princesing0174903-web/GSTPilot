@@ -421,6 +421,80 @@ export function OracleWorkspace({
     [isStreaming, messages],
   );
 
+  // ─── Oracle CFO — Analyze the user's last message for actionable intents ───
+  //     Declared BEFORE sendMessage so it is initialized when sendMessage's
+  //     useCallback dependency array is evaluated (avoids TDZ:
+  //     "Cannot access 'analyzeWithCfo' before initialization").
+  //     After Oracle finishes streaming its answer, we fire a parallel request
+  //     to /api/oracle/cfo/analyze. If it detects an actionable tool (create
+  //     invoice, send reminder, etc.), the approval cards render inline below
+  //     the assistant message. This does NOT replace the chat — it augments it
+  //     with real, executable, audited business actions.
+  const analyzeWithCfo = useCallback(
+    async (userMessage: string, oracleMessageId: string) => {
+      const orgId = orgCtx.organization?.id ?? 'preview-org';
+      const role = (orgCtx.membership?.role ?? 'manager') as 'admin' | 'manager' | 'staff' | 'viewer';
+      try {
+        // ─── Upgrade Phase 1.1: Real Invoice Creation ───────────────────
+        // If the user's message is an invoice-creation request, render the
+        // dedicated production InvoiceActionCard instead of the generic CFO
+        // panel. The card makes its own API call to the invoice engine.
+        if (isInvoiceCreationIntent(userMessage)) {
+          setInvoiceUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — invoice card handles it
+        }
+
+        // ─── Upgrade Phase 1.3: Real Payment Link Creation ──────────────
+        // If the user's message is a payment-link request, render the dedicated
+        // production PaymentLinkActionCard instead of the generic CFO panel.
+        if (isPaymentLinkIntent(userMessage)) {
+          setPaymentLinkUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — payment link card handles it
+        }
+
+        // ─── Upgrade Phase 1.4: Real Email & WhatsApp Execution ─────────
+        // If the user's message is a communication request (email/WhatsApp an
+        // invoice, GST report, payment link, reminder, or statement), render the
+        // dedicated production CommunicationActionCard instead of the generic
+        // CFO panel. The card makes its own API call to the communication engine.
+        if (isCommunicationIntent(userMessage)) {
+          setCommunicationUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
+          setCfoAnalyzing(null);
+          return; // Skip the generic analyze — communication card handles it
+        }
+
+        setCfoAnalyzing(oracleMessageId);
+        const res = await fetch('/api/oracle/cfo/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: userMessage,
+            organizationId: orgId,
+            firmId: orgCtx.organization?.firmId ?? null,
+            userId: userId ?? 'preview-user',
+            userEmail: userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in',
+            userRole: role,
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.approvalRequests && data.approvalRequests.length > 0) {
+          setCfoApprovalRequests((prev) => ({
+            ...prev,
+            [oracleMessageId]: data.approvalRequests,
+          }));
+        }
+      } catch {
+        // CFO analyze is best-effort — never block the chat on it
+      } finally {
+        setCfoAnalyzing(null);
+      }
+    },
+    [orgCtx.organization, orgCtx.membership, userId, userName],
+  );
+
   // ─── Send flow (preserved from previous implementation) ─────────────────────
   const sendMessage = useCallback(
     async (raw: string) => {
@@ -660,76 +734,6 @@ export function OracleWorkspace({
     abortRef.current?.abort();
   }, []);
 
-  // ─── Oracle CFO — Analyze the user's last message for actionable intents ───
-  //     After Oracle finishes streaming its answer, we fire a parallel request
-  //     to /api/oracle/cfo/analyze. If it detects an actionable tool (create
-  //     invoice, send reminder, etc.), the approval cards render inline below
-  //     the assistant message. This does NOT replace the chat — it augments it
-  //     with real, executable, audited business actions.
-  const analyzeWithCfo = useCallback(
-    async (userMessage: string, oracleMessageId: string) => {
-      const orgId = orgCtx.organization?.id ?? 'preview-org';
-      const role = (orgCtx.membership?.role ?? 'manager') as 'admin' | 'manager' | 'staff' | 'viewer';
-      try {
-        // ─── Upgrade Phase 1.1: Real Invoice Creation ───────────────────
-        // If the user's message is an invoice-creation request, render the
-        // dedicated production InvoiceActionCard instead of the generic CFO
-        // panel. The card makes its own API call to the invoice engine.
-        if (isInvoiceCreationIntent(userMessage)) {
-          setInvoiceUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
-          setCfoAnalyzing(null);
-          return; // Skip the generic analyze — invoice card handles it
-        }
-
-        // ─── Upgrade Phase 1.3: Real Payment Link Creation ──────────────
-        // If the user's message is a payment-link request, render the dedicated
-        // production PaymentLinkActionCard instead of the generic CFO panel.
-        if (isPaymentLinkIntent(userMessage)) {
-          setPaymentLinkUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
-          setCfoAnalyzing(null);
-          return; // Skip the generic analyze — payment link card handles it
-        }
-
-        // ─── Upgrade Phase 1.4: Real Email & WhatsApp Execution ─────────
-        // If the user's message is a communication request (email/WhatsApp an
-        // invoice, GST report, payment link, reminder, or statement), render the
-        // dedicated production CommunicationActionCard instead of the generic
-        // CFO panel. The card makes its own API call to the communication engine.
-        if (isCommunicationIntent(userMessage)) {
-          setCommunicationUserMessages((prev) => ({ ...prev, [oracleMessageId]: userMessage }));
-          setCfoAnalyzing(null);
-          return; // Skip the generic analyze — communication card handles it
-        }
-
-        setCfoAnalyzing(oracleMessageId);
-        const res = await fetch('/api/oracle/cfo/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: userMessage,
-            organizationId: orgId,
-            firmId: orgCtx.organization?.firmId ?? null,
-            userId: userId ?? 'preview-user',
-            userEmail: userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in',
-            userRole: role,
-          }),
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.approvalRequests && data.approvalRequests.length > 0) {
-          setCfoApprovalRequests((prev) => ({
-            ...prev,
-            [oracleMessageId]: data.approvalRequests,
-          }));
-        }
-      } catch {
-        // CFO analyze is best-effort — never block the chat on it
-      } finally {
-        setCfoAnalyzing(null);
-      }
-    },
-    [orgCtx.organization, orgCtx.membership, userId, userName],
-  );
   // ─── Input handling ────────────────────────────────────────────────────────
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);

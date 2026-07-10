@@ -23,7 +23,7 @@ import { motion } from 'framer-motion';
 import {
   Brain, ListTodo, Clock, Plug, Users, Lightbulb, CheckCircle2, ArrowRight,
   Sparkles, TrendingDown, AlertTriangle, Wallet, IndianRupee, ShieldAlert,
-  Package, FileText, Database,
+  Package, FileText, Database, Building2, Receipt, ArrowRightLeft,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,9 @@ import {
 import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
 import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
 import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
+import { useGSTpilotVendors } from '@/hooks/useGSTpilotVendors';
+import { useGSTpilotExpenses } from '@/hooks/useGSTpilotExpenses';
+import { useGSTpilotPayments } from '@/hooks/useGSTpilotPayments';
 import { TrustBar } from '@/components/shared/TrustBar';
 import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
 
@@ -629,7 +632,12 @@ export default function MissionControlPage() {
   const { stats: customerStats, loading: customersLoading } = useGSTpilotCustomers();
   const { stats: productStats, loading: productsLoading } = useGSTpilotProducts();
   const { stats: invoiceStats, loading: invoicesLoading } = useGSTpilotInvoices();
-  const registryLoading = customersLoading || productsLoading || invoicesLoading;
+  const { stats: vendorStats, loading: vendorsLoading } = useGSTpilotVendors();
+  const { stats: expenseStats, loading: expensesLoading } = useGSTpilotExpenses();
+  const { stats: paymentStats, loading: paymentsLoading } = useGSTpilotPayments();
+  const registryLoading =
+    customersLoading || productsLoading || invoicesLoading ||
+    vendorsLoading || expensesLoading || paymentsLoading;
 
   // ── Priority checkbox toggle state (visual only, local to Today's Priorities widget) ──
   const [done, setDone] = useState<Record<string, boolean>>({});
@@ -1002,7 +1010,7 @@ export default function MissionControlPage() {
             </span>
           )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* 1. Total Customers */}
           <RegistryStatCard
             icon={Users}
@@ -1043,6 +1051,31 @@ export default function MissionControlPage() {
             onClick={() => setCurrentView('invoices')}
             delay={0.58}
             accent={!invoicesLoading && invoiceStats.totalOutstanding > 0 ? 'amber' : 'emerald'}
+          />
+          {/* 6. Total Vendors */}
+          <RegistryStatCard
+            icon={Building2}
+            label="Total Vendors"
+            value={vendorsLoading ? null : String(vendorStats.count)}
+            onClick={() => setCurrentView('vendors')}
+            delay={0.62}
+          />
+          {/* 7. Expenses (₹ INR) — amber accent */}
+          <RegistryStatCard
+            icon={Receipt}
+            label="Expenses"
+            value={expensesLoading ? null : formatINR(expenseStats.totalAmount)}
+            onClick={() => setCurrentView('expenses')}
+            delay={0.66}
+            accent="amber"
+          />
+          {/* 8. Payments — total received (₹ INR) */}
+          <RegistryStatCard
+            icon={ArrowRightLeft}
+            label="Payments"
+            value={paymentsLoading ? null : formatINR(paymentStats.totalReceived)}
+            onClick={() => setCurrentView('payments')}
+            delay={0.70}
           />
         </div>
       </motion.section>

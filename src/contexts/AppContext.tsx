@@ -40,6 +40,8 @@ export type AppView =
   | 'inventory'
   | 'banking'
   | 'payments'
+  | 'vendors'
+  | 'expenses'
   | 'e-invoicing'
   | 'tds'
   | 'roc-compliance'

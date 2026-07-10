@@ -126,6 +126,9 @@ const CRMPage = dynamic(() => import('@/components/crm/CRMPage'), { loading: Pag
 const GSTpilotCustomersView = dynamic(() => import('@/components/gstpilot-data/CustomersView'), { loading: PageLoader, ssr: false })
 const GSTpilotProductsView = dynamic(() => import('@/components/gstpilot-data/ProductsView'), { loading: PageLoader, ssr: false })
 const GSTpilotInvoicesView = dynamic(() => import('@/components/gstpilot-data/InvoicesView'), { loading: PageLoader, ssr: false })
+const GSTpilotVendorsView = dynamic(() => import('@/components/gstpilot-data/VendorsView'), { loading: PageLoader, ssr: false })
+const GSTpilotExpensesView = dynamic(() => import('@/components/gstpilot-data/ExpensesView'), { loading: PageLoader, ssr: false })
+const GSTpilotPaymentsView = dynamic(() => import('@/components/gstpilot-data/PaymentsView'), { loading: PageLoader, ssr: false })
 const ApprovalsPage = dynamic(() => import('@/components/approvals/ApprovalsPage'), { loading: PageLoader, ssr: false })
 const AutomationsPage = dynamic(() => import('@/components/automations/AutomationsPage'), { loading: PageLoader, ssr: false })
 const AutomationCenterPage = dynamic(() => import('@/components/automation/AutomationCenterPage'), { loading: PageLoader, ssr: false })
@@ -210,6 +213,8 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   returns: ReturnsPage,
   reconcile: ReconciliationPage,
   invoices: GSTpilotInvoicesView,
+  vendors: GSTpilotVendorsView,
+  expenses: GSTpilotExpensesView,
   clients: ClientRegistryPage,
   'client-workspace': ClientWorkspacePage,
   'return-prep': ReturnPrepWorkspace,
@@ -273,7 +278,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   hrms: HRMSPage,
   inventory: GSTpilotProductsView,
   banking: BankingPage,
-  payments: PaymentsPage,
+  payments: GSTpilotPaymentsView,
   'e-invoicing': EInvoicingPage,
   tds: TDSPage,
   'roc-compliance': ROCCompliancePage,

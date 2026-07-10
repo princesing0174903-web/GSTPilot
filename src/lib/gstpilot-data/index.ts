@@ -14,3 +14,6 @@ export * from './gst';
 export * from './customers';
 export * from './products';
 export * from './invoices';
+export * from './vendors';
+export * from './expenses';
+export * from './payments';

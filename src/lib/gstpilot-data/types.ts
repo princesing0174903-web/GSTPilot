@@ -283,3 +283,185 @@ export interface CustomerStats {
   totalOutstanding: number;
   withGstin: number;
 }
+
+// ─── Vendor ──────────────────────────────────────────────────────────────────
+// A vendor is a supplier / payee the organization owes money to (for expenses,
+// purchases, services). Stored at organizations/GSTpilot_SAAS/vendors.
+
+export type VendorCategory =
+  | 'Supplier'
+  | 'Contractor'
+  | 'Service Provider'
+  | 'Freelancer'
+  | 'Utility'
+  | 'Other';
+
+export interface Vendor {
+  id: string;
+  name: string;
+  type: CustomerType;
+  /** GSTIN (15 chars) or null for unregistered vendors. */
+  gstin: string | null;
+  pan: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  state: string | null;
+  stateCode: string | null;
+  category: VendorCategory;
+  contactPerson: string | null;
+  notes: string | null;
+  /** Running total of all bills/expenses from this vendor. */
+  totalBilled: number;
+  /** Running total of all payments made to this vendor. */
+  totalPaid: number;
+  /** Outstanding payable balance = totalBilled - totalPaid. */
+  balance: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CreateVendorInput {
+  name: string;
+  type?: CustomerType;
+  gstin?: string | null;
+  pan?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
+  category?: VendorCategory;
+  contactPerson?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateVendorInput = Partial<CreateVendorInput>;
+
+export interface VendorStats {
+  count: number;
+  totalPayable: number;
+  withGstin: number;
+}
+
+// ─── Expense ─────────────────────────────────────────────────────────────────
+// A business expense (purchase / bill). Stored at
+// organizations/GSTpilot_SAAS/expenses.
+
+export type ExpenseCategory =
+  | 'Office'
+  | 'Travel'
+  | 'Salary'
+  | 'Marketing'
+  | 'Rent'
+  | 'Utilities'
+  | 'Software'
+  | 'Miscellaneous';
+
+export type PaymentMode = 'cash' | 'upi' | 'bank' | 'card' | 'cheque' | 'other';
+
+export type ExpenseStatus = 'recorded' | 'billed' | 'paid';
+
+export interface Expense {
+  id: string;
+  /** Linked vendor id (optional — ad-hoc expenses may have none). */
+  vendorId: string | null;
+  vendorName: string;
+  category: ExpenseCategory;
+  description: string;
+  /** Total amount inclusive of GST, in rupees. */
+  amount: number;
+  /** GST amount included in `amount`. */
+  gst: number;
+  /** Whether the GST on this expense is claimable as ITC. */
+  gstClaimable: boolean;
+  /** ISO date string (YYYY-MM-DD) the expense was incurred. */
+  date: string;
+  paymentMode: PaymentMode;
+  status: ExpenseStatus;
+  /** UTR / cheque / reference number. */
+  referenceNo: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CreateExpenseInput {
+  vendorId?: string | null;
+  vendorName?: string;
+  category?: ExpenseCategory;
+  description: string;
+  amount: number;
+  gst?: number;
+  gstClaimable?: boolean;
+  date?: string;
+  paymentMode?: PaymentMode;
+  status?: ExpenseStatus;
+  referenceNo?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateExpenseInput = Partial<CreateExpenseInput>;
+
+export interface ExpenseStats {
+  count: number;
+  totalAmount: number;
+  totalGst: number;
+  claimableGst: number;
+}
+
+// ─── Payment ─────────────────────────────────────────────────────────────────
+// A payment (money in from a customer OR money out to a vendor). Stored at
+// organizations/GSTpilot_SAAS/payments. When linked to an invoice, the
+// invoice's paidAmount / balanceDue / paymentStatus are auto-updated.
+
+export type PartyType = 'customer' | 'vendor';
+export type PaymentTxStatus = 'completed' | 'pending' | 'failed';
+
+export interface Payment {
+  id: string;
+  partyType: PartyType;
+  /** Linked customer or vendor id (optional). */
+  partyId: string | null;
+  partyName: string;
+  /** Linked invoice id (optional — for customer payments). */
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  /** Payment amount, in rupees. */
+  amount: number;
+  /** ISO date string (YYYY-MM-DD). */
+  paymentDate: string;
+  paymentMode: PaymentMode;
+  /** UTR / cheque / reference number. */
+  referenceNo: string | null;
+  status: PaymentTxStatus;
+  /** Whether this payment has been reconciled against a bank statement. */
+  reconciled: boolean;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CreatePaymentInput {
+  partyType: PartyType;
+  partyId?: string | null;
+  partyName?: string;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
+  amount: number;
+  paymentDate?: string;
+  paymentMode?: PaymentMode;
+  referenceNo?: string | null;
+  status?: PaymentTxStatus;
+  reconciled?: boolean;
+  notes?: string | null;
+}
+
+export type UpdatePaymentInput = Partial<CreatePaymentInput>;
+
+export interface PaymentStats {
+  count: number;
+  totalReceived: number;
+  totalPaidOut: number;
+  totalReconciled: number;
+}

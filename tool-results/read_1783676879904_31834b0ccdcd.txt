@@ -1,0 +1,375 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * ═══════════════════════════════════════════════════════════════════════════════
+     5→ * DashboardViews — View Registry & Renderer
+     6→ * ═══════════════════════════════════════════════════════════════════════════════
+     7→ *
+     8→ * PURPOSE: Isolate all 150 dashboard-view dynamic imports into a single
+     9→ * lazily-loaded component so that the root page.tsx module graph stays tiny.
+    10→ *
+    11→ * WHY: The 4 GB sandbox OOM-kills Turbopack when page.tsx has 153 top-level
+    12→ * dynamic() calls. By moving them here and lazy-loading THIS file, the root
+    13→ * route only compiles 3 dynamic imports (Landing, Login, Onboarding) instead
+    14→ * of 153. This file is compiled on-demand only when the authenticated
+    15→ * dashboard shell mounts.
+    16→ *
+    17→ * The view → component mapping is a 1:1 port of the original switch statement
+    18→ * that lived in page.tsx → DashboardContent.renderView().
+    19→ */
+    20→
+    21→import dynamic from 'next/dynamic'
+    22→import type { ComponentType } from 'react'
+    23→
+    24→// ── Loading placeholder (matches page.tsx PageLoader) ──────────────────────────
+    25→const PageLoader = () => (
+    26→  <div className="flex h-full min-h-[60vh] items-center justify-center">
+    27→    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+    28→  </div>
+    29→)
+    30→
+    31→// ═══════════════════════════════════════════════════════════════════════════════
+    32→// LAZY-LOADED VIEW COMPONENTS — next/dynamic so only the active view compiles.
+    33→// ═══════════════════════════════════════════════════════════════════════════════
+    34→
+    35→const ReturnsPage = dynamic(() => import('@/components/returns/ReturnsPage'), { loading: PageLoader, ssr: false })
+    36→const ReconciliationPage = dynamic(() => import('@/components/reconciliation/ReconciliationPage'), { loading: PageLoader, ssr: false })
+    37→const InvoiceWorkspacePage = dynamic(() => import('@/components/invoices/InvoiceWorkspacePage'), { loading: PageLoader, ssr: false })
+    38→const ClientRegistryPage = dynamic(() => import('@/components/clients/ClientRegistryPage'), { loading: PageLoader, ssr: false })
+    39→const ClientWorkspacePage = dynamic(() => import('@/components/clients/ClientWorkspacePage'), { loading: PageLoader, ssr: false })
+    40→const ReturnPrepWorkspace = dynamic(() => import('@/components/returns/ReturnPrepWorkspace'), { loading: PageLoader, ssr: false })
+    41→const SettingsPage = dynamic(() => import('@/components/settings/SettingsPage'), { loading: PageLoader, ssr: false })
+    42→const FirmCommandCenterPage = dynamic(() => import('@/components/firm-command-center/FirmCommandCenterPage'), { loading: PageLoader, ssr: false })
+    43→const MultiFirmPage = dynamic(() => import('@/components/multi-firm/MultiFirmPage'), { loading: PageLoader, ssr: false })
+    44→const AutopilotPage = dynamic(() => import('@/components/autopilot/AutopilotPage'), { loading: PageLoader, ssr: false })
+    45→const AICAManagerPage = dynamic(() => import('@/components/ai-ca-manager/AICAManagerPage'), { loading: PageLoader, ssr: false })
+    46→const AIAccountManagerPage = dynamic(() => import('@/components/ai-account-manager/AIAccountManagerPage'), { loading: PageLoader, ssr: false })
+    47→const AIDeadlineEnginePage = dynamic(() => import('@/components/ai-deadline-engine/AIDeadlineEnginePage'), { loading: PageLoader, ssr: false })
+    48→const AIDocumentEmployeePage = dynamic(() => import('@/components/ai-document-employee/AIDocumentEmployeePage'), { loading: PageLoader, ssr: false })
+    49→const AIVoiceAssistantPage = dynamic(() => import('@/components/ai-voice-assistant/AIVoiceAssistantPage'), { loading: PageLoader, ssr: false })
+    50→const AIFirmMemoryPage = dynamic(() => import('@/components/ai-firm-memory/AIFirmMemoryPage'), { loading: PageLoader, ssr: false })
+    51→const AIOperatingRoomPage = dynamic(() => import('@/components/ai-operating-room/AIOperatingRoomPage'), { loading: PageLoader, ssr: false })
+    52→const AIPredictionsPage = dynamic(() => import('@/components/ai-predictions/AIPredictionsPage'), { loading: PageLoader, ssr: false })
+    53→const AIPriorityEnginePage = dynamic(() => import('@/components/ai-priority-engine/AIPriorityEnginePage'), { loading: PageLoader, ssr: false })
+    54→const BusinessGraphPage = dynamic(() => import('@/components/business-graph/BusinessGraphPage'), { loading: PageLoader, ssr: false })
+    55→const DataMoatPage = dynamic(() => import('@/components/data-moat/DataMoatPage'), { loading: PageLoader, ssr: false })
+    56→const EmbeddedFinancePage = dynamic(() => import('@/components/embedded-finance/EmbeddedFinancePage'), { loading: PageLoader, ssr: false })
+    57→const IndustryBenchmarkPage = dynamic(() => import('@/components/industry-benchmark/IndustryBenchmarkPage'), { loading: PageLoader, ssr: false })
+    58→const WorkingCapitalPage = dynamic(() => import('@/components/working-capital/WorkingCapitalPage'), { loading: PageLoader, ssr: false })
+    59→const NetworkEffectsPage = dynamic(() => import('@/components/network-effects/NetworkEffectsPage'), { loading: PageLoader, ssr: false })
+    60→const AIBusinessCopilotPage = dynamic(() => import('@/components/ai-business-copilot/AIBusinessCopilotPage'), { loading: PageLoader, ssr: false })
+    61→const RunMyBusinessPage = dynamic(() => import('@/components/run-my-business/RunMyBusinessPage'), { loading: PageLoader, ssr: false })
+    62→const ExecutiveWarRoomPage = dynamic(() => import('@/components/executive-war-room/ExecutiveWarRoomPage'), { loading: PageLoader, ssr: false })
+    63→const AppStorePage = dynamic(() => import('@/components/app-store/AppStorePage'), { loading: PageLoader, ssr: false })
+    64→const DigitalTwinPage = dynamic(() => import('@/components/digital-twin/DigitalTwinPage'), { loading: PageLoader, ssr: false })
+    65→const APIPlatformPage = dynamic(() => import('@/components/api-platform-v2/APIPlatformPage'), { loading: PageLoader, ssr: false })
+    66→const EventEnginePage = dynamic(() => import('@/components/event-engine/EventEnginePage'), { loading: PageLoader, ssr: false })
+    67→const AgentOSPage = dynamic(() => import('@/components/agent-os/AgentOSPage'), { loading: PageLoader, ssr: false })
+    68→const DecisionEnginePage = dynamic(() => import('@/components/decision-engine/DecisionEnginePage'), { loading: PageLoader, ssr: false })
+    69→const GSTPilotNetworkPage = dynamic(() => import('@/components/gstpilot-network/GSTPilotNetworkPage'), { loading: PageLoader, ssr: false })
+    70→const DataCloudPage = dynamic(() => import('@/components/data-cloud/DataCloudPage'), { loading: PageLoader, ssr: false })
+    71→const RunIndiaBusinessPage = dynamic(() => import('@/components/run-india-business/RunIndiaBusinessPage'), { loading: PageLoader, ssr: false })
+    72→const UniversalBusinessIDPage = dynamic(() => import('@/components/universal-business-id/UniversalBusinessIDPage'), { loading: PageLoader, ssr: false })
+    73→const CreditScoringEnginePage = dynamic(() => import('@/components/credit-scoring-engine/CreditScoringEnginePage'), { loading: PageLoader, ssr: false })
+    74→const InvoiceExchangePage = dynamic(() => import('@/components/invoice-exchange/InvoiceExchangePage'), { loading: PageLoader, ssr: false })
+    75→const FinancingMarketplacePage = dynamic(() => import('@/components/financing-marketplace/FinancingMarketplacePage'), { loading: PageLoader, ssr: false })
+    76→const EconomicGraphPage = dynamic(() => import('@/components/economic-graph/EconomicGraphPage'), { loading: PageLoader, ssr: false })
+    77→const EconomicWarRoomPage = dynamic(() => import('@/components/economic-war-room/EconomicWarRoomPage'), { loading: PageLoader, ssr: false })
+    78→const RunMyCompanyPage = dynamic(() => import('@/components/run-my-company/RunMyCompanyPage'), { loading: PageLoader, ssr: false })
+    79→const MissionControlPage = dynamic(() => import('@/components/mission-control/MissionControlPage'), { loading: PageLoader, ssr: false })
+    80→const BusinessDNApage = dynamic(() => import('@/components/business-dna/BusinessDNApage'), { loading: PageLoader, ssr: false })
+    81→const AICFODashboardPage = dynamic(() => import('@/components/ai-cfo/AICFODashboardPage'), { loading: PageLoader, ssr: false })
+    82→const InvoiceCloudPage = dynamic(() => import('@/components/invoice-cloud/InvoiceCloudPage'), { loading: PageLoader, ssr: false })
+    83→const ExecutionEnginePage = dynamic(() => import('@/components/execution-engine/ExecutionEnginePage'), { loading: PageLoader, ssr: false })
+    84→const GenerateWorkbench = dynamic(() => import('@/components/generate/GenerateWorkbench'), { loading: PageLoader, ssr: false })
+    85→const ReportsPage = dynamic(() => import('@/components/reports/ReportsPage'), { loading: PageLoader, ssr: false })
+    86→const AIExecutiveReportsPage = dynamic(() => import('@/components/ai-reports/AIExecutiveReportsPage'), { loading: PageLoader, ssr: false })
+    87→const AICompliancePage = dynamic(() => import('@/components/ai-compliance/AICompliancePage'), { loading: PageLoader, ssr: false })
+    88→const AIRiskEnginePage = dynamic(() => import('@/components/ai-risk/AIRiskEnginePage'), { loading: PageLoader, ssr: false })
+    89→const AIClientInsightsPage = dynamic(() => import('@/components/ai-insights/AIClientInsightsPage'), { loading: PageLoader, ssr: false })
+    90→const AITaskGeneratorPage = dynamic(() => import('@/components/ai-tasks/AITaskGeneratorPage'), { loading: PageLoader, ssr: false })
+    91→const AIBenchmarkPage = dynamic(() => import('@/components/ai-benchmark/AIBenchmarkPage'), { loading: PageLoader, ssr: false })
+    92→const AIKnowledgeCenterPage = dynamic(() => import('@/components/ai-knowledge/AIKnowledgeCenterPage'), { loading: PageLoader, ssr: false })
+    93→const AIDocumentChatPage = dynamic(() => import('@/components/ai-doc-chat/AIDocumentChatPage'), { loading: PageLoader, ssr: false })
+    94→const NoticeCenterPage = dynamic(() => import('@/components/notices/NoticeCenterPage'), { loading: PageLoader, ssr: false })
+    95→const GSTRFilingPage = dynamic(() => import('@/components/gstr/GSTRFilingPage'), { loading: PageLoader, ssr: false })
+    96→const FilingCalendarPage = dynamic(() => import('@/components/calendar/FilingCalendarPage'), { loading: PageLoader, ssr: false })
+    97→const AccountingPage = dynamic(() => import('@/components/accounting/AccountingPage'), { loading: PageLoader, ssr: false })
+    98→const PayrollPage = dynamic(() => import('@/components/payroll/PayrollPage'), { loading: PageLoader, ssr: false })
+    99→const HRMSPage = dynamic(() => import('@/components/hrms/HRMSPage'), { loading: PageLoader, ssr: false })
+   100→const InventoryPage = dynamic(() => import('@/components/inventory/InventoryPage'), { loading: PageLoader, ssr: false })
+   101→const BankingPage = dynamic(() => import('@/components/banking/BankingPage'), { loading: PageLoader, ssr: false })
+   102→const PaymentsPage = dynamic(() => import('@/components/payments/PaymentsPage'), { loading: PageLoader, ssr: false })
+   103→const EInvoicingPage = dynamic(() => import('@/components/e-invoicing/EInvoicingPage'), { loading: PageLoader, ssr: false })
+   104→const TDSPage = dynamic(() => import('@/components/tds/TDSPage'), { loading: PageLoader, ssr: false })
+   105→const ROCCompliancePage = dynamic(() => import('@/components/roc-compliance/ROCCompliancePage'), { loading: PageLoader, ssr: false })
+   106→const LegalNoticesPage = dynamic(() => import('@/components/legal-notices/LegalNoticesPage'), { loading: PageLoader, ssr: false })
+   107→const TeamManagementPage = dynamic(() => import('@/components/team/TeamManagementPage'), { loading: PageLoader, ssr: false })
+   108→const TeamPerformancePage = dynamic(() => import('@/components/team-performance/TeamPerformancePage'), { loading: PageLoader, ssr: false })
+   109→const FirmOperationsPage = dynamic(() => import('@/components/firm-operations/FirmOperationsPage'), { loading: PageLoader, ssr: false })
+   110→const WorkloadPage = dynamic(() => import('@/components/workload/WorkloadPage'), { loading: PageLoader, ssr: false })
+   111→const ReviewPage = dynamic(() => import('@/components/review/ReviewPage'), { loading: PageLoader, ssr: false })
+   112→const DeadlineCenterPage = dynamic(() => import('@/components/deadlines/DeadlineCenterPage'), { loading: PageLoader, ssr: false })
+   113→const ClientHealthPage = dynamic(() => import('@/components/client-health/ClientHealthPage'), { loading: PageLoader, ssr: false })
+   114→const ExecutiveAnalyticsPage = dynamic(() => import('@/components/executive-analytics/ExecutiveAnalyticsPage'), { loading: PageLoader, ssr: false })
+   115→const AnalyticsPage = dynamic(() => import('@/components/analytics/AnalyticsPage'), { loading: PageLoader, ssr: false })
+   116→const TimelinePage = dynamic(() => import('@/components/timeline/TimelinePage'), { loading: PageLoader, ssr: false })
+   117→const TasksPage = dynamic(() => import('@/components/tasks/TasksPage'), { loading: PageLoader, ssr: false })
+   118→const DocumentVaultPage = dynamic(() => import('@/components/documents/DocumentVaultPage'), { loading: PageLoader, ssr: false })
+   119→const CollaborationPage = dynamic(() => import('@/components/collaboration/CollaborationPage'), { loading: PageLoader, ssr: false })
+   120→const CRMPage = dynamic(() => import('@/components/crm/CRMPage'), { loading: PageLoader, ssr: false })
+   121→
+   122→// ── GSTPilot Firestore-connected modules ─────────────────────────────────────
+   123→// These three views replace the mock-data pages with real Firestore CRUD at:
+   124→//   organizations/GSTpilot_SAAS/{customers,products,invoices}
+   125→// Live lists via onSnapshot. No demo data. Firestore is the only source of truth.
+   126→const GSTpilotCustomersView = dynamic(() => import('@/components/gstpilot-data/CustomersView'), { loading: PageLoader, ssr: false })
+   127→const GSTpilotProductsView = dynamic(() => import('@/components/gstpilot-data/ProductsView'), { loading: PageLoader, ssr: false })
+   128→const GSTpilotInvoicesView = dynamic(() => import('@/components/gstpilot-data/InvoicesView'), { loading: PageLoader, ssr: false })
+   129→const ApprovalsPage = dynamic(() => import('@/components/approvals/ApprovalsPage'), { loading: PageLoader, ssr: false })
+   130→const AutomationsPage = dynamic(() => import('@/components/automations/AutomationsPage'), { loading: PageLoader, ssr: false })
+   131→const AutomationCenterPage = dynamic(() => import('@/components/automation/AutomationCenterPage'), { loading: PageLoader, ssr: false })
+   132→const ErrorResolutionPage = dynamic(() => import('@/components/audit/ErrorResolutionPage'), { loading: PageLoader, ssr: false })
+   133→const AuditLogsPage = dynamic(() => import('@/components/audit-logs/AuditLogsPage'), { loading: PageLoader, ssr: false })
+   134→const BillingPage = dynamic(() => import('@/components/billing/BillingPage'), { loading: PageLoader, ssr: false })
+   135→const WhiteLabelPage = dynamic(() => import('@/components/white-label/WhiteLabelPage'), { loading: PageLoader, ssr: false })
+   136→const VersionHistoryPage = dynamic(() => import('@/components/version-history/VersionHistoryPage'), { loading: PageLoader, ssr: false })
+   137→const ESignaturesPage = dynamic(() => import('@/components/esignatures/ESignaturesPage'), { loading: PageLoader, ssr: false })
+   138→const ClientPortalPage = dynamic(() => import('@/components/client-portal/ClientPortalPage'), { loading: PageLoader, ssr: false })
+   139→const MarketplacePage = dynamic(() => import('@/components/marketplace/MarketplacePage'), { loading: PageLoader, ssr: false })
+   140→const AgentsPage = dynamic(() => import('@/components/agents/AgentsPage'), { loading: PageLoader, ssr: false })
+   141→const ConnectionsPage = dynamic(() => import('@/components/connections/ConnectionsPage'), { loading: PageLoader, ssr: false })
+   142→const AISoftwareFactoryPage = dynamic(() => import('@/components/ai-software-factory/AISoftwareFactoryPage'), { loading: PageLoader, ssr: false })
+   143→const AutonomousEnterprisePage = dynamic(() => import('@/components/autonomous-enterprise/AutonomousEnterprisePage'), { loading: PageLoader, ssr: false })
+   144→const EnterpriseCloudPlatformPage = dynamic(() => import('@/components/enterprise-cloud-platform/EnterpriseCloudPlatformPage'), { loading: PageLoader, ssr: false })
+   145→const EnterpriseAIPlatformPage = dynamic(() => import('@/components/enterprise-ai-platform/EnterpriseAIPlatformPage'), { loading: PageLoader, ssr: false })
+   146→const GlobalEnterpriseNetworkPage = dynamic(() => import('@/components/global-enterprise-network/GlobalEnterpriseNetworkPage'), { loading: PageLoader, ssr: false })
+   147→
+   148→// ═══ Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ═══
+   149→const EnterpriseCommandCenterPage = dynamic(() => import('@/components/enterprise-network/EnterpriseCommandCenter'), { loading: PageLoader, ssr: false })
+   150→const MultiCompanyWorkspacePage = dynamic(() => import('@/components/enterprise-network/MultiCompanyWorkspace'), { loading: PageLoader, ssr: false })
+   151→const TeamCollaborationPage = dynamic(() => import('@/components/enterprise-network/TeamCollaboration'), { loading: PageLoader, ssr: false })
+   152→const WorkflowEnginePage = dynamic(() => import('@/components/enterprise-network/WorkflowEngine'), { loading: PageLoader, ssr: false })
+   153→// ═══ Phase Delta — Autonomous Finance OS (lazy-loaded, named exports) ═══
+   154→const AutonomousFinanceDashboard = dynamic(() => import('@/components/autonomous-finance/AutonomousFinanceDashboard').then(m => ({ default: m.AutonomousFinanceDashboard })), { loading: PageLoader, ssr: false })
+   155→const WorkflowStudioPage = dynamic(() => import('@/components/autonomous-finance/WorkflowStudioPage').then(m => ({ default: m.WorkflowStudioPage })), { loading: PageLoader, ssr: false })
+   156→const OracleActionsPanel = dynamic(() => import('@/components/autonomous-finance/OracleActionsPanel').then(m => ({ default: m.OracleActionsPanel })), { loading: PageLoader, ssr: false })
+   157→const FinancialIntelligencePage = dynamic(() => import('@/components/autonomous-finance/FinancialIntelligencePage').then(m => ({ default: m.FinancialIntelligencePage })), { loading: PageLoader, ssr: false })
+   158→const SmartReconciliationPage = dynamic(() => import('@/components/autonomous-finance/SmartReconciliationPage').then(m => ({ default: m.SmartReconciliationPage })), { loading: PageLoader, ssr: false })
+   159→const PredictiveCompliancePage = dynamic(() => import('@/components/autonomous-finance/PredictiveCompliancePage').then(m => ({ default: m.PredictiveCompliancePage })), { loading: PageLoader, ssr: false })
+   160→const IntelligentCollectionsPage = dynamic(() => import('@/components/autonomous-finance/IntelligentCollectionsPage').then(m => ({ default: m.IntelligentCollectionsPage })), { loading: PageLoader, ssr: false })
+   161→const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
+   162→const ExecutiveCalendarPage = dynamic(() => import('@/components/enterprise-network/ExecutiveCalendar'), { loading: PageLoader, ssr: false })
+   163→const EnterpriseSearchPage = dynamic(() => import('@/components/enterprise-network/EnterpriseSearch'), { loading: PageLoader, ssr: false })
+   164→const EnterpriseNotificationsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseNotifications'), { loading: PageLoader, ssr: false })
+   165→const AdvancedRBACPage = dynamic(() => import('@/components/enterprise-network/AdvancedRBAC'), { loading: PageLoader, ssr: false })
+   166→const CrossCompanyAnalyticsPage = dynamic(() => import('@/components/enterprise-network/CrossCompanyAnalytics'), { loading: PageLoader, ssr: false })
+   167→const EnterpriseAuditPage = dynamic(() => import('@/components/enterprise-network/EnterpriseAudit'), { loading: PageLoader, ssr: false })
+   168→
+   169→// ═══ Phase 14 — Global Expansion & International Financial Operating System™ ═══
+   170→const MultiCountryAccountingPage = dynamic(() => import('@/components/global-expansion/MultiCountryAccounting'), { loading: PageLoader, ssr: false })
+   171→const MultiTaxEnginePage = dynamic(() => import('@/components/global-expansion/MultiTaxEngine'), { loading: PageLoader, ssr: false })
+   172→const MultiCurrencySystemPage = dynamic(() => import('@/components/global-expansion/MultiCurrencySystem'), { loading: PageLoader, ssr: false })
+   173→const InternationalBankingPage = dynamic(() => import('@/components/global-expansion/InternationalBanking'), { loading: PageLoader, ssr: false })
+   174→const GlobalComplianceEnginePage = dynamic(() => import('@/components/global-expansion/GlobalComplianceEngine'), { loading: PageLoader, ssr: false })
+   175→const InternationalERPPage = dynamic(() => import('@/components/global-expansion/InternationalERP'), { loading: PageLoader, ssr: false })
+   176→const MultiLanguagePlatformPage = dynamic(() => import('@/components/global-expansion/MultiLanguagePlatform'), { loading: PageLoader, ssr: false })
+   177→const AIGlobalAdvisorPage = dynamic(() => import('@/components/global-expansion/AIGlobalAdvisor'), { loading: PageLoader, ssr: false })
+   178→const GlobalDashboardPage = dynamic(() => import('@/components/global-expansion/GlobalDashboard'), { loading: PageLoader, ssr: false })
+   179→const CrossBorderPaymentsPage = dynamic(() => import('@/components/global-expansion/CrossBorderPayments'), { loading: PageLoader, ssr: false })
+   180→const InternationalReportsPage = dynamic(() => import('@/components/global-expansion/InternationalReports'), { loading: PageLoader, ssr: false })
+   181→const GlobalPerformancePage = dynamic(() => import('@/components/global-expansion/GlobalPerformance'), { loading: PageLoader, ssr: false })
+   182→
+   183→// ═══ Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ═══
+   184→const GlobalFinancialCloudHubPage = dynamic(() => import('@/components/global-cloud/GlobalFinancialCloudHub'), { loading: PageLoader, ssr: false })
+   185→const DeveloperPlatformPage = dynamic(() => import('@/components/global-cloud/DeveloperPlatform'), { loading: PageLoader, ssr: false })
+   186→const EnterpriseAPIGatewayPage = dynamic(() => import('@/components/global-cloud/EnterpriseAPIGateway'), { loading: PageLoader, ssr: false })
+   187→const AppMarketplaceCloudPage = dynamic(() => import('@/components/global-cloud/AppMarketplaceCloud'), { loading: PageLoader, ssr: false })
+   188→const GlobalIntegrationHubPage = dynamic(() => import('@/components/global-cloud/GlobalIntegrationHub'), { loading: PageLoader, ssr: false })
+   189→const FinancialDataCloudPage = dynamic(() => import('@/components/global-cloud/FinancialDataCloud'), { loading: PageLoader, ssr: false })
+   190→const EventStreamingPage = dynamic(() => import('@/components/global-cloud/EventStreaming'), { loading: PageLoader, ssr: false })
+   191→const AutomationStudioPage = dynamic(() => import('@/components/global-cloud/AutomationStudio'), { loading: PageLoader, ssr: false })
+   192→const DataWarehousePage = dynamic(() => import('@/components/global-cloud/DataWarehouse'), { loading: PageLoader, ssr: false })
+   193→const GlobalIdentityPage = dynamic(() => import('@/components/global-cloud/GlobalIdentity'), { loading: PageLoader, ssr: false })
+   194→const DeveloperAnalyticsPage = dynamic(() => import('@/components/global-cloud/DeveloperAnalytics'), { loading: PageLoader, ssr: false })
+   195→const EnterpriseBillingPage = dynamic(() => import('@/components/global-cloud/EnterpriseBilling'), { loading: PageLoader, ssr: false })
+   196→const MultiTenantInfraPage = dynamic(() => import('@/components/global-cloud/MultiTenantInfra'), { loading: PageLoader, ssr: false })
+   197→const EnterpriseSecurityCloudPage = dynamic(() => import('@/components/global-cloud/EnterpriseSecurityCloud'), { loading: PageLoader, ssr: false })
+   198→const GlobalFinancialNetworkPage = dynamic(() => import('@/components/global-cloud/GlobalFinancialNetwork'), { loading: PageLoader, ssr: false })
+   199→const PlatformIntelligencePage = dynamic(() => import('@/components/global-cloud/PlatformIntelligence'), { loading: PageLoader, ssr: false })
+   200→
+   201→// ═══════════════════════════════════════════════════════════════════════════════
+   202→// VIEW → COMPONENT MAP
+   203→// A plain object lookup is faster than a 150-case switch and lets React skip
+   204→// re-renders when the view hasn't changed. The `default` fallback maps to the
+   205→// Mission Control dashboard.
+   206→// ═══════════════════════════════════════════════════════════════════════════════
+   207→
+   208→const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
+   209→  dashboard: MissionControlPage,
+   210→  returns: ReturnsPage,
+   211→  reconcile: ReconciliationPage,
+   212→  invoices: GSTpilotInvoicesView,
+   213→  clients: ClientRegistryPage,
+   214→  'client-workspace': ClientWorkspacePage,
+   215→  'return-prep': ReturnPrepWorkspace,
+   216→  settings: SettingsPage,
+   217→  'firm-command-center': FirmCommandCenterPage,
+   218→  'multi-firm': MultiFirmPage,
+   219→  autopilot: AutopilotPage,
+   220→  'ai-ca-manager': AICAManagerPage,
+   221→  'ai-account-manager': AIAccountManagerPage,
+   222→  'ai-deadline-engine': AIDeadlineEnginePage,
+   223→  'ai-document-employee': AIDocumentEmployeePage,
+   224→  'ai-voice-assistant': AIVoiceAssistantPage,
+   225→  'ai-firm-memory': AIFirmMemoryPage,
+   226→  'ai-operating-room': AIOperatingRoomPage,
+   227→  'ai-predictions': AIPredictionsPage,
+   228→  'ai-priority-engine': AIPriorityEnginePage,
+   229→  'business-graph': BusinessGraphPage,
+   230→  'data-moat': DataMoatPage,
+   231→  'embedded-finance': EmbeddedFinancePage,
+   232→  'working-capital': WorkingCapitalPage,
+   233→  'industry-benchmark': IndustryBenchmarkPage,
+   234→  'network-effects': NetworkEffectsPage,
+   235→  'ai-business-copilot': AIBusinessCopilotPage,
+   236→  'run-my-business': RunMyBusinessPage,
+   237→  'executive-war-room': ExecutiveWarRoomPage,
+   238→  'api-platform-v2': APIPlatformPage,
+   239→  'digital-twin': DigitalTwinPage,
+   240→  'event-engine': EventEnginePage,
+   241→  'agent-os': AgentOSPage,
+   242→  'decision-engine': DecisionEnginePage,
+   243→  'app-store': AppStorePage,
+   244→  'gstpilot-network': GSTPilotNetworkPage,
+   245→  'data-cloud': DataCloudPage,
+   246→  'run-india-business': RunIndiaBusinessPage,
+   247→  'universal-business-id': UniversalBusinessIDPage,
+   248→  'credit-scoring-engine': CreditScoringEnginePage,
+   249→  'invoice-exchange': InvoiceExchangePage,
+   250→  'financing-marketplace': FinancingMarketplacePage,
+   251→  'economic-graph': EconomicGraphPage,
+   252→  'economic-war-room': EconomicWarRoomPage,
+   253→  'run-my-company': RunMyCompanyPage,
+   254→  'business-dna': BusinessDNApage,
+   255→  'invoice-cloud': InvoiceCloudPage,
+   256→  'execution-engine': ExecutionEnginePage,
+   257→  'ai-cfo': AICFODashboardPage,
+   258→  // ═══ Recovered modules ═══
+   259→  reports: ReportsPage,
+   260→  'ai-reports': AIExecutiveReportsPage,
+   261→  'ai-compliance': AICompliancePage,
+   262→  'ai-risk': AIRiskEnginePage,
+   263→  'ai-insights': AIClientInsightsPage,
+   264→  'ai-tasks': AITaskGeneratorPage,
+   265→  'ai-benchmark': AIBenchmarkPage,
+   266→  'ai-knowledge': AIKnowledgeCenterPage,
+   267→  'ai-doc-chat': AIDocumentChatPage,
+   268→  notices: NoticeCenterPage,
+   269→  'gstr-filing': GSTRFilingPage,
+   270→  calendar: FilingCalendarPage,
+   271→  accounting: AccountingPage,
+   272→  payroll: PayrollPage,
+   273→  hrms: HRMSPage,
+   274→  inventory: GSTpilotProductsView,
+   275→  banking: BankingPage,
+   276→  payments: PaymentsPage,
+   277→  'e-invoicing': EInvoicingPage,
+   278→  tds: TDSPage,
+   279→  'roc-compliance': ROCCompliancePage,
+   280→  'legal-notices': LegalNoticesPage,
+   281→  team: TeamManagementPage,
+   282→  'team-performance': TeamPerformancePage,
+   283→  'firm-operations': FirmOperationsPage,
+   284→  workload: WorkloadPage,
+   285→  review: ReviewPage,
+   286→  deadlines: DeadlineCenterPage,
+   287→  'client-health': ClientHealthPage,
+   288→  'executive-analytics': ExecutiveAnalyticsPage,
+   289→  analytics: AnalyticsPage,
+   290→  timeline: TimelinePage,
+   291→  tasks: TasksPage,
+   292→  documents: DocumentVaultPage,
+   293→  collaboration: CollaborationPage,
+   294→  crm: GSTpilotCustomersView,
+   295→  approvals: ApprovalsPage,
+   296→  automations: AutomationsPage,
+   297→  'automation-center': AutomationCenterPage,
+   298→  'audit-resolution': ErrorResolutionPage,
+   299→  'audit-trail': AuditLogsPage,
+   300→  billing: BillingPage,
+   301→  'white-label': WhiteLabelPage,
+   302→  'version-history': VersionHistoryPage,
+   303→  esignatures: ESignaturesPage,
+   304→  'client-portal': ClientPortalPage,
+   305→  marketplace: MarketplacePage,
+   306→  agents: AgentsPage,
+   307→  connections: ConnectionsPage,
+   308→  'ai-software-factory': AISoftwareFactoryPage,
+   309→  'autonomous-enterprise': AutonomousEnterprisePage,
+   310→  'enterprise-cloud-platform': EnterpriseCloudPlatformPage,
+   311→  'enterprise-ai-platform': EnterpriseAIPlatformPage,
+   312→  'global-enterprise-network': GlobalEnterpriseNetworkPage,
+   313→  generate: GenerateWorkbench,
+   314→  // Phase 13 — Enterprise Collaboration
+   315→  'enterprise-command-center': EnterpriseCommandCenterPage,
+   316→  'multi-company-workspace': MultiCompanyWorkspacePage,
+   317→  'team-collaboration': TeamCollaborationPage,
+   318→  'workflow-engine': WorkflowEnginePage,
+   319→  'enterprise-documents': EnterpriseDocumentsPage,
+   320→  'executive-calendar': ExecutiveCalendarPage,
+   321→  'enterprise-search': EnterpriseSearchPage,
+   322→  'enterprise-notifications': EnterpriseNotificationsPage,
+   323→  'advanced-rbac': AdvancedRBACPage,
+   324→  'cross-company-analytics': CrossCompanyAnalyticsPage,
+   325→  'enterprise-audit': EnterpriseAuditPage,
+   326→  // Phase 14 — Global Expansion
+   327→  'multi-country-accounting': MultiCountryAccountingPage,
+   328→  'multi-tax-engine': MultiTaxEnginePage,
+   329→  'multi-currency-system': MultiCurrencySystemPage,
+   330→  'international-banking': InternationalBankingPage,
+   331→  'global-compliance-engine': GlobalComplianceEnginePage,
+   332→  'international-erp': InternationalERPPage,
+   333→  'multi-language-platform': MultiLanguagePlatformPage,
+   334→  'ai-global-advisor': AIGlobalAdvisorPage,
+   335→  'global-dashboard': GlobalDashboardPage,
+   336→  'cross-border-payments': CrossBorderPaymentsPage,
+   337→  'international-reports': InternationalReportsPage,
+   338→  'global-performance': GlobalPerformancePage,
+   339→  // Phase 16 — Global Financial Cloud
+   340→  'global-financial-cloud': GlobalFinancialCloudHubPage,
+   341→  'developer-platform': DeveloperPlatformPage,
+   342→  'enterprise-api-gateway': EnterpriseAPIGatewayPage,
+   343→  'app-marketplace-cloud': AppMarketplaceCloudPage,
+   344→  'global-integration-hub': GlobalIntegrationHubPage,
+   345→  'financial-data-cloud': FinancialDataCloudPage,
+   346→  'event-streaming': EventStreamingPage,
+   347→  'automation-studio': AutomationStudioPage,
+   348→  'data-warehouse': DataWarehousePage,
+   349→  'global-identity': GlobalIdentityPage,
+   350→  'developer-analytics': DeveloperAnalyticsPage,
+   351→  'enterprise-billing': EnterpriseBillingPage,
+   352→  'multi-tenant-infra': MultiTenantInfraPage,
+   353→  'enterprise-security-cloud': EnterpriseSecurityCloudPage,
+   354→  'global-financial-network': GlobalFinancialNetworkPage,
+   355→  'platform-intelligence': PlatformIntelligencePage,
+   356→  // Phase Delta — Autonomous Finance OS
+   357→  'autonomous-finance': AutonomousFinanceDashboard,
+   358→  'workflow-studio': WorkflowStudioPage,
+   359→  'oracle-actions': OracleActionsPanel,
+   360→  'financial-intelligence': FinancialIntelligencePage,
+   361→  'smart-reconciliation': SmartReconciliationPage,
+   362→  'predictive-compliance': PredictiveCompliancePage,
+   363→  'intelligent-collections': IntelligentCollectionsPage,
+   364→}
+   365→
+   366→// ═══════════════════════════════════════════════════════════════════════════════
+   367→// DashboardViewRenderer — the actual component consumed by page.tsx
+   368→// ═══════════════════════════════════════════════════════════════════════════════
+   369→
+   370→export default function DashboardViews({ view }: { view: string }) {
+   371→  const Component = VIEW_COMPONENTS[view] || MissionControlPage
+   372→  return <Component />
+   373→}
+
+[showing lines 1-373 of 374; use offset=374 with limit to continue reading]

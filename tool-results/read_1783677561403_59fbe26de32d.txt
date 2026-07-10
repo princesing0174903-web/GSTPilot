@@ -1,0 +1,1537 @@
+     1→'use client';
+     2→
+     3→import React, { useEffect, useMemo, useCallback, useState } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  UserPlus,
+     7→  Upload,
+     8→  FileText,
+     9→  RefreshCw,
+    10→  BarChart3,
+    11→  ClipboardList,
+    12→  Bell,
+    13→  Users,
+    14→  CheckSquare,
+    15→  Bot,
+    16→  Zap,
+    17→  Building2,
+    18→  FileSpreadsheet,
+    19→  FolderOpen,
+    20→  Activity,
+    21→  Star,
+    22→  Clock,
+    23→  Pin,
+    24→  Search,
+    25→  ArrowRight,
+    26→  Receipt,
+    27→  Copy,
+    28→  Cpu,
+    29→  Crown,
+    30→  Cloud,
+    31→  Globe,
+    32→  Brain,
+    33→  ShieldCheck,
+    34→  Calendar,
+    35→  Network,
+    36→  GitBranch,
+    37→  ScrollText,
+    38→  Layers,
+    39→  LayoutDashboard,
+    40→  Globe2,
+    41→  Coins,
+    42→  Banknote,
+    43→  Warehouse,
+    44→  Languages,
+    45→  Plane,
+    46→  FileBarChart,
+    47→  Package,
+    48→  Server,
+    49→  Calculator,
+    50→  Code2,
+    51→  Store,
+    52→  Plug,
+    53→  Database,
+    54→  Radio,
+    55→  Workflow,
+    56→  Fingerprint,
+    57→  CreditCard,
+    58→  Share2,
+    59→  BrainCircuit,
+    60→  Boxes,
+    61→} from 'lucide-react';
+    62→import { useApp } from '@/contexts/AppContext';
+    63→import {
+    64→  useFireClients,
+    65→  useFireInvoices,
+    66→  useFireReturns,
+    67→  useFireDocuments,
+    68→  useFireRecentActivities,
+    69→} from '@/hooks/use-firestore';
+    70→import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
+    71→import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
+    72→import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
+    73→import {
+    74→  CommandDialog,
+    75→  CommandInput,
+    76→  CommandList,
+    77→  CommandEmpty,
+    78→  CommandGroup,
+    79→  CommandItem,
+    80→  CommandSeparator,
+    81→  CommandShortcut,
+    82→} from '@/components/ui/command';
+    83→import { modalEnterVariants, springModalTransition, backdropVariants } from '@/components/ui-pro';
+    84→
+    85→// ═══════════════════════════════════════════════════════════════════════════════
+    86→// TYPES
+    87→// ═══════════════════════════════════════════════════════════════════════════════
+    88→
+    89→interface CommandAction {
+    90→  id: string;
+    91→  label: string;
+    92→  description?: string;
+    93→  icon: React.ElementType;
+    94→  shortcut?: string;
+    95→  action: () => void;
+    96→  group: string;
+    97→}
+    98→
+    99→interface RecentItem {
+   100→  id: string;
+   101→  label: string;
+   102→  type: 'command' | 'client' | 'invoice' | 'return' | 'document' | 'activity';
+   103→  timestamp: number;
+   104→}
+   105→
+   106→interface FavoriteItem {
+   107→  id: string;
+   108→  label: string;
+   109→  type: 'command';
+   110→}
+   111→
+   112→// ═══════════════════════════════════════════════════════════════════════════════
+   113→// CONSTANTS
+   114→// ═══════════════════════════════════════════════════════════════════════════════
+   115→
+   116→const RECENT_STORAGE_KEY = 'gstpilot-recent-commands';
+   117→const FAVORITES_STORAGE_KEY = 'gstpilot-favorite-commands';
+   118→const MAX_RECENT = 5;
+   119→
+   120→// ═══════════════════════════════════════════════════════════════════════════════
+   121→// LOCAL STORAGE HELPERS
+   122→// ═══════════════════════════════════════════════════════════════════════════════
+   123→
+   124→function loadRecent(): RecentItem[] {
+   125→  try {
+   126→    const raw = localStorage.getItem(RECENT_STORAGE_KEY);
+   127→    return raw ? JSON.parse(raw) : [];
+   128→  } catch {
+   129→    return [];
+   130→  }
+   131→}
+   132→
+   133→function saveRecent(items: RecentItem[]) {
+   134→  try {
+   135→    localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(items.slice(0, MAX_RECENT)));
+   136→  } catch {
+   137→    // ignore quota errors
+   138→  }
+   139→}
+   140→
+   141→function loadFavorites(): FavoriteItem[] {
+   142→  try {
+   143→    const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+   144→    return raw ? JSON.parse(raw) : [];
+   145→  } catch {
+   146→    return [];
+   147→  }
+   148→}
+   149→
+   150→function saveFavorites(items: FavoriteItem[]) {
+   151→  try {
+   152→    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(items));
+   153→  } catch {
+   154→    // ignore quota errors
+   155→  }
+   156→}
+   157→
+   158→// ═══════════════════════════════════════════════════════════════════════════════
+   159→// COMMAND PALETTE COMPONENT
+   160→// ═══════════════════════════════════════════════════════════════════════════════
+   161→
+   162→export default function CommandPalette() {
+   163→  const {
+   164→    setCurrentView,
+   165→    commandPaletteOpen,
+   166→    setCommandPaletteOpen,
+   167→    setSelectedClientId,
+   168→  } = useApp();
+   169→
+   170→  const [query, setQuery] = useState('');
+   171→  const [recentItems, setRecentItems] = useState<RecentItem[]>(loadRecent);
+   172→  const [favorites, setFavorites] = useState<FavoriteItem[]>(loadFavorites);
+   173→
+   174→  // ─── Firestore live data ──────────────────────────────────────────────────
+   175→  const { data: clients } = useFireClients();
+   176→  const { data: invoices } = useFireInvoices();
+   177→  const { data: returns } = useFireReturns();
+   178→  const { data: documents } = useFireDocuments();
+   179→  const { data: activities } = useFireRecentActivities(20);
+   180→
+   181→  // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+   182→  const { customers: gstCustomers } = useGSTpilotCustomers();
+   183→  const { products: gstProducts } = useGSTpilotProducts();
+   184→  const { invoices: gstInvoices } = useGSTpilotInvoices();
+   185→
+   186→  // ─── Keyboard shortcut: Ctrl+K ───────────────────────────────────────────
+   187→  useEffect(() => {
+   188→    const handler = (e: KeyboardEvent) => {
+   189→      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+   190→        e.preventDefault();
+   191→        if (!commandPaletteOpen) {
+   192→          setQuery('');
+   193→        }
+   194→        setCommandPaletteOpen(!commandPaletteOpen);
+   195→      }
+   196→    };
+   197→    window.addEventListener('keydown', handler);
+   198→    return () => window.removeEventListener('keydown', handler);
+   199→  }, [commandPaletteOpen, setCommandPaletteOpen]);
+   200→
+   201→  // ─── Add to recent ───────────────────────────────────────────────────────
+   202→  const addToRecent = useCallback(
+   203→    (id: string, label: string, type: RecentItem['type']) => {
+   204→      setRecentItems((prev) => {
+   205→        const filtered = prev.filter((r) => r.id !== id);
+   206→        const updated = [{ id, label, type, timestamp: Date.now() }, ...filtered].slice(
+   207→          0,
+   208→          MAX_RECENT
+   209→        );
+   210→        saveRecent(updated);
+   211→        return updated;
+   212→      });
+   213→    },
+   214→    []
+   215→  );
+   216→
+   217→  // ─── Toggle favorite ─────────────────────────────────────────────────────
+   218→  const toggleFavorite = useCallback((id: string, label: string) => {
+   219→    setFavorites((prev) => {
+   220→      const exists = prev.find((f) => f.id === id);
+   221→      const updated = exists
+   222→        ? prev.filter((f) => f.id !== id)
+   223→        : [...prev, { id, label, type: 'command' as const }];
+   224→      saveFavorites(updated);
+   225→      return updated;
+   226→    });
+   227→  }, []);
+   228→
+   229→  // ─── Command actions ─────────────────────────────────────────────────────
+   230→  const commands: CommandAction[] = useMemo(
+   231→    () => [
+   232→      {
+   233→        id: 'cmd-create-client',
+   234→        label: 'Create Client',
+   235→        description: 'Add a new client to the registry',
+   236→        icon: UserPlus,
+   237→        shortcut: 'G C',
+   238→        action: () => {
+   239→          setCurrentView('clients');
+   240→          addToRecent('cmd-create-client', 'Create Client', 'command');
+   241→        },
+   242→        group: 'Commands',
+   243→      },
+   244→      {
+   245→        id: 'cmd-upload-invoice',
+   246→        label: 'Upload Invoice',
+   247→        description: 'Upload and extract invoice data',
+   248→        icon: Upload,
+   249→        shortcut: 'G I',
+   250→        action: () => {
+   251→          setCurrentView('invoices');
+   252→          addToRecent('cmd-upload-invoice', 'Upload Invoice', 'command');
+   253→        },
+   254→        group: 'Commands',
+   255→      },
+   256→      {
+   257→        id: 'cmd-invoice-cloud',
+   258→        label: 'Open Invoice Cloud',
+   259→        description: 'Sales · Purchase · Expenses · Receivables · Payables · Payments · TDS · Payroll · Forecast',
+   260→        icon: Receipt,
+   261→        shortcut: 'G C',
+   262→        action: () => {
+   263→          setCurrentView('invoice-cloud');
+   264→          addToRecent('cmd-invoice-cloud', 'Open Invoice Cloud', 'command');
+   265→        },
+   266→        group: 'Commands',
+   267→      },
+   268→      {
+   269→        id: 'cmd-execution-engine',
+   270→        label: 'Open Execution Engine',
+   271→        description: 'Observe · Think · Decide · Execute · Learn — Autonomous AI workforce',
+   272→        icon: Zap,
+   273→        shortcut: 'G E',
+   274→        action: () => {
+   275→          setCurrentView('execution-engine');
+   276→          addToRecent('cmd-execution-engine', 'Open Execution Engine', 'command');
+   277→        },
+   278→        group: 'Commands',
+   279→      },
+   280→      {
+   281→        id: 'cmd-digital-twin',
+   282→        label: 'Open Digital Twin™',
+   283→        description: 'Live business simulator — Mirror · Simulate · Predict · Replay history',
+   284→        icon: Copy,
+   285→        shortcut: 'G D',
+   286→        action: () => {
+   287→          setCurrentView('digital-twin');
+   288→          addToRecent('cmd-digital-twin', 'Open Digital Twin™', 'command');
+   289→        },
+   290→        group: 'Commands',
+   291→      },
+   292→      {
+   293→        id: 'cmd-create-return',
+   294→        label: 'Create Return',
+   295→        description: 'Prepare a new GST return',
+   296→        icon: FileText,
+   297→        action: () => {
+   298→          setCurrentView('returns');
+   299→          addToRecent('cmd-create-return', 'Create Return', 'command');
+   300→        },
+   301→        group: 'Commands',
+   302→      },
+   303→      {
+   304→        id: 'cmd-run-reconciliation',
+   305→        label: 'Run Reconciliation',
+   306→        description: 'Reconcile GSTR-2B with purchase register',
+   307→        icon: RefreshCw,
+   308→        action: () => {
+   309→          setCurrentView('reconcile');
+   310→          addToRecent('cmd-run-reconciliation', 'Run Reconciliation', 'command');
+   311→        },
+   312→        group: 'Commands',
+   313→      },
+   314→      {
+   315→        id: 'cmd-open-analytics',
+   316→        label: 'Open Analytics',
+   317→        description: 'View firm analytics and reports',
+   318→        icon: BarChart3,
+   319→        action: () => {
+   320→          setCurrentView('analytics');
+   321→          addToRecent('cmd-open-analytics', 'Open Analytics', 'command');
+   322→        },
+   323→        group: 'Commands',
+   324→      },
+   325→      {
+   326→        id: 'cmd-generate-filing-summary',
+   327→        label: 'Generate Filing Summary',
+   328→        description: 'Generate a filing summary report',
+   329→        icon: ClipboardList,
+   330→        action: () => {
+   331→          setCurrentView('returns');
+   332→          addToRecent('cmd-generate-filing-summary', 'Generate Filing Summary', 'command');
+   333→        },
+   334→        group: 'Commands',
+   335→      },
+   336→      {
+   337→        id: 'cmd-open-notifications',
+   338→        label: 'Open Notifications',
+   339→        description: 'View your notifications',
+   340→        icon: Bell,
+   341→        action: () => {
+   342→          setCommandPaletteOpen(false);
+   343→          addToRecent('cmd-open-notifications', 'Open Notifications', 'command');
+   344→        },
+   345→        group: 'Commands',
+   346→      },
+   347→      {
+   348→        id: 'cmd-invite-team-member',
+   349→        label: 'Invite Team Member',
+   350→        description: 'Send a team invitation',
+   351→        icon: Users,
+   352→        action: () => {
+   353→          setCurrentView('team');
+   354→          addToRecent('cmd-invite-team-member', 'Invite Team Member', 'command');
+   355→        },
+   356→        group: 'Commands',
+   357→      },
+   358→      {
+   359→        id: 'cmd-create-task',
+   360→        label: 'Create Task',
+   361→        description: 'Create a new task',
+   362→        icon: CheckSquare,
+   363→        action: () => {
+   364→          setCurrentView('tasks');
+   365→          addToRecent('cmd-create-task', 'Create Task', 'command');
+   366→        },
+   367→        group: 'Commands',
+   368→      },
+   369→      {
+   370→        id: 'cmd-open-ai-copilot',
+   371→        label: 'Open AI Copilot',
+   372→        description: 'Copilot is always visible in the sidebar',
+   373→        icon: Bot,
+   374→        action: () => {
+   375→          setCommandPaletteOpen(false);
+   376→          addToRecent('cmd-open-ai-copilot', 'Open AI Copilot', 'command');
+   377→        },
+   378→        group: 'Commands',
+   379→      },
+   380→      {
+   381→        id: 'cmd-open-generate',
+   382→        label: 'Open AI Generation Workbench',
+   383→        description: 'Production AI pipeline — queue, generate, retry, cancel, version history',
+   384→        icon: Zap,
+   385→        action: () => {
+   386→          setCurrentView('generate');
+   387→          addToRecent('cmd-open-generate', 'Open AI Generation Workbench', 'command');
+   388→        },
+   389→        group: 'Commands',
+   390→      },
+   391→      {
+   392→        id: 'cmd-run-autopilot',
+   393→        label: 'Run Autopilot',
+   394→        description: 'Launch automated workflow execution',
+   395→        icon: Zap,
+   396→        action: () => {
+   397→          setCurrentView('autopilot');
+   398→          addToRecent('cmd-run-autopilot', 'Run Autopilot', 'command');
+   399→        },
+   400→        group: 'Commands',
+   401→      },
+   402→      {
+   403→        id: 'cmd-open-software-factory',
+   404→        label: 'Open AI Software Factory™',
+   405→        description: 'Build apps from natural language — Oracle™ + 10 AI dev employees',
+   406→        icon: Cpu,
+   407→        action: () => {
+   408→          setCurrentView('ai-software-factory');
+   409→          addToRecent('cmd-open-software-factory', 'Open AI Software Factory™', 'command');
+   410→        },
+   411→        group: 'Commands',
+   412→      },
+   413→      {
+   414→        id: 'cmd-open-autonomous-enterprise',
+   415→        label: 'Open Autonomous Enterprise™',
+   416→        description: 'Self-running business OS — 9 AI executives plan, decide, execute, learn',
+   417→        icon: Crown,
+   418→        action: () => {
+   419→          setCurrentView('autonomous-enterprise');
+   420→          addToRecent('cmd-open-autonomous-enterprise', 'Open Autonomous Enterprise™', 'command');
+   421→        },
+   422→        group: 'Commands',
+   423→      },
+   424→      {
+   425→        id: 'cmd-open-enterprise-cloud-platform',
+   426→        label: 'Open Enterprise Cloud Platform™',
+   427→        description: 'Global SaaS infrastructure — multi-tenant, billing, marketplace, APIs, security',
+   428→        icon: Cloud,
+   429→        action: () => {
+   430→          setCurrentView('enterprise-cloud-platform');
+   431→          addToRecent('cmd-open-enterprise-cloud-platform', 'Open Enterprise Cloud Platform™', 'command');
+   432→        },
+   433→        group: 'Commands',
+   434→      },
+   435→      {
+   436→        id: 'cmd-open-enterprise-ai-platform',
+   437→        label: 'Open Enterprise AI Platform™',
+   438→        description: 'Developer platform — marketplace, webhooks, API keys, low-code studio, SDKs',
+   439→        icon: Cloud,
+   440→        action: () => {
+   441→          setCurrentView('enterprise-ai-platform');
+   442→          addToRecent('cmd-open-enterprise-ai-platform', 'Open Enterprise AI Platform™', 'command');
+   443→        },
+   444→        group: 'Commands',
+   445→      },
+   446→      {
+   447→        id: 'cmd-open-global-enterprise-network',
+   448→        label: 'Open Global Enterprise Network™',
+   449→        description: 'World business network — global business graph, suppliers, B2B commerce, trust scores, opportunities',
+   450→        icon: Globe,
+   451→        action: () => {
+   452→          setCurrentView('global-enterprise-network');
+   453→          addToRecent('cmd-open-global-enterprise-network', 'Open Global Enterprise Network™', 'command');
+   454→        },
+   455→        group: 'Commands',
+   456→      },
+   457→      // ─── Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ───
+   458→      {
+   459→        id: 'cmd-open-enterprise-command-center',
+   460→        label: 'Open Enterprise Command Center™',
+   461→        description: 'Global command center — every company, financial health, GST, AI alerts, cash flow, risks, growth',
+   462→        icon: LayoutDashboard,
+   463→        action: () => {
+   464→          setCurrentView('enterprise-command-center');
+   465→          addToRecent('cmd-open-enterprise-command-center', 'Open Enterprise Command Center™', 'command');
+   466→        },
+   467→        group: 'Phase 13 — Enterprise',
+   468→      },
+   469→      {
+   470→        id: 'cmd-open-multi-company-workspace',
+   471→        label: 'Open Multi-Company Workspace™',
+   472→        description: 'Unlimited companies, GSTINs & branches — instant switching with complete data isolation',
+   473→        icon: Layers,
+   474→        action: () => {
+   475→          setCurrentView('multi-company-workspace');
+   476→          addToRecent('cmd-open-multi-company-workspace', 'Open Multi-Company Workspace™', 'command');
+   477→        },
+   478→        group: 'Phase 13 — Enterprise',
+   479→      },
+   480→      {
+   481→        id: 'cmd-open-team-collaboration',
+   482→        label: 'Open Team Collaboration™',
+   483→        description: 'Tasks, assignments, approvals, comments, mentions, internal chat & real-time activity feed',
+   484→        icon: Users,
+   485→        action: () => {
+   486→          setCurrentView('team-collaboration');
+   487→          addToRecent('cmd-open-team-collaboration', 'Open Team Collaboration™', 'command');
+   488→        },
+   489→        group: 'Phase 13 — Enterprise',
+   490→      },
+   491→      {
+   492→        id: 'cmd-open-workflow-engine',
+   493→        label: 'Open Enterprise Workflow Engine™',
+   494→        description: 'Multi-level approval workflows — invoices, expenses, payments, GST filings, vendors, POs, salary',
+   495→        icon: GitBranch,
+   496→        action: () => {
+   497→          setCurrentView('workflow-engine');
+   498→          addToRecent('cmd-open-workflow-engine', 'Open Enterprise Workflow Engine™', 'command');
+   499→        },
+   500→        group: 'Phase 13 — Enterprise',
+   501→      },
+   502→      {
+   503→        id: 'cmd-open-enterprise-documents',
+   504→        label: 'Open Enterprise Documents™',
+   505→        description: 'Shared document workspace — version history, access permissions, folders, approvals, OCR',
+   506→        icon: FolderOpen,
+   507→        action: () => {
+   508→          setCurrentView('enterprise-documents');
+   509→          addToRecent('cmd-open-enterprise-documents', 'Open Enterprise Documents™', 'command');
+   510→        },
+   511→        group: 'Phase 13 — Enterprise',
+   512→      },
+   513→      {
+   514→        id: 'cmd-open-executive-calendar',
+   515→        label: 'Open Executive Calendar™',
+   516→        description: 'Unified calendar — GST deadlines, meetings, approvals, tasks, payments, compliance, AI reminders',
+   517→        icon: Calendar,
+   518→        action: () => {
+   519→          setCurrentView('executive-calendar');
+   520→          addToRecent('cmd-open-executive-calendar', 'Open Executive Calendar™', 'command');
+   521→        },
+   522→        group: 'Phase 13 — Enterprise',
+   523→      },
+   524→      {
+   525→        id: 'cmd-open-enterprise-search',
+   526→        label: 'Open Enterprise Search™',
+   527→        description: 'Universal search across invoices, customers, vendors, companies, GST, reports, docs, tasks',
+   528→        icon: Search,
+   529→        action: () => {
+   530→          setCurrentView('enterprise-search');
+   531→          addToRecent('cmd-open-enterprise-search', 'Open Enterprise Search™', 'command');
+   532→        },
+   533→        group: 'Phase 13 — Enterprise',
+   534→      },
+   535→      {
+   536→        id: 'cmd-open-enterprise-notifications',
+   537→        label: 'Open Enterprise Notifications™',
+   538→        description: 'Central hub — assignments, approvals, AI alerts, GST deadlines, payments, risk & compliance',
+   539→        icon: Bell,
+   540→        action: () => {
+   541→          setCurrentView('enterprise-notifications');
+   542→          addToRecent('cmd-open-enterprise-notifications', 'Open Enterprise Notifications™', 'command');
+   543→        },
+   544→        group: 'Phase 13 — Enterprise',
+   545→      },
+   546→      {
+   547→        id: 'cmd-open-advanced-rbac',
+   548→        label: 'Open Advanced RBAC™',
+   549→        description: 'Enterprise permissions — CEO, CFO, Finance Manager, CA, Accountant, GST Executive, HR, Auditor',
+   550→        icon: ShieldCheck,
+   551→        action: () => {
+   552→          setCurrentView('advanced-rbac');
+   553→          addToRecent('cmd-open-advanced-rbac', 'Open Advanced RBAC™', 'command');
+   554→        },
+   555→        group: 'Phase 13 — Enterprise',
+   556→      },
+   557→      {
+   558→        id: 'cmd-open-cross-company-analytics',
+   559→        label: 'Open Cross-Company Analytics™',
+   560→        description: 'Compare revenue, expenses, profit, GST, compliance, growth, cash flow, risk & AI score',
+   561→        icon: BarChart3,
+   562→        action: () => {
+   563→          setCurrentView('cross-company-analytics');
+   564→          addToRecent('cmd-open-cross-company-analytics', 'Open Cross-Company Analytics™', 'command');
+   565→        },
+   566→        group: 'Phase 13 — Enterprise',
+   567→      },
+   568→      {
+   569→        id: 'cmd-open-enterprise-audit',
+   570→        label: 'Open Enterprise Audit™',
+   571→        description: 'Track every action — user & org activity, approvals, changes, AI actions, compliance logs',
+   572→        icon: ScrollText,
+   573→        action: () => {
+   574→          setCurrentView('enterprise-audit');
+   575→          addToRecent('cmd-open-enterprise-audit', 'Open Enterprise Audit™', 'command');
+   576→        },
+   577→        group: 'Phase 13 — Enterprise',
+   578→      },
+   579→      // ─── Phase 14 — Global Expansion & International Financial Operating System™ ───
+   580→      {
+   581→        id: 'cmd-open-multi-country-accounting',
+   582→        label: 'Open Multi-Country Accounting™',
+   583→        description: '10 countries (IN, US, CA, GB, AU, AE, SG, DE, FR, JP) with automatic country-specific rules',
+   584→        icon: Globe2,
+   585→        action: () => {
+   586→          setCurrentView('multi-country-accounting');
+   587→          addToRecent('cmd-open-multi-country-accounting', 'Open Multi-Country Accounting™', 'command');
+   588→        },
+   589→        group: 'Phase 14 — Global',
+   590→      },
+   591→      {
+   592→        id: 'cmd-open-multi-tax-engine',
+   593→        label: 'Open Multi-Tax Engine™',
+   594→        description: 'GST, VAT, Sales Tax, Corporate Tax, Payroll Tax, Import/Export Duty — country-specific calculations',
+   595→        icon: Calculator,
+   596→        action: () => {
+   597→          setCurrentView('multi-tax-engine');
+   598→          addToRecent('cmd-open-multi-tax-engine', 'Open Multi-Tax Engine™', 'command');
+   599→        },
+   600→        group: 'Phase 14 — Global',
+   601→      },
+   602→      {
+   603→        id: 'cmd-open-multi-currency-system',
+   604→        label: 'Open Multi-Currency System™',
+   605→        description: 'USD, INR, EUR, GBP, AED, CAD, JPY, AUD, SGD — live rates, conversion, historical trends',
+   606→        icon: Coins,
+   607→        action: () => {
+   608→          setCurrentView('multi-currency-system');
+   609→          addToRecent('cmd-open-multi-currency-system', 'Open Multi-Currency System™', 'command');
+   610→        },
+   611→        group: 'Phase 14 — Global',
+   612→      },
+   613→      {
+   614→        id: 'cmd-open-international-banking',
+   615→        label: 'Open International Banking™',
+   616→        description: 'Stripe, PayPal, Wise, Revolut, Mercury, Brex, HSBC, Citibank, JP Morgan, Razorpay, Cashfree',
+   617→        icon: Banknote,
+   618→        action: () => {
+   619→          setCurrentView('international-banking');
+   620→          addToRecent('cmd-open-international-banking', 'Open International Banking™', 'command');
+   621→        },
+   622→        group: 'Phase 14 — Global',
+   623→      },
+   624→      {
+   625→        id: 'cmd-open-global-compliance-engine',
+   626→        label: 'Open Global Compliance Engine™',
+   627→        description: 'India, USA, UK, EU, Singapore, Australia, Canada — automated compliance report generation',
+   628→        icon: ShieldCheck,
+   629→        action: () => {
+   630→          setCurrentView('global-compliance-engine');
+   631→          addToRecent('cmd-open-global-compliance-engine', 'Open Global Compliance Engine™', 'command');
+   632→        },
+   633→        group: 'Phase 14 — Global',
+   634→      },
+   635→      {
+   636→        id: 'cmd-open-international-erp',
+   637→        label: 'Open International ERP™',
+   638→        description: 'Global inventory, warehouses, branches, cross-border purchase orders & invoices',
+   639→        icon: Warehouse,
+   640→        action: () => {
+   641→          setCurrentView('international-erp');
+   642→          addToRecent('cmd-open-international-erp', 'Open International ERP™', 'command');
+   643→        },
+   644→        group: 'Phase 14 — Global',
+   645→      },
+   646→      {
+   647→        id: 'cmd-open-multi-language-platform',
+   648→        label: 'Open Multi-Language Platform™',
+   649→        description: 'English, Hindi, French, German, Spanish, Arabic, Japanese, Chinese — runtime switching',
+   650→        icon: Languages,
+   651→        action: () => {
+   652→          setCurrentView('multi-language-platform');
+   653→          addToRecent('cmd-open-multi-language-platform', 'Open Multi-Language Platform™', 'command');
+   654→        },
+   655→        group: 'Phase 14 — Global',
+   656→      },
+   657→      {
+   658→        id: 'cmd-open-ai-global-advisor',
+   659→        label: 'Open AI Global Advisor™',
+   660→        description: 'Oracle AI for country regulations, international taxation, currency risks, cross-border finance',
+   661→        icon: Brain,
+   662→        action: () => {
+   663→          setCurrentView('ai-global-advisor');
+   664→          addToRecent('cmd-open-ai-global-advisor', 'Open AI Global Advisor™', 'command');
+   665→        },
+   666→        group: 'Phase 14 — Global',
+   667→      },
+   668→      {
+   669→        id: 'cmd-open-global-dashboard',
+   670→        label: 'Open Global Dashboard™',
+   671→        description: 'Country-wise revenue, expenses, tax, exchange gains/losses, international cash flow, regional KPIs',
+   672→        icon: LayoutDashboard,
+   673→        action: () => {
+   674→          setCurrentView('global-dashboard');
+   675→          addToRecent('cmd-open-global-dashboard', 'Open Global Dashboard™', 'command');
+   676→        },
+   677→        group: 'Phase 14 — Global',
+   678→      },
+   679→      {
+   680→        id: 'cmd-open-cross-border-payments',
+   681→        label: 'Open Cross-Border Payments™',
+   682→        description: 'International invoices, collections, payouts & cross-border reconciliation',
+   683→        icon: Plane,
+   684→        action: () => {
+   685→          setCurrentView('cross-border-payments');
+   686→          addToRecent('cmd-open-cross-border-payments', 'Open Cross-Border Payments™', 'command');
+   687→        },
+   688→        group: 'Phase 14 — Global',
+   689→      },
+   690→      {
+   691→        id: 'cmd-open-international-reports',
+   692→        label: 'Open International Reports™',
+   693→        description: 'Country reports, currency reports, global cash flow, international P&L, regional analytics',
+   694→        icon: FileBarChart,
+   695→        action: () => {
+   696→          setCurrentView('international-reports');
+   697→          addToRecent('cmd-open-international-reports', 'Open International Reports™', 'command');
+   698→        },
+   699→        group: 'Phase 14 — Global',
+   700→      },
+   701→      {
+   702→        id: 'cmd-open-global-performance',
+   703→        label: 'Open Global Performance™',
+   704→        description: '10,000+ users, 100,000+ orgs, millions of invoices, worldwide scaling, CDN optimization',
+   705→        icon: Server,
+   706→        action: () => {
+   707→          setCurrentView('global-performance');
+   708→          addToRecent('cmd-open-global-performance', 'Open Global Performance™', 'command');
+   709→        },
+   710→        group: 'Phase 14 — Global',
+   711→      },
+   712→      // ─── Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ───
+   713→      {
+   714→        id: 'cmd-open-global-financial-cloud',
+   715→        label: 'Open Global Financial Cloud™ Hub',
+   716→        description: 'The 15 pillars of the open platform — APIs, Marketplace, Integrations, Data, Events',
+   717→        icon: Cloud,
+   718→        action: () => {
+   719→          setCurrentView('global-financial-cloud');
+   720→          addToRecent('cmd-open-global-financial-cloud', 'Open Global Financial Cloud™ Hub', 'command');
+   721→        },
+   722→        group: 'Phase 16 — Cloud',
+   723→      },
+   724→      {
+   725→        id: 'cmd-open-developer-platform',
+   726→        label: 'Open Developer Platform™',
+   727→        description: 'REST, GraphQL, Webhooks, 8 SDKs, CLI, OAuth, API keys, Playground, Sandbox, Docs',
+   728→        icon: Code2,
+   729→        action: () => {
+   730→          setCurrentView('developer-platform');
+   731→          addToRecent('cmd-open-developer-platform', 'Open Developer Platform™', 'command');
+   732→        },
+   733→        group: 'Phase 16 — Cloud',
+   734→      },
+   735→      {
+   736→        id: 'cmd-open-enterprise-api-gateway',
+   737→        label: 'Open Enterprise API Gateway™',
+   738→        description: '13 secure service APIs: GST, Invoices, Accounting, ERP, CRM, HR, Payroll, Banking, AI',
+   739→        icon: Network,
+   740→        action: () => {
+   741→          setCurrentView('enterprise-api-gateway');
+   742→          addToRecent('cmd-open-enterprise-api-gateway', 'Open Enterprise API Gateway™', 'command');
+   743→        },
+   744→        group: 'Phase 16 — Cloud',
+   745→      },
+   746→      {
+   747→        id: 'cmd-open-app-marketplace-cloud',
+   748→        label: 'Open App Marketplace™',
+   749→        description: 'Apps, Extensions, Plugins, AI Skills, ERP Connectors, Industry Templates, Automation Packs',
+   750→        icon: Store,
+   751→        action: () => {
+   752→          setCurrentView('app-marketplace-cloud');
+   753→          addToRecent('cmd-open-app-marketplace-cloud', 'Open App Marketplace™', 'command');
+   754→        },
+   755→        group: 'Phase 16 — Cloud',
+   756→      },
+   757→      {
+   758→        id: 'cmd-open-global-integration-hub',
+   759→        label: 'Open Global Integration Hub™',
+   760→        description: 'SAP, Oracle, Dynamics, Zoho, Tally, QuickBooks, Xero, Salesforce, Slack, Stripe, Bank APIs',
+   761→        icon: Plug,
+   762→        action: () => {
+   763→          setCurrentView('global-integration-hub');
+   764→          addToRecent('cmd-open-global-integration-hub', 'Open Global Integration Hub™', 'command');
+   765→        },
+   766→        group: 'Phase 16 — Cloud',
+   767→      },
+   768→      {
+   769→        id: 'cmd-open-financial-data-cloud',
+   770→        label: 'Open Financial Data Cloud™',
+   771→        description: 'Unified financial data layer syncing 11 domains in real-time across every connected system',
+   772→        icon: Database,
+   773→        action: () => {
+   774→          setCurrentView('financial-data-cloud');
+   775→          addToRecent('cmd-open-financial-data-cloud', 'Open Financial Data Cloud™', 'command');
+   776→        },
+   777→        group: 'Phase 16 — Cloud',
+   778→      },
+   779→      {
+   780→        id: 'cmd-open-event-streaming',
+   781→        label: 'Open Event Streaming Platform™',
+   782→        description: 'Realtime events: Invoice Created, Payment Received, GST Filed, Bank Synced, Webhook Delivery',
+   783→        icon: Radio,
+   784→        action: () => {
+   785→          setCurrentView('event-streaming');
+   786→          addToRecent('cmd-open-event-streaming', 'Open Event Streaming Platform™', 'command');
+   787→        },
+   788→        group: 'Phase 16 — Cloud',
+   789→      },
+   790→      {
+   791→        id: 'cmd-open-automation-studio',
+   792→        label: 'Open Enterprise Automation Studio™',
+   793→        description: 'Visual drag-and-drop workflow builder with triggers, conditions, AI nodes, API nodes, schedules',
+   794→        icon: Workflow,
+   795→        action: () => {
+   796→          setCurrentView('automation-studio');
+   797→          addToRecent('cmd-open-automation-studio', 'Open Enterprise Automation Studio™', 'command');
+   798→        },
+   799→        group: 'Phase 16 — Cloud',
+   800→      },
+   801→      {
+   802→        id: 'cmd-open-data-warehouse',
+   803→        label: 'Open Enterprise Data Warehouse™',
+   804→        description: 'Petabyte-scale analytics: realtime, historical, custom SQL, BI dashboards, AI queries, data lake',
+   805→        icon: BarChart3,
+   806→        action: () => {
+   807→          setCurrentView('data-warehouse');
+   808→          addToRecent('cmd-open-data-warehouse', 'Open Enterprise Data Warehouse™', 'command');
+   809→        },
+   810→        group: 'Phase 16 — Cloud',
+   811→      },
+   812→      {
+   813→        id: 'cmd-open-global-identity',
+   814→        label: 'Open Global Identity Platform™',
+   815→        description: 'Enterprise SSO, OAuth, SAML, Azure AD, Google, Microsoft, MFA, passwordless WebAuthn',
+   816→        icon: Fingerprint,
+   817→        action: () => {
+   818→          setCurrentView('global-identity');
+   819→          addToRecent('cmd-open-global-identity', 'Open Global Identity Platform™', 'command');
+   820→        },
+   821→        group: 'Phase 16 — Cloud',
+   822→      },
+   823→      {
+   824→        id: 'cmd-open-developer-analytics',
+   825→        label: 'Open Developer Analytics™',
+   826→        description: 'API usage, errors, latency, revenue, apps, downloads, subscriptions, usage trends',
+   827→        icon: Activity,
+   828→        action: () => {
+   829→          setCurrentView('developer-analytics');
+   830→          addToRecent('cmd-open-developer-analytics', 'Open Developer Analytics™', 'command');
+   831→        },
+   832→        group: 'Phase 16 — Cloud',
+   833→      },
+   834→      {
+   835→        id: 'cmd-open-enterprise-billing',
+   836→        label: 'Open Enterprise Billing Platform™',
+   837→        description: 'Subscriptions, usage billing, marketplace revenue, partner revenue, API billing, enterprise contracts',
+   838→        icon: CreditCard,
+   839→        action: () => {
+   840→          setCurrentView('enterprise-billing');
+   841→          addToRecent('cmd-open-enterprise-billing', 'Open Enterprise Billing Platform™', 'command');
+   842→        },
+   843→        group: 'Phase 16 — Cloud',
+   844→      },
+   845→      {
+   846→        id: 'cmd-open-multi-tenant-infra',
+   847→        label: 'Open Multi-Tenant Cloud Infra™',
+   848→        description: 'Millions of orgs, billions of API calls, 10 regions, auto-scaling, load balancing, edge, CDN, HA',
+   849→        icon: Server,
+   850→        action: () => {
+   851→          setCurrentView('multi-tenant-infra');
+   852→          addToRecent('cmd-open-multi-tenant-infra', 'Open Multi-Tenant Cloud Infra™', 'command');
+   853→        },
+   854→        group: 'Phase 16 — Cloud',
+   855→      },
+   856→      {
+   857→        id: 'cmd-open-enterprise-security-cloud',
+   858→        label: 'Open Enterprise Security™',
+   859→        description: 'API security, Zero Trust, encryption, secrets, rate limiting, threat detection, audit, compliance',
+   860→        icon: ShieldCheck,
+   861→        action: () => {
+   862→          setCurrentView('enterprise-security-cloud');
+   863→          addToRecent('cmd-open-enterprise-security-cloud', 'Open Enterprise Security™', 'command');
+   864→        },
+   865→        group: 'Phase 16 — Cloud',
+   866→      },
+   867→      {
+   868→        id: 'cmd-open-global-financial-network',
+   869→        label: 'Open Global Financial Network™',
+   870→        description: 'Secure org-to-org network: invoices, POs, payments, approvals, documents, vendor & customer collab',
+   871→        icon: Share2,
+   872→        action: () => {
+   873→          setCurrentView('global-financial-network');
+   874→          addToRecent('cmd-open-global-financial-network', 'Open Global Financial Network™', 'command');
+   875→        },
+   876→        group: 'Phase 16 — Cloud',
+   877→      },
+   878→      {
+   879→        id: 'cmd-open-platform-intelligence',
+   880→        label: 'Open Platform Intelligence™',
+   881→        description: 'AI monitors performance, scaling, security, costs, reliability, developer experience',
+   882→        icon: BrainCircuit,
+   883→        action: () => {
+   884→          setCurrentView('platform-intelligence');
+   885→          addToRecent('cmd-open-platform-intelligence', 'Open Platform Intelligence™', 'command');
+   886→        },
+   887→        group: 'Phase 16 — Cloud',
+   888→      },
+   889→    ],
+   890→    [setCurrentView, setCommandPaletteOpen, addToRecent]
+   891→  );
+   892→
+   893→  // ─── Search results grouped by type ──────────────────────────────────────
+   894→  const searchResults = useMemo(() => {
+   895→    if (!query.trim()) {
+   896→      return {
+   897→        clients: [],
+   898→        invoices: [],
+   899→        returns: [],
+   900→        documents: [],
+   901→        activities: [],
+   902→        gstCustomers: [],
+   903→        gstProducts: [],
+   904→        gstInvoices: [],
+   905→      };
+   906→    }
+   907→
+   908→    const q = query.toLowerCase();
+   909→
+   910→    const matchedClients = clients
+   911→      .filter(
+   912→        (c) =>
+   913→          c.tradeName?.toLowerCase().includes(q) ||
+   914→          c.gstin?.toLowerCase().includes(q) ||
+   915→          c.legalName?.toLowerCase().includes(q)
+   916→      )
+   917→      .slice(0, 5);
+   918→
+   919→    const matchedInvoices = invoices
+   920→      .filter(
+   921→        (inv) =>
+   922→          inv.invoiceNumber?.toLowerCase().includes(q) ||
+   923→          inv.buyerName?.toLowerCase().includes(q) ||
+   924→          inv.sellerGstin?.toLowerCase().includes(q)
+   925→      )
+   926→      .slice(0, 5);
+   927→
+   928→    const matchedReturns = returns
+   929→      .filter(
+   930→        (r) =>
+   931→          r.returnType?.toLowerCase().includes(q) ||
+   932→          r.period?.toLowerCase().includes(q) ||
+   933→          r.status?.toLowerCase().includes(q)
+   934→      )
+   935→      .slice(0, 5);
+   936→
+   937→    const matchedDocuments = documents
+   938→      .filter(
+   939→        (d) =>
+   940→          d.fileName?.toLowerCase().includes(q) ||
+   941→          d.documentType?.toLowerCase().includes(q) ||
+   942→          d.status?.toLowerCase().includes(q)
+   943→      )
+   944→      .slice(0, 5);
+   945→
+   946→    const matchedActivities = activities
+   947→      .filter(
+   948→        (a) =>
+   949→          a.title?.toLowerCase().includes(q) ||
+   950→          a.description?.toLowerCase().includes(q)
+   951→      )
+   952→      .slice(0, 5);
+   953→
+   954→    // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+   955→    const matchedGstCustomers = gstCustomers
+   956→      .filter(
+   957→        (c) =>
+   958→          c.name?.toLowerCase().includes(q) ||
+   959→          (c.gstin ?? '')?.toLowerCase().includes(q) ||
+   960→          (c.email ?? '')?.toLowerCase().includes(q) ||
+   961→          (c.phone ?? '')?.toLowerCase().includes(q) ||
+   962→          (c.state ?? '')?.toLowerCase().includes(q) ||
+   963→          (c.pan ?? '')?.toLowerCase().includes(q)
+   964→      )
+   965→      .slice(0, 5);
+   966→
+   967→    const matchedGstProducts = gstProducts
+   968→      .filter(
+   969→        (p) =>
+   970→          p.name?.toLowerCase().includes(q) ||
+   971→          (p.sku ?? '')?.toLowerCase().includes(q) ||
+   972→          (p.hsnSac ?? '')?.toLowerCase().includes(q) ||
+   973→          (p.description ?? '')?.toLowerCase().includes(q)
+   974→      )
+   975→      .slice(0, 5);
+   976→
+   977→    const matchedGstInvoices = gstInvoices
+   978→      .filter(
+   979→        (inv) =>
+   980→          inv.invoiceNumber?.toLowerCase().includes(q) ||
+   981→          (inv.customerName ?? '')?.toLowerCase().includes(q) ||
+   982→          (inv.customerGstin ?? '')?.toLowerCase().includes(q)
+   983→      )
+   984→      .slice(0, 5);
+   985→
+   986→    return {
+   987→      clients: matchedClients,
+   988→      invoices: matchedInvoices,
+   989→      returns: matchedReturns,
+   990→      documents: matchedDocuments,
+   991→      activities: matchedActivities,
+   992→      gstCustomers: matchedGstCustomers,
+   993→      gstProducts: matchedGstProducts,
+   994→      gstInvoices: matchedGstInvoices,
+   995→    };
+   996→  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices]);
+   997→
+   998→  const hasSearchResults =
+   999→    searchResults.clients.length > 0 ||
+  1000→    searchResults.invoices.length > 0 ||
+  1001→    searchResults.returns.length > 0 ||
+  1002→    searchResults.documents.length > 0 ||
+  1003→    searchResults.activities.length > 0 ||
+  1004→    searchResults.gstCustomers.length > 0 ||
+  1005→    searchResults.gstProducts.length > 0 ||
+  1006→    searchResults.gstInvoices.length > 0;
+  1007→
+  1008→  // ─── Handle item selection ───────────────────────────────────────────────
+  1009→  const handleSelect = useCallback(
+  1010→    (callback: () => void) => {
+  1011→      setCommandPaletteOpen(false);
+  1012→      callback();
+  1013→    },
+  1014→    [setCommandPaletteOpen]
+  1015→  );
+  1016→
+  1017→  const handleClientSelect = useCallback(
+  1018→    (clientId: string, tradeName: string) => {
+  1019→      setCommandPaletteOpen(false);
+  1020→      setSelectedClientId(clientId);
+  1021→      setCurrentView('client-workspace');
+  1022→      addToRecent(`client-${clientId}`, tradeName, 'client');
+  1023→    },
+  1024→    [setCommandPaletteOpen, setSelectedClientId, setCurrentView, addToRecent]
+  1025→  );
+  1026→
+  1027→  const handleInvoiceSelect = useCallback(
+  1028→    (invoiceNumber: string) => {
+  1029→      setCommandPaletteOpen(false);
+  1030→      setCurrentView('invoices');
+  1031→      addToRecent(`invoice-${invoiceNumber}`, invoiceNumber, 'invoice');
+  1032→    },
+  1033→    [setCommandPaletteOpen, setCurrentView, addToRecent]
+  1034→  );
+  1035→
+  1036→  const handleReturnSelect = useCallback(
+  1037→    (returnLabel: string, clientId: string | null) => {
+  1038→      setCommandPaletteOpen(false);
+  1039→      if (clientId) {
+  1040→        setSelectedClientId(clientId);
+  1041→      }
+  1042→      setCurrentView('returns');
+  1043→      addToRecent(`return-${returnLabel}`, returnLabel, 'return');
+  1044→    },
+  1045→    [setCommandPaletteOpen, setSelectedClientId, setCurrentView, addToRecent]
+  1046→  );
+  1047→
+  1048→  const handleDocumentSelect = useCallback(
+  1049→    (fileName: string) => {
+  1050→      setCommandPaletteOpen(false);
+  1051→      setCurrentView('documents');
+  1052→      addToRecent(`doc-${fileName}`, fileName, 'document');
+  1053→    },
+  1054→    [setCommandPaletteOpen, setCurrentView, addToRecent]
+  1055→  );
+  1056→
+  1057→  // ─── Recent commands filtered ────────────────────────────────────────────
+  1058→  const recentCommands = useMemo(() => {
+  1059→    return recentItems
+  1060→      .map((r) => {
+  1061→        if (r.type === 'command') {
+  1062→          const cmd = commands.find((c) => c.id === r.id);
+  1063→          return cmd || null;
+  1064→        }
+  1065→        return null;
+  1066→      })
+  1067→      .filter(Boolean) as CommandAction[];
+  1068→  }, [recentItems, commands]);
+  1069→
+  1070→  // ─── Favorite commands resolved ──────────────────────────────────────────
+  1071→  const favoriteCommands = useMemo(() => {
+  1072→    return favorites
+  1073→      .map((f) => {
+  1074→        const cmd = commands.find((c) => c.id === f.id);
+  1075→        return cmd || null;
+  1076→      })
+  1077→      .filter(Boolean) as CommandAction[];
+  1078→  }, [favorites, commands]);
+  1079→
+  1080→  // ─── Is searching ────────────────────────────────────────────────────────
+  1081→  const isSearching = query.trim().length > 0;
+  1082→
+  1083→  return (
+  1084→    <AnimatePresence>
+  1085→      {commandPaletteOpen && (
+  1086→        <>
+  1087→          {/* Dark overlay with blur */}
+  1088→          <motion.div
+  1089→            key="cmd-overlay"
+  1090→            variants={backdropVariants}
+  1091→            initial="hidden"
+  1092→            animate="visible"
+  1093→            exit="exit"
+  1094→            className="fixed inset-0 z-[60] premium-backdrop"
+  1095→            onClick={() => setCommandPaletteOpen(false)}
+  1096→          />
+  1097→
+  1098→          {/* Centered modal */}
+  1099→          <motion.div
+  1100→            key="cmd-modal"
+  1101→            variants={modalEnterVariants}
+  1102→            initial="hidden"
+  1103→            animate="visible"
+  1104→            exit="exit"
+  1105→            transition={springModalTransition}
+  1106→            className="fixed left-1/2 top-[12%] z-[70] w-full max-w-xl -translate-x-1/2"
+  1107→            role="dialog"
+  1108→            aria-modal="true"
+  1109→            aria-label="Command palette"
+  1110→          >
+  1111→            <div className="glass-surface-strong rounded-2xl shadow-[0_24px_70px_-12px_rgba(0,0,0,0.8)] overflow-hidden">
+  1112→              {/* Search input */}
+  1113→              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08] bg-white/[0.03] transition-colors focus-within:border-emerald-400/50 focus-within:ring-1 focus-within:ring-emerald-400/40">
+  1114→                <Search className="h-4 w-4 text-muted-foreground shrink-0 transition-colors" />
+  1115→                <input
+  1116→                  autoFocus
+  1117→                  value={query}
+  1118→                  onChange={(e) => setQuery(e.target.value)}
+  1119→                  placeholder="Type a command or search..."
+  1120→                  aria-label="Search commands"
+  1121→                  className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
+  1122→                  onKeyDown={(e) => {
+  1123→                    if (e.key === 'Escape') {
+  1124→                      setCommandPaletteOpen(false);
+  1125→                    }
+  1126→                  }}
+  1127→                />
+  1128→                <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
+  1129→                  ESC
+  1130→                </kbd>
+  1131→              </div>
+  1132→
+  1133→              {/* Results list */}
+  1134→              <div className="max-h-[420px] overflow-y-auto overscroll-contain scrollbar-thin">
+  1135→                {/* Empty state */}
+  1136→                {isSearching && !hasSearchResults && (
+  1137→                  <div className="py-10 text-center">
+  1138→                    <Search className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+  1139→                    <p className="text-sm text-foreground/70">
+  1140→                      No results found for &ldquo;{query}&rdquo;
+  1141→                    </p>
+  1142→                    <p className="text-xs text-muted-foreground/70 mt-1">
+  1143→                      Try searching for clients, invoices, returns, or documents
+  1144→                    </p>
+  1145→                  </div>
+  1146→                )}
+  1147→
+  1148→                {/* ─── Favorites Section ──────────────────────────────────── */}
+  1149→                {!isSearching && favoriteCommands.length > 0 && (
+  1150→                  <div className="p-2">
+  1151→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1152→                      <Star className="h-3 w-3 text-cyan-400" />
+  1153→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1154→                        Favorites
+  1155→                      </span>
+  1156→                    </div>
+  1157→                    {favoriteCommands.map((cmd) => (
+  1158→                      <CommandItemRow
+  1159→                        key={cmd.id}
+  1160→                        icon={cmd.icon}
+  1161→                        label={cmd.label}
+  1162→                        description={cmd.description}
+  1163→                        shortcut={cmd.shortcut}
+  1164→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+  1165→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+  1166→                        onSelect={() => handleSelect(cmd.action)}
+  1167→                      />
+  1168→                    ))}
+  1169→                  </div>
+  1170→                )}
+  1171→
+  1172→                {/* ─── Recent Section ─────────────────────────────────────── */}
+  1173→                {!isSearching && recentCommands.length > 0 && (
+  1174→                  <div className="p-2">
+  1175→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1176→                      <Clock className="h-3 w-3 text-muted-foreground/70" />
+  1177→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1178→                        Recent
+  1179→                      </span>
+  1180→                    </div>
+  1181→                    {recentCommands.map((cmd) => (
+  1182→                      <CommandItemRow
+  1183→                        key={cmd.id}
+  1184→                        icon={cmd.icon}
+  1185→                        label={cmd.label}
+  1186→                        description={cmd.description}
+  1187→                        shortcut={cmd.shortcut}
+  1188→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+  1189→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+  1190→                        onSelect={() => handleSelect(cmd.action)}
+  1191→                      />
+  1192→                    ))}
+  1193→                  </div>
+  1194→                )}
+  1195→
+  1196→                {/* ─── Commands Section ───────────────────────────────────── */}
+  1197→                {!isSearching && (
+  1198→                  <div className="p-2">
+  1199→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1200→                      <Zap className="h-3 w-3 text-muted-foreground/70" />
+  1201→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1202→                        Commands
+  1203→                      </span>
+  1204→                    </div>
+  1205→                    {commands.map((cmd) => (
+  1206→                      <CommandItemRow
+  1207→                        key={cmd.id}
+  1208→                        icon={cmd.icon}
+  1209→                        label={cmd.label}
+  1210→                        description={cmd.description}
+  1211→                        shortcut={cmd.shortcut}
+  1212→                        isFavorite={favorites.some((f) => f.id === cmd.id)}
+  1213→                        onToggleFavorite={() => toggleFavorite(cmd.id, cmd.label)}
+  1214→                        onSelect={() => handleSelect(cmd.action)}
+  1215→                      />
+  1216→                    ))}
+  1217→                  </div>
+  1218→                )}
+  1219→
+  1220→                {/* ─── Search Results: GSTPilot Customers ─────────────────── */}
+  1221→                {isSearching && searchResults.gstCustomers.length > 0 && (
+  1222→                  <div className="p-2">
+  1223→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1224→                      <Users className="h-3 w-3 text-emerald-400" />
+  1225→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1226→                        Customers
+  1227→                      </span>
+  1228→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1229→                        {searchResults.gstCustomers.length} found
+  1230→                      </span>
+  1231→                    </div>
+  1232→                    {searchResults.gstCustomers.map((c) => (
+  1233→                      <CommandItemRow
+  1234→                        key={c.id}
+  1235→                        icon={Users}
+  1236→                        label={c.name}
+  1237→                        description={`${c.gstin || 'No GSTIN'}${c.state ? ` · ${c.state}` : ''}`}
+  1238→                        onSelect={() => {
+  1239→                          setCommandPaletteOpen(false);
+  1240→                          setCurrentView('crm');
+  1241→                        }}
+  1242→                      />
+  1243→                    ))}
+  1244→                  </div>
+  1245→                )}
+  1246→
+  1247→                {/* ─── Search Results: GSTPilot Products ──────────────────── */}
+  1248→                {isSearching && searchResults.gstProducts.length > 0 && (
+  1249→                  <div className="p-2">
+  1250→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1251→                      <Package className="h-3 w-3 text-emerald-400" />
+  1252→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1253→                        Products
+  1254→                      </span>
+  1255→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1256→                        {searchResults.gstProducts.length} found
+  1257→                      </span>
+  1258→                    </div>
+  1259→                    {searchResults.gstProducts.map((p) => (
+  1260→                      <CommandItemRow
+  1261→                        key={p.id}
+  1262→                        icon={Package}
+  1263→                        label={p.name}
+  1264→                        description={`${p.sku || 'No SKU'} · ${p.hsnSac} · GST ${p.gstRate}%`}
+  1265→                        onSelect={() => {
+  1266→                          setCommandPaletteOpen(false);
+  1267→                          setCurrentView('inventory');
+  1268→                        }}
+  1269→                      />
+  1270→                    ))}
+  1271→                  </div>
+  1272→                )}
+  1273→
+  1274→                {/* ─── Search Results: GSTPilot Invoices ──────────────────── */}
+  1275→                {isSearching && searchResults.gstInvoices.length > 0 && (
+  1276→                  <div className="p-2">
+  1277→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1278→                      <FileText className="h-3 w-3 text-cyan-400" />
+  1279→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1280→                        Invoices
+  1281→                      </span>
+  1282→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1283→                        {searchResults.gstInvoices.length} found
+  1284→                      </span>
+  1285→                    </div>
+  1286→                    {searchResults.gstInvoices.map((inv) => (
+  1287→                      <CommandItemRow
+  1288→                        key={inv.id}
+  1289→                        icon={FileText}
+  1290→                        label={inv.invoiceNumber}
+  1291→                        description={`${inv.customerName} · ₹${inv.grandTotal.toLocaleString('en-IN')} · ${inv.status}`}
+  1292→                        onSelect={() => {
+  1293→                          setCommandPaletteOpen(false);
+  1294→                          setCurrentView('invoices');
+  1295→                        }}
+  1296→                      />
+  1297→                    ))}
+  1298→                  </div>
+  1299→                )}
+  1300→
+  1301→                {/* ─── Search Results: Clients ────────────────────────────── */}
+  1302→                {isSearching && searchResults.clients.length > 0 && (
+  1303→                  <div className="p-2">
+  1304→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1305→                      <Building2 className="h-3 w-3 text-emerald-400" />
+  1306→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1307→                        Clients
+  1308→                      </span>
+  1309→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1310→                        {searchResults.clients.length} found
+  1311→                      </span>
+  1312→                    </div>
+  1313→                    {searchResults.clients.map((c) => (
+  1314→                      <CommandItemRow
+  1315→                        key={c.id}
+  1316→                        icon={Building2}
+  1317→                        label={c.tradeName || c.legalName || 'Unknown'}
+  1318→                        description={`${c.gstin}${c.state ? ` · ${c.state}` : ''}`}
+  1319→                        onSelect={() =>
+  1320→                          handleClientSelect(c.id, c.tradeName || c.legalName || 'Unknown')
+  1321→                        }
+  1322→                      />
+  1323→                    ))}
+  1324→                  </div>
+  1325→                )}
+  1326→
+  1327→                {/* ─── Search Results: Invoices ───────────────────────────── */}
+  1328→                {isSearching && searchResults.invoices.length > 0 && (
+  1329→                  <div className="p-2">
+  1330→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1331→                      <FileSpreadsheet className="h-3 w-3 text-cyan-400" />
+  1332→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1333→                        Invoices
+  1334→                      </span>
+  1335→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1336→                        {searchResults.invoices.length} found
+  1337→                      </span>
+  1338→                    </div>
+  1339→                    {searchResults.invoices.map((inv) => (
+  1340→                      <CommandItemRow
+  1341→                        key={inv.id}
+  1342→                        icon={FileSpreadsheet}
+  1343→                        label={inv.invoiceNumber || 'Unknown'}
+  1344→                        description={`${inv.invoiceType} · ₹${(inv.totalAmount || 0).toLocaleString('en-IN')}`}
+  1345→                        onSelect={() => handleInvoiceSelect(inv.invoiceNumber || inv.id)}
+  1346→                      />
+  1347→                    ))}
+  1348→                  </div>
+  1349→                )}
+  1350→
+  1351→                {/* ─── Search Results: Returns ────────────────────────────── */}
+  1352→                {isSearching && searchResults.returns.length > 0 && (
+  1353→                  <div className="p-2">
+  1354→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1355→                      <FileText className="h-3 w-3 text-blue-400" />
+  1356→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1357→                        Returns
+  1358→                      </span>
+  1359→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1360→                        {searchResults.returns.length} found
+  1361→                      </span>
+  1362→                    </div>
+  1363→                    {searchResults.returns.map((r) => (
+  1364→                      <CommandItemRow
+  1365→                        key={r.id}
+  1366→                        icon={FileText}
+  1367→                        label={`${r.returnType} · ${r.period}`}
+  1368→                        description={`${r.status}`}
+  1369→                        onSelect={() =>
+  1370→                          handleReturnSelect(
+  1371→                            `${r.returnType} · ${r.period}`,
+  1372→                            r.clientId || null
+  1373→                          )
+  1374→                        }
+  1375→                      />
+  1376→                    ))}
+  1377→                  </div>
+  1378→                )}
+  1379→
+  1380→                {/* ─── Search Results: Documents ──────────────────────────── */}
+  1381→                {isSearching && searchResults.documents.length > 0 && (
+  1382→                  <div className="p-2">
+  1383→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1384→                      <FolderOpen className="h-3 w-3 text-cyan-400" />
+  1385→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1386→                        Documents
+  1387→                      </span>
+  1388→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1389→                        {searchResults.documents.length} found
+  1390→                      </span>
+  1391→                    </div>
+  1392→                    {searchResults.documents.map((d) => (
+  1393→                      <CommandItemRow
+  1394→                        key={d.id}
+  1395→                        icon={FolderOpen}
+  1396→                        label={d.fileName || 'Unknown document'}
+  1397→                        description={`${d.documentType} · ${d.status}`}
+  1398→                        onSelect={() => handleDocumentSelect(d.fileName || d.id)}
+  1399→                      />
+  1400→                    ))}
+  1401→                  </div>
+  1402→                )}
+  1403→
+  1404→                {/* ─── Search Results: Activities ─────────────────────────── */}
+  1405→                {isSearching && searchResults.activities.length > 0 && (
+  1406→                  <div className="p-2">
+  1407→                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+  1408→                      <Activity className="h-3 w-3 text-blue-400" />
+  1409→                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+  1410→                        Activities
+  1411→                      </span>
+  1412→                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+  1413→                        {searchResults.activities.length} found
+  1414→                      </span>
+  1415→                    </div>
+  1416→                    {searchResults.activities.map((a) => (
+  1417→                      <CommandItemRow
+  1418→                        key={a.id}
+  1419→                        icon={Activity}
+  1420→                        label={a.title || 'Activity'}
+  1421→                        description={a.description?.slice(0, 60) || ''}
+  1422→                        onSelect={() => {
+  1423→                          setCommandPaletteOpen(false);
+  1424→                          addToRecent(`activity-${a.id}`, a.title || 'Activity', 'activity');
+  1425→                          if (a.clientId) {
+  1426→                            setSelectedClientId(a.clientId);
+  1427→                            setCurrentView('client-workspace');
+  1428→                          }
+  1429→                        }}
+  1430→                      />
+  1431→                    ))}
+  1432→                  </div>
+  1433→                )}
+  1434→              </div>
+  1435→
+  1436→              {/* Footer with keyboard hints */}
+  1437→              <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center gap-4 text-xs text-muted-foreground">
+  1438→                <span className="flex items-center gap-1">
+  1439→                  <kbd className="badge-premium font-mono text-[10px]">↑↓</kbd>
+  1440→                  Navigate
+  1441→                </span>
+  1442→                <span className="flex items-center gap-1">
+  1443→                  <kbd className="badge-premium font-mono text-[10px]">↵</kbd>
+  1444→                  Select
+  1445→                </span>
+  1446→                <span className="flex items-center gap-1">
+  1447→                  <kbd className="badge-premium font-mono text-[10px]">esc</kbd>
+  1448→                  Close
+  1449→                </span>
+  1450→                <span className="ml-auto flex items-center gap-1">
+  1451→                  <Pin className="h-2.5 w-2.5" /> Click star to favorite
+  1452→                </span>
+  1453→              </div>
+  1454→            </div>
+  1455→          </motion.div>
+  1456→        </>
+  1457→      )}
+  1458→    </AnimatePresence>
+  1459→  );
+  1460→}
+  1461→
+  1462→// ═══════════════════════════════════════════════════════════════════════════════
+  1463→// COMMAND ITEM ROW — Reusable row for each palette item
+  1464→// ═══════════════════════════════════════════════════════════════════════════════
+  1465→
+  1466→interface CommandItemRowProps {
+  1467→  icon: React.ElementType;
+  1468→  label: string;
+  1469→  description?: string;
+  1470→  shortcut?: string;
+  1471→  isFavorite?: boolean;
+  1472→  onToggleFavorite?: () => void;
+  1473→  onSelect: () => void;
+  1474→}
+  1475→
+  1476→function CommandItemRow({
+  1477→  icon: Icon,
+  1478→  label,
+  1479→  description,
+  1480→  shortcut,
+  1481→  isFavorite,
+  1482→  onToggleFavorite,
+  1483→  onSelect,
+  1484→}: CommandItemRowProps) {
+  1485→  const [hovered, setHovered] = React.useState(false);
+  1486→
+  1487→  return (
+  1488→    <motion.div
+  1489→      className="group relative flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors duration-150 hover:bg-white/[0.06]"
+  1490→      onClick={onSelect}
+  1491→      onMouseEnter={() => setHovered(true)}
+  1492→      onMouseLeave={() => setHovered(false)}
+  1493→      whileHover={{ x: 2 }}
+  1494→      transition={{ duration: 0.1 }}
+  1495→    >
+  1496→      {/* Active left accent bar */}
+  1497→      <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+  1498→      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-emerald-400/10">
+  1499→        <Icon className="h-3.5 w-3.5 text-muted-foreground transition-colors group-hover:text-emerald-400" />
+  1500→      </div>
+  1501→      <div className="flex-1 min-w-0">
+  1502→        <p className="text-sm font-medium text-white truncate">{label}</p>
+  1503→        {description && (
+  1504→          <p className="text-xs text-muted-foreground truncate">{description}</p>
+  1505→        )}
+  1506→      </div>
+  1507→      <div className="flex items-center gap-2 shrink-0">
+  1508→        {/* Favorite toggle for commands */}
+  1509→        {onToggleFavorite && (
+  1510→          <button
+  1511→            onClick={(e) => {
+  1512→              e.stopPropagation();
+  1513→              onToggleFavorite();
+  1514→            }}
+  1515→            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/[0.08] rounded"
+  1516→            aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+  1517→          >
+  1518→            <Star
+  1519→              className={`h-3 w-3 ${
+  1520→                isFavorite
+  1521→                  ? 'fill-cyan-400 text-cyan-400'
+  1522→                  : 'text-muted-foreground/70'
+  1523→              }`}
+  1524→            />
+  1525→          </button>
+  1526→        )}
+  1527→        {shortcut && (
+  1528→          <kbd className="badge-premium hidden sm:inline-flex font-mono text-[10px]">
+  1529→            {shortcut}
+  1530→          </kbd>
+  1531→        )}
+  1532→        <ArrowRight className="h-3 w-3 text-transparent group-hover:text-muted-foreground transition-colors" />
+  1533→      </div>
+  1534→    </motion.div>
+  1535→  );
+  1536→}
+  1537→

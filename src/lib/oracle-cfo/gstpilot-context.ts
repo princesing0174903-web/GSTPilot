@@ -15,13 +15,24 @@ import {
   getCustomersOnce,
   getProductsOnce,
   getInvoicesOnce,
+  getVendorsOnce,
+  getExpensesOnce,
+  getPaymentsOnce,
   computeInvoiceStatsLocal,
   computeProductStats,
+  computeExpenseStatsLocal,
+  computePaymentStatsLocal,
   type Customer,
   type Product,
   type Invoice,
+  type Vendor,
+  type Expense,
+  type Payment,
   type InvoiceStats,
   type ProductStats,
+  type VendorStats,
+  type ExpenseStats,
+  type PaymentStats,
 } from '@/lib/gstpilot-data';
 
 // ─── INR formatting (server-side, short form) ─────────────────────────────────
@@ -45,11 +56,19 @@ export interface GSTpilotSnapshot {
   customers: Customer[];
   products: Product[];
   invoices: Invoice[];
+  vendors: Vendor[];
+  expenses: Expense[];
+  payments: Payment[];
   invoiceStats: InvoiceStats;
   productStats: ProductStats;
+  expenseStats: ExpenseStats;
+  paymentStats: PaymentStats;
+  vendorStats: VendorStats;
   customerCount: number;
   withGstin: number;
   totalCustomerOutstanding: number;
+  vendorCount: number;
+  totalPayable: number;
   loaded: boolean;
 }
 
@@ -62,28 +81,50 @@ export interface GSTpilotSnapshot {
  */
 export async function loadGSTpilotSnapshot(): Promise<GSTpilotSnapshot> {
   try {
-    const [customers, products, invoices] = await Promise.all([
+    const [customers, products, invoices, vendors, expenses, payments] = await Promise.all([
       getCustomersOnce(),
       getProductsOnce(),
       getInvoicesOnce(),
+      getVendorsOnce(),
+      getExpensesOnce(),
+      getPaymentsOnce(),
     ]);
 
     const invoiceStats = computeInvoiceStatsLocal(invoices);
     const productStats = computeProductStats(products);
+    const expenseStats = computeExpenseStatsLocal(expenses);
+    const paymentStats = computePaymentStatsLocal(payments);
     const totalCustomerOutstanding = Math.round(
       customers.reduce((s, c) => s + (c.balance || 0), 0) * 100,
     ) / 100;
     const withGstin = customers.filter((c) => !!c.gstin).length;
+    const vendorCount = vendors.length;
+    const vendorWithGstin = vendors.filter((v) => !!v.gstin).length;
+    const totalPayable = Math.round(
+      vendors.reduce((s, v) => s + (v.balance || 0), 0) * 100,
+    ) / 100;
 
     return {
       customers,
       products,
       invoices,
+      vendors,
+      expenses,
+      payments,
       invoiceStats,
       productStats,
+      expenseStats,
+      paymentStats,
+      vendorStats: {
+        count: vendorCount,
+        totalPayable,
+        withGstin: vendorWithGstin,
+      },
       customerCount: customers.length,
       withGstin,
       totalCustomerOutstanding,
+      vendorCount,
+      totalPayable,
       loaded: true,
     };
   } catch {
@@ -91,11 +132,19 @@ export async function loadGSTpilotSnapshot(): Promise<GSTpilotSnapshot> {
       customers: [],
       products: [],
       invoices: [],
+      vendors: [],
+      expenses: [],
+      payments: [],
       invoiceStats: computeInvoiceStatsLocal([]),
       productStats: computeProductStats([]),
+      expenseStats: computeExpenseStatsLocal([]),
+      paymentStats: computePaymentStatsLocal([]),
+      vendorStats: { count: 0, totalPayable: 0, withGstin: 0 },
       customerCount: 0,
       withGstin: 0,
       totalCustomerOutstanding: 0,
+      vendorCount: 0,
+      totalPayable: 0,
       loaded: false,
     };
   }
@@ -113,26 +162,37 @@ export async function loadGSTpilotSnapshot(): Promise<GSTpilotSnapshot> {
  *   • Explicit instructions for "Show customers / invoices / products" commands
  */
 export function formatGSTpilotContextBlock(snap: GSTpilotSnapshot): string {
-  if (!snap.loaded || (snap.customerCount === 0 && snap.products.length === 0 && snap.invoices.length === 0)) {
+  const anyData =
+    snap.customerCount > 0 ||
+    snap.products.length > 0 ||
+    snap.invoices.length > 0 ||
+    snap.vendorCount > 0 ||
+    snap.expenses.length > 0 ||
+    snap.payments.length > 0;
+  if (!snap.loaded || !anyData) {
     return `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
-Source: Firestore — organizations/GSTpilot_SAAS/{customers,products,invoices}
+Source: Firestore — organizations/GSTpilot_SAAS/{customers,products,invoices,vendors,expenses,payments}
 Status: No documents found yet (the collections are empty, or preview-mode security rules blocked the read).
 
-When the user asks to "show customers", "show invoices", or "show products", reply honestly that the registry is currently empty and guide them to add their first customer/product/invoice from the CRM, Inventory, or Invoices pages. NEVER fabricate customer, product, or invoice records.`;
+When the user asks to "show customers / invoices / products / vendors / expenses / payments", reply honestly that the registry is currently empty and guide them to add their first record from the relevant page (CRM, Inventory, Invoices, Vendors, Expenses, or Payments). NEVER fabricate customer, product, invoice, vendor, expense, or payment records.`;
   }
 
   const s = snap.invoiceStats;
+  const e = snap.expenseStats;
+  const p = snap.paymentStats;
   const lines: string[] = [];
 
   lines.push(`## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)`);
-  lines.push(`Source: Firestore — organizations/GSTpilot_SAAS/{customers,products,invoices} (real-time, onSnapshot)`);
-  lines.push(`Status: LIVE — ${snap.customerCount} customers, ${snap.products.length} products, ${s.count} invoices.`);
+  lines.push(`Source: Firestore — organizations/GSTpilot_SAAS/{customers,products,invoices,vendors,expenses,payments} (real-time, onSnapshot)`);
+  lines.push(`Status: LIVE — ${snap.customerCount} customers, ${snap.products.length} products, ${s.count} invoices, ${snap.vendorCount} vendors, ${e.count} expenses, ${p.count} payments.`);
   lines.push(``);
 
   // ── Aggregate KPIs ──
   lines.push(`### AGGREGATE KPIs (real)`);
   lines.push(`- Total Customers: ${snap.customerCount} (${snap.withGstin} with GSTIN)`);
   lines.push(`- Customer Outstanding (sum of balances): ${inrFull(snap.totalCustomerOutstanding)}`);
+  lines.push(`- Total Vendors: ${snap.vendorCount} (${snap.vendorStats.withGstin} with GSTIN)`);
+  lines.push(`- Total Payable (vendors): ${inrFull(snap.totalPayable)}`);
   lines.push(`- Total Products: ${snap.products.length} (stock value ${inrFull(snap.productStats.totalStockValue)}, ${snap.productStats.lowStockCount} low, ${snap.productStats.outOfStockCount} out of stock)`);
   lines.push(`- Total Invoices: ${s.count}`);
   lines.push(`- Total Invoiced (excl. cancelled): ${inrFull(s.totalInvoiced)}`);
@@ -140,6 +200,10 @@ When the user asks to "show customers", "show invoices", or "show products", rep
   lines.push(`- Total Outstanding: ${inrFull(s.totalOutstanding)}`);
   lines.push(`- Total Tax Collected: ${inrFull(s.totalTaxCollected)}`);
   lines.push(`- By status: draft ${s.byStatus.draft}, sent ${s.byStatus.sent}, paid ${s.byStatus.paid}, partial ${s.byStatus.partial}, overdue ${s.byStatus.overdue}, cancelled ${s.byStatus.cancelled}`);
+  lines.push(`- Total Expenses: ${e.count} (sum ${inrFull(e.totalAmount)})`);
+  lines.push(`- Expense GST (claimable ITC): ${inrFull(e.claimableGst)} of ${inrFull(e.totalGst)} GST total`);
+  lines.push(`- Total Payments Received: ${inrFull(p.totalReceived)}`);
+  lines.push(`- Total Payments Paid Out: ${inrFull(p.totalPaidOut)}`);
   lines.push(``);
 
   // ── Top customers by outstanding balance ──
@@ -193,13 +257,60 @@ When the user asks to "show customers", "show invoices", or "show products", rep
     lines.push(``);
   }
 
+  // ── Vendors ──
+  const topVendors = snap.vendors.slice(0, 15);
+  if (topVendors.length > 0) {
+    lines.push(`### VENDORS (first ${topVendors.length})`);
+    for (const v of topVendors) {
+      const parts = [v.name];
+      parts.push(`GSTIN ${v.gstin || 'unregistered'}`);
+      parts.push(v.category);
+      if ((v.balance || 0) > 0) parts.push(`payable ${inrFull(v.balance)}`);
+      lines.push(`- ${parts.join(' · ')}`);
+    }
+    lines.push(``);
+  }
+
+  // ── Recent expenses ──
+  const recentExpenses = snap.expenses.slice(0, 15);
+  if (recentExpenses.length > 0) {
+    lines.push(`### EXPENSES (most recent ${recentExpenses.length})`);
+    for (const ex of recentExpenses) {
+      const desc = ex.description.length > 60 ? ex.description.slice(0, 57) + '...' : ex.description;
+      const parts = [ex.date, ex.vendorName || 'Ad-hoc', ex.category, desc];
+      parts.push(`${inrFull(ex.amount)}`);
+      if (ex.gst > 0) parts.push(`GST ${inrFull(ex.gst)}`);
+      parts.push(ex.status);
+      lines.push(`- ${parts.join(' · ')}`);
+    }
+    lines.push(``);
+  }
+
+  // ── Recent payments ──
+  const recentPayments = snap.payments.slice(0, 15);
+  if (recentPayments.length > 0) {
+    lines.push(`### PAYMENTS (most recent ${recentPayments.length})`);
+    for (const pay of recentPayments) {
+      const parts = [pay.paymentDate, pay.partyType, pay.partyName || '—'];
+      parts.push(`inv ${pay.invoiceNumber || '—'}`);
+      parts.push(`${inrFull(pay.amount)}`);
+      parts.push(pay.paymentMode);
+      parts.push(pay.status);
+      lines.push(`- ${parts.join(' · ')}`);
+    }
+    lines.push(``);
+  }
+
   // ── Behaviour instructions ──
-  lines.push(`### COMMANDS — "Show customers / invoices / products"`);
+  lines.push(`### COMMANDS — "Show customers / invoices / products / vendors / expenses / payments"`);
   lines.push(`When the user asks to "show customers", "list customers", "who are my customers", or similar — reply with a concise list drawn from the CUSTOMERS section above (name · GSTIN · state · outstanding). Cite real names and real outstanding amounts. NEVER invent customers.`);
   lines.push(`When the user asks to "show invoices", "list invoices", "recent invoices", or similar — reply with a concise list drawn from the INVOICES section above (invoice number · customer · total · balance · status). NEVER invent invoices or invoice numbers.`);
   lines.push(`When the user asks to "show products", "list products", "what do I sell", or similar — reply with a concise list drawn from the PRODUCTS section above (name · HSN · GST rate · price · stock). NEVER invent products.`);
-  lines.push(`When the user asks for totals (revenue, outstanding, tax collected, customer count, product count, invoice count) — cite the AGGREGATE KPIs above exactly. Round money to rupees.`);
-  lines.push(`If a section is empty, say so plainly (e.g. "You have no invoices yet.") and suggest the relevant page. Do NOT pad with fabricated examples.`);
+  lines.push(`When the user asks to "show vendors", "list vendors", "who are my suppliers", or similar — reply with a concise list drawn from the VENDORS section above (name · GSTIN or "unregistered" · category · payable balance). Cite real names and real payable amounts. NEVER invent vendors.`);
+  lines.push(`When the user asks to "show expenses", "list expenses", "recent expenses", or similar — reply with a concise list drawn from the EXPENSES section above (date · vendor or "Ad-hoc" · category · description · amount · GST · status). NEVER invent expenses or amounts.`);
+  lines.push(`When the user asks to "show payments", "list payments", "recent payments", or similar — reply with a concise list drawn from the PAYMENTS section above (date · partyType · partyName · invoice# · amount · mode · status). NEVER invent payments.`);
+  lines.push(`When the user asks for totals (revenue, outstanding, tax collected, customer count, product count, invoice count, vendor count, total payable, total expenses, expense GST claimable, total payments received, total payments paid out) — cite the AGGREGATE KPIs above exactly. Round money to rupees.`);
+  lines.push(`If a section is empty, say so plainly (e.g. "You have no invoices yet." or "You have no vendors yet.") and suggest the relevant page (CRM, Inventory, Invoices, Vendors, Expenses, or Payments). Do NOT pad with fabricated examples.`);
 
   return lines.join('\n');
 }
@@ -215,6 +326,6 @@ export async function buildGSTpilotContextBlock(): Promise<string> {
   } catch (err) {
     console.warn('[Oracle] GSTPilot context unavailable:', err);
     return `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
-The live GSTPilot registry could not be loaded right now. If the user asks to "show customers / invoices / products", reply that the registry is temporarily unavailable and suggest they try again in a moment. NEVER fabricate customer, product, or invoice records.`;
+The live GSTPilot registry could not be loaded right now. If the user asks to "show customers / invoices / products / vendors / expenses / payments", reply that the registry is temporarily unavailable and suggest they try again in a moment. NEVER fabricate customer, product, invoice, vendor, expense, or payment records.`;
   }
 }

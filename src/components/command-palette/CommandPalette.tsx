@@ -58,6 +58,7 @@ import {
   Share2,
   BrainCircuit,
   Boxes,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -70,6 +71,9 @@ import {
 import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
 import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
 import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
+import { useGSTpilotVendors } from '@/hooks/useGSTpilotVendors';
+import { useGSTpilotExpenses } from '@/hooks/useGSTpilotExpenses';
+import { useGSTpilotPayments } from '@/hooks/useGSTpilotPayments';
 import {
   CommandDialog,
   CommandInput,
@@ -182,6 +186,9 @@ export default function CommandPalette() {
   const { customers: gstCustomers } = useGSTpilotCustomers();
   const { products: gstProducts } = useGSTpilotProducts();
   const { invoices: gstInvoices } = useGSTpilotInvoices();
+  const { vendors: gstVendors } = useGSTpilotVendors();
+  const { expenses: gstExpenses } = useGSTpilotExpenses();
+  const { payments: gstPayments } = useGSTpilotPayments();
 
   // ─── Keyboard shortcut: Ctrl+K ───────────────────────────────────────────
   useEffect(() => {
@@ -902,6 +909,9 @@ export default function CommandPalette() {
         gstCustomers: [],
         gstProducts: [],
         gstInvoices: [],
+        gstVendors: [],
+        gstExpenses: [],
+        gstPayments: [],
       };
     }
 
@@ -983,6 +993,39 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
+    // ── GSTPilot live registry: Vendors / Expenses / Payments ──
+    const matchedGstVendors = gstVendors
+      .filter(
+        (v) =>
+          v.name?.toLowerCase().includes(q) ||
+          (v.gstin ?? '')?.toLowerCase().includes(q) ||
+          (v.category ?? '')?.toLowerCase().includes(q) ||
+          (v.email ?? '')?.toLowerCase().includes(q) ||
+          (v.phone ?? '')?.toLowerCase().includes(q) ||
+          (v.contactPerson ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
+    const matchedGstExpenses = gstExpenses
+      .filter(
+        (e) =>
+          (e.vendorName ?? '')?.toLowerCase().includes(q) ||
+          (e.description ?? '')?.toLowerCase().includes(q) ||
+          (e.category ?? '')?.toLowerCase().includes(q) ||
+          (e.referenceNo ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
+    const matchedGstPayments = gstPayments
+      .filter(
+        (p) =>
+          (p.partyName ?? '')?.toLowerCase().includes(q) ||
+          (p.referenceNo ?? '')?.toLowerCase().includes(q) ||
+          (p.invoiceNumber ?? '')?.toLowerCase().includes(q) ||
+          (p.paymentMode ?? '')?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+
     return {
       clients: matchedClients,
       invoices: matchedInvoices,
@@ -992,8 +1035,11 @@ export default function CommandPalette() {
       gstCustomers: matchedGstCustomers,
       gstProducts: matchedGstProducts,
       gstInvoices: matchedGstInvoices,
+      gstVendors: matchedGstVendors,
+      gstExpenses: matchedGstExpenses,
+      gstPayments: matchedGstPayments,
     };
-  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices]);
+  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices, gstVendors, gstExpenses, gstPayments]);
 
   const hasSearchResults =
     searchResults.clients.length > 0 ||
@@ -1003,7 +1049,10 @@ export default function CommandPalette() {
     searchResults.activities.length > 0 ||
     searchResults.gstCustomers.length > 0 ||
     searchResults.gstProducts.length > 0 ||
-    searchResults.gstInvoices.length > 0;
+    searchResults.gstInvoices.length > 0 ||
+    searchResults.gstVendors.length > 0 ||
+    searchResults.gstExpenses.length > 0 ||
+    searchResults.gstPayments.length > 0;
 
   // ─── Handle item selection ───────────────────────────────────────────────
   const handleSelect = useCallback(
@@ -1292,6 +1341,87 @@ export default function CommandPalette() {
                         onSelect={() => {
                           setCommandPaletteOpen(false);
                           setCurrentView('invoices');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Vendors ───────────────────── */}
+                {isSearching && searchResults.gstVendors.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <Building2 className="h-3 w-3 text-emerald-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Vendors
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstVendors.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstVendors.map((v) => (
+                      <CommandItemRow
+                        key={v.id}
+                        icon={Building2}
+                        label={v.name}
+                        description={`${v.gstin || 'No GSTIN'}${v.category ? ` · ${v.category}` : ''}`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('vendors');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Expenses ─────────────────── */}
+                {isSearching && searchResults.gstExpenses.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <Receipt className="h-3 w-3 text-amber-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Expenses
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstExpenses.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstExpenses.map((e) => (
+                      <CommandItemRow
+                        key={e.id}
+                        icon={Receipt}
+                        label={e.description || e.category}
+                        description={`${e.vendorName || 'Ad-hoc'} · ${e.category} · ₹${e.amount}`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('expenses');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* ─── Search Results: GSTPilot Payments ─────────────────── */}
+                {isSearching && searchResults.gstPayments.length > 0 && (
+                  <div className="p-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <ArrowRightLeft className="h-3 w-3 text-cyan-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">
+                        Payments
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/70 ml-auto">
+                        {searchResults.gstPayments.length} found
+                      </span>
+                    </div>
+                    {searchResults.gstPayments.map((p) => (
+                      <CommandItemRow
+                        key={p.id}
+                        icon={ArrowRightLeft}
+                        label={p.partyName}
+                        description={`${p.partyName} · ₹${p.amount} · ${p.paymentMode}`}
+                        onSelect={() => {
+                          setCommandPaletteOpen(false);
+                          setCurrentView('payments');
                         }}
                       />
                     ))}

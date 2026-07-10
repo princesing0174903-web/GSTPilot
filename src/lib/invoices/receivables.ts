@@ -4,8 +4,9 @@
 // Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { AgingBucket, InvoiceCloudInvoice, ReceivablesSummary } from './types';
+import type { AgingBucket, InvoiceCloudInvoice, ReceivablesSummary, ReceivableDTO, ReceivablesListResult, ReceivablesAgingBucket } from './types';
 import { isOverdue, daysOverdue } from './invoices';
+import { db } from '@/lib/db';
 
 // ─── Aging buckets ────────────────────────────────────────────────────────────
 
@@ -168,4 +169,89 @@ export function collectionRate(invoices: InvoiceCloudInvoice[]): number {
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function sum(nums: number[]): number {
+  return nums.reduce((a, b) => a + b, 0);
+}
+
+// ─── DB-backed list query ──────────────────────────────────────────────────────
+
+/** Fetches outstanding invoices from Prisma and builds the receivables list. */
+export async function getReceivables(opts?: { limit?: number }): Promise<ReceivablesListResult> {
+  const rows = await db.invoice.findMany({
+    take: opts?.limit ?? 500,
+    orderBy: { createdAt: 'desc' },
+  });
+  const receivables: ReceivableDTO[] = rows
+    .filter((r) => r.paymentStatus !== 'paid' && r.status !== 'cancelled' && r.status !== 'draft')
+    .map((r) => {
+      const dOverdue = r.dueDate ? daysOverdue(r.dueDate) : 0;
+      const balance = r.balanceAmount;
+      const riskLevel = dOverdue > 60 ? 'high' : dOverdue > 30 ? 'medium' : 'low';
+      const collectionProbability = dOverdue > 90 ? 0.3 : dOverdue > 60 ? 0.5 : dOverdue > 30 ? 0.7 : 0.9;
+      return {
+        id: r.id,
+        invoiceId: r.id,
+        customerName: r.buyerName ?? 'Unknown',
+        invoiceNo: r.invoiceNumber,
+        invoiceDate: r.invoiceDate,
+        dueDate: r.dueDate ?? null,
+        totalAmount: r.totalAmount,
+        paidAmount: r.paidAmount,
+        balanceDue: r.balanceAmount,
+        daysOverdue: dOverdue,
+        riskLevel,
+        collectionProbability,
+        expectedAmount: round2(balance * collectionProbability),
+        status: r.paymentStatus,
+      };
+    });
+
+  const totalOutstanding = sum(receivables.map((r) => r.balanceDue));
+  const totalExpected = sum(receivables.map((r) => r.expectedAmount));
+  const overdueItems = receivables.filter((r) => r.daysOverdue > 0);
+  const overdueCount = overdueItems.length;
+  const overdueAmount = sum(overdueItems.map((r) => r.balanceDue));
+  const avgDaysOverdue = overdueItems.length > 0
+    ? Math.round(sum(overdueItems.map((r) => r.daysOverdue)) / overdueItems.length)
+    : 0;
+  const collectionEfficiencyPct = totalOutstanding > 0
+    ? Math.round((totalExpected / totalOutstanding) * 100)
+    : 0;
+
+  // Aging buckets
+  const agingDefs = [
+    { label: 'Current', min: 0, max: 0 },
+    { label: '1-30', min: 1, max: 30 },
+    { label: '31-60', min: 31, max: 60 },
+    { label: '61-90', min: 61, max: 90 },
+    { label: '90+', min: 91, max: 9999 },
+  ];
+  const byAging: ReceivablesAgingBucket[] = agingDefs.map((b) => {
+    const items = receivables.filter((r) => r.daysOverdue >= b.min && r.daysOverdue <= b.max);
+    const amount = sum(items.map((r) => r.balanceDue));
+    return {
+      label: b.label,
+      count: items.length,
+      amount: round2(amount),
+      expectedCollection: round2(amount * 0.85),
+    };
+  });
+
+  const overallRisk = overdueCount > 5 ? 'high' : overdueCount > 0 ? 'medium' : 'low';
+
+  return {
+    receivables,
+    total: receivables.length,
+    totalOutstanding: round2(totalOutstanding),
+    totalExpected: round2(totalExpected),
+    collectionEfficiencyPct,
+    overdueCount,
+    overdueAmount: round2(overdueAmount),
+    avgDaysOverdue,
+    riskLevel: overallRisk,
+    byAging,
+    hasLiveData: receivables.length > 0,
+  };
 }

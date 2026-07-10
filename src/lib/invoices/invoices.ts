@@ -3,7 +3,8 @@
 // Create, Number, Total, Track, Collect. Pure TypeScript, no Prisma, no Next.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { InvoiceCloudInvoice, InvoiceStatus, PaymentStatus } from './types';
+import type { InvoiceCloudInvoice, InvoiceStatus, PaymentStatus, InvoiceDTO, InvoiceListResult, CreateInvoiceInput, SendChannel } from './types';
+import { db } from '@/lib/db';
 
 // ─── Numbering ─────────────────────────────────────────────────────────────────
 
@@ -193,4 +194,218 @@ export function seedInvoices(): InvoiceCloudInvoice[] {
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function sum(nums: number[]): number {
+  return nums.reduce((a, b) => a + b, 0);
+}
+
+// ─── DB-backed list query ──────────────────────────────────────────────────────
+
+/** Fetches sales invoices from Prisma and maps them to the InvoiceDTO shape. */
+export async function getInvoices(opts?: { limit?: number }): Promise<InvoiceListResult> {
+  const rows = await db.invoice.findMany({
+    take: opts?.limit ?? 500,
+    orderBy: { createdAt: 'desc' },
+  });
+  const invoices: InvoiceDTO[] = rows.map((r) => ({
+    id: r.id,
+    clientId: r.clientId,
+    invoiceNo: r.invoiceNumber,
+    clientName: r.buyerName ?? 'Unknown',
+    invoiceDate: r.invoiceDate,
+    dueDate: r.dueDate,
+    taxableValue: r.taxableValue,
+    cgst: r.cgst,
+    sgst: r.sgst,
+    igst: r.igst,
+    cess: r.cess,
+    gstAmount: r.gstAmount,
+    total: r.totalAmount,
+    paidAmount: r.paidAmount,
+    balanceDue: r.balanceAmount,
+    status: r.status,
+    paymentStatus: r.paymentStatus,
+    paymentMode: r.paymentMode,
+    recurring: r.recurring,
+  }));
+  const totalRevenue = sum(invoices.map((i) => i.total));
+  const totalPaid = sum(invoices.map((i) => i.paidAmount));
+  const totalOutstanding = sum(invoices.map((i) => i.balanceDue));
+  const totalOverdue = sum(
+    invoices.filter((i) => i.paymentStatus === 'overdue').map((i) => i.balanceDue),
+  );
+  return {
+    invoices,
+    total: invoices.length,
+    totalRevenue: round2(totalRevenue),
+    totalPaid: round2(totalPaid),
+    totalOutstanding: round2(totalOutstanding),
+    totalOverdue: round2(totalOverdue),
+    hasLiveData: invoices.length > 0,
+  };
+}
+
+/** Fetches a single invoice by ID from Prisma and maps it to InvoiceDTO. */
+export async function getInvoice(id: string): Promise<InvoiceDTO | null> {
+  const r = await db.invoice.findUnique({ where: { id } });
+  if (!r) return null;
+  return {
+    id: r.id,
+    clientId: r.clientId,
+    invoiceNo: r.invoiceNumber,
+    clientName: r.buyerName ?? 'Unknown',
+    invoiceDate: r.invoiceDate,
+    dueDate: r.dueDate,
+    taxableValue: r.taxableValue,
+    cgst: r.cgst,
+    sgst: r.sgst,
+    igst: r.igst,
+    cess: r.cess,
+    gstAmount: r.gstAmount,
+    total: r.totalAmount,
+    paidAmount: r.paidAmount,
+    balanceDue: r.balanceAmount,
+    status: r.status,
+    paymentStatus: r.paymentStatus,
+    paymentMode: r.paymentMode,
+    recurring: r.recurring,
+  };
+}
+
+// ─── Invoice creation + actions ────────────────────────────────────────────────
+
+/** Maps a Prisma invoice row to the InvoiceDTO shape. */
+function mapInvoice(r: {
+  id: string; clientId: string; invoiceNumber: string; buyerName: string | null;
+  invoiceDate: string; dueDate: string | null; taxableValue: number;
+  cgst: number; sgst: number; igst: number; cess: number; gstAmount: number;
+  totalAmount: number; paidAmount: number; balanceAmount: number;
+  status: string; paymentStatus: string; paymentMode: string | null;
+  recurring: boolean;
+}): InvoiceDTO {
+  return {
+    id: r.id,
+    clientId: r.clientId,
+    invoiceNo: r.invoiceNumber,
+    clientName: r.buyerName ?? 'Unknown',
+    invoiceDate: r.invoiceDate,
+    dueDate: r.dueDate,
+    taxableValue: r.taxableValue,
+    cgst: r.cgst,
+    sgst: r.sgst,
+    igst: r.igst,
+    cess: r.cess,
+    gstAmount: r.gstAmount,
+    total: r.totalAmount,
+    paidAmount: r.paidAmount,
+    balanceDue: r.balanceAmount,
+    status: r.status,
+    paymentStatus: r.paymentStatus,
+    paymentMode: r.paymentMode,
+    recurring: r.recurring,
+  };
+}
+
+/** Creates a sales invoice in Prisma from line items and returns the DTO. */
+export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceDTO> {
+  // Look up client for buyer details
+  const client = await db.client.findUnique({ where: { id: input.clientId } });
+
+  // Generate invoice number
+  const existing = await db.invoice.findMany({
+    where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
+    select: { invoiceNumber: true },
+  });
+  const invoiceNo = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
+
+  // Calculate totals from line items
+  const items = input.items.map((it) => ({
+    taxableValue: it.taxableValue,
+    cgstRate: it.cgstRate ?? 0,
+    sgstRate: it.sgstRate ?? 0,
+    igstRate: it.igstRate ?? 0,
+  }));
+  const totals = calculateInvoiceTotals(items);
+  const today = input.invoiceDate ?? new Date().toISOString().slice(0, 10);
+
+  const created = await db.invoice.create({
+    data: {
+      clientId: input.clientId,
+      invoiceNumber: invoiceNo,
+      invoiceDate: today,
+      sellerGstin: input.sellerGstin ?? '',
+      buyerGstin: input.buyerGstin ?? client?.gstin ?? null,
+      buyerName: input.buyerName ?? client?.businessName ?? 'Unknown',
+      invoiceType: input.invoiceType ?? 'B2B',
+      taxableValue: totals.taxableValue,
+      cgst: totals.cgst,
+      sgst: totals.sgst,
+      igst: totals.igst,
+      cess: 0,
+      gstAmount: totals.gstAmount,
+      totalAmount: totals.totalAmount,
+      status: 'draft',
+      paymentStatus: 'unpaid',
+      balanceAmount: totals.totalAmount,
+      dueDate: input.dueDate ?? null,
+      notes: input.notes ?? null,
+      recurring: input.recurring ?? false,
+      recurringCycle: input.recurringCycle ?? null,
+    },
+  });
+
+  return mapInvoice(created);
+}
+
+/** Generates a PDF + UPI payment link for an invoice. */
+export async function generatePaymentLink(id: string): Promise<{
+  invoice: InvoiceDTO;
+  pdfUrl: string;
+  paymentLink: string;
+}> {
+  const r = await db.invoice.findUnique({ where: { id } });
+  if (!r) throw new Error('Invoice not found');
+  // Mark as sent
+  const updated = await db.invoice.update({
+    where: { id },
+    data: {
+      sentToCustomer: true,
+      sentAt: new Date().toISOString(),
+      status: r.status === 'draft' ? 'sent' : r.status,
+    },
+  });
+  const invoice = mapInvoice(updated);
+  // Deterministic payment link (UPI deep link with invoice number as reference)
+  const upiId = 'business@upi';
+  const paymentLink = `upi://pay?pa=${upiId}&pn=Business&tr=${invoice.invoiceNo}&am=${invoice.total}&cu=INR`;
+  const pdfUrl = `/api/invoices/${id}/pdf`;
+  return { invoice, pdfUrl, paymentLink };
+}
+
+/** Generates a PDF for an invoice (returns the URL). */
+export async function generatePdf(id: string): Promise<{
+  invoice: InvoiceDTO;
+  pdfUrl: string;
+  paymentLink: string;
+}> {
+  return generatePaymentLink(id);
+}
+
+/** Sends an invoice via the specified channel (email/whatsapp/sms). */
+export async function sendInvoice(id: string, channel: SendChannel): Promise<InvoiceDTO> {
+  const r = await db.invoice.findUnique({ where: { id } });
+  if (!r) throw new Error('Invoice not found');
+  const updated = await db.invoice.update({
+    where: { id },
+    data: {
+      sentToCustomer: true,
+      sentAt: new Date().toISOString(),
+      status: r.status === 'draft' ? 'sent' : r.status,
+    },
+  });
+  // In production this would dispatch an email/WhatsApp/SMS via the
+  // communication service. Here we just mark it sent and return.
+  void channel;
+  return mapInvoice(updated);
 }

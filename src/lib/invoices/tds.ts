@@ -4,7 +4,8 @@
 // Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { TDSSummary, TDSRecord } from './types';
+import type { TDSSummary, TDSRecord, TDSRecordDTO, TDSListResult, TDSBySection } from './types';
+import { db } from '@/lib/db';
 
 // ─── TDS section catalog ──────────────────────────────────────────────────────
 
@@ -126,4 +127,72 @@ export function seedTDSRecords(): TDSRecord[] {
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function sum(nums: number[]): number {
+  return nums.reduce((a, b) => a + b, 0);
+}
+
+// ─── DB-backed list query ──────────────────────────────────────────────────────
+
+/** Fetches TDS records from Prisma and builds the list result. */
+export async function getTDSRecords(opts?: { limit?: number }): Promise<TDSListResult> {
+  const rows = await db.tDSRecord.findMany({
+    take: opts?.limit ?? 500,
+    orderBy: { createdAt: 'desc' },
+  });
+  const records: TDSRecordDTO[] = rows.map((r) => ({
+    id: r.id,
+    section: r.section,
+    natureOfPayment: r.section, // best-effort; TDS_SECTIONS has descriptions
+    deducteeName: r.deducteeName,
+    deducteePan: r.deducteePan ?? null,
+    paymentAmount: r.paymentAmount,
+    tdsRate: r.tdsRate,
+    tdsAmount: r.tdsAmount,
+    date: r.date,
+    status: r.status,
+    quarter: r.quarter ?? null,
+  }));
+
+  const totalPaymentAmount = sum(records.map((r) => r.paymentAmount));
+  const totalTDS = sum(records.map((r) => r.tdsAmount));
+  const pendingChallanCount = records.filter((r) => r.status === 'deducted').length;
+  const pendingReturnCount = records.filter((r) => r.status === 'challan_paid').length;
+
+  const byStatus = {
+    deducted: records.filter((r) => r.status === 'deducted').length,
+    challan_ready: records.filter((r) => r.status === 'challan_ready').length,
+    challan_paid: records.filter((r) => r.status === 'challan_paid').length,
+    return_filed: records.filter((r) => r.status === 'return_filed').length,
+  };
+
+  // Group by section
+  const sectionMap = new Map<string, { natureOfPayment: string; count: number; paymentAmount: number; tdsAmount: number }>();
+  for (const r of records) {
+    const cur = sectionMap.get(r.section) ?? { natureOfPayment: r.natureOfPayment, count: 0, paymentAmount: 0, tdsAmount: 0 };
+    cur.count += 1;
+    cur.paymentAmount += r.paymentAmount;
+    cur.tdsAmount += r.tdsAmount;
+    sectionMap.set(r.section, cur);
+  }
+  const bySection: TDSBySection[] = Array.from(sectionMap.entries()).map(([section, v]) => ({
+    section,
+    natureOfPayment: v.natureOfPayment,
+    count: v.count,
+    paymentAmount: round2(v.paymentAmount),
+    tdsAmount: round2(v.tdsAmount),
+  }));
+
+  return {
+    records,
+    total: records.length,
+    totalPaymentAmount: round2(totalPaymentAmount),
+    totalTDS: round2(totalTDS),
+    pendingChallanCount,
+    pendingReturnCount,
+    byStatus,
+    bySection,
+    hasLiveData: records.length > 0,
+  };
 }

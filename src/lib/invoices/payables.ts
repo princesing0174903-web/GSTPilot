@@ -4,7 +4,8 @@
 // Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { PayablesSummary, PurchaseBill } from './types';
+import type { PayablesSummary, PurchaseBill, PayableDTO, PayablesListResult } from './types';
+import { db } from '@/lib/db';
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
@@ -162,4 +163,63 @@ export function cashAllocationPlan(bills: PurchaseBill[], availableCash: number)
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function sum(nums: number[]): number {
+  return nums.reduce((a, b) => a + b, 0);
+}
+
+// ─── DB-backed list query ──────────────────────────────────────────────────────
+
+/** Fetches unpaid purchase bills from Prisma and builds the payables list. */
+export async function getPayables(opts?: { limit?: number }): Promise<PayablesListResult> {
+  const rows = await db.purchaseBill.findMany({
+    take: opts?.limit ?? 500,
+    orderBy: { createdAt: 'desc' },
+  });
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const payables: PayableDTO[] = rows
+    .filter((r) => r.paymentStatus !== 'paid' && r.balanceAmount > 0)
+    .map((r) => {
+      const dueTs = r.dueDate ? new Date(r.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const daysUntilDue = Math.round((dueTs - now) / dayMs);
+      const priority = daysUntilDue <= 0 ? 'high' : daysUntilDue <= 7 ? 'high' : daysUntilDue <= 14 ? 'medium' : 'low';
+      const priorityScore = Math.max(0, Math.min(100, 100 - Math.max(0, daysUntilDue)));
+      return {
+        id: r.id,
+        vendorName: r.vendorName,
+        billNo: r.invoiceNo,
+        billDate: r.invoiceDate,
+        dueDate: r.dueDate ?? null,
+        totalAmount: r.totalAmount,
+        paidAmount: r.paidAmount,
+        balanceDue: r.balanceAmount,
+        daysUntilDue,
+        priority,
+        priorityScore,
+        status: r.status,
+      };
+    });
+
+  const totalDue = sum(payables.map((p) => p.balanceDue));
+  const dueIn7Days = sum(payables.filter((p) => p.daysUntilDue >= 0 && p.daysUntilDue <= 7).map((p) => p.balanceDue));
+  const dueIn30Days = sum(payables.filter((p) => p.daysUntilDue >= 0 && p.daysUntilDue <= 30).map((p) => p.balanceDue));
+  const overdueAmount = sum(payables.filter((p) => p.daysUntilDue < 0).map((p) => p.balanceDue));
+  const avgPriorityScore = payables.length > 0
+    ? Math.round(sum(payables.map((p) => p.priorityScore)) / payables.length)
+    : 0;
+
+  return {
+    payables,
+    total: payables.length,
+    totalDue: round2(totalDue),
+    dueIn7Days: round2(dueIn7Days),
+    dueIn30Days: round2(dueIn30Days),
+    overdueAmount: round2(overdueAmount),
+    scheduledCount: 0,
+    avgPriorityScore,
+    hasLiveData: payables.length > 0,
+  };
 }

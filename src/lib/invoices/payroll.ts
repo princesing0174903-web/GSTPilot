@@ -3,7 +3,9 @@
 // Indian salary breakdown, TDS estimation, payslip generation. Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import type { Employee, Payroll, PayrollSummary } from './types';
+import type { Employee, Payroll, PayrollSummary, PayrollListResult, PayrollStatsDTO } from './types';
+import { db } from '@/lib/db';
+import { currentMonth } from './types';
 
 // ─── Salary breakdown ─────────────────────────────────────────────────────────
 
@@ -151,4 +153,51 @@ export function seedPayroll(_employees: Employee[]): Payroll[] {
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function sum(nums: number[]): number {
+  return nums.reduce((a, b) => a + b, 0);
+}
+
+// ─── DB-backed list query ──────────────────────────────────────────────────────
+
+/** Fetches employees + current-month payroll from Prisma. */
+export async function getPayroll(): Promise<PayrollListResult> {
+  const month = currentMonth();
+  const [employees, payrolls] = await Promise.all([
+    db.employee.findMany(),
+    db.payroll.findMany({ where: { period: month } }),
+  ]);
+  const totalGross = sum(payrolls.map((p) => p.grossSalary));
+  const totalNet = sum(payrolls.map((p) => p.netSalary));
+  const totalPF = sum(payrolls.map((p) => p.pf));
+  const totalESI = sum(payrolls.map((p) => p.esi));
+  const totalTDS = sum(payrolls.map((p) => p.tds));
+  const totalDeductions = round2(totalPF + totalESI + totalTDS + sum(payrolls.map((p) => p.professionalTax)));
+  const employerPF = round2(totalPF); // employer match ~12% of basic
+  const employerESI = round2(totalESI * (12 / 0.75)); // employer 3.25% vs employee 0.75%
+  const totalCost = round2(totalGross + employerPF + employerESI);
+  const processed = payrolls.filter((p) => p.status === 'generated' || p.status === 'paid').length;
+  const paid = payrolls.filter((p) => p.status === 'paid').length;
+  const pending = employees.length - processed;
+
+  const currentMonthPayroll: PayrollStatsDTO = {
+    month,
+    totalGross: round2(totalGross),
+    totalDeductions,
+    totalNet: round2(totalNet),
+    employerPF,
+    employerESI,
+    totalCost,
+    processed,
+    paid,
+    pending,
+  };
+
+  return {
+    currentMonthPayroll,
+    totalEmployees: employees.length,
+    activeEmployees: employees.filter((e) => e.status === 'active').length,
+    hasLiveData: employees.length > 0,
+  };
 }

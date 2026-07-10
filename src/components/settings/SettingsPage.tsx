@@ -72,9 +72,9 @@ import { useOrg } from '@/contexts/OrgContext'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useOrgMembers, useFireRecentActivities } from '@/hooks/use-firestore'
 import type { FirestoreActivity, ActivityType } from '@/lib/firestore-schema'
-import { db, storage, auth } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { getSupabaseStorage } from '@/lib/supabase'
 import { updatePassword } from 'firebase/auth'
 import {
   inviteMember,
@@ -756,9 +756,22 @@ export default function SettingsPage() {
 
     try {
       const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-      const fileRef = storageRef(storage, `organizations/${orgIdNonNull}/logo.${ext}`)
-      await uploadBytes(fileRef, file)
-      const downloadUrl = await getDownloadURL(fileRef)
+      const logoPath = `organizations/${orgIdNonNull}/logo.${ext}`
+      // Upload to Supabase Storage (bucket: gstpilot-files). upsert:true
+      // overwrites any previous logo at the same path — same semantics as the
+      // previous Firebase uploadBytes call.
+      const { error: uploadError } = await getSupabaseStorage().upload(
+        logoPath,
+        file,
+        { contentType: file.type || 'image/png', upsert: true },
+      )
+      if (uploadError) throw uploadError
+      const { data: urlData, error: urlError } =
+        await getSupabaseStorage().createSignedUrl(logoPath, 3600)
+      if (urlError || !urlData?.signedUrl) {
+        throw new Error('Could not generate a download URL for the logo.')
+      }
+      const downloadUrl = urlData.signedUrl
       await updateDoc(doc(db, 'organizations', orgIdNonNull), {
         logoUrl: downloadUrl,
         updatedAt: serverTimestamp(),

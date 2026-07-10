@@ -6,7 +6,7 @@
 // authenticated user's context — exactly like the existing onSnapshot hooks.
 //
 // Flow:
-//   1. uploadInvoiceFile(file, onProgress) → Firebase Storage upload + URL
+//   1. uploadInvoiceFile(file, onProgress) → Supabase Storage upload + URL
 //   2. (client calls /api/invoices/extract with the data URL)
 //   3. matchCustomer(extracted, customers)  → reuse existing or create new
 //   4. matchProduct(lineItem, products)     → reuse existing or create new (per item)
@@ -19,12 +19,11 @@
 'use client';
 
 import {
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-  type UploadTaskSnapshot,
-} from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+  getSupabaseStorage,
+  resolveSupabaseUrl,
+  resolveSupabaseAnonKey,
+  GSTPILOT_STORAGE_BUCKET,
+} from '@/lib/supabase';
 import { ORG_PATH } from './config';
 import { createCustomer } from './customers';
 import { createProduct } from './products';
@@ -97,7 +96,7 @@ export function resolveMimeType(file: File): string {
   return file.type || 'application/octet-stream';
 }
 
-// ─── Firebase Storage upload ──────────────────────────────────────────────────
+// ─── Supabase Storage upload ──────────────────────────────────────────────────
 
 export interface UploadResult {
   url: string;
@@ -108,14 +107,23 @@ export interface UploadResult {
 }
 
 /**
- * Upload an invoice file to Firebase Storage under the organization's
+ * Build the Supabase Storage REST URL for a direct object upload.
+ */
+function buildInvoiceUploadUrl(path: string): string {
+  const base = resolveSupabaseUrl().replace(/\/$/, '');
+  const encoded = encodeURIComponent(path).replace(/%2F/g, '/');
+  return `${base}/storage/v1/object/${GSTPILOT_STORAGE_BUCKET}/${encoded}`;
+}
+
+/**
+ * Upload an invoice file to Supabase Storage under the organization's
  * invoices/uploads/ folder. Reports progress via the callback.
  *
  * Storage path:  organizations/GSTpilot_SAAS/invoices/uploads/{ts}-{slug}
  */
 export function uploadInvoiceFile(
   file: File,
-  onProgress?: (percent: number, snapshot: UploadTaskSnapshot) => void,
+  onProgress?: (percent: number) => void,
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const ts = Date.now();
@@ -124,56 +132,75 @@ export function uploadInvoiceFile(
     const ext = safeName.split('.').pop() ?? 'bin';
     const base = safeName.slice(0, safeName.length - ext.length - 1) || 'invoice';
     const path = `${ORG_PATH}/invoices/uploads/${ts}-${base}.${ext}`;
-    const storageRef = ref(storage, path);
+    const uploadUrl = buildInvoiceUploadUrl(path);
+    const anonKey = resolveSupabaseAnonKey();
 
-    const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: mimeType,
-      customMetadata: {
-        originalName: file.name,
-        uploadedAt: new Date().toISOString(),
-        module: 'gstpilot-phase3',
-      },
-    });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
+    xhr.setRequestHeader('Content-Type', mimeType);
+    xhr.setRequestHeader('x-upsert', 'false');
 
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const percent =
-          snapshot.totalBytes > 0
-            ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-            : 0;
-        onProgress?.(Math.round(percent), snapshot);
-      },
-      (err) => {
-        const msg = err instanceof Error ? err.message : 'Upload failed';
-        reject(new Error(translateStorageError(msg)));
-      },
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve({
-            url,
-            path,
-            fileName: file.name,
-            mimeType,
-            fileSize: file.size,
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const percent =
+        event.total > 0 ? (event.loaded / event.total) * 100 : 0;
+      onProgress?.(Math.round(percent));
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Upload succeeded — mint a signed download URL.
+        getSupabaseStorage()
+          .createSignedUrl(path, 3600)
+          .then(({ data, error }) => {
+            if (error || !data?.signedUrl) {
+              reject(new Error(translateStorageError('Could not get download URL')));
+              return;
+            }
+            resolve({
+              url: data.signedUrl,
+              path,
+              fileName: file.name,
+              mimeType,
+              fileSize: file.size,
+            });
+          })
+          .catch(() => {
+            reject(new Error(translateStorageError('Could not get download URL')));
           });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Could not get download URL';
-          reject(new Error(translateStorageError(msg)));
-        }
-      },
-    );
+        return;
+      }
+      reject(new Error(translateStorageError(getXhrErrorMessage(xhr.status, xhr.responseText))));
+    };
+
+    xhr.onerror = () => {
+      reject(new Error(translateStorageError('Network error during upload')));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error(translateStorageError('Upload was canceled')));
+    };
+
+    xhr.send(file);
   });
+}
+
+function getXhrErrorMessage(status: number, body: string): string {
+  if (status === 401 || status === 403) return 'permission denied';
+  if (status === 413) return 'file too large';
+  if (status === 429) return 'rate limited';
+  if (body && body.toLowerCase().includes('quota')) return 'quota exceeded';
+  return `upload failed (HTTP ${status})`;
 }
 
 function translateStorageError(msg: string): string {
   const lower = msg.toLowerCase();
   if (lower.includes('permission') || lower.includes('denied') || lower.includes('unauthorized')) {
-    return 'Firebase Storage permission denied. Check your Storage security rules — the authenticated user needs write access to organizations/GSTpilot_SAAS/invoices/uploads/.';
+    return 'Supabase Storage permission denied. Check your bucket RLS policies — the uploader needs write access to organizations/GSTpilot_SAAS/invoices/uploads/ in the "gstpilot-files" bucket.';
   }
   if (lower.includes('quota') || lower.includes('billing')) {
-    return 'Firebase Storage quota exceeded. Check your Firebase project billing plan.';
+    return 'Supabase Storage quota exceeded. Check your Supabase project billing plan.';
   }
   if (lower.includes('network') || lower.includes('retry') || lower.includes('offline')) {
     return 'Network error during upload. Please check your connection and retry.';

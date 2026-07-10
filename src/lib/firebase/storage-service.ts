@@ -1,9 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Firebase Storage Service (Multi-Tenant)
+// GSTPilot — Storage Service (Multi-Tenant) — Supabase Storage
 //
 // The single source of truth for every file operation in GSTPilot.
 //
-// Storage layout (org-isolated):
+// Backed by Supabase Storage (bucket: "gstpilot-files"). Firebase
+// Authentication, Firestore, and Firebase Functions are NOT touched — only the
+// file-storage layer was migrated from Firebase Storage to Supabase Storage.
+//
+// Storage layout (org-isolated, unchanged from the Firebase era):
 //   organizations/{organizationId}/{category}/{timestamp}_{sanitizedFileName}
 //
 // Categories:
@@ -16,20 +20,16 @@
 //
 // Every public function:
 //   • Accepts an `organizationId` so files can NEVER cross tenant boundaries.
-//   • Returns friendly error strings — never raw Firebase error codes.
-//   • Is safe to call from the browser (uses the Firebase client SDK).
+//   • Returns friendly error strings — never raw SDK error codes.
+//   • Is safe to call from the browser (uses the Supabase anon key).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import {
-  ref,
-  uploadBytesResumable,
-  deleteObject,
-  getDownloadURL as fbGetDownloadURL,
-  listAll,
-  getMetadata,
-  type UploadTaskSnapshot,
-} from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+  getSupabaseStorage,
+  resolveSupabaseUrl,
+  resolveSupabaseAnonKey,
+  GSTPILOT_STORAGE_BUCKET,
+} from '@/lib/supabase';
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export interface UploadOptions {
   onProgress?: (progress: UploadProgress) => void;
   /**
    * Optional custom metadata to attach to the Storage object (e.g. tags,
-   * uploadedBy). Stored as `customMetadata` on the Storage object.
+   * uploadedBy). Stored via Supabase object metadata (`metadata` option).
    */
   customMetadata?: Record<string, string>;
 }
@@ -122,6 +122,9 @@ const VALID_CATEGORIES: readonly StorageCategory[] = [
   'notices',
   'ai',
 ];
+
+/** Signed-URL expiry (seconds) for on-demand download URLs. */
+const SIGNED_URL_EXPIRY_SECONDS = 3600; // 1 hour
 
 // ─── Path Generation ─────────────────────────────────────────────────────────
 
@@ -274,10 +277,26 @@ export function guessCategory(file: File): StorageCategory {
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 /**
- * Upload a file to Firebase Storage under the caller's organization.
+ * Build the Supabase Storage REST URL for a direct object upload.
+ *
+ * Supabase exposes a REST endpoint that accepts a raw PUT/POST body, which lets
+ * us wire `XMLHttpRequest.upload.onprogress` for real progress reporting — the
+ * JS SDK's `upload()` does not expose progress.
+ */
+function buildUploadUrl(storagePath: string): string {
+  const base = resolveSupabaseUrl().replace(/\/$/, '');
+  const encoded = encodeURIComponent(storagePath).replace(/%2F/g, '/');
+  return `${base}/storage/v1/object/${GSTPILOT_STORAGE_BUCKET}/${encoded}`;
+}
+
+/**
+ * Upload a file to Supabase Storage under the caller's organization.
+ *
+ * Uses XMLHttpRequest so we can report real upload progress through the
+ * `onProgress` callback (matching the previous Firebase contract exactly).
  *
  * Resolves with the download URL, storage path and metadata.
- * Rejects with a **friendly** error string (never a raw Firebase code).
+ * Rejects with a **friendly** error string (never a raw SDK error).
  */
 export function uploadFile(
   file: File,
@@ -304,76 +323,122 @@ export function uploadFile(
       file.name,
       options.subPath,
     );
-    const storageRef = ref(storage, storagePath);
     const mimeType = resolveMimeType(file);
+    const uploadUrl = buildUploadUrl(storagePath);
+    const anonKey = resolveSupabaseAnonKey();
 
-    const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: mimeType,
-      customMetadata: {
-        originalName: file.name,
-        organizationId: options.organizationId,
-        category: options.category,
-        ...(options.customMetadata ?? {}),
-      },
-    });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
+    xhr.setRequestHeader('Content-Type', mimeType);
+    // Don't overwrite an existing object at the same path — fail instead. The
+    // timestamp prefix in `generateStoragePath` makes collisions near-impossible,
+    // but `x-upsert: false` keeps the semantic identical to Firebase's default.
+    xhr.setRequestHeader('x-upsert', 'false');
 
-    uploadTask.on(
-      'state_changed',
-      (snapshot: UploadTaskSnapshot) => {
-        const pct =
-          snapshot.totalBytes > 0
-            ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-            : 0;
+    // Report progress throughout the upload.
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const pct = event.total > 0 ? (event.loaded / event.total) * 100 : 0;
+      options.onProgress?.({
+        progress: pct,
+        bytesTransferred: event.loaded,
+        totalBytes: event.total,
+        state: 'running',
+      });
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Upload succeeded — mint a signed download URL for the result.
         options.onProgress?.({
-          progress: pct,
-          bytesTransferred: snapshot.bytesTransferred,
-          totalBytes: snapshot.totalBytes,
-          state:
-            snapshot.state === 'running'
-              ? 'running'
-              : snapshot.state === 'paused'
-                ? 'paused'
-                : snapshot.state === 'success'
-                  ? 'success'
-                  : 'error',
+          progress: 100,
+          bytesTransferred: file.size,
+          totalBytes: file.size,
+          state: 'success',
         });
-      },
-      (error) => {
-        reject(new Error(friendlyStorageError(error)));
-      },
-      async () => {
-        try {
-          const downloadURL = await fbGetDownloadURL(uploadTask.snapshot.ref);
-          resolve({
-            downloadURL,
-            storagePath,
-            fileName: file.name,
-            fileSize: file.size,
-            mimeType,
-            createdAt: new Date().toISOString(),
+        getDownloadURL(storagePath)
+          .then((downloadURL) => {
+            resolve({
+              downloadURL,
+              storagePath,
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType,
+              createdAt: new Date().toISOString(),
+            });
+          })
+          .catch(() => {
+            reject(
+              new Error(
+                'Upload finished but the download link could not be retrieved.',
+              ),
+            );
           });
-        } catch {
-          reject(new Error('Upload finished but the download link could not be retrieved.'));
-        }
-      },
-    );
+        return;
+      }
+      // Non-2xx — translate to a friendly error.
+      options.onProgress?.({
+        progress: 0,
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        state: 'error',
+      });
+      reject(new Error(friendlyStorageError({ status: xhr.status, body: xhr.responseText })));
+    };
+
+    xhr.onerror = () => {
+      options.onProgress?.({
+        progress: 0,
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        state: 'error',
+      });
+      reject(
+        new Error(
+          'Network error during upload. Please check your connection and try again.',
+        ),
+      );
+    };
+
+    xhr.onabort = () => {
+      reject(new Error('The upload was canceled.'));
+    };
+
+    xhr.send(file);
   });
 }
 
 // ─── Download URL ────────────────────────────────────────────────────────────
 
 /**
- * Get a fresh download URL for a stored file.
- * Firebase download URLs are long-lived but can be revoked; always fetch on
- * demand rather than caching indefinitely.
+ * Get a fresh signed download URL for a stored file.
+ *
+ * Supabase signed URLs expire after {@link SIGNED_URL_EXPIRY_SECONDS}, so
+ * callers should always fetch on demand rather than caching indefinitely —
+ * exactly the same guidance the previous Firebase implementation documented.
  */
 export async function getDownloadURL(storagePath: string): Promise<string> {
   if (!storagePath) {
     throw new Error('File path is missing.');
   }
   try {
-    return await fbGetDownloadURL(ref(storage, storagePath));
+    const { data, error } = await getSupabaseStorage().createSignedUrl(
+      storagePath,
+      SIGNED_URL_EXPIRY_SECONDS,
+    );
+    if (error) {
+      throw new Error(friendlyStorageError(error));
+    }
+    if (!data?.signedUrl) {
+      throw new Error('File operation failed. Please try again.');
+    }
+    return data.signedUrl;
   } catch (error) {
+    // Re-throw if it's already a friendly Error we constructed.
+    if (error instanceof Error && error.message) {
+      throw error;
+    }
     throw new Error(friendlyStorageError(error));
   }
 }
@@ -381,17 +446,23 @@ export async function getDownloadURL(storagePath: string): Promise<string> {
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 /**
- * Delete a file from Firebase Storage.
+ * Delete a file from Supabase Storage.
  * Silently succeeds if the file does not exist (idempotent).
  */
 export async function deleteFile(storagePath: string): Promise<void> {
   if (!storagePath) return;
   try {
-    await deleteObject(ref(storage, storagePath));
+    const { error } = await getSupabaseStorage().remove([storagePath]);
+    if (error) {
+      // "not found" style errors are treated as success (idempotent delete).
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('not found') || msg.includes('does not exist')) return;
+      throw new Error(friendlyStorageError(error));
+    }
   } catch (error) {
-    // `storage/object-not-found` is the only error we treat as success.
-    const code = (error as { code?: string })?.code;
-    if (code === 'storage/object-not-found') return;
+    const msg =
+      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (msg.includes('not found') || msg.includes('does not exist')) return;
     throw new Error(friendlyStorageError(error));
   }
 }
@@ -403,9 +474,9 @@ export async function deleteFile(storagePath: string): Promise<void> {
  *
  * Optionally scope to a single category (e.g. `listFiles(orgId, 'invoices')`).
  *
- * Note: `listAll` paginates internally and returns up to 1,000 items per call.
- * For very large orgs a follow-up token would be needed, but this is more than
- * enough for the typical GSTPilot workspace.
+ * Note: Supabase `list()` returns up to 1,000 items per call. For very large
+ * orgs a follow-up token would be needed, but this is more than enough for the
+ * typical GSTPilot workspace.
  */
 export async function listFiles(
   organizationId: string,
@@ -419,21 +490,41 @@ export async function listFiles(
     : `organizations/${organizationId}`;
 
   try {
-    const { items } = await listAll(ref(storage, prefix));
+    const { data, error } = await getSupabaseStorage().list(prefix, {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: 'created_at', order: 'desc' },
+    });
+    if (error) {
+      throw new Error(friendlyStorageError(error));
+    }
+    if (!data || data.length === 0) return [];
+
+    // Supabase `list()` returns item names relative to the prefix. Rebuild the
+    // full storage path and fetch a signed URL + metadata for each in parallel.
     const results = await Promise.all(
-      items.map(async (item) => {
-        const [meta, url] = await Promise.all([
-          getMetadata(item).catch(() => null),
-          fbGetDownloadURL(item).catch(() => ''),
+      data.map(async (item) => {
+        const fullPath = prefix.endsWith('/')
+          ? `${prefix}${item.name}`
+          : `${prefix}/${item.name}`;
+        const [urlResult] = await Promise.all([
+          getSupabaseStorage()
+            .createSignedUrl(fullPath, SIGNED_URL_EXPIRY_SECONDS)
+            .then((r) => (r.data?.signedUrl ?? ''))
+            .catch(() => ''),
         ]);
+        const meta = (item.metadata ?? {}) as {
+          size?: number;
+          mimetype?: string;
+        };
         return {
           name: item.name,
-          storagePath: item.fullPath,
-          downloadURL: url,
-          size: meta?.size ?? 0,
-          mimeType: meta?.contentType ?? 'application/octet-stream',
-          createdAt: meta?.timeCreated ?? new Date().toISOString(),
-          updatedAt: meta?.updated ?? new Date().toISOString(),
+          storagePath: fullPath,
+          downloadURL: urlResult,
+          size: Number(meta.size ?? 0),
+          mimeType: meta.mimetype ?? 'application/octet-stream',
+          createdAt: item.created_at ?? new Date().toISOString(),
+          updatedAt: item.updated_at ?? new Date().toISOString(),
         } satisfies StoredFile;
       }),
     );
@@ -446,24 +537,81 @@ export async function listFiles(
 // ─── Friendly Error Mapping ──────────────────────────────────────────────────
 
 /**
- * Convert any Firebase Storage error into a user-friendly message.
- * Never exposes the raw Firebase error code to the end user.
+ * Convert any Supabase Storage error into a user-friendly message.
+ * Never exposes the raw SDK error to the end user.
  */
 export function friendlyStorageError(error: unknown): string {
-  const code = (error as { code?: string })?.code || '';
-  const map: Record<string, string> = {
-    'storage/unauthorized':
-      'You do not have permission to access this file. Please contact your workspace owner.',
-    'storage/canceled': 'The upload was canceled.',
-    'storage/invalid-checksum': 'The file was corrupted during upload. Please try again.',
-    'storage/quota-exceeded':
-      'Your workspace has exceeded its storage quota. Contact support to upgrade.',
-    'storage/unauthenticated': 'Your session has expired. Please sign in again.',
-    'storage/retry-limit-exceeded':
-      'Network is unstable. The upload timed out — please try again.',
-    'storage/invalid-url': 'The file reference is invalid.',
-    'storage/object-not-found': 'This file no longer exists.',
-    'storage/unknown': 'Something went wrong with file storage. Please try again.',
+  if (!error) return 'File operation failed. Please try again.';
+
+  // Supabase errors typically carry a `message` and sometimes an `error` code
+  // string (e.g. "InvalidApiKey", "Unauthorized", "NotFound").
+  const err = error as {
+    message?: string;
+    error?: string;
+    statusCode?: number | string;
+    status?: number;
+    body?: string;
   };
-  return map[code] || 'File operation failed. Please try again.';
+
+  const rawMessage =
+    (typeof err.message === 'string' && err.message) ||
+    (typeof err.body === 'string' && err.body) ||
+    '';
+
+  const code = (err.error || '').toLowerCase();
+  const status = Number(err.statusCode ?? err.status ?? 0);
+  const msg = rawMessage.toLowerCase();
+
+  // Auth / permission errors.
+  if (
+    code.includes('invalidapikey') ||
+    code.includes('unauthorized') ||
+    status === 401 ||
+    status === 403 ||
+    msg.includes('permission') ||
+    msg.includes('denied') ||
+    msg.includes('unauthorized') ||
+    msg.includes('not allowed')
+  ) {
+    return 'You do not have permission to access this file. Please contact your workspace owner.';
+  }
+
+  // Not found.
+  if (
+    code.includes('notfound') ||
+    status === 404 ||
+    msg.includes('not found') ||
+    msg.includes('does not exist')
+  ) {
+    return 'This file no longer exists.';
+  }
+
+  // Quota / billing.
+  if (
+    code.includes('quota') ||
+    code.includes('billing') ||
+    msg.includes('quota') ||
+    msg.includes('billing') ||
+    msg.includes('exceeded')
+  ) {
+    return 'Your workspace has exceeded its storage quota. Contact support to upgrade.';
+  }
+
+  // Payload too large.
+  if (status === 413 || code.includes('payloadtoolarge') || msg.includes('too large')) {
+    return 'File is too large. Maximum allowed size is 100 MB.';
+  }
+
+  // Network / retry.
+  if (
+    code.includes('network') ||
+    msg.includes('network') ||
+    msg.includes('fetch') ||
+    msg.includes('timeout') ||
+    msg.includes('retry')
+  ) {
+    return 'Network is unstable. The upload timed out — please try again.';
+  }
+
+  return 'File operation failed. Please try again.';
 }

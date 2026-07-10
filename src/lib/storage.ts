@@ -1,5 +1,18 @@
-import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from './firebase';
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Legacy Storage Helpers (Supabase Storage)
+//
+// A smaller, path-based upload helper that predates the org-scoped
+// `storage-service.ts`. Kept for backwards compatibility. Internals now route
+// through Supabase Storage (bucket: "gstpilot-files"); the public function
+// signatures are unchanged.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import {
+  getSupabaseStorage,
+  resolveSupabaseUrl,
+  resolveSupabaseAnonKey,
+  GSTPILOT_STORAGE_BUCKET,
+} from './supabase';
 
 export interface UploadResult {
   downloadURL: string;
@@ -16,7 +29,16 @@ export interface UploadProgress {
 }
 
 /**
- * Upload a file to Firebase Storage
+ * Build the Supabase Storage REST URL for a direct object upload.
+ */
+function buildUploadUrl(path: string): string {
+  const base = resolveSupabaseUrl().replace(/\/$/, '');
+  const encoded = encodeURIComponent(path).replace(/%2F/g, '/');
+  return `${base}/storage/v1/object/${GSTPILOT_STORAGE_BUCKET}/${encoded}`;
+}
+
+/**
+ * Upload a file to Supabase Storage.
  * @param file - The file to upload
  * @param path - Storage path (e.g., 'uploads/invoices/filename.pdf')
  * @param onProgress - Callback for progress updates
@@ -28,50 +50,78 @@ export async function uploadFile(
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadUrl = buildUploadUrl(path);
+    const anonKey = resolveSupabaseAnonKey();
+    const mimeType = file.type || 'application/octet-stream';
 
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        onProgress?.({
-          progress,
-          bytesTransferred: snapshot.bytesTransferred,
-          totalBytes: snapshot.totalBytes,
-          state: snapshot.state === 'running' ? 'running' :
-                 snapshot.state === 'paused' ? 'paused' :
-                 snapshot.state === 'success' ? 'success' : 'error',
-        });
-      },
-      (error) => {
-        console.error('[Storage] Upload error:', error);
-        reject(new Error(getUploadErrorMessage(error)));
-      },
-      async () => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
+    xhr.setRequestHeader('Content-Type', mimeType);
+    xhr.setRequestHeader('x-upsert', 'false');
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const progress = event.total > 0 ? (event.loaded / event.total) * 100 : 0;
+      onProgress?.({
+        progress,
+        bytesTransferred: event.loaded,
+        totalBytes: event.total,
+        state: 'running',
+      });
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const { data, error } = await getSupabaseStorage().createSignedUrl(path, 3600);
+          if (error || !data?.signedUrl) {
+            throw new Error('Failed to get download URL');
+          }
+          onProgress?.({
+            progress: 100,
+            bytesTransferred: file.size,
+            totalBytes: file.size,
+            state: 'success',
+          });
           resolve({
-            downloadURL,
+            downloadURL: data.signedUrl,
             filePath: path,
             fileName: file.name,
             fileSize: file.size,
           });
-        } catch (error) {
+        } catch {
           reject(new Error('Failed to get download URL'));
         }
+        return;
       }
-    );
+      onProgress?.({
+        progress: 0,
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        state: 'error',
+      });
+      reject(new Error(getUploadErrorMessage(xhr.status, xhr.responseText)));
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload. Please try again.'));
+    };
+
+    xhr.send(file);
   });
 }
 
 /**
- * Delete a file from Firebase Storage
+ * Delete a file from Supabase Storage.
  */
 export async function deleteFile(filePath: string): Promise<void> {
   try {
-    const storageRef = ref(storage, filePath);
-    await deleteObject(storageRef);
+    const { error } = await getSupabaseStorage().remove([filePath]);
+    if (error) {
+      console.warn('[Storage] Delete error:', error.message);
+      throw new Error('Failed to delete file');
+    }
   } catch (error) {
     console.warn('[Storage] Delete error:', error);
     throw new Error('Failed to delete file');
@@ -102,9 +152,9 @@ export function isSupportedFileType(file: File): boolean {
     'image/webp',
   ];
   const supportedExtensions = ['.pdf', '.xlsx', '.xls', '.csv', '.json', '.jpg', '.jpeg', '.png', '.webp'];
-  
+
   if (supportedTypes.includes(file.type)) return true;
-  
+
   const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
   return supportedExtensions.includes(ext);
 }
@@ -127,14 +177,18 @@ export function getFileCategory(file: File): 'invoices' | 'gstr' | 'excel' | 'js
 }
 
 // ── Error message helper ──
-function getUploadErrorMessage(error: { code?: string }): string {
-  const code = (error as { code?: string })?.code || '';
-  const messages: Record<string, string> = {
-    'storage/unauthorized': 'You do not have permission to upload files.',
-    'storage/canceled': 'Upload was canceled.',
-    'storage/unknown': 'An unknown error occurred during upload.',
-    'storage/quota-exceeded': 'Storage quota exceeded.',
-    'storage/invalid-checksum': 'File upload failed - checksum mismatch.',
-  };
-  return messages[code] || 'File upload failed. Please try again.';
+function getUploadErrorMessage(status: number, body: string): string {
+  if (status === 401 || status === 403) {
+    return 'You do not have permission to upload files.';
+  }
+  if (status === 413) {
+    return 'File is too large.';
+  }
+  if (status === 429) {
+    return 'Too many requests. Please try again shortly.';
+  }
+  if (body && body.toLowerCase().includes('quota')) {
+    return 'Storage quota exceeded.';
+  }
+  return 'File upload failed. Please try again.';
 }

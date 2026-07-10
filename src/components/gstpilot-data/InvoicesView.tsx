@@ -90,11 +90,13 @@ import {
   Receipt,
   TrendingUp,
   X,
+  UploadCloud,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
 import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
 import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
+import { InvoiceUploadDialog } from './InvoiceUploadDialog';
 import {
   GST_RATES,
   DEFAULT_GST_RATE,
@@ -231,6 +233,7 @@ export default function InvoicesView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [viewTarget, setViewTarget] = useState<Invoice | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   // Form is reset directly in the open handlers — no effect needed.
   const openCreate = () => {
@@ -407,13 +410,23 @@ export default function InvoicesView() {
             Live GST invoices — synced with Firestore in real-time. Totals auto-calculated.
           </p>
         </div>
-        <Button
-          onClick={openCreate}
-          className="bg-emerald-500 text-black hover:bg-emerald-400"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Invoice
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => setUploadOpen(true)}
+            variant="outline"
+            className="border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/[0.12] hover:text-emerald-200"
+          >
+            <UploadCloud className="mr-2 h-4 w-4" />
+            Upload Invoice
+          </Button>
+          <Button
+            onClick={openCreate}
+            className="bg-emerald-500 text-black hover:bg-emerald-400"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Invoice
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -965,6 +978,17 @@ export default function InvoicesView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Phase 3 — Real invoice upload + Gemini AI extraction */}
+      <InvoiceUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onSaved={(inv) => {
+          toast.success('Invoice saved from upload', {
+            description: `${inv.invoiceNumber} · ${inv.customerName}`,
+          });
+        }}
+      />
     </div>
   );
 }

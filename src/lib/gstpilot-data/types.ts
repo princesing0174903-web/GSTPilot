@@ -63,6 +63,35 @@ export interface CreateCustomerInput {
 
 export type UpdateCustomerInput = Partial<CreateCustomerInput>;
 
+// ─── Invoice Source (AI ingestion metadata) ──────────────────────────────────
+// Captured when an invoice is created from an uploaded document via the
+// Gemini/VLM extraction pipeline (Phase 3). Manual invoices leave this null.
+
+export interface InvoiceSource {
+  /** How the invoice entered the system. */
+  type: 'upload' | 'manual' | 'import';
+  /** Firebase Storage download URL for the original uploaded file. */
+  storageUrl: string | null;
+  /** Storage object path (organizations/GSTpilot_SAAS/invoices/uploads/...). */
+  storagePath: string | null;
+  /** Original file name as uploaded by the user. */
+  fileName: string | null;
+  /** MIME type (application/pdf, image/jpeg, image/png). */
+  mimeType: string | null;
+  /** File size in bytes. */
+  fileSize: number | null;
+  /** Raw structured JSON returned by the VLM (verbatim, for audit). */
+  aiExtraction: Record<string, unknown> | null;
+  /** AI model identifier used for extraction (e.g. "glm-4.5v"). */
+  aiModel: string | null;
+  /** Overall extraction confidence (0–1). */
+  confidence: number | null;
+  /** End-to-end processing time in milliseconds (upload → extraction). */
+  processingTimeMs: number | null;
+  /** ISO timestamp when the file was uploaded. */
+  uploadedAt: string | null;
+}
+
 // ─── Product ─────────────────────────────────────────────────────────────────
 
 export type ProductUnit = 'NOS' | 'KG' | 'GM' | 'LTR' | 'ML' | 'MTR' | 'BOX' | 'PCS' | 'SET' | 'HR' | 'DAY' | 'MONTH';
@@ -195,6 +224,10 @@ export interface Invoice {
   /** Internal private notes (not printed). */
   privateNotes: string | null;
 
+  /** Provenance metadata — populated when the invoice was created from an
+   *  uploaded document via AI extraction. Null for manually-created invoices. */
+  source: InvoiceSource | null;
+
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -217,6 +250,8 @@ export interface CreateInvoiceInput {
   >;
   notes?: string | null;
   privateNotes?: string | null;
+  /** Optional provenance metadata for AI-ingested invoices. */
+  source?: InvoiceSource | null;
 }
 
 export type UpdateInvoiceInput = Partial<CreateInvoiceInput> & {

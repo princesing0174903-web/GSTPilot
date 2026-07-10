@@ -1,0 +1,1805 @@
+     1→// ═══════════════════════════════════════════════════════════════════════════════
+     2→// GSTPilot — Firebase Workflow Engine
+     3→// Every write operation triggers automatic side effects:
+     4→//   - Activity logging
+     5→//   - Counter updates
+     6→//   - Notification generation
+     7→//   - Compliance score recalculation
+     8→//   - AI recommendation generation
+     9→// ═══════════════════════════════════════════════════════════════════════════════
+    10→
+    11→import {
+    12→  collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+    13→  getDoc, getDocs, query, where, orderBy, limit,
+    14→  serverTimestamp, writeBatch, onSnapshot,
+    15→  type Unsubscribe, type DocumentReference, type QueryConstraint,
+    16→} from 'firebase/firestore';
+    17→import { db, auth } from '@/lib/firebase';
+    18→import {
+    19→  COLLECTIONS,
+    20→  type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
+    21→  type FirestoreReturn, type FirestoreReconciliation, type FirestoreNotification,
+    22→  type FirestoreActivity, type FirestoreAIRecommendation, type FirestoreFirm,
+    23→  type FirestoreLead, type FirestoreDeal, type FirestoreMeeting, type FirestoreTask,
+    24→  type FirestoreBankAccount, type FirestoreBankTransaction,
+    25→  type FirestoreGstProfile, type FirestoreGstReturn,
+    26→  type FirestoreExpense, type FirestorePayment, type FirestoreAiMemory,
+    27→  type FirestoreNotice, type FirestoreReport,
+    28→  type FirestoreJournalEntry,
+    29→  type LeadStatus, type LeadSource, type DealStage, type MeetingType, type MeetingStatus,
+    30→  type ActivityType, type NotificationType, type NotificationPriority,
+    31→  type ReconMismatch, type DocumentStatus, type DocumentType,
+    32→  type LiveDashboardMetrics,
+    33→} from '@/lib/firestore-schema';
+    34→import type { FilingStatus, ClientStatus, InvoiceStatus, MatchStatus, RiskLevel, AIRecommendationType } from '@/types/gst';
+    35→
+    36→// ─── Helpers ──────────────────────────────────────────────────────────────────
+    37→
+    38→function generateId(): string {
+    39→  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    40→}
+    41→
+    42→function generateARN(): string {
+    43→  // DEPRECATED: This function is kept for reference but must NEVER be called.
+    44→  // GSTPilot never simulates successful government filings. A real ARN can
+    45→  // only come from the official GSTN API via the provider's fileReturn method.
+    46→  throw new Error(
+    47→    'generateARN() must never be called. Real ARNs come from GSTN only. ' +
+    48→    'Use the API route /api/gstr-filing/[id]/file which calls the GSTN provider.'
+    49→  );
+    50→}
+    51→
+    52→function currentUserId(): string {
+    53→  return auth.currentUser?.uid || 'system';
+    54→}
+    55→
+    56→/**
+    57→ * Returns the current organization id (the canonical tenant scope) or null.
+    58→ *
+    59→ * The OrgContext persists the active organization id to localStorage under
+    60→ * `gstpilot_org_id` whenever it resolves. This non-React module reads that
+    61→ * value so CRUD functions can stamp every document with `organizationId` —
+    62→ * the field the Firestore security rules and the onSnapshot hooks require.
+    63→ *
+    64→ * Falls back to the legacy `firmId` in `gstpilot_session` for compatibility
+    65→ * with older sessions.
+    66→ */
+    67→function currentOrgId(): string | null {
+    68→  try {
+    69→    // 1. Canonical: org id persisted by OrgContext.
+    70→    const orgId = localStorage.getItem('gstpilot_org_id');
+    71→    if (orgId) return orgId;
+    72→    // 2. Legacy: firmId embedded in the auth session.
+    73→    const stored = localStorage.getItem('gstpilot_session');
+    74→    if (stored) {
+    75→      const parsed = JSON.parse(stored);
+    76→      if (parsed.firmId) return parsed.firmId;
+    77→    }
+    78→  } catch { /* ignore */ }
+    79→  return null;
+    80→}
+    81→
+    82→/** Alias kept for backward compatibility with existing call sites. */
+    83→function currentFirmId(): string | null {
+    84→  return currentOrgId();
+    85→}
+    86→
+    87→/**
+    88→ * Convert a Firestore snapshot ({ id, data() }) into a typed object with the
+    89→ * document id prepended, recursively converting Firestore Timestamps to ISO
+    90→ * strings. Mirrors the conversion logic in `withId` (firestore-schema.ts) but
+    91→ * drops the `T extends Record<string, unknown>` constraint so it accepts
+    92→ * strongly-typed interfaces (which do not have an implicit index signature).
+    93→ */
+    94→function docToData<T>(d: { id: string; data: () => Record<string, unknown> }): T & { id: string } {
+    95→  const data = d.data();
+    96→  const converted: Record<string, unknown> = {};
+    97→  for (const [key, value] of Object.entries(data)) {
+    98→    if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+    99→      converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+   100→    } else {
+   101→      converted[key] = value;
+   102→    }
+   103→  }
+   104→  return { id: d.id, ...converted } as T & { id: string };
+   105→}
+   106→
+   107→// ─── 1. CLIENT WORKFLOW ─────────────────────────────────────────────────────
+   108→// Creating a client:
+   109→//   - Creates client document
+   110→//   - Increases Active Clients count on firm
+   111→//   - Adds activity log
+   112→//   - Generates compliance profile
+   113→
+   114→export async function createClient(data: Omit<FirestoreClient, 'clientId' | 'firmId' | 'organizationId' | 'complianceProfile' | 'invoiceCount' | 'totalTaxPaid' | 'pendingReturnCount' | 'documentCount' | 'createdAt' | 'updatedAt'>): Promise<string> {
+   115→  const firmId = currentFirmId();
+   116→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+   117→
+   118→  const clientId = generateId();
+   119→  const clientRef = doc(db, COLLECTIONS.CLIENTS, clientId);
+   120→
+   121→  const clientData: FirestoreClient = {
+   122→    ...data,
+   123→    clientId,
+   124→    firmId,
+   125→    organizationId: firmId,
+   126→    complianceProfile: {
+   127→      filingCompliance: 100,
+   128→      gstinValidity: true,
+   129→      lastFilingStatus: null,
+   130→      overdueReturns: 0,
+   131→      totalReturnsFiled: 0,
+   132→      averageFilingDelay: 0,
+   133→    },
+   134→    invoiceCount: 0,
+   135→    totalTaxPaid: 0,
+   136→    pendingReturnCount: 0,
+   137→    documentCount: 0,
+   138→    createdAt: serverTimestamp(),
+   139→    updatedAt: serverTimestamp(),
+   140→  };
+   141→
+   142→  await setDoc(clientRef, clientData);
+   143→
+   144→  // Side effects (non-blocking)
+   145→  incrementFirmCounter(firmId, 'activeClientCount', 1);
+   146→  addActivity({
+   147→    type: 'client_created',
+   148→    title: 'Client added',
+   149→    description: `${data.tradeName} (${data.gstin}) added to the firm`,
+   150→    clientId,
+   151→    entityType: COLLECTIONS.CLIENTS,
+   152→    entityId: clientId,
+   153→  });
+   154→  addNotification({
+   155→    type: 'system',
+   156→    priority: 'low',
+   157→    title: 'New client onboarded',
+   158→    message: `${data.tradeName} has been added. Set up their compliance profile.`,
+   159→    entityType: COLLECTIONS.CLIENTS,
+   160→    entityId: clientId,
+   161→  });
+   162→
+   163→  // Auto-create draft returns for current period if not exists
+   164→  autoCreateDraftReturns(firmId, clientId);
+   165→
+   166→  return clientId;
+   167→}
+   168→
+   169→export async function updateClient(clientId: string, updates: Partial<FirestoreClient>): Promise<void> {
+   170→  const clientRef = doc(db, COLLECTIONS.CLIENTS, clientId);
+   171→  await updateDoc(clientRef, { ...updates, updatedAt: serverTimestamp() });
+   172→
+   173→  addActivity({
+   174→    type: 'client_updated',
+   175→    title: 'Client updated',
+   176→    description: `Client profile updated`,
+   177→    clientId,
+   178→    entityType: COLLECTIONS.CLIENTS,
+   179→    entityId: clientId,
+   180→  });
+   181→}
+   182→
+   183→export async function deleteClient(clientId: string): Promise<void> {
+   184→  // Get client info before deleting
+   185→  const clientSnap = await getDoc(doc(db, COLLECTIONS.CLIENTS, clientId));
+   186→  const clientData = clientSnap.data() as FirestoreClient | undefined;
+   187→  const firmId = clientData?.firmId || currentFirmId();
+   188→
+   189→  await deleteDoc(doc(db, COLLECTIONS.CLIENTS, clientId));
+   190→
+   191→  // Side effects
+   192→  if (firmId) incrementFirmCounter(firmId, 'activeClientCount', -1);
+   193→  addActivity({
+   194→    type: 'client_deleted',
+   195→    title: 'Client removed',
+   196→    description: `${clientData?.tradeName || 'Client'} has been removed`,
+   197→    clientId,
+   198→    entityType: COLLECTIONS.CLIENTS,
+   199→    entityId: clientId,
+   200→  });
+   201→}
+   202→
+   203→// ─── 2. DOCUMENT WORKFLOW ───────────────────────────────────────────────────
+   204→// Uploading a document:
+   205→//   - Creates document record
+   206→//   - Updates upload counters on client
+   207→//   - Triggers extraction status
+   208→
+   209→export async function createDocument(data: {
+   210→  clientId: string;
+   211→  fileName: string;
+   212→  filePath?: string;
+   213→  fileSize: number;
+   214→  fileType: string;
+   215→  documentType: DocumentType;
+   216→  period?: string;
+   217→}): Promise<string> {
+   218→  const firmId = currentFirmId();
+   219→  const docId = generateId();
+   220→  const docRef = doc(db, COLLECTIONS.DOCUMENTS, docId);
+   221→
+   222→  const docData: FirestoreDocument = {
+   223→    docId,
+   224→    firmId: firmId || '',
+   225→    organizationId: firmId || '',
+   226→    clientId: data.clientId,
+   227→    uploadedBy: currentUserId(),
+   228→    fileName: data.fileName,
+   229→    filePath: data.filePath || null,
+   230→    fileSize: data.fileSize,
+   231→    fileType: data.fileType,
+   232→    documentType: data.documentType,
+   233→    status: 'uploading',
+   234→    extractionStatus: 'pending',
+   235→    extractedInvoiceCount: 0,
+   236→    extractionAccuracy: 0,
+   237→    extractionError: null,
+   238→    period: data.period || null,
+   239→    metadata: {},
+   240→    createdAt: serverTimestamp(),
+   241→    updatedAt: serverTimestamp(),
+   242→  };
+   243→
+   244→  await setDoc(docRef, docData);
+   245→
+   246→  // Update client document count
+   247→  incrementClientCounter(data.clientId, 'documentCount', 1);
+   248→
+   249→  addActivity({
+   250→    type: 'document_uploaded',
+   251→    title: 'Document uploaded',
+   252→    description: `${data.fileName} uploaded for processing`,
+   253→    clientId: data.clientId,
+   254→    entityType: COLLECTIONS.DOCUMENTS,
+   255→    entityId: docId,
+   256→  });
+   257→
+   258→  // Simulate extraction process (in production, this would be a Cloud Function trigger)
+   259→  simulateExtraction(docId, data.clientId);
+   260→
+   261→  return docId;
+   262→}
+   263→
+   264→export async function updateDocumentStatus(docId: string, status: DocumentStatus, extras?: Partial<FirestoreDocument>): Promise<void> {
+   265→  const docRef = doc(db, COLLECTIONS.DOCUMENTS, docId);
+   266→  await updateDoc(docRef, { status, ...extras, updatedAt: serverTimestamp() });
+   267→}
+   268→
+   269→/** Queue document for extraction.
+   270→ *  In production this would be a Cloud Function trigger. Until that wiring
+   271→ *  exists, we mark the document as "queued" (NOT fabricated as "extracted"
+   272→ *  with random invoice counts / accuracy). The dashboard's
+   273→ *  `documentsProcessed` / `extractionsPending` metrics then reflect reality
+   274→ *  instead of fabricated numbers.
+   275→ */
+   276→function simulateExtraction(docId: string, clientId: string): void {
+   277→  // Mark as queued — real extraction happens when an OCR/AI pipeline picks it up.
+   278→  setTimeout(async () => {
+   279→    try {
+   280→      const docRef = doc(db, COLLECTIONS.DOCUMENTS, docId);
+   281→      await updateDoc(docRef, {
+   282→        status: 'queued',
+   283→        extractionStatus: 'pending',
+   284→        // Do NOT fabricate extractedInvoiceCount / extractionAccuracy here.
+   285→        // Those fields are populated by the real extraction pipeline.
+   286→        updatedAt: serverTimestamp(),
+   287→      });
+   288→
+   289→      addActivity({
+   290→        type: 'document_processed',
+   291→        title: 'Document queued for extraction',
+   292→        description: `Document is waiting to be processed by the extraction pipeline.`,
+   293→        clientId,
+   294→        entityType: COLLECTIONS.DOCUMENTS,
+   295→        entityId: docId,
+   296→      });
+   297→    } catch (e) {
+   298→      console.warn('[Workflow] Extraction queueing failed:', e);
+   299→    }
+   300→  }, 800);
+   301→}
+   302→
+   303→// ─── 3. INVOICE WORKFLOW ────────────────────────────────────────────────────
+   304→// Extracting invoices:
+   305→//   - Creates invoice records
+   306→//   - Calculates tax volume
+   307→//   - Updates dashboard statistics
+   308→//   - Generates draft returns
+   309→
+   310→export async function createInvoice(data: Omit<FirestoreInvoice, 'invoiceId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+   311→  const firmId = currentFirmId();
+   312→  const invoiceId = generateId();
+   313→  const invoiceRef = doc(db, COLLECTIONS.INVOICES, invoiceId);
+   314→
+   315→  const invoiceData: FirestoreInvoice = {
+   316→    ...data,
+   317→    invoiceId,
+   318→    firmId: firmId || '',
+   319→    organizationId: firmId || '',
+   320→    createdAt: serverTimestamp(),
+   321→    updatedAt: serverTimestamp(),
+   322→  };
+   323→
+   324→  await setDoc(invoiceRef, invoiceData);
+   325→
+   326→  // Update client counters
+   327→  incrementClientCounter(data.clientId, 'invoiceCount', 1);
+   328→  incrementClientCounter(data.clientId, 'totalTaxPaid', data.totalAmount);
+   329→
+   330→  addActivity({
+   331→    type: 'invoice_extracted',
+   332→    title: 'Invoice extracted',
+   333→    description: `Invoice ${data.invoiceNumber} — ₹${data.totalAmount.toLocaleString('en-IN')}`,
+   334→    clientId: data.clientId,
+   335→    entityType: COLLECTIONS.INVOICES,
+   336→    entityId: invoiceId,
+   337→    metadata: { amount: data.totalAmount, invoiceType: data.invoiceType },
+   338→  });
+   339→
+   340→  // Update draft return for this client's period
+   341→  // NOTE: totalTax is a NUMBER field (see FirestoreInvoice type), not a method.
+   342→  if (data.period) {
+   343→    updateDraftReturnForInvoice(firmId || '', data.clientId, data.returnType, data.period, data.totalAmount, typeof data.totalTax === 'number' ? data.totalTax : 0);
+   344→  }
+   345→
+   346→  return invoiceId;
+   347→}
+   348→
+   349→export async function updateInvoice(invoiceId: string, updates: Partial<FirestoreInvoice>): Promise<void> {
+   350→  const invoiceRef = doc(db, COLLECTIONS.INVOICES, invoiceId);
+   351→  await updateDoc(invoiceRef, { ...updates, updatedAt: serverTimestamp() });
+   352→}
+   353→
+   354→export async function approveInvoice(invoiceId: string): Promise<void> {
+   355→  const invoiceRef = doc(db, COLLECTIONS.INVOICES, invoiceId);
+   356→  const invoiceSnap = await getDoc(invoiceRef);
+   357→  if (!invoiceSnap.exists()) return;
+   358→
+   359→  await updateDoc(invoiceRef, {
+   360→    status: 'approved' as InvoiceStatus,
+   361→    riskScore: Math.max(0, (invoiceSnap.data().riskScore || 0) - 20),
+   362→    updatedAt: serverTimestamp(),
+   363→  });
+   364→
+   365→  const data = invoiceSnap.data() as FirestoreInvoice;
+   366→  addActivity({
+   367→    type: 'invoice_approved',
+   368→    title: 'Invoice approved',
+   369→    description: `Invoice ${data.invoiceNumber} approved`,
+   370→    clientId: data.clientId,
+   371→    entityType: COLLECTIONS.INVOICES,
+   372→    entityId: invoiceId,
+   373→  });
+   374→}
+   375→
+   376→export async function deleteInvoice(invoiceId: string): Promise<void> {
+   377→  const invoiceSnap = await getDoc(doc(db, COLLECTIONS.INVOICES, invoiceId));
+   378→  if (!invoiceSnap.exists()) return;
+   379→  const data = invoiceSnap.data() as FirestoreInvoice;
+   380→
+   381→  await deleteDoc(doc(db, COLLECTIONS.INVOICES, invoiceId));
+   382→  incrementClientCounter(data.clientId, 'invoiceCount', -1);
+   383→}
+   384→
+   385→// ─── 4. RETURN WORKFLOW ─────────────────────────────────────────────────────
+   386→// Preparing returns:
+   387→//   - Updates Ready to File counts
+   388→//   - Creates notifications
+   389→//   - Updates client compliance score
+   390→// Filing returns:
+   391→//   - Moves return to Filed state
+   392→//   - Generates ARN
+   393→//   - Updates dashboard metrics
+   394→//   - Adds timeline activity
+   395→
+   396→export async function createReturn(data: Omit<FirestoreReturn, 'returnId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+   397→  const firmId = currentFirmId();
+   398→  const returnId = generateId();
+   399→  const returnRef = doc(db, COLLECTIONS.RETURNS, returnId);
+   400→
+   401→  const returnData: FirestoreReturn = {
+   402→    ...data,
+   403→    returnId,
+   404→    firmId: firmId || '',
+   405→    organizationId: firmId || '',
+   406→    createdAt: serverTimestamp(),
+   407→    updatedAt: serverTimestamp(),
+   408→  };
+   409→
+   410→  await setDoc(returnRef, returnData);
+   411→
+   412→  incrementClientCounter(data.clientId, 'pendingReturnCount', 1);
+   413→  if (firmId) incrementFirmCounter(firmId, 'totalReturnCount', 1);
+   414→
+   415→  addActivity({
+   416→    type: 'return_prepared',
+   417→    title: 'Return prepared',
+   418→    description: `${data.returnType} for ${data.period} created (Draft)`,
+   419→    clientId: data.clientId,
+   420→    entityType: COLLECTIONS.RETURNS,
+   421→    entityId: returnId,
+   422→  });
+   423→
+   424→  return returnId;
+   425→}
+   426→
+   427→export async function updateReturnStatus(returnId: string, status: FilingStatus, extras?: Partial<FirestoreReturn>): Promise<void> {
+   428→  const returnRef = doc(db, COLLECTIONS.RETURNS, returnId);
+   429→  const returnSnap = await getDoc(returnRef);
+   430→  if (!returnSnap.exists()) return;
+   431→
+   432→  const data = returnSnap.data() as FirestoreReturn;
+   433→  await updateDoc(returnRef, { status, ...extras, updatedAt: serverTimestamp() });
+   434→
+   435→  const statusActivityMap: Record<string, ActivityType> = {
+   436→    prepared: 'return_prepared',
+   437→    validated: 'return_prepared',
+   438→    reviewed: 'return_reviewed',
+   439→    generated: 'return_prepared',
+   440→    filed: 'return_filed',
+   441→    reopened: 'return_reopened',
+   442→  };
+   443→
+   444→  const activityType = statusActivityMap[status] || 'return_prepared';
+   445→  const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+   446→
+   447→  addActivity({
+   448→    type: activityType,
+   449→    title: `Return ${statusLabel}`,
+   450→    description: `${data.returnType} for ${data.period} moved to ${statusLabel}`,
+   451→    clientId: data.clientId,
+   452→    entityType: COLLECTIONS.RETURNS,
+   453→    entityId: returnId,
+   454→  });
+   455→
+   456→  if (status === 'reviewed' || status === 'validated' || status === 'generated') {
+   457→    addNotification({
+   458→      type: 'return_reviewed',
+   459→      priority: 'normal',
+   460→      title: `${data.returnType} ready to file`,
+   461→      message: `${data.returnType} for ${data.period} has been ${statusLabel} and is ready for filing.`,
+   462→      entityType: COLLECTIONS.RETURNS,
+   463→      entityId: returnId,
+   464→    });
+   465→
+   466→    // Update compliance score
+   467→    recalculateComplianceScore(data.clientId);
+   468→  }
+   469→}
+   470→
+   471→export async function fileReturn(returnId: string): Promise<string> {
+   472→  // CRITICAL: This function MUST NOT fake the ARN.
+   473→  // GSTPilot never simulates successful government filings.
+   474→  //
+   475→  // The filing is delegated to the server-side API route which:
+   476→  //   1. Checks for an active GSTN connection (Firestore gst_connections)
+   477→  //   2. If no connection: returns 400 "GSTN connection required"
+   478→  //   3. If mock provider: returns 400 "Cannot file in mock mode"
+   479→  //   4. If official provider: calls provider.fileReturn() → real ARN
+   480→  //   5. Only marks as "filed" if a real ARN is returned
+   481→  //
+   482→  // The return status transitions:
+   483→  //   draft → prepared → validated → reviewed → submitted (awaiting GSTN ack)
+   484→  //   submitted → filed (only when real ARN received from GSTN)
+   485→  const response = await fetch(`/api/gstr-filing/${returnId}/file`, {
+   486→    method: 'POST',
+   487→    headers: { 'Content-Type': 'application/json' },
+   488→  });
+   489→
+   490→  if (!response.ok) {
+   491→    const error = await response.json().catch(() => ({ error: 'Filing failed' }));
+   492→    throw new Error(error.error || 'Failed to file return with GSTN');
+   493→  }
+   494→
+   495→  const result = await response.json();
+   496→
+   497→  // If the filing was submitted but not yet acknowledged (no real ARN),
+   498→  // the return is marked as "submitted" — not "filed".
+   499→  if (!result.acknowledgmentNumber) {
+   500→    throw new Error(
+   501→      'Return submitted to GSTN but not yet acknowledged. ' +
+   502→      'The return status is now "submitted" — it will become "filed" when ' +
+   503→      'GSTN returns an acknowledgment number (ARN). Check back after syncing.'
+   504→    );
+   505→  }
+   506→
+   507→  return result.acknowledgmentNumber as string;
+   508→}
+   509→
+   510→/** Auto-create draft returns for current period.
+   511→ *  Period format MUST be "YYYY-MM" to match gst-utils.ts (getFilingDueDate /
+   512→ *  isOverdue / periodToLabel) and the dashboard's parsePeriod. Writing
+   513→ *  "MM-YYYY" here previously caused "undefined 6" labels and inflated
+   514→ *  overdue counts on the dashboard.
+   515→ */
+   516→async function autoCreateDraftReturns(firmId: string, clientId: string): Promise<void> {
+   517→  const now = new Date();
+   518→  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+   519→  const fy = now.getMonth() >= 3 ? `${now.getFullYear()}-${String(now.getFullYear() + 1).slice(2)}` : `${now.getFullYear() - 1}-${String(now.getFullYear()).slice(2)}`;
+   520→
+   521→  for (const returnType of ['GSTR-1', 'GSTR-3B'] as const) {
+   522→    // Check if return already exists
+   523→    const q = query(
+   524→      collection(db, COLLECTIONS.RETURNS),
+   525→      where('clientId', '==', clientId),
+   526→      where('returnType', '==', returnType),
+   527→      where('period', '==', period),
+   528→      limit(1)
+   529→    );
+   530→    const existing = await getDocs(q);
+   531→    if (existing.empty) {
+   532→      await createReturn({
+   533→        clientId,
+   534→        returnType,
+   535→        period,
+   536→        financialYear: fy,
+   537→        status: 'draft',
+   538→        filedDate: null,
+   539→        acknowledgmentNumber: null,
+   540→        totalInvoices: 0,
+   541→        readyForFiling: 0,
+   542→        issuesFound: 0,
+   543→        criticalErrors: 0,
+   544→        warnings: 0,
+   545→        totalTaxableValue: 0,
+   546→        totalTax: 0,
+   547→        jsonPayload: null,
+   548→        assignedTo: null,
+   549→        reviewedBy: null,
+   550→      });
+   551→    }
+   552→  }
+   553→}
+   554→
+   555→/** Update draft return when an invoice is added */
+   556→async function updateDraftReturnForInvoice(firmId: string, clientId: string, returnType: string, period: string, taxableValue: number, taxAmount: number): Promise<void> {
+   557→  try {
+   558→    const q = query(
+   559→      collection(db, COLLECTIONS.RETURNS),
+   560→      where('clientId', '==', clientId),
+   561→      where('returnType', '==', returnType),
+   562→      where('period', '==', period),
+   563→      limit(1)
+   564→    );
+   565→    const snap = await getDocs(q);
+   566→    if (!snap.empty) {
+   567→      const returnDoc = snap.docs[0];
+   568→      const data = returnDoc.data() as FirestoreReturn;
+   569→      await updateDoc(returnDoc.ref, {
+   570→        totalInvoices: (data.totalInvoices || 0) + 1,
+   571→        totalTaxableValue: (data.totalTaxableValue || 0) + taxableValue,
+   572→        totalTax: (data.totalTax || 0) + taxAmount,
+   573→        updatedAt: serverTimestamp(),
+   574→      });
+   575→    }
+   576→  } catch (e) {
+   577→    console.warn('[Workflow] Failed to update draft return:', e);
+   578→  }
+   579→}
+   580→
+   581→// ─── 5. RECONCILIATION WORKFLOW ─────────────────────────────────────────────
+   582→// Reconciliation:
+   583→//   - Generates mismatch records
+   584→//   - Calculates ITC differences
+   585→//   - Generates AI recommendations
+   586→
+   587→export async function createReconciliation(data: {
+   588→  clientId: string;
+   589→  period: string;
+   590→  sources: string;
+   591→}): Promise<string> {
+   592→  const firmId = currentFirmId();
+   593→  const reconId = generateId();
+   594→  const reconRef = doc(db, COLLECTIONS.RECONCILIATIONS, reconId);
+   595→
+   596→  // ── Production reconciliation ──
+   597→  // Do NOT fabricate random mismatch records. Compute real counts from the
+   598→  // books (Firestore invoices for this client+period) and the portal
+   599→  // (GSTR-2B sync records if available). If portal data hasn't been synced
+   600→  // yet, the reconciliation is created with status "pending" and zeroed
+   601→  // counters — the real reconciliation engine (lib/banking/reconcile.ts or
+   602→  // lib/gstn/reconcile.ts) populates the mismatches when it runs.
+   603→  const booksQuery = query(
+   604→    collection(db, COLLECTIONS.INVOICES),
+   605→    where('clientId', '==', data.clientId),
+   606→    where('period', '==', data.period)
+   607→  );
+   608→  const booksSnap = await getDocs(booksQuery);
+   609→  const totalRecords = booksSnap.size;
+   610→  const matched = 0;
+   611→  const partialMatches = 0;
+   612→  const unmatched = 0;
+   613→  const highRisk = 0;
+   614→  const mismatches: ReconMismatch[] = [];
+   615→  const gstDifference = 0;
+   616→
+   617→  const reconData: FirestoreReconciliation = {
+   618→    reconId,
+   619→    firmId: firmId || '',
+   620→    organizationId: firmId || '',
+   621→    clientId: data.clientId,
+   622→    period: data.period,
+   623→    sources: data.sources,
+   624→    // Status is "pending" until the real reconciliation engine runs and
+   625→    // populates mismatches. Previously this was hard-coded to "completed"
+   626→    // with fabricated random counts.
+   627→    status: 'pending',
+   628→    totalRecords,
+   629→    matched,
+   630→    unmatched,
+   631→    partialMatches,
+   632→    highRisk,
+   633→    gstDifference,
+   634→    mismatches,
+   635→    runBy: currentUserId(),
+   636→    createdAt: serverTimestamp(),
+   637→    updatedAt: serverTimestamp(),
+   638→  };
+   639→
+   640→  await setDoc(reconRef, reconData);
+   641→
+   642→  addActivity({
+   643→    type: 'reconciliation_run',
+   644→    title: 'Reconciliation queued',
+   645→    description: `${data.sources}: ${totalRecords} book invoices found. Waiting for portal data to reconcile.`,
+   646→    clientId: data.clientId,
+   647→    entityType: COLLECTIONS.RECONCILIATIONS,
+   648→    entityId: reconId,
+   649→    metadata: { matched, unmatched, gstDifference, totalRecords },
+   650→  });
+   651→
+   652→  // Do NOT auto-generate AI recommendations with random confidence scores.
+   653→  // Real recommendations are generated by the reconciliation engine after
+   654→  // actual mismatches are detected.
+   655→  void generateAIRecommendations; // keep the symbol referenced for tree-shaking
+   656→
+   657→  addNotification({
+   658→    type: 'mismatch_found',
+   659→    priority: 'normal',
+   660→    title: 'Reconciliation created',
+   661→    message: `Reconciliation queued for ${data.period}. ${totalRecords} book invoices will be matched against portal data.`,
+   662→    entityType: COLLECTIONS.RECONCILIATIONS,
+   663→    entityId: reconId,
+   664→  });
+   665→
+   666→  return reconId;
+   667→}
+   668→
+   669→export async function resolveMismatch(reconId: string, invoiceNumber: string): Promise<void> {
+   670→  const reconRef = doc(db, COLLECTIONS.RECONCILIATIONS, reconId);
+   671→  const reconSnap = await getDoc(reconRef);
+   672→  if (!reconSnap.exists()) return;
+   673→
+   674→  const data = reconSnap.data() as FirestoreReconciliation;
+   675→  const updatedMismatches = data.mismatches.map(m =>
+   676→    m.invoiceNumber === invoiceNumber
+   677→      ? { ...m, resolved: true, resolvedBy: currentUserId(), resolvedAt: new Date().toISOString() }
+   678→      : m
+   679→  );
+   680→
+   681→  const resolvedCount = updatedMismatches.filter(m => m.resolved).length;
+   682→  const newUnmatched = updatedMismatches.filter(m => !m.resolved && m.matchStatus === 'missing_in_books').length;
+   683→  const newPartial = updatedMismatches.filter(m => !m.resolved && m.matchStatus === 'partial_match').length;
+   684→
+   685→  await updateDoc(reconRef, {
+   686→    mismatches: updatedMismatches,
+   687→    unmatched: newUnmatched,
+   688→    partialMatches: newPartial,
+   689→    matched: data.totalRecords - newUnmatched - newPartial,
+   690→    updatedAt: serverTimestamp(),
+   691→  });
+   692→
+   693→  addActivity({
+   694→    type: 'mismatch_resolved',
+   695→    title: 'Mismatch resolved',
+   696→    description: `Reconciliation mismatch for ${invoiceNumber} resolved`,
+   697→    clientId: data.clientId,
+   698→    entityType: COLLECTIONS.RECONCILIATIONS,
+   699→    entityId: reconId,
+   700→  });
+   701→}
+   702→
+   703→// ─── 6. NOTIFICATION ENGINE ─────────────────────────────────────────────────
+   704→
+   705→export async function addNotification(data: {
+   706→  type: NotificationType;
+   707→  priority: NotificationPriority;
+   708→  title: string;
+   709→  message: string;
+   710→  entityType?: string | null;
+   711→  entityId?: string | null;
+   712→}): Promise<void> {
+   713→  const firmId = currentFirmId();
+   714→  if (!firmId) return; // Can't add notification without firm
+   715→
+   716→  const notifId = generateId();
+   717→  const notifRef = doc(db, COLLECTIONS.NOTIFICATIONS, notifId);
+   718→
+   719→  const notifData: FirestoreNotification = {
+   720→    notifId,
+   721→    firmId,
+   722→    organizationId: firmId,
+   723→    userId: currentUserId(),
+   724→    type: data.type,
+   725→    priority: data.priority,
+   726→    title: data.title,
+   727→    message: data.message,
+   728→    entityType: data.entityType || null,
+   729→    entityId: data.entityId || null,
+   730→    read: false,
+   731→    actionUrl: null,
+   732→    createdAt: serverTimestamp(),
+   733→  };
+   734→
+   735→  await setDoc(notifRef, notifData);
+   736→}
+   737→
+   738→export async function markNotificationRead(notifId: string): Promise<void> {
+   739→  await updateDoc(doc(db, COLLECTIONS.NOTIFICATIONS, notifId), { read: true });
+   740→}
+   741→
+   742→export async function markAllNotificationsRead(): Promise<void> {
+   743→  const firmId = currentFirmId();
+   744→  if (!firmId) return;
+   745→
+   746→  const q = query(
+   747→    collection(db, COLLECTIONS.NOTIFICATIONS),
+   748→    where('firmId', '==', firmId),
+   749→    where('read', '==', false)
+   750→  );
+   751→  const snap = await getDocs(q);
+   752→
+   753→  const batch = writeBatch(db);
+   754→  snap.docs.forEach(d => batch.update(d.ref, { read: true }));
+   755→  await batch.commit();
+   756→}
+   757→
+   758→// ─── 7. ACTIVITY FEED ───────────────────────────────────────────────────────
+   759→
+   760→export async function addActivity(data: {
+   761→  type: ActivityType;
+   762→  title: string;
+   763→  description: string;
+   764→  clientId?: string | null;
+   765→  entityType?: string | null;
+   766→  entityId?: string | null;
+   767→  metadata?: Record<string, string | number | boolean>;
+   768→}): Promise<void> {
+   769→  const firmId = currentFirmId();
+   770→  if (!firmId) return;
+   771→
+   772→  const activityId = generateId();
+   773→  const activityRef = doc(db, COLLECTIONS.ACTIVITIES, activityId);
+   774→
+   775→  const activityData: FirestoreActivity = {
+   776→    activityId,
+   777→    firmId,
+   778→    organizationId: firmId,
+   779→    userId: currentUserId(),
+   780→    clientId: data.clientId || null,
+   781→    type: data.type,
+   782→    title: data.title,
+   783→    description: data.description,
+   784→    entityType: data.entityType || null,
+   785→    entityId: data.entityId || null,
+   786→    metadata: data.metadata || {},
+   787→    createdAt: serverTimestamp(),
+   788→  };
+   789→
+   790→  await setDoc(activityRef, activityData);
+   791→}
+   792→
+   793→// ─── 8. AI RECOMMENDATIONS ──────────────────────────────────────────────────
+   794→
+   795→function generateAIRecommendations(firmId: string, clientId: string, reconId: string, mismatches: ReconMismatch[]): void {
+   796→  const recommendations: AIRecommendationType[] = ['correct_gstin', 'adjust_gst_amount', 'review_vendor_data', 'review_manually', 'mark_as_duplicate'];
+   797→
+   798→  mismatches.filter(m => !m.resolved).slice(0, 5).forEach((mismatch, i) => {
+   799→    const recId = generateId();
+   800→    const recType = recommendations[i % recommendations.length];
+   801→
+   802→    const recData: FirestoreAIRecommendation = {
+   803→      recId,
+   804→      firmId,
+   805→      organizationId: firmId,
+   806→      clientId,
+   807→      invoiceId: null,
+   808→      reconId,
+   809→      type: recType,
+   810→      title: `${recType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} — ${mismatch.invoiceNumber}`,
+   811→      description: `ITC difference of ₹${mismatch.difference.toLocaleString('en-IN')} detected for invoice ${mismatch.invoiceNumber}. ${mismatch.reason}.`,
+   812→      suggestedAction: getSuggestedAction(recType),
+   813→      confidenceScore: 80, // deterministic baseline; real confidence comes from the ML model when available
+   814→      riskLevel: mismatch.difference > 50000 ? 'high' as RiskLevel : 'medium' as RiskLevel,
+   815→      status: 'active',
+   816→      dismissedBy: null,
+   817→      appliedBy: null,
+   818→      createdAt: serverTimestamp(),
+   819→      updatedAt: serverTimestamp(),
+   820→    };
+   821→
+   822→    setDoc(doc(db, COLLECTIONS.AI_RECOMMENDATIONS, recId), recData);
+   823→  });
+   824→}
+   825→
+   826→function getSuggestedAction(type: AIRecommendationType): string {
+   827→  const actions: Record<AIRecommendationType, string> = {
+   828→    correct_gstin: 'Verify and correct the GSTIN in the invoice to match portal records',
+   829→    correct_invoice_number: 'Update the invoice number format to match GST portal format',
+   830→    adjust_gst_amount: 'Adjust the GST amount to match the portal value and claim correct ITC',
+   831→    review_vendor_data: 'Cross-verify vendor details with GST portal records',
+   832→    mark_as_duplicate: 'Mark this as a duplicate entry and remove from records',
+   833→    review_manually: 'This case requires manual review — automated resolution not possible',
+   834→  };
+   835→  return actions[type];
+   836→}
+   837→
+   838→export async function dismissRecommendation(recId: string): Promise<void> {
+   839→  await updateDoc(doc(db, COLLECTIONS.AI_RECOMMENDATIONS, recId), {
+   840→    status: 'dismissed',
+   841→    dismissedBy: currentUserId(),
+   842→    updatedAt: serverTimestamp(),
+   843→  });
+   844→}
+   845→
+   846→// ─── COUNTER UPDATES ────────────────────────────────────────────────────────
+   847→
+   848→async function incrementFirmCounter(firmId: string, field: keyof FirestoreFirm, delta: number): Promise<void> {
+   849→  try {
+   850→    const firmRef = doc(db, COLLECTIONS.FIRMS, firmId);
+   851→    const firmSnap = await getDoc(firmRef);
+   852→    if (!firmSnap.exists()) return;
+   853→
+   854→    const current = (firmSnap.data()[field] as number) || 0;
+   855→    await updateDoc(firmRef, { [field]: Math.max(0, current + delta), updatedAt: serverTimestamp() });
+   856→  } catch (e) {
+   857→    console.warn('[Workflow] Firm counter update failed:', e);
+   858→  }
+   859→}
+   860→
+   861→async function incrementClientCounter(clientId: string, field: keyof FirestoreClient, delta: number): Promise<void> {
+   862→  try {
+   863→    const clientRef = doc(db, COLLECTIONS.CLIENTS, clientId);
+   864→    const clientSnap = await getDoc(clientRef);
+   865→    if (!clientSnap.exists()) return;
+   866→
+   867→    const current = (clientSnap.data()[field] as number) || 0;
+   868→    const numField = field as string;
+   869→    await updateDoc(clientRef, { [numField]: Math.max(0, current + delta), updatedAt: serverTimestamp() });
+   870→  } catch (e) {
+   871→    console.warn('[Workflow] Client counter update failed:', e);
+   872→  }
+   873→}
+   874→
+   875→// ─── COMPLIANCE SCORE RECALCULATION ─────────────────────────────────────────
+   876→
+   877→async function recalculateComplianceScore(clientId: string): Promise<void> {
+   878→  try {
+   879→    const clientRef = doc(db, COLLECTIONS.CLIENTS, clientId);
+   880→    const clientSnap = await getDoc(clientRef);
+   881→    if (!clientSnap.exists()) return;
+   882→
+   883→    const client = clientSnap.data() as FirestoreClient;
+   884→    let score = 100;
+   885→
+   886→    // Deductions
+   887→    score -= Math.min(client.complianceProfile.overdueReturns * 15, 45);
+   888→    score -= Math.min(client.complianceProfile.averageFilingDelay * 2, 20);
+   889→    if (!client.complianceProfile.gstinValidity) score -= 20;
+   890→    if (client.pendingReturnCount > 3) score -= 10;
+   891→
+   892→    score = Math.max(0, Math.min(100, score));
+   893→
+   894→    await updateDoc(clientRef, {
+   895→      healthScore: score,
+   896→      complianceProfile: {
+   897→        ...client.complianceProfile,
+   898→        filingCompliance: score,
+   899→      },
+   900→      updatedAt: serverTimestamp(),
+   901→    });
+   902→  } catch (e) {
+   903→    console.warn('[Workflow] Compliance recalc failed:', e);
+   904→  }
+   905→}
+   906→
+   907→// ─── REAL-TIME LISTENER HELPERS ──────────────────────────────────────────────
+   908→
+   909→/** Subscribe to a Firestore collection with firm scoping */
+   910→export function subscribeToCollection<T>(
+   911→  collectionName: CollectionName,
+   912→  callback: (data: Array<T & { id: string }>) => void,
+   913→  ...constraints: QueryConstraint[]
+   914→): Unsubscribe {
+   915→  const firmId = currentFirmId();
+   916→
+   917→  const q = firmId
+   918→    ? query(collection(db, collectionName), where('firmId', '==', firmId), ...constraints)
+   919→    : query(collection(db, collectionName), ...constraints);
+   920→
+   921→  return onSnapshot(q, (snap) => {
+   922→    const data = snap.docs.map(d => {
+   923→      const docData = d.data();
+   924→      const converted: Record<string, unknown> = { id: d.id };
+   925→      for (const [key, value] of Object.entries(docData)) {
+   926→        if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+   927→          converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+   928→        } else {
+   929→          converted[key] = value;
+   930→        }
+   931→      }
+   932→      return converted as T & { id: string };
+   933→    });
+   934→    callback(data);
+   935→  }, (error) => {
+   936→    console.warn(`[Firestore] Subscription error for ${collectionName}:`, error);
+   937→    callback([]);
+   938→  });
+   939→}
+   940→
+   941→/** Subscribe to a single Firestore document */
+   942→export function subscribeToDoc<T>(
+   943→  collectionName: CollectionName,
+   944→  docId: string,
+   945→  callback: (data: (T & { id: string }) | null) => void,
+   946→): Unsubscribe {
+   947→  return onSnapshot(doc(db, collectionName, docId), (snap) => {
+   948→    if (!snap.exists()) {
+   949→      callback(null);
+   950→      return;
+   951→    }
+   952→    const docData = snap.data();
+   953→    const converted: Record<string, unknown> = { id: snap.id };
+   954→    for (const [key, value] of Object.entries(docData)) {
+   955→      if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+   956→        converted[key] = (value as { toDate: () => Date }).toDate().toISOString();
+   957→      } else {
+   958→        converted[key] = value;
+   959→      }
+   960→    }
+   961→    callback(converted as T & { id: string });
+   962→  }, (error) => {
+   963→    console.warn(`[Firestore] Doc subscription error for ${collectionName}/${docId}:`, error);
+   964→    callback(null);
+   965→  });
+   966→}
+   967→
+   968→/** Compute live dashboard metrics from Firestore data */
+   969→export function computeDashboardMetrics(
+   970→  clients: Array<FirestoreClient & { id: string }>,
+   971→  invoices: Array<FirestoreInvoice & { id: string }>,
+   972→  returns: Array<FirestoreReturn & { id: string }>,
+   973→  documents: Array<FirestoreDocument & { id: string }>,
+   974→  activities: Array<FirestoreActivity & { id: string }>,
+   975→): LiveDashboardMetrics {
+   976→  const activeClients = clients.filter(c => c.status === 'active').length;
+   977→  const filedReturns = returns.filter(r => r.status === 'filed').length;
+   978→  const pendingReturns = returns.filter(r => r.status !== 'filed').length;
+   979→  const readyToFile = returns.filter(r => ['validated', 'reviewed', 'generated'].includes(r.status)).length;
+   980→  const overdueReturns = returns.filter(r => {
+   981→    if (r.status === 'filed') return false;
+   982→    const periodDate = parsePeriod(r.period);
+   983→    return periodDate && periodDate < new Date();
+   984→  }).length;
+   985→
+   986→  const totalTaxVolume = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+   987→  const totalTax = invoices.reduce((sum, inv) => sum + (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0) + (inv.cess || 0), 0);
+   988→
+   989→  const criticalIssues = invoices.filter(inv => inv.riskLevel === 'critical').length +
+   990→    returns.filter(r => r.criticalErrors > 0).length;
+   991→  const warnings = invoices.filter(inv => inv.riskLevel === 'high' || inv.riskLevel === 'medium').length +
+   992→    returns.filter(r => r.warnings > 0).length;
+   993→
+   994→  const averageHealthScore = clients.length > 0
+   995→    ? Math.round(clients.reduce((sum, c) => sum + c.healthScore, 0) / clients.length)
+   996→    : 0;
+   997→
+   998→  const matchedInvoices = invoices.filter(inv => inv.matchStatus === 'perfect_match').length;
+   999→  const matchPercentage = invoices.length > 0 ? Math.round((matchedInvoices / invoices.length) * 100) : 100;
+  1000→
+  1001→  const riskyInvoices = invoices.filter(inv => ['high', 'critical'].includes(inv.riskLevel)).length;
+  1002→  const riskPercentage = invoices.length > 0 ? Math.round((riskyInvoices / invoices.length) * 100) : 0;
+  1003→
+  1004→  const documentsProcessed = documents.filter(d => d.extractionStatus === 'completed').length;
+  1005→  const extractionsPending = documents.filter(d => d.extractionStatus === 'pending' || d.extractionStatus === 'in_progress').length;
+  1006→
+  1007→  const recentActivities = [...activities]
+  1008→    .sort((a, b) => {
+  1009→      const aTime = typeof a.createdAt === 'string' ? new Date(a.createdAt).getTime() : 0;
+  1010→      const bTime = typeof b.createdAt === 'string' ? new Date(b.createdAt).getTime() : 0;
+  1011→      return bTime - aTime;
+  1012→    })
+  1013→    .slice(0, 10);
+  1014→
+  1015→  const upcomingFilings = returns
+  1016→    .filter(r => r.status !== 'filed')
+  1017→    .sort((a, b) => {
+  1018→      const aTime = typeof a.createdAt === 'string' ? new Date(a.createdAt).getTime() : 0;
+  1019→      const bTime = typeof b.createdAt === 'string' ? new Date(b.createdAt).getTime() : 0;
+  1020→      return aTime - bTime;
+  1021→    })
+  1022→    .slice(0, 5);
+  1023→
+  1024→  return {
+  1025→    totalClients: clients.length,
+  1026→    activeClients,
+  1027→    totalInvoices: invoices.length,
+  1028→    totalTaxVolume,
+  1029→    filedReturns,
+  1030→    pendingReturns,
+  1031→    overdueReturns,
+  1032→    readyToFile,
+  1033→    criticalIssues,
+  1034→    warnings,
+  1035→    averageHealthScore,
+  1036→    matchPercentage,
+  1037→    riskPercentage,
+  1038→    documentsProcessed,
+  1039→    extractionsPending,
+  1040→    recentActivities,
+  1041→    upcomingFilings,
+  1042→  };
+  1043→}
+  1044→
+  1045→function parsePeriod(period: string | null): Date | null {
+  1046→  if (!period) return null;
+  1047→  try {
+  1048→    const [mm, yyyy] = period.split('-').map(Number);
+  1049→    if (!mm || !yyyy) return null;
+  1050→    return new Date(yyyy, mm, 20); // Due date is typically 20th of next month
+  1051→  } catch {
+  1052→    return null;
+  1053→  }
+  1054→}
+  1055→
+  1056→// ═══════════════════════════════════════════════════════════════════════════════
+  1057→// CRM — Leads, Deals, Meetings (Recovered)
+  1058→// ═══════════════════════════════════════════════════════════════════════════════
+  1059→
+  1060→// ─── Leads ────────────────────────────────────────────────────────────────────
+  1061→
+  1062→export async function createLead(
+  1063→  data: Omit<FirestoreLead, 'leadId' | 'firmId' | 'organizationId' | 'convertedClientId' | 'createdAt' | 'updatedAt'>,
+  1064→): Promise<string> {
+  1065→  const firmId = currentFirmId();
+  1066→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1067→  const leadId = generateId();
+  1068→  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  1069→  const leadData: FirestoreLead = {
+  1070→    ...data,
+  1071→    leadId,
+  1072→    firmId,
+  1073→    organizationId: firmId,
+  1074→    convertedClientId: null,
+  1075→    createdAt: serverTimestamp(),
+  1076→    updatedAt: serverTimestamp(),
+  1077→  };
+  1078→  await setDoc(leadRef, leadData);
+  1079→  return leadId;
+  1080→}
+  1081→
+  1082→export async function updateLead(leadId: string, updates: Partial<FirestoreLead>): Promise<void> {
+  1083→  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  1084→  await updateDoc(leadRef, { ...updates, updatedAt: serverTimestamp() });
+  1085→}
+  1086→
+  1087→export async function deleteLead(leadId: string): Promise<void> {
+  1088→  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  1089→  await deleteDoc(leadRef);
+  1090→}
+  1091→
+  1092→export async function convertLeadToClient(leadId: string): Promise<string> {
+  1093→  // Read the lead, create a client from it, then mark lead as converted.
+  1094→  const leadRef = doc(db, COLLECTIONS.LEADS, leadId);
+  1095→  const leadSnap = await getDoc(leadRef);
+  1096→  if (!leadSnap.exists()) throw new Error('Lead not found');
+  1097→  const lead = leadSnap.data() as FirestoreLead;
+  1098→
+  1099→  // Create the client using the existing createClient workflow (which handles
+  1100→  // side effects: counters, compliance profile, draft returns, activity, etc.)
+  1101→  const clientId = await createClient({
+  1102→    tradeName: lead.company,
+  1103→    legalName: lead.company,
+  1104→    gstin: lead.gstin || '',
+  1105→    contactEmail: lead.contactEmail,
+  1106→    contactPhone: lead.contactPhone,
+  1107→    address: '',
+  1108→    state: '',
+  1109→    stateCode: '',
+  1110→    entityType: 'Regular',
+  1111→    returnPeriod: null,
+  1112→    lastFilingDate: null,
+  1113→    status: 'active',
+  1114→    healthScore: 80,
+  1115→  });
+  1116→
+  1117→  // Mark the lead as converted
+  1118→  await updateDoc(leadRef, {
+  1119→    status: 'converted' as LeadStatus,
+  1120→    convertedClientId: clientId,
+  1121→    updatedAt: serverTimestamp(),
+  1122→  });
+  1123→
+  1124→  return clientId;
+  1125→}
+  1126→
+  1127→// ─── Deals ────────────────────────────────────────────────────────────────────
+  1128→
+  1129→export async function createDeal(
+  1130→  data: Omit<FirestoreDeal, 'dealId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1131→): Promise<string> {
+  1132→  const firmId = currentFirmId();
+  1133→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1134→  const dealId = generateId();
+  1135→  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  1136→  const dealData: FirestoreDeal = {
+  1137→    ...data,
+  1138→    dealId,
+  1139→    firmId,
+  1140→    organizationId: firmId,
+  1141→    createdAt: serverTimestamp(),
+  1142→    updatedAt: serverTimestamp(),
+  1143→  };
+  1144→  await setDoc(dealRef, dealData);
+  1145→  return dealId;
+  1146→}
+  1147→
+  1148→export async function updateDeal(dealId: string, updates: Partial<FirestoreDeal>): Promise<void> {
+  1149→  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  1150→  await updateDoc(dealRef, { ...updates, updatedAt: serverTimestamp() });
+  1151→}
+  1152→
+  1153→export async function deleteDeal(dealId: string): Promise<void> {
+  1154→  const dealRef = doc(db, COLLECTIONS.DEALS, dealId);
+  1155→  await deleteDoc(dealRef);
+  1156→}
+  1157→
+  1158→// ─── Meetings ─────────────────────────────────────────────────────────────────
+  1159→
+  1160→export async function createMeeting(
+  1161→  data: Omit<FirestoreMeeting, 'meetingId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1162→): Promise<string> {
+  1163→  const firmId = currentFirmId();
+  1164→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1165→  const meetingId = generateId();
+  1166→  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  1167→  const meetingData: FirestoreMeeting = {
+  1168→    ...data,
+  1169→    meetingId,
+  1170→    firmId,
+  1171→    organizationId: firmId,
+  1172→    createdAt: serverTimestamp(),
+  1173→    updatedAt: serverTimestamp(),
+  1174→  };
+  1175→  await setDoc(meetingRef, meetingData);
+  1176→  return meetingId;
+  1177→}
+  1178→
+  1179→export async function updateMeeting(meetingId: string, updates: Partial<FirestoreMeeting>): Promise<void> {
+  1180→  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  1181→  await updateDoc(meetingRef, { ...updates, updatedAt: serverTimestamp() });
+  1182→}
+  1183→
+  1184→export async function deleteMeeting(meetingId: string): Promise<void> {
+  1185→  const meetingRef = doc(db, COLLECTIONS.MEETINGS, meetingId);
+  1186→  await deleteDoc(meetingRef);
+  1187→}
+  1188→
+  1189→// ─── Tasks ───────────────────────────────────────────────────────────────────
+  1190→// CRUD added in P1-M2 so TasksPage can read/write the `tasks` collection.
+  1191→// listTasks accepts an optional clientId to scope to one client; omit for
+  1192→// firm-wide feed.
+  1193→
+  1194→export async function listTasks(
+  1195→  scope: { firmId?: string; clientId?: string },
+  1196→): Promise<Array<FirestoreTask & { id: string }>> {
+  1197→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1198→  if (scope.clientId) {
+  1199→    constraints.unshift(where('clientId', '==', scope.clientId));
+  1200→  } else if (scope.firmId) {
+  1201→    constraints.unshift(where('firmId', '==', scope.firmId));
+  1202→  }
+  1203→  const q = query(collection(db, COLLECTIONS.TASKS), ...constraints);
+  1204→  const snap = await getDocs(q);
+  1205→  return snap.docs.map(d => docToData<FirestoreTask>(d));
+  1206→}
+  1207→
+  1208→export async function createTask(
+  1209→  data: Omit<FirestoreTask, 'taskId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1210→): Promise<string> {
+  1211→  const firmId = currentFirmId();
+  1212→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1213→  const taskId = generateId();
+  1214→  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  1215→  const taskData: FirestoreTask = {
+  1216→    ...data,
+  1217→    taskId,
+  1218→    firmId,
+  1219→    organizationId: firmId,
+  1220→    createdAt: serverTimestamp(),
+  1221→    updatedAt: serverTimestamp(),
+  1222→  };
+  1223→  await setDoc(ref, taskData);
+  1224→  return taskId;
+  1225→}
+  1226→
+  1227→export async function updateTask(
+  1228→  taskId: string,
+  1229→  updates: Partial<FirestoreTask>,
+  1230→): Promise<void> {
+  1231→  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  1232→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1233→}
+  1234→
+  1235→export async function deleteTask(taskId: string): Promise<void> {
+  1236→  const ref = doc(db, COLLECTIONS.TASKS, taskId);
+  1237→  await deleteDoc(ref);
+  1238→}
+  1239→
+  1240→export async function getTask(
+  1241→  taskId: string,
+  1242→): Promise<(FirestoreTask & { id: string }) | null> {
+  1243→  const snap = await getDoc(doc(db, COLLECTIONS.TASKS, taskId));
+  1244→  if (!snap.exists()) return null;
+  1245→  return docToData<FirestoreTask>(snap);
+  1246→}
+  1247→
+  1248→// ═══════════════════════════════════════════════════════════════════════════════
+  1249→// BANKING, GST, FINANCE & AI MEMORY (PT-3-5)
+  1250→// Each new collection follows the same CRUD shape:
+  1251→//   listXxx / createXxx / updateXxx / deleteXxx / getXxx
+  1252→// Reads use getDocs + query + where + orderBy. Writes use setDoc + generateId()
+  1253→// (matching the existing CRM pattern) so the typed xxxId field stays consistent
+  1254→// with the Firestore doc id.
+  1255→// ═══════════════════════════════════════════════════════════════════════════════
+  1256→
+  1257→// ─── Bank Accounts ───────────────────────────────────────────────────────────
+  1258→
+  1259→export async function listBankAccounts(
+  1260→  firmId: string,
+  1261→): Promise<Array<FirestoreBankAccount & { id: string }>> {
+  1262→  const q = query(
+  1263→    collection(db, COLLECTIONS.BANK_ACCOUNTS),
+  1264→    where('firmId', '==', firmId),
+  1265→    orderBy('createdAt', 'desc'),
+  1266→  );
+  1267→  const snap = await getDocs(q);
+  1268→  return snap.docs.map(d => docToData<FirestoreBankAccount>(d));
+  1269→}
+  1270→
+  1271→export async function createBankAccount(
+  1272→  data: Omit<FirestoreBankAccount, 'bankAccountId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1273→): Promise<string> {
+  1274→  const firmId = currentFirmId();
+  1275→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1276→  const bankAccountId = generateId();
+  1277→  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  1278→  const bankAccountData: FirestoreBankAccount = {
+  1279→    ...data,
+  1280→    bankAccountId,
+  1281→    firmId,
+  1282→    organizationId: firmId,
+  1283→    createdAt: serverTimestamp(),
+  1284→    updatedAt: serverTimestamp(),
+  1285→  };
+  1286→  await setDoc(ref, bankAccountData);
+  1287→  return bankAccountId;
+  1288→}
+  1289→
+  1290→export async function updateBankAccount(
+  1291→  bankAccountId: string,
+  1292→  updates: Partial<FirestoreBankAccount>,
+  1293→): Promise<void> {
+  1294→  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  1295→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1296→}
+  1297→
+  1298→export async function deleteBankAccount(bankAccountId: string): Promise<void> {
+  1299→  const ref = doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId);
+  1300→  await deleteDoc(ref);
+  1301→}
+  1302→
+  1303→export async function getBankAccount(
+  1304→  bankAccountId: string,
+  1305→): Promise<(FirestoreBankAccount & { id: string }) | null> {
+  1306→  const snap = await getDoc(doc(db, COLLECTIONS.BANK_ACCOUNTS, bankAccountId));
+  1307→  if (!snap.exists()) return null;
+  1308→  return docToData<FirestoreBankAccount>(snap);
+  1309→}
+  1310→
+  1311→// ─── Bank Transactions ──────────────────────────────────────────────────────
+  1312→// listBankTransactions accepts EITHER a firmId OR a bankAccountId — when
+  1313→// bankAccountId is provided it scopes to that account; otherwise falls back to
+  1314→// firm-wide query.
+  1315→
+  1316→export async function listBankTransactions(
+  1317→  scope: { firmId?: string; bankAccountId?: string },
+  1318→): Promise<Array<FirestoreBankTransaction & { id: string }>> {
+  1319→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1320→  if (scope.bankAccountId) {
+  1321→    constraints.unshift(where('bankAccountId', '==', scope.bankAccountId));
+  1322→  } else if (scope.firmId) {
+  1323→    constraints.unshift(where('firmId', '==', scope.firmId));
+  1324→  }
+  1325→  const q = query(collection(db, COLLECTIONS.BANK_TRANSACTIONS), ...constraints);
+  1326→  const snap = await getDocs(q);
+  1327→  return snap.docs.map(d => docToData<FirestoreBankTransaction>(d));
+  1328→}
+  1329→
+  1330→export async function createBankTransaction(
+  1331→  data: Omit<FirestoreBankTransaction, 'bankTxnId' | 'firmId' | 'organizationId' | 'createdAt'>,
+  1332→): Promise<string> {
+  1333→  const firmId = currentFirmId();
+  1334→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1335→  const bankTxnId = generateId();
+  1336→  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  1337→  const bankTxnData: FirestoreBankTransaction = {
+  1338→    ...data,
+  1339→    bankTxnId,
+  1340→    firmId,
+  1341→    organizationId: firmId,
+  1342→    createdAt: serverTimestamp(),
+  1343→  };
+  1344→  await setDoc(ref, bankTxnData);
+  1345→  return bankTxnId;
+  1346→}
+  1347→
+  1348→export async function updateBankTransaction(
+  1349→  bankTxnId: string,
+  1350→  updates: Partial<FirestoreBankTransaction>,
+  1351→): Promise<void> {
+  1352→  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  1353→  await updateDoc(ref, updates);
+  1354→}
+  1355→
+  1356→export async function deleteBankTransaction(bankTxnId: string): Promise<void> {
+  1357→  const ref = doc(db, COLLECTIONS.BANK_TRANSACTIONS, bankTxnId);
+  1358→  await deleteDoc(ref);
+  1359→}
+  1360→
+  1361→// ─── GST Profiles ───────────────────────────────────────────────────────────
+  1362→
+  1363→export async function listGstProfiles(
+  1364→  firmId: string,
+  1365→): Promise<Array<FirestoreGstProfile & { id: string }>> {
+  1366→  const q = query(
+  1367→    collection(db, COLLECTIONS.GST_PROFILES),
+  1368→    where('firmId', '==', firmId),
+  1369→    orderBy('createdAt', 'desc'),
+  1370→  );
+  1371→  const snap = await getDocs(q);
+  1372→  return snap.docs.map(d => docToData<FirestoreGstProfile>(d));
+  1373→}
+  1374→
+  1375→export async function createGstProfile(
+  1376→  data: Omit<FirestoreGstProfile, 'gstProfileId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1377→): Promise<string> {
+  1378→  const firmId = currentFirmId();
+  1379→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1380→  const gstProfileId = generateId();
+  1381→  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  1382→  const profileData: FirestoreGstProfile = {
+  1383→    ...data,
+  1384→    gstProfileId,
+  1385→    firmId,
+  1386→    organizationId: firmId,
+  1387→    createdAt: serverTimestamp(),
+  1388→    updatedAt: serverTimestamp(),
+  1389→  };
+  1390→  await setDoc(ref, profileData);
+  1391→  return gstProfileId;
+  1392→}
+  1393→
+  1394→export async function updateGstProfile(
+  1395→  gstProfileId: string,
+  1396→  updates: Partial<FirestoreGstProfile>,
+  1397→): Promise<void> {
+  1398→  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  1399→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1400→}
+  1401→
+  1402→export async function deleteGstProfile(gstProfileId: string): Promise<void> {
+  1403→  const ref = doc(db, COLLECTIONS.GST_PROFILES, gstProfileId);
+  1404→  await deleteDoc(ref);
+  1405→}
+  1406→
+  1407→export async function getGstProfile(
+  1408→  gstProfileId: string,
+  1409→): Promise<(FirestoreGstProfile & { id: string }) | null> {
+  1410→  const snap = await getDoc(doc(db, COLLECTIONS.GST_PROFILES, gstProfileId));
+  1411→  if (!snap.exists()) return null;
+  1412→  return docToData<FirestoreGstProfile>(snap);
+  1413→}
+  1414→
+  1415→// ─── GST Returns ────────────────────────────────────────────────────────────
+  1416→// listGstReturns accepts EITHER a firmId OR a gstProfileId — when gstProfileId
+  1417→// is provided it scopes to that GSTN profile; otherwise falls back to firm-wide.
+  1418→
+  1419→export async function listGstReturns(
+  1420→  scope: { firmId?: string; gstProfileId?: string },
+  1421→): Promise<Array<FirestoreGstReturn & { id: string }>> {
+  1422→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1423→  if (scope.gstProfileId) {
+  1424→    constraints.unshift(where('gstProfileId', '==', scope.gstProfileId));
+  1425→  } else if (scope.firmId) {
+  1426→    constraints.unshift(where('firmId', '==', scope.firmId));
+  1427→  }
+  1428→  const q = query(collection(db, COLLECTIONS.GST_RETURNS), ...constraints);
+  1429→  const snap = await getDocs(q);
+  1430→  return snap.docs.map(d => docToData<FirestoreGstReturn>(d));
+  1431→}
+  1432→
+  1433→export async function createGstReturn(
+  1434→  data: Omit<FirestoreGstReturn, 'gstReturnId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1435→): Promise<string> {
+  1436→  const firmId = currentFirmId();
+  1437→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1438→  const gstReturnId = generateId();
+  1439→  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  1440→  const returnData: FirestoreGstReturn = {
+  1441→    ...data,
+  1442→    gstReturnId,
+  1443→    firmId,
+  1444→    organizationId: firmId,
+  1445→    createdAt: serverTimestamp(),
+  1446→    updatedAt: serverTimestamp(),
+  1447→  };
+  1448→  await setDoc(ref, returnData);
+  1449→  return gstReturnId;
+  1450→}
+  1451→
+  1452→export async function updateGstReturn(
+  1453→  gstReturnId: string,
+  1454→  updates: Partial<FirestoreGstReturn>,
+  1455→): Promise<void> {
+  1456→  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  1457→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1458→}
+  1459→
+  1460→export async function deleteGstReturn(gstReturnId: string): Promise<void> {
+  1461→  const ref = doc(db, COLLECTIONS.GST_RETURNS, gstReturnId);
+  1462→  await deleteDoc(ref);
+  1463→}
+  1464→
+  1465→// ─── Expenses ───────────────────────────────────────────────────────────────
+  1466→
+  1467→export async function listExpenses(
+  1468→  firmId: string,
+  1469→): Promise<Array<FirestoreExpense & { id: string }>> {
+  1470→  const q = query(
+  1471→    collection(db, COLLECTIONS.EXPENSES),
+  1472→    where('firmId', '==', firmId),
+  1473→    orderBy('createdAt', 'desc'),
+  1474→  );
+  1475→  const snap = await getDocs(q);
+  1476→  return snap.docs.map(d => docToData<FirestoreExpense>(d));
+  1477→}
+  1478→
+  1479→export async function createExpense(
+  1480→  data: Omit<FirestoreExpense, 'expenseId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1481→): Promise<string> {
+  1482→  const firmId = currentFirmId();
+  1483→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1484→  const expenseId = generateId();
+  1485→  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  1486→  const expenseData: FirestoreExpense = {
+  1487→    ...data,
+  1488→    expenseId,
+  1489→    firmId,
+  1490→    organizationId: firmId,
+  1491→    createdAt: serverTimestamp(),
+  1492→    updatedAt: serverTimestamp(),
+  1493→  };
+  1494→  await setDoc(ref, expenseData);
+  1495→  return expenseId;
+  1496→}
+  1497→
+  1498→export async function updateExpense(
+  1499→  expenseId: string,
+  1500→  updates: Partial<FirestoreExpense>,
+  1501→): Promise<void> {
+  1502→  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  1503→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1504→}
+  1505→
+  1506→export async function deleteExpense(expenseId: string): Promise<void> {
+  1507→  const ref = doc(db, COLLECTIONS.EXPENSES, expenseId);
+  1508→  await deleteDoc(ref);
+  1509→}
+  1510→
+  1511→// ─── Payments ───────────────────────────────────────────────────────────────
+  1512→
+  1513→export async function listPayments(
+  1514→  firmId: string,
+  1515→): Promise<Array<FirestorePayment & { id: string }>> {
+  1516→  const q = query(
+  1517→    collection(db, COLLECTIONS.PAYMENTS),
+  1518→    where('firmId', '==', firmId),
+  1519→    orderBy('createdAt', 'desc'),
+  1520→  );
+  1521→  const snap = await getDocs(q);
+  1522→  return snap.docs.map(d => docToData<FirestorePayment>(d));
+  1523→}
+  1524→
+  1525→export async function createPayment(
+  1526→  data: Omit<FirestorePayment, 'paymentId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1527→): Promise<string> {
+  1528→  const firmId = currentFirmId();
+  1529→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1530→  const paymentId = generateId();
+  1531→  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  1532→  const paymentData: FirestorePayment = {
+  1533→    ...data,
+  1534→    paymentId,
+  1535→    firmId,
+  1536→    organizationId: firmId,
+  1537→    createdAt: serverTimestamp(),
+  1538→    updatedAt: serverTimestamp(),
+  1539→  };
+  1540→  await setDoc(ref, paymentData);
+  1541→  return paymentId;
+  1542→}
+  1543→
+  1544→export async function updatePayment(
+  1545→  paymentId: string,
+  1546→  updates: Partial<FirestorePayment>,
+  1547→): Promise<void> {
+  1548→  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  1549→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1550→}
+  1551→
+  1552→export async function deletePayment(paymentId: string): Promise<void> {
+  1553→  const ref = doc(db, COLLECTIONS.PAYMENTS, paymentId);
+  1554→  await deleteDoc(ref);
+  1555→}
+  1556→
+  1557→// ─── AI Memory ──────────────────────────────────────────────────────────────
+  1558→// listAiMemories accepts an optional agent filter so an AI agent can fetch
+  1559→// just its own memory.
+  1560→
+  1561→export async function listAiMemories(
+  1562→  firmId: string,
+  1563→  agent?: string,
+  1564→): Promise<Array<FirestoreAiMemory & { id: string }>> {
+  1565→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1566→  if (agent) {
+  1567→    constraints.unshift(where('agent', '==', agent));
+  1568→  }
+  1569→  const q = query(
+  1570→    collection(db, COLLECTIONS.AI_MEMORY),
+  1571→    where('firmId', '==', firmId),
+  1572→    ...constraints,
+  1573→  );
+  1574→  const snap = await getDocs(q);
+  1575→  return snap.docs.map(d => docToData<FirestoreAiMemory>(d));
+  1576→}
+  1577→
+  1578→export async function createAiMemory(
+  1579→  data: Omit<FirestoreAiMemory, 'memoryId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1580→): Promise<string> {
+  1581→  const firmId = currentFirmId();
+  1582→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1583→  const memoryId = generateId();
+  1584→  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  1585→  const memoryData: FirestoreAiMemory = {
+  1586→    ...data,
+  1587→    memoryId,
+  1588→    firmId,
+  1589→    organizationId: firmId,
+  1590→    createdAt: serverTimestamp(),
+  1591→    updatedAt: serverTimestamp(),
+  1592→  };
+  1593→  await setDoc(ref, memoryData);
+  1594→  return memoryId;
+  1595→}
+  1596→
+  1597→export async function updateAiMemory(
+  1598→  memoryId: string,
+  1599→  updates: Partial<FirestoreAiMemory>,
+  1600→): Promise<void> {
+  1601→  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  1602→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1603→}
+  1604→
+  1605→export async function deleteAiMemory(memoryId: string): Promise<void> {
+  1606→  const ref = doc(db, COLLECTIONS.AI_MEMORY, memoryId);
+  1607→  await deleteDoc(ref);
+  1608→}
+  1609→
+  1610→// ═══════════════════════════════════════════════════════════════════════════════
+  1611→// NOTICES & REPORTS (Phase 1 — Real Backend Foundation)
+  1612→// Each follows the same CRUD shape as the other Phase 1 collections:
+  1613→//   listXxx / createXxx / updateXxx / deleteXxx / getXxx
+  1614→// Reads use getDocs + query + where + orderBy. Writes use setDoc + generateId()
+  1615→// (matching the existing pattern) so the typed xxxId field stays consistent
+  1616→// with the Firestore doc id.
+  1617→// ═══════════════════════════════════════════════════════════════════════════════
+  1618→
+  1619→// ─── Notices ─────────────────────────────────────────────────────────────────
+  1620→// listNotices accepts an optional clientId to scope to one client; omit for
+  1621→// firm-wide feed.
+  1622→
+  1623→export async function listNotices(
+  1624→  scope: { firmId?: string; clientId?: string },
+  1625→): Promise<Array<FirestoreNotice & { id: string }>> {
+  1626→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1627→  if (scope.clientId) {
+  1628→    constraints.unshift(where('clientId', '==', scope.clientId));
+  1629→  } else if (scope.firmId) {
+  1630→    constraints.unshift(where('firmId', '==', scope.firmId));
+  1631→  }
+  1632→  const q = query(collection(db, COLLECTIONS.NOTICES), ...constraints);
+  1633→  const snap = await getDocs(q);
+  1634→  return snap.docs.map(d => docToData<FirestoreNotice>(d));
+  1635→}
+  1636→
+  1637→export async function createNotice(
+  1638→  data: Omit<FirestoreNotice, 'noticeId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1639→): Promise<string> {
+  1640→  const firmId = currentFirmId();
+  1641→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1642→  const noticeId = generateId();
+  1643→  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  1644→  const noticeData: FirestoreNotice = {
+  1645→    ...data,
+  1646→    noticeId,
+  1647→    firmId,
+  1648→    organizationId: firmId,
+  1649→    createdAt: serverTimestamp(),
+  1650→    updatedAt: serverTimestamp(),
+  1651→  };
+  1652→  await setDoc(ref, noticeData);
+  1653→
+  1654→  // Side effects — notify the firm + log activity
+  1655→  addActivity({
+  1656→    type: 'system',
+  1657→    title: 'Notice added',
+  1658→    description: `${data.subject}${data.clientTradeName ? ` — ${data.clientTradeName}` : ''}`,
+  1659→    clientId: data.clientId || null,
+  1660→    entityType: COLLECTIONS.NOTICES,
+  1661→    entityId: noticeId,
+  1662→  });
+  1663→  addNotification({
+  1664→    type: 'issue_detected',
+  1665→    priority: data.priority === 'urgent' ? 'urgent' : 'high',
+  1666→    title: 'New notice added',
+  1667→    message: `${data.noticeType.replace(/_/g, ' ')}: ${data.subject}`,
+  1668→    entityType: COLLECTIONS.NOTICES,
+  1669→    entityId: noticeId,
+  1670→  });
+  1671→
+  1672→  return noticeId;
+  1673→}
+  1674→
+  1675→export async function updateNotice(
+  1676→  noticeId: string,
+  1677→  updates: Partial<FirestoreNotice>,
+  1678→): Promise<void> {
+  1679→  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  1680→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1681→}
+  1682→
+  1683→export async function deleteNotice(noticeId: string): Promise<void> {
+  1684→  const ref = doc(db, COLLECTIONS.NOTICES, noticeId);
+  1685→  await deleteDoc(ref);
+  1686→}
+  1687→
+  1688→export async function getNotice(
+  1689→  noticeId: string,
+  1690→): Promise<(FirestoreNotice & { id: string }) | null> {
+  1691→  const snap = await getDoc(doc(db, COLLECTIONS.NOTICES, noticeId));
+  1692→  if (!snap.exists()) return null;
+  1693→  return docToData<FirestoreNotice>(snap);
+  1694→}
+  1695→
+  1696→// ─── Reports ─────────────────────────────────────────────────────────────────
+  1697→// listReports accepts an optional clientId to scope to one client; omit for
+  1698→// firm-wide feed.
+  1699→
+  1700→export async function listReports(
+  1701→  scope: { firmId?: string; clientId?: string },
+  1702→): Promise<Array<FirestoreReport & { id: string }>> {
+  1703→  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+  1704→  if (scope.clientId) {
+  1705→    constraints.unshift(where('clientId', '==', scope.clientId));
+  1706→  } else if (scope.firmId) {
+  1707→    constraints.unshift(where('firmId', '==', scope.firmId));
+  1708→  }
+  1709→  const q = query(collection(db, COLLECTIONS.REPORTS), ...constraints);
+  1710→  const snap = await getDocs(q);
+  1711→  return snap.docs.map(d => docToData<FirestoreReport>(d));
+  1712→}
+  1713→
+  1714→export async function createReport(
+  1715→  data: Omit<FirestoreReport, 'reportId' | 'firmId' | 'organizationId' | 'createdAt' | 'updatedAt'>,
+  1716→): Promise<string> {
+  1717→  const firmId = currentFirmId();
+  1718→  if (!firmId) throw new Error('No firm found. Please complete onboarding first.');
+  1719→  const reportId = generateId();
+  1720→  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  1721→  const reportData: FirestoreReport = {
+  1722→    ...data,
+  1723→    reportId,
+  1724→    firmId,
+  1725→    organizationId: firmId,
+  1726→    createdAt: serverTimestamp(),
+  1727→    updatedAt: serverTimestamp(),
+  1728→  };
+  1729→  await setDoc(ref, reportData);
+  1730→  return reportId;
+  1731→}
+  1732→
+  1733→export async function updateReport(
+  1734→  reportId: string,
+  1735→  updates: Partial<FirestoreReport>,
+  1736→): Promise<void> {
+  1737→  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  1738→  await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
+  1739→}
+  1740→
+  1741→export async function deleteReport(reportId: string): Promise<void> {
+  1742→  const ref = doc(db, COLLECTIONS.REPORTS, reportId);
+  1743→  await deleteDoc(ref);
+  1744→}
+  1745→
+  1746→export async function getReport(
+  1747→  reportId: string,
+  1748→): Promise<(FirestoreReport & { id: string }) | null> {
+  1749→  const snap = await getDoc(doc(db, COLLECTIONS.REPORTS, reportId));
+  1750→  if (!snap.exists()) return null;
+  1751→  return docToData<FirestoreReport>(snap);
+  1752→}
+  1753→
+  1754→// ─── Manual Journal Entries ──────────────────────────────────────────────────
+  1755→
+  1756→export async function createJournalEntry(
+  1757→  data: Omit<FirestoreJournalEntry, 'jeId' | 'organizationId' | 'source' | 'createdBy' | 'createdAt' | 'updatedAt'>,
+  1758→): Promise<string> {
+  1759→  const orgId = currentOrgId();
+  1760→  if (!orgId) throw new Error('No organization found. Please complete onboarding first.');
+  1761→  const jeId = generateId();
+  1762→  const ref = doc(db, COLLECTIONS.JOURNAL_ENTRIES, jeId);
+  1763→  const jeData: FirestoreJournalEntry = {
+  1764→    ...data,
+  1765→    jeId,
+  1766→    organizationId: orgId,
+  1767→    source: 'manual',
+  1768→    createdBy: currentUserId(),
+  1769→    createdByName: auth.currentUser?.displayName || null,
+  1770→    createdAt: serverTimestamp(),
+  1771→    updatedAt: serverTimestamp(),
+  1772→  };
+  1773→  await setDoc(ref, jeData);
+  1774→
+  1775→  addActivity({
+  1776→    type: 'system',
+  1777→    title: 'Manual journal entry posted',
+  1778→    description: `${data.description} — Dr ${data.debitAccount}, Cr ${data.creditAccount} (₹${data.amount.toLocaleString('en-IN')})`,
+  1779→    clientId: null,
+  1780→    entityType: COLLECTIONS.JOURNAL_ENTRIES,
+  1781→    entityId: jeId,
+  1782→  });
+  1783→
+  1784→  return jeId;
+  1785→}
+  1786→
+  1787→export async function deleteJournalEntry(jeId: string): Promise<void> {
+  1788→  const ref = doc(db, COLLECTIONS.JOURNAL_ENTRIES, jeId);
+  1789→  await deleteDoc(ref);
+  1790→}
+  1791→
+  1792→export async function listJournalEntries(
+  1793→  scope: { firmId?: string; clientId?: string },
+  1794→): Promise<Array<FirestoreJournalEntry & { id: string }>> {
+  1795→  const constraints: QueryConstraint[] = [orderBy('entryDate', 'desc')];
+  1796→  if (scope.clientId) {
+  1797→    constraints.unshift(where('clientId', '==', scope.clientId));
+  1798→  } else if (scope.firmId) {
+  1799→    constraints.unshift(where('organizationId', '==', scope.firmId));
+  1800→  }
+  1801→  const q = query(collection(db, COLLECTIONS.JOURNAL_ENTRIES), ...constraints);
+  1802→  const snap = await getDocs(q);
+  1803→  return snap.docs.map(d => docToData<FirestoreJournalEntry>(d));
+  1804→}
+  1805→

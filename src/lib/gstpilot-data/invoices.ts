@@ -46,6 +46,7 @@ import type {
   InvoiceLineItem,
   InvoiceStatus,
   PaymentStatus,
+  InvoiceSource,
 } from './types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ function toInvoice(id: string, raw: Record<string, unknown>): Invoice {
     isIntraState: Boolean(raw.isIntraState ?? false),
     notes: (raw.notes as string | null) ?? null,
     privateNotes: (raw.privateNotes as string | null) ?? null,
+    source: (raw.source as InvoiceSource | null) ?? null,
     createdAt: ts(raw.createdAt),
     updatedAt: ts(raw.updatedAt),
   };
@@ -264,6 +266,7 @@ export async function createInvoice(
     isIntraState: totals.isIntraState,
     notes: input.notes?.trim() || null,
     privateNotes: input.privateNotes?.trim() || null,
+    source: input.source ?? null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };

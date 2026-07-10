@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { BrandLogo } from '@/components/brand';
+import { OracleLogo, OracleThinkingIndicator, type OracleLogoState } from './OracleLogo';
 import { cn } from '@/lib/utils';
 import type { AppView } from '@/contexts/AppContext';
 import { useLiveDashboardMetrics } from '@/hooks/use-firestore';
@@ -973,7 +974,7 @@ export function OracleWorkspace({
                 <MessageSquare className="h-4 w-4" />
               </button>
 
-              <OracleAvatar state={avatarState} />
+              <OracleAvatar state={avatarState} isStreaming={isStreaming} size={36} />
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-0.5">
@@ -1002,15 +1003,6 @@ export function OracleWorkspace({
                   <span className="text-white/30">· {nativeLanguageLabel(activeLanguage)}</span>
                 )}
               </div>
-
-              {/* Animated brand pulse — top right, 8s cycle (blue ↔ purple glow) */}
-              <BrandLogo
-                variant="icon"
-                theme="dark"
-                size={24}
-                disableGlow
-                className="brand-pulse hidden md:block"
-              />
 
               {messages.length > 0 && !isStreaming && (
                 <button
@@ -1256,9 +1248,30 @@ function HistoryGroup({ label, items, activeId, onSelect, onDelete }: HistoryGro
 }
 
 // ─── Oracle Avatar (dynamic state) ────────────────────────────────────────────
+// Maps the legacy avatar state (idle/listening/thinking/speaking/success/warning)
+// to the premium OracleLogo state (idle/thinking/streaming/done).
 
-function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }) {
-  const ringColor =
+function avatarToLogoState(
+  state: ReturnType<typeof deriveAvatarState>,
+  isStreaming?: boolean,
+): OracleLogoState {
+  if (isStreaming || state === 'speaking') return 'streaming';
+  if (state === 'thinking') return 'thinking';
+  if (state === 'success') return 'done';
+  return 'idle';
+}
+
+function OracleAvatar({
+  state,
+  isStreaming,
+  size = 36,
+}: {
+  state: ReturnType<typeof deriveAvatarState>;
+  isStreaming?: boolean;
+  size?: number;
+}) {
+  const logoState = avatarToLogoState(state, isStreaming);
+  const dotColor =
     state === 'speaking'
       ? 'bg-amber-400'
       : state === 'warning'
@@ -1268,17 +1281,12 @@ function OracleAvatar({ state }: { state: ReturnType<typeof deriveAvatarState> }
           : 'bg-emerald-400';
   return (
     <div className="relative shrink-0">
-      <div
-        className="flex h-9 w-9 items-center justify-center rounded-xl shadow-lg shadow-emerald-500/20"
-        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
-      >
-        <BrandLogo variant="icon" theme="dark" size={20} disableGlow />
-      </div>
+      <OracleLogo size={size} state={logoState} withGlow withOrbit withEnergyRing label="Oracle AI" />
       <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
-        {state === 'speaking' && (
-          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', ringColor)} />
+        {(state === 'speaking' || isStreaming) && (
+          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', dotColor)} />
         )}
-        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2', ringColor)} style={{ borderColor: '#050505' }} />
+        <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full border-2', dotColor)} style={{ borderColor: '#050505' }} />
       </span>
     </div>
   );
@@ -1347,14 +1355,17 @@ function MessageBubble({
       transition={{ duration: 0.25 }}
       className="flex gap-3"
     >
-      {/* Avatar */}
+      {/* Avatar — premium Oracle logo. Streams gently while responding,
+          settles into a breathing glow when done. */}
       <div className="mt-0.5 shrink-0">
-        <div
-          className="flex h-7 w-7 items-center justify-center rounded-lg shadow-md shadow-emerald-500/15"
-          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
-        >
-          <BrandLogo variant="icon" theme="dark" size={15} disableGlow />
-        </div>
+        <OracleLogo
+          size={28}
+          state={message.streaming ? 'streaming' : 'done'}
+          withGlow
+          withOrbit={message.streaming}
+          withEnergyRing
+          label="Oracle AI"
+        />
       </div>
 
       {/* Bubble */}
@@ -1366,7 +1377,7 @@ function MessageBubble({
         )}
 
         {isEmptyStreaming ? (
-          <RespondingIndicator />
+          <OracleThinkingIndicator size={28} />
         ) : (
           <div className="oracle-prose text-sm leading-relaxed text-white/90">
             <ReactMarkdown
@@ -1504,37 +1515,12 @@ function MessageBubble({
   );
 }
 
-// ─── "Oracle is responding…" with blinking cursor ─────────────────────────────
-
-function RespondingIndicator() {
-  return (
-    <div className="flex items-center gap-2 text-sm text-white/50">
-      <span className="flex items-center gap-1.5">
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-        </span>
-        <span className="animate-pulse">Oracle is responding</span>
-      </span>
-      <span className="text-white/30">…</span>
-      <BlinkingCursor />
-    </div>
-  );
-}
+// ─── Streaming cursor (shown inline while text is being generated) ────────────
 
 function PulsingCursor() {
   return (
     <span
       className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse rounded-full bg-emerald-400 align-middle"
-      aria-hidden
-    />
-  );
-}
-
-function BlinkingCursor() {
-  return (
-    <span
-      className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded-full bg-emerald-400 align-middle"
       aria-hidden
     />
   );

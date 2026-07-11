@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion } from 'framer-motion';
-import { Home, Brain, Zap, Wallet, Network, Settings, Sparkles, type LucideIcon } from 'lucide-react';
+import { Home, Brain, Zap, Wallet, Network, Settings, Sparkles, Cloud, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { BrandLogo } from '@/components/brand';
@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'reconcile', label: 'Finance', icon: Wallet },
   { id: 'business-graph', label: 'Network', icon: Network },
   { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'google-workspace', label: 'Google', icon: Cloud },
 ];
 
 // Views that belong to each nav group — used to keep the active state correct
@@ -57,6 +58,7 @@ const NAV_GROUP_MAP: Record<string, AppView> = {
   'gstpilot-network': 'business-graph',
   'economic-graph': 'business-graph',
   settings: 'settings',
+  'google-workspace': 'google-workspace',
 };
 
 export function LeftNav() {

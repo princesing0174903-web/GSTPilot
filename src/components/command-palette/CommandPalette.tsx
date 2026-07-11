@@ -461,6 +461,18 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      // ─── Google Workspace — Enterprise Integration ───
+      {
+        id: 'cmd-open-google-workspace',
+        label: 'Open Google Workspace',
+        description: 'Connect Gmail, Drive, Docs, Sheets & Calendar — send emails, upload invoices, export reports, schedule reminders',
+        icon: Cloud,
+        action: () => {
+          setCurrentView('google-workspace');
+          addToRecent('cmd-open-google-workspace', 'Open Google Workspace', 'command');
+        },
+        group: 'Commands',
+      },
       // ─── Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ───
       {
         id: 'cmd-open-enterprise-command-center',

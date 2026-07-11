@@ -11,21 +11,16 @@
 //
 // Response: { ok: true, authUrl: string, redirectUri: string }
 //
-// The redirect URI is derived dynamically from the request's forwarded
-// headers (X-Forwarded-Host / X-Forwarded-Proto set by the Caddy gateway)
-// so that it always matches whatever origin the user's browser is browsing.
-// This is critical for the preview environment — using a hardcoded
-// localhost:3000 redirect URI causes `redirect_uri_mismatch` at Google
-// AND would be unreachable by the browser after consent.
+// The `redirect_uri` embedded in `authUrl` is always `GOOGLE_REDIRECT_URI`
+// from the environment (localhost for local dev, deployment URL for
+// production). It is NOT derived from request headers — that would cause the
+// URI to change based on how the app is accessed (preview hostname vs
+// localhost), which breaks the exact-match requirement against Google Cloud
+// Console's "Authorized redirect URIs" list.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import {
-  buildAuthUrl,
-  encodeState,
-  resolveOrgUserFromHeaders,
-  resolveRedirectUri,
-} from '@/lib/google-workspace';
+import { buildAuthUrl, encodeState, resolveOrgUserFromHeaders, getRedirectUri } from '@/lib/google-workspace';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,24 +38,9 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const returnPath = url.searchParams.get('return') ?? '/google-workspace';
 
-    // Derive the OAuth redirect URI from the request's actual public origin.
-    // This MUST match what's registered in Google Cloud Console → Credentials →
-    // OAuth 2.0 Client → "Authorized redirect URIs".
-    const redirectUri = resolveRedirectUri(req);
-
     const state = encodeState({ orgId, userId, userEmail: userEmail ?? '', returnPath });
-    const authUrl = buildAuthUrl(state, redirectUri);
-
-    console.info(
-      '[/api/integrations/google/connect] redirectUri=',
-      redirectUri,
-      ' host=',
-      req.headers.get('host'),
-      ' x-forwarded-host=',
-      req.headers.get('x-forwarded-host'),
-      ' x-forwarded-proto=',
-      req.headers.get('x-forwarded-proto'),
-    );
+    const authUrl = buildAuthUrl(state);
+    const redirectUri = getRedirectUri();
 
     return NextResponse.json({ ok: true, authUrl, redirectUri });
   } catch (err) {

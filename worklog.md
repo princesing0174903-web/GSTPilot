@@ -1389,3 +1389,52 @@ Stage Summary:
   • `src/app/api/integrations/google/callback/route.ts` (dynamic redirect URI passed to `exchangeCodeForTokens` + logging)
   • `src/app/api/integrations/google/redirect-uri/route.ts` (new debug endpoint)
 - **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was fixed.
+
+---
+Task ID: gw-oauth-redirect-env-only
+Agent: main
+Task: Verify the redirect_uri actually being sent to Google in /api/integrations/google/connect. It must exactly match an Authorized Redirect URI in Google Cloud Console. For local dev it must be http://localhost:3000/api/integrations/google/callback. If a preview hostname / forwarded host is being generated instead, fix the redirect URI resolution so local dev always uses localhost and production uses the deployment URL. Do not build new features.
+
+Work Log:
+- Verified `.env`: `GOOGLE_REDIRECT_URI=http://localhost:3000/api/integrations/google/callback` ✓
+- Diagnosed the bug introduced by the previous "preview-aware" fix (task gw-oauth-redirect-fix): `resolveRedirectUri(req)` was deriving the redirect URI from `X-Forwarded-Host` + `X-Forwarded-Proto` headers, which meant:
+    • Direct localhost call → `http://localhost:3000/...` ✓
+    • Caddy gateway call with preview Host → `http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/...` ✗
+  This broke the exact-match requirement against Google Cloud Console's "Authorized redirect URIs" list (the user registered localhost, but the OAuth URL contained the preview hostname → `redirect_uri_mismatch`).
+- Fix: made `GOOGLE_REDIRECT_URI` env var the SINGLE source of truth. Removed all dynamic header-based resolution.
+- `src/lib/google-workspace/auth.ts`:
+    • Removed `resolvePublicOrigin(req)`, `resolveRedirectUri(req)`, `inferProto(host)` helpers (the preview-aware resolution logic).
+    • Kept `getGoogleOAuthConfig()` reading `redirectUri` from env, with localhost fallback.
+    • Added `getRedirectUri()` named export — returns `process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3000/api/integrations/google/callback'`. Used by the debug endpoint so it always reflects the exact value the OAuth flow uses.
+    • Reverted `buildAuthUrl(state)` — removed `redirectUriOverride` param; always uses `getGoogleOAuthConfig().redirectUri`.
+    • Reverted `exchangeCodeForTokens(code)` — removed `redirectUriOverride` param; always uses `getGoogleOAuthConfig().redirectUri`. The authorize URL and the token-exchange body are now guaranteed to use the identical URI (both come from the same env var), eliminating any possibility of `redirect_uri_mismatch` at the token endpoint.
+    • Updated doc-comments to state explicitly that the env var is the single source of truth and that local dev should set `http://localhost:3000/...` while production should set `https://your-domain.com/...`.
+- `src/app/api/integrations/google/connect/route.ts`:
+    • Removed `resolveRedirectUri` import + call.
+    • `buildAuthUrl(state)` now takes no override.
+    • Response still includes `redirectUri` (now from `getRedirectUri()`) for client introspection.
+    • Removed diagnostic `console.info` for forwarded headers (no longer relevant).
+- `src/app/api/integrations/google/callback/route.ts`:
+    • Removed `resolveRedirectUri` import + call.
+    • `exchangeCodeForTokens(code)` now takes no override.
+    • Removed diagnostic `console.info`.
+- `src/app/api/integrations/google/redirect-uri/route.ts` (debug endpoint):
+    • Simplified to return `{ ok, redirectUri, envRedirectUri }` from `getRedirectUri()` + `process.env.GOOGLE_REDIRECT_URI`. No longer reads request headers — the value is now independent of how the endpoint is accessed, which is exactly the point.
+- Lint passes cleanly on all four files.
+- Verified with curl:
+    • `.env` `GOOGLE_REDIRECT_URI` = `http://localhost:3000/api/integrations/google/callback`
+    • Direct `localhost:3000` call → `redirectUri: http://localhost:3000/api/integrations/google/callback` ✓
+    • Caddy gateway call with preview Host `ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run` + `X-Forwarded-Proto: https` → `redirectUri: http://localhost:3000/api/integrations/google/callback` ✓ (STABLE — no longer changes with the request host)
+    • `authUrl.redirect_uri` param decoded from the connect response (direct) = `http://localhost:3000/api/integrations/google/callback` ✓
+    • `authUrl.redirect_uri` param decoded from the connect response (via gateway) = `http://localhost:3000/api/integrations/google/callback` ✓ (matches what's registered in Google Cloud Console)
+
+Stage Summary:
+- **Root cause of the residual `redirect_uri_mismatch`**: The previous "preview-aware" fix (task gw-oauth-redirect-fix) derived `redirect_uri` from request headers, so the URI changed based on how the app was accessed. When the user accessed via the preview URL, the OAuth URL contained the preview hostname instead of localhost — and the user had registered localhost in Google Cloud Console → mismatch.
+- **Fix**: `GOOGLE_REDIRECT_URI` env var is now the single source of truth. No header-based resolution. `buildAuthUrl` and `exchangeCodeForTokens` both read it via `getGoogleOAuthConfig()`, so they always agree. The redirect URI is now stable: `http://localhost:3000/api/integrations/google/callback` for local dev (current `.env`), or whatever the user sets in `.env.production` for production.
+- **Action required from user**: ensure `http://localhost:3000/api/integrations/google/callback` is in Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client (`44040248808-...`) → "Authorized redirect URIs". (The user already confirmed this is registered.)
+- **Files changed**:
+  • `src/lib/google-workspace/auth.ts` (removed `resolvePublicOrigin`, `resolveRedirectUri`, `inferProto`; reverted `buildAuthUrl` + `exchangeCodeForTokens` to env-var-only; added `getRedirectUri()`)
+  • `src/app/api/integrations/google/connect/route.ts` (removed dynamic resolution)
+  • `src/app/api/integrations/google/callback/route.ts` (removed dynamic resolution)
+  • `src/app/api/integrations/google/redirect-uri/route.ts` (simplified to return env var value)
+- **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was reverted to env-var-only.

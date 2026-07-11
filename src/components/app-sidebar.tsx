@@ -145,6 +145,7 @@ const autonomousItems: NavItem[] = [
 // INTELLIGENCE — AI Executive + AI Workforce merged
 const intelligenceItems: NavItem[] = [
   { title: 'AI CEO', view: 'firm-command-center', icon: Crown, subtitle: 'Autonomous Partner', isNew: true },
+  { title: 'Oracle AI', view: 'oracle-intelligence', icon: Sparkles, subtitle: 'Enterprise AI Workspace', isNew: true },
   { title: 'Operating Room', view: 'ai-operating-room', icon: Gauge, subtitle: '6 Live Scores', isNew: true },
   { title: 'Predictions', view: 'ai-predictions', icon: TrendingUp, subtitle: '6 Prediction Models', isNew: true },
   { title: 'Priority Engine', view: 'ai-priority-engine', icon: Target, subtitle: 'Daily Priorities', isNew: true },

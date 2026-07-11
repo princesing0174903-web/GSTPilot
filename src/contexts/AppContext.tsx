@@ -207,7 +207,9 @@ export type AppView =
   | 'financial-intelligence'
   | 'smart-reconciliation'
   | 'predictive-compliance'
-  | 'intelligent-collections';
+  | 'intelligent-collections'
+  // Phase Oracle-AI — Enterprise AI Intelligence Layer
+  | 'oracle-intelligence';
 
 export interface ReturnPrepContext {
   clientId: string | null;

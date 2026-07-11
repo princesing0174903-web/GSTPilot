@@ -5352,3 +5352,167 @@ model AGIAuditLog {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP 3.24 — Oracle AI™ Intelligence Layer (Phase 1 — Enterprise AI Workspace)
+//
+// True session + message persistence (the legacy OracleConversation stores
+// turns as a JSON array — these models give us per-message rows for paging,
+// indexing, and citation back-references). Plus the AI Task Queue, rich
+// Artifacts, multi-Agent roster, curated Knowledge Base, and Tool-Call log.
+// All firm-scoped + user-scoped for multi-tenant isolation.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Oracle AI Chat Sessions ─────────────────────────────────────────────────
+model OracleAISession {
+  id           String   @id @default(cuid())
+  firmId       String
+  userId       String?
+  title        String   @default("New conversation")
+  summary      String?  // LLM-generated short summary after first turn
+  status       String   @default("active") // active | archived | pinned | deleted
+  agentId      String?  // which agent persona handled this session
+  modelUsed    String?  // e.g. "glm-4.6"
+  messageCount Int      @default(0)
+  tokensUsed   Int      @default(0)
+  metadata     String   @default("{}") // JSON: {language, tags, pinned, ...}
+  lastMessageAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([firmId, status, updatedAt])
+  @@index([userId, status])
+}
+
+// ─── Oracle AI Messages (true per-message persistence) ───────────────────────
+model OracleAIMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  firmId      String
+  userId      String?
+  role        String   // user | assistant | system | tool
+  content     String   @default("") // raw markdown / text content
+  parts       String   @default("[]") // JSON: MessagePart[] (text, artifact-ref, tool-call, citation, thinking)
+  model       String?  // model that produced this message (assistant only)
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  latencyMs   Int      @default(0)
+  status      String   @default("completed") // streaming | completed | error | cancelled
+  error       String?  // populated when status = error
+  agentId     String?  // agent persona that produced this message
+  toolName    String?  // populated when role = tool
+  parentMessageId String? // for branching / retries
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, createdAt])
+}
+
+// ─── Oracle AI Artifacts (rich rendered outputs: tables, charts, reports) ────
+model OracleAIArtifact {
+  id          String   @id @default(cuid())
+  sessionId   String
+  messageId   String?  // the assistant message that produced this artifact
+  firmId      String
+  userId      String?
+  kind        String   // table | chart | report | document | code | json | kanban | metric
+  title       String
+  description String?
+  data        String   @default("{}") // JSON payload — schema depends on `kind`
+  rendered    Boolean  @default(false) // has the artifact been rendered client-side?
+  pinned      Boolean  @default(false)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, kind])
+}
+
+// ─── Oracle AI Task Queue (background + async jobs) ──────────────────────────
+model OracleAITask {
+  id          String   @id @default(cuid())
+  firmId      String
+  userId      String?
+  sessionId   String?  // optional: originating chat session
+  messageId   String?  // optional: originating message
+  type        String   // reasoning | research | report | data-fetch | tool-call | agent-run | batch
+  title       String
+  description String?
+  status      String   @default("queued") // queued | running | completed | failed | cancelled
+  priority    Int      @default(5) // 1 (highest) .. 10 (lowest)
+  progress    Int      @default(0) // 0..100
+  payload     String   @default("{}") // JSON: task-specific input
+  result      String?  // JSON: task-specific output
+  error       String?
+  agentId     String?  // which agent is/was running this
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([firmId, status, priority, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+// ─── Oracle AI Agents (multi-agent roster — personas) ────────────────────────
+model OracleAIAgent {
+  id           String   @id @default(cuid())
+  firmId       String
+  name         String
+  role         String   // e.g. "CFO", "Compliance Officer", "Research Analyst"
+  description  String?
+  systemPrompt String   @default("")
+  tools        String   @default("[]") // JSON: tool names this agent can call
+  model        String?  // preferred model override
+  color        String   @default("emerald") // tailwind color token for avatar
+  icon         String   @default("Sparkles") // lucide icon name
+  temperature  Float    @default(0.4)
+  isBuiltIn    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  invocationCount Int   @default(0)
+  lastInvokedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([firmId, isActive])
+}
+
+// ─── Oracle AI Knowledge Base (curated, searchable, citable) ─────────────────
+model OracleAIKnowledge {
+  id          String   @id @default(cuid())
+  firmId      String
+  title       String
+  content     String   // markdown body
+  category    String   @default("general") // gst | compliance | finance | operations | legal | general
+  tags        String   @default("[]") // JSON string[]
+  source      String?  // URL or document reference
+  sourceType  String   @default("manual") // manual | imported | generated | url
+  confidence  Float    @default(0.8) // 0..1 — how reliable this entry is
+  pinned      Boolean  @default(false)
+  viewCount   Int      @default(0)
+  metadata    String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([firmId, category, updatedAt])
+}
+
+// ─── Oracle AI Tool Calls (audit log for tool invocations) ───────────────────
+model OracleAIToolCall {
+  id          String   @id @default(cuid())
+  messageId   String?  // the assistant message that triggered this call
+  sessionId   String?
+  firmId      String
+  userId      String?
+  toolName    String
+  args        String   @default("{}") // JSON input
+  result      String?  // JSON output
+  status      String   @default("pending") // pending | success | error | timeout
+  durationMs  Int      @default(0)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, toolName])
+}

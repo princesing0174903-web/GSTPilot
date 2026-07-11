@@ -42,25 +42,15 @@ export const GOOGLE_SCOPES = [
 export interface GoogleOAuthConfig {
   clientId: string;
   clientSecret: string;
+  /** Default redirect URI from GOOGLE_REDIRECT_URI env (localhost fallback). */
   redirectUri: string;
 }
 
 /**
- * Resolve the Google OAuth config from environment variables.
- *
- * `GOOGLE_REDIRECT_URI` is the SINGLE source of truth for the OAuth redirect
- * URI — it is sent to Google in the authorize URL AND in the token-exchange
- * request (they MUST match exactly, and MUST match one of the "Authorized
- * redirect URIs" registered in Google Cloud Console).
- *
- * Set it differently per environment:
- *   • Local development (.env):        http://localhost:3000/api/integrations/google/callback
- *   • Production (.env.production):    https://your-domain.com/api/integrations/google/callback
- *
- * We deliberately do NOT derive the redirect URI from request headers
- * (X-Forwarded-Host / Host) — that would cause the URI to change based on how
- * the app is accessed (preview hostname vs localhost), which breaks the
- * exact-match requirement against Google Cloud Console's authorized list.
+ * Resolve the Google OAuth credentials from env. Only the client_id and
+ * client_secret come from here; the redirect URI is resolved per-request
+ * via `resolveRedirectUri(req)` because it must match whatever origin the
+ * user's browser is actually browsing.
  */
 export function getGoogleOAuthConfig(): GoogleOAuthConfig {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -76,10 +66,117 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
   return { clientId, clientSecret, redirectUri };
 }
 
+// ─── Request-aware redirect URI resolution ───────────────────────────────────
+//
+// CRITICAL CONTEXT:
+// Google OAuth redirects the user's BROWSER (not the server) to the
+// `redirect_uri`. This means the redirect URI MUST be reachable by the
+// browser. If a user is browsing the Z.ai preview at
+// `http://ws-ac-xxx.fcapp.run/...` and we send Google a redirect_uri of
+// `http://localhost:3000/...`, Google redirects the browser to
+// `localhost:3000` — which doesn't exist on the user's machine →
+// `ERR_CONNECTION_REFUSED`.
+//
+// Therefore the redirect URI must be derived PER REQUEST from whatever origin
+// the browser actually used to reach us:
+//   • Browsing localhost:3000  → redirect_uri = http://localhost:3000/...
+//   • Browsing preview URL     → redirect_uri = http://<preview-host>/...
+//
+// The connect route and the callback route MUST use the same resolution
+// logic, so the redirect_uri sent to Google in the authorize step exactly
+// matches the redirect_uri sent in the token-exchange step (Google rejects
+// mismatches with `redirect_uri_mismatch`). Because both routes derive the
+// URI from the request headers using `resolveRedirectUri(req)`, and the
+// callback request comes from the same browser that did the authorize step,
+// the two URIs are guaranteed to match.
+//
+// IMPORTANT (Google Cloud Console setup):
+// Every distinct redirect URI must be registered in Google Cloud Console →
+// APIs & Services → Credentials → OAuth 2.0 Client → "Authorized redirect
+// URIs". So both:
+//   • http://localhost:3000/api/integrations/google/callback
+//   • http://<preview-host>/api/integrations/google/callback
+// must be in the authorized list. The `/api/integrations/google/redirect-uri`
+// endpoint returns the exact URI to register for the current request.
+
 /**
- * Get the OAuth redirect URI — always `GOOGLE_REDIRECT_URI` from env (with a
- * localhost fallback). Kept as a named export so callers and the debug
- * endpoint can reference the same source of truth the OAuth flow uses.
+ * Resolve the public origin (scheme://host[:port]) for an incoming request.
+ *
+ * Resolution order:
+ *   1. `X-Forwarded-Host` + `X-Forwarded-Proto` (set by Caddy gateway)
+ *   2. `Host` header (scheme inferred unless X-Forwarded-Proto present)
+ *   3. The request URL's own origin
+ *   4. Origin of `GOOGLE_REDIRECT_URI` env var
+ *   5. `http://localhost:3000` (last-resort fallback)
+ */
+export function resolvePublicOrigin(req: Request): string {
+  const headers = req.headers;
+  const forwardedProto =
+    headers.get('x-forwarded-proto') || headers.get('x-forwarded-protocol');
+  const forwardedHost = headers.get('x-forwarded-host');
+  const hostHeader = headers.get('host');
+
+  // 1. Forwarded headers (set by Caddy gateway — what the browser actually used)
+  if (forwardedHost) {
+    const proto = forwardedProto || inferProto(forwardedHost);
+    return `${proto}://${forwardedHost}`;
+  }
+
+  // 2. Host header
+  if (hostHeader) {
+    const proto = forwardedProto || inferProto(hostHeader);
+    return `${proto}://${hostHeader}`;
+  }
+
+  // 3. Request URL origin
+  try {
+    const url = new URL(req.url);
+    if (url.host) return `${url.protocol}//${url.host}`;
+  } catch {
+    /* ignore */
+  }
+
+  // 4. Env var origin
+  const envRedirect = process.env.GOOGLE_REDIRECT_URI;
+  if (envRedirect) {
+    try {
+      const url = new URL(envRedirect);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 5. Last resort
+  return 'http://localhost:3000';
+}
+
+/**
+ * Infer the scheme for a host. localhost / 127.0.0.1 use http (dev), all
+ * other hosts default to https (production). Overridden by X-Forwarded-Proto
+ * when present.
+ */
+function inferProto(host: string): string {
+  if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) return 'http';
+  return 'https';
+}
+
+/**
+ * Resolve the full OAuth redirect URI for an incoming request — always
+ * `${publicOrigin}/api/integrations/google/callback`. Used by BOTH the
+ * connect route (to build the authorize URL) and the callback route (to
+ * exchange the code for tokens), guaranteeing the two URIs match.
+ */
+export function resolveRedirectUri(req: Request): string {
+  const origin = resolvePublicOrigin(req);
+  return `${origin}/api/integrations/google/callback`;
+}
+
+/**
+ * Convenience: returns the redirect URI from the env var (without a request).
+ * Used by the debug endpoint and as a fallback. Note: in normal request flow
+ * you should use `resolveRedirectUri(req)` instead — this exists only for
+ * contexts where no request is available.
  */
 export function getRedirectUri(): string {
   return (
@@ -116,16 +213,22 @@ export interface StoredGoogleToken {
  * the callback — encode orgId + userId + return path in it (the caller is
  * responsible for signing/encoding it).
  *
- * The `redirect_uri` parameter is always `GOOGLE_REDIRECT_URI` from env
- * (localhost for local dev, deployment URL for production). It must match
- * exactly one of the "Authorized redirect URIs" registered in Google Cloud
- * Console → Credentials → OAuth 2.0 Client.
+ * `redirectUri` should be the result of `resolveRedirectUri(req)` from the
+ * connect route — this makes the OAuth redirect URI match whatever origin
+ * the user's browser is actually browsing (critical for the preview
+ * environment where Google redirects the browser back to the callback URL
+ * and the browser must be able to reach it). If omitted, falls back to
+ * `GOOGLE_REDIRECT_URI` env var.
+ *
+ * The same `redirectUri` value MUST be passed to `exchangeCodeForTokens` in
+ * the callback route — Google rejects mismatches with `redirect_uri_mismatch`.
  */
-export function buildAuthUrl(state: string): string {
-  const { clientId, redirectUri } = getGoogleOAuthConfig();
+export function buildAuthUrl(state: string, redirectUri?: string): string {
+  const { clientId, redirectUri: defaultRedirectUri } = getGoogleOAuthConfig();
+  const uri = redirectUri ?? defaultRedirectUri;
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri,
+    redirect_uri: uri,
     response_type: 'code',
     scope: GOOGLE_SCOPES,
     access_type: 'offline',
@@ -184,21 +287,25 @@ interface UserInfoResponse {
  * Exchange an authorization code for tokens. Also fetches the Google user
  * profile (email) so we can label the connection.
  *
- * The `redirect_uri` passed to Google's token endpoint MUST be the same URI
- * that was used in the `buildAuthUrl` call — Google rejects mismatches with
- * `redirect_uri_mismatch`. We always use `GOOGLE_REDIRECT_URI` from env in
- * both places, so they are guaranteed to match.
+ * `redirectUri` MUST be the same redirect URI that was used in the
+ * `buildAuthUrl` call during the connect step — Google's token endpoint
+ * rejects mismatches with `redirect_uri_mismatch`. Pass the result of
+ * `resolveRedirectUri(req)` from the callback route; it will naturally match
+ * because the callback request comes from the same browser that did the
+ * authorize step (same origin).
  */
 export async function exchangeCodeForTokens(
   code: string,
+  redirectUri?: string,
 ): Promise<{ tokens: GoogleTokens; userInfo: UserInfoResponse; error: string | null }> {
-  const { clientId, clientSecret, redirectUri } = getGoogleOAuthConfig();
+  const { clientId, clientSecret, redirectUri: defaultRedirectUri } = getGoogleOAuthConfig();
+  const uri = redirectUri ?? defaultRedirectUri;
 
   const body = new URLSearchParams({
     code,
     client_id: clientId,
     client_secret: clientSecret,
-    redirect_uri: redirectUri,
+    redirect_uri: uri,
     grant_type: 'authorization_code',
   });
 

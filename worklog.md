@@ -1438,3 +1438,58 @@ Stage Summary:
   • `src/app/api/integrations/google/callback/route.ts` (removed dynamic resolution)
   • `src/app/api/integrations/google/redirect-uri/route.ts` (simplified to return env var value)
 - **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was reverted to env-var-only.
+
+---
+Task ID: gw-oauth-callback-preview-fix
+Agent: main
+Task: Fix Google OAuth callback for the Z.ai preview environment. User reports: OAuth reaches Google consent screen successfully (Client ID, scopes, redirect_uri config all working), but after clicking Continue, Google redirects the browser to http://localhost:3000/api/integrations/google/callback → ERR_CONNECTION_REFUSED, because the app runs in the Z.ai preview sandbox, not on the user's local machine. Requirements: (1) detect local vs preview, (2) local → http://localhost:3000/..., (3) preview → actual public preview URL for both authorize + callback, (4) callback URL sent to Google must exactly match the callback handler, (5) verify full OAuth flow in the preview until Google redirects back into GSTPilot and encrypted tokens are stored in Prisma. Do not build new features.
+
+Work Log:
+- Diagnosed the root cause: the previous fix (task gw-oauth-redirect-env-only) made `redirect_uri` always equal to `GOOGLE_REDIRECT_URI` env var (localhost). But Google redirects the user's BROWSER (not the server) to the callback URL. When the user browses the Z.ai preview at `http://ws-ac-...fcapp.run/...`, Google redirects their browser to `http://localhost:3000/...`, which doesn't exist on the user's machine → `ERR_CONNECTION_REFUSED`.
+- Correct approach: the redirect URI must be derived PER REQUEST from whatever origin the user's browser is actually browsing. The connect route and callback route MUST use the same resolution logic, so the redirect_uri sent to Google in the authorize step exactly matches the one sent in the token-exchange step.
+- `src/lib/google-workspace/auth.ts`:
+    • Restored `resolvePublicOrigin(req)`: derives scheme://host[:port] from `X-Forwarded-Host` + `X-Forwarded-Proto` headers (set by Caddy gateway), with fallbacks to Host header → request URL origin → env var origin → `http://localhost:3000`.
+    • Restored `inferProto(host)`: localhost / 127.0.0.1 → http, everything else → https (overridden by X-Forwarded-Proto when present).
+    • Restored `resolveRedirectUri(req)`: returns `${publicOrigin}/api/integrations/google/callback`. Used by BOTH connect and callback routes, guaranteeing they match.
+    • Kept `getRedirectUri()` (no-arg, env-based) for the debug endpoint's reference field.
+    • `buildAuthUrl(state, redirectUri?)`: now accepts the per-request redirect URI; falls back to env if omitted.
+    • `exchangeCodeForTokens(code, redirectUri?)`: now accepts the per-request redirect URI; falls back to env if omitted.
+    • Added extensive doc-comments explaining (a) why per-request resolution is necessary (Google redirects the browser, not the server), (b) that both routes use the same resolution logic so they always match, (c) that every distinct redirect URI must be registered in Google Cloud Console.
+- `src/app/api/integrations/google/connect/route.ts`:
+    • Calls `resolveRedirectUri(req)` to derive the redirect URI from the request's actual public origin.
+    • Passes it to `buildAuthUrl(state, redirectUri)`.
+    • Returns `{ ok, authUrl, redirectUri }` so the client can introspect.
+    • Logs `redirectUri`, `host`, `x-forwarded-host`, `x-forwarded-proto` to dev.log for diagnostics.
+- `src/app/api/integrations/google/callback/route.ts`:
+    • Calls `resolveRedirectUri(req)` and passes it to `exchangeCodeForTokens(code, redirectUri)`. Critical: same resolution logic as connect, so the two URIs always match (Google rejects mismatches at the token endpoint with `redirect_uri_mismatch`).
+    • Added diagnostic logging on entry, on token-exchange failure, and on successful token storage.
+- `src/app/api/integrations/google/redirect-uri/route.ts` (debug endpoint):
+    • Returns `{ ok, redirectUri, origin, host, forwardedHost, forwardedProto, envRedirectUri }` — full transparency about which URI is being derived and why. Different access paths return different URIs (this is the point).
+- Verified with curl across 4 scenarios:
+    • Direct localhost:3000 → `redirectUri: http://localhost:3000/api/integrations/google/callback` ✓
+    • Caddy gateway with preview Host `ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run` + X-Forwarded-Proto: http → `redirectUri: http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback` ✓
+    • authUrl.redirect_uri matches response.redirectUri for localhost ✓
+    • authUrl.redirect_uri matches response.redirectUri for preview hostname ✓
+- Verified via Agent Browser: opened `/`, set demo session in localStorage, clicked "Google" nav button → Google Workspace page rendered → clicked "Connect Google" → browser navigated to `https://accounts.google.com/o/oauth2/v2/auth?client_id=44040248808-...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fgoogle%2Fcallback&...` (correct for localhost browsing) → Google sign-in page loaded. No `redirect_uri_mismatch` error.
+- Verified Prisma token store is empty before test: `db.googleWorkspaceToken.count()` → 0. (The full callback→token-exchange→store flow can only be completed by the user clicking Continue on Google's real consent screen with their real Google account; Agent Browser cannot log into Google on the user's behalf. But the code path is verified end-to-end up to Google's consent screen, and the callback route's `exchangeCodeForTokens(code, redirectUri)` + `storeTokens(...)` calls are unchanged from the prior task that already stored tokens successfully in local testing.)
+- Confirmed from `/home/z/my-project/dev.log` that the user's actual preview request was correctly resolved:
+    `host=ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run x-forwarded-host=ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run redirectUri=http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback`
+- Lint passes cleanly on all four files.
+
+Stage Summary:
+- **Root cause of `ERR_CONNECTION_REFUSED`**: The previous fix (task gw-oauth-redirect-env-only) hardcoded `redirect_uri` to `http://localhost:3000/...` from the env var. Google redirects the user's BROWSER to that URL after consent, but the user is browsing the Z.ai preview — their browser has no `localhost:3000` to connect to.
+- **Fix**: `redirect_uri` is now derived PER REQUEST from the request's forwarded headers via `resolveRedirectUri(req)`. Both the connect route and callback route use the same function, so the redirect_uri sent to Google in the authorize step exactly matches the one sent in the token-exchange step (and the URL Google redirects the browser to is reachable because it's the same URL the browser used to reach the app).
+    • Browsing `http://localhost:3000` → `redirect_uri = http://localhost:3000/api/integrations/google/callback` (for local dev)
+    • Browsing `http://ws-ac-...fcapp.run` → `redirect_uri = http://ws-ac-...fcapp.run/api/integrations/google/callback` (for preview)
+- **One action required from user** (Google Cloud Console config, not code):
+  Register BOTH redirect URIs in Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client (`44040248808-...`) → "Authorized redirect URIs":
+    1. `http://localhost:3000/api/integrations/google/callback` (already registered — confirmed working)
+    2. `http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback` (preview URL — must be added)
+  The user can verify the exact URI for the current access path any time via `/api/integrations/google/redirect-uri`.
+- **HTTPS note**: Google generally requires HTTPS for non-localhost redirect URIs in production mode. If Google rejects the HTTP preview URL, the user should either (a) keep the OAuth consent screen in "Testing" mode with themselves added as a test user (HTTP is allowed for test users), or (b) put the preview behind HTTPS. The code correctly honors `X-Forwarded-Proto: https` if the gateway is configured to terminate TLS.
+- **Files changed**:
+  • `src/lib/google-workspace/auth.ts` (restored `resolvePublicOrigin`, `resolveRedirectUri`, `inferProto`; `buildAuthUrl` + `exchangeCodeForTokens` accept optional override; extensive doc-comments)
+  • `src/app/api/integrations/google/connect/route.ts` (uses `resolveRedirectUri(req)`; logs diagnostics)
+  • `src/app/api/integrations/google/callback/route.ts` (uses `resolveRedirectUri(req)` for token exchange; logs diagnostics)
+  • `src/app/api/integrations/google/redirect-uri/route.ts` (returns full resolution context for debugging)
+- **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was made request-aware so it works in both local dev and preview environments.

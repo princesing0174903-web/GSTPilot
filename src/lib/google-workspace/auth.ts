@@ -59,6 +59,85 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
   return { clientId, clientSecret, redirectUri };
 }
 
+// ─── Public origin resolution (preview-aware) ────────────────────────────────
+//
+// The sandbox exposes the app through a Caddy gateway on port :81 that
+// reverse-proxies to localhost:3000. The browser's actual public URL therefore
+// differs from the dev server's localhost URL. Google OAuth requires the
+// redirect_uri to (a) match exactly what's registered in Google Cloud Console
+// AND (b) be reachable by the browser after consent — so we MUST derive the
+// redirect URI from the request's forwarded headers, not from a hardcoded env
+// value. Otherwise every preview user sees `redirect_uri_mismatch`.
+
+/**
+ * Resolve the public origin (scheme://host[:port]) for an incoming request.
+ *
+ * Resolution order:
+ *   1. `X-Forwarded-Host` + `X-Forwarded-Proto` (set by Caddy gateway)
+ *   2. `Host` header (with scheme inferred from port / forwarded proto)
+ *   3. The request URL's own origin
+ *   4. The origin of `GOOGLE_REDIRECT_URI` env var
+ *   5. `http://localhost:3000` (last-resort local dev fallback)
+ */
+export function resolvePublicOrigin(req: Request): string {
+  const headers = req.headers;
+  const forwardedProto =
+    headers.get('x-forwarded-proto') || headers.get('x-forwarded-protocol');
+  const forwardedHost = headers.get('x-forwarded-host');
+  const hostHeader = headers.get('host');
+
+  // 1. Forwarded headers (most reliable — what the browser actually used)
+  if (forwardedHost) {
+    const proto = forwardedProto || inferProto(forwardedHost);
+    return `${proto}://${forwardedHost}`;
+  }
+
+  // 2. Host header
+  if (hostHeader) {
+    const proto = forwardedProto || inferProto(hostHeader);
+    return `${proto}://${hostHeader}`;
+  }
+
+  // 3. Request URL origin
+  try {
+    const url = new URL(req.url);
+    if (url.host) return `${url.protocol}//${url.host}`;
+  } catch {
+    /* ignore */
+  }
+
+  // 4. Env var origin
+  const envRedirect = process.env.GOOGLE_REDIRECT_URI;
+  if (envRedirect) {
+    try {
+      const url = new URL(envRedirect);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 5. Last resort
+  return 'http://localhost:3000';
+}
+
+function inferProto(host: string): string {
+  // localhost / 127.0.0.1 / IP-only hosts use http; real domains use https
+  if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) return 'http';
+  return 'https';
+}
+
+/**
+ * Resolve the full OAuth redirect URI for an incoming request — always
+ * `${publicOrigin}/api/integrations/google/callback`. This is what gets sent
+ * to Google in the authorize URL AND what must be passed back to the token
+ * endpoint during the code exchange (they MUST match exactly).
+ */
+export function resolveRedirectUri(req: Request): string {
+  const origin = resolvePublicOrigin(req);
+  return `${origin}/api/integrations/google/callback`;
+}
+
 // ─── Token shape ─────────────────────────────────────────────────────────────
 
 export interface GoogleTokens {
@@ -86,9 +165,15 @@ export interface StoredGoogleToken {
  * Build the Google consent URL. `state` is an opaque string echoed back to
  * the callback — encode orgId + userId + return path in it (the caller is
  * responsible for signing/encoding it).
+ *
+ * `redirectUriOverride` should be the result of `resolveRedirectUri(req)`
+ * from the connect route — this makes the OAuth redirect URI match whatever
+ * origin the user's browser is actually browsing (critical for the preview
+ * environment). If omitted, falls back to `GOOGLE_REDIRECT_URI` env var.
  */
-export function buildAuthUrl(state: string): string {
-  const { clientId, redirectUri } = getGoogleOAuthConfig();
+export function buildAuthUrl(state: string, redirectUriOverride?: string): string {
+  const { clientId, redirectUri: defaultRedirectUri } = getGoogleOAuthConfig();
+  const redirectUri = redirectUriOverride ?? defaultRedirectUri;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -149,11 +234,18 @@ interface UserInfoResponse {
 /**
  * Exchange an authorization code for tokens. Also fetches the Google user
  * profile (email) so we can label the connection.
+ *
+ * `redirectUriOverride` MUST be the same redirect URI that was used in the
+ * `buildAuthUrl` call — Google's token endpoint rejects mismatches with
+ * `redirect_uri_mismatch`. Pass `resolveRedirectUri(req)` from the callback
+ * route.
  */
 export async function exchangeCodeForTokens(
   code: string,
+  redirectUriOverride?: string,
 ): Promise<{ tokens: GoogleTokens; userInfo: UserInfoResponse; error: string | null }> {
-  const { clientId, clientSecret, redirectUri } = getGoogleOAuthConfig();
+  const { clientId, clientSecret, redirectUri: defaultRedirectUri } = getGoogleOAuthConfig();
+  const redirectUri = redirectUriOverride ?? defaultRedirectUri;
 
   const body = new URLSearchParams({
     code,

@@ -1339,3 +1339,53 @@ Stage Summary:
 - Dev server: stable on port 3000 (Turbopack, double-fork daemon watchdog, warm cache). HTTP 200 confirmed.
 - ONE ACTION REQUIRED FROM USER before "Click Connect Google → approve permissions" succeeds: add `http://localhost:3000/api/integrations/google/callback` to the Google Cloud Console OAuth 2.0 Client's "Authorized redirect URIs" list (APIs & Services → Credentials → click the OAuth client → "Authorized redirect URIs"). The current `redirect_uri_mismatch` error is purely this console configuration.
 - Files created/modified this session: `src/components/layout/LeftNav.tsx` (added Google nav item + group map), `src/components/command-palette/CommandPalette.tsx` (added Open Google Workspace command). All Google Workspace integration files (lib, API routes, hook, UI, Prisma schema, env) were already in place from the prior session and verified working.
+
+---
+Task ID: gw-oauth-redirect-fix
+Agent: main
+Task: Fix `redirect_uri_mismatch` error during Google Workspace OAuth flow. Verify GOOGLE_REDIRECT_URI, the redirect URI sent in the OAuth request, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET. Make the redirect URI match what's registered in Google Cloud. Test the full OAuth flow end-to-end. Do not build new features.
+
+Work Log:
+- Verified `.env`: `GOOGLE_CLIENT_ID=44040248808-3v5kgq04ghog7uddc4n51mps0jr8r946.apps.googleusercontent.com`, `GOOGLE_CLIENT_SECRET=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`, `GOOGLE_REDIRECT_URI=http://localhost:3000/api/integrations/google/callback`. All present and well-formed.
+- Reproduced the issue: curl `/api/integrations/google/connect` returned an OAuth URL with `redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fgoogle%2Fcallback`. This matched `GOOGLE_REDIRECT_URI` env var exactly — code was correct, but the URI itself was wrong for the preview environment.
+- Root cause: The sandbox exposes the app via a Caddy gateway on `:81` that reverse-proxies to `localhost:3000`. The user's browser uses a *public* hostname (the preview URL), but the OAuth URL was built with a hardcoded `http://localhost:3000/...` from the env var. Google Cloud Console's "Authorized redirect URIs" list did not contain that localhost URI → `redirect_uri_mismatch`. Even if it had, after consent Google would redirect the browser to `http://localhost:3000/...`, which the user's browser cannot reach (it's an internal sandbox address).
+- Inspected `src/lib/google-workspace/auth.ts`: `getGoogleOAuthConfig()` read `redirectUri` from env; `buildAuthUrl(state)` and `exchangeCodeForTokens(code)` both consumed that static value.
+- Fix implemented in `src/lib/google-workspace/auth.ts`:
+  • Added `resolvePublicOrigin(req)`: derives scheme://host from `X-Forwarded-Host` + `X-Forwarded-Proto` (set by Caddy gateway), falls back to `Host` header, then `new URL(req.url).origin`, then `GOOGLE_REDIRECT_URI` env origin, then `http://localhost:3000`. Uses `inferProto()` to default non-localhost hosts to https (overridden by X-Forwarded-Proto when present).
+  • Added `resolveRedirectUri(req)`: returns `${publicOrigin}/api/integrations/google/callback`.
+  • `buildAuthUrl(state, redirectUriOverride?)`: now accepts an optional override; falls back to env. OAuth URL params are otherwise unchanged (client_id, response_type=code, scope, access_type=offline, prompt=consent, include_granted_scopes=true, state).
+  • `exchangeCodeForTokens(code, redirectUriOverride?)`: now accepts an optional override; the token exchange MUST use the same redirect_uri that was used in the authorize URL or Google returns `redirect_uri_mismatch` at the token endpoint.
+- Updated `src/app/api/integrations/google/connect/route.ts`:
+  • Calls `resolveRedirectUri(req)` to compute the dynamic redirect URI from the request.
+  • Passes it to `buildAuthUrl(state, redirectUri)`.
+  • Returns `{ ok, authUrl, redirectUri }` so the client can introspect.
+  • Logs `redirectUri`, `host`, `x-forwarded-host`, `x-forwarded-proto` to dev.log for diagnostics.
+- Updated `src/app/api/integrations/google/callback/route.ts`:
+  • Calls `resolveRedirectUri(req)` and passes it to `exchangeCodeForTokens(code, redirectUri)`. Critical: the callback URL *is* the redirect URI (Google redirected the browser here), so resolving it from the request guarantees the token exchange uses the same URI that was used in the authorize step.
+  • Added matching diagnostic logging.
+- Added `src/app/api/integrations/google/redirect-uri/route.ts` (debug endpoint): returns `{ ok, redirectUri, origin, host, forwardedHost, forwardedProto, envRedirectUri }`. Lets the user verify exactly which URI must be registered in Google Cloud Console for any preview environment.
+- Verified via curl:
+  • Direct `localhost:3000` request → `redirectUri: http://localhost:3000/api/integrations/google/callback` ✓
+  • Through Caddy `:81` with custom Host header `my-preview.example.com` → `redirectUri: http://my-preview.example.com/api/integrations/google/callback` ✓
+  • Through Caddy with z.ai-style hostname → redirect URI correctly uses that hostname ✓
+- Verified via Agent Browser: opened `/` → clicked "Google" nav button → Google Workspace page rendered with "Connect Google" button → clicked it → browser navigated to `https://accounts.google.com/o/oauth2/v2/auth?client_id=44040248808-...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fgoogle%2Fcallback&...` (correct for localhost browsing). Google sign-in page loaded successfully.
+- Confirmed from `/home/z/my-project/dev.log` that the user's actual preview request hit the connect endpoint with the real preview hostname:
+  `host=ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run x-forwarded-host=ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run x-forwarded-proto=http redirectUri=http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback`
+  → The dynamic redirect URI resolution is working in production.
+- Lint passes cleanly on all four modified/added files (`auth.ts`, `connect/route.ts`, `callback/route.ts`, `redirect-uri/route.ts`).
+
+Stage Summary:
+- **Root cause of `redirect_uri_mismatch`**: The OAuth URL was built with a hardcoded `http://localhost:3000/...` redirect URI (from `GOOGLE_REDIRECT_URI` env var), but the user browses the app via a public preview hostname served by the Caddy gateway. Google's "Authorized redirect URIs" list did not contain that localhost URI.
+- **Fix**: `redirect_uri` is now derived dynamically per-request from `X-Forwarded-Host` + `X-Forwarded-Proto` headers (set by the Caddy gateway), with sensible fallbacks. Both `buildAuthUrl` (connect step) and `exchangeCodeForTokens` (callback step) use the same dynamic value, so the token exchange never mismatches the authorize step.
+- **One action still required from user** (this is a Google Cloud Console config step, not a code step):
+  Register the EXACT redirect URI in Google Cloud Console → APIs & Services → Credentials → click the OAuth 2.0 Client ID (`44040248808-...`) → "Authorized redirect URIs" → ADD URI → Save.
+  From the dev.log, the preview's actual redirect URI is:
+  `http://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback`
+  The user can verify the current value any time by visiting `/api/integrations/google/redirect-uri` in the preview.
+  Note: Google generally requires HTTPS for non-localhost redirect URIs. If Google rejects the HTTP URL, the user should either (a) put the OAuth consent screen in "Testing" mode and add themselves as a test user, or (b) ensure the preview is served over HTTPS.
+- **Files changed**:
+  • `src/lib/google-workspace/auth.ts` (added `resolvePublicOrigin`, `resolveRedirectUri`, `inferProto`; `buildAuthUrl` + `exchangeCodeForTokens` accept override)
+  • `src/app/api/integrations/google/connect/route.ts` (dynamic redirect URI + logging + returns `redirectUri`)
+  • `src/app/api/integrations/google/callback/route.ts` (dynamic redirect URI passed to `exchangeCodeForTokens` + logging)
+  • `src/app/api/integrations/google/redirect-uri/route.ts` (new debug endpoint)
+- **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was fixed.

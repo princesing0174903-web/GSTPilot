@@ -94,3 +94,46 @@ export async function parseBody<T>(req: NextRequest): Promise<T | null> {
     return null
   }
 }
+
+// ─── Response helpers (used by Executive API routes) ──────────────────────────
+
+/**
+ * Wrap a JSON payload in a NextResponse with the given status code.
+ */
+export function jsonResponse(data: unknown, status: number = 200): NextResponse {
+  return NextResponse.json(data, { status })
+}
+
+/**
+ * Build a JSON error response with the given message + status code.
+ */
+export function errorResponse(message: string, status: number = 500): NextResponse {
+  return NextResponse.json({ error: message }, { status })
+}
+
+/**
+ * Audit-log an Executive API call from a high-level summary entry.
+ * Maps onto the low-level `auditLog` schema (decision, denialReason, etc.)
+ * and is fire-and-forget safe — routes call it without await.
+ */
+export async function auditRequest(entry: {
+  endpoint: string
+  method: string
+  statusCode: number
+  durationMs: number
+  errorMessage?: string
+}): Promise<void> {
+  try {
+    const isFailure = entry.statusCode >= 400
+    await auditLog({
+      endpoint: entry.endpoint,
+      method: entry.method,
+      decision: isFailure ? 'deny' : 'allow',
+      denialReason: entry.errorMessage,
+      responseTimeMs: entry.durationMs,
+    })
+  } catch (err) {
+    // Audit failures must NEVER break the API
+    console.error('[intelligence/api-helpers] auditRequest failed:', err)
+  }
+}

@@ -468,6 +468,9 @@ export interface ExpenseListResult {
 
 // ─── Receivables DTO ────────────────────────────────────────────────────────────
 
+/** Risk bucket assigned to an outstanding receivable based on days overdue. */
+export type ReceivableRisk = 'high' | 'medium' | 'low';
+
 export interface ReceivableDTO {
   id: string;
   invoiceId?: string | null;

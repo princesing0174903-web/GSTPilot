@@ -196,3 +196,116 @@ export async function getTDSRecords(opts?: { limit?: number }): Promise<TDSListR
     hasLiveData: records.length > 0,
   };
 }
+
+// ─── Challan + return preparation (DB-backed) ─────────────────────────────────
+
+export interface PrepareChallanResult {
+  challanNo: string;
+  count: number;
+  totalAmount: number;
+  section: string | null;
+  challanDate: string;
+}
+
+/**
+ * Groups all TDS records in the "deducted" state (optionally filtered by
+ * section) into a single challan, marks them "challan_ready", and stamps the
+ * challan number + date into the `notes` field. Returns the challan summary.
+ */
+export async function prepareChallan(opts: {
+  section?: string;
+  challanDate?: string;
+}): Promise<PrepareChallanResult> {
+  const challanDate = opts.challanDate ?? new Date().toISOString().split('T')[0];
+  const challanNo = `CHN-${challanDate.replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+  const where = {
+    status: 'deducted',
+    ...(opts.section ? { section: opts.section } : {}),
+  };
+  const rows = await db.tDSRecord.findMany({ where });
+
+  let totalAmount = 0;
+  for (const r of rows) {
+    totalAmount += r.tdsAmount;
+    const marker = `[CHALLAN:${challanNo}:${challanDate}]`;
+    const cleaned = (r.notes ?? '').replace(/\[CHALLAN:[^\]]*\]/g, '').trim();
+    await db.tDSRecord.update({
+      where: { id: r.id },
+      data: { status: 'challan_ready', notes: `${marker} ${cleaned}`.trim() },
+    });
+  }
+
+  return {
+    challanNo,
+    count: rows.length,
+    totalAmount: round2(totalAmount),
+    section: opts.section ?? null,
+    challanDate,
+  };
+}
+
+export interface MarkChallanPaidResult {
+  challanNo: string;
+  updated: number;
+  totalAmount: number;
+}
+
+/**
+ * Marks every TDS record tagged with the given challanNo (via the notes
+ * marker written by prepareChallan) as "challan_paid".
+ */
+export async function markChallanPaid(challanNo: string): Promise<MarkChallanPaidResult> {
+  const rows = await db.tDSRecord.findMany({
+    where: { status: 'challan_ready', notes: { contains: `[CHALLAN:${challanNo}:` } },
+  });
+
+  let totalAmount = 0;
+  for (const r of rows) {
+    totalAmount += r.tdsAmount;
+    await db.tDSRecord.update({
+      where: { id: r.id },
+      data: { status: 'challan_paid' },
+    });
+  }
+
+  return { challanNo, updated: rows.length, totalAmount: round2(totalAmount) };
+}
+
+export interface PrepareTDSReturnResult {
+  returnPeriod: string;
+  filed: number;
+  totalTDS: number;
+  challanNo: string | null;
+}
+
+/**
+ * Files the TDS return for a period: marks every "challan_paid" record as
+ * "return_filed". If challanNo is supplied, only records tagged with that
+ * challan are filed.
+ */
+export async function prepareTDSReturn(opts: {
+  returnPeriod: string;
+  challanNo?: string;
+}): Promise<PrepareTDSReturnResult> {
+  const where = challanNo
+    ? { status: 'challan_paid', notes: { contains: `[CHALLAN:${opts.challanNo}:` } }
+    : { status: 'challan_paid' };
+  const rows = await db.tDSRecord.findMany({ where });
+
+  let totalTDS = 0;
+  for (const r of rows) {
+    totalTDS += r.tdsAmount;
+    await db.tDSRecord.update({
+      where: { id: r.id },
+      data: { status: 'return_filed', quarter: opts.returnPeriod },
+    });
+  }
+
+  return {
+    returnPeriod: opts.returnPeriod,
+    filed: rows.length,
+    totalTDS: round2(totalTDS),
+    challanNo: opts.challanNo ?? null,
+  };
+}

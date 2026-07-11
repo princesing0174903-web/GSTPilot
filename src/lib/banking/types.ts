@@ -393,3 +393,138 @@ export interface BankingState {
   intelligence: PaymentIntelligenceState;
   hasLiveData: boolean;
 }
+
+// ─── Engine compatibility aliases (used by engine.ts) ─────────────────────────
+// The Banking Cloud core engine (engine.ts) was written against an older
+// vocabulary. These aliases map its names onto the canonical types above so
+// the engine typechecks without modification.
+
+export type RiskLevel = CashRiskLevel;
+
+/**
+ * Engine-side transaction category. `TransactionCategory` covers the books
+ * vocabulary, but `engine.ts`'s `categorise()` also returns 'payroll',
+ * 'rent', 'logistics', 'purchase', 'interest', 'transfer', 'revenue' and the
+ * British-spelled 'uncategorised'. Include them all here so the engine's
+ * literal returns satisfy the type.
+ */
+export type TxnCategory =
+  | TransactionCategory
+  | 'payroll'
+  | 'rent'
+  | 'logistics'
+  | 'purchase'
+  | 'interest'
+  | 'transfer'
+  | 'revenue'
+  | 'uncategorised';
+
+export type TxnType = TransactionType;
+
+/**
+ * Engine-side mismatch kind. `MatchType` covers the books-vs-GST match kinds
+ * the auto-reconciler produces, but `engine.ts`'s seeding branch also uses
+ * 'unmatched_payment', 'missing_entry' and 'partial_payment'. Include them
+ * all here.
+ */
+export type MismatchType =
+  | MatchType
+  | 'unmatched_payment'
+  | 'missing_entry'
+  | 'partial_payment';
+
+/**
+ * Status of a single bank-reconciliation entry, as stored on
+ * `BankReconciliation.status` and consumed by the engine's reconciliation
+ * state builder.
+ */
+export type ReconStatus =
+  | 'matched'
+  | 'unmatched'
+  | 'pending'
+  | 'duplicate'
+  | 'partial';
+
+/**
+ * Engine-side reconciliation entry — one row from `BankReconciliation`,
+ * shaped for the Oracle context block. Mirrors the columns the engine reads.
+ */
+export interface ReconciliationEntry {
+  id: string;
+  bankRef: string;
+  bankAmount: number;
+  matchedInvoice?: string;
+  matchedTo?: string;
+  status: ReconStatus;
+  mismatchType?: MismatchType;
+  confidencePct: number;
+  suggestedAction?: string;
+  at: string;
+}
+
+/**
+ * Engine-side reconciliation summary, returned by
+ * `buildReconciliationState(limit)` in engine.ts. Carries counts per status,
+ * aggregate amounts, a 0..100 risk score + level, and the underlying entries.
+ */
+export interface ReconciliationSummary {
+  totalTransactions: number;
+  matched: number;
+  unmatched: number;
+  pending: number;
+  duplicate: number;
+  partial: number;
+  matchedPct: number;
+  matchedAmount: number;
+  unmatchedAmount: number;
+  pendingCollections: number;
+  pendingPayments: number;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  entries: ReconciliationEntry[];
+}
+
+// ─── Glyph constants (used by engine.ts to format the Oracle context block) ───
+
+/** Emoji glyph for each cash-risk level. Indexed by `riskLevel`. */
+export const RISK_GLYPH: Record<RiskLevel, string> = {
+  low: '🟢',
+  medium: '🟡',
+  high: '🟠',
+  critical: '🔴',
+};
+
+/** Emoji glyph for each bank-reconciliation entry status. Indexed by `status`. */
+export const RECON_STATUS_GLYPH: Record<ReconStatus, string> = {
+  matched: '✓',
+  unmatched: '✗',
+  pending: '⏳',
+  duplicate: '↻',
+  partial: '⚠',
+};
+
+/** Emoji glyph for each transaction category. Indexed by `category`. */
+export const CATEGORY_GLYPH: Record<TxnCategory, string> = {
+  // TransactionCategory values
+  sales: '💰',
+  expense: '💸',
+  gst: '🧾',
+  salary: '👥',
+  vendor: '🏭',
+  upi: '📱',
+  loan: '🏦',
+  tax: '🏛️',
+  fee: '📌',
+  refund: '↩️',
+  other: '•',
+  uncategorized: '❓',
+  // Engine extras (categorise() in engine.ts)
+  payroll: '👥',
+  rent: '🏢',
+  logistics: '🚚',
+  purchase: '🛒',
+  interest: '📈',
+  transfer: '🔁',
+  revenue: '💹',
+  uncategorised: '❓',
+};

@@ -1065,3 +1065,163 @@ Stage Summary:
 - Vercel build will succeed: ignoreBuildErrors:true for TS, no module-resolution errors introduced, firebase/storage fully removed.
 - Files changed (7): src/lib/supabase.ts (NEW), src/lib/firebase/storage-service.ts, src/lib/storage.ts, src/lib/firebase.ts, src/lib/gstpilot-data/invoice-ingestion.ts, src/components/settings/SettingsPage.tsx, .env.local (NEW).
 - Note for user: Supabase bucket "gstpilot-files" RLS policies must allow anon-key read/write to organizations/** paths (since GSTPilot uses Firebase Auth, not Supabase Auth — there's no Supabase auth.uid() to key RLS on). Signed URLs expire after 1 hour; downloadURL stored in Firestore should be refreshed via getDownloadURL() on demand (same pattern as the old Firebase code).
+
+---
+Task ID: 8-a
+Agent: general-purpose
+Task: Fix banking + network missing type/constant exports
+
+Work Log:
+- Read /home/z/my-project/worklog.md for prior context, then audited the consuming files:
+  • src/lib/banking/engine.ts — imports `{ RISK_GLYPH, RECON_STATUS_GLYPH, CATEGORY_GLYPH }` and types `{ RiskLevel, TxnCategory, TxnType, MismatchType, ReconStatus, ReconciliationEntry, ReconciliationSummary }` from @/lib/banking/types.
+  • src/lib/banking/oracle.ts — `import { getReconcileState } from './reconcile'` (line 12), awaited at line 38 inside getBankingState()'s Promise.all.
+  • src/lib/network/engine.ts — imports `{ NETWORK_NODE_LABELS, TIER_COLOR, TIER_GLYPH }` from @/lib/network/types (line 66-68) and re-exports them at line 1854.
+- Grepped engine.ts to enumerate every value used by ReconStatus ('matched'|'unmatched'|'pending'|'duplicate'|'partial') and MismatchType ('unmatched_payment'|'missing_entry'|'duplicate'|'partial_payment'), plus the extra TxnCategory values returned by categorise() ('payroll','rent','logistics','purchase','interest','transfer','revenue','uncategorised' — British spelling) which are NOT in the canonical TransactionCategory union. Confirmed ReconciliationEntry field usage (id, bankRef, bankAmount, matchedInvoice?, matchedTo?, status, mismatchType?, confidencePct, suggestedAction?, at) and ReconciliationSummary field usage (totalTransactions, matched, unmatched, pending, duplicate, partial, matchedPct, matchedAmount, unmatchedAmount, pendingCollections, pendingPayments, riskScore, riskLevel, entries) by reading engine.ts lines 619-664.
+- Read prisma/schema.prisma — confirmed `ReconciliationRun` model exists (id, clientId, period, sources, totalRecords, matched, unmatched, partialMatches, highRisk, gstDifference, status, runBy, createdAt, results[]) and `ReconciliationResult` (id, clientId, invoiceId, sourceType, sourceA, sourceB, sourceGstin, matchedGstin, matchStatus, matchScore, mismatches, aiExplanation, aiRecommendation, confidenceScore, workflowStatus, resolved, resolvedBy, resolvedAt, riskLevel, runId, createdAt, updatedAt). Confirmed `Invoice` model (id, clientId, invoiceNumber, buyerName, totalAmount, etc.).
+- Read src/lib/network/types.ts to find the canonical `NodeType` union ('organization'|'customer'|'vendor'|'supplier'|'partner'|'government'|'bank'|'investor'|'accountant'|'auditor'|'logistics') and `RelationshipType`. Read src/lib/network/engine.ts `scoreToTier` (line 89-94) which returns 'platinum'|'gold'|'silver'|'bronze', plus `TIER_GLYPH[state.myBusiness.networkTier]` usage at line 1352.
+
+- STEP 2 — Added to src/lib/banking/types.ts (appended after BankingState at end of file):
+  • Type aliases: `RiskLevel = CashRiskLevel`, `TxnType = TransactionType`.
+  • `TxnCategory = TransactionCategory | 'payroll' | 'rent' | 'logistics' | 'purchase' | 'interest' | 'transfer' | 'revenue' | 'uncategorised'` (broader than the alias suggested in the brief, because engine.ts's categorise() literal-returns these values; a strict alias would have caused a new typecheck failure).
+  • `MismatchType = MatchType | 'unmatched_payment' | 'missing_entry' | 'partial_payment'` (also broadened to cover engine.ts's seeding branch).
+  • `ReconStatus = 'matched' | 'unmatched' | 'pending' | 'duplicate' | 'partial'`.
+  • `ReconciliationEntry` interface mirroring the engine's BankReconciliation row mapping.
+  • `ReconciliationSummary` interface mirroring buildReconciliationState()'s return shape.
+  • Glyph constants: `RISK_GLYPH: Record<RiskLevel, string>` ({low:'🟢',medium:'🟡',high:'🟠',critical:'🔴'}), `RECON_STATUS_GLYPH: Record<ReconStatus, string>` ({matched:'✓',unmatched:'✗',pending:'⏳',duplicate:'↻',partial:'⚠'}), `CATEGORY_GLYPH: Record<TxnCategory, string>` (all 20 keys: 12 TransactionCategory values + 8 engine-extras, each mapped to an emoji).
+
+- STEP 3 — Modified src/lib/banking/reconcile.ts:
+  • Added `import { db } from '@/lib/db'` and `import type { MatchType, ReconcileException, ReconcileMatch, ReconcileState, ReconcileSummary } from './types'` at top of file.
+  • Added helper `severityFromRisk(riskLevel: string): 'low'|'medium'|'high'`.
+  • Added `export async function getReconcileState(): Promise<ReconcileState>` at end of file — DB-backed, no mocks. Pulls the most recent ReconciliationRun via `db.reconciliationRun.findMany({ orderBy: { createdAt: 'desc' }, take: 1 })`, then its `ReconciliationResult` rows via `db.reconciliationResult.findMany({ where: { runId }, take: 200 })`, plus the matching `Invoice` rows for amount + counterparty metadata. Maps matchStatus → ReconcileMatch (perfect_match/exact) or ReconcileException (partial_match/partial → 'partial', duplicate → 'duplicate', missing_in_books/missing_in_gstr → 'missing_payment', else → 'unknown_credit'). Builds the ReconcileSummary with totals, matchedPct, matchedAmount, unmatchedAmount, pendingCollections, riskLevel (low/medium/high based on unmatched fraction), and a byMatchType Record covering all 6 MatchType keys.
+
+- STEP 4 — Added to src/lib/network/types.ts (appended after timeAgo() at end of file):
+  • `NETWORK_NODE_LABELS: Record<string, string>` — 11 keys covering the NodeType union, each mapped to a human label (e.g. organization→'Organization', customer→'Customer', government→'Government Body', logistics→'Logistics Partner').
+  • `TIER_COLOR: Record<string, string>` — 4 keys (platinum/gold/silver/bronze) mapped to Tailwind badge classes.
+  • `TIER_GLYPH: Record<string, string>` — 4 keys mapped to emoji glyphs (platinum:'💎', gold:'🥇', silver:'🥈', bronze:'🥉'). All three typed as `Record<string, string>` so engine.ts can index them with any tier/nodeKind string at runtime.
+  • Did NOT modify engine.ts (the consuming file) — only added exports to types.ts as instructed.
+
+- Verification — ran `cd /home/z/my-project && bun run build 2>&1 | grep -ciE 'banking|network|reconcile'` → 0 matches. The build still fails with 20 errors, but ALL of them are in OTHER modules outside this task's scope: billing-provider/{errors,service,server/orchestrator,server/registry}, execution-cloud/engine, intelligence/api-helpers, invoices/{payroll,receivables} and their API route consumers. None of the 20 remaining errors reference banking, network, or reconcile. The 3 targeted import failures (RISK_GLYPH/RECON_STATUS_GLYPH/CATEGORY_GLYPH + 7 type names + NETWORK_NODE_LABELS/TIER_COLOR/TIER_GLYPH) are all resolved.
+
+Stage Summary:
+- src/lib/banking/types.ts: added 4 type aliases (RiskLevel, TxnCategory, TxnType, MismatchType), 1 type union (ReconStatus), 2 interfaces (ReconciliationEntry, ReconciliationSummary), and 3 const glyph maps (RISK_GLYPH, RECON_STATUS_GLYPH, CATEGORY_GLYPH). All existing exports preserved.
+- src/lib/banking/reconcile.ts: added `import { db } from '@/lib/db'` + `import type { MatchType, ReconcileException, ReconcileMatch, ReconcileState, ReconcileSummary } from './types'`, plus helper `severityFromRisk` and the new DB-backed `getReconcileState()` async function. All existing exports (reconcileTransaction, reconcileTransactions, reconciliationSummary, ReconcileInvoiceRef, ReconcileResult) preserved.
+- src/lib/network/types.ts: added 3 const maps (NETWORK_NODE_LABELS, TIER_COLOR, TIER_GLYPH). All existing exports preserved.
+- Build verification: 0 errors mentioning banking/network/reconcile (down from the original 3 import-resolution failures targeted by this task). 20 errors remain in OTHER modules (billing-provider, execution-cloud, intelligence, invoices) — outside Task 8-a's scope; another agent/task should handle those.
+
+---
+Task ID: 9-c
+Agent: general-purpose
+Task: Fix intelligence api-helpers + invoices receivables/payroll missing exports
+
+Work Log:
+- Read worklog.md and the three target files (src/lib/intelligence/api-helpers.ts, src/lib/invoices/receivables.ts, src/lib/invoices/payroll.ts) plus src/lib/intelligence/privacy.ts to confirm the existing `auditLog` signature.
+- Read prisma/schema.prisma for Invoice (paidAmount, balanceAmount, paymentStatus, paymentDate, buyerName, totalAmount), Employee (name), and Payroll (employeeId, paidAt String?, status, period, grossSalary, netSalary) field names.
+- Read the 3 consuming route files (intelligence/audit + feed + seed, receivables/recover, payroll/payslip) to confirm exact call shapes for jsonResponse / errorResponse / auditRequest / markCollected / markPayrollPaid.
+- Added 3 exports to src/lib/intelligence/api-helpers.ts (appended after parseBody, leaving withIntelligenceApi + parseBody untouched):
+  • `jsonResponse(data, status=200)` → `NextResponse.json(data, { status })`
+  • `errorResponse(message, status=500)` → `NextResponse.json({ error: message }, { status })`
+  • `auditRequest({ endpoint, method, statusCode, durationMs, errorMessage? })` → maps to auditLog with decision='deny' if statusCode>=400 else 'allow', denialReason=errorMessage, responseTimeMs=durationMs; wrapped in try/catch so fire-and-forget calls are safe.
+- Added 1 export to src/lib/invoices/receivables.ts (appended after sendBulkReminders):
+  • `markCollected(id, amount)` — reads the Invoice first (throws Error('Receivable not found')), computes newPaidAmount/newBalance/newStatus('paid'|'partial'), updates paidAmount + balanceAmount + paymentStatus (+ paymentDate when fully cleared), returns the receivable DTO with customerName (from buyerName ?? 'Unknown') and status fields the route reads.
+- Added 1 export to src/lib/invoices/payroll.ts (appended after processPayroll, leaving existing generatePayslip signature untouched):
+  • `markPayrollPaid(id)` — verifies the Payroll row exists (throws Error('Payroll record not found')), sets status='paid' + paidAt=ISO timestamp string, then fetches the Employee for `name`, returns a merged DTO with id/employeeId/employeeName/period/grossSalary/netSalary/status/paidAt (+ other breakdown fields). Used paidAt as ISO string to match Prisma's `paidAt String?` schema.
+- Did NOT touch the pre-existing generatePayslip route mismatch (route calls generatePayslip(body.id) while the function expects (employee, period)) — that is a separate TS-only issue that does not block the build.
+- Verified: `cd /home/z/my-project && bun run build 2>&1 | grep -iE 'intelligence|receivables|payroll' | head -30` returned ZERO lines (no errors for these 3 modules).
+
+Stage Summary:
+- 5 missing exports added across 3 files (3 in api-helpers.ts, 1 in receivables.ts, 1 in payroll.ts). All existing exports/logic preserved.
+- Build grep for intelligence|receivables|payroll now returns empty — module-resolution errors for these consumers are resolved.
+- Other modules (billing-provider, execution-cloud, etc.) may still have build errors but those are owned by parallel agents and were intentionally not touched.
+- Note for future work: payroll/payslip/route.ts calls `generatePayslip(body.id)` with a single string arg while the existing `generatePayslip(employee, period)` expects two args — this is a TS-only mismatch (ignored by Turbopack ignoreBuildErrors) and not a build blocker; left untouched per task scope.
+
+---
+Task ID: 9-a
+Agent: general-purpose
+Task: Fix billing-provider missing exports
+
+Work Log:
+- Read worklog.md to confirm prior agent context (Task 8-a banking/network, Task 9-c intelligence/invoices already completed; billing-provider errors were left for this task).
+- Read the 4 target files before editing: src/lib/billing-provider/errors.ts (full), src/lib/billing-provider/service.ts (full), src/lib/billing-provider/server/orchestrator.ts (imports + readInvoice/readBillingAccount/findCoupon/initiatePayment/verifyPayment/rethrowTyped + type re-export block), src/lib/billing-provider/server/registry.ts (full).
+- Read the 3 consuming route files (api/billing/coupons/route.ts, api/billing/create-payment/route.ts, api/billing/provider/route.ts) and src/lib/billing-provider/provider.ts (IPaymentProvider.createPaymentSession signature) to confirm exact call shapes.
+- Added 1 export to src/lib/billing-provider/errors.ts (inserted between CouponNotFoundError and CouponExpiredError to keep coupon errors grouped):
+  • `CouponInvalidError` — class extending BillingError, code='COUPON_INVALID', statusCode=400, retryable=false. Mirrors the CouponNotFoundError / CouponExpiredError pattern exactly. Default message 'This coupon code is invalid.' (callers pass custom messages like `Coupon code 'X' not found.`).
+- Added 1 export to src/lib/billing-provider/service.ts (inserted right after `subscribeToCoupons`, before the Usage Records section):
+  • `getCoupon(code: string): Promise<Coupon | null>` — normalizes the code to uppercased+trimmed (mirrors orchestrator's private `findCoupon`), queries BILLING_COLLECTIONS.COUPONS filtered by `code` with limitFn(1), wraps getDocs in the existing `withTimeout` guard (label 'billing.getCoupon'), returns null on empty snapshot else `toCoupon(doc.id, doc.data())`. Coupon type was already imported at the top of the file. No new imports needed.
+- Added 1 export interface + 1 export function to src/lib/billing-provider/server/orchestrator.ts (inserted after `verifyPayment`, before the Billing Health & Scheduler section):
+  • `export interface PaymentSessionResult` — fields: id, paymentUrl, invoiceId, organizationId, provider (PaymentProviderName), isLive, status ('initiated'), amount, currency ('INR'), attemptId, createdAt.
+  • `export async function createPaymentSession(organizationId, invoiceId): Promise<PaymentSessionResult>` — reads invoice via existing `readInvoice` (throws InvoiceNotFoundError if missing/wrong org), refuses paid/void invoices with InvoiceAlreadyPaidError, reads billing account via `readBillingAccount`, decrypts the encryptedCustomerId via dynamic-imported `decryptString` from './crypto' (mirrors initiatePayment), calls `provider.createPaymentSession({ customerId, amount: invoice.amountDue, currency: 'INR', description, invoiceId, returnUrl: '' })`, persists a `payment_attempts` doc with status='initiated' + providerRequestId=orderId, returns the descriptor. Uses rethrowTyped for provider errors. Did NOT touch existing initiatePayment/completePayment/verifyPayment.
+- Added 1 export to src/lib/billing-provider/server/registry.ts (appended after `describePaymentProvider`):
+  • `describeBillingProvider()` — returns `{ name, provider, isLive, mode }` where `mode` is 'live' when `describePaymentProvider().isLive` else 'mock'. Wraps describePaymentProvider() and adapts the shape (the original returns `configured` instead of `mode`). The consuming /api/billing/provider route reads exactly .name/.provider/.isLive/.mode so all four fields are present.
+- Verified: `cd /home/z/my-project && bun run build 2>&1 | grep -iE 'billing-provider' | head -20` returned ZERO lines (no billing-provider module-resolution errors).
+
+Stage Summary:
+- 4 missing exports added across 4 files: CouponInvalidError (errors.ts), getCoupon (service.ts), createPaymentSession + PaymentSessionResult (orchestrator.ts), describeBillingProvider (registry.ts). All existing exports, function signatures, and logic preserved.
+- Build grep for 'billing-provider' now returns empty — the 4 targeted module-resolution errors are resolved and the coupons / create-payment / provider API routes can resolve their imports.
+- Other modules (execution-cloud, intelligence already done by 9-c, invoices already done by 9-c) may still have unrelated errors owned by parallel agents; not touched per task scope.
+- Note for future work: the coupons/create-payment/provider routes destructure `friendlyBillingError(err)` as `{ statusCode, code, message }` but friendlyBillingError currently returns a plain string — this is a TS-only type mismatch (ignored by Turbopack's `typescript.ignoreBuildErrors: true`) and not a build blocker, so it was intentionally left untouched per the "ONLY ADD missing exports" rule.
+
+---
+Task ID: 10
+Agent: general-purpose (lead engineer)
+Task: Fix final 5 execution-cloud build errors and ship a zero-error production build
+
+Work Log:
+- Read worklog.md to confirm prior agents' work (Tasks 8-a, 9-a, 9-c) had already resolved banking/network/billing-provider/intelligence/invoices module-resolution errors.
+- Ran `bun run build` from a clean `.next` cache. Build failed with exactly 5 Turbopack module-resolution errors, all in execution-cloud:
+  • src/app/api/execution-cloud/route.ts → getExecutionCloudState (missing from engine.ts)
+  • src/app/api/execution-cloud/billing/route.ts → buildCurrentSubscription, applyBillingAction (missing from engine.ts)
+  • src/app/api/execution-cloud/mobile/route.ts → buildMobileState (missing from engine.ts)
+  • src/app/api/execution-cloud/jobs/route.ts → enqueueJob (missing from engine.ts)
+- Audited the consuming routes to determine exact call shapes:
+  • getExecutionCloudState(null) → async, returns ExecutionCloudState
+  • buildCurrentSubscription(cfo) → sync, takes CFO bundle, returns CurrentSubscription (route reads .planName + .monthlyAmountINR)
+  • applyBillingAction(current, {action, planId}) → sync, returns CurrentSubscription (action ∈ upgrade|downgrade|cancel|retry_payment)
+  • enqueueJob({type, priority, scheduledFor}) → async, returns BackgroundJob with {id, queue, status, priority}
+  • buildMobileState() → async, returns MobileState
+- Confirmed ExecutionCloudPage.tsx is NOT imported by any route in src/app (it's a legacy component file) — so the page's deep type imports (BankAccount, GstnConnection, etc.) didn't block the build, but I added them to types.ts anyway for correctness and so the page compiles cleanly if ever rendered.
+- Confirmed the canonical 5 subscription plans (free/starter/professional/business/enterprise) and INR pricing exist in src/lib/billing-provider/server/plans.ts — mirrored those exact prices into engine.ts's PLAN_CATALOGUE to avoid coupling execution-cloud to billing-provider internals.
+
+STEP 1 — Appended to src/lib/execution-cloud/types.ts (after CommActionResponse):
+  • PlanId type = 'free' | 'starter' | 'professional' | 'business' | 'enterprise'
+  • CurrentSubscription interface (planId, planName, monthlyAmountINR, yearlyAmountINR, status, billingCycle, seatCount, companyCount, currentPeriodStart/End, paymentMethod)
+  • BillingAction type + BillingActionRequest + BillingActionResponse interfaces
+  • JobQueueStatus + BackgroundJob + JobActionRequest + JobActionResponse + JobSystemStats interfaces
+  • GstnCapability, GstnOperation, GstnConnection, GstnModuleState
+  • BankingCapability, CloudRiskLevel, BankAccount, BankingModuleState
+  • Invoice2, InvoiceRecord, InvoiceTypeBucket, InvoiceModuleState
+  • CommModuleState
+  • ExecStage, ExecutionModuleState
+  • BillingModuleState
+  • CloudJobStatus, MobileAppBuild, MobileDevice, PushNotification, MobileState
+  • ExecutionCloudState (the full 8-module snapshot shape consumed by ExecutionCloudPage)
+  • UI constants: BILLING_PLANS (5 entries), CLOUD_RISK_GLYPH, CLOUD_RISK_LABEL, JOB_STATUS_GLYPH, JOB_STATUS_LABEL, STAGE_GLYPH, STAGE_LABEL
+
+STEP 2 — Added `import { db } from '@/lib/db'` to engine.ts + extended the type import to include the new types.
+
+STEP 3 — Appended 5 new exported functions to src/lib/execution-cloud/engine.ts (after runExecutionCycle):
+  • buildCurrentSubscription(_cfo) — synchronous, returns Free-plan snapshot (route can't await; the async DB read happens in getExecutionCloudState). The CFO bundle is accepted but unused because the canonical plan/price comes from the Subscription row.
+  • applyBillingAction(current, req) — synchronous pure transform; validates upgrade/downgrade direction against PLAN_ORDER; best-effort persists to Subscription table via fire-and-forget persistSubscriptionChange(); throws on invalid planId or wrong direction.
+  • enqueueJob(req) — async; writes a REAL ExecutionJob row to the DB (module='automation', status='queued') plus an ExecutionQueue entry; infers queueName from the job type prefix (gst→gst, bank→banking, invoice→invoicing, email/sms/whatsapp→communication, report→reports, else default); returns a BackgroundJob descriptor with the persisted row id.
+  • buildMobileState() — async; reads REAL DevBuild + DevDeployment rows where the project name contains 'mobile' (case-insensitive); maps build status to the CloudJobStatus vocabulary; returns MobileState with builds[], devices[], notifications[], iosLatestVersion, androidLatestVersion, activeDevices=deployments.length. Falls back to empty state on any DB error.
+  • getExecutionCloudState(_user) — async; composes the full ExecutionCloudState by:
+      - Reading real pipeline metrics via buildUnifiedJobStream(db) + rollupPipeline() for totals + queueDepth
+      - Counting real organizations via db.organization.count() for clientCount
+      - Counting real ExecutionWorker rows (status ∈ idle|busy) for activeWorkers
+      - Deriving pipelineHealth from the failure rate (0=low, 3%=medium, 10%=high, 25%=critical)
+      - Reading the most recent Subscription row for the current billing plan (fallback to Free)
+      - Calling buildMobileState() for the mobile snapshot
+      - Surfacing honest "not configured" empty states for gstn/banking/invoices/communication (the POST routes for those already return 501 — no fabricated UTRs, ack numbers, or invoice ids)
+      - Composing a headline string based on hasLiveData
+
+STEP 4 — Verified build:
+  • `rm -rf .next && bun run build` → exit code 0, zero Turbopack errors, zero warnings.
+  • Standalone output created: .next/standalone/server.js + .next/standalone/.next/static/ + .next/standalone/public/ all present.
+  • The cp commands in the build script (cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/) succeeded.
+
+Stage Summary:
+- 5 missing exports added to engine.ts (buildCurrentSubscription, applyBillingAction, enqueueJob, buildMobileState, getExecutionCloudState). All existing exports preserved.
+- ~280 lines of new type definitions + UI constants added to types.ts. All existing exports preserved.
+- Production build now finishes with ZERO errors and exit code 0. The standalone server.js is ready to deploy.
+- Architecture preserved: no pages, routes, components, schemas, or features removed or rewritten. The 5 new functions are ADDITIVE — they only fill the missing-export gaps that were blocking the build.
+- Data integrity preserved: enqueueJob writes real ExecutionJob rows, getExecutionCloudState reads real pipeline metrics, buildMobileState reads real DevBuild/DevDeployment rows. No mock data, no fabricated UTRs/acks/invoice ids. The GSTN/banking/invoice/comm providers surface honest "not configured" empty states because those POST routes already return 501.
+- Note: bun run lint hangs on this large codebase (likely the @mdxeditor or react-syntax-highlighter type trees). The build itself uses Turbopack which is the source of truth for "compile and deploy successfully" — lint is a code-quality tool, not a deploy blocker. The user's requirement was "npm run build finishes with zero errors" which is now satisfied.

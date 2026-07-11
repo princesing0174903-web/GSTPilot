@@ -522,3 +522,360 @@ export interface ScheduleJobRequest {
 export interface CancelJobRequest { jobId: string; reason?: string }
 export interface RetryJobRequest { jobId: string }
 export interface ReplayJobRequest { jobId: string }
+
+// ─── EXECUTION CYCLE (Observe → Think → Decide → Execute → Confirm → Learn) ────
+
+export interface ExecutionCycleStage {
+  name: 'observe' | 'think' | 'decide' | 'execute' | 'confirm' | 'learn';
+  status: 'completed' | 'skipped' | 'failed';
+  durationMs: number;
+  summary: string;
+}
+
+export interface ExecutionCycleAction {
+  id: string;
+  module: ExecutionModule;
+  type: string;
+  description: string;
+  status: ExecutionStatus;
+  dispatchedAt: string;
+}
+
+export interface ExecutionCycle {
+  cycleId: string;
+  trigger: string;
+  command: string | null;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  stages: ExecutionCycleStage[];
+  actions: ExecutionCycleAction[];
+  summary: string;
+}
+
+// ─── Action API request/response contracts ─────────────────────────────────────
+
+export interface ExecuteActionRequest {
+  trigger?: string;
+  command?: string;
+}
+
+export interface ExecuteActionResponse {
+  ok: boolean;
+  cycle: ExecutionCycle;
+  message: string;
+}
+
+// ─── Communication action contracts ────────────────────────────────────────────
+
+export type CommChannel = 'whatsapp' | 'email' | 'sms' | 'notice' | 'report';
+
+export interface CommActionRequest {
+  channel: CommChannel;
+  to: string;
+  toName?: string;
+  subject: string;
+  body?: string;
+  template?: string;
+}
+
+export interface CommMessage {
+  id: string;
+  channel: CommChannel;
+  to: string;
+  toName: string;
+  subject: string;
+  preview: string;
+  status: 'sent' | 'queued' | 'failed';
+  template?: string;
+  at: string;
+}
+
+export interface CommActionResponse {
+  ok: boolean;
+  message: CommMessage;
+}
+
+// ─── Phase 8 — Execution Cloud (legacy 8-module UI) contracts ─────────────────
+// These contracts back the /api/execution-cloud/* family of routes and the
+// legacy ExecutionCloudPage UI. They are deliberately permissive (lots of
+// optional fields) because the real provider for GSTN/banking/invoice is not
+// wired in this environment — the routes return honest 501s and the state
+// surfaces "not configured" rather than fabricated data.
+
+export type PlanId = 'free' | 'starter' | 'professional' | 'business' | 'enterprise';
+
+export interface CurrentSubscription {
+  planId: PlanId;
+  planName: string;
+  monthlyAmountINR: number;
+  yearlyAmountINR: number;
+  status: 'trial' | 'active' | 'suspended' | 'cancelled' | 'expired';
+  billingCycle: 'monthly' | 'yearly';
+  seatCount: number;
+  companyCount: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  paymentMethod: string | null;
+}
+
+export type BillingAction = 'upgrade' | 'downgrade' | 'cancel' | 'retry_payment';
+
+export interface BillingActionRequest {
+  action: BillingAction;
+  planId?: PlanId;
+}
+
+export interface BillingActionResponse {
+  ok: boolean;
+  subscription: CurrentSubscription;
+  message: string;
+}
+
+// ─── Background job system (POST /api/execution-cloud/jobs) ───────────────────
+
+export type JobQueueStatus = 'queued' | 'running' | 'completed' | 'failed' | 'delayed' | 'cancelled';
+
+export interface BackgroundJob {
+  id: string;
+  type: string;
+  queue: string;
+  status: JobQueueStatus;
+  priority: ExecutionPriority;
+  scheduledFor: string | null;
+  enqueuedAt: string;
+}
+
+export interface JobActionRequest {
+  type: string;
+  priority?: ExecutionPriority;
+  scheduledFor?: string;
+}
+
+export interface JobActionResponse {
+  ok: boolean;
+  job: BackgroundJob;
+  message: string;
+}
+
+export interface JobSystemStats {
+  jobsCompletedToday: number;
+  jobsFailedToday: number;
+  activeWorkers: number;
+  queueDepth: number;
+  avgLatencyMs: number;
+}
+
+// ─── GSTN Live module state ───────────────────────────────────────────────────
+
+export type GstnCapability = 'gstr1' | 'gstr3b' | 'gstr2b' | 'einvoice' | 'ewaybill' | 'gstsearch' | 'panverify';
+export type GstnOperation = 'file' | 'fetch' | 'generate' | 'search' | 'verify';
+
+export interface GstnConnection {
+  gstin: string;
+  legalName: string;
+  state: string;
+  status: 'active' | 'suspended' | 'cancelled';
+  connectedAt: string;
+}
+
+export interface GstnModuleState {
+  configured: boolean;
+  connections: GstnConnection[];
+  operationsToday: number;
+  filingsThisMonth: number;
+  capabilities: { id: GstnCapability; label: string; emoji: string; enabled: boolean }[];
+}
+
+// ─── Banking Cloud module state ───────────────────────────────────────────────
+
+export type BankingCapability = 'sync' | 'collect' | 'fetch' | 'reconcile';
+export type CloudRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountMasked: string;
+  ifsc: string;
+  balanceINR: number;
+  syncedAt: string | null;
+  healthy: boolean;
+}
+
+export interface BankingModuleState {
+  configured: boolean;
+  accounts: BankAccount[];
+  totalBalanceINR: number;
+  reconMatchRatePct: number;
+  pendingReconciliations: number;
+}
+
+// ─── Real Invoice Engine module state ─────────────────────────────────────────
+
+export type Invoice2 = 'sales' | 'purchase' | 'tds' | 'payroll';
+
+export interface InvoiceRecord {
+  id: string;
+  type: Invoice2;
+  party: string;
+  amountINR: number;
+  status: 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled';
+  date: string;
+}
+
+export interface InvoiceTypeBucket {
+  type: Invoice2;
+  label: string;
+  count: number;
+  amountINR: number;
+}
+
+export interface InvoiceModuleState {
+  configured: boolean;
+  todayCount: number;
+  outstandingINR: number;
+  buckets: InvoiceTypeBucket[];
+  recent: InvoiceRecord[];
+}
+
+// ─── Communication Cloud module state ─────────────────────────────────────────
+
+export interface CommModuleState {
+  totalSentToday: number;
+  avgDeliveryRatePct: number;
+  byChannel: Record<CommChannel, number>;
+}
+
+// ─── Execution Engine module state ────────────────────────────────────────────
+
+export type ExecStage = 'observe' | 'think' | 'decide' | 'execute' | 'confirm' | 'learn';
+
+export interface ExecutionModuleState {
+  pipelineHealth: CloudRiskLevel;
+  autonomousExecutionsToday: number;
+  lastCycle: ExecutionCycle | null;
+}
+
+// ─── SaaS Billing module state ────────────────────────────────────────────────
+
+export interface BillingModuleState {
+  current: CurrentSubscription;
+  mrrINR: number;
+  arrINR: number;
+  paymentMethodOnFile: boolean;
+}
+
+// ─── Mobile Apps module state ─────────────────────────────────────────────────
+
+export type CloudJobStatus = 'queued' | 'building' | 'success' | 'failed' | 'cancelled';
+
+export interface MobileAppBuild {
+  id: string;
+  platform: 'ios' | 'android';
+  version: string;
+  status: CloudJobStatus;
+  buildNumber: number;
+  createdAt: string;
+  artifactUrl: string | null;
+}
+
+export interface MobileDevice {
+  id: string;
+  name: string;
+  platform: 'ios' | 'android';
+  lastSeenAt: string;
+  appVersion: string;
+  pushToken: string | null;
+}
+
+export interface PushNotification {
+  id: string;
+  title: string;
+  body: string;
+  sentAt: string;
+  deliveredTo: number;
+}
+
+export interface MobileState {
+  builds: MobileAppBuild[];
+  devices: MobileDevice[];
+  notifications: PushNotification[];
+  iosLatestVersion: string | null;
+  androidLatestVersion: string | null;
+  activeDevices: number;
+}
+
+// ─── Full ExecutionCloudState (GET /api/execution-cloud) ──────────────────────
+
+export interface ExecutionCloudState {
+  generatedAt: string;
+  clientCount: number;
+  hasLiveData: boolean;
+  headline: string;
+  gstn: GstnModuleState;
+  banking: BankingModuleState;
+  invoices: InvoiceModuleState;
+  communication: CommModuleState;
+  execution: ExecutionModuleState;
+  jobs: { stats: JobSystemStats; recent: BackgroundJob[] };
+  billing: BillingModuleState;
+  mobile: MobileState;
+}
+
+// ─── UI constants (used by ExecutionCloudPage) ────────────────────────────────
+
+export const BILLING_PLANS: { id: PlanId; name: string; priceMonthly: number; emoji: string; tagline: string }[] = [
+  { id: 'free',         name: 'Free',         priceMonthly: 0,     emoji: '🆓', tagline: 'Solo founders' },
+  { id: 'starter',      name: 'Starter',      priceMonthly: 1499,  emoji: '🚀', tagline: 'Small businesses' },
+  { id: 'professional', name: 'Professional', priceMonthly: 4999,  emoji: '⚡', tagline: 'Most popular' },
+  { id: 'business',     name: 'Business',     priceMonthly: 14999, emoji: '🏢', tagline: 'Growing teams' },
+  { id: 'enterprise',   name: 'Enterprise',   priceMonthly: 49999, emoji: '🏛️', tagline: 'Large orgs' },
+];
+
+export const CLOUD_RISK_GLYPH: Record<CloudRiskLevel, string> = {
+  low: '🟢',
+  medium: '🟡',
+  high: '🟠',
+  critical: '🔴',
+};
+
+export const CLOUD_RISK_LABEL: Record<CloudRiskLevel, string> = {
+  low: 'Healthy',
+  medium: 'Watch',
+  high: 'At risk',
+  critical: 'Critical',
+};
+
+export const JOB_STATUS_GLYPH: Record<CloudJobStatus, string> = {
+  queued: '⏳',
+  building: '🔨',
+  success: '✅',
+  failed: '❌',
+  cancelled: '↩️',
+};
+
+export const JOB_STATUS_LABEL: Record<CloudJobStatus, string> = {
+  queued: 'Queued',
+  building: 'Building',
+  success: 'Success',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+
+export const STAGE_GLYPH: Record<ExecStage, string> = {
+  observe: '👁️',
+  think: '🧠',
+  decide: '⚖️',
+  execute: '⚡',
+  confirm: '✅',
+  learn: '📚',
+};
+
+export const STAGE_LABEL: Record<ExecStage, string> = {
+  observe: 'Observe',
+  think: 'Think',
+  decide: 'Decide',
+  execute: 'Execute',
+  confirm: 'Confirm',
+  learn: 'Learn',
+};

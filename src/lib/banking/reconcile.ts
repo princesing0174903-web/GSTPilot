@@ -20,10 +20,18 @@
 // matched against the GST liability ledger.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { db } from '@/lib/db';
 import type {
   BankTransaction,
   ReconciliationStatus,
 } from '@/lib/banking-provider/types';
+import type {
+  MatchType,
+  ReconcileException,
+  ReconcileMatch,
+  ReconcileState,
+  ReconcileSummary,
+} from './types';
 
 // ─── Invoice / payment reference shape ───────────────────────────────────────
 // The engine accepts a lightweight invoice shape so it can run against any
@@ -341,5 +349,180 @@ export function reconciliationSummary(transactions: BankTransaction[]): {
     unmatched,
     matchedAmount: round2(matchedAmount),
     unmatchedAmount: round2(unmatchedAmount),
+  };
+}
+
+// ─── DB-backed Banking Cloud state (consumed by oracle.ts) ────────────────────
+//
+// `oracle.ts` calls `getReconcileState()` and feeds the result into the
+// aggregated `BankingState` consumed by the Banking Cloud Oracle context
+// block. The shape returned must satisfy the `ReconcileState` interface
+// defined in `./types` (summary + matches + exceptions + hasLiveData).
+//
+// Data sources (all real, no mocks):
+//   • `ReconciliationRun` — most recent run drives the summary window.
+//   • `ReconciliationResult` — one row per invoice/reconciled-entity pair,
+//     with `matchStatus`, `matchScore`, `mismatches`, `aiRecommendation`,
+//     `riskLevel` and a join to `Invoice` for amount + counterparty.
+//
+// Mapping `ReconciliationResult.matchStatus` → engine vocabulary:
+//   perfect_match | exact              → matched (ReconcileMatch)
+//   partial_match | partial            → partial (ReconcileException)
+//   duplicate                          → duplicate (ReconcileException)
+//   missing_in_books | missing_in_gstr → missing_payment (ReconcileException)
+//   mismatch | anything else           → unknown_credit (ReconcileException)
+
+function severityFromRisk(riskLevel: string): 'low' | 'medium' | 'high' {
+  if (riskLevel === 'high' || riskLevel === 'critical') return 'high';
+  if (riskLevel === 'medium') return 'medium';
+  return 'low';
+}
+
+export async function getReconcileState(): Promise<ReconcileState> {
+  // Most recent run drives the summary window.
+  const runs = await db.reconciliationRun.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+  });
+  const latestRun = runs[0] ?? null;
+
+  const results = latestRun
+    ? await db.reconciliationResult.findMany({
+        where: { runId: latestRun.id },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      })
+    : [];
+
+  // Pull invoice metadata for richer match records + amounts.
+  const invoiceIds = Array.from(new Set(results.map((r) => r.invoiceId)));
+  const invoices = invoiceIds.length > 0
+    ? await db.invoice.findMany({
+        where: { id: { in: invoiceIds } },
+        take: 500,
+      })
+    : [];
+  const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+
+  const matches: ReconcileMatch[] = [];
+  const exceptions: ReconcileException[] = [];
+
+  let matchedCount = 0;
+  let partialCount = 0;
+  let duplicateCount = 0;
+  let unmatchedCount = 0;
+  let matchedAmount = 0;
+  let unmatchedAmount = 0;
+
+  for (const r of results) {
+    const inv = invoiceById.get(r.invoiceId);
+    const invoiceAmount = inv?.totalAmount ?? 0;
+    const confidence = r.confidenceScore || r.matchScore || 0;
+    const dateIso = r.createdAt.toISOString();
+    const periodLabel = latestRun?.period ?? '';
+
+    if (r.matchStatus === 'perfect_match' || r.matchStatus === 'exact') {
+      matchedCount++;
+      matchedAmount += invoiceAmount;
+      matches.push({
+        id: r.id,
+        bankTxnId: r.id, // ReconciliationResult has no bank-txn FK; reuse id.
+        invoiceId: r.invoiceId,
+        invoiceNumber: inv?.invoiceNumber ?? null,
+        customerName: inv?.buyerName ?? null,
+        bankAmount: invoiceAmount, // No bank amount on ReconciliationResult.
+        invoiceAmount,
+        matchType: 'exact',
+        confidence,
+        date: dateIso,
+        description: `Matched in reconciliation run ${periodLabel}`.trim(),
+        reason: r.aiExplanation ?? 'Exact amount + counterparty match',
+      });
+    } else if (r.matchStatus === 'partial_match' || r.matchStatus === 'partial') {
+      partialCount++;
+      unmatchedAmount += invoiceAmount;
+      exceptions.push({
+        id: r.id,
+        type: 'partial',
+        bankTxnId: r.id,
+        description: r.mismatches ?? 'Partial match — amount or counterparty differs',
+        amount: invoiceAmount,
+        date: dateIso,
+        suggestedAction: r.aiRecommendation ?? 'Review and confirm partial match',
+        severity: 'medium',
+      });
+    } else if (r.matchStatus === 'duplicate') {
+      duplicateCount++;
+      unmatchedAmount += invoiceAmount;
+      exceptions.push({
+        id: r.id,
+        type: 'duplicate',
+        bankTxnId: r.id,
+        description: r.mismatches ?? 'Duplicate entry detected',
+        amount: invoiceAmount,
+        date: dateIso,
+        suggestedAction: r.aiRecommendation ?? 'Remove duplicate entry',
+        severity: 'high',
+      });
+    } else {
+      // missing_in_books | missing_in_gstr | mismatch | anything else
+      unmatchedCount++;
+      unmatchedAmount += invoiceAmount;
+      const isMissing =
+        r.matchStatus === 'missing_in_books' || r.matchStatus === 'missing_in_gstr';
+      exceptions.push({
+        id: r.id,
+        type: isMissing ? 'missing_payment' : 'unknown_credit',
+        bankTxnId: r.id,
+        description: r.mismatches ?? `Unmatched — ${r.matchStatus}`,
+        amount: invoiceAmount,
+        date: dateIso,
+        suggestedAction: r.aiRecommendation ?? 'Investigate and resolve',
+        severity: severityFromRisk(r.riskLevel),
+      });
+    }
+  }
+
+  const total = results.length;
+  const matchedPct = total > 0 ? Math.round((matchedCount / total) * 100) : 0;
+  const unknownCreditCount = exceptions.filter((e) => e.type === 'unknown_credit').length;
+  const missingPaymentCount = exceptions.filter((e) => e.type === 'missing_payment').length;
+
+  const byMatchType: Record<MatchType, number> = {
+    exact: matchedCount,
+    partial: partialCount,
+    duplicate: duplicateCount,
+    unknown_credit: unknownCreditCount,
+    unknown_debit: 0,
+    missing_payment: missingPaymentCount,
+  };
+
+  const pendingCollections = partialCount;
+  const riskScore = total > 0
+    ? Math.min(
+        100,
+        Math.round(((unmatchedCount + partialCount + duplicateCount) / total) * 100),
+      )
+    : 0;
+  const riskLevel: ReconcileSummary['riskLevel'] =
+    riskScore >= 60 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
+
+  const summary: ReconcileSummary = {
+    totalTransactions: total,
+    matched: matchedCount,
+    unmatched: unmatchedCount,
+    matchedAmount: round2(matchedAmount),
+    unmatchedAmount: round2(unmatchedAmount),
+    matchedPct,
+    pendingCollections,
+    riskLevel,
+    byMatchType,
+  };
+
+  return {
+    summary,
+    matches,
+    exceptions,
+    hasLiveData: total > 0,
   };
 }

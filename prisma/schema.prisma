@@ -5516,3 +5516,28 @@ model OracleAIToolCall {
   @@index([sessionId, createdAt])
   @@index([firmId, toolName])
 }
+
+// ─── Google Workspace Integration Tokens (Phase: Google Workspace) ──────────
+// Stores encrypted OAuth tokens for each (organization, user) pair. The
+// refresh token is AES-256-GCM encrypted with a key derived from
+// GOOGLE_CLIENT_SECRET (no separate encryption env var needed). Tokens are
+// server-side only — never exposed to the client. Org-isolated + RBAC-gated.
+model GoogleWorkspaceToken {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  userEmail      String
+  googleUserId   String?
+  accessToken    String   // encrypted (short-lived, refreshed automatically)
+  refreshToken   String   // encrypted (long-lived)
+  expiryDate     DateTime?
+  scope          String
+  tokenType      String   @default("Bearer")
+  connectedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  revokedAt      DateTime?
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}

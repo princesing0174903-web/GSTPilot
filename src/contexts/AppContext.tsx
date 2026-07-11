@@ -209,7 +209,12 @@ export type AppView =
   | 'predictive-compliance'
   | 'intelligent-collections'
   // Phase Oracle-AI — Enterprise AI Intelligence Layer
-  | 'oracle-intelligence';
+  | 'oracle-intelligence'
+  // Phase Enterprise RBAC — Multi-Tenant Organization & RBAC
+  | 'organization-dashboard'
+  | 'enterprise-settings'
+  // Phase Google Workspace — Enterprise Integration
+  | 'google-workspace';
 
 export interface ReturnPrepContext {
   clientId: string | null;

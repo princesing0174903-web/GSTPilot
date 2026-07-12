@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Sora, Poppins, JetBrains_Mono } from "next/font/google";
-import { Providers } from "@/components/providers";
+import { ProvidersLazy } from "@/components/providers-lazy";
 import "./globals.css";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -146,7 +146,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${sora.variable} ${poppins.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`}
       >
-        <Providers>{children}</Providers>
+        <ProvidersLazy>{children}</ProvidersLazy>
       </body>
     </html>
   );

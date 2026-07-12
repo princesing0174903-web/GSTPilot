@@ -1784,3 +1784,30 @@ Stage Summary:
 - All 12 FinOS modules refactored to use pure-SVG chart primitives from `@/components/finos/ui/charts`. Zero recharts dependency in any module.
 - Files modified: 10 (ExecutiveDashboard, AICFO, GSTIntelligence, Banking, Sales, Purchases, Inventory, Payroll, ComplianceCenter, AutomationBuilder). Files verified unchanged: 2 (AIAccountant, OracleAI — had no charts).
 - The dev server should now stay stable when users navigate between all 12 modules, since Turbopack no longer needs to compile recharts 12 times.
+
+---
+Task ID: ROLLBACK-1
+Agent: Principal Engineer (direct)
+Task: EMERGENCY RESTORATION — Full rollback of the "AI FinOS" regression to the last stable GSTPilot
+
+Work Log:
+- Investigated the regression: identified that commit `a40be92` (2026-07-12) was the SOLE regression commit. It rewrote `src/app/page.tsx` (1295 insertions / 357 deletions), replacing the 334-line GSTPilot Infinity™ lightweight router (Landing → Login → Onboarding → DashboardShell with 146 lazy-loaded views, Firebase Auth, OrgContext) with a 1037-line self-contained "FinOS" mock page that used inline mock data and deliberately avoided Firebase/AuthContext/OrgContext/DashboardShell. It also changed `src/app/loading.tsx` (branded loading screen) and `src/components/providers.tsx` (provider tree).
+- Analyzed 3 user-uploaded reference images via VLM (z-ai vision): Image 1 = original dashboard (sidebar: Home, AI CFO, Run Business, Autonomous, Finance, Network, Settings; GSTPilot Oracle panel; what-if simulation); Images 2 & 3 = original landing page ("Run your entire financial operation on one brain", trust badges SOC 2/GSTN/RBI/India-hosted).
+- Confirmed the "FinOS" files mentioned in the prior plan (lib/finos/, components/finos/, api/finos/) were NEVER written to disk — only the page.tsx rewrite landed. Nothing extra to clean up.
+- Preserved the legitimate 2026-07-12 commits (bb7e5e2 worklog-only, 4fe8fc6 + 8344674 Google Workspace auth integration) — these are real integration improvements the user wanted kept.
+- Executed `git reset --hard bb7e5e2` — byte-exact restoration of the 3 affected files to their stable state. Verified: page.tsx back to 334 lines ("GSTPilot Infinity™ — Root Page (lightweight router)"), loading.tsx restored (BrandLogoPulse "Loading GSTPilot…"), providers.tsx restored.
+- Diagnosed dev-server OOM: the restored 146-dynamic-import module graph (Firebase + AuthContext + OrgContext + DashboardShell) cold-compiles at ~2.9GB RSS on Turbopack, which OOMs the 4GB sandbox cgroup when Chrome (agent-browser) is also open (~500MB). The cgroup group-kill also kills the watchdog, preventing auto-restart.
+- Stabilized the dev server: (1) lowered V8 heap from 1800m → 1200m in dev-watchdog.sh (reduces peak RSS from 2.96GB → 2.5GB, leaving headroom for Chrome + OS); (2) launched watchdog with `setsid bash dev-watchdog.sh </dev/null >/dev/null 2>&1 & disown` (closed stdin prevents cross-command process reaping); (3) preserved the .next on-disk cache (671MB) across watchdog restarts so subsequent compiles are light (5-33ms) and don't re-spike memory.
+- Browser-verified the full golden path with agent-browser:
+  1. Landing page renders: title "GSTPilot™ — The Financial Brain of India", nav (Features, Oracle AI, Pricing, Security, Sign in, Get Started), hero "Run your entire financial operation on one brain.", CTAs (Start Free, Book a Demo), trust badges (SOC 2 Type II, GSTN Compliant, RBI Aligned, India-hosted), features (AI CFO, GST Cloud, Banking Cloud, Invoice Cloud, Reconciliation Engine, Oracle AI), capabilities (Real-time Reconciliation, Predictive Cash Flow, Multi-Firm Command, Voice-driven Operations). ✓ MATCHES reference images 2 & 3.
+  2. Login page renders: "Welcome back to your GST Command Center", "Sign in to your account", "Continue with Google", email/password, "Enter Preview Mode". ✓
+  3. "Enter Preview Mode" → dashboard renders: top bar (GSTPilot Infinity™ logo + "The Financial Brain of India", Search ⌘K, Notifications, Toggle theme, "PU Preview" user menu), sidebar (Home, Autonomous, AI CFO, Run Business, Finance, Network, Settings, Google + "THE FINANCIAL BRAIN OF INDIA" footer), main content ("Good Morning, Preview 👋", onboarding CTAs: Connect GSTN, Connect Bank, Invite Team, Activate Oracle, "[ Connect Data ]"). ✓ MATCHES reference image 1 sidebar exactly.
+  4. Server stable throughout dashboard session: RSS held at ~2.5GB, no OOM, fast cached compiles (5-33ms). VLM-verified dashboard screenshot confirms all elements.
+- Screenshots saved: restore-verify-landing.png (176KB), restore-verify-dashboard.png (26KB).
+
+Stage Summary:
+- ROLLBACK COMPLETE. GSTPilot is restored byte-exact to the last stable version (commit bb7e5e2) via `git reset --hard`. No redesign remains, no placeholder UI remains, no functionality lost.
+- All original systems intact: Firebase Auth + OrgContext + Firestore multi-tenant architecture, 146 lazy-loaded dashboard views, 500+ API routes, Google Workspace integration, Oracle AI, AI CFO, Banking, Sales, Purchases, Inventory, Customers, Vendors, Products, Invoices, Reports, Analytics, Settings, Billing, Organization, Security — all the original modules.
+- Dev server: STABLE on Turbopack (1200MB heap, 671MB .next cache, watchdog restart loop with closed-stdin detachment). HTTP 200, cold `/` compile ~12s (cached ~50ms), dashboard compile light when warm.
+- Files modified: dev-watchdog.sh (heap 1800m→1200m). NO source files modified — restoration was via git reset, preserving the exact original code.
+- Known constraint: the dashboard COLD-compile (DashboardShell + 146 views + Firebase) spikes to ~2.9GB RSS and will OOM the 4GB sandbox if Chrome is open during the FIRST compile. Once compiled + cached (671MB on disk), subsequent renders are light and stable. The watchdog + cache make this manageable. This is an environment constraint (4GB cgroup), not a code defect — the original GSTPilot ran here for weeks per prior worklog entries.

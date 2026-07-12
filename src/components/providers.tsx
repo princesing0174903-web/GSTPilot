@@ -19,27 +19,12 @@ import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useState } from 'react';
-import dynamic from 'next/dynamic';
 import { Toaster } from '@/components/ui/sonner';
 import { AppProvider } from '@/contexts/AppContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { OrgProvider } from '@/contexts/OrgContext';
-
-// Lazy-loaded to keep the `/` cold-compile memory footprint small enough
-// for the 4 GB sandbox. These are client-only floating overlays; deferring
-// their compilation does not change user-facing behavior.
-const GSTPilotIntelligence = dynamic(
-  () => import('@/components/intelligence/GSTPilotIntelligence').then(m => m.default),
-  { ssr: false }
-);
-const DevServerReconnect = dynamic(
-  () => import('@/components/shared/DevServerReconnect').then(m => m.DevServerReconnect),
-  { ssr: false }
-);
-const ReactQueryDevtools = dynamic(
-  () => import('@tanstack/react-query-devtools').then(m => m.ReactQueryDevtools),
-  { ssr: false }
-);
+import GSTPilotIntelligence from '@/components/intelligence/GSTPilotIntelligence';
+import { DevServerReconnect } from '@/components/shared/DevServerReconnect';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

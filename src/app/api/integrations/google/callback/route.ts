@@ -8,14 +8,22 @@
 //   3. Encrypts + persists the tokens (Prisma GoogleWorkspaceToken)
 //   4. Redirects the browser to returnPath with a success flag
 //
-// The `redirect_uri` used during the token exchange MUST be the same URI
-// that was used in the `buildAuthUrl` call during the connect step. Since
-// both use `GOOGLE_REDIRECT_URI` from env (via `getGoogleOAuthConfig()`),
-// they are guaranteed to match — Google will not return `redirect_uri_mismatch`.
+// CRITICAL: The `redirect_uri` passed to `exchangeCodeForTokens` MUST be the
+// same URI that was used in `buildAuthUrl` during the connect step. Since
+// the callback URL *is* the redirect URI (Google redirected the browser
+// here), we resolve it from the request's forwarded headers — exactly the
+// same way the connect route does. Because the callback request comes from
+// the same browser that did the authorize step (same origin), the two URIs
+// are guaranteed to match.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { exchangeCodeForTokens, storeTokens, decodeState } from '@/lib/google-workspace';
+import {
+  exchangeCodeForTokens,
+  storeTokens,
+  decodeState,
+  resolveRedirectUri,
+} from '@/lib/google-workspace';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,7 +51,21 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { tokens, userInfo, error } = await exchangeCodeForTokens(code);
+    // The redirect URI for token exchange MUST match the one used in the
+    // authorize URL. Resolve it from the request the same way connect does.
+    const redirectUri = resolveRedirectUri(req);
+    console.info(
+      '[/api/integrations/google/callback] redirectUri=',
+      redirectUri,
+      ' host=',
+      req.headers.get('host'),
+      ' x-forwarded-host=',
+      req.headers.get('x-forwarded-host'),
+      ' x-forwarded-proto=',
+      req.headers.get('x-forwarded-proto'),
+    );
+
+    const { tokens, userInfo, error } = await exchangeCodeForTokens(code, redirectUri);
     if (error || !tokens.accessToken) {
       console.error('[/api/integrations/google/callback] token exchange failed:', error);
       return NextResponse.redirect(

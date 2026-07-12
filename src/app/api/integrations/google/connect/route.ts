@@ -11,14 +11,28 @@
 //
 // Response: { ok: true, authUrl: string, redirectUri: string }
 //
-// The `redirect_uri` is always `GOOGLE_REDIRECT_URI` from the environment
-// (localhost for local dev, deployment URL for production). Strategy per the
-// product roadmap: develop with localhost, deploy to a stable HTTPS domain,
-// then register the production redirect URI in Google Cloud Console.
+// The `redirect_uri` is derived PER REQUEST from the request's forwarded
+// headers via `resolveRedirectUri(req)`:
+//   • Browsing http://localhost:3000  → http://localhost:3000/api/integrations/google/callback
+//   • Browsing https://*.fcapp.run    → https://*.fcapp.run/api/integrations/google/callback
+//
+// HTTPS is inferred for any non-localhost host (the fcapp.run edge proxy
+// terminates TLS; Caddy overwrites X-Forwarded-Proto to http, so we can't
+// trust it for real domains). Google requires HTTPS for non-localhost
+// redirect URIs, so this inference is also a Google requirement.
+//
+// The callback route uses the same resolution logic, so the redirect_uri
+// sent to Google here exactly matches the one sent in the token-exchange
+// step (Google rejects mismatches with `redirect_uri_mismatch`).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { buildAuthUrl, encodeState, resolveOrgUserFromHeaders, getRedirectUri } from '@/lib/google-workspace';
+import {
+  buildAuthUrl,
+  encodeState,
+  resolveOrgUserFromHeaders,
+  resolveRedirectUri,
+} from '@/lib/google-workspace';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -36,9 +50,22 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const returnPath = url.searchParams.get('return') ?? '/google-workspace';
 
+    // Derive the OAuth redirect URI from the request's actual public origin.
+    const redirectUri = resolveRedirectUri(req);
+
     const state = encodeState({ orgId, userId, userEmail: userEmail ?? '', returnPath });
-    const authUrl = buildAuthUrl(state);
-    const redirectUri = getRedirectUri();
+    const authUrl = buildAuthUrl(state, redirectUri);
+
+    console.info(
+      '[/api/integrations/google/connect] redirectUri=',
+      redirectUri,
+      ' host=',
+      req.headers.get('host'),
+      ' x-forwarded-host=',
+      req.headers.get('x-forwarded-host'),
+      ' x-forwarded-proto=',
+      req.headers.get('x-forwarded-proto'),
+    );
 
     return NextResponse.json({ ok: true, authUrl, redirectUri });
   } catch (err) {

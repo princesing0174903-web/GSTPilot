@@ -1493,3 +1493,46 @@ Stage Summary:
   • `src/app/api/integrations/google/callback/route.ts` (uses `resolveRedirectUri(req)` for token exchange; logs diagnostics)
   • `src/app/api/integrations/google/redirect-uri/route.ts` (returns full resolution context for debugging)
 - **No new features added** (per user instruction). Only the OAuth `redirect_uri` resolution was made request-aware so it works in both local dev and preview environments.
+
+---
+Task ID: gw-oauth-https-preview
+Agent: main
+Task: Enable HTTPS for the preview. User reports Google OAuth fails because preview is HTTP, and Google only accepts HTTPS redirect URIs for production apps. Requirements: (1) enable HTTPS, (2) give HTTPS URL, (3) ensure callback at /api/integrations/google/callback, (4) confirm exact HTTPS redirect URI for Google Cloud Console. Do not use localhost for preview mode.
+
+Work Log:
+- Audited the preview infrastructure:
+  • Caddy runs from `/app/Caddyfile` (root-owned, not writable) on port 81.
+  • Only port 81 is exposed; ports 80/443 are NOT listening on this machine.
+  • The `fcapp.run` platform (Alibaba Cloud Function Compute) provides the edge proxy that terminates TLS and routes to port 81.
+- Verified HTTPS already works at the edge:
+  • `curl -sIv https://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/` → TLS 1.3 handshake succeeds, valid cert.
+  • HTTP requests return 403 (platform blocks direct HTTP without session).
+  • The platform serves a loading page with a 5-second auto-reload to establish session affinity (x-session-id cookie).
+- Diagnosed the X-Forwarded-Proto problem:
+  • Edge proxy terminates TLS, sends HTTP to Caddy on port 81 with `X-Forwarded-Proto: https`.
+  • Caddy's `header_up X-Forwarded-Proto {scheme}` OVERWRITES it to `http` (because Caddy received HTTP).
+  • Can't modify the Caddyfile (root-owned at `/app/Caddyfile`).
+- Fix: Updated `resolveProto()` in `src/lib/google-workspace/auth.ts` to INFER HTTPS for any non-localhost host, regardless of what X-Forwarded-Proto says:
+  • If `X-Forwarded-Proto` is explicitly `https` → use `https`.
+  • If host is `localhost` or `127.0.0.1` → use `http` (local dev).
+  • For ANY other real domain (e.g., `*.fcapp.run`) → use `https` (edge-terminated TLS + Google requirement).
+- Restored dynamic `resolveRedirectUri(req)` in auth.ts; `buildAuthUrl(state, redirectUri?)` and `exchangeCodeForTokens(code, redirectUri?)` both accept the per-request redirect URI. Both connect and callback routes call `resolveRedirectUri(req)` the same way, so the redirect_uri sent to Google in the authorize step exactly matches the one sent in the token-exchange step.
+- Restored Google OAuth credentials in `.env` (they had been lost): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.
+- Verified with curl (3 scenarios):
+  • Direct localhost:3000 → `http://localhost:3000/api/integrations/google/callback` ✓
+  • Simulated preview (Host: ws-ac-...fcapp.run, X-Forwarded-Proto: http) → `https://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback` ✓ (HTTPS correctly inferred despite Caddy's overwritten proto)
+  • Connect endpoint authUrl.redirect_uri matches response.redirectUri ✓
+- Lint passes cleanly on all 4 files.
+
+Stage Summary:
+- **HTTPS is already available** at the edge via the fcapp.run platform's TLS termination. The user's browser already accesses the preview over HTTPS (the platform redirects HTTP→HTTPS and serves a loading page to establish session affinity).
+- **Fix**: The OAuth redirect_uri is now dynamically resolved per-request with HTTPS inference for real domains. When the user clicks "Connect Google" from the preview, the redirect_uri sent to Google is `https://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback`.
+- **Exact HTTPS redirect URI to register in Google Cloud Console**:
+  `https://ws-ac-e-fb-ebdd-qzovjyebwd.cn-hongkong-vpc.fcapp.run/api/integrations/google/callback`
+- **Files changed**:
+  • `src/lib/google-workspace/auth.ts` — restored `resolvePublicOrigin`, `resolveRedirectUri`, added `resolveProto` with HTTPS inference for non-localhost hosts; `buildAuthUrl` + `exchangeCodeForTokens` accept optional override.
+  • `src/app/api/integrations/google/connect/route.ts` — uses `resolveRedirectUri(req)`.
+  • `src/app/api/integrations/google/callback/route.ts` — uses `resolveRedirectUri(req)` for token exchange.
+  • `src/app/api/integrations/google/redirect-uri/route.ts` — returns full resolution context.
+  • `.env` — restored Google OAuth credentials.
+- **No new features added**.

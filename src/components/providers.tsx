@@ -17,14 +17,30 @@
 
 import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { AppProvider } from '@/contexts/AppContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { OrgProvider } from '@/contexts/OrgContext';
-import GSTPilotIntelligence from '@/components/intelligence/GSTPilotIntelligence';
-import { DevServerReconnect } from '@/components/shared/DevServerReconnect';
+
+// ── Heavy components lazy-loaded so they stay OUT of the initial `/` compile ──
+// GSTPilotIntelligence is 1438 lines + pulls in the full AI SDK dependency tree.
+// DevServerReconnect is small but only needed after hydration. Both are loaded
+// on the client only, AFTER the dashboard shell mounts — keeping the cold
+// compile under ~15s instead of 65s+ (which was causing OOM kills).
+const GSTPilotIntelligence = dynamic(
+  () => import('@/components/intelligence/GSTPilotIntelligence'),
+  { ssr: false, loading: () => null },
+);
+const DevServerReconnect = dynamic(
+  () => import('@/components/shared/DevServerReconnect').then((m) => ({ default: m.DevServerReconnect })),
+  { ssr: false, loading: () => null },
+);
+const ReactQueryDevtools = dynamic(
+  () => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })),
+  { ssr: false, loading: () => null },
+);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

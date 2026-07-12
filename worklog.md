@@ -1837,3 +1837,30 @@ Stage Summary:
 - .next cache (272MB) built — warm compiles take ~10-25s instead of 60s.
 - Preview is live at HTTP 200.
 - Known constraint: the 4GB sandbox OOMs when the server compiles heavy chunks (Firebase SDK, dashboard views). The watchdog restarts it within 5-10s. User may need to refresh the preview once after the initial load.
+---
+Task ID: fix-preview-and-restore-app
+Agent: Main Agent
+Task: Fix preview permanently + restore full GSTPilot frontend + fix auth
+
+Work Log:
+- Diagnosed root cause: 4GB sandbox OOM-kills dev server during `/` cold compile
+- page.tsx was a minimal landing page, not the full GSTPilot app
+- layout.tsx had Providers removed, so auth/contexts were non-functional
+- Created `src/components/AppRoot.tsx` — wraps Providers + AppRouter
+- Created `src/components/AppRouter.tsx` — moved routing logic from page.tsx (landing/login/onboarding/dashboard screens)
+- Rewrote `src/app/page.tsx` to use `next/dynamic(ssr: false)` to load AppRoot — keeps heavy graph out of SSR
+- Modified `src/components/providers.tsx` — made GSTPilotIntelligence (1438 lines), DevServerReconnect, ReactQueryDevtools all lazy via `next/dynamic`
+- Removed Providers from `src/app/layout.tsx` (AppRoot brings them in)
+- Switched dev server from `--webpack` to `--turbopack` (compile: 65s → 33s)
+- Lowered Node heap to `--max-old-space-size=1200` (was 2200) to prevent OOM
+- Updated `dev-watchdog-permanent.sh` to use Turbopack + lower heap
+- Killed stale watchdog processes (old script was still using webpack + 2200MB heap)
+- Verified via Agent Browser: landing page, login page, and dashboard all render
+- Verified via VLM: dashboard has sidebar, navigation, getting started widget — no visual errors
+
+Stage Summary:
+- ✅ Preview is FIXED: `setsid -f` watchdog auto-restarts server, Turbopack keeps compile under 4GB
+- ✅ Full GSTPilot frontend RESTORED: landing page (hero, features, AI agents, pricing), login page (Google, email, preview mode), dashboard (sidebar, getting started, all views)
+- ✅ App loads in ~33s cold compile, 60ms cached requests
+- ⚠️ Google OAuth: Firebase `auth/unauthorized-domain` error requires preview domain in Firebase Authorized Domains. Preview Mode (demo login) works as fallback.
+- Key files: page.tsx (ultra-light), AppRoot.tsx (new), AppRouter.tsx (new), providers.tsx (lazy), dev-watchdog-permanent.sh (Turbopack)

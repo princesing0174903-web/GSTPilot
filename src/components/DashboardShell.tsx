@@ -35,8 +35,9 @@ import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
 import { FloatingDock } from '@/components/layout/FloatingDock'
 import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
-import { OraclePanel } from '@/components/oracle/OraclePanel'
-import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
+// NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
+// experience at /oracle, launched by <OracleLauncher /> (mounted globally in
+// providers.tsx). No more docked sidebar popup.
 import { BrandLogo } from '@/components/brand'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import CommandPalette from '@/components/command-palette/CommandPalette'
@@ -61,10 +62,8 @@ export function DashboardContent() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
 
-  // ── Oracle docked sidebar state (persisted to localStorage) ──────────────────
-  // Lazy initial state — readInitialOracleState is SSR-safe (returns false on
-  // the server) so this avoids the cascading-render effect entirely.
-  const [oracleOpen, setOracleOpen] = useState(readInitialOracleState)
+  // ── Notifications sheet state ──────────────────────────────────────────────
+  // Oracle is now a full page (/oracle), not a docked sidebar popup.
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const userInitials = user?.name
@@ -107,7 +106,7 @@ export function DashboardContent() {
             <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
           <button
-            onClick={() => { setNotificationsOpen(true); setOracleOpen(false) }}
+            onClick={() => setNotificationsOpen(true)}
             className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             aria-label="Notifications"
           >
@@ -172,27 +171,15 @@ export function DashboardContent() {
         </main>
       </div>
 
-      {/* ═══ PREMIUM FLOATING DOCK (Oracle · Notifications · Help) ═══ */}
+      {/* ═══ PREMIUM FLOATING DOCK (Notifications · Help) ═══ */}
+      {/* Oracle button removed from dock — the canonical Oracle launcher is
+          <OracleLauncher /> mounted globally in providers.tsx. */}
       <FloatingDock
-        onOracleToggle={() => {
-          setOracleOpen((v) => !v)
-          setNotificationsOpen(false)
-        }}
-        oracleOpen={oracleOpen}
         onNotificationsToggle={() => {
           setNotificationsOpen((v) => !v)
-          setOracleOpen(false)
         }}
         notificationsOpen={notificationsOpen}
       />
-
-      {/* ═══ ORACLE DOCKED SIDEBAR (slide-in right on desktop, bottom sheet on mobile) ═══ */}
-      <OracleDockSidebar
-        open={oracleOpen}
-        onClose={() => setOracleOpen(false)}
-      >
-        <OraclePanel onNavigate={(view) => { setCurrentView(view); setOracleOpen(false) }} />
-      </OracleDockSidebar>
 
       {/* ═══ NOTIFICATIONS SHEET (wired to /api/notifications) ═══ */}
       <NotificationsSheet

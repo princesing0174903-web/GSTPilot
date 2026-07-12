@@ -18,7 +18,7 @@
 
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Bell, HelpCircle, X } from 'lucide-react';
+import { Bell, HelpCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -28,10 +28,6 @@ import {
 } from '@/components/ui/tooltip';
 
 interface FloatingDockProps {
-  /** Called when the Oracle button is clicked. */
-  onOracleToggle: () => void;
-  /** Whether the Oracle sidebar is currently open (affects button highlight). */
-  oracleOpen?: boolean;
   /** Unread notification count (shows a badge when > 0). */
   notificationCount?: number;
   /** Called when the Notifications button is clicked. */
@@ -41,8 +37,6 @@ interface FloatingDockProps {
 }
 
 export function FloatingDock({
-  onOracleToggle,
-  oracleOpen = false,
   notificationCount = 0,
   onNotificationsToggle,
   notificationsOpen = false,
@@ -56,15 +50,10 @@ export function FloatingDock({
     setHelpOpen((v) => !v);
   }, []);
 
+  // NOTE: Oracle button removed — the canonical Oracle launcher is now
+  // <OracleLauncher /> mounted globally in providers.tsx. It navigates to
+  // the /oracle page. This dock now only contains Notifications + Help.
   const dockItems = [
-    {
-      key: 'oracle',
-      label: oracleOpen ? 'Close Oracle' : 'Open Oracle',
-      icon: Sparkles,
-      onClick: onOracleToggle,
-      active: oracleOpen,
-      accent: true,
-    },
     {
       key: 'notifications',
       label: notificationsOpen ? 'Close Notifications' : 'Notifications',
@@ -106,19 +95,11 @@ export function FloatingDock({
                     item.active
                       ? 'bg-white/[0.12] text-foreground'
                       : 'text-muted-foreground hover:bg-white/[0.08] hover:text-foreground',
-                    item.accent && !item.active && 'hover:text-emerald-400',
                   )}
                   aria-label={item.label}
                   aria-pressed={item.active}
                 >
                   <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-                  {/* Accent dot for Oracle button */}
-                  {item.accent && (
-                    <span className="absolute right-1.5 top-1.5 flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    </span>
-                  )}
                   {/* Notification badge */}
                   {'badge' in item && item.badge ? (
                     <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm">

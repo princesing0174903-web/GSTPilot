@@ -48,6 +48,10 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   'auth/redirect-operation-cancelled': 'Sign-in was cancelled. Please try again.',
   'auth/unauthorized-domain': 'This domain is not authorized for sign-in. Contact support.',
   'auth/operation-not-supported-in-this-environment': 'Sign-in is not supported in this environment.',
+  // redirect_uri_mismatch is a Google OAuth error (not a Firebase code), but
+  // we handle it here in case it surfaces through the Firebase SDK.
+  'auth/redirect-uri-mismatch': 'Google sign-in is not configured for this domain. Please contact support to authorize this domain.',
+  'redirect_uri_mismatch': 'Google sign-in configuration error. Please contact support.',
 
   // ── Session / token ──
   'auth/requires-recent-login': 'For security, please sign in again to complete this action.',

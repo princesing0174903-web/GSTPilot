@@ -774,72 +774,51 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
         .join('\n')
     : '';
 
-  // Fetch live CFO context (Module 5 — Ask CFO) — fail-safe.
-  const cfoContextBlock = await buildCFOContextBlock();
+  // ── Run all context builders IN PARALLEL (was sequential — caused 10+ round
+  //    trips and contributed to OOM kills when all modules loaded at once).
+  //    Each builder is individually fail-safe (returns a fallback string on error).
+  const [
+    cfoResult, rmbResult, graphResult, invoiceResult, execResult,
+    twinResult, ceoResult, realDataResult, recsResult, gstpilotResult,
+  ] = await Promise.allSettled([
+    buildCFOContextBlock(),
+    buildRmbContextBlock(),
+    buildGraphContextBlock(),
+    buildInvoiceEngineContextBlock(),
+    buildExecutionContextBlock(),
+    buildTwinContextBlock(),
+    buildCEOContextBlock(),
+    mem.userId ? buildRealDataSnapshot(mem.userId).then(formatRealDataContextBlock) : Promise.resolve(''),
+    formatDynamicRecommendationsBlock(mem.userId),
+    buildGSTpilotContextBlock(),
+  ]);
 
-  // Fetch live Run My Business state (Phase 4 — Ask Operator) — fail-safe.
-  const rmbContextBlock = await buildRmbContextBlock();
+  const cfoContextBlock = cfoResult.status === 'fulfilled' ? cfoResult.value : '';
+  const rmbContextBlock = rmbResult.status === 'fulfilled' ? rmbResult.value : '';
+  const graphContextBlock = graphResult.status === 'fulfilled' ? graphResult.value : '';
+  const invoiceEngineContextBlock = invoiceResult.status === 'fulfilled' ? invoiceResult.value : '';
+  const executionContextBlock = execResult.status === 'fulfilled' ? execResult.value : '';
+  const twinContextBlock = twinResult.status === 'fulfilled' ? twinResult.value : '';
+  const ceoContextBlock = ceoResult.status === 'fulfilled' ? ceoResult.value : '';
 
-  // Fetch live Business Graph state (Phase 5 — Ask Graph) — fail-safe.
-  const graphContextBlock = await buildGraphContextBlock();
-
-  // Fetch live Invoice Engine state (Phase 8 Step 3 — Real Invoice Engine™) — fail-safe.
-  const invoiceEngineContextBlock = await buildInvoiceEngineContextBlock();
-
-  // Fetch live Execution Engine state (Phase 8 Step 5 — Execution Engine™) — fail-safe.
-  const executionContextBlock = await buildExecutionContextBlock();
-
-  // Fetch live Digital Twin state (Phase 9 — GSTPilot Digital Twin™) — fail-safe.
-  // Used to answer "what changed today?", "replay yesterday", "why is my Health
-  // Score lower?", and "compare this quarter with last quarter" questions.
-  const twinContextBlock = await buildTwinContextBlock();
-
-  // Fetch live AI CEO state (Phase 10 — GSTPilot AI CEO™) — fail-safe.
-  // Used to answer "what should I do today?", "what's the biggest risk?",
-  // "can I afford X?", and "what's our strategy?" questions.
-  const ceoContextBlock = await buildCEOContextBlock();
-
-  // Fetch REAL connected data (Phase 2 — Real Data Engine™) — fail-safe.
-  // Uses the user's Firebase UID to pull from DataConnection + SyncedRecord tables.
-  let realDataContextBlock = '';
-  if (mem.userId) {
-    try {
-      const snapshot = await buildRealDataSnapshot(mem.userId);
-      realDataContextBlock = formatRealDataContextBlock(snapshot);
-    } catch (err) {
-      console.warn('[Oracle] Real data context unavailable:', err);
-      realDataContextBlock = `## REAL CONNECTED DATA (Phase 2 — Real Data Engine™)
+  let realDataContextBlock = realDataResult.status === 'fulfilled'
+    ? realDataResult.value
+    : `## REAL CONNECTED DATA (Phase 2 — Real Data Engine™)
 Real data engine is not available right now. Fall back to general guidance without fabricating connected-source numbers.`;
-    }
-  } else {
+  if (!mem.userId) {
     realDataContextBlock = `## REAL CONNECTED DATA (Phase 2 — Real Data Engine™)
 User identity not provided — cannot fetch real connected data. Encourage the user to connect data sources (GSTN, Bank, Gmail) from the Connections page.`;
   }
 
-  // Fetch DYNAMIC RECOMMENDATIONS (PT-1-b) — fail-safe.
-  // Computed from REAL DB state (Invoice, GSTRFiling, Notice, Issue, Payment,
-  // Expense, FilingEvent). Injected into the system prompt so the LLM answer
-  // is grounded in current business reality — never static / canned.
-  let dynamicRecsBlock = '';
-  try {
-    dynamicRecsBlock = await formatDynamicRecommendationsBlock(mem.userId);
-  } catch (err) {
-    console.warn('[Oracle] Dynamic recommendations unavailable:', err);
-    dynamicRecsBlock = `## DYNAMIC RECOMMENDATIONS (PT-1-b)
+  let dynamicRecsBlock = recsResult.status === 'fulfilled'
+    ? recsResult.value
+    : `## DYNAMIC RECOMMENDATIONS (PT-1-b)
 Dynamic recommendation engine is not available right now. If the user asks for recommendations, suggest running the RMB agents (Collections / Compliance / Finance / Reporting / GST) from the Run-My-Business page.`;
-  }
 
-  // Fetch GSTPILOT LIVE REGISTRY — real Firestore data from
-  // organizations/GSTpilot_SAAS/{customers,products,invoices}. Powers "Show
-  // customers / invoices / products" commands with REAL data. Fail-safe.
-  let gstpilotContextBlock = '';
-  try {
-    gstpilotContextBlock = await buildGSTpilotContextBlock();
-  } catch (err) {
-    console.warn('[Oracle] GSTPilot context unavailable:', err);
-    gstpilotContextBlock = `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
+  let gstpilotContextBlock = gstpilotResult.status === 'fulfilled'
+    ? gstpilotResult.value
+    : `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
 The live GSTPilot registry could not be loaded. If the user asks to "show customers / invoices / products", say the registry is temporarily unavailable. NEVER fabricate records.`;
-  }
 
   return `${BRAND_IDENTITY_PROMPT_BLOCK}
 
@@ -1362,7 +1341,30 @@ export async function POST(request: Request) {
     });
   }
 
-  const systemPrompt = await buildSystemPrompt(body);
+  // ── Build system prompt (fail-safe: never let context builder crashes
+  //    kill the chat. If buildSystemPrompt throws, we fall back to a minimal
+  //    prompt so the user still gets a response.)
+  let systemPrompt: string;
+  try {
+    systemPrompt = await buildSystemPrompt(body);
+  } catch (err) {
+    console.error('[Oracle] buildSystemPrompt FAILED — using fallback prompt:', err);
+    const mem = body.memory ?? {};
+    const personalisation: string[] = [];
+    if (mem.userName) personalisation.push(`- The user's name is ${mem.userName}.`);
+    if (mem.firmName) personalisation.push(`- The user's firm is "${mem.firmName}".`);
+    if (mem.gstin) personalisation.push(`- The user's GSTIN is ${mem.gstin}.`);
+    systemPrompt = `${BRAND_IDENTITY_PROMPT_BLOCK}
+
+## WHO YOU ARE
+You are **GSTPilot Oracle™** — the AI Chief Financial Officer for Indian businesses.
+${personalisation.join('\n')}
+
+## CONTEXT NOTE
+Some real-time business context modules are unavailable right now. Answer using
+your built-in GST/finance expertise. If the user asks about their specific
+numbers, let them know the live data engine is reconnecting and to try again.`;
+  }
   const languageHint = inferLanguageHint(messages);
 
   // ── Real Business Graph Engine™ — log Oracle conversation as a live event ──

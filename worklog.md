@@ -1864,3 +1864,33 @@ Stage Summary:
 - ✅ App loads in ~33s cold compile, 60ms cached requests
 - ⚠️ Google OAuth: Firebase `auth/unauthorized-domain` error requires preview domain in Firebase Authorized Domains. Preview Mode (demo login) works as fallback.
 - Key files: page.tsx (ultra-light), AppRoot.tsx (new), AppRouter.tsx (new), providers.tsx (lazy), dev-watchdog-permanent.sh (Turbopack)
+
+---
+Task ID: fix-oracle-auth-ai
+Agent: Main Agent
+Task: Fix duplicate Oracle buttons, Oracle AI backend, and auth issues
+
+Work Log:
+- AUDIT: Found TWO live Oracle floating buttons (GSTPilotIntelligence orb in providers + FloatingDock Oracle button in DashboardShell)
+- AUDIT: Found 5 dead/orphaned Oracle launcher files (2296 lines of dead code)
+- AUDIT: Firebase auth config verified - hardcoded fallback uses project gstpilot1, authDomain gstpilot1.firebaseapp.com
+- AUDIT: Oracle AI "reasoning service" error root cause = OOM kills during /api/oracle/chat compilation (1560-line route, 38 imports, 27.5s compile)
+- CREATED: src/components/oracle/OracleLauncher.tsx — single canonical colorful premium floating button that navigates to /oracle via router.push()
+- CREATED: src/app/oracle/page.tsx — full-page Oracle chat experience wrapped with Providers
+- MODIFIED: src/components/providers.tsx — replaced GSTPilotIntelligence with OracleLauncher
+- MODIFIED: src/components/layout/FloatingDock.tsx — removed Oracle button (kept Notifications + Help only)
+- MODIFIED: src/components/DashboardShell.tsx — removed OracleDockSidebar/OraclePanel (Oracle is now full page)
+- MODIFIED: src/app/api/oracle/chat/route.ts — wrapped buildSystemPrompt in try/catch + made 10 context builders parallel with Promise.allSettled
+- MODIFIED: src/lib/auth/errors.ts — added redirect_uri_mismatch friendly error messages
+- DELETED: 5 dead Oracle code files (gstpilot-intelligence/GSTPilotIntelligence.tsx, copilot/AICopilot.tsx, layout/CommandBar.tsx, layout/OracleHeroInput.tsx, intelligence/IntelligencePage.tsx)
+- VERIFIED: Landing page loads, login page loads, dashboard loads with single Oracle launcher button
+- VERIFIED: /oracle page loads with full sidebar, New Chat, history, Executive Brief, chat input
+- VERIFIED: Oracle AI API streaming works — curl test returns proper SSE tokens with {done:true}
+- VERIFIED: Lint passes on all modified files
+
+Stage Summary:
+- ✅ Oracle floating button: ONE single premium colorful orb at bottom-right that navigates to /oracle
+- ✅ Oracle AI: Fixed "reasoning service" error — buildSystemPrompt is now fail-safe + parallel context builders
+- ✅ /oracle page: Full-page chat experience with sidebar, history, streaming, Executive Brief
+- ⚠️ Google OAuth: redirect_uri_mismatch is a Google Cloud Console config issue — user must add https://gstpilot1.firebaseapp.com/__/auth/handler to authorized redirect URIs
+- ⚠️ Email/Password: Code is correct — user must verify Email/Password provider is enabled in Firebase Console and the account exists

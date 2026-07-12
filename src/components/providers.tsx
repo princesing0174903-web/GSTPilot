@@ -25,12 +25,11 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { OrgProvider } from '@/contexts/OrgContext';
 
 // ── Heavy components lazy-loaded so they stay OUT of the initial `/` compile ──
-// GSTPilotIntelligence is 1438 lines + pulls in the full AI SDK dependency tree.
-// DevServerReconnect is small but only needed after hydration. Both are loaded
-// on the client only, AFTER the dashboard shell mounts — keeping the cold
-// compile under ~15s instead of 65s+ (which was causing OOM kills).
-const GSTPilotIntelligence = dynamic(
-  () => import('@/components/intelligence/GSTPilotIntelligence'),
+// OracleLauncher is the SINGLE canonical Oracle floating button (navigates to
+// /oracle page). It's tiny so it could be static, but keeping it lazy ensures
+// the framer-motion dependency stays out of the initial compile.
+const OracleLauncher = dynamic(
+  () => import('@/components/oracle/OracleLauncher').then((m) => ({ default: m.OracleLauncher })),
   { ssr: false, loading: () => null },
 );
 const DevServerReconnect = dynamic(
@@ -63,8 +62,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <AppProvider>
               {children}
               <Toaster />
-              {/* Global Floating AI Assistant — visible on every page when authenticated */}
-              <GSTPilotIntelligence />
+              {/* Global Oracle Floating Launcher — the SINGLE canonical Oracle
+                  button. Clicking navigates to /oracle (full-page chat). */}
+              <OracleLauncher />
               {/* Preview stability: shows a professional reconnect overlay when
                   the dev server briefly restarts, instead of a browser error. */}
               <DevServerReconnect />

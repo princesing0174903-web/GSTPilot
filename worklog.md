@@ -1961,3 +1961,33 @@ Stage Summary:
 - ACTION REQUIRED BY USER: Refresh/reopen the Preview Panel in the Z.ai Code interface. This provisions a NEW public hostname. Once the user has the new hostname, they must: (1) open it in the browser first (triggers the platform's loading page which sets the x-session-id cookie required for session affinity), (2) register `https://<NEW-HOSTNAME>/api/integrations/google/callback` in Google Cloud Console → Credentials → OAuth 2.0 Client → Authorized redirect URIs, (3) then click Connect Google → consent → the callback will work (cookie present + hostname alive).
 - CRITICAL INSIGHT about x-session-id: The Aliyun FC edge proxy rejects ALL requests without an `x-session-id` header (HTTP 400). The platform's loading page sets this as a cookie when the user first opens the preview URL. Google's OAuth callback redirect is a fresh browser navigation to the fcapp.run domain — it WILL carry the x-session-id cookie IF the user has recently opened the preview (cookie not expired) AND the hostname hasn't changed. If the hostname changed (expired + new one generated), the user MUST open the new hostname first to get a new cookie before the OAuth callback will work.
 - No OAuth logic, Firebase, or application code was modified.
+
+---
+Task ID: calendar-route-move
+Agent: main (Z.ai Code)
+Task: Move Calendar API route from /api/integrations/google/calendar to /api/integrations/google/calendar/events so the backend matches the existing frontend client API (Option A from prior diagnosis). Do NOT change frontend. Do NOT change business logic, OAuth, token handling, or Calendar service code.
+
+Work Log:
+- Read existing route at src/app/api/integrations/google/calendar/route.ts (54 lines, GET + POST handlers calling calendar.listEvents / calendar.createEvent via resolveGoogleAuth).
+- Created directory src/app/api/integrations/google/calendar/events/.
+- Wrote new file src/app/api/integrations/google/calendar/events/route.ts with IDENTICAL content (no logic changes, no OAuth changes, no service code changes). Header comments already documented the /events path — now the file location finally matches them.
+- Deleted the old src/app/api/integrations/google/calendar/route.ts (true move, not a copy).
+- Killed running next-server + watchdog, removed /tmp/gstpilot-watchdog.lock, cleared stale .next cache (rm -rf .next) — critical step: Turbopack had a stale route manifest from before the move that was returning 404 even after the file move.
+- Restarted dev server via dev-watchdog-permanent.sh; confirmed "Ready in 4.6s" in dev.log.
+- Verified route registration with 4 curl tests:
+  * GET  /api/integrations/google/calendar/events?max=10  (no headers) → HTTP 400 {"error":"Organization + user context required."} ✓
+  * POST /api/integrations/google/calendar/events           (no headers) → HTTP 400 {"error":"Organization + user context required."} ✓
+  * GET  /api/integrations/google/calendar/events?max=10  (preview-org headers) → HTTP 401 {"error":"Google Workspace is not connected...","needsReconnect":true} ✓
+  * POST /api/integrations/google/calendar/events           (preview-org headers + valid event body) → HTTP 401 (same as above) ✓
+- All 404s eliminated. dev.log shows the route compiling and the handler running (render: 6-32ms).
+- Lint check: no calendar-related errors. 12 pre-existing errors in unrelated files (MissionControlPage, health/monitor, loadtest.k6) — unchanged baseline.
+- Agent Browser verification: navigated to Google Workspace page in preview mode. Page loads correctly. Calendar tab UI (Refresh/Create buttons) only renders when status.connected === true, which requires the user's real Google OAuth session — cannot be reproduced in preview mode because preview-org has no OAuth token in the DB. The 401 response in TEST 3/4 is the expected preview-mode behavior and proves the request reaches resolveGoogleAuth; with the user's real connected org, the same code path will fetch the encrypted token and call the Google Calendar API successfully.
+
+Stage Summary:
+- Root cause of 404 (from prior diagnosis): frontend called /api/integrations/google/calendar/events but route file lived at calendar/route.ts which only serves /calendar (no /events suffix). Next.js 404'd at the router layer.
+- Fix applied: moved route file from calendar/route.ts → calendar/events/route.ts. No logic changes. Frontend untouched.
+- Critical operational note: after moving route files in Turbopack dev mode, MUST clear .next cache (rm -rf .next) and restart the dev server. Without cache clearing, Turbopack kept serving 404 from a stale route manifest even though the new file was correctly placed on disk.
+- Final route file: src/app/api/integrations/google/calendar/events/route.ts (54 lines, unchanged logic).
+- Old route file: deleted.
+- All functionality preserved: GET (list events) and POST (create event) handlers export correctly, OAuth resolution via resolveGoogleAuth intact, calendar.listEvents / calendar.createEvent service calls intact.
+- End-to-end UI test (Refresh Upcoming Events / Create Event) cannot be completed in preview mode because preview-org has no real Google OAuth tokens. The user's real session (Google connected, Calendar scope granted) will exercise the same code path that now returns 401 for preview-org — for them it will resolve the token and call the Google Calendar API, returning HTTP 200 with events / created event.

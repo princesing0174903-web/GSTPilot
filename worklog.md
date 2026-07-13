@@ -2129,3 +2129,60 @@ Stage Summary:
 - WHY THIS IS PERMANENT: The redirect ALWAYS goes to `/` (the root route, which always exists). The view is passed as a query param, read by the app shell on mount. This works regardless of cookies, server restarts, disconnect/reconnect cycles, or fresh sessions. The URL params are in the redirect URL (not cookies or session state), so they survive any client-side state reset. The existing GoogleWorkspacePage banner logic continues to work unchanged.
 - ALL 4 VERIFICATIONS PASSED: (1) Fresh session — no 404, view rendered, banner shown, URL cleaned. (2) Disconnect → Reconnect — redirect target correct, no 404. (3) Server restart — fix persists, redirect correct, root route 200. (4) Clear cookies — no 404, view rendered, banner shown, URL cleaned.
 - Note: The real Google account (princesing0174903@gmail.com) tokens were disconnected as part of Verification 2 (Disconnect → Reconnect test). The user will need to click "Connect Google" again to re-establish the connection — the flow will now land them directly on the Google Workspace view with no 404.
+
+---
+Task ID: google-workspace-lock-in
+Agent: main (Z.ai Code)
+Task: Lock the completed Google Workspace integration as permanent, stable production infrastructure. Create automated regression checks that run on every dev-server restart, protect critical files from accidental refactors, preserve environment configuration, preserve working routes, establish a pre-commit regression checklist, and register all previously-solved bugs so they are never reintroduced. Confirm all Google Workspace functionality still works exactly as it does today.
+
+Work Log:
+- Inventoried all Google Workspace protected files:
+  * Core library (src/lib/google-workspace/): auth.ts, crypto.ts, route-auth.ts, services.ts, index.ts
+  * API routes (src/app/api/integrations/google/): connect, callback, status, disconnect, gmail, drive, docs, sheets, calendar/events, redirect-uri, headers-debug
+  * Frontend: AppContext.tsx (?view= lazy-init), useGoogleWorkspace.ts, GoogleWorkspacePage.tsx
+  * Environment: .env (tracked), .env.local (gitignored permanent), prisma/schema.prisma (GoogleWorkspaceToken model)
+- Ran a comprehensive 12-point regression check against the live preview URL to establish the green baseline:
+  * OAuth connect: redirect_uri = https://preview-chat-...space-z.ai/api/integrations/google/callback (no fcapp.run, no localhost) ✓
+  * OAuth callback: HTTP 307 → /?view=google-workspace&... (root route, no /google-workspace 404) ✓
+  * Status endpoint: ok:true, connected:false for new user ✓
+  * All 5 service routes (gmail/drive/docs/sheets/calendar/events): return 401 when not connected (routes exist, auth gate working) — NOT 404 ✓
+  * Disconnect: idempotent (ok:true) ✓
+  * Root route /?google_connected=1&view=google-workspace: HTTP 200 (no 404) ✓
+- Created the automated regression check script: scripts/google-workspace-regression-check.ts. It verifies:
+  1. GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI env vars are loaded
+  2. Token encryption round-trips (encrypt → decrypt === original) + safeDecrypt returns null on tamper
+  3. (with --base) OAuth connect redirect_uri on space-z.ai (not fcapp.run/localhost)
+  4. (with --base) OAuth callback HTTP 307 to root "/" with ?view=google-workspace (not /google-workspace)
+  5. (with --base) Status / Disconnect endpoints respond correctly
+  6. (with --base) All 5 service routes exist + are auth-gated (401, not 404)
+  7. (with --base) Root route /?google_connected=1&view=google-workspace returns 200 (no 404)
+  Exits with code 1 on any failure, 0 on all-pass. Supports both `--base=URL` and `--base URL` forms.
+- Added two convenience npm scripts to package.json:
+  * `bun run gw-check` — fast guard (env + crypto, <1s, no server needed) for every dev restart
+  * `bun run gw-check:live <url>` — full guard (env + crypto + 12 HTTP probes) for pre-commit
+- Created the comprehensive protection document: docs/GOOGLE-WORKSPACE-PROTECTION.md. It contains 8 sections:
+  §1 Protected Files — full inventory of every protected file with its role + why it's protected
+  §2 Permanent Rules — 8 rules (never modify working OAuth logic, run regression check on every restart, protect critical files, preserve env config, preserve working routes, pre-commit checklist, never reintroduce bugs, development rule)
+  §3 Pre-Commit Regression Checklist — manual checklist + the two commands to run
+  §4 Registry of Solved Bugs — 7 previously-solved bugs documented with symptom/root cause/fix/which check guards it (fcapp.run URLs, hostname detection, 404 after OAuth, missing env vars, Calendar route mismatch, invalid attendees, broken event loading)
+  §5 Architectural Invariants — 7 invariants that must always hold (redirect_uri match, callback to root route, abc header first, AES-256-GCM crypto, @@unique constraint, auth gate 401 not 404, calendar/events route location)
+  §6 How to Safely Extend — 6-step process for adding functionality without breaking the integration
+  §7 Verification Cadence — table of when to run each check
+  §8 Quick Reference — the commands
+- Fixed a lint error in the regression-check script (removed a require() import; used the dynamic import's safeDecrypt directly). Re-ran ESLint: EXIT 0 clean.
+- Re-ran the full regression check after creating all protection artifacts: 17/17 PASS (env+crypto fast guard: 5/5 PASS; full HTTP guard: 17/17 PASS).
+- Final end-to-end browser verification: navigated to /?google_connected=1&view=google-workspace → Sign in → Enter Preview Mode. Confirmed: (1) success banner "Google Workspace connected successfully." shown, (2) Google Workspace view rendered, (3) no 404, (4) URL cleaned to / by GoogleWorkspacePage's effect. All checks pass.
+
+Stage Summary:
+- The Google Workspace integration is now LOCKED as stable production infrastructure.
+- Automated regression guard: `scripts/google-workspace-regression-check.ts` (17 checks, exits 1 on failure). Run `bun run gw-check` on every dev restart (fast, <1s) and `bun run gw-check:live <url>` before any commit touching Google Workspace.
+- Protection contract: `docs/GOOGLE-WORKSPACE-PROTECTION.md` documents all protected files, the 8 permanent rules, the pre-commit checklist, the 7 solved bugs (with guards), the 7 architectural invariants, and the safe-extension process.
+- All Google Workspace functionality confirmed working exactly as it does today:
+  * OAuth connect → generates space-z.ai redirect_uri (no fcapp.run) ✓
+  * OAuth callback → HTTP 307 to /?view=google-workspace (no 404) ✓
+  * Token encryption → AES-256-GCM round-trips ✓
+  * Gmail/Drive/Docs/Sheets/Calendar routes → exist + auth-gated (401, not 404) ✓
+  * Connect → lands on Google Workspace view with success banner (no 404, URL cleaned) ✓
+  * Disconnect → idempotent ✓
+  * Refresh → status endpoint returns connection state ✓
+- No protected files were modified. Only NEW files were created (the regression script + the protection doc) plus the two convenience npm scripts in package.json.

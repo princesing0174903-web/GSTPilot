@@ -72,49 +72,83 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
 // Google Cloud Console. Google only accepts HTTPS for non-localhost redirect
 // URIs (production apps).
 //
-// The fcapp.run preview platform terminates TLS at its edge proxy and
-// forwards HTTP to Caddy on port 81. Caddy then forwards to Next.js on
-// port 3000. Problem: Caddy's `header_up X-Forwarded-Proto {scheme}`
-// overwrites the edge proxy's `X-Forwarded-Proto: https` with `http`
-// (because Caddy received the request as HTTP). We can't modify the
-// Caddyfile (root-owned), so we work around this by INFERRING HTTPS for
-// any non-localhost host.
+// IMPORTANT — gateway hostname rewriting:
+// The preview gateway receives requests at the PUBLIC preview hostname
+// (e.g. https://preview-chat-<chat-id>.space-z.ai) but it OVERWRITES the
+// `Host` and `X-Forwarded-Host` headers with a STALE internal hostname
+// (e.g. ws-ac-*.cn-hongkong-vpc.fcapp.run) before forwarding to Caddy/Next.js.
+// It also rewrites `X-Forwarded-Proto` to `http`. We CANNOT trust those three
+// headers for public-origin resolution — doing so produces redirect URIs that
+// point at the unreachable internal fcapp.run hostname (ERR_CONNECTION_TIMED_OUT).
 //
-// Resolution logic:
-//   • Browsing http://localhost:3000  → redirect_uri = http://localhost:3000/...
-//   • Browsing https://*.fcapp.run    → redirect_uri = https://*.fcapp.run/...
-//   • Browsing https://your-domain.com → redirect_uri = https://your-domain.com/...
+// To work around this, the gateway ALSO sets a custom `abc` header containing
+// the PUBLIC preview hostname PREFIX (e.g. "preview-chat-<chat-id>"). The real
+// public origin is `https://${abc}.space-z.ai`. This header is the single
+// most-reliable signal for the true public hostname, so it is checked FIRST.
+//
+// Resolution logic (most-trusted first):
+//   • `abc` header present            → https://${abc}.space-z.ai
+//   • Browsing http://localhost:3000  → http://localhost:3000/...
+//   • Browsing https://your-domain.com → https://your-domain.com/...
 //
 // The connect route and callback route both use resolveRedirectUri(req), so
 // the redirect_uri sent to Google in the authorize step exactly matches the
 // one sent in the token-exchange step (Google rejects mismatches).
 
+/** Public domain suffix appended to the `abc` header prefix. */
+const PREVIEW_PUBLIC_DOMAIN_SUFFIX = 'space-z.ai';
+
 /**
  * Resolve the public origin (scheme://host[:port]) for an incoming request.
  *
  * Resolution order (most-trusted first):
- *   1. `Origin` header — set by the browser on fetch/CORS requests, survives
+ *   1. `abc` header — gateway-set preview hostname PREFIX (e.g.
+ *      "preview-chat-<chat-id>"). The public origin is
+ *      `https://${abc}.space-z.ai`. This is checked FIRST because the gateway
+ *      overwrites Host/X-Forwarded-Host with a stale internal fcapp.run
+ *      hostname. If `abc` already contains a dot (full hostname), it is used
+ *      as-is; otherwise the `.space-z.ai` suffix is appended.
+ *   2. `Origin` header — set by the browser on fetch/CORS requests, survives
  *      gateway proxies that overwrite `Host`/`X-Forwarded-Host` with a stale
  *      internal hostname. Only used for non-localhost origins (the browser
  *      always knows its own real public origin).
- *   2. `X-Forwarded-Host` + `X-Forwarded-Proto` — gateway-forwarded headers.
- *   3. `Host` header — direct host the server received.
- *   4. `req.url` origin — Next.js internal URL.
- *   5. `GOOGLE_REDIRECT_URI` env var origin.
- *   6. `http://localhost:3000` — last resort.
+ *   3. `X-Forwarded-Host` + `X-Forwarded-Proto` — gateway-forwarded headers.
+ *   4. `Host` header — direct host the server received.
+ *   5. `req.url` origin — Next.js internal URL.
+ *   6. `GOOGLE_REDIRECT_URI` env var origin.
+ *   7. `http://localhost:3000` — last resort.
  *
  * NOTE: The `Origin` header is ONLY sent by the browser on fetch/CORS requests
  * (e.g. the connect endpoint). It is NOT sent on top-level GET navigations
  * (e.g. the Google OAuth callback redirect). For the callback, the redirect_uri
- * is instead passed through the OAuth `state` parameter (see `encodeState`).
+ * is instead passed through the OAuth `state` parameter (see `encodeState`),
+ * which was set by the connect step using THIS function — so the abc header is
+ * captured at connect time and replayed at callback time.
  */
 export function resolvePublicOrigin(req: Request): string {
   const headers = req.headers;
 
+  // 0. `abc` header — gateway-set public preview hostname PREFIX. Checked
+  //    FIRST because the gateway overwrites Host/x-forwarded-host with a
+  //    stale internal fcapp.run hostname, but it preserves the `abc` header
+  //    with the real public preview hostname prefix. This is the ONLY signal
+  //    that reliably points at the reachable public hostname.
+  const abcHeader = headers.get('abc');
+  if (abcHeader) {
+    const prefix = abcHeader.trim();
+    if (prefix) {
+      // If abc already contains a dot (full hostname like "host.example.com"),
+      // use it as-is. Otherwise append the platform's public domain suffix
+      // to form the full public hostname.
+      const host = prefix.includes('.') ? prefix : `${prefix}.${PREVIEW_PUBLIC_DOMAIN_SUFFIX}`;
+      return `https://${host}`;
+    }
+  }
+
   // 1. Origin header — browser's real public origin (survives gateway proxy).
   //    The gateway overwrites Host/x-forwarded-host with a stale internal
   //    hostname, but it preserves the browser-sent Origin header. This is the
-  //    most reliable signal for the real public hostname.
+  //    most reliable signal for the real public hostname when abc is absent.
   const originHeader = headers.get('origin');
   if (originHeader) {
     try {

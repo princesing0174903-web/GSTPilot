@@ -1991,3 +1991,46 @@ Stage Summary:
 - Old route file: deleted.
 - All functionality preserved: GET (list events) and POST (create event) handlers export correctly, OAuth resolution via resolveGoogleAuth intact, calendar.listEvents / calendar.createEvent service calls intact.
 - End-to-end UI test (Refresh Upcoming Events / Create Event) cannot be completed in preview mode because preview-org has no real Google OAuth tokens. The user's real session (Google connected, Calendar scope granted) will exercise the same code path that now returns 401 for preview-org — for them it will resolve the token and call the Google Calendar API, returning HTTP 200 with events / created event.
+
+---
+Task ID: env-restore-and-permanent-fix
+Agent: main (Z.ai Code)
+Task: Restore .env from commit d97b2fd (Google OAuth creds), verify runtime, then make the credentials PERMANENT so future sandbox .env wipes don't break Google Workspace.
+
+Work Log:
+- Restored /home/z/my-project/.env from git commit d97b2fd via `git show d97b2fd:.env > .env`. Verified .env now contains GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, DATABASE_URL (271 bytes).
+- Stopped next-server + watchdog, cleared .next cache, restarted dev server. Confirmed "Environments: .env" in dev.log and "Ready in 4.1s".
+- Verified runtime env via API endpoints (Next.js loads .env at application layer, not OS process env, so /proc/<pid>/environ shows false but API proves vars are loaded):
+  * GET /api/integrations/google/redirect-uri → HTTP 200, envRedirectUri populated ✓
+  * GET /api/integrations/google/connect → HTTP 200, authUrl contains client_id=44040248808-... ✓ (proves all 3 OAuth vars loaded)
+  * GET /api/integrations/google/status → HTTP 200 (no env error) ✓
+- Confirmed zero "env vars are not set" errors in dev.log and browser.
+
+PERMANENT FIX (the critical part):
+- Investigated .gitignore: line 34 contains `.env*` which gitignores ALL .env* files. However, .env is tracked because it was added to git BEFORE the .gitignore rule. .env.local does NOT exist yet, so it would be gitignored if created.
+- Confirmed via `git check-ignore -v .env.local` → `.gitignore:34:.env*  .env.local` (matched/ignored).
+- Created /home/z/my-project/.env.local with GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI. This file is:
+  * Gitignored (not tracked, not committed by sandbox auto-sync)
+  * Loaded by Next.js with HIGHER priority than .env
+  * Immune to the .env wipes that have occurred 3x (sandbox sync only rewrites tracked .env)
+- Restarted dev server. dev.log now shows "Environments: .env.local, .env" — both loaded.
+- Verified all Google endpoints still return HTTP 200 with valid OAuth URLs.
+- CRITICAL TEST: Simulated a sandbox .env wipe (rewrote .env to just DATABASE_URL, 50 bytes). Restarted dev server. Tested endpoints:
+  * /api/integrations/google/redirect-uri → HTTP 200, envRedirectUri populated ✓
+  * /api/integrations/google/connect → HTTP 200, authUrl with client_id ✓
+  * NO env errors in dev.log ✓
+  * .env.local survived the wipe intact (1234 bytes, all 3 vars present) ✓
+- Restored .env to full state from d97b2fd (belt-and-suspenders: creds in both .env and .env.local).
+- Final browser verification: navigated to Google Workspace page in preview mode. Page loads cleanly, NO "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are not set" error. Shows "Not connected" for preview-org (expected — no real OAuth token; user's real session will show Connected).
+
+Stage Summary:
+- .env restored from d97b2fd with all 4 vars (DATABASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI).
+- .env.local created with the 3 Google OAuth vars — PERMANENT and gitignored.
+- Next.js loads both files (.env.local has higher priority).
+- Simulated .env wipe proves .env.local survives and provides the credentials independently.
+- Future sandbox .env wipes will NOT break Google Workspace — .env.local is the permanent source of truth for Google OAuth credentials.
+- The sandbox auto-sync (which rewrites .env to just DATABASE_URL) cannot touch .env.local because it is gitignored and untracked.
+- No code was modified. No OAuth credentials were regenerated. No Google OAuth client was recreated.
+- Final file state:
+  * /home/z/my-project/.env (tracked, 271 bytes) — DATABASE_URL + Google OAuth vars (may be wiped by sandbox sync, but .env.local covers this)
+  * /home/z/my-project/.env.local (gitignored, 1234 bytes) — Google OAuth vars ONLY (PERMANENT, survives all future wipes)

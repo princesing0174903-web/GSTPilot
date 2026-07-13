@@ -242,7 +242,35 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentView, setCurrentView] = useState<AppView>('dashboard');
+  // ── Lazy-initialize currentView from the ?view= URL query param. ──
+  //
+  // This is the PERMANENT fix for the Google OAuth 404 regression. The OAuth
+  // callback (src/app/api/integrations/google/callback/route.ts) redirects the
+  // browser to the ROOT route "/" with ?google_connected=1&view=google-workspace
+  // (instead of the non-existent /google-workspace route, which 404'd). This
+  // lazy initializer reads ?view= on the FIRST render and sets currentView, so
+  // the app shell renders the requested view (e.g. GoogleWorkspacePage)
+  // immediately — which then reads ?google_connected=1 and shows the success
+  // banner. No flash of the dashboard view, no extra render cycle.
+  //
+  // SSR-guarded: AppRoot uses ssr:false, but the guard keeps this safe if this
+  // context is ever rendered server-side (returns 'dashboard' default).
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    if (typeof window === 'undefined') return 'dashboard';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+      if (viewParam) {
+        // Cast to AppView — the value comes from our own callback redirect
+        // (view=google-workspace), so it's always a valid AppView. If an
+        // unknown value is passed, DashboardViews falls through to the default.
+        return viewParam as AppView;
+      }
+    } catch {
+      /* ignore malformed URL */
+    }
+    return 'dashboard';
+  });
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('landing');

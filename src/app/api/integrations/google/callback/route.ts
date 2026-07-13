@@ -6,7 +6,20 @@
 //   1. Decodes the state (orgId, userId, userEmail, returnPath)
 //   2. Exchanges the code for access + refresh tokens
 //   3. Encrypts + persists the tokens (Prisma GoogleWorkspaceToken)
-//   4. Redirects the browser to returnPath with a success flag
+//   4. Redirects the browser to the ROOT route "/" with ?google_connected=1
+//      and ?view=<returnPath-without-leading-slash> so the app shell can
+//      switch to the correct client-side view on mount.
+//
+// CRITICAL — why we redirect to "/" and NOT to returnPath:
+// The `returnPath` (e.g. "/google-workspace") is a CLIENT-SIDE VIEW
+// identifier, NOT a Next.js route. There is no src/app/google-workspace/page.tsx
+// file. Redirecting to `${publicOrigin}/google-workspace` produces a 404.
+// The app is a single-page shell at "/" (src/app/page.tsx) that switches
+// views via AppContext's in-memory `currentView` state. So we redirect to
+// the ROOT route "/" (which always exists) and pass the target view as a
+// ?view= query param. AppContext reads ?view= on mount and switches to that
+// view, so the GoogleWorkspacePage renders and shows the ?google_connected=1
+// success banner.
 //
 // CRITICAL: The `redirect_uri` passed to `exchangeCodeForTokens` MUST be the
 // same URI that was used in `buildAuthUrl` during the connect step. Since
@@ -48,6 +61,36 @@ function originFromRedirectUri(redirectUri: string | undefined, req: Request): s
   }
 }
 
+/**
+ * Convert a `returnPath` view identifier (e.g. "/google-workspace") into the
+ * ROOT route "/" with a `?view=<name>` query param. The returnPath is a
+ * CLIENT-SIDE VIEW identifier, NOT a Next.js route — there is no
+ * /google-workspace route file. Redirecting there produces a 404. The root
+ * route "/" always exists (src/app/page.tsx), and the app shell reads ?view=
+ * on mount to switch to the correct view.
+ *
+ * Returns a URL string like:
+ *   "https://preview-chat-xxx.space-z.ai/?google_connected=1&view=google-workspace"
+ */
+function buildAppRedirectUrl(
+  publicOrigin: string,
+  returnPath: string,
+  params: Record<string, string>,
+): string {
+  // Extract the view name from the returnPath (strip leading slashes + any query string).
+  // e.g. "/google-workspace" → "google-workspace", "" → "google-workspace" (default).
+  const viewName =
+    returnPath.replace(/^\/+/, '').replace(/[?].*$/, '') || 'google-workspace';
+  const url = new URL('/', publicOrigin);
+  // Always set the view so the app shell switches to the right client-side view.
+  url.searchParams.set('view', viewName);
+  // Add the extra params (google_connected=1 or google_error=<msg>).
+  for (const [k, v] of Object.entries(params)) {
+    url.searchParams.set(k, v);
+  }
+  return url.toString();
+}
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -69,15 +112,19 @@ export async function GET(req: Request) {
 
   // User denied consent.
   if (googleError) {
-    return NextResponse.redirect(
-      new URL(`${returnPath}?google_error=${encodeURIComponent(googleError)}`, publicOrigin),
-    );
+    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+      google_error: googleError,
+    });
+    console.info('[/api/integrations/google/callback] redirect(denied) →', target);
+    return NextResponse.redirect(new URL(target));
   }
 
   if (!code || !decoded) {
-    return NextResponse.redirect(
-      new URL(`${returnPath}?google_error=${encodeURIComponent('Missing code or invalid state.')}`, publicOrigin),
-    );
+    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+      google_error: 'Missing code or invalid state.',
+    });
+    console.info('[/api/integrations/google/callback] redirect(no-code) →', target);
+    return NextResponse.redirect(new URL(target));
   }
 
   try {
@@ -105,9 +152,11 @@ export async function GET(req: Request) {
     const { tokens, userInfo, error } = await exchangeCodeForTokens(code, redirectUri);
     if (error || !tokens.accessToken) {
       console.error('[/api/integrations/google/callback] token exchange failed:', error);
-      return NextResponse.redirect(
-        new URL(`${returnPath}?google_error=${encodeURIComponent(error ?? 'No access token returned.')}`, publicOrigin),
-      );
+      const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+        google_error: error ?? 'No access token returned.',
+      });
+      console.info('[/api/integrations/google/callback] redirect(token-failed) →', target);
+      return NextResponse.redirect(new URL(target));
     }
 
     await storeTokens(
@@ -127,16 +176,28 @@ export async function GET(req: Request) {
       userInfo.email,
     );
 
-    return NextResponse.redirect(
-      new URL(`${returnPath}?google_connected=1`, publicOrigin),
+    // SUCCESS — redirect to the ROOT route "/" (always exists) with
+    // ?google_connected=1&view=google-workspace. The app shell (AppContext)
+    // reads ?view= on mount and switches to the google-workspace view, so
+    // GoogleWorkspacePage renders and shows the success banner.
+    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+      google_connected: '1',
+    });
+    console.info(
+      '[/api/integrations/google/callback] redirect(success) publicOrigin=',
+      publicOrigin,
+      'returnPath=',
+      returnPath,
+      '→',
+      target,
     );
+    return NextResponse.redirect(new URL(target));
   } catch (err) {
     console.error('[/api/integrations/google/callback] error:', err);
-    return NextResponse.redirect(
-      new URL(
-        `${returnPath}?google_error=${encodeURIComponent(err instanceof Error ? err.message : 'Callback failed.')}`,
-        publicOrigin,
-      ),
-    );
+    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+      google_error: err instanceof Error ? err.message : 'Callback failed.',
+    });
+    console.info('[/api/integrations/google/callback] redirect(exception) →', target);
+    return NextResponse.redirect(new URL(target));
   }
 }

@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     // Derive the OAuth redirect URI from the request's actual public origin.
     const redirectUri = resolveRedirectUri(req);
 
-    const state = encodeState({ orgId, userId, userEmail: userEmail ?? '', returnPath });
+    const state = encodeState({ orgId, userId, userEmail: userEmail ?? '', returnPath, redirectUri });
     const authUrl = buildAuthUrl(state, redirectUri);
 
     console.info(

@@ -91,15 +91,48 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
 
 /**
  * Resolve the public origin (scheme://host[:port]) for an incoming request.
+ *
+ * Resolution order (most-trusted first):
+ *   1. `Origin` header — set by the browser on fetch/CORS requests, survives
+ *      gateway proxies that overwrite `Host`/`X-Forwarded-Host` with a stale
+ *      internal hostname. Only used for non-localhost origins (the browser
+ *      always knows its own real public origin).
+ *   2. `X-Forwarded-Host` + `X-Forwarded-Proto` — gateway-forwarded headers.
+ *   3. `Host` header — direct host the server received.
+ *   4. `req.url` origin — Next.js internal URL.
+ *   5. `GOOGLE_REDIRECT_URI` env var origin.
+ *   6. `http://localhost:3000` — last resort.
+ *
+ * NOTE: The `Origin` header is ONLY sent by the browser on fetch/CORS requests
+ * (e.g. the connect endpoint). It is NOT sent on top-level GET navigations
+ * (e.g. the Google OAuth callback redirect). For the callback, the redirect_uri
+ * is instead passed through the OAuth `state` parameter (see `encodeState`).
  */
 export function resolvePublicOrigin(req: Request): string {
   const headers = req.headers;
+
+  // 1. Origin header — browser's real public origin (survives gateway proxy).
+  //    The gateway overwrites Host/x-forwarded-host with a stale internal
+  //    hostname, but it preserves the browser-sent Origin header. This is the
+  //    most reliable signal for the real public hostname.
+  const originHeader = headers.get('origin');
+  if (originHeader) {
+    try {
+      const parsed = new URL(originHeader);
+      if (parsed.host && !parsed.hostname.startsWith('localhost') && !parsed.hostname.startsWith('127.0.0.1')) {
+        return `${parsed.protocol}//${parsed.host}`;
+      }
+    } catch {
+      /* ignore malformed origin */
+    }
+  }
+
   const forwardedProto =
     headers.get('x-forwarded-proto') || headers.get('x-forwarded-protocol');
   const forwardedHost = headers.get('x-forwarded-host');
   const hostHeader = headers.get('host');
 
-  // Determine the host (prefer forwarded host from gateway)
+  // 2/3. Determine the host (prefer forwarded host from gateway)
   const host = forwardedHost || hostHeader;
 
   if (host) {
@@ -107,7 +140,7 @@ export function resolvePublicOrigin(req: Request): string {
     return `${proto}://${host}`;
   }
 
-  // Fallback: request URL origin
+  // 4. Fallback: request URL origin
   try {
     const url = new URL(req.url);
     if (url.host) return `${url.protocol}//${url.host}`;
@@ -115,7 +148,7 @@ export function resolvePublicOrigin(req: Request): string {
     /* ignore */
   }
 
-  // Last resort: env var or localhost
+  // 5. Last resort: env var or localhost
   const envRedirect = process.env.GOOGLE_REDIRECT_URI;
   if (envRedirect) {
     try {
@@ -226,12 +259,20 @@ export function buildAuthUrl(state: string, redirectUri?: string): string {
 /**
  * Encode a safe state token for the OAuth round-trip. Base64-URL JSON so the
  * callback can decode orgId/userId/return without a separate store.
+ *
+ * Includes `redirectUri` so the callback can use the EXACT redirect_uri that
+ * was sent to Google in the authorize step — without relying on its own
+ * (potentially stale) request headers. This is critical when a gateway proxy
+ * overwrites Host/X-Forwarded-Host: the connect step resolves the correct
+ * redirect_uri from the browser's Origin header, encodes it here, and the
+ * callback reuses it for the token exchange (Google rejects mismatches).
  */
 export function encodeState(input: {
   orgId: string;
   userId: string;
   userEmail: string;
   returnPath?: string;
+  redirectUri?: string;
 }): string {
   const json = JSON.stringify(input);
   return Buffer.from(json, 'utf8').toString('base64url');
@@ -242,6 +283,7 @@ export function decodeState(state: string): {
   userId: string;
   userEmail: string;
   returnPath?: string;
+  redirectUri?: string;
 } | null {
   try {
     const json = Buffer.from(state, 'base64url').toString('utf8');

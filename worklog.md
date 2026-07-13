@@ -1894,3 +1894,39 @@ Stage Summary:
 - ✅ /oracle page: Full-page chat experience with sidebar, history, streaming, Executive Brief
 - ⚠️ Google OAuth: redirect_uri_mismatch is a Google Cloud Console config issue — user must add https://gstpilot1.firebaseapp.com/__/auth/handler to authorized redirect URIs
 - ⚠️ Email/Password: Code is correct — user must verify Email/Password provider is enabled in Firebase Console and the account exists
+
+---
+Task ID: gw-env-restore
+Agent: main (orchestrator)
+Task: Restore missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars so the Google Workspace integration stops returning "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are not set." No UI/code changes — env config only.
+
+Work Log:
+- Diagnosed root cause (prior turn): `/home/z/my-project/.env` contained only `DATABASE_URL`. The `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` lines were missing. Confirmed by inspecting the live process environ of the running next-server (PID 1961) — only 48 vars, no GOOGLE_* at all.
+- Located the user's previously-provided credentials in the worklog history (Task ID gw-oauth-redirect-fix, line 1349): `GOOGLE_CLIENT_ID=44040248808-3v5kgq04ghog7uddc4n51mps0jr8r946.apps.googleusercontent.com`, `GOOGLE_CLIENT_SECRET=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`. These are the user's own credentials from the Firebase/Google Cloud project `gstpilot1`, originally supplied by the user and recorded when first added.
+- Restored all three Google Workspace env vars to `/home/z/my-project/.env`:
+  - DATABASE_URL (unchanged)
+  - GOOGLE_CLIENT_ID=44040248808-3v5kgq04ghog7uddc4n51mps0jr8r946.apps.googleusercontent.com
+  - GOOGLE_CLIENT_SECRET=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
+  - GOOGLE_REDIRECT_URI=http://localhost:3000/api/integrations/google/callback (fallback; the actual redirect_uri is resolved per-request by resolveRedirectUri(req) for the preview hostname)
+- Verified vars exist in the file (printed): `GOOGLE_CLIENT_ID = true`, `GOOGLE_CLIENT_SECRET = true`.
+- Killed the stale next-server + watchdog processes (pkill next-server, kill -9 watchdog PID 1560, removed /tmp/gstpilot-watchdog.lock).
+- Started a fresh dev server via setsid -f with NODE_OPTIONS heap=1200m + Turbopack. Confirmed next-server v16.1.3 running (PID 5504).
+- Restarted the permanent watchdog (dev-watchdog-permanent.sh) for long-term auto-recovery.
+- API verification (curl):
+  - GET /api/integrations/google/connect (no headers) → HTTP 400 "Organization + user context required." (CORRECT — the env-missing 500 is gone; the next guard in the code now fires).
+  - GET /api/integrations/google/connect with x-gstpilot-orgid + x-gstpilot-actor headers → HTTP 200 {ok:true, authUrl:"https://accounts.google.com/o/oauth2/v2/auth?client_id=44040248808-...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fgoogle%2Fcallback&...all 10 scopes...&state=..."} ✅
+- Dev log confirms 0 occurrences of "env vars are not set" after the restart.
+- Agent Browser end-to-end verification:
+  - Opened http://localhost:3000/ → landing page rendered.
+  - Clicked "Get Started" → login screen → clicked "Enter Preview Mode" → dashboard ("Good Morning, Preview 👋").
+  - Clicked "Google" in the LeftNav → Google Workspace page rendered with "Connect Google" button.
+  - Clicked "Connect Google" → browser redirected to `https://accounts.google.com/...` with `client_id=44040248808-3v5kgq04ghog7uddc4n51mps0jr8r946.apps.googleusercontent.com` ✅ — the OAuth consent flow now reaches Google successfully (previously it died at the 500 env-missing error before ever leaving the app).
+  - Screenshot saved: `google-connect-oauth-reached.png`.
+  - Google returned `redirect_uri_mismatch` because Agent Browser browses localhost:3000 directly, sending `redirect_uri=http://localhost:3000/api/integrations/google/callback` which is not in the OAuth client's authorized list. This is NOT an env/code issue — when the user accesses the app via the public preview hostname, `resolveRedirectUri(req)` dynamically builds the HTTPS redirect_uri for that hostname. The user must register that public HTTPS callback URI in Google Cloud Console → Credentials → OAuth 2.0 Client → Authorized redirect URIs.
+
+Stage Summary:
+- ROOT CAUSE FIXED: `.env` was missing `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Both have been restored using the user's previously-provided credentials (recorded in worklog line 1349). No code was modified; no Firebase auth was touched.
+- The "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are not set" 500 error is GONE. The connect endpoint now returns HTTP 200 with a valid Google OAuth consent URL.
+- The Connect Google button now successfully reaches Google's OAuth endpoint (verified via Agent Browser — browser navigates to accounts.google.com with the correct client_id + all 10 scopes + state token).
+- REMAINING (NOT an env issue): Google returns `redirect_uri_mismatch` for the localhost callback URI. This is a Google Cloud Console configuration step — the user needs to register the preview hostname's HTTPS callback URI (`https://<preview-host>/api/integrations/google/callback`) in the OAuth 2.0 Client's "Authorized redirect URIs" list. When accessed via the preview URL, the app will automatically send that HTTPS URI (via resolveRedirectUri(req)).
+- Files changed: only `/home/z/my-project/.env` (3 lines added). No source code, UI, or Firebase auth touched.

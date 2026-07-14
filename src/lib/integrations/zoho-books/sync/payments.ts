@@ -307,6 +307,19 @@ async function syncVendorPayments(
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
+ * Merge two watermark strings (ISO timestamps). Returns the later of the two,
+ * or the non-null one if either is null. ISO 8601 strings sort
+ * lexicographically = chronologically, so a simple string comparison suffices.
+ */
+function mergeWatermarks(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return b > a ? b : a;
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+/**
  * Sync Zoho Books payments (both customer and vendor) into the Payment table.
  *
  * Customer payments run first (sales collections), then vendor payments
@@ -336,7 +349,7 @@ export async function syncPayments(
   // payments fresh. The cost of re-running customer payments is low because
   // upserts are idempotent and incremental mode only fetches modified records.
   const custRes = await syncCustomerPayments(opts, watermark, resumeCursor, stats);
-  newWatermark = bumpWatermark(newWatermark, custRes.newWatermark);
+  newWatermark = mergeWatermarks(newWatermark, custRes.newWatermark);
   lastCursor = custRes.lastCursor;
   if (custRes.lastError) lastError = custRes.lastError;
 
@@ -350,7 +363,7 @@ export async function syncPayments(
   // Pass 2: Vendor payments (fresh — no resumeCursor, since customer-pass
   // cursor doesn't apply to vendorpayments endpoint).
   const vendRes = await syncVendorPayments(opts, watermark, null, stats);
-  newWatermark = bumpWatermark(newWatermark, vendRes.newWatermark);
+  newWatermark = mergeWatermarks(newWatermark, vendRes.newWatermark);
   // Prefer the vendor-payments cursor if customer payments had no more pages.
   lastCursor = vendRes.lastCursor ?? lastCursor;
   if (vendRes.lastError) lastError = vendRes.lastError;

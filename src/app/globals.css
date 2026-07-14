@@ -1164,3 +1164,60 @@ a:focus-visible,
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   ORACLE CHAT — Global Styles
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Force dark theme for Oracle Chat surface */
+html, body {
+  background: #09090b;
+  color-scheme: dark;
+}
+
+/* Premium scrollbar */
+.oracle-scroll::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.oracle-scroll::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+.oracle-scroll::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+.oracle-scroll::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+/* Oracle markdown typography refinements */
+.oracle-markdown {
+  font-feature-settings: "ss01", "cv01";
+  word-break: break-word;
+}
+.oracle-markdown > :first-child {
+  margin-top: 0;
+}
+.oracle-markdown > :last-child {
+  margin-bottom: 0;
+}
+.oracle-markdown table {
+  min-width: 100%;
+}
+.oracle-markdown table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Subtle pulsing glow for the Oracle brain avatar */
+@keyframes oracle-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+.oracle-glow {
+  animation: oracle-glow 2s ease-in-out infinite;
+}

@@ -2234,3 +2234,46 @@ Stage Summary:
   * src/components/layout/LeftNav.tsx (nav item + group map)
 - Google Workspace integration: UNTOUCHED. Zero files modified in src/lib/google-workspace/, src/app/api/integrations/google/, src/hooks/useGoogleWorkspace.ts, src/components/google-workspace/. OAuth, auth, callback, token encryption, Gmail/Calendar/Drive/Docs/Sheets all preserved.
 - Design philosophy enforced: NO fake data, NO demo numbers, NO dummy charts. Every number traceable to a real Prisma record via EntityRef. Graceful empty state when DB is empty. LLM used only for narrative synthesis of pre-computed real insights (explicitly instructed never to invent numbers).
+
+---
+Task ID: oracle-chat-1
+Agent: main (Z.ai Code)
+Task: Build complete Oracle Chat — an AI CFO agent that answers ONLY from real business data (Prisma), with tool orchestration, structured responses (Executive Summary / Analysis / Evidence / Recommended Actions / Confidence / Sources), streaming, proactive insights, and conversation memory. Must NEVER fabricate. Protected Google Workspace infrastructure is read-only and must not be modified.
+
+Work Log:
+- Read worklog and confirmed Google Workspace is COMPLETE & PROTECTED (read-only).
+- Examined existing Prisma schema: Client, Invoice, GSTRFiling, PurchaseBill, Expense, Payment, Employee, Payroll, TDSRecord, EmailMessage, BankAccount, BankTransaction, WhatsAppMessage, SMSMessage all available.
+- Found existing `src/lib/oracle-intelligence/memory-engine.ts` which loads ALL real data from Prisma and computes financials (totalSalesInvoiced, totalCollected, totalOutstanding, totalOverdue, totalExpenses, totalGstCollected, totalGstPaid, totalPayables, totalBankBalance, totalTdsDeducted) — ZERO fabrication.
+- Found existing `oracle-intelligence/types.ts` with EntityRef, MemoryRecord, MemorySnapshot, BusinessGraph, Insight, ReasoningResult, TimelineEvent, CommandResult, ExecutiveDashboard.
+- LLM skill loaded: z-ai-web-dev-sdk chat.completions.create with streaming support.
+- Plan: build NEW clean `src/lib/oracle-chat/*` module (does not touch protected infra) + new `src/app/api/oracle-chat/route.ts` streaming endpoint + new premium frontend replacing page.tsx.
+
+Stage Summary:
+- Beginning Oracle Chat build. Backend foundation first.
+
+---
+Task ID: oracle-chat-complete
+Agent: main (Z.ai Code)
+Task: Complete Oracle Chat — AI CFO agent answering ONLY from real Prisma business data with tool orchestration, structured responses, streaming, proactive insights, and conversation memory.
+
+Work Log:
+- Built `src/lib/oracle-chat/types.ts` — SourceRef, RecommendedAction, ToolCall, ToolResult, ChatMessage, ProactiveInsight, OracleStreamEvent, OracleResponse
+- Built `src/lib/oracle-chat/tools.ts` — 20 tools reading REAL Prisma data: memory_snapshot, search_invoices/payments/customers/vendors/expenses/purchases/gst_returns/tds/emails/bank_transactions, receivables_summary, payables_summary, cash_flow_summary, gst_liability, overdue_invoices, customer_followups, revenue_trend, expense_breakdown, executive_kpis. Every tool queries the Prisma database directly. Zero fabrication.
+- Built `src/lib/oracle-chat/agent.ts` — Orchestrator: (1) deterministic keyword router selects 1-6 tools, (2) executes in parallel, (3) checks if ANY data exists (refuses to fabricate if empty), (4) streams LLM completion via z-ai-web-dev-sdk with strict CFO system prompt enforcing the 6-section format, (5) parses sections, (6) derives proactive insights. Fixed SDK streaming to read raw SSE ReadableStream<Uint8Array> (not async iterable).
+- Built `src/app/api/oracle-chat/route.ts` — Streaming SSE endpoint
+- Built `src/app/api/oracle-chat/proactive/route.ts` — Proactive insights endpoint
+- Built `src/hooks/useOracleChat.ts` — Zustand store + SSE stream consumer. Removed persist middleware (caused getSnapshot infinite loop on hydration).
+- Built frontend: OracleChat (3-column premium layout), Messages (user + oracle bubbles), OracleMarkdown (premium react-markdown with tables/code/quotes), ThinkingTrail (animated tool orchestration), ConfidenceMeter + SourcesPanel, ProactiveInsights (sidebar + inline), ChatInput (auto-grow + quick prompts).
+- Replaced `src/app/page.tsx` with Oracle Chat (dynamic import, ssr:false).
+- Added Oracle global styles to globals.css.
+- Fixed Zustand infinite re-render loop: replaced `getActiveMessages()` selector with raw state selectors + useMemo (stable EMPTY_MESSAGES frozen reference).
+- Added NODE_OPTIONS='--max-old-space-size=3072' to package.json dev script to prevent OOM kills during webpack compile.
+- PROTECTED: Did NOT modify any Google Workspace, OAuth, or authentication files.
+
+Stage Summary:
+- Oracle Chat is COMPLETE and verified end-to-end via Agent Browser.
+- "Should I hire more employees?" → Oracle auto-selected 5 tools (Memory, Cash Flow, KPIs, Revenue Trend, Expense Breakdown), returned: Executive Summary ("No — zero bank balance, 0-day runway"), Analysis (4 constraints with real ₹ numbers), Evidence (real records), 4 Recommended Actions, Confidence 85%, Sources (5 tools). ALL from real Prisma data.
+- "How much money am I expecting?" → Oracle selected 4 tools, returned ₹1,18,000 from Verma Industries LLP (INV-2026-001, 121 days overdue), bank ₹0, burn ₹46,800, Confidence 90%.
+- Proactive sidebar shows real insights: "Cash runway is only 0 days" (CRITICAL), overdue invoices, GST not filed.
+- Server log: POST /api/oracle-chat 200, GET /api/oracle-chat/proactive 200.
+- Every number traceable to a real database record. Never fabricated.

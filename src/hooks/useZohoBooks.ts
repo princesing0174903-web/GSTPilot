@@ -55,7 +55,9 @@ export type ZohoSyncEntity =
   | 'bill'
   | 'expense'
   | 'bank_transaction'
-  | 'journal';
+  | 'journal'
+  | 'payment'
+  | 'item';
 
 export type ZohoSyncMode = 'full' | 'incremental';
 export type ZohoSyncStatus = 'running' | 'completed' | 'failed' | 'partial';

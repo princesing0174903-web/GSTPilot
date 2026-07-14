@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — Zoho Books Sync Orchestrator
 //
-// Drives a full or incremental sync of all 9 Zoho Books entity types into
+// Drives a full or incremental sync of all 11 Zoho Books entity types into
 // GSTPilot's existing Prisma models. The orchestrator:
 //
 //   1. Resumes an interrupted sync if `opts.resume=true` and a recent
@@ -11,9 +11,11 @@
 //   3. Runs each entity sync in dependency order:
 //        customer → vendor → tax → bank_account
 //        → invoice → bill → expense → bank_transaction → journal
+//        → payment → item
 //      (Invoices depend on customers; bank transactions depend on bank accounts;
 //       bills optionally enrich via vendors; expenses optionally link to
-//       customers.)
+//       customers; payments depend on customers/invoices/vendors/bills;
+//       items are independent catalog data.)
 //   4. Persists the per-entity watermark + lastEntity + lastCursor after each
 //      entity completes (so an interruption mid-run can be resumed).
 //   5. Updates the ZohoSyncLog row at the end with status='completed' |
@@ -41,6 +43,8 @@ import { syncBills } from './bills';
 import { syncExpenses } from './expenses';
 import { syncBankTransactions } from './bank-transactions';
 import { syncJournals } from './journals';
+import { syncPayments } from './payments';
+import { syncItems } from './items';
 import { countImportedRecords, getWatermark } from './shared';
 import type {
   EntitySyncResult,
@@ -76,6 +80,8 @@ const ENTITY_RUNNERS: Record<ZohoSyncEntity, EntityRunner> = {
   expense: syncExpenses,
   bank_transaction: syncBankTransactions,
   journal: syncJournals,
+  payment: syncPayments,
+  item: syncItems,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

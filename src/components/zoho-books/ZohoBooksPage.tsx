@@ -51,6 +51,8 @@ import {
   Landmark,
   BookOpen,
   Percent,
+  CreditCard,
+  Package,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -202,6 +204,8 @@ const ENTITY_META: Array<{ key: ZohoSyncEntity; label: string; icon: React.React
   { key: 'vendor', label: 'Vendors', icon: <Truck className="h-3.5 w-3.5" /> },
   { key: 'invoice', label: 'Invoices', icon: <FileText className="h-3.5 w-3.5" /> },
   { key: 'bill', label: 'Bills', icon: <Receipt className="h-3.5 w-3.5" /> },
+  { key: 'payment', label: 'Payments', icon: <CreditCard className="h-3.5 w-3.5" /> },
+  { key: 'item', label: 'Items', icon: <Package className="h-3.5 w-3.5" /> },
   { key: 'expense', label: 'Expenses', icon: <Banknote className="h-3.5 w-3.5" /> },
   { key: 'bank_account', label: 'Bank Accounts', icon: <Landmark className="h-3.5 w-3.5" /> },
   { key: 'bank_transaction', label: 'Bank Transactions', icon: <Activity className="h-3.5 w-3.5" /> },

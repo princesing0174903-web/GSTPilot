@@ -19,6 +19,9 @@ export {
   mapBankTransaction,
   mapJournal,
   mapTax,
+  mapCustomerPayment,
+  mapVendorPayment,
+  mapItem,
   parseZohoLastModified,
   syntheticGstinForContact,
 } from './mapper';
@@ -43,6 +46,8 @@ export { syncBills } from './bills';
 export { syncExpenses } from './expenses';
 export { syncBankTransactions } from './bank-transactions';
 export { syncJournals } from './journals';
+export { syncPayments } from './payments';
+export { syncItems } from './items';
 
 // Orchestrator
 export { runSync, getSyncStatus } from './sync';

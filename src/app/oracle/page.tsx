@@ -1,98 +1,55 @@
 'use client';
 
-/**
- * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Oracle™ — Full-Page Chat Experience
- * ═══════════════════════════════════════════════════════════════════════════════
- *
- * This is the dedicated /oracle route — a full-page, professional AI chat
- * experience like ChatGPT / Claude / Gemini.
- *
- * Features:
- *   • Sidebar with New Chat, Recent Chats, Search, History
- *   • Streaming responses with SSE
- *   • Markdown rendering, code blocks, tables
- *   • File upload, voice input
- *   • Thinking indicator, auto-scroll
- *   • Copy response, regenerate, stop generation
- *   • Suggested prompts
- *
- * This page wraps itself with the same Providers as the main app so the
- * AuthContext, OrgContext, and AppContext are available to OracleWorkspace.
- */
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot Oracle™ — Dedicated Full-Screen Workspace (/oracle)
+// ═══════════════════════════════════════════════════════════════════════════════
+// This is the Oracle Workspace — a completely separate, full-page AI CFO chat
+// experience, isolated from the rest of the app. Behaviour:
+//
+//   • Opened ONLY when the user clicks "Oracle" in the left navigation.
+//   • The dashboard (/) NEVER auto-opens Oracle.
+//   • Full-screen 3-column layout: Conversation Sidebar | Chat | Insights.
+//   • Conversations are persisted to the real database (OracleAISession,
+//     OracleAIMessage, OracleAIToolCall) — refreshing the page keeps history.
+//   • Closing Oracle returns the user to the dashboard.
+//
+// NOTE: This route does NOT wrap in <Providers> because OracleChat is
+// self-contained — it uses a Zustand store (useOracleChat) for state, not
+// AuthContext/OrgContext/AppContext. The Oracle Chat API endpoints are
+// single-tenant (userId: null) so no auth provider is required. This keeps
+// the /oracle compile graph small and memory-light.
+//
+// The OracleLauncher floating button has been REMOVED from the global
+// providers — Oracle is reachable ONLY from the left navigation.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 import dynamic from 'next/dynamic';
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Providers } from '@/components/providers';
-import { useAuth } from '@/contexts/AuthContext';
-import { useOrg } from '@/contexts/OrgContext';
-import type { AppView } from '@/contexts/AppContext';
-import { Zap } from 'lucide-react';
 
-// ── Full-page loader ──────────────────────────────────────────────────────────
-function OraclePageLoader() {
-  return (
-    <div className="flex h-screen items-center justify-center bg-black">
-      <div className="flex flex-col items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 motion-pulse">
-          <Zap className="h-6 w-6 text-emerald-400" />
+// Lazy-load the Oracle Chat component (DB-persisted, streaming, structured).
+const OracleChat = dynamic(
+  () => import('@/components/oracle-chat/OracleChat').then((m) => m.OracleChat),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400/10 ring-1 ring-emerald-400/30 motion-pulse">
+            <svg viewBox="0 0 24 24" className="h-7 w-7 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2a4 4 0 0 0-4 4v1a4 4 0 0 0-4 4 4 4 0 0 0 4 4v1a4 4 0 0 0 8 0v-1a4 4 0 0 0 4-4 4 4 0 0 0-4-4V6a4 4 0 0 0-4-4Z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-base font-semibold text-white tracking-tight">
+              Oracle<span className="text-emerald-400"> CFO</span>
+            </span>
+            <span className="text-xs text-white/45 font-medium">Waking up the financial brain…</span>
+          </div>
         </div>
-        <span className="text-sm text-white/55 font-medium">Opening Oracle…</span>
       </div>
-    </div>
-  );
-}
-
-// ── Lazy-load the heavy OracleWorkspace (1730 lines) ─────────────────────────
-const OracleWorkspace = dynamic(
-  () => import('@/components/oracle/OracleWorkspace').then((m) => ({ default: m.OracleWorkspace })),
-  { loading: OraclePageLoader, ssr: false },
+    ),
+  },
 );
 
-// ── Inner component that uses the contexts (must be inside Providers) ─────────
-function OraclePageInner() {
-  const router = useRouter();
-  const { user, isAuthenticated, isInitializing } = useAuth();
-  const { organization } = useOrg();
-
-  // The workspace is always "open" on this page — it's a full-page experience.
-  const [open] = useState(true);
-
-  const handleClose = useCallback(() => {
-    // Go back to the dashboard
-    router.push('/');
-  }, [router]);
-
-  const handleNavigate = useCallback((view: AppView) => {
-    // Navigate back to the dashboard and set the view
-    router.push(`/?view=${view}`);
-  }, [router]);
-
-  // ── Loading state while auth initializes ──
-  if (isInitializing && !isAuthenticated) {
-    return <OraclePageLoader />;
-  }
-
-  return (
-    <OracleWorkspace
-      open={open}
-      onClose={handleClose}
-      onNavigate={handleNavigate}
-      userName={user?.name}
-      firmName={organization?.name}
-      gstin={organization?.gstin ?? undefined}
-      userId={user?.id}
-    />
-  );
-}
-
 export default function OraclePage() {
-  // Wrap with the same Providers as the main app so AuthContext, OrgContext,
-  // and AppContext are available to OracleWorkspace.
-  return (
-    <Providers>
-      <OraclePageInner />
-    </Providers>
-  );
+  return <OracleChat />;
 }

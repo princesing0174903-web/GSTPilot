@@ -4,9 +4,18 @@
 // GSTPilot Infinity™ V15 — Left Navigation
 // Maximum 6 items. Glassmorphism. Gradient active state. Large icons.
 // Everything else is reachable via Search / AI / Command Palette.
+//
+// IMPORTANT (Oracle UX Restructure):
+//   • "Oracle" is a SEPARATE full-page workspace at /oracle — NOT an in-app
+//     view. Clicking "Oracle" navigates via Next.js router to /oracle.
+//   • The dashboard (/) NEVER auto-opens Oracle.
+//   • There is NO floating Oracle button anywhere in the app — the ONLY entry
+//     point to Oracle is this nav item.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Home, Brain, Zap, Wallet, Network, Settings, Sparkles, Cloud, BrainCircuit, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
@@ -16,11 +25,14 @@ interface NavItem {
   id: AppView;
   label: string;
   icon: LucideIcon;
+  /** When set, clicking navigates to this URL via Next.js router instead of an in-app view switch. */
+  href?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Home', icon: Home },
-  { id: 'oracle-brain', label: 'Oracle', icon: BrainCircuit },
+  // Oracle is a separate /oracle workspace — navigates via router, NOT setCurrentView.
+  { id: 'oracle-brain', label: 'Oracle', icon: BrainCircuit, href: '/oracle' },
   { id: 'autonomous-finance', label: 'Autonomous', icon: Sparkles },
   { id: 'ai-cfo', label: 'AI CFO', icon: Brain },
   { id: 'run-my-business', label: 'Run Business', icon: Zap },
@@ -66,7 +78,11 @@ const NAV_GROUP_MAP: Record<string, AppView> = {
 
 export function LeftNav() {
   const { currentView, setCurrentView } = useApp();
-  const activeGroup = NAV_GROUP_MAP[currentView] ?? currentView;
+  const router = useRouter();
+  const pathname = usePathname();
+  // Oracle is "active" when we're on the /oracle route (separate workspace)
+  const onOracleRoute = pathname === '/oracle' || pathname.startsWith('/oracle/');
+  const activeGroup = onOracleRoute ? 'oracle-brain' : (NAV_GROUP_MAP[currentView] ?? currentView);
 
   return (
     <nav
@@ -75,7 +91,14 @@ export function LeftNav() {
     >
       {/* Brand mark at top — official GSTPilot winged logo */}
       <button
-        onClick={() => setCurrentView('dashboard')}
+        onClick={() => {
+          // If we're on the /oracle route, navigate back to the dashboard via router
+          if (onOracleRoute) {
+            router.push('/');
+          } else {
+            setCurrentView('dashboard');
+          }
+        }}
         className="mb-2 flex h-10 items-center justify-center rounded-xl px-1 py-2 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-emerald-400/60 xl:mb-3"
         aria-label="GSTPilot Infinity — Home"
       >
@@ -95,7 +118,15 @@ export function LeftNav() {
               transition={{ duration: 0.3, delay: 0.05 * i }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => {
+                if (item.href) {
+                  // External route (e.g. /oracle) — use Next.js router
+                  router.push(item.href);
+                } else {
+                  // In-app view switch
+                  setCurrentView(item.id);
+                }
+              }}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'group relative flex items-center justify-center gap-3 rounded-2xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 xl:justify-start xl:px-3',

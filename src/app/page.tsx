@@ -1,36 +1,36 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Root Page
+// GSTPilot — Root Page (Dashboard Home)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle is the AI CFO of the company. It answers ONLY from real business data.
-// This page mounts the full-screen Oracle Chat experience directly (no auth gate,
-// no dashboard) — Oracle IS the product.
+// The root route ("/") is the DASHBOARD. It is the canonical home of the app.
+// Oracle is a separate, full-page workspace at /oracle — accessible ONLY from
+// the left navigation. The dashboard NEVER auto-opens Oracle.
+//
+// Mounting strategy: AppRoot is lazy-loaded so the initial `/` compile stays
+// tiny (Landing/Login/Onboarding routing). The heavy dashboard graph
+// (150+ views, Oracle Brain, Command Palette, etc.) is compiled on-demand
+// AFTER the user authenticates.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import dynamic from 'next/dynamic';
 
-const OracleChat = dynamic(() => import('@/components/oracle-chat/OracleChat').then((m) => m.OracleChat), {
+const AppRoot = dynamic(() => import('@/components/AppRoot').then((m) => m.AppRoot), {
   ssr: false,
   loading: () => (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400/10 ring-1 ring-emerald-400/30 motion-pulse">
-          <svg viewBox="0 0 24 24" className="h-7 w-7 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2a4 4 0 0 0-4 4v1a4 4 0 0 0-4 4 4 4 0 0 0 4 4v1a4 4 0 0 0 8 0v-1a4 4 0 0 0 4-4 4 4 0 0 0-4-4V6a4 4 0 0 0-4-4Z" strokeLinecap="round" strokeLinejoin="round"/>
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-base font-semibold text-white tracking-tight">
-            Oracle<span className="text-emerald-400"> CFO</span>
-          </span>
-          <span className="text-xs text-white/45 font-medium">Waking up the financial brain…</span>
-        </div>
+        <span className="text-sm font-medium text-muted-foreground">Loading GSTPilot…</span>
       </div>
     </div>
   ),
 });
 
 export default function Home() {
-  return <OracleChat />;
+  return <AppRoot />;
 }

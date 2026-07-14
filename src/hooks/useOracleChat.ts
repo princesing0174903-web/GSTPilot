@@ -1,18 +1,23 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ORACLE CHAT — Streaming Hook
+// ORACLE CHAT — DB-Backed Streaming Hook
 // ═══════════════════════════════════════════════════════════════════════════════
-// Consumes the SSE stream from /api/oracle-chat and updates a Zustand store.
-// Handles: conversation memory, tool-call animation, token streaming, and
-// structured section assembly (Executive Summary / Analysis / Evidence /
-// Recommended Actions / Confidence / Sources / Insights / Follow-ups).
+// Real database memory. Conversations are persisted to OracleAISession /
+// OracleAIMessage via the /api/oracle-chat endpoints. A page refresh loads the
+// full conversation history back from the database — nothing is lost.
+//
+// State model:
+//   sessions: ConversationSummary[]  — from DB (sidebar list)
+//   activeId: string | null          — currently-open conversation
+//   activeMessages: ChatMessage[]    — messages for activeId (DB-loaded + streaming)
+//   streaming: boolean               — is a response streaming in?
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
 import type {
   ChatMessage, ToolCall, ToolResult, RecommendedAction, SourceRef,
-  ProactiveInsight, OracleStreamEvent,
+  ProactiveInsight, OracleStreamEvent, ConversationSummary,
 } from '@/lib/oracle-chat/types';
 
 function uid(prefix = 'msg'): string {
@@ -20,25 +25,25 @@ function uid(prefix = 'msg'): string {
 }
 
 interface OracleChatState {
-  conversations: ChatMessage[][];
-  conversationIds: string[];
+  // ─── DB-backed state ───
+  sessions: ConversationSummary[];
   activeId: string | null;
+  activeMessages: ChatMessage[];
   streaming: boolean;
+  hydrated: boolean;
 
-  // Selectors
-  getActiveMessages: () => ChatMessage[];
+  // ─── Lifecycle ───
+  hydrate: () => Promise<void>;
+  newChat: () => void;
+  switchConversation: (id: string) => Promise<void>;
+  deleteConversation: (id: string) => Promise<void>;
+  renameConversation: (id: string, title: string) => Promise<void>;
+  togglePin: (id: string, pinned: boolean) => Promise<void>;
 
-  // Lifecycle
-  startConversation: () => string;
-  switchConversation: (id: string) => void;
-  deleteConversation: (id: string) => void;
-  clearAll: () => void;
+  // ─── Message ops ───
+  pushUserAndPlaceholder: (text: string) => { conversationId: string; oracleMsgId: string };
 
-  // Message ops
-  pushUser: (text: string) => { conversationId: string; userMsgId: string; oracleMsgId: string };
-  pushOraclePlaceholder: () => string;
-
-  // Streaming updates
+  // ─── Streaming updates ───
   setThinking: (oracleId: string, text: string) => void;
   addToolCall: (oracleId: string, tool: ToolCall) => void;
   addToolResult: (oracleId: string, result: ToolResult) => void;
@@ -52,169 +57,212 @@ interface OracleChatState {
   finalize: (oracleId: string) => void;
   markError: (oracleId: string, msg: string) => void;
   setStreaming: (s: boolean) => void;
-  /** Internal helper to patch a single oracle message in the active conversation */
+  refreshSessions: () => Promise<void>;
   _updateOracle: (oracleId: string, updater: (m: ChatMessage) => ChatMessage) => void;
 }
 
 export const useOracleChat = create<OracleChatState>()((set, get) => ({
-      conversations: [],
-      conversationIds: [],
-      activeId: null,
-      streaming: false,
+  sessions: [],
+  activeId: null,
+  activeMessages: [],
+  streaming: false,
+  hydrated: false,
 
-      getActiveMessages: () => {
-        const { conversations, conversationIds, activeId } = get();
-        if (!activeId) return [];
-        const idx = conversationIds.indexOf(activeId);
-        if (idx < 0) return [];
-        return conversations[idx] ?? [];
-      },
-
-      startConversation: () => {
-        const id = uid('conv');
-        set((s) => ({
-          conversations: [[]],
-          conversationIds: [id],
-          activeId: id,
-        }));
-        return id;
-      },
-
-      switchConversation: (id) => set({ activeId: id }),
-
-      deleteConversation: (id) => {
-        set((s) => {
-          const idx = s.conversationIds.indexOf(id);
-          if (idx < 0) return s;
-          const conversationIds = s.conversationIds.filter((c) => c !== id);
-          const conversations = s.conversations.filter((_, i) => i !== idx);
-          const activeId = s.activeId === id ? (conversationIds[0] ?? null) : s.activeId;
-          return { conversationIds, conversations, activeId };
-        });
-      },
-
-      clearAll: () => set({ conversations: [], conversationIds: [], activeId: null, streaming: false }),
-
-      pushUser: (text) => {
-        let conversationId = get().activeId;
-        if (!conversationId) {
-          conversationId = get().startConversation();
+  // ─── Hydrate from DB on mount ───
+  hydrate: async () => {
+    if (get().hydrated) return;
+    try {
+      const res = await fetch('/api/oracle-chat/conversations', { cache: 'no-store' });
+      if (res.ok) {
+        const json = (await res.json()) as { conversations: ConversationSummary[] };
+        set({ sessions: json.conversations ?? [], hydrated: true });
+        // Auto-open the most recent conversation if any
+        if (json.conversations?.length > 0 && !get().activeId) {
+          await get().switchConversation(json.conversations[0].id);
         }
-        const userMsg: ChatMessage = {
-          id: uid('u'),
-          role: 'user',
-          content: text,
-          createdAt: new Date().toISOString(),
-        };
-        const oracleMsg: ChatMessage = {
-          id: uid('o'),
-          role: 'oracle',
-          content: '',
-          streaming: true,
-          toolCalls: [],
-          toolResults: [],
-          createdAt: new Date().toISOString(),
-        };
-        set((s) => {
-          const idx = s.conversationIds.indexOf(conversationId!);
-          if (idx < 0) return s;
-          const conversations = [...s.conversations];
-          conversations[idx] = [...conversations[idx], userMsg, oracleMsg];
-          return { conversations };
-        });
-        return { conversationId: conversationId!, userMsgId: userMsg.id, oracleMsgId: oracleMsg.id };
-      },
+      } else {
+        set({ hydrated: true });
+      }
+    } catch {
+      set({ hydrated: true });
+    }
+  },
 
-      pushOraclePlaceholder: () => {
-        const id = uid('o');
-        const msg: ChatMessage = {
-          id,
-          role: 'oracle',
-          content: '',
-          streaming: true,
-          toolCalls: [],
-          toolResults: [],
-          createdAt: new Date().toISOString(),
-        };
-        return id;
-      },
+  refreshSessions: async () => {
+    try {
+      const res = await fetch('/api/oracle-chat/conversations', { cache: 'no-store' });
+      if (res.ok) {
+        const json = (await res.json()) as { conversations: ConversationSummary[] };
+        set({ sessions: json.conversations ?? [] });
+      }
+    } catch {
+      /* ignore */
+    }
+  },
 
-      _updateOracle: (oracleId: string, updater: (m: ChatMessage) => ChatMessage) => {
-        set((s) => {
-          const idx = s.conversationIds.indexOf(s.activeId!);
-          if (idx < 0) return s;
-          const conversations = [...s.conversations];
-          conversations[idx] = conversations[idx].map((m) =>
-            m.id === oracleId && m.role === 'oracle' ? updater(m) : m,
-          );
-          return { conversations };
-        });
-      },
+  newChat: () => {
+    set({ activeId: null, activeMessages: [] });
+  },
 
-      setThinking: (oracleId, text) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, content: m.content || text }));
-      },
+  switchConversation: async (id) => {
+    if (get().activeId === id) return;
+    set({ activeId: id, activeMessages: [] });
+    try {
+      const res = await fetch(`/api/oracle-chat/conversations/${encodeURIComponent(id)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const json = (await res.json()) as { messages: ChatMessage[] };
+        set({ activeMessages: json.messages ?? [] });
+      }
+    } catch {
+      /* ignore — leave empty */
+    }
+  },
 
-      addToolCall: (oracleId, tool) => {
-        get()._updateOracle(oracleId, (m) => ({
-          ...m,
-          toolCalls: [...(m.toolCalls ?? []), tool],
-        }));
-      },
+  deleteConversation: async (id) => {
+    try {
+      await fetch(`/api/oracle-chat/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch { /* ignore */ }
+    const wasActive = get().activeId === id;
+    set((s) => ({ sessions: s.sessions.filter((c) => c.id !== id) }));
+    if (wasActive) {
+      const remaining = get().sessions;
+      if (remaining.length > 0) {
+        await get().switchConversation(remaining[0].id);
+      } else {
+        set({ activeId: null, activeMessages: [] });
+      }
+    }
+  },
 
-      addToolResult: (oracleId, result) => {
-        get()._updateOracle(oracleId, (m) => ({
-          ...m,
-          toolResults: [...(m.toolResults ?? []), result],
-        }));
-      },
+  renameConversation: async (id, title) => {
+    try {
+      await fetch(`/api/oracle-chat/conversations/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      set((s) => ({
+        sessions: s.sessions.map((c) => (c.id === id ? { ...c, title } : c)),
+      }));
+    } catch { /* ignore */ }
+  },
 
-      appendToken: (oracleId, token) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, content: m.content + token }));
-      },
+  togglePin: async (id, pinned) => {
+    try {
+      await fetch(`/api/oracle-chat/conversations/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned }),
+      });
+      set((s) => ({
+        sessions: s.sessions.map((c) => (c.id === id ? { ...c, pinned } : c)),
+      }));
+    } catch { /* ignore */ }
+  },
 
-      setSection: (oracleId, section, text) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, [section]: text }));
-      },
+  // ─── Optimistic message insertion (the agent persists server-side) ───
+  pushUserAndPlaceholder: (text) => {
+    // Generate a conversation id if none active — the agent will create the DB row
+    let conversationId = get().activeId;
+    if (!conversationId) {
+      conversationId = uid('sess');
+    }
+    const userMsg: ChatMessage = {
+      id: uid('u'),
+      role: 'user',
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    const oracleMsg: ChatMessage = {
+      id: uid('o'),
+      role: 'oracle',
+      content: '',
+      streaming: true,
+      toolCalls: [],
+      toolResults: [],
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      activeId: conversationId!,
+      activeMessages: [...s.activeMessages, userMsg, oracleMsg],
+    }));
+    return { conversationId: conversationId!, oracleMsgId: oracleMsg.id };
+  },
 
-      setActions: (oracleId, actions) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, recommendedActions: actions }));
-      },
+  _updateOracle: (oracleId, updater) => {
+    set((s) => ({
+      activeMessages: s.activeMessages.map((m) =>
+        m.id === oracleId && m.role === 'oracle' ? updater(m) : m,
+      ),
+    }));
+  },
 
-      setConfidence: (oracleId, score) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, confidence: score }));
-      },
+  setThinking: (oracleId, text) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, content: m.content || text }));
+  },
 
-      setSources: (oracleId, sources) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, sources }));
-      },
+  addToolCall: (oracleId, tool) => {
+    get()._updateOracle(oracleId, (m) => ({
+      ...m,
+      toolCalls: [...(m.toolCalls ?? []), tool],
+    }));
+  },
 
-      setInsights: (oracleId, insights) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, insights }));
-      },
+  addToolResult: (oracleId, result) => {
+    get()._updateOracle(oracleId, (m) => ({
+      ...m,
+      toolResults: [...(m.toolResults ?? []), result],
+    }));
+  },
 
-      setFollowUps: (oracleId, followUps) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, followUps }));
-      },
+  appendToken: (oracleId, token) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, content: m.content + token }));
+  },
 
-      finalize: (oracleId) => {
-        get()._updateOracle(oracleId, (m) => ({ ...m, streaming: false }));
-        set({ streaming: false });
-      },
+  setSection: (oracleId, section, text) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, [section]: text }));
+  },
 
-      markError: (oracleId, msg) => {
-        get()._updateOracle(oracleId, (m) => ({
-          ...m,
-          content: m.content || `⚠️ ${msg}`,
-          streaming: false,
-          error: true,
-        }));
-        set({ streaming: false });
-      },
+  setActions: (oracleId, actions) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, recommendedActions: actions }));
+  },
 
-      setStreaming: (s) => set({ streaming: s }),
-    }),
-);
+  setConfidence: (oracleId, score) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, confidence: score }));
+  },
+
+  setSources: (oracleId, sources) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, sources }));
+  },
+
+  setInsights: (oracleId, insights) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, insights }));
+  },
+
+  setFollowUps: (oracleId, followUps) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, followUps }));
+  },
+
+  finalize: (oracleId) => {
+    get()._updateOracle(oracleId, (m) => ({ ...m, streaming: false }));
+    set({ streaming: false });
+    // Refresh the sidebar so the new conversation + title appear
+    void get().refreshSessions();
+  },
+
+  markError: (oracleId, msg) => {
+    get()._updateOracle(oracleId, (m) => ({
+      ...m,
+      content: m.content || `⚠️ ${msg}`,
+      streaming: false,
+      error: true,
+    }));
+    set({ streaming: false });
+    void get().refreshSessions();
+  },
+
+  setStreaming: (s) => set({ streaming: s }),
+}));
 
 // ─── Stream consumer ───────────────────────────────────────────────────────────
 
@@ -258,7 +306,7 @@ export async function streamOracleChat(
         const jsonStr = line.slice(6);
         try {
           const event = JSON.parse(jsonStr) as OracleStreamEvent;
-          handleStreamEvent(event, oracleMsgId);
+          handleStreamEvent(event, oracleMsgId, conversationId);
         } catch {
           // ignore malformed events
         }
@@ -269,7 +317,7 @@ export async function streamOracleChat(
     if (buffer.startsWith('data: ')) {
       try {
         const event = JSON.parse(buffer.slice(6)) as OracleStreamEvent;
-        handleStreamEvent(event, oracleMsgId);
+        handleStreamEvent(event, oracleMsgId, conversationId);
       } catch {
         /* ignore */
       }
@@ -282,11 +330,11 @@ export async function streamOracleChat(
   }
 }
 
-function handleStreamEvent(event: OracleStreamEvent, oracleId: string) {
+function handleStreamEvent(event: OracleStreamEvent, oracleId: string, _conversationId: string) {
   const s = useOracleChat.getState();
   switch (event.type) {
     case 'conversation':
-      // already set by caller
+      // The agent may assign/confirm the conversation id — already set optimistically
       break;
     case 'thinking':
       s.setThinking(oracleId, event.text);
@@ -335,14 +383,10 @@ export async function sendOracleMessage(text: string): Promise<void> {
   const store = useOracleChat.getState();
   if (store.streaming) return;
 
-  let conversationId = store.activeId;
-  if (!conversationId) {
-    conversationId = store.startConversation();
-  }
-  const { oracleMsgId } = store.pushUser(trimmed);
+  const { conversationId, oracleMsgId } = store.pushUserAndPlaceholder(trimmed);
 
-  // Build history from current conversation (exclude the placeholder)
-  const messages = useOracleChat.getState().getActiveMessages();
+  // Build history from current active messages (exclude the placeholder)
+  const messages = useOracleChat.getState().activeMessages;
   const history = messages
     .filter((m) => m.id !== oracleMsgId && m.content)
     .slice(-12)

@@ -78,7 +78,13 @@ export type ToolName =
   | 'customer_followups'
   | 'revenue_trend'
   | 'expense_breakdown'
-  | 'executive_kpis';
+  | 'executive_kpis'
+  // ─── New analytical tools (real data, no fabrication) ───
+  | 'period_comparison'      // Compare two months/quarters (e.g. June vs July)
+  | 'gst_forecast'           // Project next month's GST from real trend
+  | 'vendor_price_trends'    // Detect vendors whose prices increased
+  | 'customer_churn_risk'    // Flag customers likely to churn
+  | 'board_summary';         // Executive board-meeting briefing material
 
 /** A single message in a conversation. */
 export interface ChatMessage {
@@ -100,6 +106,8 @@ export interface ChatMessage {
   streaming?: boolean;
   /** Whether the stream errored */
   error?: boolean;
+  /** DB id of the persisted OracleAIMessage (for updates) */
+  dbMessageId?: string;
   createdAt: string;
 }
 
@@ -124,7 +132,7 @@ export interface OracleChatRequest {
 
 /** SSE event types streamed to the client. */
 export type OracleStreamEvent =
-  | { type: 'conversation'; conversationId: string }
+  | { type: 'conversation'; conversationId: string; isNew?: boolean }
   | { type: 'thinking'; text: string }
   | { type: 'tool_call'; tool: ToolCall }
   | { type: 'tool_result'; result: ToolResult }
@@ -135,7 +143,7 @@ export type OracleStreamEvent =
   | { type: 'sources'; sources: SourceRef[] }
   | { type: 'insights'; insights: ProactiveInsight[] }
   | { type: 'followups'; followUps: string[] }
-  | { type: 'done'; finalContent: string }
+  | { type: 'done'; finalContent: string; messageId?: string }
   | { type: 'error'; message: string };
 
 /** A complete finalized Oracle response. */
@@ -152,4 +160,25 @@ export interface OracleResponse {
   toolResults: ToolResult[];
   insights: ProactiveInsight[];
   followUps: string[];
+}
+
+// ─── DB persistence types (real database memory) ──────────────────────────────
+
+/** A persisted conversation session (maps to OracleAISession). */
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  summary: string | null;
+  status: string;
+  messageCount: number;
+  pinned: boolean;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A message part stored in OracleAIMessage.parts (JSON). */
+export interface MessagePart {
+  kind: 'thinking' | 'tool_call' | 'tool_result' | 'section' | 'actions' | 'confidence' | 'sources' | 'insights' | 'followups';
+  data: unknown;
 }

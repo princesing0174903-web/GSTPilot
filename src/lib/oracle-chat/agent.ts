@@ -1,12 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// ORACLE CHAT — Agent Orchestrator
+// ORACLE CHAT — Agent Orchestrator (Financial CEO)
 // ═══════════════════════════════════════════════════════════════════════════════
 // The Oracle agent. Pipeline:
-//   1. Analyze intent → select tools (deterministic keyword router)
-//   2. Always start with memory_snapshot to know if ANY data exists
-//   3. Execute selected tools IN PARALLEL
-//   4. Feed results to LLM with a strict CFO system prompt
-//   5. Stream tokens + structured sections back to client
+//   1. Ensure a DB session exists (create if missing) — REAL database memory
+//   2. Load conversation history from DB (not just client-passed)
+//   3. Recall durable semantic memory (OracleMemory) for context
+//   4. Analyze intent → select tools (deterministic keyword router)
+//   5. Always start with memory_snapshot to know if ANY data exists
+//   6. Execute selected tools IN PARALLEL + audit each to OracleAIToolCall
+//   7. Feed results to LLM with a strict CFO system prompt
+//   8. Stream tokens + structured sections back to client
+//   9. Persist the user message + oracle message to OracleAIMessage
+//  10. Save durable memory for critical insights (OracleMemory)
 //
 // HARD RULES (enforced via system prompt):
 //   • Answer ONLY from the provided tool data. Never invent numbers.
@@ -18,6 +23,10 @@
 
 import ZAI from 'z-ai-web-dev-sdk';
 import { executeTool, TOOL_DEFINITIONS } from './tools';
+import {
+  createSession, persistUserMessage, persistOracleMessage,
+  auditToolCall, saveMemory, recallMemory, loadSession,
+} from './persistence';
 import type {
   ToolCall, ToolResult, ToolName, SourceRef, RecommendedAction,
   ProactiveInsight, OracleChatRequest, OracleStreamEvent,
@@ -43,57 +52,141 @@ function selectTools(message: string): ToolName[] {
     }
   }
 
-  // Intent-based multi-tool selection
-  if (q.match(/how much.*(expect|receivable|incoming|owed|pending)|money am i expecting|outstanding/)) {
+  // ─── Intent-based multi-tool selection for the 9 canonical questions ────────
+
+  // "Show unpaid invoices" / "Show all late payments"
+  if (q.match(/unpaid|late payment|overdue|past due/i)) {
+    selected.add('receivables_summary');
+    selected.add('overdue_invoices');
+    selected.add('customer_followups');
+  }
+
+  // "Which customers may churn?"
+  if (q.match(/churn|leaving|at.?risk|might leave|stop ordering|inactive customer/i)) {
+    selected.add('customer_churn_risk');
+    selected.add('search_customers');
+    selected.add('revenue_trend');
+  }
+
+  // "Why did revenue fall?" / "Why did revenue drop?"
+  if (q.match(/why.*(revenue|sales|income).*(fall|drop|decline|decrease|down)|(revenue|sales).*(fell|dropped|declined)/i)) {
+    selected.add('revenue_trend');
+    selected.add('period_comparison');
+    selected.add('executive_kpis');
+    selected.add('search_customers');
+  }
+
+  // "Compare June vs July"
+  if (q.match(/compare.*(vs|versus|and)|month over|mom|qoq|(january|february|march|april|may|june|july|august|september|october|november|december).*(vs|versus|and|compare)/i)) {
+    selected.add('period_comparison');
+    selected.add('revenue_trend');
+  }
+
+  // "Predict next month's GST"
+  if (q.match(/predict|forecast|project.*gst|gst.*next month|expected gst|gst will/i)) {
+    selected.add('gst_forecast');
+    selected.add('gst_liability');
+    selected.add('search_gst_returns');
+  }
+
+  // "Which vendors increased prices?"
+  if (q.match(/vendor.*(price|cost).*(increase|raise|up|higher)|who.*(raised|increased).*(price|rate)/i)) {
+    selected.add('vendor_price_trends');
+    selected.add('search_vendors');
+    selected.add('payables_summary');
+  }
+
+  // "Explain cash flow"
+  if (q.match(/cash flow|cash position|liquidity|explain.*cash/i)) {
+    selected.add('cash_flow_summary');
+    selected.add('executive_kpis');
+    selected.add('receivables_summary');
+    selected.add('payables_summary');
+  }
+
+  // "Generate board meeting summary" / "CEO report" / "investor report"
+  if (q.match(/board|meeting summary|ceo report|cfo report|investor report|stakeholder|briefing/i)) {
+    selected.add('board_summary');
+    selected.add('executive_kpis');
+    selected.add('cash_flow_summary');
+    selected.add('revenue_trend');
+  }
+
+  // "How much money am I expecting?"
+  if (q.match(/how much.*(expect|receivable|incoming|owed|pending)|money am i expecting|outstanding/i)) {
     selected.add('receivables_summary');
     selected.add('overdue_invoices');
     selected.add('cash_flow_summary');
+    // Include customer_followups because overdue invoices imply follow-up need —
+    // the LLM must be able to recommend an action, not just report a number.
+    selected.add('customer_followups');
   }
-  if (q.match(/follow.?up|chase|remind|call customer|who.*(owe|hasn|hasn't replied)/)) {
+
+  // "Which customers need follow-up?"
+  if (q.match(/follow.?up|chase|remind|call customer|who.*(owe|hasn|hasn't replied)/i)) {
     selected.add('customer_followups');
     selected.add('overdue_invoices');
     selected.add('search_emails');
   }
-  if (q.match(/this week|today|happen|briefing|summary of|what's new|whats new/)) {
+
+  // "What happened this week?" / briefing
+  if (q.match(/this week|today|happen|briefing|summary of|what's new|whats new/i)) {
     selected.add('executive_kpis');
     selected.add('receivables_summary');
     selected.add('overdue_invoices');
   }
-  if (q.match(/hire|employee|staff|headcount|recruit|team size/)) {
+
+  // "Should I hire more employees?"
+  if (q.match(/hire|employee|staff|headcount|recruit|team size/i)) {
     selected.add('cash_flow_summary');
     selected.add('executive_kpis');
     selected.add('revenue_trend');
     selected.add('expense_breakdown');
   }
-  if (q.match(/gst.*(pay|owe|liability|due)|how much gst/)) {
+
+  // "How much GST will I pay?"
+  if (q.match(/gst.*(pay|owe|liability|due)|how much gst/i)) {
     selected.add('gst_liability');
     selected.add('search_gst_returns');
     selected.add('search_purchases');
   }
-  if (q.match(/cash.*(flow|position|runway|survive|burn)|runway|burn rate/)) {
+
+  // "Cash runway / burn"
+  if (q.match(/cash.*(flow|position|runway|survive|burn)|runway|burn rate/i)) {
     selected.add('cash_flow_summary');
     selected.add('executive_kpis');
   }
-  if (q.match(/revenue|growth|trend|sales trend|how.*doing/)) {
+
+  // "Revenue / growth / trend"
+  if (q.match(/revenue|growth|trend|sales trend|how.*doing/i)) {
     selected.add('revenue_trend');
     selected.add('executive_kpis');
   }
-  if (q.match(/expense|spend|cost|where.*money|breakdown/)) {
+
+  // "Expense / spend / cost"
+  if (q.match(/expense|spend|cost|where.*money|breakdown/i)) {
     selected.add('expense_breakdown');
     selected.add('cash_flow_summary');
   }
-  if (q.match(/owe me|who owes|customer.*outstanding|top customer/)) {
+
+  // "Who owes me / top customer"
+  if (q.match(/owe me|who owes|customer.*outstanding|top customer/i)) {
     selected.add('receivables_summary');
     selected.add('search_customers');
   }
-  if (q.match(/owe to|payable|vendor.*outstanding|supplier/)) {
+
+  // "Payable / vendor outstanding / supplier"
+  if (q.match(/owe to|payable|vendor.*outstanding|supplier/i)) {
     selected.add('payables_summary');
     selected.add('search_vendors');
   }
-  if (q.match(/dashboard|health|overview|kpi|metric|how.*business/)) {
+
+  // "Dashboard / health / overview / kpi"
+  if (q.match(/dashboard|health|overview|kpi|metric|how.*business/i)) {
     selected.add('executive_kpis');
     selected.add('cash_flow_summary');
   }
+
   // If nothing specific matched beyond memory_snapshot, add executive_kpis for context
   if (selected.size === 1) {
     selected.add('executive_kpis');
@@ -116,6 +209,11 @@ function reasonForTool(name: ToolName, message: string): string {
     revenue_trend: 'Building the 6-month revenue and collection trend',
     expense_breakdown: 'Breaking down expenses by category',
     payables_summary: 'Reviewing outstanding payables to vendors',
+    period_comparison: 'Comparing two periods side-by-side from real records',
+    gst_forecast: 'Projecting next month GST from real output-tax and ITC trends',
+    vendor_price_trends: 'Detecting vendors whose average bill amount increased',
+    customer_churn_risk: 'Scoring customer churn risk from real invoice history',
+    board_summary: 'Assembling executive board-meeting briefing material',
     search_invoices: q.match(/overdue/) ? 'Searching overdue invoices' : 'Searching invoice records',
     search_payments: 'Searching payment records',
     search_customers: 'Searching customer records',
@@ -132,7 +230,7 @@ function reasonForTool(name: ToolName, message: string): string {
 
 // ─── Build the CFO system prompt ───────────────────────────────────────────────
 
-function buildSystemPrompt(toolResults: ToolResult[]): string {
+function buildSystemPrompt(toolResults: ToolResult[], memoryContext: string): string {
   const hasData = toolResults.some((t) => t.recordCount > 0);
   const dataBlock = toolResults
     .map((t) => `### Tool: ${t.label} (${t.name}) — ${t.recordCount} records\n\`\`\`json\n${t.summary}\n\`\`\``)
@@ -148,6 +246,8 @@ You are NOT a chatbot. You are the executive brain. You answer using ONLY the re
 - You think in conclusions, not data dumps. "ABC Traders usually pays 11 days late" — not "here is a list of invoices".
 - You are honest about uncertainty. If data is missing, you say so plainly.
 - You are proactive — you notice things before being asked.
+- When the question is analytical (compare, predict, explain why), you reason step-by-step and cite the real records that drive your conclusion.
+- You are ACTION-ORIENTED. Every conclusion you draw must be paired with a concrete next step. "Customer X has a 121-day overdue invoice" MUST lead to "Follow up with Customer X today" — never leave an insight without a recommended action.
 
 # HARD RULES
 1. Answer ONLY from the JSON data blocks provided below. Do NOT invent or estimate any number.
@@ -155,6 +255,17 @@ You are NOT a chatbot. You are the executive brain. You answer using ONLY the re
 3. Every financial figure must come from the tool results. Round to whole rupees where appropriate.
 4. Use ₹ symbol for Indian Rupees. Format large numbers with Indian comma grouping (e.g., ₹12,34,567).
 5. When you mention a specific record (invoice, customer, payment), it MUST exist in the tool data.
+6. For FORECASTS / PREDICTIONS: clearly label them as projections. Only project when the tool provides explicit trend data (gst_forecast, revenue_trend). State the basis and the confidence honestly.
+7. For COMPARISONS: present a clear before/after table and call out the direction (up/down/flat) with the percentage delta from the tool data.
+8. For "WHY did X happen" questions: identify the specific customers/invoices/transactions in the data that explain the change. Name them.
+
+# CRITICAL — CONSISTENCY & INFERENCE (DO NOT CONTRADICT YOURSELF)
+- NEVER make two statements in the same response that contradict each other.
+- If you mention an overdue invoice (from the overdue_invoices tool), the customer who owes it MUST also be flagged as needing follow-up. NEVER say "no customers need follow-up" while simultaneously reporting overdue invoices — a customer with an overdue invoice IS a customer who needs follow-up, by definition.
+- If the customer_followups tool returns ANY customer with overdueInvoices > 0 or daysOverdue > 0, state explicitly that those customers require follow-up. The follow-up list and the overdue invoice list MUST be consistent.
+- If overdue_invoices returns N > 0 invoices, then customer_followups (if it ran) MUST also return ≥ 1 customer. If you see overdue invoices in one tool but 0 customers in the follow-ups tool, point out the inconsistency and use the overdue invoice data as the source of truth.
+- A customer with an overdue balance needs follow-up. A customer with no recent invoices may need re-engagement. A vendor with increased prices needs review. ALWAYS pair the observation with the action.
+- Read the "note" field in customer_followups carefully — it tells you the correct interpretation.
 
 # RESPONSE FORMAT (MANDATORY — follow exactly)
 You must respond with these exact markdown sections in order. Use the exact H2 headers.
@@ -184,6 +295,10 @@ List every data source you used, one per line:
 
 ---
 
+# CONVERSATION MEMORY
+This conversation is persisted to the company database. Earlier in this conversation (and prior sessions) the following durable memories were recalled:
+${memoryContext || '(no prior durable memories yet)'}
+
 # BUSINESS DATA AVAILABLE
 ${hasData ? 'Below is the REAL data retrieved from the company database. Use ONLY this.' : 'WARNING: The database returned no business records. You must tell the user the data is unavailable.'}
 
@@ -195,7 +310,8 @@ ${dataBlock || 'No tool data was retrieved.'}
 - Never invent. Never estimate unless explicitly asked to forecast.
 - If asked to forecast or predict, clearly label it as a projection based on the real trend data.
 - Match the user's language (English / Hindi / Hinglish) but keep financial terms precise.
-- Be the CFO the CEO trusts.`;
+- Be the CFO the CEO trusts.
+- NEVER contradict yourself. If you cite an overdue invoice, the customer who owes it needs follow-up — full stop.`;
 }
 
 // ─── Parse LLM output into structured sections ────────────────────────────────
@@ -288,6 +404,9 @@ function generateFollowUps(content: string): string[] {
   if (lower.match(/expense|spend|cost/)) {
     suggestions.push('Where can I cut expenses?');
   }
+  if (lower.match(/churn|customer/)) {
+    suggestions.push('Which customers may churn?');
+  }
   suggestions.push('Give me an executive briefing for today');
   suggestions.push('What should I worry about right now?');
   // Dedupe, cap at 4
@@ -324,18 +443,30 @@ export async function runOracleAgent(
   callbacks: AgentCallbacks,
 ): Promise<void> {
   const { message, history = [] } = req;
+  const agentStart = Date.now();
 
-  // 1. Emit conversation id
-  callbacks.onEvent({ type: 'conversation', conversationId });
+  // 1. Ensure DB session exists + emit conversation id
+  await createSession({ id: conversationId });
+  const isNew = !(await sessionHasMessages(conversationId));
+  callbacks.onEvent({ type: 'conversation', conversationId, isNew });
 
-  // 2. Select tools
+  // 2. Persist the user message FIRST (real database memory)
+  await persistUserMessage(conversationId, message);
+
+  // 3. Recall durable semantic memory for context
+  const memories = await recallMemory(8);
+  const memoryContext = memories.length
+    ? memories.map((m) => `- [${m.category}] ${m.title}${m.summary ? ` — ${m.summary}` : ''}`).join('\n')
+    : '';
+
+  // 4. Select tools
   const toolNames = selectTools(message);
   callbacks.onEvent({
     type: 'thinking',
     text: `Analyzing your question and selecting the right data sources…`,
   });
 
-  // 3. Execute tools (with tool_call events)
+  // 5. Execute tools (with tool_call events)
   const toolCalls: ToolCall[] = toolNames.map((name) => ({
     name,
     label: TOOL_DEFINITIONS[name].label,
@@ -352,9 +483,11 @@ export async function runOracleAgent(
   for (let i = 0; i < results.length; i++) {
     toolResults.push(results[i]);
     callbacks.onEvent({ type: 'tool_result', result: results[i] });
+    // Audit every tool call to OracleAIToolCall (best-effort)
+    void auditToolCall(conversationId, results[i]);
   }
 
-  // 4. Check if we have ANY data at all
+  // 6. Check if we have ANY data at all
   const hasAnyData = toolResults.some((t) => t.recordCount > 0);
   const allSources = collectSources(toolResults);
 
@@ -392,20 +525,37 @@ Confidence: 100%
     callbacks.onEvent({ type: 'confidence', score: 100 });
     callbacks.onEvent({ type: 'actions', actions: [] });
     callbacks.onEvent({ type: 'followups', followUps: ['How do I add my first customer?', 'What can Oracle do once I have data?'] });
-    callbacks.onEvent({ type: 'done', finalContent: noDataContent });
+    const msgId = await persistOracleMessage(conversationId, {
+      content: noDataContent,
+      executiveSummary: 'I don\'t have enough business data to answer that yet.',
+      confidence: 100,
+      latencyMs: Date.now() - agentStart,
+    });
+    callbacks.onEvent({ type: 'done', finalContent: noDataContent, messageId: msgId });
     return;
   }
 
-  // 5. Build conversation context (last 6 messages)
-  const recentHistory = history.slice(-6).map((h) => ({
-    role: h.role === 'user' ? 'user' : 'assistant',
-    content: h.content,
-  }));
+  // 7. Build conversation context (DB history takes precedence; fall back to client-passed)
+  let recentHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+  try {
+    const { messages: dbMessages } = await loadSession(conversationId);
+    // Exclude the just-persisted user message (it's sent separately) + placeholder
+    recentHistory = dbMessages
+      .filter((m) => m.content && m.id !== dbMessages[dbMessages.length - 1]?.id)
+      .slice(-12)
+      .map((m) => ({ role: m.role === 'user' ? 'user' as const : 'assistant' as const, content: m.content }));
+  } catch {
+    // fall back to client-passed history
+    recentHistory = history.slice(-6).map((h) => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: h.content,
+    }));
+  }
 
-  // 6. Build system prompt with tool data
-  const systemPrompt = buildSystemPrompt(toolResults);
+  // 8. Build system prompt with tool data + memory
+  const systemPrompt = buildSystemPrompt(toolResults, memoryContext);
 
-  // 7. Stream LLM completion
+  // 9. Stream LLM completion
   let fullContent = '';
   try {
     const zai = await ZAI.create();
@@ -479,10 +629,16 @@ Confidence: 100%
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'LLM stream failed';
     callbacks.onEvent({ type: 'error', message: errMsg });
+    // Persist the error state
+    await persistOracleMessage(conversationId, {
+      content: `⚠️ ${errMsg}`,
+      error: errMsg,
+      latencyMs: Date.now() - agentStart,
+    });
     return;
   }
 
-  // 8. Parse structured sections
+  // 10. Parse structured sections
   const parsed = parseSections(fullContent);
 
   // Emit structured sections
@@ -502,13 +658,61 @@ Confidence: 100%
   callbacks.onEvent({ type: 'sources', sources: allSources });
   callbacks.onEvent({ type: 'followups', followUps: parsed.followUps });
 
-  // 9. Proactive insights (derived from tool data)
+  // 11. Proactive insights (derived from tool data)
   const insights = deriveProactiveInsights(toolResults);
   if (insights.length > 0) {
     callbacks.onEvent({ type: 'insights', insights });
   }
 
-  callbacks.onEvent({ type: 'done', finalContent: fullContent });
+  // 12. Persist the oracle message to OracleAIMessage (real database memory)
+  const oracleMsgId = await persistOracleMessage(conversationId, {
+    content: fullContent,
+    executiveSummary: parsed.executiveSummary,
+    analysis: parsed.analysis,
+    evidence: parsed.evidence,
+    recommendedActions: parsed.recommendedActions,
+    confidence: parsed.confidence,
+    sources: allSources,
+    toolCalls,
+    toolResults,
+    insights,
+    followUps: parsed.followUps,
+    latencyMs: Date.now() - agentStart,
+  });
+
+  // 13. Save durable memory for critical conclusions (best-effort)
+  for (const ins of insights.filter((i) => i.severity === 'critical').slice(0, 2)) {
+    void saveMemory({
+      category: ins.category,
+      title: ins.headline,
+      summary: ins.detail,
+      importance: 85,
+      source: 'oracle-chat-proactive',
+      payload: { conversationId, suggestedAction: ins.suggestedAction },
+    });
+  }
+  // Remember the user's question + confidence as a lightweight memory
+  void saveMemory({
+    category: 'conversation',
+    title: message.slice(0, 120),
+    summary: `Confidence ${parsed.confidence}% · ${toolCalls.length} tools · ${allSources.length} sources cited`,
+    importance: parsed.confidence >= 80 ? 60 : 40,
+    source: 'oracle-chat',
+    payload: { conversationId, confidence: parsed.confidence, tools: toolCalls.map((t) => t.name) },
+  });
+
+  callbacks.onEvent({ type: 'done', finalContent: fullContent, messageId: oracleMsgId });
+}
+
+// ─── Helper: does this session already have messages? ─────────────────────────
+
+async function sessionHasMessages(sessionId: string): Promise<boolean> {
+  try {
+    const count = await (await import('@/lib/db')).db.oracleAIMessage.count({ where: { sessionId } });
+    return count > 0;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Proactive insights — "I noticed…" ────────────────────────────────────────
@@ -560,7 +764,7 @@ function deriveProactiveInsights(toolResults: ToolResult[]): ProactiveInsight[] 
     });
   }
 
-  // GST filing proximity (check gst returns for not_started)
+  // GST filing proximity
   const gst = find('search_gst_returns');
   if (gst) {
     try {
@@ -577,6 +781,44 @@ function deriveProactiveInsights(toolResults: ToolResult[]): ProactiveInsight[] 
           detail: `GST returns are in draft or not-started state. Missing the filing deadline attracts late fees and interest.`,
           sources: gst.sources.slice(0, 3),
           suggestedAction: 'Prepare and file pending GST returns before the due date',
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Churn risk
+  const churn = find('customer_churn_risk');
+  if (churn) {
+    try {
+      const d = JSON.parse(churn.summary);
+      if (d.highRisk > 0) {
+        insights.push({
+          id: `ins-churn-${Date.now()}`,
+          severity: d.highRisk > 2 ? 'critical' : 'warning',
+          category: 'customer',
+          headline: `${d.highRisk} customer${d.highRisk === 1 ? '' : 's'} at high churn risk`,
+          detail: `${d.highRisk} customer(s) show strong churn signals (no recent invoices, high overdue, or low engagement). ${d.mediumRisk} more at medium risk.`,
+          sources: churn.sources.slice(0, 5),
+          suggestedAction: 'Reach out to high-risk customers this week to re-engage',
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Vendor price increases
+  const vpt = find('vendor_price_trends');
+  if (vpt) {
+    try {
+      const d = JSON.parse(vpt.summary);
+      if (d.increased?.length > 0) {
+        insights.push({
+          id: `ins-vendor-${Date.now()}`,
+          severity: 'warning',
+          category: 'expense',
+          headline: `${d.increased.length} vendor${d.increased.length === 1 ? '' : 's'} raised prices`,
+          detail: d.increased.slice(0, 3).map((v: { vendor: string; changePct: number }) => `${v.vendor} (+${v.changePct}%)`).join(', '),
+          sources: vpt.sources.slice(0, 5),
+          suggestedAction: 'Review contracts and negotiate or find alternatives',
         });
       }
     } catch { /* ignore */ }

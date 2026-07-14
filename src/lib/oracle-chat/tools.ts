@@ -655,9 +655,13 @@ async function overdueInvoices(): Promise<ToolResult> {
 async function customerFollowups(): Promise<ToolResult> {
   const start = Date.now();
   const nowIso = new Date().toISOString();
-  // Customers with overdue or unpaid invoices needing follow-up
+  // Customers with overdue, unpaid, or partially-paid invoices needing follow-up.
+  // IMPORTANT: 'overdue' MUST be included — an invoice marked 'overdue' is, by
+  // definition, a customer who needs follow-up. Excluding it would cause the
+  // agent to falsely report "no customers need follow-up" while simultaneously
+  // reporting overdue invoices (a contradiction). See Oracle UX Restructure.
   const invoices = await db.invoice.findMany({
-    where: { paymentStatus: { in: ['unpaid', 'partial'] }, balanceAmount: { gt: 0 } },
+    where: { paymentStatus: { in: ['unpaid', 'partial', 'overdue'] }, balanceAmount: { gt: 0 } },
     orderBy: { dueDate: 'asc' },
     take: 50,
     include: { client: { select: { id: true, tradeName: true, contactEmail: true, contactPhone: true, gstin: true } } },
@@ -675,15 +679,38 @@ async function customerFollowups(): Promise<ToolResult> {
     label: `${r.invoiceNumber} • ${r.client?.tradeName || '—'}`,
     amount: round2(r.balanceAmount), date: r.dueDate, status: r.paymentStatus,
   }));
-  const summary = JSON.stringify({
-    customersNeedingFollowup: Array.from(byClient.values()).slice(0, 20).map(({ client, invoices }) => ({
-      customer: client.tradeName, gstin: client.gstin,
-      email: client.contactEmail, phone: client.contactPhone,
+  // Build summary with explicit, action-oriented fields so the LLM cannot
+  // misinterpret "0 follow-ups" when overdue invoices exist.
+  const customersNeedingFollowup = Array.from(byClient.values()).slice(0, 20).map(({ client, invoices }) => {
+    const overdueInvs = invoices.filter((i) => i.dueDate && new Date(i.dueDate) < new Date(nowIso));
+    const oldestOverdue = overdueInvs[0];
+    const daysOverdue = oldestOverdue?.dueDate ? daysSince(oldestOverdue.dueDate) : null;
+    return {
+      customer: client.tradeName,
+      gstin: client.gstin,
+      email: client.contactEmail,
+      phone: client.contactPhone,
       openInvoices: invoices.length,
+      overdueInvoices: overdueInvs.length,
       totalOutstanding: round2(invoices.reduce((s, i) => s + i.balanceAmount, 0)),
+      overdueAmount: round2(overdueInvs.reduce((s, i) => s + i.balanceAmount, 0)),
       oldestDue: invoices[0]?.dueDate,
-      hasOverdue: invoices.some((i) => i.dueDate && new Date(i.dueDate) < new Date(nowIso)),
-    })),
+      daysOverdue,
+      needsFollowUp: true, // explicit flag — this customer is in the follow-up list
+      recommendedAction: daysOverdue && daysOverdue > 60
+        ? 'URGENT: Send final payment reminder + call customer today'
+        : daysOverdue && daysOverdue > 0
+          ? 'Send payment reminder email + follow up by phone'
+          : 'Monitor — invoice approaching due date',
+    };
+  });
+  const summary = JSON.stringify({
+    totalCustomersNeedingFollowUp: customersNeedingFollowup.length,
+    totalOverdueAmount: round2(customersNeedingFollowup.reduce((s, c) => s + c.overdueAmount, 0)),
+    customersNeedingFollowup,
+    note: customersNeedingFollowup.length === 0
+      ? 'No customers currently need follow-up (no open or overdue invoices with positive balance).'
+      : `${customersNeedingFollowup.length} customer(s) have open invoices. Any customer with overdueInvoices > 0 MUST be followed up — do not state "no customers need follow-up" if any entry has overdueInvoices > 0.`,
   });
   return {
     name: 'customer_followups',
@@ -810,6 +837,286 @@ async function executiveKpis(): Promise<ToolResult> {
   };
 }
 
+// ─── Tool: period_comparison (e.g. "Compare June vs July") ───────────────────
+// Parses two month names from the query, aggregates real invoices / payments /
+// expenses / GST for each period, and returns the deltas. ZERO fabrication —
+// if either month has no data, the comparison says so.
+async function periodComparison(q: string): Promise<ToolResult> {
+  const start = Date.now();
+  const now = new Date();
+  const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const MONTHS_SHORT = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  const lower = q.toLowerCase();
+  const found: { name: string; idx: number }[] = [];
+  for (let i = 0; i < 12; i++) {
+    if (lower.includes(MONTHS[i]) || lower.includes(MONTHS_SHORT[i])) found.push({ name: MONTHS[i], idx: i });
+  }
+  // Also support "this month" / "last month"
+  let monthAIdx = -1, monthBIdx = -1, yearA = now.getFullYear(), yearB = now.getFullYear();
+  if (found.length >= 2) {
+    monthAIdx = found[0].idx; monthBIdx = found[1].idx;
+    // If both months are in the past relative to now, and monthB < monthA, monthB is likely next year... but for simplicity keep same year unless crossing Dec->Jan
+  } else {
+    // Default: this month vs last month
+    monthAIdx = now.getMonth();
+    monthBIdx = now.getMonth() - 1;
+    if (monthBIdx < 0) { monthBIdx = 11; yearB = now.getFullYear() - 1; }
+  }
+  const startA = new Date(yearA, monthAIdx, 1).toISOString().slice(0, 10);
+  const endA = new Date(yearA, monthAIdx + 1, 0).toISOString().slice(0, 10);
+  const startB = new Date(yearB, monthBIdx, 1).toISOString().slice(0, 10);
+  const endB = new Date(yearB, monthBIdx + 1, 0).toISOString().slice(0, 10);
+  const labelA = new Date(yearA, monthAIdx, 15).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+  const labelB = new Date(yearB, monthBIdx, 15).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+
+  const [aInv, bInv, aPay, bPay, aExp, bExp, aGst, bGst] = await Promise.all([
+    db.invoice.aggregate({ where: { invoiceDate: { gte: startA, lte: endA } }, _sum: { totalAmount: true, gstAmount: true }, _count: true }),
+    db.invoice.aggregate({ where: { invoiceDate: { gte: startB, lte: endB } }, _sum: { totalAmount: true, gstAmount: true }, _count: true }),
+    db.payment.aggregate({ where: { partyType: 'customer', paymentDate: { gte: startA, lte: endA } }, _sum: { amount: true } }),
+    db.payment.aggregate({ where: { partyType: 'customer', paymentDate: { gte: startB, lte: endB } }, _sum: { amount: true } }),
+    db.expense.aggregate({ where: { date: { gte: startA, lte: endA } }, _sum: { amount: true }, _count: true }),
+    db.expense.aggregate({ where: { date: { gte: startB, lte: endB } }, _sum: { amount: true }, _count: true }),
+    db.invoice.aggregate({ where: { invoiceDate: { gte: startA, lte: endA } }, _sum: { gstAmount: true } }),
+    db.invoice.aggregate({ where: { invoiceDate: { gte: startB, lte: endB } }, _sum: { gstAmount: true } }),
+  ]);
+  const aRev = round2(aInv._sum.totalAmount || 0);
+  const bRev = round2(bInv._sum.totalAmount || 0);
+  const aColl = round2(aPay._sum.amount || 0);
+  const bColl = round2(bPay._sum.amount || 0);
+  const aExpT = round2(aExp._sum.amount || 0);
+  const bExpT = round2(bExp._sum.amount || 0);
+  const revDelta = bRev > 0 ? round2(((aRev - bRev) / bRev) * 100) : null;
+  const expDelta = bExpT > 0 ? round2(((aExpT - bExpT) / bExpT) * 100) : null;
+  const summary = JSON.stringify({
+    periodA: { label: labelA, start: startA, end: endA },
+    periodB: { label: labelB, start: startB, end: endB },
+    revenue: { a: aRev, b: bRev, deltaPct: revDelta, direction: aRev > bRev ? 'up' : aRev < bRev ? 'down' : 'flat' },
+    collected: { a: aColl, b: bColl },
+    expenses: { a: aExpT, b: bExpT, deltaPct: expDelta },
+    gstCollected: { a: round2(aGst._sum.gstAmount || 0), b: round2(bGst._sum.gstAmount || 0) },
+    invoiceCount: { a: aInv._count, b: bInv._count },
+    note: (aInv._count === 0 && bInv._count === 0) ? 'No invoice data for either period — comparison cannot be made.' : null,
+  });
+  const sources: SourceRef[] = [];
+  // cite a couple of invoices from each period
+  const [aRows, bRows] = await Promise.all([
+    db.invoice.findMany({ where: { invoiceDate: { gte: startA, lte: endA } }, orderBy: { invoiceDate: 'desc' }, take: 3, include: { client: { select: { tradeName: true } } } }),
+    db.invoice.findMany({ where: { invoiceDate: { gte: startB, lte: endB } }, orderBy: { invoiceDate: 'desc' }, take: 3, include: { client: { select: { tradeName: true } } } }),
+  ]);
+  for (const r of aRows) sources.push({ kind: 'invoice', id: r.id, label: `${labelA}: ${r.invoiceNumber} • ${r.buyerName || r.client?.tradeName || '—'}`, amount: round2(r.totalAmount), date: r.invoiceDate });
+  for (const r of bRows) sources.push({ kind: 'invoice', id: r.id, label: `${labelB}: ${r.invoiceNumber} • ${r.buyerName || r.client?.tradeName || '—'}`, amount: round2(r.totalAmount), date: r.invoiceDate });
+  return { name: 'period_comparison', label: `Compare ${labelA} vs ${labelB}`, recordCount: aInv._count + bInv._count, summary, sources, durationMs: Date.now() - start };
+}
+
+// ─── Tool: gst_forecast (project next month's GST from real trend) ─────────────
+// Uses the last 3-6 months of REAL output tax (invoices) + ITC (purchase bills)
+// to project next month's net GST liability. Clearly labeled as a projection —
+// the LLM is instructed to mark it as such.
+async function gstForecast(): Promise<ToolResult> {
+  const start = Date.now();
+  const now = new Date();
+  const months: { label: string; start: string; end: string }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const s = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const e = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    months.push({ label: s.toLocaleString('en-IN', { month: 'short', year: '2-digit' }), start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) });
+  }
+  const data = await Promise.all(months.map(async (m) => {
+    const [out, itc] = await Promise.all([
+      db.invoice.aggregate({ where: { invoiceDate: { gte: m.start, lte: m.end } }, _sum: { gstAmount: true }, _count: true }),
+      db.purchaseBill.aggregate({ where: { invoiceDate: { gte: m.start, lte: m.end } }, _sum: { gstAmount: true }, _count: true }),
+    ]);
+    return { month: m.label, outputTax: round2(out._sum.gstAmount || 0), itc: round2(itc._sum.gstAmount || 0), net: round2((out._sum.gstAmount || 0) - (itc._sum.gstAmount || 0)), invCount: out._count, billCount: itc._count };
+  }));
+  // Linear projection on net liability (last 3 months weighted toward recent)
+  const recent = data.slice(-3).filter((d) => d.invCount > 0 || d.billCount > 0);
+  let projectedNet: number | null = null;
+  let basis = 'insufficient';
+  if (recent.length >= 2) {
+    // simple linear regression on net over the recent points
+    const xs = recent.map((_, i) => i);
+    const ys = recent.map((d) => d.net);
+    const n = xs.length;
+    const sx = xs.reduce((a, b) => a + b, 0);
+    const sy = ys.reduce((a, b) => a + b, 0);
+    const sxx = xs.reduce((a, b) => a + b * b, 0);
+    const sxy = xs.reduce((a, b, i) => a + b * ys[i], 0);
+    const slope = n * sxy - sx * sy !== 0 && (n * sxx - sx * sx) !== 0 ? (n * sxy - sx * sy) / (n * sxx - sx * sx) : 0;
+    const intercept = (sy - slope * sx) / n;
+    projectedNet = round2(Math.max(0, slope * n + intercept));
+    basis = `linear projection over ${recent.length} months of real net GST data`;
+  } else if (recent.length === 1) {
+    projectedNet = recent[0].net;
+    basis = 'single month of real data (flat carry-forward)';
+  }
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 15).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+  const summary = JSON.stringify({
+    history: data,
+    projection: {
+      forMonth: nextMonth,
+      projectedNetLiability: projectedNet,
+      basis,
+      warning: projectedNet === null ? 'Not enough historical GST data to project. File at least 2 months of invoices and purchase bills.' : null,
+    },
+  });
+  return { name: 'gst_forecast', label: 'GST Forecast (next month)', recordCount: data.reduce((s, d) => s + d.invCount + d.billCount, 0), summary, sources: [], durationMs: Date.now() - start };
+}
+
+// ─── Tool: vendor_price_trends (detect vendors who increased prices) ──────────
+// Groups purchase bills by vendor, compares average bill total this period vs
+// last period, and flags vendors whose average increased beyond a threshold.
+async function vendorPriceTrends(): Promise<ToolResult> {
+  const start = Date.now();
+  const now = new Date();
+  const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const lastStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+  const [thisBills, lastBills] = await Promise.all([
+    db.purchaseBill.findMany({ where: { invoiceDate: { gte: thisStart } }, select: { vendorName: true, totalAmount: true, taxableValue: true, invoiceDate: true, invoiceNo: true } }),
+    db.purchaseBill.findMany({ where: { invoiceDate: { gte: lastStart, lte: lastEnd } }, select: { vendorName: true, totalAmount: true, taxableValue: true, invoiceDate: true, invoiceNo: true } }),
+  ]);
+  const agg = (rows: typeof thisBills) => {
+    const m = new Map<string, { count: number; total: number; taxable: number }>();
+    for (const r of rows) {
+      const v = r.vendorName || 'Unknown';
+      const e = m.get(v) ?? { count: 0, total: 0, taxable: 0 };
+      e.count++; e.total += r.totalAmount || 0; e.taxable += r.taxableValue || 0;
+      m.set(v, e);
+    }
+    return m;
+  };
+  const thisMap = agg(thisBills);
+  const lastMap = agg(lastBills);
+  const vendors: { name: string; thisAvg: number; lastAvg: number; changePct: number | null; direction: string; thisCount: number; lastCount: number }[] = [];
+  for (const [name, t] of thisMap) {
+    const l = lastMap.get(name);
+    const thisAvg = round2(t.total / Math.max(1, t.count));
+    const lastAvg = l ? round2(l.total / Math.max(1, l.count)) : 0;
+    const changePct = l && lastAvg > 0 ? round2(((thisAvg - lastAvg) / lastAvg) * 100) : null;
+    vendors.push({ name, thisAvg, lastAvg, changePct, direction: changePct === null ? 'new' : changePct > 2 ? 'up' : changePct < -2 ? 'down' : 'stable', thisCount: t.count, lastCount: l?.count ?? 0 });
+  }
+  vendors.sort((a, b) => (b.changePct ?? -999) - (a.changePct ?? -999));
+  const increased = vendors.filter((v) => v.changePct !== null && v.changePct > 5);
+  const sources: SourceRef[] = [];
+  for (const v of increased.slice(0, 5)) {
+    const rows = await db.purchaseBill.findMany({ where: { vendorName: v.name }, orderBy: { invoiceDate: 'desc' }, take: 2, select: { id: true, invoiceNo: true, totalAmount: true, invoiceDate: true } });
+    for (const r of rows) sources.push({ kind: 'purchaseBill', id: r.id, label: `${v.name} • ${r.invoiceNo}`, amount: round2(r.totalAmount), date: r.invoiceDate });
+  }
+  const summary = JSON.stringify({
+    thisMonthStart: thisStart, lastMonthStart: lastStart,
+    vendorCount: thisMap.size,
+    increased: increased.map((v) => ({ vendor: v.name, thisAvg: v.thisAvg, lastAvg: v.lastAvg, changePct: v.changePct, thisCount: v.thisCount, lastCount: v.lastCount })),
+    allVendors: vendors.slice(0, 20),
+    note: thisBills.length === 0 && lastBills.length === 0 ? 'No purchase bill data for either period — cannot detect price trends.' : null,
+  });
+  return { name: 'vendor_price_trends', label: 'Vendor Price Trends', recordCount: thisBills.length + lastBills.length, summary, sources, durationMs: Date.now() - start };
+}
+
+// ─── Tool: customer_churn_risk (flag customers likely to churn) ───────────────
+// Real signals: no invoice in 60/90+ days, declining invoice frequency,
+// high overdue ratio, or low collection rate. Computes a deterministic risk
+// score 0-100 per customer from REAL data.
+async function customerChurnRisk(): Promise<ToolResult> {
+  const start = Date.now();
+  const now = Date.now();
+  const clients = await db.client.findMany({ where: { status: 'active' }, take: 100, select: { id: true, tradeName: true, gstin: true, contactEmail: true, createdAt: true } });
+  if (clients.length === 0) {
+    return { name: 'customer_churn_risk', label: 'Customer Churn Risk', recordCount: 0, summary: JSON.stringify({ customers: [], note: 'No active customers in the database.' }), sources: [], durationMs: Date.now() - start };
+  }
+  const invoices = await db.invoice.findMany({
+    where: { clientId: { in: clients.map((c) => c.id) } },
+    select: { clientId: true, invoiceDate: true, totalAmount: true, balanceAmount: true, paymentStatus: true },
+    orderBy: { invoiceDate: 'desc' },
+  });
+  const byClient = new Map<string, typeof invoices>();
+  for (const inv of invoices) {
+    const arr = byClient.get(inv.clientId) ?? [];
+    arr.push(inv); byClient.set(inv.clientId, arr);
+  }
+  const results = clients.map((c) => {
+    const invs = byClient.get(c.id) ?? [];
+    const lastInv = invs[0];
+    const daysSinceLast = lastInv?.invoiceDate ? Math.floor((now - new Date(lastInv.invoiceDate).getTime()) / 86400000) : null;
+    const totalInvoiced = invs.reduce((s, i) => s + (i.totalAmount || 0), 0);
+    const outstanding = invs.reduce((s, i) => s + (i.balanceAmount || 0), 0);
+    const overdue = invs.filter((i) => i.paymentStatus !== 'paid' && i.invoiceDate && new Date(i.invoiceDate) < new Date(now - 30 * 86400000)).reduce((s, i) => s + (i.balanceAmount || 0), 0);
+    // Risk score (deterministic, 0-100)
+    let risk = 0;
+    if (daysSinceLast === null) risk += 60; // never invoiced
+    else if (daysSinceLast > 90) risk += 50;
+    else if (daysSinceLast > 60) risk += 30;
+    else if (daysSinceLast > 45) risk += 15;
+    if (totalInvoiced > 0 && outstanding / totalInvoiced > 0.5) risk += 25;
+    if (invs.length > 0 && invs.length < 3) risk += 10; // low engagement
+    risk = Math.min(100, risk);
+    return { id: c.id, name: c.tradeName, gstin: c.gstin, email: c.contactEmail, daysSinceLastInvoice: daysSinceLast, invoiceCount: invs.length, totalInvoiced: round2(totalInvoiced), outstanding: round2(outstanding), overdue: round2(overdue), riskScore: risk, riskLevel: risk >= 60 ? 'high' : risk >= 35 ? 'medium' : 'low' };
+  }).sort((a, b) => b.riskScore - a.riskScore);
+  const sources: SourceRef[] = results.filter((r) => r.riskScore >= 35).slice(0, 10).map((r) => ({ kind: 'client', id: r.id, label: `${r.name} • risk ${r.riskScore}/100`, status: r.riskLevel, date: clients.find((c) => c.id === r.id)?.createdAt.toISOString() }));
+  const summary = JSON.stringify({
+    customers: results.slice(0, 25),
+    highRisk: results.filter((r) => r.riskLevel === 'high').length,
+    mediumRisk: results.filter((r) => r.riskLevel === 'medium').length,
+    note: clients.length === 0 ? 'No customers to assess.' : null,
+  });
+  return { name: 'customer_churn_risk', label: 'Customer Churn Risk', recordCount: clients.length, summary, sources, durationMs: Date.now() - start };
+}
+
+// ─── Tool: board_summary (executive board-meeting briefing material) ──────────
+// Aggregates everything an executive needs for a board meeting: revenue,
+// collection, top customers, overdue, cash, GST status, headcount, key risks.
+async function boardSummary(): Promise<ToolResult> {
+  const start = Date.now();
+  const now = new Date();
+  const d30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+  const nowIso = now.toISOString();
+  const [revThis, revLast, coll30, exp30, outstanding, overdue, bank, topClients, gstThis, gstPending, employees, vendors] = await Promise.all([
+    db.invoice.aggregate({ where: { invoiceDate: { gte: monthStart } }, _sum: { totalAmount: true }, _count: true }),
+    db.invoice.aggregate({ where: { invoiceDate: { gte: lastMonthStart, lte: lastMonthEnd } }, _sum: { totalAmount: true }, _count: true }),
+    db.payment.aggregate({ where: { partyType: 'customer', paymentDate: { gte: d30 } }, _sum: { amount: true } }),
+    db.expense.aggregate({ where: { date: { gte: d30 } }, _sum: { amount: true }, _count: true }),
+    db.invoice.aggregate({ _sum: { balanceAmount: true }, _count: true }),
+    db.invoice.aggregate({ where: { paymentStatus: { not: 'paid' }, dueDate: { lt: nowIso, not: null }, balanceAmount: { gt: 0 } }, _sum: { balanceAmount: true }, _count: true }),
+    db.bankAccount.aggregate({ _sum: { balance: true }, _count: true }),
+    db.invoice.groupBy({ by: ['clientId'], _sum: { totalAmount: true }, orderBy: { _sum: { totalAmount: 'desc' } }, take: 5 }),
+    db.invoice.aggregate({ where: { invoiceDate: { gte: monthStart } }, _sum: { gstAmount: true } }),
+    db.gSTReturn.count({ where: { status: { in: ['not_started', 'draft'] } } }),
+    db.employee.aggregate({ _sum: { netSalary: true }, _count: true }),
+    db.vendor.aggregate({ _sum: { outstanding: true }, _count: true }),
+  ]);
+  const topClientIds = topClients.map((t) => t.clientId).filter(Boolean);
+  const topClientRows = topClientIds.length ? await db.client.findMany({ where: { id: { in: topClientIds } }, select: { id: true, tradeName: true } }) : [];
+  const clientName = new Map(topClientRows.map((c) => [c.id, c.tradeName]));
+  const revThisAmt = round2(revThis._sum.totalAmount || 0);
+  const revLastAmt = round2(revLast._sum.totalAmount || 0);
+  const revDelta = revLastAmt > 0 ? round2(((revThisAmt - revLastAmt) / revLastAmt) * 100) : null;
+  const monthlyBurn = round2((exp30._sum.amount || 0) + (employees._sum.netSalary || 0));
+  const bankBalance = round2(bank._sum.balance || 0);
+  const runway = monthlyBurn > 0 ? Math.floor(bankBalance / (monthlyBurn / 30)) : null;
+  const summary = JSON.stringify({
+    asOf: now.toISOString(),
+    revenue: { thisMonth: revThisAmt, lastMonth: revLastAmt, deltaPct: revDelta, invoicesThisMonth: revThis._count },
+    collections: { last30d: round2(coll30._sum.amount || 0), collectionRate: revThisAmt > 0 ? Math.round(((coll30._sum.amount || 0) / revThisAmt) * 100) : 0 },
+    receivables: { outstanding: round2(outstanding._sum.balanceAmount || 0), overdue: round2(overdue._sum.balanceAmount || 0), overdueCount: overdue._count, openInvoices: outstanding._count },
+    cash: { bankBalance, monthlyBurn, runwayDays: runway, accountCount: bank._count },
+    gst: { collectedThisMonth: round2(gstThis._sum.gstAmount || 0), pendingReturns: gstPending },
+    expenses: { last30d: round2(exp30._sum.amount || 0), count: exp30._count },
+    payables: { vendorOutstanding: round2(vendors._sum.outstanding || 0), vendorCount: vendors._count },
+    team: { headcount: employees._count, monthlyPayroll: round2(employees._sum.netSalary || 0) },
+    topCustomers: topClients.map((t, i) => ({ rank: i + 1, name: clientName.get(t.clientId) || '—', revenue: round2(t._sum.totalAmount || 0) })),
+    headlineRisks: [
+      ...(overdue._count > 0 ? [`${overdue._count} overdue invoices worth ₹${inr(overdue._sum.balanceAmount || 0)}`] : []),
+      ...(runway !== null && runway < 60 ? [`Cash runway only ${runway} days`] : []),
+      ...(gstPending > 0 ? [`${gstPending} GST return(s) not filed`] : []),
+      ...(revDelta !== null && revDelta < -10 ? [`Revenue down ${Math.abs(revDelta)}% MoM`] : []),
+    ],
+  });
+  const sources: SourceRef[] = topClientRows.map((c) => ({ kind: 'client', id: c.id, label: c.tradeName }));
+  return { name: 'board_summary', label: 'Board Meeting Summary', recordCount: revThis._count + outstanding._count + employees._count, summary, sources, durationMs: Date.now() - start };
+}
+
 // ─── Tool dispatcher ──────────────────────────────────────────────────────────
 
 export const TOOL_DEFINITIONS: Record<ToolName, { label: string; description: string; keywords: string[] }> = {
@@ -833,6 +1140,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, { label: string; description: st
   revenue_trend: { label: 'Revenue Trend', description: '6-month revenue and collection trend', keywords: ['revenue', 'trend', 'growth', 'month', 'sales trend', 'chart'] },
   expense_breakdown: { label: 'Expense Breakdown', description: 'Expenses grouped by category with percentages', keywords: ['expense', 'breakdown', 'category', 'spend', 'where', 'distribution'] },
   executive_kpis: { label: 'Executive KPIs', description: 'All key metrics: revenue, collection, outstanding, runway, employees', keywords: ['kpi', 'metric', 'dashboard', 'health', 'score', 'performance', 'overview'] },
+  period_comparison: { label: 'Period Comparison', description: 'Compare two months or periods (e.g. June vs July) — revenue, expenses, GST deltas', keywords: ['compare', 'vs', 'versus', 'june', 'july', 'this month', 'last month', 'month over', 'mom', 'qoq', 'difference', 'delta', 'change'] },
+  gst_forecast: { label: 'GST Forecast', description: 'Project next month GST liability from real output-tax and ITC trends', keywords: ['predict', 'forecast', 'projection', 'next month', 'estimate gst', 'gst will', 'expected gst', 'project gst'] },
+  vendor_price_trends: { label: 'Vendor Price Trends', description: 'Detect vendors whose average bill amount increased this month vs last', keywords: ['vendor', 'price', 'increase', 'raised', 'cost up', 'supplier', 'vendor cost', 'price change', 'price trend'] },
+  customer_churn_risk: { label: 'Customer Churn Risk', description: 'Flag customers likely to churn (no recent invoices, high overdue, low engagement)', keywords: ['churn', 'leaving', 'at risk', 'inactive', 'lost customer', 'customer risk', 'who may', 'might leave', 'stop ordering'] },
+  board_summary: { label: 'Board Meeting Summary', description: 'Executive board-meeting briefing: revenue, collections, cash, GST, team, risks', keywords: ['board', 'meeting', 'briefing', 'summary for', 'investor', 'ceo report', 'cfo report', 'stakeholder', 'presentation'] },
 };
 
 export async function executeTool(name: ToolName, query: string): Promise<ToolResult> {
@@ -858,6 +1170,11 @@ export async function executeTool(name: ToolName, query: string): Promise<ToolRe
       case 'revenue_trend': return await revenueTrend();
       case 'expense_breakdown': return await expenseBreakdown();
       case 'executive_kpis': return await executiveKpis();
+      case 'period_comparison': return await periodComparison(query);
+      case 'gst_forecast': return await gstForecast();
+      case 'vendor_price_trends': return await vendorPriceTrends();
+      case 'customer_churn_risk': return await customerChurnRisk();
+      case 'board_summary': return await boardSummary();
       default: return { name, label: name, recordCount: 0, summary: '{}', sources: [], durationMs: 0 };
     }
   } catch (err) {

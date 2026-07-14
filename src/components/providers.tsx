@@ -25,13 +25,9 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { OrgProvider } from '@/contexts/OrgContext';
 
 // ── Heavy components lazy-loaded so they stay OUT of the initial `/` compile ──
-// OracleLauncher is the SINGLE canonical Oracle floating button (navigates to
-// /oracle page). It's tiny so it could be static, but keeping it lazy ensures
-// the framer-motion dependency stays out of the initial compile.
-const OracleLauncher = dynamic(
-  () => import('@/components/oracle/OracleLauncher').then((m) => ({ default: m.OracleLauncher })),
-  { ssr: false, loading: () => null },
-);
+// NOTE: OracleLauncher (the blue floating button) was REMOVED per the
+// Oracle UX Restructure. Oracle is now reachable ONLY from the left
+// navigation. There is no floating Oracle button anywhere in the app.
 const DevServerReconnect = dynamic(
   () => import('@/components/shared/DevServerReconnect').then((m) => ({ default: m.DevServerReconnect })),
   { ssr: false, loading: () => null },
@@ -62,9 +58,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <AppProvider>
               {children}
               <Toaster />
-              {/* Global Oracle Floating Launcher — the SINGLE canonical Oracle
-                  button. Clicking navigates to /oracle (full-page chat). */}
-              <OracleLauncher />
               {/* Preview stability: shows a professional reconnect overlay when
                   the dev server briefly restarts, instead of a browser error. */}
               <DevServerReconnect />

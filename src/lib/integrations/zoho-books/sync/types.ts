@@ -23,6 +23,8 @@ export const ZOHO_SYNC_ENTITIES = [
   'expense',
   'bank_transaction',
   'journal',
+  'payment',
+  'item',
 ] as const;
 
 export type ZohoSyncEntity = (typeof ZOHO_SYNC_ENTITIES)[number];
@@ -38,6 +40,8 @@ export const ZOHO_SYNC_ENTITY_LABELS: Record<ZohoSyncEntity, string> = {
   expense: 'Expenses',
   bank_transaction: 'Bank Transactions',
   journal: 'Journals',
+  payment: 'Payments',
+  item: 'Items',
 };
 
 // ─── Generic Zoho list-response shape ────────────────────────────────────────
@@ -418,6 +422,100 @@ export interface ZohoTaxesResponse {
   page_context: ZohoPageContext;
 }
 
+// ─── Customer Payment — Zoho Books /customerpayments ──────────────────────────
+
+export interface ZohoCustomerPayment {
+  payment_id: string;
+  payment_number?: string;
+  date?: string;
+  payment_mode?: string;
+  amount?: number;
+  customer_id?: string;
+  customer_name?: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  description?: string;
+  reference_number?: string;
+  bank_account_id?: string;
+  bank_account_name?: string;
+  currency_code?: string;
+  exchange_rate?: number;
+  is_advance_payment?: boolean;
+  unused_amount?: number;
+  status?: string; // paid | sent | overdue | void | etc.
+  created_time?: string;
+  last_modified_time?: string;
+}
+
+export interface ZohoCustomerPaymentsResponse {
+  code: number;
+  message: string;
+  customerpayments: ZohoCustomerPayment[];
+  page_context: ZohoPageContext;
+}
+
+// ─── Vendor Payment — Zoho Books /vendorpayments ──────────────────────────────
+
+export interface ZohoVendorPayment {
+  payment_id: string;
+  payment_number?: string;
+  date?: string;
+  payment_mode?: string;
+  amount?: number;
+  vendor_id?: string;
+  vendor_name?: string;
+  bill_id?: string;
+  bill_number?: string;
+  description?: string;
+  reference_number?: string;
+  paid_through_account_id?: string;
+  paid_through_account_name?: string;
+  currency_code?: string;
+  exchange_rate?: number;
+  status?: string;
+  created_time?: string;
+  last_modified_time?: string;
+}
+
+export interface ZohoVendorPaymentsResponse {
+  code: number;
+  message: string;
+  vendorpayments: ZohoVendorPayment[];
+  page_context: ZohoPageContext;
+}
+
+// ─── Item — Zoho Books /items (product/service catalog) ───────────────────────
+
+export interface ZohoItem {
+  item_id: string;
+  name: string;
+  description?: string;
+  // goods | service | digital_product | digital_service | overhead_cost
+  item_type?: string;
+  unit?: string;
+  rate?: number;
+  purchase_rate?: number;
+  tax_id?: string;
+  tax_name?: string;
+  tax_percentage?: number;
+  is_taxable?: boolean;
+  hsn_or_sac?: string;
+  product_type?: string;
+  stock_on_hand?: number;
+  reorder_level?: number;
+  status?: string; // active | inactive
+  source_id?: string;
+  created_time?: string;
+  last_modified_time?: string;
+}
+
+export interface ZohoItemsResponse {
+  code: number;
+  message: string;
+  items: ZohoItem[];
+  page_context: ZohoPageContext;
+}
+
 // ─── Normalized GSTPilot record payloads (mapper output) ─────────────────────
 //
 // The mapper produces these normalized payloads. The sync services upsert them
@@ -534,6 +632,36 @@ export interface NormalizedJournalEntry {
   totalCredit: number;
   notes: string | null;
   lines: string; // JSON-stringified array of { account, debit, credit, description }
+  status: string;
+}
+
+export interface NormalizedPayment {
+  clientId: string | null;
+  invoiceId: string | null;
+  purchaseBillId: string | null;
+  partyName: string;
+  partyType: 'customer' | 'vendor';
+  amount: number;
+  paymentDate: string;
+  paymentMode: string;
+  referenceNo: string | null;
+  status: string;
+  notes: string | null;
+}
+
+export interface NormalizedItem {
+  name: string;
+  description: string | null;
+  itemType: string;
+  unit: string | null;
+  hsnOrSac: string | null;
+  rate: number;
+  purchaseRate: number;
+  taxName: string | null;
+  taxPercentage: number;
+  isTaxable: boolean;
+  stockOnHand: number;
+  reorderLevel: number;
   status: string;
 }
 

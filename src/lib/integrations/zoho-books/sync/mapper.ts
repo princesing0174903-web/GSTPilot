@@ -28,6 +28,9 @@ import type {
   ZohoBankTransaction,
   ZohoJournal,
   ZohoTax,
+  ZohoCustomerPayment,
+  ZohoVendorPayment,
+  ZohoItem,
   NormalizedClient,
   NormalizedVendor,
   NormalizedInvoice,
@@ -36,6 +39,8 @@ import type {
   NormalizedBankAccount,
   NormalizedBankTransaction,
   NormalizedJournalEntry,
+  NormalizedPayment,
+  NormalizedItem,
 } from './types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -426,6 +431,62 @@ export function mapTax(t: ZohoTax): NormalizedTaxLookup {
     taxPercentage: num(t.tax_percentage),
     taxType: optionalStr(t.tax_type),
     status: (t.status ?? 'active').toLowerCase(),
+  };
+}
+
+// ─── Customer Payment → NormalizedPayment ────────────────────────────────────
+
+export function mapCustomerPayment(p: ZohoCustomerPayment): NormalizedPayment {
+  return {
+    clientId: null, // resolved by caller via customer_id → ZohoEntityMap lookup
+    invoiceId: null, // resolved by caller via invoice_id → ZohoEntityMap lookup
+    purchaseBillId: null,
+    partyName: str(p.customer_name, 'Unknown Customer'),
+    partyType: 'customer',
+    amount: num(p.amount),
+    paymentDate: normalizeDate(p.date),
+    paymentMode: normalizePaymentMode(p.payment_mode) ?? 'bank',
+    referenceNo: optionalStr(p.reference_number ?? p.payment_number),
+    status: (p.status ?? 'completed').toLowerCase() === 'void' ? 'failed' : 'completed',
+    notes: optionalStr(p.description),
+  };
+}
+
+// ─── Vendor Payment → NormalizedPayment ──────────────────────────────────────
+
+export function mapVendorPayment(p: ZohoVendorPayment): NormalizedPayment {
+  return {
+    clientId: null,
+    invoiceId: null,
+    purchaseBillId: null, // resolved by caller via bill_id → ZohoEntityMap lookup
+    partyName: str(p.vendor_name, 'Unknown Vendor'),
+    partyType: 'vendor',
+    amount: num(p.amount),
+    paymentDate: normalizeDate(p.date),
+    paymentMode: normalizePaymentMode(p.payment_mode) ?? 'bank',
+    referenceNo: optionalStr(p.reference_number ?? p.payment_number),
+    status: (p.status ?? 'completed').toLowerCase() === 'void' ? 'failed' : 'completed',
+    notes: optionalStr(p.description),
+  };
+}
+
+// ─── Item → NormalizedItem ───────────────────────────────────────────────────
+
+export function mapItem(item: ZohoItem): NormalizedItem {
+  return {
+    name: str(item.name, item.item_id),
+    description: optionalStr(item.description),
+    itemType: str(item.item_type, 'goods').toLowerCase(),
+    unit: optionalStr(item.unit) ?? 'NOS',
+    hsnOrSac: optionalStr(item.hsn_or_sac),
+    rate: num(item.rate),
+    purchaseRate: num(item.purchase_rate),
+    taxName: optionalStr(item.tax_name),
+    taxPercentage: num(item.tax_percentage),
+    isTaxable: item.is_taxable !== false,
+    stockOnHand: num(item.stock_on_hand),
+    reorderLevel: num(item.reorder_level),
+    status: (item.status ?? 'active').toLowerCase() === 'active' ? 'active' : 'inactive',
   };
 }
 

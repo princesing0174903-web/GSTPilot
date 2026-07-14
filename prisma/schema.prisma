@@ -5672,3 +5672,39 @@ model ZohoJournalEntry {
   @@index([organizationId, zohoOrgId, date])
   @@index([journalNumber])
 }
+
+// ─── ZohoItem: normalized product/service catalog from Zoho Books /items ──────
+//
+// GSTPilot has no standalone Item model (InvoiceItem is a line-item on invoices,
+// not a catalog entry). Zoho Books exposes /items (products & services sold),
+// so we store them here as normalized GSTPilot records — NOT raw Zoho JSON.
+//
+// Oracle Memory Engine can read db.zohoItem.findMany to answer catalog questions
+// ("What's my product list?", "Which items have GST?") with zero Oracle changes.
+model ZohoItem {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  zohoItemId      String   // Zoho's item_id
+  name            String
+  description     String?
+  // goods | service | digital_product | digital_service | overhead_cost
+  itemType        String   @default("goods")
+  unit            String?  // NOS | KG | MTR | BOX | etc.
+  hsnOrSac        String?  // HSN for goods, SAC for services
+  rate            Float    @default(0)   // selling price (per unit)
+  purchaseRate    Float    @default(0)   // purchase cost (per unit)
+  taxName         String?
+  taxPercentage   Float    @default(0)
+  isTaxable       Boolean  @default(true)
+  stockOnHand     Float    @default(0)   // current inventory
+  reorderLevel    Float    @default(0)
+  status          String   @default("active") // active | inactive
+  source          String   @default("zoho")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoItemId])
+  @@index([organizationId, zohoOrgId])
+  @@index([name])
+}

@@ -98,6 +98,32 @@ service cloud.firestore {
       allow create: if isSignedIn(); // creator becomes owner via membership row
       allow update: if isOwnerOrAdmin(orgId);
       allow delete: if isOrgMember(orgId) && roleIn(orgId) == 'owner';
+
+      // ── Organization subcollections (GSTPilot Infinity™ data module) ───
+      // The gstpilot-data service writes invoices, customers, products,
+      // vendors, expenses, payments, and the atomic invoice-number counter
+      // as subcollections under the org document:
+      //
+      //   organizations/{orgId}/invoices/{invoiceId}
+      //   organizations/{orgId}/customers/{customerId}
+      //   organizations/{orgId}/products/{productId}
+      //   organizations/{orgId}/vendors/{vendorId}
+      //   organizations/{orgId}/expenses/{expenseId}
+      //   organizations/{orgId}/payments/{paymentId}
+      //   organizations/{orgId}/counters/invoiceCounter   ← 4-segment doc
+      //
+      // The counter document previously lived at
+      //   organizations/{orgId}/invoices/_counter/invoiceCounter
+      // which is an INVALID path (5 segments) and was rejected by the
+      // Firestore SDK. It now lives under a dedicated `counters`
+      // subcollection (4 segments — valid).
+      //
+      // Access policy: any active org member may read; only members with
+      // mutate privileges (owner/admin/accountant/employee) may write.
+      match /{document=**} {
+        allow read:   if isOrgMember(orgId);
+        allow write:  if isOrgMember(orgId) && canMutate(orgId);
+      }
     }
 
     // ─── Organization Members ─────────────────────────────────────────────

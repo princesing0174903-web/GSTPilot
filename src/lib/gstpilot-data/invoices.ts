@@ -9,9 +9,17 @@
 // via calculateInvoiceTotals(). The UI NEVER computes totals.
 //
 // Invoice numbering is atomic: a counter document at
-//   organizations/GSTpilot_SAAS/invoices/_counter/invoiceCounter
+//   organizations/GSTpilot_SAAS/counters/invoiceCounter
 // is incremented inside a Firestore transaction so concurrent creates
 // never collide.
+//
+// The counter lives under a dedicated `counters` subcollection (NOT inside
+// the `invoices` subcollection). This is mandatory: a Firestore document
+// reference must have an EVEN number of path segments. The legacy path
+// `organizations/{orgId}/invoices/_counter/invoiceCounter` had 5 segments
+// (odd) and was rejected by Firestore with
+// "Invalid document reference. Document references must have an even
+// number of segments."
 //
 // Firestore is the ONLY source of truth. No mock data, no localStorage.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -32,7 +40,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { INVOICES_COLLECTION } from './config';
+import { INVOICES_COLLECTION, INVOICE_COUNTER_DOC } from './config';
 import {
   calculateInvoiceTotals,
   derivePaymentStatus,
@@ -51,7 +59,10 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const COUNTER_DOC = `${INVOICES_COLLECTION}/_counter/invoiceCounter`;
+// Counter document path: `organizations/GSTpilot_SAAS/counters/invoiceCounter`
+// (4 segments — a VALID Firestore document reference). The counter no longer
+// lives inside the `invoices` collection, so reads of that collection do not
+// need to filter out a stray `_counter` document anymore.
 
 function ts(v: unknown): string | null {
   if (v && typeof v === 'object' && 'toDate' in v) {
@@ -130,7 +141,11 @@ function toInvoice(id: string, raw: Record<string, unknown>): Invoice {
 async function nextInvoiceNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
-  const counterRef = doc(db, COUNTER_DOC);
+  // `INVOICE_COUNTER_DOC` = `organizations/GSTpilot_SAAS/counters/invoiceCounter`
+  // → 4 path segments, which is a VALID Firestore document reference.
+  // (The previous path `${INVOICES_COLLECTION}/_counter/invoiceCounter` had
+  // 5 segments and was rejected by Firestore.)
+  const counterRef = doc(db, INVOICE_COUNTER_DOC);
 
   const seq = await runTransaction(db, async (txn) => {
     const counterSnap = await txn.get(counterRef);
@@ -170,8 +185,6 @@ export function subscribeInvoices(
       const list: Invoice[] = [];
       snap.forEach((d) => {
         const raw = d.data() as Record<string, unknown>;
-        // Skip the counter document (it lives in the same collection).
-        if (d.id === '_counter') return;
         list.push(toInvoice(d.id, raw));
       });
       onData(list);
@@ -189,8 +202,9 @@ export async function getInvoice(id: string): Promise<Invoice | null> {
 
 /**
  * Fetch ALL invoices in one shot (server-side / API-route friendly).
- * Skips the internal `_counter` document. Returns an empty array on
- * permission-denied / unavailable (preview mode).
+ * The counter document now lives in a separate `counters` collection, so no
+ * filtering is required. Returns an empty array on permission-denied /
+ * unavailable (preview mode).
  */
 export async function getInvoicesOnce(): Promise<Invoice[]> {
   try {
@@ -198,7 +212,6 @@ export async function getInvoicesOnce(): Promise<Invoice[]> {
     const snap = await getDocs(q);
     const list: Invoice[] = [];
     snap.forEach((d) => {
-      if (d.id === '_counter') return;
       list.push(toInvoice(d.id, d.data() as Record<string, unknown>));
     });
     return list;

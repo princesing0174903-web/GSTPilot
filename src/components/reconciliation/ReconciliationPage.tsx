@@ -80,6 +80,7 @@ import type { MatchStatus, RiskLevel } from '@/types/gst';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { useApp } from '@/contexts/AppContext';
+import { useClients, type ClientOption } from '@/hooks/useClients';
 
 // ─── API response shapes (subset of Prisma models) ─────────────────────────
 
@@ -151,22 +152,8 @@ interface ApiReconciliationResult {
   } | null;
 }
 
-interface ApiClient {
-  id: string;
-  gstin: string;
-  tradeName: string;
-  legalName?: string | null;
-  status: string;
-  healthScore: number;
-  createdAt: string;
-  updatedAt: string;
-  _aggregations?: {
-    totalInvoices: number;
-    filedReturns: number;
-    pendingReturns: number;
-    matchPercentage: number;
-  };
-}
+// ApiClient is now sourced from the shared useClients() hook (ClientOption).
+// This guarantees the dropdown receives the exact shape /api/clients returns.
 
 // Maps a ReconciliationRun + its results to the FirestoreReconciliation shape used by the UI.
 function mapApiRunToRecon(run: ApiReconciliationRun, results: ApiReconciliationResult[]): FirestoreReconciliation & { id: string } {
@@ -247,7 +234,7 @@ function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
   };
 }
 
-function mapApiClient(c: ApiClient): FirestoreClient & { id: string } {
+function mapApiClient(c: ClientOption): FirestoreClient & { id: string } {
   return {
     id: c.id,
     clientId: c.id,
@@ -469,15 +456,28 @@ export default function ReconciliationPage() {
 
   // ── Real API-backed state (replaces former Firestore hooks) ─────────
   const [reconciliations, setReconciliations] = useState<(FirestoreReconciliation & { id: string })[]>([]);
-  const [clients, setClients] = useState<(FirestoreClient & { id: string })[]>([]);
   const [aiRecommendations, setAiRecommendations] = useState<FirestoreAIRecommendation[]>([]);
   const [reconsLoading, setReconsLoading] = useState(true);
-  const [clientsLoading, setClientsLoading] = useState(true);
   const [recsLoading, setRecsLoading] = useState(true);
   const [reconsError, setReconsError] = useState<string | null>(null);
-  const [clientsError, setClientsError] = useState<string | null>(null);
   const [recsError, setRecsError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Clients list (tenant-scoped via useClients → /api/clients?organizationId) ──
+  // This fixes the root cause of the empty Client dropdown: the API requires
+  // an organizationId query param, and the shared hook threads the current
+  // org id from OrgContext into the request. Loading / empty / error flags
+  // drive the dropdown's spinner / options / "No clients found" / error states.
+  const {
+    clients: rawClients,
+    loading: clientsLoading,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useClients();
+  const clients = useMemo(
+    () => rawClients.map(mapApiClient),
+    [rawClients],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -507,26 +507,9 @@ export default function ReconciliationPage() {
     return () => { cancelled = true; };
   }, [refreshKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setClientsLoading(true);
-    fetch('/api/clients')
-      .then(r => r.ok ? r.json() : { clients: [] })
-      .then(data => {
-        if (cancelled) return;
-        const items: ApiClient[] = Array.isArray(data?.clients) ? data.clients : [];
-        setClients(items.map(mapApiClient));
-        setClientsError(null);
-        setClientsLoading(false);
-      })
-      .catch(err => {
-        if (cancelled) return;
-        setClients([]);
-        setClientsError(err instanceof Error ? err.message : 'Failed to load clients');
-        setClientsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
+  // NOTE: Clients are loaded by the useClients() hook above (tenant-scoped).
+  // When a new reconciliation is created we bump refreshKey to reload the
+  // runs list, and also refetch clients so any newly-added client appears.
 
   // AI Recommendations have no backing REST API yet — leave the list empty so
   // the existing "No active recommendations" empty state renders truthfully.
@@ -635,12 +618,13 @@ export default function ReconciliationPage() {
       setSelectedPeriod('');
       setSelectedSource('');
       setRefreshKey(k => k + 1);
+      refetchClients();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create reconciliation');
     } finally {
       setCreating(false);
     }
-  }, [selectedClientId, selectedPeriod, selectedSource]);
+  }, [selectedClientId, selectedPeriod, selectedSource, refetchClients]);
 
   const handleResolveMismatch = useCallback(async (reconId: string, invoiceNumber: string) => {
     setResolvingInvoice(invoiceNumber);
@@ -754,11 +738,21 @@ export default function ReconciliationPage() {
                   <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                     <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                     <SelectContent>
-                      {clients.map(c => (
-                        <SelectItem key={c.id} value={c.clientId}>
-                          {c.tradeName} — {c.gstin}
-                        </SelectItem>
-                      ))}
+                      {clientsLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                        </div>
+                      ) : clientsError ? (
+                        <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                      ) : clients.length === 0 ? (
+                        <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                      ) : (
+                        clients.map(c => (
+                          <SelectItem key={c.id} value={c.clientId}>
+                            {c.tradeName} — {c.gstin}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -862,11 +856,21 @@ export default function ReconciliationPage() {
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                   <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
-                    {clients.map(c => (
-                      <SelectItem key={c.id} value={c.clientId}>
-                        {c.tradeName} — {c.gstin}
-                      </SelectItem>
-                    ))}
+                    {clientsLoading ? (
+                      <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                      </div>
+                    ) : clientsError ? (
+                      <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                    ) : clients.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                    ) : (
+                      clients.map(c => (
+                        <SelectItem key={c.id} value={c.clientId}>
+                          {c.tradeName} — {c.gstin}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

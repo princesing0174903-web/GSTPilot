@@ -225,6 +225,7 @@ const platformItems: NavItem[] = [
   { title: 'White Label', view: 'white-label', icon: Palette, subtitle: 'Custom Branding' },
   { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Workspace' },
   { title: 'Google Workspace', view: 'google-workspace', icon: Cloud, subtitle: 'Gmail · Drive · Docs · Sheets · Calendar', isNew: true },
+  { title: 'Zoho Books', view: 'zoho-books', icon: BookOpen, subtitle: 'Invoices · Customers · Bills · Banking', isNew: true },
 ]
 
 // Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™

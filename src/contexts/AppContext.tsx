@@ -215,6 +215,8 @@ export type AppView =
   | 'enterprise-settings'
   // Phase Google Workspace — Enterprise Integration
   | 'google-workspace'
+  // Phase Zoho Books — Accounting Integration (OAuth)
+  | 'zoho-books'
   // Oracle Intelligence — The Financial Brain
   | 'oracle-brain';
 

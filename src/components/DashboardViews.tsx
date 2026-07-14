@@ -164,6 +164,7 @@ const IntelligentCollectionsPage = dynamic(() => import('@/components/autonomous
 const OracleAIWorkspacePage = dynamic(() => import('@/components/oracle-ai/OracleAIWorkspacePage'), { loading: PageLoader, ssr: false })
 const OracleBrainDashboard = dynamic(() => import('@/components/oracle-brain/OracleBrainDashboard'), { loading: PageLoader, ssr: false })
 const GoogleWorkspacePage = dynamic(() => import('@/components/google-workspace/GoogleWorkspacePage'), { loading: PageLoader, ssr: false })
+const ZohoBooksPage = dynamic(() => import('@/components/zoho-books/ZohoBooksPage'), { loading: PageLoader, ssr: false })
 const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
 const ExecutiveCalendarPage = dynamic(() => import('@/components/enterprise-network/ExecutiveCalendar'), { loading: PageLoader, ssr: false })
 const EnterpriseSearchPage = dynamic(() => import('@/components/enterprise-network/EnterpriseSearch'), { loading: PageLoader, ssr: false })
@@ -375,6 +376,8 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   'oracle-brain': OracleBrainDashboard,
   // Phase Google Workspace — Enterprise Integration
   'google-workspace': GoogleWorkspacePage,
+  // Phase Zoho Books — Accounting Integration (OAuth)
+  'zoho-books': ZohoBooksPage,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

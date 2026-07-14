@@ -5541,3 +5541,36 @@ model GoogleWorkspaceToken {
   @@index([organizationId])
   @@index([userId])
 }
+
+// ─── Zoho Books Integration Tokens (Phase 1: Zoho Books OAuth) ──────────────
+// Stores encrypted OAuth tokens for each (organization, user) pair. Tokens are
+// AES-256-GCM encrypted with a key derived from ZOHO_CLIENT_SECRET (no separate
+// encryption env var needed — mirrors the Google Workspace pattern). Server-side
+// only, never exposed to the client. Org-isolated + RBAC-gated.
+//
+// Multi-tenant: Zoho's own "organization" concept (zohoOrgId / zohoOrgName) is
+// mapped to our PlatformOrganization. A user may have access to multiple Zoho
+// Books organizations; we store the primary one selected during connect.
+model ZohoBooksToken {
+  id               String   @id @default(cuid())
+  organizationId   String   // → PlatformOrganization.id (loose ref, no FK)
+  userId           String   // → User.id (loose ref, no FK)
+  userEmail        String
+  zohoUserId       String?  // Zoho account ID of the connecting user
+  zohoOrgId        String?  // Zoho Books numeric organization ID (multi-tenant)
+  zohoOrgName      String?  // Zoho Books organization display name
+  accessToken      String   // encrypted (short-lived, refreshed automatically)
+  refreshToken     String   // encrypted (long-lived)
+  expiryDate       DateTime?
+  scope            String
+  tokenType        String   @default("Bearer")
+  apiDomain        String?  // Zoho returns a datacenter-specific apiDomain
+  dataCenter       String   @default("in")  // in | com | eu | au | jp | ca
+  connectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  revokedAt        DateTime?
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}

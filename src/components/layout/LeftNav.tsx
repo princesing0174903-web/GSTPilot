@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion } from 'framer-motion';
-import { Home, Brain, Zap, Wallet, Network, Settings, Sparkles, Cloud, type LucideIcon } from 'lucide-react';
+import { Home, Brain, Zap, Wallet, Network, Settings, Sparkles, Cloud, BrainCircuit, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { BrandLogo } from '@/components/brand';
@@ -20,6 +20,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Home', icon: Home },
+  { id: 'oracle-brain', label: 'Oracle', icon: BrainCircuit },
   { id: 'autonomous-finance', label: 'Autonomous', icon: Sparkles },
   { id: 'ai-cfo', label: 'AI CFO', icon: Brain },
   { id: 'run-my-business', label: 'Run Business', icon: Zap },
@@ -33,6 +34,8 @@ const NAV_ITEMS: NavItem[] = [
 // when the user is in a sub-view (e.g. 'returns' highlights Finance).
 const NAV_GROUP_MAP: Record<string, AppView> = {
   dashboard: 'dashboard',
+  'oracle-brain': 'oracle-brain',
+  'oracle-intelligence': 'oracle-brain',
   'autonomous-finance': 'autonomous-finance',
   'workflow-studio': 'autonomous-finance',
   'oracle-actions': 'autonomous-finance',

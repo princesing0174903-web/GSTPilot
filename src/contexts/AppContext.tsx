@@ -214,7 +214,9 @@ export type AppView =
   | 'organization-dashboard'
   | 'enterprise-settings'
   // Phase Google Workspace — Enterprise Integration
-  | 'google-workspace';
+  | 'google-workspace'
+  // Oracle Intelligence — The Financial Brain
+  | 'oracle-brain';
 
 export interface ReturnPrepContext {
   clientId: string | null;

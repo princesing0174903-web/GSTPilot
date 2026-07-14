@@ -162,6 +162,7 @@ const SmartReconciliationPage = dynamic(() => import('@/components/autonomous-fi
 const PredictiveCompliancePage = dynamic(() => import('@/components/autonomous-finance/PredictiveCompliancePage').then(m => ({ default: m.PredictiveCompliancePage })), { loading: PageLoader, ssr: false })
 const IntelligentCollectionsPage = dynamic(() => import('@/components/autonomous-finance/IntelligentCollectionsPage').then(m => ({ default: m.IntelligentCollectionsPage })), { loading: PageLoader, ssr: false })
 const OracleAIWorkspacePage = dynamic(() => import('@/components/oracle-ai/OracleAIWorkspacePage'), { loading: PageLoader, ssr: false })
+const OracleBrainDashboard = dynamic(() => import('@/components/oracle-brain/OracleBrainDashboard'), { loading: PageLoader, ssr: false })
 const GoogleWorkspacePage = dynamic(() => import('@/components/google-workspace/GoogleWorkspacePage'), { loading: PageLoader, ssr: false })
 const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
 const ExecutiveCalendarPage = dynamic(() => import('@/components/enterprise-network/ExecutiveCalendar'), { loading: PageLoader, ssr: false })
@@ -370,6 +371,8 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   'intelligent-collections': IntelligentCollectionsPage,
   // Phase Oracle-AI — Enterprise AI Intelligence Layer
   'oracle-intelligence': OracleAIWorkspacePage,
+  // Oracle Intelligence — The Financial Brain (Memory + Graph + Reasoning + Timeline + Command Center + Executive Dashboard)
+  'oracle-brain': OracleBrainDashboard,
   // Phase Google Workspace — Enterprise Integration
   'google-workspace': GoogleWorkspacePage,
 }

@@ -35,6 +35,50 @@ export interface ZohoConnectionStatus {
   scopeAreas: string[];
 }
 
+// ─── Phase 2 — Data Sync types ───────────────────────────────────────────────
+
+export interface ZohoEntitySyncStats {
+  imported: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  pages: number;
+  lastError: string | null;
+}
+
+export type ZohoSyncEntity =
+  | 'customer'
+  | 'vendor'
+  | 'tax'
+  | 'bank_account'
+  | 'invoice'
+  | 'bill'
+  | 'expense'
+  | 'bank_transaction'
+  | 'journal';
+
+export type ZohoSyncMode = 'full' | 'incremental';
+export type ZohoSyncStatus = 'running' | 'completed' | 'failed' | 'partial';
+
+export interface ZohoSyncStatusInfo {
+  connected: boolean;
+  organizationName: string | null;
+  zohoOrgId: string | null;
+  lastSync: {
+    id: string;
+    status: ZohoSyncStatus;
+    mode: ZohoSyncMode;
+    startedAt: string;
+    completedAt: string | null;
+    durationMs: number | null;
+    error: string | null;
+    stats: Partial<Record<ZohoSyncEntity, ZohoEntitySyncStats>>;
+  } | null;
+  recordsImported: Partial<Record<ZohoSyncEntity, number>>;
+  totalRecords: number;
+  isRunning: boolean;
+}
+
 interface ApiError {
   error: string;
 }
@@ -99,6 +143,12 @@ export function useZohoBooks() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // Phase 2 — Data Sync state
+  const [syncStatus, setSyncStatus] = useState<ZohoSyncStatusInfo | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   const orgId = organization?.id ?? null;
 
   const refreshStatus = useCallback(async () => {
@@ -117,10 +167,58 @@ export function useZohoBooks() {
     setStatusLoading(false);
   }, [orgId, buildHeaders]);
 
+  // Phase 2 — fetch sync status (separate endpoint from connection status)
+  const refreshSyncStatus = useCallback(async () => {
+    if (!orgId) return;
+    setSyncLoading(true);
+    setSyncError(null);
+    const res = await zfetch<{ ok: boolean; status: ZohoSyncStatusInfo }>(
+      '/api/integrations/zoho/sync/status',
+      buildHeaders(),
+    );
+    if (res.ok && res.data) {
+      setSyncStatus(res.data.status);
+      setSyncing(res.data.status?.isRunning ?? false);
+    } else {
+      setSyncError(res.error);
+    }
+    setSyncLoading(false);
+  }, [orgId, buildHeaders]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshStatus();
-  }, [refreshStatus]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshSyncStatus();
+  }, [refreshStatus, refreshSyncStatus]);
+
+  // Phase 2 — trigger a manual sync (POST /api/integrations/zoho/sync)
+  const triggerSync = useCallback(
+    async (opts?: { mode?: ZohoSyncMode; resume?: boolean }): Promise<{
+      ok: boolean;
+      error: string | null;
+    }> => {
+      setSyncing(true);
+      setSyncError(null);
+      const res = await zfetch<{ ok: boolean; syncLogId: string; status: ZohoSyncStatus; stats: Record<string, ZohoEntitySyncStats>; error: string | null }>(
+        '/api/integrations/zoho/sync',
+        buildHeaders(),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            mode: opts?.mode ?? 'incremental',
+            resume: opts?.resume ?? true,
+          }),
+        },
+      );
+      setSyncing(false);
+      // Refresh both the sync status (for fresh stats) and the connection
+      // status (in case the watermark changed).
+      await refreshSyncStatus();
+      return { ok: res.ok, error: res.error };
+    },
+    [buildHeaders, refreshSyncStatus],
+  );
 
   const connect = useCallback(async (): Promise<{ authUrl: string | null; error: string | null }> => {
     let bearer = '';
@@ -190,5 +288,12 @@ export function useZohoBooks() {
     refresh,
     pending,
     call,
+    // Phase 2 — Data Sync
+    syncStatus,
+    syncLoading,
+    syncError,
+    syncing,
+    refreshSyncStatus,
+    triggerSync,
   };
 }

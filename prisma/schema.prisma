@@ -5574,3 +5574,101 @@ model ZohoBooksToken {
   @@index([organizationId])
   @@index([userId])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Zoho Books Data Sync
+//
+// Three additive models that enable idempotent Zoho data sync into the existing
+// GSTPilot tables (Client, Vendor, Invoice, PurchaseBill, Expense, BankAccount,
+// BankTransaction) WITHOUT modifying those existing models:
+//
+//   • ZohoEntityMap  — (zohoEntityType, zohoEntityId) → localEntityType +
+//                      localEntityId. Drives the upsert lookup ("no duplicate
+//                      imports") and stores lastModifiedAt for incremental sync.
+//   • ZohoSyncLog    — one row per sync run. Records status (running |
+//                      completed | failed | partial), per-entity stats, and the
+//                      resume cursor (lastEntity + lastCursor) so an interrupted
+//                      sync can be continued.
+//   • ZohoJournalEntry — GSTPilot-normalized journal entries. GSTPilot has no
+//                      generic Journal model, so journals live here (normalized,
+//                      not raw Zoho JSON). Oracle can read them via a future
+//                      tool — currently not surfaced in Oracle Chat tools.
+//
+// PROTECTED (NOT modified): all existing GSTPilot models. These three tables
+// are pure additions. Oracle Memory Engine + Oracle Chat read the EXISTING
+// tables (Client/Vendor/Invoice/Expense/PurchaseBill/BankAccount/BankTransaction)
+// which the sync writes into — so Oracle gets Zoho data with zero Oracle code
+// changes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ZohoEntityMap: idempotent upsert lookup + incremental-sync watermark ────
+model ZohoEntityMap {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID (multi-tenant)
+  zohoEntityType  String   // customer | vendor | invoice | bill | expense | bank_account | bank_transaction | journal | tax
+  zohoEntityId    String   // Zoho's ID for the entity (e.g. "460000000012345")
+  localEntityType String   // Client | Vendor | Invoice | PurchaseBill | Expense | BankAccount | BankTransaction | ZohoJournalEntry | TaxRate
+  localEntityId   String   // Prisma row ID of the normalized record
+  lastModifiedAt  DateTime? // Zoho's last_modified_time — drives incremental sync
+  lastSyncedAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoEntityType, zohoEntityId])
+  @@index([organizationId, zohoEntityType, lastModifiedAt])
+  @@index([organizationId, zohoOrgId])
+  @@index([localEntityType, localEntityId])
+}
+
+// ─── ZohoSyncLog: one row per sync run (full or incremental) ─────────────────
+model ZohoSyncLog {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  userId          String?  // → User.id (loose ref, no FK; nullable for system runs)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  status          String   @default("running") // running | completed | failed | partial
+  mode            String   @default("full")    // full | incremental
+  // Resume support: when a sync is interrupted (process crash, timeout, OOM),
+  // the next sync run looks for the most-recent "running" log and continues
+  // from `lastEntity` at `lastCursor` (the entity-specific pagination cursor
+  // — typically the next page token or the last_modified_time watermark).
+  lastEntity      String?  // customer | vendor | invoice | bill | expense | ...
+  lastCursor      String?  // entity-specific cursor (page token or timestamp)
+  error           String?  // top-level error message if status=failed
+  stats           String   @default("{}") // JSON: { customers: {imported, updated, failed}, ... }
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, startedAt])
+  @@index([status])
+}
+
+// ─── ZohoJournalEntry: normalized journal entries (GSTPilot has no Journal model)
+//
+// Stores Zoho journal entries as normalized GSTPilot records (not raw Zoho
+// JSON). Each entry has the standard journal fields: reference number, date,
+// debit/credit totals, notes, and a JSON `lines` array of {account, debit,
+// credit, description} for the double-entry lines.
+model ZohoJournalEntry {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  journalNumber   String?  // Zoho journal_number (e.g. "JNL-00001")
+  referenceNumber String?  // Zoho reference_number
+  date            String   // ISO date of the journal entry
+  totalDebit      Float    @default(0)
+  totalCredit     Float    @default(0)
+  notes           String?
+  // JSON array of { account: string, debit: number, credit: number, description?: string }
+  // — normalized line items (NEVER the raw Zoho response)
+  lines           String   @default("[]")
+  status          String   @default("posted") // posted | draft | void
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, date])
+  @@index([journalNumber])
+}

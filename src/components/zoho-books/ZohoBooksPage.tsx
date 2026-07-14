@@ -1,17 +1,26 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Integration Page (Phase 1: OAuth)
+// GSTPilot — Zoho Books Integration Page (Phase 1: OAuth + Phase 2: Data Sync)
 //
 // Premium integration console mirroring the Google Workspace page design:
 //   • Connection header (connect / disconnect / refresh / status)
 //   • Connected-state card showing Organization + Scopes (Books, Invoices,
 //     Customers, Bills, Expenses, Banking, Reports)
+//   • Data Sync panel (Phase 2):
+//       - Connected ✓ badge
+//       - Last Sync (relative timestamp + duration)
+//       - Records Imported (per-entity + total)
+//       - Sync Status (Completed ✓ / Partial ⚠ / Failed ✗ / Running…)
+//       - Current Organization
+//       - Manual Sync button (with Full / Incremental toggle)
 //   • OAuth success/error banner (reads ?zoho_connected=1 / ?zoho_error=…)
 //   • Security note (AES-256-GCM encrypted tokens)
 //
-// Phase 1 milestone: OAuth + token encryption + token storage + token refresh
-// + connected status. NO accounting data sync yet — that's Phase 2.
+// Oracle Memory Engine + Oracle Chat read the existing GSTPilot tables that
+// the sync writes into (Client, Vendor, Invoice, Expense, PurchaseBill,
+// BankAccount, BankTransaction) — so synced Zoho data is immediately available
+// to Oracle with zero Oracle code changes.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState, useCallback } from 'react';
@@ -30,12 +39,24 @@ import {
   Database,
   Server,
   ArrowRight,
+  Clock,
+  ListChecks,
+  Activity,
+  PlayCircle,
+  Users,
+  Truck,
+  FileText,
+  Receipt,
+  Banknote,
+  Landmark,
+  BookOpen,
+  Percent,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useZohoBooks } from '@/hooks/useZohoBooks';
+import { useZohoBooks, type ZohoSyncEntity } from '@/hooks/useZohoBooks';
 import { useOrg } from '@/contexts/OrgContext';
 
 // ─── Zoho Books brand mark (red "Z" tile) ────────────────────────────────────
@@ -174,6 +195,283 @@ function ConnectionHeader() {
   );
 }
 
+// ─── Sync panel (Phase 2) ────────────────────────────────────────────────────
+
+const ENTITY_META: Array<{ key: ZohoSyncEntity; label: string; icon: React.ReactNode }> = [
+  { key: 'customer', label: 'Customers', icon: <Users className="h-3.5 w-3.5" /> },
+  { key: 'vendor', label: 'Vendors', icon: <Truck className="h-3.5 w-3.5" /> },
+  { key: 'invoice', label: 'Invoices', icon: <FileText className="h-3.5 w-3.5" /> },
+  { key: 'bill', label: 'Bills', icon: <Receipt className="h-3.5 w-3.5" /> },
+  { key: 'expense', label: 'Expenses', icon: <Banknote className="h-3.5 w-3.5" /> },
+  { key: 'bank_account', label: 'Bank Accounts', icon: <Landmark className="h-3.5 w-3.5" /> },
+  { key: 'bank_transaction', label: 'Bank Transactions', icon: <Activity className="h-3.5 w-3.5" /> },
+  { key: 'journal', label: 'Journals', icon: <BookOpen className="h-3.5 w-3.5" /> },
+  { key: 'tax', label: 'Taxes', icon: <Percent className="h-3.5 w-3.5" /> },
+];
+
+function timeAgo(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  return `${m}m ${s}s`;
+}
+
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  if (!status) {
+    return (
+      <Badge variant="outline" className="border-border/60 text-muted-foreground">
+        Never synced
+      </Badge>
+    );
+  }
+  switch (status) {
+    case 'running':
+      return (
+        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-400">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Running…
+        </Badge>
+      );
+    case 'completed':
+      return (
+        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+          <CheckCircle2 className="mr-1 h-3 w-3" /> Completed
+        </Badge>
+      );
+    case 'partial':
+      return (
+        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+          <AlertCircle className="mr-1 h-3 w-3" /> Partial
+        </Badge>
+      );
+    case 'failed':
+      return (
+        <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-400">
+          <XCircle className="mr-1 h-3 w-3" /> Failed
+        </Badge>
+      );
+    default:
+      return (
+        <Badge variant="outline" className="border-border/60 text-muted-foreground">
+          {status}
+        </Badge>
+      );
+  }
+}
+
+function SyncPanel() {
+  const {
+    syncStatus,
+    syncLoading,
+    syncing,
+    syncError,
+    triggerSync,
+    refreshSyncStatus,
+  } = useZohoBooks();
+  const [mode, setMode] = useState<'incremental' | 'full'>('incremental');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleSync = useCallback(async () => {
+    setLocalError(null);
+    const { ok, error } = await triggerSync({ mode, resume: true });
+    if (!ok && error) setLocalError(error);
+  }, [triggerSync, mode]);
+
+  const lastSync = syncStatus?.lastSync;
+  const records = syncStatus?.recordsImported ?? {};
+  const totalRecords = syncStatus?.totalRecords ?? 0;
+
+  return (
+    <Card className="border-border/60 bg-card/50 backdrop-blur">
+      <CardContent className="p-6">
+        <div className="flex flex-col gap-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-[#C8202F]" />
+              <span className="text-sm font-semibold tracking-tight">Data Sync</span>
+              <StatusBadge status={lastSync?.status} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void refreshSyncStatus()}
+                disabled={syncLoading}
+                className="h-7 gap-1.5 text-xs text-muted-foreground"
+              >
+                <RefreshCw className={`h-3 w-3 ${syncLoading ? 'animate-spin' : ''}`} /> Refresh
+              </Button>
+              <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-muted/20 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMode('incremental')}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium transition ${
+                    mode === 'incremental' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                  }`}
+                >
+                  Incremental
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('full')}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium transition ${
+                    mode === 'full' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                  }`}
+                >
+                  Full
+                </button>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSync}
+                disabled={syncing}
+                className="h-8 gap-1.5 bg-[#C8202F] text-white hover:bg-[#a01a26]"
+              >
+                {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                {syncing ? 'Syncing…' : 'Sync Now'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Last sync + records grid */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SyncMetric
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Last Sync"
+              value={lastSync ? timeAgo(lastSync.startedAt) : '—'}
+              sub={lastSync?.durationMs !== null && lastSync?.durationMs !== undefined ? formatDuration(lastSync.durationMs) : undefined}
+            />
+            <SyncMetric
+              icon={<ListChecks className="h-3.5 w-3.5" />}
+              label="Records Imported"
+              value={totalRecords.toLocaleString('en-IN')}
+              sub={lastSync ? `${lastSync.mode} sync` : undefined}
+            />
+            <SyncMetric
+              icon={<Building2 className="h-3.5 w-3.5" />}
+              label="Organization"
+              value={syncStatus?.organizationName ?? 'Not mapped'}
+              sub={syncStatus?.zohoOrgId ? `ID: ${syncStatus.zohoOrgId}` : undefined}
+            />
+            <SyncMetric
+              icon={<Activity className="h-3.5 w-3.5" />}
+              label="Status"
+              value={lastSync ? lastSync.status : '—'}
+              sub={lastSync?.error ? `error: ${lastSync.error.slice(0, 30)}…` : undefined}
+              valueClassName={
+                lastSync?.status === 'completed'
+                  ? 'text-emerald-400'
+                  : lastSync?.status === 'failed'
+                  ? 'text-red-400'
+                  : lastSync?.status === 'partial'
+                  ? 'text-amber-400'
+                  : 'text-muted-foreground'
+              }
+            />
+          </div>
+
+          {/* Per-entity breakdown */}
+          <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <ListChecks className="h-3 w-3" />
+              Per-entity Breakdown
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {ENTITY_META.map((e) => {
+                const count = records[e.key] ?? 0;
+                const stats = lastSync?.stats?.[e.key];
+                const hasError = stats?.failed && stats.failed > 0;
+                return (
+                  <div
+                    key={e.key}
+                    className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="text-muted-foreground/80">{e.icon}</span>
+                      {e.label}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-mono font-medium text-foreground">{count}</span>
+                      {hasError ? (
+                        <span
+                          title={`${stats?.failed} failed${stats?.lastError ? `: ${stats.lastError}` : ''}`}
+                          className="h-1.5 w-1.5 rounded-full bg-amber-500"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Error banner */}
+          {(localError || syncError || lastSync?.error) && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="leading-relaxed">
+                {localError || syncError || lastSync?.error}
+              </span>
+            </div>
+          )}
+
+          {/* Oracle integration note */}
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-400">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="leading-relaxed">
+              Synced data flows into Oracle automatically. Ask Oracle{' '}
+              <span className="font-medium">&quot;Who owes me money?&quot;</span>,{' '}
+              <span className="font-medium">&quot;Which invoices are overdue?&quot;</span>,{' '}
+              <span className="font-medium">&quot;What is my cash balance?&quot;</span> — answers come from your live Zoho Books data.
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SyncMetric({
+  icon,
+  label,
+  value,
+  sub,
+  valueClassName,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {icon}
+        {label}
+      </div>
+      <span className={`text-sm font-semibold ${valueClassName ?? 'text-foreground'}`}>{value}</span>
+      {sub ? <span className="text-[10px] text-muted-foreground/70">{sub}</span> : null}
+    </div>
+  );
+}
+
 // ─── Connected-state details card ────────────────────────────────────────────
 
 function ConnectionDetails() {
@@ -196,7 +494,7 @@ function ConnectionDetails() {
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               <Building2 className="h-3 w-3" />
-              Organization
+              Current Organization
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
@@ -258,15 +556,6 @@ function ConnectionDetails() {
               value={status.connectedAt ? new Date(status.connectedAt).toLocaleString() : '—'}
               valueClassName="text-muted-foreground"
             />
-          </div>
-
-          {/* Phase 1 notice */}
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="leading-relaxed">
-              <span className="font-medium">Phase 1 (OAuth)</span> — connection is live and tokens are encrypted at
-              rest. Data sync (Invoices, Customers, Bills, Expenses, Banking) arrives in Phase 2.
-            </span>
           </div>
         </div>
       </CardContent>
@@ -370,7 +659,7 @@ export default function ZohoBooksPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           {organization?.name ? `${organization.name} · ` : ''}
-          India&apos;s leading accounting platform — connected with encrypted OAuth tokens.
+          India&apos;s leading accounting platform — OAuth 2.0 + automated data sync into Oracle.
         </p>
       </div>
 
@@ -412,9 +701,12 @@ export default function ZohoBooksPage() {
         </span>
       </div>
 
-      {/* Connection details (only when connected) */}
+      {/* Connection details + Sync panel (only when connected) */}
       <NotConnectedGate>
-        <ConnectionDetails />
+        <div className="flex flex-col gap-4">
+          <SyncPanel />
+          <ConnectionDetails />
+        </div>
       </NotConnectedGate>
     </div>
   );

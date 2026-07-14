@@ -44,3 +44,6 @@ export type { ResolvedZohoAuth } from './auth';
 
 // Service wrappers (Phase 1: organization info only)
 export { listOrganizations, getPrimaryOrganization } from './services';
+
+// Phase 2 — Data Sync (pagination + incremental + resume + audit logging)
+export * from './sync';

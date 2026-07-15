@@ -43,6 +43,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { useApp } from '@/contexts/AppContext';
 import type { Client, HealthScoreRecord } from '@/types/gst';
 import { formatNumber, periodToLabel } from '@/lib/gst-utils';
+import { useClients } from '@/hooks/useClients';
 import {
   Users,
   HeartPulse,
@@ -384,10 +385,12 @@ const kpiVariants = {
 export default function ClientHealthPage() {
   const { setCurrentView, setSelectedClientId } = useApp();
 
-  // Data state
-  const [clients, setClients] = useState<EnrichedClient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Data state — clients come from the shared, tenant-scoped useClients hook
+  // so the orgId is always threaded into /api/clients?organizationId=….
+  const { clients: rawClients, loading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
+  const clients: EnrichedClient[] = useMemo(() => rawClients as EnrichedClient[], [rawClients]);
+  const loading = clientsLoading;
+  const error = clientsError;
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -399,29 +402,14 @@ export default function ClientHealthPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // ── Fetch clients on mount ──────────────────
+  // Refresh client list when the user clicks "Recalculate Score" so any newly
+  // created clients appear immediately. The hook itself auto-caches, so this
+  // is just a manual override.
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [clientsRes, healthRes] = await Promise.all([
-          fetch('/api/clients'),
-          fetch('/api/health-score'),
-        ]);
-
-        if (!clientsRes.ok) throw new Error('Failed to fetch clients');
-        const clientsData = await clientsRes.json();
-        setClients(clientsData.clients ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
+    // no-op — useClients handles initial fetch via TanStack Query. This effect
+    // exists only to surface `refetchClients` to the rest of the component via
+    // the dependency array below if needed in the future.
+  }, [refetchClients]);
 
   // ── Derived KPI counts ──────────────────────
   const kpiCounts = useMemo(() => {
@@ -1231,6 +1219,9 @@ export default function ClientHealthPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ clientId: selectedClient.client.id }),
                           });
+                          // Refresh the tenant-scoped client list so the
+                          // updated health score appears immediately.
+                          refetchClients();
                         } catch { /* ignore */ }
                         setDialogOpen(false);
                       }}

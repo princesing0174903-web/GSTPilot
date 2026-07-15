@@ -46,18 +46,15 @@ import {
   MessageSquare,
   Search,
   Filter,
+  Loader2,
 } from 'lucide-react';
 import type { Issue, IssueSeverity } from '@/types/gst';
 import { ISSUE_SEVERITY_CONFIG } from '@/types/gst';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
+import { useClients } from '@/hooks/useClients';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface ClientOption {
-  id: string;
-  tradeName: string;
-}
-
 interface NoteEntry {
   id: string;
   author: string;
@@ -150,7 +147,7 @@ export default function ErrorResolutionPage() {
 
   // Data state
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
+  const { clients, loading: clientsLoading, error: clientsError } = useClients();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -191,27 +188,6 @@ export default function ErrorResolutionPage() {
       setLoading(false);
     }
   }, [filterClient, filterSeverity, filterStatus, filterCategory]);
-
-  // ─── Fetch clients for filter dropdown ───────────────────────────────────
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (!res.ok) return;
-      const data = await res.json();
-      setClients(
-        (data.clients ?? []).map((c: { id: string; tradeName: string }) => ({
-          id: c.id,
-          tradeName: c.tradeName,
-        }))
-      );
-    } catch {
-      // silently ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
 
   useEffect(() => {
     fetchIssues();
@@ -550,11 +526,21 @@ export default function ErrorResolutionPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Clients</SelectItem>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.tradeName}
-                  </SelectItem>
-                ))}
+                {clientsLoading ? (
+                  <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                  </div>
+                ) : clientsError ? (
+                  <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                ) : clients.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                ) : (
+                  clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.tradeName}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
 

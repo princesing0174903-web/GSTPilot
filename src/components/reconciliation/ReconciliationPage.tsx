@@ -81,6 +81,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { useApp } from '@/contexts/AppContext';
 import { useClients, type ClientOption } from '@/hooks/useClients';
+import { useConnectedSources } from '@/hooks/useConnectedSources';
 
 // ─── API response shapes (subset of Prisma models) ─────────────────────────
 
@@ -293,16 +294,6 @@ const slideInRight = {
 };
 
 // ──────────────────────────────────────────────
-// Source options for reconciliation
-// ──────────────────────────────────────────────
-const SOURCE_OPTIONS = [
-  'GSTR-2B vs Purchase Register',
-  'GSTR-1 vs Sales Register',
-  'GSTR-2B vs GSTR-1',
-  'Purchase Register vs Sales Register',
-];
-
-// ──────────────────────────────────────────────
 // Period generator (last 12 months)
 // ──────────────────────────────────────────────
 function getRecentPeriods(count: number = 12): string[] {
@@ -478,6 +469,14 @@ export default function ReconciliationPage() {
     () => rawClients.map(mapApiClient),
     [rawClients],
   );
+
+  // ── Connected data sources (tenant-scoped via useConnectedSources) ──
+  // Replaces the former hardcoded SOURCE_OPTIONS array. The hook fires
+  // the Zoho / Google Workspace / Bank status endpoints in parallel and
+  // always returns the GST Portal + Manual Entry built-ins so the
+  // dropdown is never empty. The string `value` (e.g. 'zoho', 'gst') is
+  // what gets persisted to ReconciliationRun.sources.
+  const { sources: connectedSources, loading: sourcesLoading } = useConnectedSources();
 
   useEffect(() => {
     let cancelled = false;
@@ -772,11 +771,20 @@ export default function ReconciliationPage() {
                   <Select value={selectedSource} onValueChange={setSelectedSource}>
                     <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
                     <SelectContent>
-                      {SOURCE_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
+                      {sourcesLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sources…
+                        </div>
+                      ) : (
+                        connectedSources.map(s => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Only connected data sources are shown. Connect more in Integrations.
+                  </p>
                 </div>
               </div>
               <DialogFooter>
@@ -890,11 +898,20 @@ export default function ReconciliationPage() {
                 <Select value={selectedSource} onValueChange={setSelectedSource}>
                   <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
                   <SelectContent>
-                    {SOURCE_OPTIONS.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
+                    {sourcesLoading ? (
+                      <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sources…
+                      </div>
+                    ) : (
+                      connectedSources.map(s => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Only connected data sources are shown. Connect more in Integrations.
+                </p>
               </div>
             </div>
             <DialogFooter>

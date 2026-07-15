@@ -53,6 +53,7 @@ import { formatNumber } from '@/lib/gst-utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Inbox, Users as UsersIcon } from 'lucide-react';
+import { useClients } from '@/hooks/useClients';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type TaskSourceType = 'notice' | 'risk_alert' | 'missing_document' | 'pending_reconciliation' | 'pending_approval';
@@ -79,11 +80,6 @@ interface TeamMember {
   id: string;
   name: string;
   avatar?: string;
-}
-
-interface ClientOption {
-  id: string;
-  tradeName: string;
 }
 
 interface TasksData {
@@ -215,7 +211,7 @@ export default function AITaskGeneratorPage() {
   // loaded from /api/ai-tasks in fetchData() below.
   const [tasks, setTasks] = useState<AITask[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
+  const { clients, loading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -237,10 +233,9 @@ export default function AITaskGeneratorPage() {
       setLoading(true);
       setError(null);
 
-      const [tasksRes, teamRes, clientsRes] = await Promise.allSettled([
+      const [tasksRes, teamRes] = await Promise.allSettled([
         fetch('/api/ai-tasks'),
         fetch('/api/team-members'),
-        fetch('/api/clients'),
       ]);
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value.ok) {
@@ -274,19 +269,6 @@ export default function AITaskGeneratorPage() {
         })));
       } else {
         setTeamMembers([]);
-      }
-
-      if (clientsRes.status === 'fulfilled' && clientsRes.value.ok) {
-        const clientsData = await clientsRes.value.json();
-        const list = Array.isArray(clientsData) ? clientsData : Array.isArray(clientsData.clients) ? clientsData.clients : [];
-        setClients(
-          list.map((c: { id?: string; tradeName?: string; name?: string }) => ({
-            id: String(c.id ?? ''),
-            tradeName: String(c.tradeName ?? c.name ?? 'Client'),
-          }))
-        );
-      } else {
-        setClients([]);
       }
     } catch (err) {
       console.error('AI Tasks fetch error:', err);
@@ -391,6 +373,8 @@ export default function AITaskGeneratorPage() {
       createdAt: new Date().toISOString().split('T')[0],
     };
     setTasks((prev) => [newTask, ...prev]);
+    // Refresh client list so any newly-created client appears immediately.
+    refetchClients();
     // Reset form
     setFormClient('');
     setFormSourceType('notice');
@@ -725,11 +709,21 @@ export default function AITaskGeneratorPage() {
                   <SelectValue placeholder="Select client (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.tradeName}
-                    </SelectItem>
-                  ))}
+                  {clientsLoading ? (
+                    <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                    </div>
+                  ) : clientsError ? (
+                    <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                  ) : clients.length === 0 ? (
+                    <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                  ) : (
+                    clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.tradeName}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

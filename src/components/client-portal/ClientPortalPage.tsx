@@ -32,6 +32,7 @@ import {
   User,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/gst-utils'
+import { useClients } from '@/hooks/useClients'
 
 interface ClientData {
   id: string
@@ -80,90 +81,60 @@ export default function ClientPortalPage() {
   const [documents, setDocuments] = useState<ClientDocument[]>([])
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Demo clients for login
-  const demoClients = [
-    { email: 'accounts@sharmaent.com', password: 'demo', name: 'Sharma Enterprises', gstin: '27AABCS1429B1Z5', id: 'demo-1' },
-    { email: 'gst@patelsons.com', password: 'demo', name: 'Patel & Sons', gstin: '24AABCP5678G1Z3', id: 'demo-2' },
-    { email: 'gst@krishnatraders.in', password: 'demo', name: 'Krishna Traders', gstin: '06AABCK9012H1Z1', id: 'demo-3' },
-  ]
+  // Real client list (tenant-scoped via shared hook) — used to look up the
+  // portal user by their contact email. NO demo credentials, NO fake data.
+  const { clients: orgClients, loading: clientsLoading } = useClients()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError('')
     setIsLoading(true)
 
-    // Simulate login delay
-    await new Promise(resolve => setTimeout(resolve, 800))
+    // Real lookup: match the entered email against client contactEmail records
+    // in the current organization. No hardcoded credentials.
+    const matchedClient = orgClients.find(
+      c => (c.contactEmail ?? '').toLowerCase() === loginEmail.trim().toLowerCase()
+    )
 
-    const client = demoClients.find(c => c.email === loginEmail && c.password === loginPassword)
-    if (client) {
-      setIsLoggedIn(true)
-      setClientData({
-        id: client.id,
-        tradeName: client.name,
-        gstin: client.gstin,
-        healthScore: 88,
-        status: 'active',
-      })
-
-      // Load client data
-      try {
-        const clientsRes = await fetch('/api/clients')
-        if (clientsRes.ok) {
-          const clientsData = await clientsRes.json()
-          const matchedClient = clientsData.clients?.find((c: { gstin: string }) => c.gstin === client.gstin)
-          if (matchedClient) {
-            setClientData(matchedClient)
-            
-            // Fetch filings for this client
-            const filingsRes = await fetch(`/api/gstr-filing?clientId=${matchedClient.id}`)
-            if (filingsRes.ok) {
-              const filingsData = await filingsRes.json()
-              setFilings(filingsData.filings || [])
-            }
-
-            // Fetch notices
-            const noticesRes = await fetch(`/api/notices?clientId=${matchedClient.id}`)
-            if (noticesRes.ok) {
-              const noticesData = await noticesRes.json()
-              setNotices(noticesData.notices || [])
-            }
-
-            // Fetch documents
-            const docsRes = await fetch(`/api/documents?clientId=${matchedClient.id}`)
-            if (docsRes.ok) {
-              const docsData = await docsRes.json()
-              setDocuments(docsData.documents || [])
-            }
-          }
-        }
-      } catch {
-        // Use fallback data
-      }
-
-      // Set fallback data if API didn't return enough
-      if (filings.length === 0) {
-        setFilings([
-          { id: '1', returnType: 'GSTR-1', period: '2025-05', status: 'filed', filedDate: '2025-06-11', totalTax: 2450000 },
-          { id: '2', returnType: 'GSTR-3B', period: '2025-05', status: 'filed', filedDate: '2025-06-20', totalTax: 2380000 },
-          { id: '3', returnType: 'GSTR-1', period: '2025-06', status: 'pending', totalTax: 0 },
-          { id: '4', returnType: 'GSTR-3B', period: '2025-06', status: 'draft', totalTax: 0 },
-        ])
-      }
-      if (notices.length === 0) {
-        setNotices([
-          { id: '1', subject: 'GST Assessment Notice for FY 2024-25', noticeType: 'gst_notice', status: 'open', priority: 'high', dueDate: '2025-08-15' },
-        ])
-      }
-    } else {
-      setLoginError('Invalid credentials. Try demo accounts below.')
+    if (!matchedClient) {
+      setLoginError('No client found with that email. Please contact your firm to get portal access.')
+      setIsLoading(false)
+      return
     }
-    setIsLoading(false)
-  }
 
-  const handleDemoLogin = (email: string) => {
-    setLoginEmail(email)
-    setLoginPassword('demo')
+    setIsLoggedIn(true)
+    setClientData({
+      id: matchedClient.id,
+      tradeName: matchedClient.tradeName,
+      gstin: matchedClient.gstin,
+      healthScore: matchedClient.healthScore,
+      status: matchedClient.status,
+    })
+
+    // Load real client data from APIs (no fallbacks / no fake data)
+    try {
+      const filingsRes = await fetch(`/api/gstr-filing?clientId=${matchedClient.id}`)
+      if (filingsRes.ok) {
+        const filingsData = await filingsRes.json()
+        setFilings(filingsData.filings || [])
+      }
+
+      const noticesRes = await fetch(`/api/notices?clientId=${matchedClient.id}`)
+      if (noticesRes.ok) {
+        const noticesData = await noticesRes.json()
+        setNotices(noticesData.notices || [])
+      }
+
+      const docsRes = await fetch(`/api/documents?clientId=${matchedClient.id}`)
+      if (docsRes.ok) {
+        const docsData = await docsRes.json()
+        setDocuments(docsData.documents || [])
+      }
+    } catch {
+      // Network error — leave lists empty; the UI shows honest empty states.
+    }
+
+    setIsLoading(false)
   }
 
   const handleLogout = () => {
@@ -257,20 +228,13 @@ export default function ClientPortalPage() {
               </form>
 
               <div className="mt-6 pt-4 border-t">
-                <p className="text-xs text-muted-foreground text-center mb-3">Demo Accounts</p>
-                <div className="space-y-2">
-                  {demoClients.map((client) => (
-                    <button
-                      key={client.email}
-                      onClick={() => handleDemoLogin(client.email)}
-                      className="w-full text-left p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all text-sm"
-                    >
-                      <span className="font-medium text-foreground">{client.name}</span>
-                      <span className="block text-xs text-muted-foreground">{client.email}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground text-center mt-3">Password: demo</p>
+                <p className="text-xs text-muted-foreground text-center">
+                  {clientsLoading
+                    ? 'Loading client accounts…'
+                    : orgClients.length === 0
+                      ? 'No client accounts found. Contact your firm to get portal access.'
+                      : `Sign in with the email your firm has on file (${orgClients.length} client${orgClients.length === 1 ? '' : 's'} registered).`}
+                </p>
               </div>
             </CardContent>
           </Card>

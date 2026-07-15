@@ -58,6 +58,7 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { useApp } from '@/contexts/AppContext';
+import { useClients, type ClientOption } from '@/hooks/useClients';
 import { createReturn, fileReturn } from '@/lib/firestore-service';
 import type { FirestoreReturn, FirestoreClient } from '@/lib/firestore-schema';
 import type { FilingStatus } from '@/types/gst';
@@ -92,31 +93,6 @@ interface ApiGSTRFiling {
   client?: { id: string; tradeName: string; gstin: string; state?: string | null } | null;
 }
 
-interface ApiClient {
-  id: string;
-  gstin: string;
-  tradeName: string;
-  legalName?: string | null;
-  address?: string | null;
-  state?: string | null;
-  stateCode?: string | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  entityType?: string;
-  returnPeriod?: string | null;
-  lastFilingDate?: string | null;
-  status: string;
-  healthScore: number;
-  createdAt: string;
-  updatedAt: string;
-  _aggregations?: {
-    totalInvoices: number;
-    filedReturns: number;
-    pendingReturns: number;
-    matchPercentage: number;
-  };
-}
-
 // Maps a GSTRFiling row from /api/returns to the ReturnItem shape used by the UI.
 function mapApiReturnToItem(r: ApiGSTRFiling): ReturnItem {
   return {
@@ -146,7 +122,8 @@ function mapApiReturnToItem(r: ApiGSTRFiling): ReturnItem {
 }
 
 // Maps a Client row from /api/clients to the ClientItem shape used by the UI.
-function mapApiClientToItem(c: ApiClient): ClientItem {
+// Source type is the shared ClientOption from useClients() (tenant-scoped).
+function mapApiClientToItem(c: ClientOption): ClientItem {
   return {
     id: c.id,
     clientId: c.id,
@@ -159,10 +136,12 @@ function mapApiClientToItem(c: ApiClient): ClientItem {
     stateCode: c.stateCode ?? null,
     contactEmail: c.contactEmail ?? null,
     contactPhone: c.contactPhone ?? null,
-    entityType: c.entityType ?? 'regular',
-    returnPeriod: c.returnPeriod ?? null,
-    lastFilingDate: c.lastFilingDate ?? null,
-    status: c.status as 'active' | 'inactive',
+    // ClientOption doesn't expose entityType / returnPeriod / lastFilingDate.
+    // Use sensible defaults — do NOT fabricate business data.
+    entityType: 'regular',
+    returnPeriod: null,
+    lastFilingDate: null,
+    status: c.status === 'inactive' ? 'inactive' : 'active',
     healthScore: c.healthScore ?? 0,
     complianceProfile: {
       filingCompliance: 0,
@@ -176,8 +155,8 @@ function mapApiClientToItem(c: ApiClient): ClientItem {
     totalTaxPaid: 0,
     pendingReturnCount: c._aggregations?.pendingReturns ?? 0,
     documentCount: 0,
-    createdAt: c.createdAt,
-    updatedAt: c.updatedAt,
+    createdAt: c.createdAt ?? '',
+    updatedAt: c.updatedAt ?? '',
   };
 }
 
@@ -353,11 +332,21 @@ export default function ReturnsPage() {
 
   // ── Real API-backed state (replaces former Firestore hooks) ─────────
   const [returns, setReturns] = useState<ReturnItem[]>([]);
-  const [clients, setClients] = useState<ClientItem[]>([]);
   const [returnsLoading, setReturnsLoading] = useState(true);
-  const [clientsLoading, setClientsLoading] = useState(true);
   const [returnsError, setReturnsError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Clients (tenant-scoped via shared hook) ──
+  const {
+    clients: rawClients,
+    loading: clientsLoading,
+    error: clientsError,
+    empty: clientsEmpty,
+  } = useClients();
+  const clients = useMemo<ClientItem[]>(
+    () => rawClients.map(mapApiClientToItem),
+    [rawClients],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -375,25 +364,6 @@ export default function ReturnsPage() {
         if (cancelled) return;
         setReturnsError(err instanceof Error ? err.message : 'Failed to load returns');
         setReturnsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setClientsLoading(true);
-    fetch('/api/clients')
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return;
-        const items: ApiClient[] = Array.isArray(data?.clients) ? data.clients : [];
-        setClients(items.map(mapApiClientToItem));
-        setClientsLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setClients([]);
-        setClientsLoading(false);
       });
     return () => { cancelled = true; };
   }, [refreshKey]);
@@ -1326,6 +1296,21 @@ export default function ReturnsPage() {
                 <SelectValue placeholder="Select client" />
               </SelectTrigger>
               <SelectContent>
+                {clientsLoading && (
+                  <SelectItem value="__clients_loading" disabled>
+                    Loading clients…
+                  </SelectItem>
+                )}
+                {clientsError && (
+                  <SelectItem value="__clients_error" disabled className="text-red-600">
+                    {clientsError}
+                  </SelectItem>
+                )}
+                {!clientsLoading && !clientsError && clientsEmpty && (
+                  <SelectItem value="__clients_empty" disabled>
+                    No clients found — add clients in Client Registry
+                  </SelectItem>
+                )}
                 {clients.map((client) => (
                   <SelectItem key={client.id} value={client.clientId}>
                     {client.tradeName}

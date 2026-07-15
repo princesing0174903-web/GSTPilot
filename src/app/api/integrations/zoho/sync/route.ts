@@ -1,147 +1,100 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // POST /api/integrations/zoho/sync
+// GET  /api/integrations/zoho/sync
+// ═══════════════════════════════════════════════════════════════════════════════
 //
-// Triggers a Zoho Books data sync for the current (org, user) pair.
+// Triggers the full Zoho Books data synchronization (13 modules) or returns the
+// current sync status.
 //
-// Phase 5: Fire-and-forget. The sync runs in a DETACHED background promise so
-// the HTTP response returns IMMEDIATELY with { status: 'running', syncLogId }.
-// The UI polls GET /sync/status every 1.5s for live progress
-// (currentEntity, per-entity counts, "Fetching Customers…", etc.).
+// POST body:
+//   { mode: "full" | "incremental" }   (default: "full")
 //
-// This is safe because:
-//   • The dev server process stays alive (watchdog auto-restarts it).
-//   • The sync writes currentEntity to ZohoSyncLog before each entity, so a
-//     crash mid-sync leaves a resumable state (lastEntity + lastCursor).
-//   • The next sync with resume=true picks up from the last completed entity.
+// Headers:
+//   x-gstpilot-orgid: <organizationId>   (required)
+//   x-gstpilot-actor: <userId>           (optional — system sync if omitted)
 //
-// Body (optional JSON):
-//   { mode?: 'full' | 'incremental', resume?: boolean }
-//   - mode defaults to 'incremental' (only fetch records modified since the
-//     last sync's watermark). Pass 'full' to re-import everything.
-//   - resume defaults to true. If a stale 'running' ZohoSyncLog exists (e.g.,
-//     a previous sync crashed), the new run continues from where it left off
-//     instead of starting over. Pass false to force a fresh start.
+// POST response: SyncEngineResult JSON with per-module counts + status.
+// GET  response: current sync status (for UI polling of live progress).
 //
-// Auth:
-//   - x-gstpilot-orgid header (required)
-//   - x-gstpilot-actor header (required) — JSON: { uid, email, name, role }
-//   - Zoho Books must be connected (valid access token is resolved via
-//     getValidAccessToken, which auto-refreshes if expired)
-//
-// Response (immediate — sync still running in background):
-//   {
-//     ok: true,
-//     syncLogId: string,
-//     status: 'running',
-//     mode: 'full' | 'incremental',
-//     message: 'Sync started in background. Poll GET /sync/status for progress.'
-//   }
-//
-// The final result is available via GET /sync/status (status transitions:
-// running → completed | partial | failed).
+// The sync runs synchronously in this request (it may take 10-60s depending on
+// data volume). The UI polls GET /sync/status to show "Fetching Customers…"
+// "Fetching Invoices…" etc. in real time via the ZohoSyncLog.currentEntity field.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server';
-import {
-  getConnectionStatus,
-  resolveOrgUserFromHeaders,
-  loadTokens,
-  getValidAccessToken,
-  runSync,
-  type SyncMode,
-} from '@/lib/integrations/zoho-books';
+import { NextRequest, NextResponse } from 'next/server';
+import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integrations/zoho-books/sync-engine';
+import { resolveOrgUserFromHeaders } from '@/lib/integrations/zoho-books/oauth';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-// The HTTP request returns immediately, but keep maxDuration high in case the
-// runtime decides to wait for background tasks.
-export const maxDuration = 300;
+export const maxDuration = 300; // 5 minutes — sync can take a while for large orgs
 
-export async function POST(req: Request) {
+// ─── POST: trigger a sync ─────────────────────────────────────────────────────
+export async function POST(request: NextRequest) {
   try {
-    const { orgId, userId, userEmail } = resolveOrgUserFromHeaders(req);
-    if (!orgId || !userId) {
+    const { orgId, userId } = resolveOrgUserFromHeaders(request);
+
+    if (!orgId) {
       return NextResponse.json(
-        { ok: false, error: 'Organization + user context required.' },
+        { ok: false, error: 'Organization ID is required (x-gstpilot-orgid header or ?organizationId=).' },
         { status: 400 },
       );
     }
 
-    // Verify Zoho Books is connected (and resolve zohoOrgId).
-    const status = await getConnectionStatus(orgId, userId);
-    if (!status.connected) {
-      return NextResponse.json(
-        { ok: false, error: 'Zoho Books is not connected.', needsReconnect: true },
-        { status: 401 },
-      );
-    }
-    if (!status.zohoOrgId) {
-      return NextResponse.json(
-        { ok: false, error: 'Zoho Books organization is not mapped. Reconnect to resolve.' },
-        { status: 400 },
-      );
-    }
-
-    // Parse body (optional).
-    let mode: SyncMode = 'incremental';
-    let resume = true;
+    // Parse mode from body (default: full)
+    let mode: SyncMode = 'full';
     try {
-      const body = (await req.json().catch(() => ({}))) as { mode?: SyncMode; resume?: boolean };
-      if (body.mode === 'full' || body.mode === 'incremental') mode = body.mode;
-      if (typeof body.resume === 'boolean') resume = body.resume;
+      const body = await request.json();
+      if (body?.mode === 'incremental' || body?.mode === 'full') {
+        mode = body.mode;
+      }
     } catch {
-      /* body is optional — defaults are fine */
+      // No body or invalid JSON — default to full sync
     }
 
-    // Resolve a valid (auto-refreshed) access token.
-    const { accessToken, error: tokenErr } = await getValidAccessToken(orgId, userId);
-    if (!accessToken) {
-      return NextResponse.json(
-        { ok: false, error: tokenErr ?? 'No access token.', needsReconnect: true },
-        { status: 401 },
-      );
-    }
-
-    // Look up the stored row for zohoOrgId (defensive — getConnectionStatus
-    // already returned it, but we re-read to be safe).
-    const { stored } = await loadTokens(orgId, userId);
-    const zohoOrgId = stored?.zohoOrgId ?? status.zohoOrgId;
-
-    // ── Phase 5: Fire-and-forget ────────────────────────────────────────────
-    //
-    // Start the sync in a DETACHED background promise. We do NOT await it.
-    // The sync writes `currentEntity` to the ZohoSyncLog row as it progresses
-    // through each entity, so the UI can poll GET /sync/status for live
-    // progress. The response returns immediately with the syncLogId.
-    //
-    // The promise is caught internally (runSync never throws — it returns
-    // { ok: false, error } on failure and writes status='failed' to the log).
-
-    void runSync({
+    const result = await runZohoFullSync({
       organizationId: orgId,
       userId,
-      userEmail,
-      zohoOrgId,
-      accessToken,
       mode,
-      resume,
-      maxRecordsPerEntity: 10000,
-    }).catch((syncErr) => {
-      // Last-resort error handler — runSync should never throw, but if it
-      // does (e.g., OOM, process crash), log it so we can diagnose.
-      console.error('[/api/integrations/zoho/sync] background sync crashed:', syncErr);
     });
 
-    return NextResponse.json({
-      ok: true,
-      status: 'running',
-      mode,
-      message: 'Sync started in background. Poll GET /sync/status for live progress.',
+    return NextResponse.json(result, {
+      status: result.ok ? 200 : 502,
     });
-  } catch (err) {
-    console.error('[/api/integrations/zoho/sync] error:', err);
+  } catch (error) {
+    console.error('POST /api/integrations/zoho/sync error:', error);
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'Sync failed.' },
+      {
+        ok: false,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Sync failed unexpectedly.',
+      },
+      { status: 500 },
+    );
+  }
+}
+
+// ─── GET: current sync status (for UI polling) ────────────────────────────────
+export async function GET(request: NextRequest) {
+  try {
+    const { orgId } = resolveOrgUserFromHeaders(request);
+    // Fallback: accept ?organizationId= query param (for non-hook callers)
+    const queryOrgId = request.nextUrl.searchParams.get('organizationId');
+
+    const finalOrgId = orgId || queryOrgId;
+
+    if (!finalOrgId) {
+      return NextResponse.json(
+        { status: 'idle', error: 'Organization ID is required.' },
+        { status: 400 },
+      );
+    }
+
+    const status = await getSyncStatus(finalOrgId);
+    return NextResponse.json(status);
+  } catch (error) {
+    console.error('GET /api/integrations/zoho/sync error:', error);
+    return NextResponse.json(
+      { status: 'idle', error: error instanceof Error ? error.message : 'Failed to fetch sync status.' },
       { status: 500 },
     );
   }

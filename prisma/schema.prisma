@@ -5854,3 +5854,286 @@ model ZohoCreditNote {
   @@index([customerId])
   @@index([invoiceId])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 5 — Complete Zoho Books Data Synchronization (remaining entities)
+//
+// These models mirror the Zoho Books REST API shape 1:1 so the sync engine can
+// upsert every record by its Zoho ID. Each stores: zohoId, organizationId,
+// zohoOrgId, createdTime, modifiedTime, lastSyncedAt — exactly as required.
+//
+// Relationships maintained:
+//   ZohoInvoice       → ZohoCustomer (customerId)
+//   ZohoBill          → ZohoVendor   (vendorId)
+//   ZohoPaymentReceived → ZohoInvoice (invoiceId)
+//   ZohoPaymentMade    → ZohoBill    (billId)
+//   ZohoExpense       → ZohoVendor   (vendorId)
+//   ZohoBankTransaction → ZohoBankAccount (bankAccountId)
+//   ZohoCreditNote    → ZohoCustomer (customerId) — already defined above
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ZohoVendor: suppliers (Zoho Books /contacts?contact_type=vendor) ────────
+model ZohoVendor {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  zohoOrgId             String
+  zohoContactId         String   // Zoho contact_id (durable key)
+  contactName           String
+  companyName           String?
+  gstNumber             String?
+  email                 String?
+  phone                 String?
+  currency              String?
+  paymentTerms          Int?
+  outstandingPayable    Float    @default(0)
+  status                String   @default("active")
+  billingAddress        String?
+  shippingAddress       String?
+  lastSyncedAt          DateTime @default(now())
+  zohoCreatedAt         DateTime?
+  zohoUpdatedAt         DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoContactId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([gstNumber])
+}
+
+// ─── ZohoInvoice: sales invoices (Zoho Books /invoices) ──────────────────────
+model ZohoInvoice {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoInvoiceId      String   // Zoho invoice_id
+  invoiceNumber      String?  // Zoho invoice_number
+  customerId         String?  // → ZohoCustomer.zohoContactId
+  customerName       String?
+  status             String   @default("draft") // draft|sent|paid|overdue|void|partial
+  date               String?  // ISO date
+  dueDate            String?  // ISO date
+  subTotal           Float    @default(0)
+  total              Float    @default(0)
+  balance            Float    @default(0) // unpaid amount
+  paidAmount         Float    @default(0)
+  cgst               Float    @default(0)
+  sgst               Float    @default(0)
+  igst               Float    @default(0)
+  cess               Float    @default(0)
+  totalTax           Float    @default(0)
+  currencyCode       String?
+  // JSON array of line items: { item_id, name, quantity, rate, amount, tax }
+  lineItems          String   @default("[]")
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoInvoiceId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([customerId])
+  @@index([invoiceNumber])
+}
+
+// ─── ZohoBill: vendor bills (Zoho Books /bills) ──────────────────────────────
+model ZohoBill {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoBillId         String   // Zoho bill_id
+  billNumber         String?  // Zoho bill_number
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  status             String   @default("open") // open|paid|overdue|void|partial
+  date               String?
+  dueDate            String?
+  subTotal           Float    @default(0)
+  total              Float    @default(0)
+  balance            Float    @default(0)
+  paidAmount         Float    @default(0)
+  cgst               Float    @default(0)
+  sgst               Float    @default(0)
+  igst               Float    @default(0)
+  cess               Float    @default(0)
+  totalTax           Float    @default(0)
+  currencyCode       String?
+  lineItems          String   @default("[]")
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoBillId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([vendorId])
+}
+
+// ─── ZohoPaymentReceived: customer payments (Zoho Books /customerpayments) ───
+model ZohoPaymentReceived {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoPaymentId      String   // Zoho payment_id
+  paymentNumber      String?  // Zoho payment_number
+  customerId         String?  // → ZohoCustomer.zohoContactId
+  customerName       String?
+  invoiceId          String?  // → ZohoInvoice.zohoInvoiceId
+  invoiceNumber      String?
+  amount             Float    @default(0)
+  date               String?
+  paymentMode        String?  // cash|cheque|card|banktransfer|onlinepayment
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoPaymentId])
+  @@index([organizationId, zohoOrgId])
+  @@index([customerId])
+  @@index([invoiceId])
+}
+
+// ─── ZohoPaymentMade: vendor payments (Zoho Books /vendorpayments) ───────────
+model ZohoPaymentMade {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoPaymentId      String   // Zoho payment_id
+  paymentNumber      String?
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  billId             String?  // → ZohoBill.zohoBillId
+  billNumber         String?
+  amount             Float    @default(0)
+  date               String?
+  paymentMode        String?
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoPaymentId])
+  @@index([organizationId, zohoOrgId])
+  @@index([vendorId])
+  @@index([billId])
+}
+
+// ─── ZohoExpense: expenses (Zoho Books /expenses) ────────────────────────────
+model ZohoExpense {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoExpenseId      String   // Zoho expense_id
+  expenseNumber      String?
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  accountId          String?  // Zoho account_id (expense category)
+  accountName        String?
+  amount             Float    @default(0)
+  date               String?
+  status             String   @default("unbilled") // unbilled|billed|reimbursed|void
+  paymentMode        String?
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoExpenseId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([vendorId])
+}
+
+// ─── ZohoTax: tax rates (Zoho Books /settings/taxes) ─────────────────────────
+model ZohoTax {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoTaxId          String   // Zoho tax_id
+  taxName            String
+  taxPercentage      Float    @default(0)
+  taxType            String   @default("tax") // tax|compound_tax|retention_tax
+  taxAuthorityName   String?
+  status             String   @default("active") // active|inactive
+  isDefault          Boolean  @default(false)
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoTaxId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+}
+
+// ─── ZohoBankAccount: bank accounts (Zoho Books /bankaccounts) ───────────────
+model ZohoBankAccount {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoAccountId      String   // Zoho account_id
+  accountName        String
+  accountNumber      String?  // Zoho bank_account_number (masked)
+  ifscCode           String?
+  bankName           String?
+  accountType        String?  // savings|current|credit_card|etc
+  currencyCode       String?
+  balance            Float    @default(0)
+  availableBalance   Float    @default(0)
+  status             String   @default("active") // active|inactive
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoAccountId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+}
+
+// ─── ZohoBankTransaction: bank transactions (Zoho Books /banktransactions) ──
+model ZohoBankTransaction {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoTransactionId  String   // Zoho transaction_id
+  bankAccountId      String?  // → ZohoBankAccount.zohoAccountId
+  accountName        String?
+  amount             Float    @default(0)
+  transactionType    String   @default("debit") // debit|credit
+  transactionDate    String?
+  description        String?
+  referenceNumber    String?
+  status             String   @default("uncategorized") // uncategorized|matched|excluded
+  payee              String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoTransactionId])
+  @@index([organizationId, zohoOrgId])
+  @@index([bankAccountId])
+  @@index([organizationId, zohoOrgId, transactionDate])
+}

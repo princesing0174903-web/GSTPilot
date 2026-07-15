@@ -61,6 +61,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useZohoBooks, type ZohoSyncEntity } from '@/hooks/useZohoBooks';
 import { useOrg } from '@/contexts/OrgContext';
 import { ZohoCustomersSyncPanel } from './ZohoCustomersSyncPanel';
+import { ZohoFullSyncPanel } from './ZohoFullSyncPanel';
 
 // ─── Zoho Books brand mark (red "Z" tile) ────────────────────────────────────
 
@@ -915,7 +916,11 @@ export default function ZohoBooksPage() {
         </span>
       </div>
 
-      {/* Connection details + Sync panel (only when connected) */}
+      {/* Full Sync panel — always visible. The sync engine returns a clear
+          "not connected" error if the user hasn't completed OAuth yet. */}
+      <ZohoFullSyncPanel />
+
+      {/* Connection details + customer sync panel (only when connected) */}
       <NotConnectedGate>
         <div className="flex flex-col gap-4">
           <SyncPanel />

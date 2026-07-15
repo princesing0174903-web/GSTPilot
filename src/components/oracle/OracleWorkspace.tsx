@@ -581,6 +581,7 @@ export function OracleWorkspace({
         // return / invoice state (built into the system prompt as
         // "LIVE DASHBOARD DATA (legacy)").
         context: {
+          organizationId: orgCtx.organization?.id ?? 'preview-org',
           dashboardMetrics: {
             totalClients: dashboardMetrics.totalClients,
             activeClients: dashboardMetrics.activeClients,

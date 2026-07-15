@@ -54,6 +54,7 @@ import { getTimelineSummary } from '@/lib/execution/timeline';
 import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock, formatDynamicRecommendationsBlock } from '@/lib/oracle/real-data';
+import { getBusinessSnapshot } from '@/lib/business/snapshot';
 import { buildGSTpilotContextBlock } from '@/lib/oracle-cfo/gstpilot-context';
 import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
 import type { TwinOracleContext } from '@/lib/twin/types';
@@ -739,6 +740,58 @@ function safeJsonParseSteps(s: string): WorkflowStep[] {
 //  directly using the LIVE RUN MY BUSINESS STATE block above.)
 
 
+// ─── Business Snapshot context block (Phase 1 + Phase 2) ─────────────────────
+//
+// THE single source of truth for all business metrics. Oracle MUST use these
+// exact numbers — never compute Revenue, Cash, Profit, GST, Health Score, etc.
+// independently. If the org has no data, all values are 0 (honest empty state).
+//
+// This block is built from getBusinessSnapshot() which reads native Prisma
+// tables + Zoho-synced tables and merges them. Oracle NEVER calls external APIs
+// directly — it only reads from this snapshot (which is computed from the DB).
+async function buildBusinessSnapshotContextBlock(organizationId: string | undefined): Promise<string> {
+  if (!organizationId) {
+    return `## BUSINESS SNAPSHOT (Single Source of Truth)
+No organization context available. If the user asks about their business numbers,
+ask them to ensure they're signed in and an organization is selected.`;
+  }
+  try {
+    const s = await getBusinessSnapshot(organizationId);
+    return `## BUSINESS SNAPSHOT (Single Source of Truth — computed from real DB data)
+These are THE canonical numbers for this business. Use EXACTLY these values when
+the user asks about revenue, cash, profit, receivables, payables, GST, ITC, or
+health score. Never compute these independently — always cite these figures.
+
+- Revenue (FY): ${s.revenue.toLocaleString('en-IN')} (from ${s.invoiceCount} sales invoices)
+- Expenses (FY): ${s.expenses.toLocaleString('en-IN')}
+- Profit: ${s.profit.toLocaleString('en-IN')} (margin: ${(s.profitMargin * 100).toFixed(1)}%)
+- Cash Position: ${s.cash.toLocaleString('en-IN')}
+- Customers: ${s.customerCount} | Vendors: ${s.vendorCount}
+- Receivables (unpaid): ${s.receivables.toLocaleString('en-IN')}
+- Payables (unpaid): ${s.payables.toLocaleString('en-IN')}
+- Working Capital: ${s.workingCapital.toLocaleString('en-IN')}
+- GST Collected (output tax): ${s.outputTax.toLocaleString('en-IN')}
+- ITC Available (input tax): ${s.itcAvailable.toLocaleString('en-IN')}
+- GST Liability (net payable): ${s.gstLiability.toLocaleString('en-IN')}
+- Health Score: ${s.healthScore}/100 | Risk Score: ${s.riskScore}/100
+- Collection Rate: ${(s.collectionRate * 100).toFixed(1)}%
+- Runway: ${s.runwayDays === Infinity ? 'unlimited (no burn)' : s.runwayDays + ' days'}
+- Filed Returns: ${s.filedReturns} | Pending: ${s.pendingReturns} | Overdue: ${s.overdueReturns}
+- Forecast: next month revenue ~${s.forecast.nextMonthRevenue.toLocaleString('en-IN')} (${s.forecast.trend})
+
+Zoho Books Sync Status: ${s.lastSyncStatus}${s.lastSyncAt ? ' at ' + new Date(s.lastSyncAt).toLocaleString('en-IN') : ''}
+Synced entities: ${s.perEntity.zohoCustomers} customers, ${s.perEntity.zohoVendors} vendors, ${s.perEntity.zohoInvoices} invoices, ${s.perEntity.zohoBills} bills, ${s.perEntity.zohoBankAccounts} bank accounts, ${s.perEntity.zohoBankTransactions} bank transactions.
+
+RULE: These numbers come from the real database (native GSTPilot tables + Zoho Books synced data). They are NOT estimates. If a number is 0, it means there is genuinely no data for that metric — do not invent a value. Always use these exact figures.`;
+  } catch (err) {
+    console.error('[Oracle] Business Snapshot failed:', err);
+    return `## BUSINESS SNAPSHOT (Single Source of Truth)
+The business snapshot service is temporarily unavailable. If the user asks about
+specific numbers, let them know the data engine is reconnecting.`;
+  }
+}
+
+
 async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
   const mem = req.memory ?? {};
   const now = new Date();
@@ -780,6 +833,7 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
   const [
     cfoResult, rmbResult, graphResult, invoiceResult, execResult,
     twinResult, ceoResult, realDataResult, recsResult, gstpilotResult,
+    snapshotResult,
   ] = await Promise.allSettled([
     buildCFOContextBlock(),
     buildRmbContextBlock(),
@@ -791,6 +845,7 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
     mem.userId ? buildRealDataSnapshot(mem.userId).then(formatRealDataContextBlock) : Promise.resolve(''),
     formatDynamicRecommendationsBlock(mem.userId),
     buildGSTpilotContextBlock(),
+    buildBusinessSnapshotContextBlock(req.context?.organizationId),
   ]);
 
   const cfoContextBlock = cfoResult.status === 'fulfilled' ? cfoResult.value : '';
@@ -800,6 +855,7 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
   const executionContextBlock = execResult.status === 'fulfilled' ? execResult.value : '';
   const twinContextBlock = twinResult.status === 'fulfilled' ? twinResult.value : '';
   const ceoContextBlock = ceoResult.status === 'fulfilled' ? ceoResult.value : '';
+  const businessSnapshotBlock = snapshotResult.status === 'fulfilled' ? snapshotResult.value : '';
 
   let realDataContextBlock = realDataResult.status === 'fulfilled'
     ? realDataResult.value
@@ -1251,6 +1307,8 @@ Today: ${today}
 Current month: ${currentMonth}
 ${personalisation.length ? `\n## USER MEMORY\n${personalisation.join('\n')}` : ''}
 ${liveData ? `\n## LIVE DASHBOARD DATA (legacy)\n${liveData}` : ''}
+
+${businessSnapshotBlock}
 
 ${cfoContextBlock}
 

@@ -57,6 +57,31 @@ async function mirrorZohoCustomerToClient(
   const normalized = mapCustomerToClient(contact, `ZOHO-ORG-${contact.contact_id}`);
   const gstin = contact.gstin?.trim() || syntheticGstinForContact(contact.contact_id);
 
+  // Ensure a Firm bridge row exists for this organizationId so the
+  // Client.firmId → Firm.id FK constraint is satisfied. Without this, the
+  // upsert below fails silently (caught by the caller) and the synced customer
+  // never appears in the GST Return / Reconciliation / Oracle dropdowns.
+  // The modern org model uses organizationId (Firestore/preview-org); the
+  // legacy Prisma Client model uses firmId → Firm.id. This bridge row unifies
+  // them so a single tenant scope works across both worlds.
+  try {
+    await db.firm.upsert({
+      where: { id: organizationId },
+      create: {
+        id: organizationId,
+        name: contact.company_name || contact.contact_name
+          ? `${contact.company_name || contact.contact_name} (Org)`
+          : 'GSTPilot Organization',
+        subscriptionPlan: 'enterprise',
+        maxClients: 100000,
+        isActive: true,
+      },
+      update: { isActive: true },
+    });
+  } catch {
+    /* non-fatal — Firm may already exist or org id may be a preview-mode id */
+  }
+
   await db.client.upsert({
     where: { gstin },
     create: {

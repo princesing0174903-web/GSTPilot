@@ -107,6 +107,8 @@ export interface OracleChatRequest {
   memory?: OracleUserMemory;
   context?: {
     dashboardMetrics?: Record<string, number | string | undefined>;
+    /** The current organization id — used to fetch the unified Business Snapshot. */
+    organizationId?: string;
   };
 }
 

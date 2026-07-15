@@ -10,10 +10,14 @@
 //
 //   Returns: { otp, expiresAt, channel } — the OTP is intentionally returned so
 //   the UI can display it (since we don't really send SMS).
+//
+//   GATING: Dev-only. Returns 503 when `NODE_ENV === 'production'` — the
+//   fake-but-persisted OTP generator is a dev-workflow convenience and must
+//   never run in production (where a real SMS / AA consent OTP gateway would
+//   be used instead).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { safeAudit } from '@/lib/audit/safe-write';
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -40,6 +44,15 @@ function generateOtp(): string {
 }
 
 export async function POST(request: NextRequest) {
+  // GATING: fake-but-persisted OTP is dev-only — never run in production.
+  // A real SMS / AA consent OTP gateway must be wired up for production use.
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Fake OTP generator is dev-only. Configure a real SMS / Account Aggregator OTP gateway for production.' },
+      { status: 503 },
+    );
+  }
+
   let body: {
     userId?: string;
     type?: string;

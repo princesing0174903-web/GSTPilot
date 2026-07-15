@@ -20,9 +20,13 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { safeAudit } from '@/lib/audit/safe-write';
 
 // ─── Stub data generators ────────────────────────────────────────────────────
-// Each generator simulates "fetching real data" from the upstream connector and
-// returns SyncedRecord-shaped rows. These are realistic enough for the Oracle +
-// Data Quality Engine to operate on.
+// REAL CONNECTOR SYNC PENDING — returns empty. Stubs removed to prevent fake
+// data in production DB. Each generator previously returned hardcoded mock
+// records (Acme Industries, Sample Customer, Tally Solutions, WeWork Mumbai,
+// etc.) which were persisted as SyncedRecord rows on every connector sync.
+// They now return `[]` so the route continues to compile + report `0 records`
+// honestly. Real connector sync (live GSTN/bank/WhatsApp/accounting APIs) is a
+// future enterprise phase.
 
 interface StubRecord {
   sourceType: string;
@@ -35,135 +39,35 @@ interface StubRecord {
   processed: boolean;
 }
 
-function gstnStubRecords(gstin: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  // Generate 3 GSTR-filing records spanning the last 3 months
-  const months = [
-    { period: 'GSTR-1', monthOffset: 1, type: 'gstr_1', tax: 184500 },
-    { period: 'GSTR-3B', monthOffset: 1, type: 'gstr_3b', tax: 192300 },
-    { period: 'GSTR-2B', monthOffset: 0, type: 'gstr_2b', tax: 167800 },
-  ];
-  return months.map((m) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - m.monthOffset, 20);
-    return {
-      sourceType: 'gst_return',
-      externalId: `${gstin}_${m.type}_${d.toISOString().slice(0, 7)}`,
-      title: `${m.period} — ${d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`,
-      amount: m.tax,
-      date: fmt(d),
-      category: m.type,
-      rawData: {
-        gstin,
-        returnType: m.period,
-        period: d.toISOString().slice(0, 7),
-        status: 'filed',
-        taxPayable: m.tax,
-        itcClaimed: Math.round(m.tax * 0.78),
-        filingDate: fmt(d),
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function gstnStubRecords(_gstin: string): StubRecord[] {
+  // TODO: wire to real GSTN API (returns / e-invoices / e-way bills / notices).
+  void _gstin;
+  return [];
 }
 
-function bankStubRecords(bankName: string, accountLast4: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const merchants = [
-    { name: 'Salary Credit — Acme Industries', type: 'credit', amount: 84500 },
-    { name: 'GST Payment — CGST+SGST', type: 'debit', amount: -18450 },
-    { name: 'Vendor Payment — Supplier Inc', type: 'debit', amount: -32400 },
-    { name: 'Tally Software Subscription', type: 'debit', amount: -14999 },
-    { name: 'Client Receipt — Customer Receipt', type: 'credit', amount: 56000 },
-    { name: 'Office Rent — WeWork Mumbai', type: 'debit', amount: -45000 },
-    { name: 'Zoho Books Subscription', type: 'debit', amount: -7999 },
-    { name: 'Interest Credit', type: 'credit', amount: 234.5 },
-  ];
-  return merchants.map((m, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (i + 1) * 3);
-    return {
-      sourceType: 'bank_tx',
-      externalId: `banktx_${accountLast4}_${d.getTime()}_${i}`,
-      title: m.name,
-      amount: m.amount,
-      date: fmt(d),
-      category: m.type,
-      rawData: {
-        bankName,
-        accountLast4,
-        description: m.name,
-        type: m.type,
-        amount: m.amount,
-        currency: 'INR',
-        balanceAfter: 250000 - i * 18000,
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function bankStubRecords(_bankName: string, _accountLast4: string): StubRecord[] {
+  // TODO: wire to real bank API (Razorpay / Decentro / MBS / Anumati).
+  void _bankName;
+  void _accountLast4;
+  return [];
 }
 
-function whatsappStubRecords(phone: string): StubRecord[] {
-  const now = new Date();
-  const messages = [
-    { from: 'Client', body: 'Hi, our GSTR-1 is ready for review. Please confirm.', cat: 'client_communication' },
-    { from: 'Vendor', body: 'Payment of \u20B932,400 received. Thank you!', cat: 'collections' },
-    { from: 'GST Department', body: 'Reminder: GSTR-3B due in 5 days for your firm.', cat: 'reminder' },
-  ];
-  return messages.map((m, i) => {
-    const d = new Date(now);
-    d.setHours(d.getHours() - (i + 1) * 6);
-    return {
-      sourceType: 'whatsapp_msg',
-      externalId: `wa_${phone}_${d.getTime()}_${i}`,
-      title: `${m.from}: ${m.body}`,
-      amount: null,
-      date: d.toISOString(),
-      category: m.cat,
-      rawData: {
-        from: m.from,
-        body: m.body,
-        phone,
-        timestamp: d.toISOString(),
-      },
-      processed: false,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function whatsappStubRecords(_phone: string): StubRecord[] {
+  // TODO: wire to real WhatsApp Business API.
+  void _phone;
+  return [];
 }
 
-function accountingStubRecords(software: string, companyName: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const invoices = [
-    { no: 'INV-2025-001', party: 'Sample Customer', amount: 45000, type: 'sales' },
-    { no: 'INV-2025-002', party: 'Sample Supplier', amount: 32400, type: 'purchase' },
-    { no: 'INV-2025-003', party: 'Sample Customer B', amount: 78900, type: 'sales' },
-    { no: 'BILL-2025-009', party: 'Tally Solutions', amount: 14999, type: 'purchase' },
-  ];
-  return invoices.map((inv, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (i + 1) * 4);
-    return {
-      sourceType: 'accounting_invoice',
-      externalId: `${software}_${inv.no}`,
-      title: `${inv.type === 'sales' ? 'Sales' : 'Purchase'} Invoice ${inv.no} — ${inv.party}`,
-      amount: inv.amount,
-      date: fmt(d),
-      category: inv.type === 'sales' ? 'sales_invoice' : 'purchase_invoice',
-      rawData: {
-        software,
-        companyName,
-        invoiceNumber: inv.no,
-        party: inv.party,
-        amount: inv.amount,
-        type: inv.type,
-        date: fmt(d),
-        gst: Math.round(inv.amount * 0.18),
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function accountingStubRecords(_software: string, _companyName: string): StubRecord[] {
+  // TODO: wire to real ERP (Zoho Books customer sync is available via
+  // /api/integrations/zoho/customers; Tally/Busy/QuickBooks pending).
+  void _software;
+  void _companyName;
+  return [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

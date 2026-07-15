@@ -206,6 +206,7 @@ const ENTITY_META: Array<{ key: ZohoSyncEntity; label: string; icon: React.React
   { key: 'invoice', label: 'Invoices', icon: <FileText className="h-3.5 w-3.5" /> },
   { key: 'bill', label: 'Bills', icon: <Receipt className="h-3.5 w-3.5" /> },
   { key: 'payment', label: 'Payments', icon: <CreditCard className="h-3.5 w-3.5" /> },
+  { key: 'creditnote', label: 'Credit Notes', icon: <FileText className="h-3.5 w-3.5" /> },
   { key: 'item', label: 'Items', icon: <Package className="h-3.5 w-3.5" /> },
   { key: 'expense', label: 'Expenses', icon: <Banknote className="h-3.5 w-3.5" /> },
   { key: 'bank_account', label: 'Bank Accounts', icon: <Landmark className="h-3.5 w-3.5" /> },
@@ -300,6 +301,44 @@ function SyncPanel() {
   const lastSync = syncStatus?.lastSync;
   const records = syncStatus?.recordsImported ?? {};
   const totalRecords = syncStatus?.totalRecords ?? 0;
+  const currentEntity = lastSync?.currentEntity ?? null;
+  const isRunning = syncing || lastSync?.status === 'running';
+
+  // ── Live progress step label ──────────────────────────────────────────────
+  //
+  // Translates the raw `currentEntity` field from ZohoSyncLog into the
+  // user-facing step text required by Phase 5:
+  //   • Sync not started: "Ready to sync"
+  //   • Sync running, no entity yet: "Connecting…"
+  //   • Sync running, fetching entity X: "Fetching {EntityLabel}…"
+  //   • Sync completed: "Completed"
+  //   • Sync failed: "Failed"
+  const progressStep: string = (() => {
+    if (!isRunning) {
+      if (lastSync?.status === 'completed') return 'Completed';
+      if (lastSync?.status === 'failed') return 'Failed';
+      if (lastSync?.status === 'partial') return 'Partially completed';
+      return 'Ready to sync';
+    }
+    if (!currentEntity) return 'Connecting…';
+    const label = ENTITY_META.find((e) => e.key === currentEntity)?.label ?? currentEntity;
+    return `Fetching ${label}…`;
+  })();
+
+  // Progress percentage — based on how many entities have completed (have
+  // non-zero stats in lastSync.stats) vs total entities.
+  const progressPercent: number = (() => {
+    if (!isRunning) return lastSync?.status === 'completed' ? 100 : 0;
+    if (!lastSync?.stats) return 0;
+    const completed = Object.values(lastSync.stats).filter(
+      (s) => s && (s.imported > 0 || s.updated > 0 || s.failed > 0 || s.pages > 0),
+    ).length;
+    // Total entities = 12 (ZOHO_SYNC_ENTITIES). currentEntity adds partial credit.
+    const total = ENTITY_META.length;
+    const currentIdx = currentEntity ? ENTITY_META.findIndex((e) => e.key === currentEntity) : -1;
+    const base = currentIdx >= 0 ? (currentIdx / total) * 100 : 0;
+    return Math.min(99, Math.round(base + (completed / total) * 100));
+  })();
 
   return (
     <Card className="border-border/60 bg-card/50 backdrop-blur">
@@ -351,6 +390,46 @@ function SyncPanel() {
                 {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
                 {syncing ? 'Syncing…' : 'Sync Now'}
               </Button>
+            </div>
+          </div>
+
+          {/* Phase 5 — Live progress bar + step indicator */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                {isRunning ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-[#C8202F]" />
+                ) : lastSync?.status === 'completed' ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                ) : lastSync?.status === 'failed' ? (
+                  <XCircle className="h-3 w-3 text-red-400" />
+                ) : (
+                  <Database className="h-3 w-3 text-muted-foreground/60" />
+                )}
+                <span className={
+                  isRunning ? 'text-foreground font-medium' :
+                  lastSync?.status === 'completed' ? 'text-emerald-400 font-medium' :
+                  lastSync?.status === 'failed' ? 'text-red-400 font-medium' :
+                  'text-muted-foreground'
+                }>
+                  {progressStep}
+                </span>
+              </div>
+              {isRunning && (
+                <span className="font-mono text-[10px] text-muted-foreground">{progressPercent}%</span>
+              )}
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/40">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ease-out ${
+                  lastSync?.status === 'failed'
+                    ? 'bg-red-500'
+                    : lastSync?.status === 'completed'
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-[#C8202F] to-[#E8505A]'
+                }`}
+                style={{ width: `${isRunning ? progressPercent : lastSync?.status === 'completed' ? 100 : 0}%` }}
+              />
             </div>
           </div>
 

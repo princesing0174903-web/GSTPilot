@@ -45,6 +45,7 @@ import { syncBankTransactions } from './bank-transactions';
 import { syncJournals } from './journals';
 import { syncPayments } from './payments';
 import { syncItems } from './items';
+import { syncCreditNotes } from './creditnotes';
 import { countImportedRecords, getWatermark } from './shared';
 import type {
   EntitySyncResult,
@@ -82,6 +83,7 @@ const ENTITY_RUNNERS: Record<ZohoSyncEntity, EntityRunner> = {
   journal: syncJournals,
   payment: syncPayments,
   item: syncItems,
+  creditnote: syncCreditNotes,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -157,6 +159,7 @@ async function persistProgress(
   lastEntity: ZohoSyncEntity | null,
   lastCursor: string | null,
   stats: SyncStats,
+  currentEntity?: ZohoSyncEntity | null,
 ): Promise<void> {
   try {
     await db.zohoSyncLog.update({
@@ -164,6 +167,7 @@ async function persistProgress(
       data: {
         lastEntity,
         lastCursor,
+        currentEntity: currentEntity ?? lastEntity,
         stats: JSON.stringify(stats),
       },
     });
@@ -257,9 +261,9 @@ export async function runSync(opts: SyncOptions): Promise<TriggerSyncResponse> {
         mode === 'full' ? null : await getWatermark(opts.organizationId, opts.zohoOrgId, entity);
       const resumeCursor = isResumeEntity ? startCursor : null;
 
-      // Update the log's lastEntity before starting (so a crash here resumes
-      // from THIS entity, not the previous one).
-      await persistProgress(syncLogId, entity, resumeCursor, stats);
+      // Update the log's lastEntity + currentEntity before starting (so a
+      // crash here resumes from THIS entity, and the UI shows live progress).
+      await persistProgress(syncLogId, entity, resumeCursor, stats, entity);
 
       const result = await runner(
         { ...opts, mode },
@@ -271,8 +275,9 @@ export async function runSync(opts: SyncOptions): Promise<TriggerSyncResponse> {
       results.push(result);
 
       // Persist progress after each entity (so an interruption during the
-      // NEXT entity resumes from this completed one).
-      await persistProgress(syncLogId, entity, null, stats);
+      // NEXT entity resumes from this completed one). Clear currentEntity
+      // momentarily — it'll be set to the next entity on the next iteration.
+      await persistProgress(syncLogId, entity, null, stats, entity);
 
       // If this entity had a hard error (e.g., token revoked mid-sync), abort
       // the entire run — no point continuing with broken auth.
@@ -294,6 +299,7 @@ export async function runSync(opts: SyncOptions): Promise<TriggerSyncResponse> {
       where: { id: syncLogId },
       data: {
         status: finalStatus,
+        currentEntity: null, // sync done — no entity is currently being fetched
         completedAt: new Date(),
         error: topLevelError,
         stats: JSON.stringify(stats),
@@ -387,6 +393,7 @@ export async function getSyncStatus(
     durationMs: number | null;
     error: string | null;
     stats: Partial<Record<ZohoSyncEntity, EntitySyncStats>>;
+    currentEntity: ZohoSyncEntity | null;
   } | null;
   recordsImported: Partial<Record<ZohoSyncEntity, number>>;
   totalRecords: number;
@@ -424,6 +431,7 @@ export async function getSyncStatus(
             : null,
           error: lastLog.error,
           stats: parsedStats,
+          currentEntity: (lastLog.currentEntity as ZohoSyncEntity | null) ?? null,
         }
       : null,
     recordsImported: counts,

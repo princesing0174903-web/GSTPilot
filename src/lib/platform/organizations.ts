@@ -536,68 +536,21 @@ interface DemoOrgSpec {
   recommendedActions: string[];
 }
 
-function buildDemoCustomerOrgs(realClientCount: number, realInvoiceCount: number): DemoOrgSpec[] {
-  // The number of demo customers scales with the real firm's client base — so a
-  // bigger real firm is modelled as serving a bigger SaaS customer roster.
-  const base = Math.max(6, Math.min(14, Math.round(realClientCount / 4) + 6));
-  const industries = ['Manufacturing', 'Healthcare', 'Retail', 'Logistics', 'Real Estate', 'IT Services', 'Education', 'Hospitality'];
-  const cities: Array<[string, string]> = [['Mumbai', 'Maharashtra'], ['Bengaluru', 'Karnataka'], ['Delhi', 'Delhi'], ['Chennai', 'Tamil Nadu'], ['Hyderabad', 'Telangana'], ['Pune', 'Maharashtra'], ['Ahmedabad', 'Gujarat'], ['Kolkata', 'West Bengal']];
-  const plans: PlanKey[] = ['starter', 'professional', 'business', 'enterprise'];
-  const orgs: DemoOrgSpec[] = [];
-  const companyNames = ['Acme Industries', 'Bharat Textiles', 'Cloud Nine Retail', 'Dharma Healthcare', 'Everest Logistics', 'Fortune Foods', 'Greenfield Realty', 'Helix IT Services', 'Ivy Education', 'Jaipur Hospitality', 'Kohinoor Manufacturing', 'Lakshmi Exports'];
-
-  for (let i = 0; i < base; i++) {
-    const name = companyNames[i % companyNames.length];
-    const plan = plans[i % plans.length];
-    const city = cities[i % cities.length];
-    const isActive = i % 5 !== 4;       // 80% active, 20% trial
-    const planStatus: 'trial' | 'active' | 'past_due' = isActive ? 'active' : i % 7 === 6 ? 'past_due' : 'trial';
-    const billingCycle: 'monthly' | 'annual' = i % 3 === 0 ? 'annual' : 'monthly';
-    const seatsUsed = plan === 'starter' ? 2 + (i % 3) : plan === 'professional' ? 6 + (i % 8) : plan === 'business' ? 18 + (i % 30) : 60 + (i % 150);
-    const mrr = plan === 'starter' ? 2999 : plan === 'professional' ? 7999 : plan === 'business' ? 19999 : 49999;
-    const storageMb = Math.min(seatsUsed * 80 + (realInvoiceCount * 0.3), 500000);
-    const apiCalls = seatsUsed * 1200 + realClientCount * 30;
-    const aiCredits = seatsUsed * 80 + realClientCount * 4;
-    const healthScore = planStatus === 'past_due' ? 55 : planStatus === 'trial' ? 70 : 78 + (i % 20);
-    const churnRisk = planStatus === 'past_due' ? 0.65 : planStatus === 'trial' ? 0.35 : Math.max(0.02, 0.15 - (healthScore - 80) * 0.01);
-
-    orgs.push({
-      name,
-      legalName: `${name} Pvt Ltd`,
-      domain: name.toLowerCase().split(' ')[0] + '.in',
-      country: 'IN',
-      timezone: 'Asia/Kolkata',
-      city: city[0],
-      state: city[1],
-      region: 'ap-south-1',
-      industry: industries[i % industries.length],
-      orgType: i % 4 === 0 ? 'parent' : 'standalone',
-      isSubsidiary: false,
-      plan,
-      planStatus,
-      billingCycle,
-      employeeCount: seatsUsed * 4,
-      mrr: planStatus === 'trial' ? 0 : mrr,
-      seatsUsed,
-      seatsLimit: plan === 'starter' ? 3 : plan === 'professional' ? 10 : plan === 'business' ? 50 : 250,
-      storageMb,
-      storageLimitMb: (plan === 'starter' ? 5 : plan === 'professional' ? 50 : plan === 'business' ? 250 : 1024) * 1024,
-      apiCalls,
-      aiCredits,
-      aiCreditsLimit: plan === 'starter' ? 1000 : plan === 'professional' ? 10000 : plan === 'business' ? 100000 : 1000000,
-      healthScore,
-      churnRisk,
-      brandColor: ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][i % 6],
-      accentColor: '#14b8a6',
-      ageDays: 30 + i * 17,
-      recommendedActions:
-        planStatus === 'past_due' ? ['Send payment reminder', 'Offer 10% goodwill discount', 'Schedule recovery call'] :
-        planStatus === 'trial' ? ['Schedule onboarding call', 'Show AI CFO demo', 'Offer annual discount'] :
-        healthScore > 85 ? ['Propose seat expansion', 'Introduce AGI module', 'Invite to case study'] :
-        ['Check feature adoption', 'Send product update', 'Schedule QBR'],
-    });
-  }
-  return orgs;
+// Demo customer orgs removed — platform dashboard shows real orgs only.
+// Previously generated 6-14 fake SaaS customer orgs (Acme Industries, Bharat
+// Textiles, Cloud Nine Retail, Dharma Healthcare, Everest Logistics, Fortune
+// Foods, Greenfield Realty, Helix IT Services, Ivy Education, Jaipur
+// Hospitality, Kohinoor Manufacturing, Lakshmi Exports) with fake MRR / seats
+// / health / churn. These synthetic rows polluted the PlatformOrganization
+// table on first seed. The function now returns `[]` so the demo-org loop in
+// `ensurePlatformOrganizationsSeeded()` does nothing — the platform dashboard
+// shows the host firm + any real orgs only.
+function buildDemoCustomerOrgs(_realClientCount: number, _realInvoiceCount: number): DemoOrgSpec[] {
+  // Demo customer orgs removed — platform dashboard shows real orgs only.
+  // TODO: wire to real platform customer onboarding flow.
+  void _realClientCount;
+  void _realInvoiceCount;
+  return [];
 }
 
 // ─── Mapper: Prisma → domain Organization ────────────────────────────────────

@@ -3,6 +3,15 @@
 // Seeds: 5 developers · 25 starter apps · 12 AI employee apps · 8 installs
 // 15 reviews · 6 plugins · 10 webhooks · analytics events · payouts
 // Idempotent — safe to run multiple times.
+//
+// GATING: Disabled by default. Set `GSTPILOT_ALLOW_SEED=true` in env (and
+// `NODE_ENV !== 'production'`) to enable. Real apps / developers / installs
+// should come from the marketplace publisher + install flows — this seed file
+// previously persisted 17 fake developers (GSTPilot Labs, TaxTech India, Tally
+// Solutions, Intuit Partner, etc.), 25 starter apps, 12 AI employee apps,
+// installs, reviews, plugins, webhooks, analytics events, and payouts — all
+// with Math.random()-derived install counts / ratings / review counts. Now
+// no-ops unless explicitly enabled.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
@@ -12,6 +21,11 @@ import { resolveDefaultTenantId } from './registry';
 
 /** Seed the entire App Marketplace catalog + tenant-scoped data. Idempotent. */
 export async function seedAppMarketplace(): Promise<{ developers: number; apps: number; aiEmployees: number; installs: number; reviews: number; plugins: number; webhooks: number; analytics: number; payouts: number }> {
+  // GATING: Real apps / developers / installs come from the marketplace flows.
+  // Set GSTPILOT_ALLOW_SEED=true (and NODE_ENV !== 'production') to re-enable.
+  if (process.env.GSTPILOT_ALLOW_SEED !== 'true') return { developers: 0, apps: 0, aiEmployees: 0, installs: 0, reviews: 0, plugins: 0, webhooks: 0, analytics: 0, payouts: 0 };
+  if (process.env.NODE_ENV === 'production') return { developers: 0, apps: 0, aiEmployees: 0, installs: 0, reviews: 0, plugins: 0, webhooks: 0, analytics: 0, payouts: 0 };
+
   // 1. Seed developers (17 — covers all STARTER_APPS developer slugs)
   const developerDefs = [
     { slug: 'gstpilot-labs', name: 'GSTPilot Labs', displayName: 'GSTPilot Labs', email: 'labs@gstpilot.com', website: 'https://labs.gstpilot.com', bio: 'Official GSTPilot first-party apps and AI tools.', verified: true, partnerLevel: 'strategic', revenueSharePct: 100, country: 'India' },

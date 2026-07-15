@@ -22,6 +22,7 @@ export {
   mapCustomerPayment,
   mapVendorPayment,
   mapItem,
+  mapCreditNote,
   parseZohoLastModified,
   syntheticGstinForContact,
 } from './mapper';
@@ -48,6 +49,7 @@ export { syncBankTransactions } from './bank-transactions';
 export { syncJournals } from './journals';
 export { syncPayments } from './payments';
 export { syncItems } from './items';
+export { syncCreditNotes } from './creditnotes';
 
 // Orchestrator
 export { runSync, getSyncStatus } from './sync';

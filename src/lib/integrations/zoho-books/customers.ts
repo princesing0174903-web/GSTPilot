@@ -25,7 +25,67 @@
 import { db } from '@/lib/db';
 import { zohoGet, zohoPost, zohoPut } from './client';
 import type { ZohoContact, ZohoContactsResponse, ZohoPageContext } from './sync/types';
+import { mapCustomerToClient, syntheticGstinForContact } from './sync/mapper';
 import { safeAudit } from '@/lib/audit/safe-write';
+
+// ─── Client mirror helper (Phase 5 BUG FIX) ─────────────────────────────────
+//
+// GSTPilot's Client Registry (Prisma `Client`) is the SINGLE source of truth
+// for every page that needs a customer list:
+//   • GST Returns → "Create New Return" client dropdown
+//   • Reconciliation, Review, AI Tasks, Audit Logs, Client Health
+//   • Oracle AI (reads db.client.findMany)
+//
+// Before this fix, the Phase 4 customer sync wrote ONLY to the `ZohoCustomer`
+// table — so the GST Return dropdown was empty even after a successful sync.
+// Now every synced Zoho customer is ALSO mirrored into `Client` (matched by
+// gstin within the same firm). B2C customers (no gstin) get a synthetic key
+// `ZOHO-CONTACT-{contactId}` so the unique constraint is satisfied.
+//
+// This is the bridge between the Zoho-synced world and the GSTPilot-native world.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Mirror a Zoho customer into the Prisma `Client` table so every GSTPilot page
+ * that reads from `Client` (GST Returns, Reconciliation, Oracle, etc.) sees the
+ * synced customer. Idempotent — upserts by gstin.
+ */
+async function mirrorZohoCustomerToClient(
+  organizationId: string,
+  contact: ZohoContact,
+): Promise<void> {
+  const normalized = mapCustomerToClient(contact, `ZOHO-ORG-${contact.contact_id}`);
+  const gstin = contact.gstin?.trim() || syntheticGstinForContact(contact.contact_id);
+
+  await db.client.upsert({
+    where: { gstin },
+    create: {
+      gstin,
+      tradeName: normalized.tradeName,
+      legalName: normalized.legalName,
+      address: normalized.address,
+      state: normalized.state,
+      stateCode: normalized.stateCode,
+      contactEmail: normalized.contactEmail,
+      contactPhone: normalized.contactPhone,
+      entityType: normalized.entityType,
+      status: normalized.status,
+      firmId: organizationId,
+    },
+    update: {
+      tradeName: normalized.tradeName,
+      legalName: normalized.legalName,
+      address: normalized.address,
+      state: normalized.state,
+      stateCode: normalized.stateCode,
+      contactEmail: normalized.contactEmail,
+      contactPhone: normalized.contactPhone,
+      entityType: normalized.entityType,
+      status: normalized.status,
+      firmId: organizationId,
+    },
+  });
+}
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -481,6 +541,15 @@ export async function syncZohoCustomersIntoDb(opts: {
           });
           imported++;
         }
+
+        // Mirror into the Client table so every GSTPilot page (GST Returns,
+        // Reconciliation, Oracle, Client Health, etc.) sees this customer.
+        // Best-effort — a failure here does NOT fail the ZohoCustomer upsert.
+        try {
+          await mirrorZohoCustomerToClient(opts.organizationId, c);
+        } catch {
+          /* non-fatal — Client mirror is best-effort */
+        }
       } catch (err) {
         failed++;
         if (!firstRowError) {
@@ -595,6 +664,13 @@ export async function createZohoCustomer(opts: {
       });
     } catch {
       /* non-fatal */
+    }
+
+    // Mirror into the Client table so GST Returns + Oracle see this customer.
+    try {
+      await mirrorZohoCustomerToClient(opts.organizationId, c);
+    } catch {
+      /* non-fatal — Client mirror is best-effort */
     }
 
     return {
@@ -717,6 +793,13 @@ export async function updateZohoCustomer(opts: {
       });
     } catch {
       /* non-fatal */
+    }
+
+    // Mirror the update into the Client table.
+    try {
+      await mirrorZohoCustomerToClient(opts.organizationId, c);
+    } catch {
+      /* non-fatal — Client mirror is best-effort */
     }
 
     return {

@@ -3,6 +3,14 @@
 // Bootstraps realistic installed integrations, events, sync jobs & analytics
 // for the default tenant so the Marketplace shows LIVE data on first load.
 // Idempotent — safe to call on every boot.
+//
+// GATING: Disabled by default. Set `GSTPILOT_ALLOW_SEED=true` in env (and
+// `NODE_ENV !== 'production'`) to enable. Real marketplace installs should
+// happen via the user-facing connect/disconnect flow — this seed file
+// previously persisted 12 fake installed integrations (Gmail, Shopify,
+// Razorpay, Stripe, Slack, QuickBooks, HubSpot, GitHub, ICICI, HDFC, WhatsApp,
+// GSTN) with fake last-sync timestamps. All synthetic. Now no-ops unless
+// explicitly enabled.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db'
@@ -14,6 +22,10 @@ import { triggerSync } from './sync-engine'
 let _seeded = false
 
 export async function seedMarketplace(): Promise<void> {
+  // GATING: Real marketplace installs come from the user-facing connect flow.
+  // Set GSTPILOT_ALLOW_SEED=true (and NODE_ENV !== 'production') to re-enable.
+  if (process.env.GSTPILOT_ALLOW_SEED !== 'true') return
+  if (process.env.NODE_ENV === 'production') return
   if (_seeded) return
   _seeded = true
   try {

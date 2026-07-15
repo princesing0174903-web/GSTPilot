@@ -6,6 +6,12 @@
 // the same company always yields the same dataset — syncs are idempotent.
 //
 // This module is SERVER-ONLY (imported by the mock providers in server/).
+//
+// GATING: All generator functions are gated behind `process.env.MOCK_ERP_PROVIDER
+// === 'true'`. Default = DISABLED — every generator returns `[]` unless the env
+// var is set. Real ERP integration (Zoho Books customer sync, Phase 4) is in
+// place — the mocks are retained only as a provider-architecture fallback for
+// local development and never run in production.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {
@@ -20,6 +26,10 @@ import type {
   ERPTax,
   ERPVendor,
 } from '../types';
+
+// Mock ERP provider is disabled by default. Set MOCK_ERP_PROVIDER=true in env
+// to re-enable the deterministic mock generators (local dev / testing only).
+const MOCK_ERP_ENABLED = process.env.MOCK_ERP_PROVIDER === 'true';
 
 // ─── Seeded PRNG (mulberry32) ─────────────────────────────────────────────────
 
@@ -172,6 +182,9 @@ export function generateCustomers(
   organizationId: string,
   count: number,
 ): ERPCustomer[] {
+  // Mock ERP provider disabled by default — real Zoho Books customer sync is
+  // available via /api/integrations/zoho/customers. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':customers');
   const customers: ERPCustomer[] = [];
   const usedNames = new Set<string>();
@@ -222,6 +235,8 @@ export function generateVendors(
   organizationId: string,
   count: number,
 ): ERPVendor[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':vendors');
   const vendors: ERPVendor[] = [];
   const usedNames = new Set<string>();
@@ -274,6 +289,8 @@ export function generateInvoices(
   vendors: ERPVendor[],
   inventory: ERPInventoryItem[],
 ): ERPInvoice[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':invoices');
   const invoices: ERPInvoice[] = [];
   for (let i = 0; i < count; i++) {
@@ -359,6 +376,8 @@ export function generateInventory(
   connectionId: string,
   organizationId: string,
 ): ERPInventoryItem[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':inventory');
   const now = new Date().toISOString();
   return INVENTORY_ITEMS.map((item, i) => {
@@ -404,6 +423,8 @@ export function generateLedgers(
   connectionId: string,
   organizationId: string,
 ): ERPLedger[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':ledgers');
   const now = new Date().toISOString();
   const asOf = new Date().toISOString().slice(0, 10);
@@ -464,6 +485,8 @@ export function generatePayments(
   count: number,
   invoices: ERPInvoice[],
 ): ERPPayment[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':payments');
   const now = new Date().toISOString();
   const payments: ERPPayment[] = [];
@@ -507,6 +530,8 @@ export function generateBankTransactions(
   organizationId: string,
   count: number,
 ): ERPBankTransaction[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':banktxns');
   const now = new Date().toISOString();
   const bankLedgers = ['HDFC Bank A/c', 'ICICI Bank A/c', 'SBI Current A/c'];
@@ -549,6 +574,8 @@ export function generateTaxes(
   organizationId: string,
   invoices: ERPInvoice[],
 ): ERPTax[] {
+  // Mock ERP provider disabled by default. Enable with MOCK_ERP_PROVIDER=true.
+  if (!MOCK_ERP_ENABLED) return [];
   const rng = makeRng(seed + ':taxes');
   const now = new Date().toISOString();
   const period = currentPeriod();

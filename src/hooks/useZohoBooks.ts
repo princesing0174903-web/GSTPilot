@@ -12,7 +12,7 @@
 // /api/integrations/zoho/* — never absolute URLs.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase';
@@ -59,7 +59,8 @@ export type ZohoSyncEntity =
   | 'bank_transaction'
   | 'journal'
   | 'payment'
-  | 'item';
+  | 'item'
+  | 'creditnote';
 
 export type ZohoSyncMode = 'full' | 'incremental';
 export type ZohoSyncStatus = 'running' | 'completed' | 'failed' | 'partial';
@@ -97,6 +98,7 @@ export interface ZohoSyncStatusInfo {
     durationMs: number | null;
     error: string | null;
     stats: Partial<Record<ZohoSyncEntity, ZohoEntitySyncStats>>;
+    currentEntity: ZohoSyncEntity | null;
   } | null;
   recordsImported: Partial<Record<ZohoSyncEntity, number>>;
   totalRecords: number;
@@ -262,6 +264,7 @@ export function useZohoBooks() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Phase 4 — Customer Sync state
   const [customers, setCustomers] = useState<ZohoCustomerRecord[]>([]);
@@ -315,7 +318,13 @@ export function useZohoBooks() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [refreshStatus, refreshSyncStatus]);
 
-  // Phase 2 — trigger a manual sync (POST /api/integrations/zoho/sync)
+  // Phase 5 — trigger a manual sync (POST /api/integrations/zoho/sync)
+  //
+  // Fire-and-forget: the POST starts the sync in the background and returns
+  // immediately with { status: 'running' }. We set `syncing=true` and start
+  // polling GET /sync/status every 1.5s for live progress (currentEntity,
+  // per-entity counts). Polling stops when the sync status transitions away
+  // from 'running' (→ completed | partial | failed).
   const triggerSync = useCallback(
     async (opts?: { mode?: ZohoSyncMode; resume?: boolean }): Promise<{
       ok: boolean;
@@ -323,7 +332,8 @@ export function useZohoBooks() {
     }> => {
       setSyncing(true);
       setSyncError(null);
-      const res = await zfetch<{ ok: boolean; syncLogId: string; status: ZohoSyncStatus; stats: Record<string, ZohoEntitySyncStats>; error: string | null }>(
+
+      const res = await zfetch<{ ok: boolean; status: string; mode: string; message?: string }>(
         '/api/integrations/zoho/sync',
         buildHeaders(),
         {
@@ -334,14 +344,51 @@ export function useZohoBooks() {
           }),
         },
       );
-      setSyncing(false);
-      // Refresh both the sync status (for fresh stats) and the connection
-      // status (in case the watermark changed).
-      await refreshSyncStatus();
-      return { ok: res.ok, error: res.error };
+
+      if (!res.ok) {
+        setSyncing(false);
+        setSyncError(res.error);
+        return { ok: false, error: res.error };
+      }
+
+      // Sync started in background — kick off polling for live progress.
+      // First poll immediately so the UI shows "Connecting…" → "Fetching X…"
+      // without a 1.5s delay.
+      void refreshSyncStatus();
+
+      // Clear any existing poll interval (e.g., user clicks Sync twice).
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        await refreshSyncStatus();
+        // Stop polling once the sync is no longer running.
+        // refreshSyncStatus updates syncStatus — read the latest from state
+        // via a functional check.
+        setSyncStatus((prev) => {
+          if (prev?.isRunning === false) {
+            setSyncing(false);
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          }
+          return prev;
+        });
+      }, 1500);
+
+      return { ok: true, error: null };
     },
     [buildHeaders, refreshSyncStatus],
   );
+
+  // Cleanup polling on unmount.
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, []);
 
   const connect = useCallback(async (): Promise<{ authUrl: string | null; error: string | null }> => {
     let bearer = '';

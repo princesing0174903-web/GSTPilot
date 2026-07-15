@@ -225,22 +225,13 @@ const TOP_BUYERS = [
   { name: 'SBI Factors', initials: 'SF', color: 'bg-slate-500', volume: 84500000, trades: 87, type: 'Bank' },
 ];
 
-const TOP_SELLERS = [
-  { name: 'Tata Consultancy Services', initials: 'TC', color: 'bg-emerald-500', sold: 156000000, count: 23 },
-  { name: 'Reliance Industries', initials: 'RI', color: 'bg-teal-500', sold: 134200000, count: 19 },
-  { name: 'Larsen & Toubro', initials: 'L&T', color: 'bg-amber-500', sold: 118700000, count: 17 },
-  { name: 'Infosys Limited', initials: 'IN', color: 'bg-cyan-500', sold: 98400000, count: 15 },
-  { name: 'Tata Steel', initials: 'TS', color: 'bg-emerald-600', sold: 87600000, count: 14 },
-  { name: 'Mahindra Group', initials: 'MG', color: 'bg-teal-600', sold: 76200000, count: 12 },
-  { name: 'Bharti Airtel', initials: 'BA', color: 'bg-amber-600', sold: 68900000, count: 11 },
-  { name: 'Wipro Enterprises', initials: 'WE', color: 'bg-slate-500', sold: 54300000, count: 9 },
+const TOP_SELLERS: { name: string; initials: string; color: string; sold: number; count: number }[] = [
+  // TODO: wire to real API
 ];
 
 // 30-day daily volume (in crores)
-const VOLUME_30D = [
-  28.4, 32.1, 30.5, 35.8, 38.2, 33.6, 29.4, 36.7, 41.2, 39.8,
-  34.5, 37.9, 42.3, 45.6, 41.8, 38.4, 43.7, 47.2, 44.9, 40.3,
-  46.8, 50.1, 48.7, 44.2, 49.5, 52.8, 50.4, 47.6, 51.3, 54.7,
+const VOLUME_30D: number[] = [
+  // TODO: wire to real API
 ];
 
 const INDUSTRIES = [
@@ -259,102 +250,31 @@ const INDUSTRIES = [
 ];
 
 const MARKETPLACE_INVOICES: MarketInvoice[] = [
-  { id: 'inv-001', invoiceNo: 'INV-TCS-2026-0451', seller: 'Tata Consultancy Services', sellerInitials: 'TC', sellerColor: 'bg-emerald-500', buyer: 'Reliance Retail', industry: 'IT Services', amount: 4500000, discountRate: 3.2, netAmount: 4356000, maturityDays: 45, trustScore: 94, rating: 'AAA', listedDate: daysAgo(2), dueDate: daysFromNow(45) },
-  { id: 'inv-002', invoiceNo: 'INF-RL-2026-0982', seller: 'Infosys Limited', sellerInitials: 'IN', sellerColor: 'bg-teal-500', buyer: 'HDFC Bank', industry: 'IT Services', amount: 8900000, discountRate: 2.8, netAmount: 8650800, maturityDays: 30, trustScore: 92, rating: 'AAA', listedDate: daysAgo(1), dueDate: daysFromNow(30) },
-  { id: 'inv-003', invoiceNo: 'TS-STM-2026-1156', seller: 'Tata Steel', sellerInitials: 'TS', sellerColor: 'bg-amber-500', buyer: 'L&T Construction', industry: 'Steel & Metals', amount: 12300000, discountRate: 4.5, netAmount: 11746500, maturityDays: 60, trustScore: 85, rating: 'AA', listedDate: daysAgo(3), dueDate: daysFromNow(60) },
-  { id: 'inv-004', invoiceNo: 'LN-IND-2026-0734', seller: 'Larsen & Toubro', sellerInitials: 'L&T', sellerColor: 'bg-cyan-500', buyer: 'Adani Power', industry: 'Construction', amount: 15600000, discountRate: 4.1, netAmount: 14960400, maturityDays: 75, trustScore: 88, rating: 'AA', listedDate: daysAgo(2), dueDate: daysFromNow(75) },
-  { id: 'inv-005', invoiceNo: 'PH-KRM-2026-0231', seller: 'Krishna Pharma', sellerInitials: 'KP', sellerColor: 'bg-emerald-600', buyer: 'Apollo Hospitals', industry: 'Pharmaceuticals', amount: 3400000, discountRate: 3.7, netAmount: 3274200, maturityDays: 40, trustScore: 82, rating: 'A', listedDate: daysAgo(4), dueDate: daysFromNow(40) },
-  { id: 'inv-006', invoiceNo: 'TX-AGT-2026-0512', seller: 'Agarwal Textiles', sellerInitials: 'AT', sellerColor: 'bg-teal-600', buyer: 'Reliance Trends', industry: 'Textiles', amount: 2100000, discountRate: 5.2, netAmount: 1990800, maturityDays: 50, trustScore: 74, rating: 'BBB', listedDate: daysAgo(5), dueDate: daysFromNow(50) },
-  { id: 'inv-007', invoiceNo: 'AU-MS-2026-0845', seller: 'Maruti Suzuki', sellerInitials: 'MS', sellerColor: 'bg-amber-600', buyer: 'Bosch India', industry: 'Automotive', amount: 9800000, discountRate: 3.4, netAmount: 9466800, maturityDays: 35, trustScore: 89, rating: 'AA', listedDate: daysAgo(1), dueDate: daysFromNow(35) },
-  { id: 'inv-008', invoiceNo: 'FM-HUL-2026-0623', seller: 'Hindustan Unilever', sellerInitials: 'HU', sellerColor: 'bg-emerald-500', buyer: 'Big Bazaar', industry: 'FMCG', amount: 5600000, discountRate: 2.6, netAmount: 5454400, maturityDays: 25, trustScore: 95, rating: 'AAA', listedDate: daysAgo(2), dueDate: daysFromNow(25) },
-  { id: 'inv-009', invoiceNo: 'TL-BA-2026-0934', seller: 'Bharti Airtel', sellerInitials: 'BA', sellerColor: 'bg-cyan-500', buyer: 'Vodafone Idea', industry: 'Telecom', amount: 12300000, discountRate: 4.8, netAmount: 11709600, maturityDays: 65, trustScore: 83, rating: 'A', listedDate: daysAgo(3), dueDate: daysFromNow(65) },
-  { id: 'inv-010', invoiceNo: 'CH-VCI-2026-0412', seller: 'Verma Chemical Industries', sellerInitials: 'VC', sellerColor: 'bg-teal-500', buyer: 'Tata Chemicals', industry: 'Chemicals', amount: 4500000, discountRate: 4.2, netAmount: 4311000, maturityDays: 55, trustScore: 78, rating: 'BBB', listedDate: daysAgo(4), dueDate: daysFromNow(55) },
-  { id: 'inv-011', invoiceNo: 'MN-GML-2026-0267', seller: 'Gupta Manufacturing', sellerInitials: 'GM', sellerColor: 'bg-amber-500', buyer: 'Siemens India', industry: 'Manufacturing', amount: 6700000, discountRate: 3.9, netAmount: 6438700, maturityDays: 42, trustScore: 84, rating: 'A', listedDate: daysAgo(2), dueDate: daysFromNow(42) },
-  { id: 'inv-012', invoiceNo: 'EN-AP-2026-0891', seller: 'Adani Power', sellerInitials: 'AP', sellerColor: 'bg-emerald-600', buyer: 'Tata Power', industry: 'Energy', amount: 18900000, discountRate: 5.5, netAmount: 17860500, maturityDays: 90, trustScore: 81, rating: 'A', listedDate: daysAgo(3), dueDate: daysFromNow(90) },
-  { id: 'inv-013', invoiceNo: 'IT-WIP-2026-0578', seller: 'Wipro Enterprises', sellerInitials: 'WE', sellerColor: 'bg-teal-600', buyer: 'Cognizant India', industry: 'IT Services', amount: 7200000, discountRate: 3.1, netAmount: 6976800, maturityDays: 38, trustScore: 90, rating: 'AA', listedDate: daysAgo(1), dueDate: daysFromNow(38) },
-  { id: 'inv-014', invoiceNo: 'PH-SUN-2026-0345', seller: 'Sun Pharmaceutical', sellerInitials: 'SP', sellerColor: 'bg-cyan-500', buyer: 'Dr Reddy Labs', industry: 'Pharmaceuticals', amount: 8900000, discountRate: 3.3, netAmount: 8606300, maturityDays: 48, trustScore: 87, rating: 'AA', listedDate: daysAgo(2), dueDate: daysFromNow(48) },
-  { id: 'inv-015', invoiceNo: 'AU-BAJ-2026-0192', seller: 'Bajaj Auto', sellerInitials: 'BA', sellerColor: 'bg-amber-600', buyer: 'TVS Motors', industry: 'Automotive', amount: 5400000, discountRate: 4.0, netAmount: 5184000, maturityDays: 52, trustScore: 80, rating: 'A', listedDate: daysAgo(5), dueDate: daysFromNow(52) },
+  // TODO: wire to real API
 ];
 
 const MY_INVOICES: MyInvoice[] = [
-  { id: 'my-001', invoiceNo: 'INV-OWN-2026-001', buyer: 'Reliance Retail', amount: 4500000, listingDate: daysAgo(8), discount: 3.2, status: 'listed', bidsCount: 4, bestOffer: 4365000 },
-  { id: 'my-002', invoiceNo: 'INV-OWN-2026-002', buyer: 'HDFC Bank', amount: 8900000, listingDate: daysAgo(5), discount: 2.8, status: 'bid-received', bidsCount: 5, bestOffer: 8667500 },
-  { id: 'my-003', invoiceNo: 'INV-OWN-2026-003', buyer: 'L&T Construction', amount: 12300000, listingDate: daysAgo(12), discount: 4.5, status: 'sold', bidsCount: 7, bestOffer: 11780000 },
-  { id: 'my-004', invoiceNo: 'INV-OWN-2026-004', buyer: 'Adani Power', amount: 15600000, listingDate: daysAgo(3), discount: 4.1, status: 'listed', bidsCount: 2, bestOffer: 14998000 },
-  { id: 'my-005', invoiceNo: 'INV-OWN-2026-005', buyer: 'Apollo Hospitals', amount: 3400000, listingDate: daysAgo(15), discount: 3.7, status: 'sold', bidsCount: 6, bestOffer: 3281500 },
-  { id: 'my-006', invoiceNo: 'INV-OWN-2026-006', buyer: 'Bosch India', amount: 9800000, listingDate: daysAgo(20), discount: 3.4, status: 'expired', bidsCount: 1, bestOffer: 9450000 },
-  { id: 'my-007', invoiceNo: 'INV-OWN-2026-007', buyer: 'Big Bazaar', amount: 5600000, listingDate: daysAgo(2), discount: 2.6, status: 'listed', bidsCount: 3, bestOffer: 5467000 },
-  { id: 'my-008', invoiceNo: 'INV-OWN-2026-008', buyer: 'Vodafone Idea', amount: 12300000, listingDate: daysAgo(6), discount: 4.8, status: 'bid-received', bidsCount: 4, bestOffer: 11743000 },
+  // TODO: wire to real API
 ];
 
 const SAMPLE_BIDS: Bid[] = [
-  { id: 'bid-001', bidder: 'Bajaj Finance', bidderInitials: 'BF', bidderColor: 'bg-emerald-500', amount: 8667500, discountRate: 2.55, time: '2 hours ago', type: 'NBFC' },
-  { id: 'bid-002', bidder: 'HDFC Bank', bidderInitials: 'HB', bidderColor: 'bg-teal-500', amount: 8642000, discountRate: 2.83, time: '5 hours ago', type: 'Bank' },
-  { id: 'bid-003', bidder: 'Kotak Mahindra', bidderInitials: 'KM', bidderColor: 'bg-amber-500', amount: 8621000, discountRate: 3.07, time: '8 hours ago', type: 'Bank' },
-  { id: 'bid-004', bidder: 'Aditya Birla Finance', bidderInitials: 'AB', bidderColor: 'bg-cyan-500', amount: 8598000, discountRate: 3.33, time: '12 hours ago', type: 'NBFC' },
-  { id: 'bid-005', bidder: 'Tata Capital', bidderInitials: 'TC', bidderColor: 'bg-emerald-600', amount: 8565000, discountRate: 3.70, time: '18 hours ago', type: 'NBFC' },
+  // TODO: wire to real API
 ];
 
-const INDUSTRY_VOLUME = [
-  { name: 'IT Services', volume: 312, color: '#10b981' },
-  { name: 'Manufacturing', volume: 287, color: '#14b8a6' },
-  { name: 'Pharmaceuticals', volume: 234, color: '#06b6d4' },
-  { name: 'Steel & Metals', volume: 198, color: '#f59e0b' },
-  { name: 'Automotive', volume: 187, color: '#22c55e' },
-  { name: 'Construction', volume: 165, color: '#0d9488' },
-  { name: 'Chemicals', volume: 142, color: '#eab308' },
-  { name: 'FMCG', volume: 128, color: '#84cc16' },
-  { name: 'Telecom', volume: 96, color: '#64748b' },
-  { name: 'Energy', volume: 84, color: '#a3a3a3' },
+const INDUSTRY_VOLUME: { name: string; volume: number; color: string }[] = [
+  // TODO: wire to real API
 ];
 
-const BUYER_TYPE_DIST = [
-  { label: 'NBFC', value: 45, color: '#10b981' },
-  { label: 'Bank', value: 30, color: '#14b8a6' },
-  { label: 'Investor', value: 15, color: '#f59e0b' },
-  { label: 'Fund', value: 10, color: '#64748b' },
+const BUYER_TYPE_DIST: { label: string; value: number; color: string }[] = [
+  // TODO: wire to real API
 ];
 
-const DISCOUNT_TREND_12M = [
-  { month: 'Apr', rate: 4.8 },
-  { month: 'May', rate: 4.5 },
-  { month: 'Jun', rate: 4.3 },
-  { month: 'Jul', rate: 4.6 },
-  { month: 'Aug', rate: 4.2 },
-  { month: 'Sep', rate: 3.9 },
-  { month: 'Oct', rate: 4.1 },
-  { month: 'Nov', rate: 4.4 },
-  { month: 'Dec', rate: 4.7 },
-  { month: 'Jan', rate: 4.3 },
-  { month: 'Feb', rate: 4.0 },
-  { month: 'Mar', rate: 3.8 },
+const DISCOUNT_TREND_12M: { month: string; rate: number }[] = [
+  // TODO: wire to real API
 ];
 
-const STATE_HEATMAP = [
-  { name: 'Maharashtra', code: 'MH', volume: 100 },
-  { name: 'Karnataka', code: 'KA', volume: 87 },
-  { name: 'Tamil Nadu', code: 'TN', volume: 82 },
-  { name: 'Delhi', code: 'DL', volume: 78 },
-  { name: 'Gujarat', code: 'GJ', volume: 71 },
-  { name: 'Telangana', code: 'TG', volume: 64 },
-  { name: 'Uttar Pradesh', code: 'UP', volume: 58 },
-  { name: 'West Bengal', code: 'WB', volume: 51 },
-  { name: 'Rajasthan', code: 'RJ', volume: 44 },
-  { name: 'Kerala', code: 'KL', volume: 39 },
-  { name: 'Madhya Pradesh', code: 'MP', volume: 34 },
-  { name: 'Punjab', code: 'PB', volume: 31 },
-  { name: 'Haryana', code: 'HR', volume: 28 },
-  { name: 'Bihar', code: 'BR', volume: 22 },
-  { name: 'Odisha', code: 'OD', volume: 19 },
-  { name: 'Assam', code: 'AS', volume: 15 },
-  { name: 'Jharkhand', code: 'JH', volume: 13 },
-  { name: 'Chhattisgarh', code: 'CG', volume: 11 },
-  { name: 'Uttarakhand', code: 'UK', volume: 9 },
-  { name: 'Himachal Pradesh', code: 'HP', volume: 6 },
-  { name: 'J&K', code: 'JK', volume: 5 },
-  { name: 'Goa', code: 'GA', volume: 4 },
-  { name: 'Manipur', code: 'MN', volume: 3 },
-  { name: 'Tripura', code: 'TR', volume: 2 },
+const STATE_HEATMAP: { name: string; code: string; volume: number }[] = [
+  // TODO: wire to real API
 ];
 
 const TOP_PERFORMING_INVOICES = [
@@ -378,6 +298,14 @@ const RISK_DISTRIBUTION = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function VolumeLineChart() {
+  // Empty-state guard — VOLUME_30D may be [] (real API pending).
+  if (VOLUME_30D.length === 0) {
+    return (
+      <div className="flex h-[220px] w-full items-center justify-center text-sm text-slate-400">
+        No volume data yet
+      </div>
+    );
+  }
   const width = 760;
   const height = 220;
   const padding = { top: 20, right: 24, bottom: 32, left: 48 };
@@ -479,6 +407,14 @@ function VolumeLineChart() {
 }
 
 function IndustryVolumeBarChart() {
+  // Empty-state guard — INDUSTRY_VOLUME may be [] (real API pending).
+  if (INDUSTRY_VOLUME.length === 0) {
+    return (
+      <div className="flex h-[280px] w-full items-center justify-center text-sm text-slate-400">
+        No industry volume data yet
+      </div>
+    );
+  }
   const width = 760;
   const height = 280;
   const padding = { top: 20, right: 24, bottom: 50, left: 60 };
@@ -557,6 +493,14 @@ function IndustryVolumeBarChart() {
 }
 
 function BuyerTypeDonut() {
+  // Empty-state guard — BUYER_TYPE_DIST may be [] (real API pending).
+  if (BUYER_TYPE_DIST.length === 0) {
+    return (
+      <div className="flex h-[180px] w-full items-center justify-center text-sm text-slate-400">
+        No buyer-type distribution yet
+      </div>
+    );
+  }
   const cx = 90;
   const cy = 90;
   const r = 70;
@@ -626,6 +570,14 @@ function BuyerTypeDonut() {
 }
 
 function DiscountTrendChart() {
+  // Empty-state guard — DISCOUNT_TREND_12M may be [] (real API pending).
+  if (DISCOUNT_TREND_12M.length === 0) {
+    return (
+      <div className="flex h-[220px] w-full items-center justify-center text-sm text-slate-400">
+        No discount trend data yet
+      </div>
+    );
+  }
   const width = 760;
   const height = 220;
   const padding = { top: 20, right: 24, bottom: 32, left: 48 };

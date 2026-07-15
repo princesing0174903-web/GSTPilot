@@ -2,8 +2,13 @@
 // GSTPilot ERP & Accounting Integrations™ — Mock Zoho Books Provider (SERVER)
 //
 // Deterministic simulated Zoho Books responses. Seeded by company name.
-// Switch to the real Zoho Books integration later by setting
-// ERP_PROVIDER=zoho_books-future (once implemented).
+//
+// GATING: Disabled by default. Set `MOCK_ERP_PROVIDER=true` in env to enable.
+// When disabled, every sync method returns empty records (`{ records: [] }`),
+// the connect/complete/refresh lifecycle methods throw, and healthCheck returns
+// `false`. Real Zoho Books customer sync is available via
+// /api/integrations/zoho/customers (Phase 4) — this mock is retained only as a
+// provider-architecture fallback for local development.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { ERPSession, ERPSyncOptions, IERPProvider } from '../provider';
@@ -20,12 +25,17 @@ import {
 
 const ORG_PREFIX = 'mock-zoho';
 
+// Mock ERP provider is disabled by default. Set MOCK_ERP_PROVIDER=true to enable.
+const MOCK_ERP_ENABLED = process.env.MOCK_ERP_PROVIDER === 'true';
+const MOCK_DISABLED_MSG = 'Mock ERP provider disabled. Connect a real ERP (Zoho Books).';
+
 export class MockZohoBooksProvider implements IERPProvider {
   readonly name = 'Mock Zoho Books';
   readonly provider: ERPProviderName = 'zoho_books';
   readonly isLive = false;
 
   async connect(input: Omit<ConnectERPInput, 'organizationId' | 'createdBy'>): Promise<ConnectERPResult> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('zoho_books', MOCK_DISABLED_MSG);
     if (!input.companyName) throw new ValidationError('Company name is required.');
     if (!input.credentials?.organizationId) throw new ValidationError('Zoho organization id is required.');
     await delay(300);
@@ -47,6 +57,7 @@ export class MockZohoBooksProvider implements IERPProvider {
   async completeConnection(connectionRef: string): Promise<{
     session: ERPSession; companyInfo: CompleteERPConnectionResult['companyInfo'];
   }> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('zoho_books', MOCK_DISABLED_MSG);
     await delay(200);
     const [, companyName] = connectionRef.split(':');
     return {
@@ -67,6 +78,7 @@ export class MockZohoBooksProvider implements IERPProvider {
   }
 
   async refreshSession(session: ERPSession): Promise<{ session: ERPSession }> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('zoho_books', MOCK_DISABLED_MSG);
     await delay(150);
     return {
       session: {
@@ -80,14 +92,17 @@ export class MockZohoBooksProvider implements IERPProvider {
   async disconnect(_session: ERPSession): Promise<void> { await delay(100); }
 
   async syncCustomers(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPCustomer[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateCustomers(seed(session), 'zoho_books', session.companyId, '', 28) };
   }
   async syncVendors(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPVendor[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateVendors(seed(session), 'zoho_books', session.companyId, '', 16) };
   }
   async syncInvoices(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(600);
     const customers = generateCustomers(seed(session), 'zoho_books', session.companyId, '', 28);
     const vendors = generateVendors(seed(session), 'zoho_books', session.companyId, '', 16);
@@ -95,14 +110,17 @@ export class MockZohoBooksProvider implements IERPProvider {
     return { records: generateInvoices(seed(session), 'zoho_books', session.companyId, '', 45, customers, vendors, inventory) };
   }
   async syncSales(session: ERPSession, o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     const all = await this.syncInvoices(session, o);
     return { records: all.records.filter((i) => i.invoiceType === 'sales') };
   }
   async syncPurchases(session: ERPSession, o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     const all = await this.syncInvoices(session, o);
     return { records: all.records.filter((i) => i.invoiceType === 'purchase') };
   }
   async syncExpenses(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(300);
     const customers = generateCustomers(seed(session), 'zoho_books', session.companyId, '', 5);
     const vendors = generateVendors(seed(session), 'zoho_books', session.companyId, '', 8);
@@ -110,14 +128,17 @@ export class MockZohoBooksProvider implements IERPProvider {
     return { records: generateInvoices(`${ORG_PREFIX}:${session.companyName}:exp`, 'zoho_books', session.companyId, '', 14, customers, vendors, inventory) };
   }
   async syncInventory(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInventoryItem[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateInventory(seed(session), 'zoho_books', session.companyId, '') };
   }
   async syncLedgers(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPLedger[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateLedgers(seed(session), 'zoho_books', session.companyId, '') };
   }
   async syncPayments(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPPayment[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     const customers = generateCustomers(seed(session), 'zoho_books', session.companyId, '', 28);
     const vendors = generateVendors(seed(session), 'zoho_books', session.companyId, '', 16);
@@ -126,10 +147,12 @@ export class MockZohoBooksProvider implements IERPProvider {
     return { records: generatePayments(seed(session), 'zoho_books', session.companyId, '', 32, invoices) };
   }
   async syncBankTransactions(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPBankTransaction[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateBankTransactions(seed(session), 'zoho_books', session.companyId, '', 42) };
   }
   async syncTaxes(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPTax[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(300);
     const customers = generateCustomers(seed(session), 'zoho_books', session.companyId, '', 28);
     const vendors = generateVendors(seed(session), 'zoho_books', session.companyId, '', 16);
@@ -137,7 +160,7 @@ export class MockZohoBooksProvider implements IERPProvider {
     const invoices = generateInvoices(seed(session), 'zoho_books', session.companyId, '', 45, customers, vendors, inventory);
     return { records: generateTaxes(seed(session), 'zoho_books', session.companyId, '', invoices) };
   }
-  async healthCheck(): Promise<boolean> { return true; }
+  async healthCheck(): Promise<boolean> { return MOCK_ERP_ENABLED; }
 }
 
 function seed(session: ERPSession): string { return `${ORG_PREFIX}:${session.companyName}`; }

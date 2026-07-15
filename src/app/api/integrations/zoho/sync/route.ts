@@ -3,6 +3,17 @@
 //
 // Triggers a Zoho Books data sync for the current (org, user) pair.
 //
+// Phase 5: Fire-and-forget. The sync runs in a DETACHED background promise so
+// the HTTP response returns IMMEDIATELY with { status: 'running', syncLogId }.
+// The UI polls GET /sync/status every 1.5s for live progress
+// (currentEntity, per-entity counts, "Fetching Customers…", etc.).
+//
+// This is safe because:
+//   • The dev server process stays alive (watchdog auto-restarts it).
+//   • The sync writes currentEntity to ZohoSyncLog before each entity, so a
+//     crash mid-sync leaves a resumable state (lastEntity + lastCursor).
+//   • The next sync with resume=true picks up from the last completed entity.
+//
 // Body (optional JSON):
 //   { mode?: 'full' | 'incremental', resume?: boolean }
 //   - mode defaults to 'incremental' (only fetch records modified since the
@@ -17,31 +28,17 @@
 //   - Zoho Books must be connected (valid access token is resolved via
 //     getValidAccessToken, which auto-refreshes if expired)
 //
-// Response:
+// Response (immediate — sync still running in background):
 //   {
 //     ok: true,
 //     syncLogId: string,
+//     status: 'running',
 //     mode: 'full' | 'incremental',
-//     status: 'completed' | 'partial' | 'failed',
-//     startedAt: string,            // ISO timestamp
-//     stats: {                      // per-entity stats
-//       customer:    { imported, updated, failed, skipped, pages, lastError },
-//       vendor:      { ... },
-//       tax:         { ... },
-//       bank_account: { ... },
-//       invoice:     { ... },
-//       bill:        { ... },
-//       expense:     { ... },
-//       bank_transaction: { ... },
-//       journal:     { ... }
-//     },
-//     error: string | null
+//     message: 'Sync started in background. Poll GET /sync/status for progress.'
 //   }
 //
-// The sync runs inline (awaited). For very large Zoho orgs (>10k records per
-// entity), consider splitting into a background queue — but for typical SMB
-// Zoho Books accounts, inline is fast enough (each page is ~200 records, 50
-// pages = 10k records in ~30s).
+// The final result is available via GET /sync/status (status transitions:
+// running → completed | partial | failed).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
@@ -52,12 +49,12 @@ import {
   getValidAccessToken,
   runSync,
   type SyncMode,
-  type TriggerSyncResponse,
 } from '@/lib/integrations/zoho-books';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-// Sync can take a while for large orgs — give it up to 5 minutes.
+// The HTTP request returns immediately, but keep maxDuration high in case the
+// runtime decides to wait for background tasks.
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
@@ -110,8 +107,17 @@ export async function POST(req: Request) {
     const { stored } = await loadTokens(orgId, userId);
     const zohoOrgId = stored?.zohoOrgId ?? status.zohoOrgId;
 
-    // Run the sync.
-    const result: TriggerSyncResponse = await runSync({
+    // ── Phase 5: Fire-and-forget ────────────────────────────────────────────
+    //
+    // Start the sync in a DETACHED background promise. We do NOT await it.
+    // The sync writes `currentEntity` to the ZohoSyncLog row as it progresses
+    // through each entity, so the UI can poll GET /sync/status for live
+    // progress. The response returns immediately with the syncLogId.
+    //
+    // The promise is caught internally (runSync never throws — it returns
+    // { ok: false, error } on failure and writes status='failed' to the log).
+
+    void runSync({
       organizationId: orgId,
       userId,
       userEmail,
@@ -120,9 +126,18 @@ export async function POST(req: Request) {
       mode,
       resume,
       maxRecordsPerEntity: 10000,
+    }).catch((syncErr) => {
+      // Last-resort error handler — runSync should never throw, but if it
+      // does (e.g., OOM, process crash), log it so we can diagnose.
+      console.error('[/api/integrations/zoho/sync] background sync crashed:', syncErr);
     });
 
-    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+    return NextResponse.json({
+      ok: true,
+      status: 'running',
+      mode,
+      message: 'Sync started in background. Poll GET /sync/status for live progress.',
+    });
   } catch (err) {
     console.error('[/api/integrations/zoho/sync] error:', err);
     return NextResponse.json(

@@ -139,8 +139,28 @@ export async function* paginate<T>(
       per_page: String(perPage),
     };
     // Incremental: only fetch records modified after the watermark.
+    // Zoho Books expects last_modified_time in ISO 8601 WITHOUT milliseconds
+    // and WITH timezone offset (e.g. "2024-01-15T10:30:45+05:30"). The
+    // watermark is stored as a JS Date ISO string (with 'Z' suffix + ms),
+    // so we reformat it. Using the local timezone offset is safe because
+    // Zoho compares server-side (IST = UTC+5:30 for .in data center).
     if (mode === 'incremental' && watermark) {
-      qp.last_modified_time = watermark;
+      try {
+        const d = new Date(watermark);
+        if (!isNaN(d.getTime())) {
+          // Format: YYYY-MM-DDThh:mm:ss+HH:MM (no milliseconds, with offset)
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const offset = -d.getTimezoneOffset();
+          const sign = offset >= 0 ? '+' : '-';
+          const absOffset = Math.abs(offset);
+          qp.last_modified_time =
+            `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+            `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+            `${sign}${pad(Math.floor(absOffset / 60))}:${pad(absOffset % 60)}`;
+        }
+      } catch {
+        /* if watermark is invalid, skip incremental (full fetch) */
+      }
     }
     // Resume: use the cursor Zoho returned on the previous page.
     if (cursor) {
@@ -160,6 +180,30 @@ export async function* paginate<T>(
       accessToken,
       { organizationId: zohoOrgId, signal: abortSignal },
     );
+
+    // ── Graceful fallback: if the endpoint rejects last_modified_time (some
+    // Zoho Books endpoints like /contacts, /invoices, /items don't support
+    // this filter), retry without it. This makes incremental sync degrade
+    // to a full fetch for those entities instead of failing. ──────────────
+    if (
+      finalRes.error &&
+      /last_modified_time|Invalid value passed/i.test(finalRes.error) &&
+      qp.last_modified_time
+    ) {
+      delete qp.last_modified_time;
+      const url2 = new URL(path, 'http://zoho.local');
+      for (const [k, v] of Object.entries(qp)) {
+        url2.searchParams.set(k, v);
+      }
+      const pathWithQuery2 = url2.pathname + (url2.search ? `?${url2.searchParams.toString()}` : '');
+      const retryRes = await zohoGet<Record<string, unknown>>(
+        pathWithQuery2,
+        accessToken,
+        { organizationId: zohoOrgId, signal: abortSignal },
+      );
+      // Replace finalRes with the retry result
+      Object.assign(finalRes, retryRes);
+    }
 
     pageCount++;
 

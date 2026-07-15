@@ -25,6 +25,7 @@ export const ZOHO_SYNC_ENTITIES = [
   'journal',
   'payment',
   'item',
+  'creditnote',
 ] as const;
 
 export type ZohoSyncEntity = (typeof ZOHO_SYNC_ENTITIES)[number];
@@ -42,6 +43,7 @@ export const ZOHO_SYNC_ENTITY_LABELS: Record<ZohoSyncEntity, string> = {
   journal: 'Journals',
   payment: 'Payments',
   item: 'Items',
+  creditnote: 'Credit Notes',
 };
 
 // ─── Generic Zoho list-response shape ────────────────────────────────────────
@@ -516,6 +518,73 @@ export interface ZohoItemsResponse {
   page_context: ZohoPageContext;
 }
 
+// ─── CreditNote — Zoho Books /creditnotes ────────────────────────────────────
+
+export interface ZohoCreditNoteLineItem {
+  line_item_id?: string;
+  item_id?: string;
+  name?: string;
+  description?: string;
+  quantity?: number;
+  rate?: number;
+  amount?: number;
+  tax_id?: string;
+  tax_name?: string;
+  tax_percentage?: number;
+  item_total?: number;
+}
+
+export interface ZohoCreditNote {
+  creditnote_id: string;
+  creditnote_number?: string;
+  date?: string;
+  status?: string; // open | closed | void | draft
+  customer_id?: string;
+  customer_name?: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  total?: number;
+  sub_total?: number;
+  total_credited?: number;
+  balance?: number;
+  currency_code?: string;
+  reason?: string;
+  notes?: string;
+  line_items?: ZohoCreditNoteLineItem[];
+  created_time?: string;
+  last_modified_time?: string;
+}
+
+export interface ZohoCreditNotesResponse {
+  code: number;
+  message: string;
+  creditnotes: ZohoCreditNote[];
+  page_context: ZohoPageContext;
+}
+
+// ─── Normalized credit note (for ZohoCreditNote Prisma model) ────────────────
+
+export interface NormalizedCreditNote {
+  zohoCreditNoteId: string;
+  creditNoteNumber: string | null;
+  date: string | null;
+  status: string;
+  customerId: string | null;
+  customerName: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  total: number;
+  subTotal: number;
+  totalCredited: number;
+  balance: number;
+  currencyCode: string | null;
+  reason: string | null;
+  notes: string | null;
+  lineItems: string; // JSON-stringified array
+  zohoCreatedAt: Date | null;
+  zohoUpdatedAt: Date | null;
+}
+
 // ─── Normalized GSTPilot record payloads (mapper output) ─────────────────────
 //
 // The mapper produces these normalized payloads. The sync services upsert them
@@ -717,6 +786,7 @@ export interface SyncStatusResponse {
     durationMs: number | null;
     error: string | null;
     stats: Partial<Record<ZohoSyncEntity, EntitySyncStats>>;
+    currentEntity: ZohoSyncEntity | null;
   } | null;
   /** Aggregate record counts currently in the database (from ZohoEntityMap). */
   recordsImported: Partial<Record<ZohoSyncEntity, number>>;

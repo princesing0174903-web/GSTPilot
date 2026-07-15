@@ -31,6 +31,7 @@ import type {
   ZohoCustomerPayment,
   ZohoVendorPayment,
   ZohoItem,
+  ZohoCreditNote,
   NormalizedClient,
   NormalizedVendor,
   NormalizedInvoice,
@@ -41,6 +42,7 @@ import type {
   NormalizedJournalEntry,
   NormalizedPayment,
   NormalizedItem,
+  NormalizedCreditNote,
 } from './types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -502,4 +504,47 @@ export function parseZohoLastModified(
   if (!raw) return null;
   const d = new Date(raw);
   return isNaN(d.getTime()) ? null : d;
+}
+
+// ─── Credit Note mapper (Phase 5) ────────────────────────────────────────────
+
+/**
+ * Map a raw Zoho Books credit note to the NormalizedCreditNote shape that
+ * gets upserted into the ZohoCreditNote Prisma model.
+ */
+export function mapCreditNote(cn: ZohoCreditNote): NormalizedCreditNote {
+  const lineItems = Array.isArray(cn.line_items)
+    ? cn.line_items.map((li) => ({
+        lineItemId: li.line_item_id ?? null,
+        itemId: li.item_id ?? null,
+        name: li.name ?? null,
+        description: li.description ?? null,
+        quantity: li.quantity ?? 0,
+        rate: li.rate ?? 0,
+        amount: li.amount ?? li.item_total ?? 0,
+        taxName: li.tax_name ?? null,
+        taxPercentage: li.tax_percentage ?? 0,
+      }))
+    : [];
+
+  return {
+    zohoCreditNoteId: str(cn.creditnote_id, ''),
+    creditNoteNumber: optionalStr(cn.creditnote_number),
+    date: optionalStr(cn.date),
+    status: str(cn.status, 'open').toLowerCase(),
+    customerId: optionalStr(cn.customer_id),
+    customerName: optionalStr(cn.customer_name),
+    invoiceId: optionalStr(cn.invoice_id),
+    invoiceNumber: optionalStr(cn.invoice_number),
+    total: num(cn.total),
+    subTotal: num(cn.sub_total),
+    totalCredited: num(cn.total_credited),
+    balance: num(cn.balance),
+    currencyCode: optionalStr(cn.currency_code),
+    reason: optionalStr(cn.reason),
+    notes: optionalStr(cn.notes),
+    lineItems: JSON.stringify(lineItems),
+    zohoCreatedAt: parseZohoLastModified(cn.created_time),
+    zohoUpdatedAt: parseZohoLastModified(cn.last_modified_time),
+  };
 }

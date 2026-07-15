@@ -3395,3 +3395,155 @@ Stage Summary:
 - ✅ Run My Business page verified: All 10+ sections render correctly, zero chunk/console errors.
 - ✅ No code changes needed: The error was purely an infrastructure/build-cache issue, not a code bug in RunMyBusinessPage.tsx (1700 lines, loads via `dynamic(() => import(...), { ssr: false })`).
 - Files changed: NONE (only .next cache cleared + process management). RunMyBusinessPage.tsx, DashboardViews.tsx untouched.
+
+---
+Task ID: phase1-audit-mock
+Agent: Explore Agent (mock audit)
+Task: Audit all mock/demo/fake data sources in src/
+
+Work Log:
+- Read worklog.md (last 200 lines) to understand prior context (Phase 4 Zoho Customer Sync complete, fake Zoho tokens purged, dev server watchdog upgraded).
+- Step 1 — Searched for files named like *mock*, *demo*, *sample*, *fixture*, *seed* under src/. Result: 0 files with those exact name patterns; but found 13 `mock-*-provider.ts` files under src/lib/{billing,banking,gstn,ai-pipeline,communication,erp,ai}-provider/server/ (intentional provider-architecture mocks) + src/lib/erp-provider/server/mock-data.ts (data generator for those mock ERP providers).
+- Step 2 — Grep for `Verma Industries|Acme Corp|Acme|TechCorp|Test Corp|Sample Corp` across src/. Found 19 hits. Triaged: most are HTML input placeholders (`placeholder="Acme Pvt Ltd"` in OrganizationDashboard, EnterpriseSettings, ZohoCustomersSyncPanel, InvoiceUploadDialog, CustomersView, VendorsView, ConnectionsPage, etc.) — acceptable. Real mock data hits:
+    * src/lib/platform/organizations.ts:547 — `companyNames` array of 12 demo SaaS customer orgs (Acme Industries, Bharat Textiles, Cloud Nine Retail, Dharma Healthcare, Everest Logistics, Fortune Foods, Greenfield Realty, Helix IT Services, Ivy Education, Jaipur Hospitality, Kohinoor Manufacturing, Lakshmi Exports) used by `buildDemoCustomerOrgs()` to seed PlatformOrganization rows.
+    * src/app/api/connectors/[id]/sync/route.ts:74 — `bankStubRecords()` hardcoded merchant list with "Salary Credit — Acme Industries", "Vendor Payment — Supplier Inc", "Sample Customer", "Sample Supplier" etc. (writes stubs to DB as SyncedRecord rows).
+    * src/components/command-center/CommandCenterPage.tsx:86 — hardcoded INITIAL_ACTIONS array with "File GSTR-3B for Acme Industries".
+    * src/lib/oracle-cfo/types.ts:120 + oracle-intelligence.ts:869 — JSDoc/comment examples only (no runtime data).
+    * src/app/api/oracle/chat/route.ts:1155,1162 — string-literal example phrases in the system prompt (no runtime data).
+- Step 3 — Grep for `mock|mockData|MOCK_|fake|dummy|placeholder|demoData|sampleData|testData` (case-insensitive). 250+ file matches — most are: type comments, the `mock-*-provider.ts` modules, empty-array initial states (e.g. `const demoApiKeys: ApiKey[] = []`), or post-cleanup comments documenting removed mock data. Confirmed empty arrays in APIPlatformPage.tsx, WorkingCapitalPage.tsx, SettingsPage.tsx, EventStreaming.tsx, CollaborationPage.tsx, CRMPage.tsx, DocumentsPage.tsx, DataMoatPage.tsx, AIExecutiveReportsPage.tsx (all are `[]` placeholders, not populated mock data).
+- Step 4 — Grep for `Math.random()` across src/. Found 142 files. Triaged:
+    * 8 mock provider modules (legitimate PRNG for deterministic mock ERP data in src/lib/erp-provider/server/mock-data.ts).
+    * 1 dev OTP generator (src/app/api/connectors/otp/route.ts:39 — explicitly "fake-but-persisted OTP" for dev workflow).
+    * 1 platform seed (src/lib/platform/organizations.ts:447 — `Math.random()*3` for `openTickets`).
+    * 3 already-cleaned execution-cloud routes (gstn/banking/invoice) — now return 501, no longer fabricate.
+    * 2 platform/create-org + connect/bank — legitimate unique ID/slug suffix.
+    * Remainder are spread across AI/CFO/Twin/AGI simulation engines, marketplace seed (install counts, ratings, review counts), enterprise seed (usage variance). These persist synthetic values into the DB.
+- Step 5 — Grep for `healthScore|health_score` (163 files). Found the real ones in src/lib/twin/snapshots.ts (computed), src/lib/connections/health-engine.ts (computed), src/app/api/business-health/route.ts (real). Found hardcoded literals at:
+    * src/lib/platform/organizations.ts:91 — `healthScore: 88` for the host org (anchored to firm record, but synthetic).
+    * src/lib/platform/organizations.ts:561 — `healthScore` formula on demoOrgs.
+    * src/lib/ecosystem/org-resolver.ts:43 — `healthScore: 90` for provisioning fallback.
+    * src/lib/command-network/operations-map.ts:61,78,132,150,163 — `healthScore: 88|85|80` on operations-map demo nodes.
+    * src/lib/firestore-service.ts:1114 — `healthScore: 80` on converted-lead Client seed row.
+    * src/components/data-cloud/DataCloudPage.tsx:161-165 — `healthScore: 87|82|91|94|78` on 5 hardcoded SECTOR_INTELLIGENCE rows.
+    * src/app/api/platform/create-org/route.ts:55 — `healthScore: 75` for new-org defaults.
+- Step 6 — Grep for hardcoded GST numbers (`27AAAAA0000A1Z5|29AABCU9603R1ZJ|22AAAAA0000A1Z5`). Found 13 hits — ALL are HTML input `placeholder="22AAAAA0000A1Z5"` for GSTIN fields. No hardcoded GSTINs in data sources.
+- Step 7 — Identified the existing centralized Business Snapshot service:
+    * src/lib/twin/snapshots.ts (351 lines) — `computeSnapshotBundle()` + `fetchLatestSnapshot()` + `computeSnapshotForPeriod()`. Computes Revenue / Profit / Cash / GST / Health Score / Risk Score / Forecast / Collections / Expenses / Employees / Assets / Liabilities at 5 frequencies (daily 14, weekly 12, monthly 12, quarterly 8, yearly 5) + 3 comparisons (today vs yesterday, this month vs last month, this year vs last year). Fetches REAL DB data: invoices, expenses, payments, purchaseBills, employees, gSTRFilings.
+    * src/app/api/twin/snapshots/route.ts — GET endpoint, 120s in-memory cache.
+    * src/lib/twin/types.ts — BusinessSnapshot type definition.
+- Step 8 — Identified a second centralized snapshot pattern in src/lib/connections/index.ts:
+    * `loadOracleLiveData()` (300+ lines, returns OracleLiveData) — orchestrates GSTN + Bank datasets, computes Business Health Score (compliance, cashFlow, collection, growth, profitability, risk), Phase 2A extensions (cashBurn, runwayDays, collectionEfficiency, expenseCategories, dailyCashFlow, topClients, firmProfile, gstr9, itcLedger, cashLedger, liabilityLedger, lateFees, taxLiability, recentReturns, activeNoticesList). Consumed by /api/business-health.
+    * BUT — `loadGstnDataset()` calls `generateGstnDataset()` (src/lib/connections/gstn-data.ts, 627 lines) which is a DETERMINISTIC MOCK GENERATOR (mulberry32 PRNG seeded by GSTIN) producing synthetic GSTR-1/3B/2B filings, e-invoices, e-way bills, notices, ITC/cash/liability ledgers, GSTR-9. The file's own header comment explicitly states: "the `fetchGstnDataset` function would be replaced with live GSTN API calls".
+    * AND — `connectBank()` calls `generateBankDataset()` (src/lib/connections/bank-data.ts, 234 lines) which is a DETERMINISTIC MOCK GENERATOR (mulberry32 PRNG seeded by provider + accountRef) producing 90 days of synthetic bank transactions with hardcoded counterparty pools ("Patel Enterprises", "Sharma Traders", "Reliance Power", "Tata Steel Supplier", etc.). The file's own header comment explicitly states: "the `generateBankDataset` function would be replaced with live bank API calls".
+- Step 9 — Mapped the major mock data sources in components:
+    * src/components/invoice-exchange/InvoiceExchangePage.tsx (lines 230-340+): TOP_SELLERS, VOLUME_30D (30 daily volume figures), INDUSTRIES list, MARKETPLACE_INVOICES (15 fake listed invoices), MY_INVOICES (8 fake own invoices), SAMPLE_BIDS (5 fake bids), INDUSTRY_VOLUME (10 industries), BUYER_TYPE_DIST (4 types), DISCOUNT_TREND_12M (12 months), STATE_HEATMAP. ~12 hardcoded arrays.
+    * src/components/marketplace/MarketplacePage.tsx (lines 155-490+): MARKETPLACE_ITEMS (dozens of fake template/app/tool entries with fake ratings/downloads/revenue), SAMPLE_REVIEWS (6 fake reviews by "Rajesh Gupta", "Priya Sharma" etc.), SELLER_PRODUCTS, PAYOUT_HISTORY (4 fake payouts), REVENUE_DATA (12 months).
+    * src/components/credit-scoring-engine/CreditScoringEnginePage.tsx (lines 282-300+): INDUSTRY_COMPARISON (10 industries with hardcoded gstCredit/collection/compliance/growth/risk/businesses scores), TOP_BUSINESSES (TCS, HUL etc. with fake ratings).
+    * src/components/data-cloud/DataCloudPage.tsx (lines 160-165): SECTOR_INTELLIGENCE (5 sectors with hardcoded dataVolume/growth/healthScore/trend arrays).
+    * src/components/universal-business-id/UniversalBusinessIDPage.tsx (lines 323-334): INDUSTRY_AVG (10 industries with hardcoded avg scores + business counts + growth).
+    * src/components/command-center/CommandCenterPage.tsx (lines 84-91): INITIAL_ACTIONS (6 hardcoded tasks referencing "Acme Industries", "ICICI bank", "Q3 revenue forecast").
+    * src/components/global-expansion/MultiCurrencySystem.tsx:290 — TREND_SERIES (hardcoded FX trend data).
+    * src/components/global-expansion/MultiLanguagePlatform.tsx:59 — SAMPLE_CARDS (hardcoded multi-language platform cards).
+    * src/components/global-cloud/AutomationStudio.tsx:90 — SAMPLE_CANVAS_NODES (hardcoded automation canvas nodes).
+    * src/components/economic-graph/EconomicGraphPage.tsx:108,504,506 — INDUSTRY_CLUSTERS + INDUSTRY_IDS + INDUSTRY_MATRIX (hardcoded inter-industry relationship matrix).
+    * src/components/industry-benchmark/IndustryBenchmarkPage.tsx:98,223 — INDUSTRY_BENCHMARKS + INDUSTRY_INSIGHTS (hardcoded benchmark percentiles per industry — possibly legitimate reference data, needs human review).
+    * src/components/landing/GSTPilotLanding.tsx:1395,1604 — MARKETPLACE + TESTIMONIALS (legitimate marketing copy on the public landing page — KEEP).
+- Step 10 — Confirmed the DashboardPage (src/components/dashboard/DashboardPage.tsx, 1723 lines) is REAL:
+    * Consumes useLiveDashboardMetrics(), useFireClients(), useFireReturns(), useFireRecentActivities(), useFirmExecutiveScores(), useFireMemberships(), useFirePriorities() (all real-time Firestore hooks).
+    * Consumes useInvoices() (Real Invoice Engine™ — org-scoped, server-calculated).
+    * Consumes useGSTTransactions() (Real GST Return Engine™ — server-calculated).
+    * Consumes useBanking() (Real Banking Foundation™ — server-calculated from bank_connections + bank_transactions).
+    * Consumes useAIRecommendations() + useCommunications() (real-time).
+    * All KPIs (revenue, cash position, GST liability, available ITC, output tax, CGST/SGST/IGST collected, health score, transaction counts, banking summary, Gmail/WhatsApp comms) come from real hooks.
+- Step 11 — Confirmed the existing /api/dashboard/route.ts is REAL (tenant-scoped Prisma queries against Client/Invoice/GSTRFiling/Issue/AuditLog with emptyDashboard() fallback when no tenant). No mock data.
+- Step 12 — Catalogued all dashboard/snapshot-related API routes:
+    * /api/dashboard/route.ts — REAL (Prisma, tenant-scoped).
+    * /api/business-health/route.ts — REAL (calls loadOracleLiveData()).
+    * /api/business-graph/route.ts + /api/business-graph/ai/route.ts — graph data.
+    * /api/twin/snapshots/route.ts — REAL (calls computeSnapshotBundle()).
+    * /api/twin/{state,forecast,snapshots,simulate,replay,history,playback,kpis,anomalies}/route.ts — Digital Twin suite.
+    * /api/admin/dashboard/route.ts, /api/agi/dashboard/route.ts, /api/ai-workforce/dashboard/route.ts, /api/autonomous/dashboard/route.ts, /api/ceo/dashboard/route.ts, /api/command/dashboard/route.ts, /api/compliance/dashboard/route.ts, /api/dev/dashboard/route.ts, /api/ecosystem/dashboard/route.ts, /api/execution/dashboard/route.ts, /api/global/dashboard/route.ts, /api/intelligence/dashboard/route.ts, /api/network/dashboard/route.ts, /api/oracle/dashboard/route.ts, /api/oracle-brain/dashboard/route.ts, /api/platform/dashboard/route.ts — domain-specific dashboards (not all audited in this pass — recommend a follow-up audit per route).
+    * No /api/kpi/*, /api/metrics/*, /api/snapshot/*, /api/business-snapshot/* routes exist.
+
+Stage Summary:
+- Mock Data Sources found: 18 distinct files containing hardcoded/demo/synthetic data (excluding legitimate provider mocks + HTML placeholders + landing-page marketing copy).
+  * Tier 1 (CRITICAL — affects production data integrity):
+    1. src/lib/connections/gstn-data.ts (627 lines) — deterministic PRNG-generated fake GSTN dataset (GSTR-1/3B/2B, e-invoices, e-way bills, notices, ledgers, GSTR-9). Consumed by loadOracleLiveData() → /api/business-health → Dashboard KPIs + Oracle context.
+    2. src/lib/connections/bank-data.ts (234 lines) — deterministic PRNG-generated fake bank transactions (90 days, hardcoded counterparty pools). Consumed by connectBank() → loadBankDataset() → /api/business-health → Dashboard KPIs.
+    3. src/lib/erp-provider/server/mock-data.ts (618 lines) — generates fake ERP customers/vendors/invoices/payments/taxes/bank-txns/ledgers/inventory. Consumed by all 4 mock ERP providers (Tally/Zoho/Busy/QuickBooks) in src/lib/erp-provider/server/mock-*-provider.ts.
+    4. src/app/api/connectors/[id]/sync/route.ts (456 lines) — writes hardcoded stub records (Acme Industries, Sample Customer, Tally Solutions, WeWork Mumbai, etc.) to SyncedRecord table on every connector sync.
+    5. src/lib/platform/organizations.ts:539-601 (buildDemoCustomerOrgs) — generates 6-14 fake SaaS customer orgs (Acme Industries, Bharat Textiles, etc.) with fake MRR/seats/health/churn, persisted to PlatformOrganization table on first seed.
+    6. src/lib/enterprise/seed.ts (380 lines) — seeds fake tenant users (Prince Singh, Arjun Mehta, Priya Nair, Rohan Kapoor, etc.), org hierarchy (GSTPilot Global Holding → India Pvt Ltd → Delhi Branch → Sales Dept), subscriptions, integrations, API keys, 30 days of usage events, billing invoices, audit logs, security events, policies, approvals, backups.
+    7. src/lib/marketplace/seed.ts (185 lines) — seeds fake installed integrations (Gmail, Shopify, Razorpay, Stripe, Slack, QuickBooks, HubSpot, GitHub, ICICI, HDFC, WhatsApp) + sync events.
+    8. src/lib/app-platform/seed.ts (290 lines) — seeds 17 fake developers (GSTPilot Labs, TaxTech India, Tally Solutions, Intuit Partner, etc.) + 25 starter apps + 12 AI employee apps + installs + reviews + plugins + webhooks + analytics + payouts (uses Math.random for install counts/ratings).
+  * Tier 2 (UI-only mock data — displayed but not persisted):
+    9. src/components/invoice-exchange/InvoiceExchangePage.tsx — ~12 hardcoded arrays (TOP_SELLERS, VOLUME_30D, MARKETPLACE_INVOICES, MY_INVOICES, SAMPLE_BIDS, INDUSTRY_VOLUME, BUYER_TYPE_DIST, DISCOUNT_TREND_12M, STATE_HEATMAP).
+    10. src/components/marketplace/MarketplacePage.tsx — MARKETPLACE_ITEMS + SAMPLE_REVIEWS + SELLER_PRODUCTS + PAYOUT_HISTORY + REVENUE_DATA.
+    11. src/components/credit-scoring-engine/CreditScoringEnginePage.tsx — INDUSTRY_COMPARISON (10 industries) + TOP_BUSINESSES.
+    12. src/components/data-cloud/DataCloudPage.tsx — SECTOR_INTELLIGENCE (5 sectors).
+    13. src/components/universal-business-id/UniversalBusinessIDPage.tsx — INDUSTRY_AVG (10 industries).
+    14. src/components/command-center/CommandCenterPage.tsx — INITIAL_ACTIONS (6 fake actions mentioning "Acme Industries").
+    15. src/components/global-expansion/MultiCurrencySystem.tsx — TREND_SERIES.
+    16. src/components/global-expansion/MultiLanguagePlatform.tsx — SAMPLE_CARDS.
+    17. src/components/global-cloud/AutomationStudio.tsx — SAMPLE_CANVAS_NODES.
+    18. src/components/economic-graph/EconomicGraphPage.tsx — INDUSTRY_CLUSTERS + INDUSTRY_MATRIX.
+- Hardcoded Data: items #1-3 (PRNG generators), #4 (sync stubs), #5-8 (seed files) all write synthetic data to the production DB. Items #9-18 are pure UI mock arrays.
+- Random/Generated Data: gstn-data.ts + bank-data.ts use mulberry32 PRNG (deterministic, seeded). enterprise/seed.ts uses Math.random for usage variance. app-platform/seed.ts uses Math.random for install counts/ratings/review counts. platform/organizations.ts:447 uses Math.random for openTickets count.
+- Existing Snapshot Services:
+  1. **src/lib/twin/snapshots.ts** → `computeSnapshotBundle()` + `fetchLatestSnapshot()` — computes Revenue/Profit/Cash/GST/HealthScore/RiskScore/Forecast/Collections/Expenses/Employees/Assets/Liabilities at 5 frequencies from REAL DB rows. Exposed via /api/twin/snapshots. **RECOMMENDED CONSOLIDATION TARGET**.
+  2. **src/lib/connections/index.ts** → `loadOracleLiveData()` — orchestrates GSTN+Bank, computes BusinessHealthBreakdown (6 sub-scores) + Phase 2A financial signals. Exposed via /api/business-health. Currently depends on the mock gstn-data.ts + bank-data.ts generators — needs to be rewired to real GSTN/Bank API integrations OR fall through to empty states.
+  3. **src/lib/cfo/phase1/data.ts** → `fetchRawCFOData()` — single source of truth for AI CFO engines, pulls REAL Prisma rows (invoices, expenses, payments, purchaseBills, clients, employees, filings). No mock data.
+  4. **src/lib/ceo/data.ts** → `fetchCEOData()` — merges CFO Phase 1 + Digital Twin bundles. Real data only.
+  5. **src/lib/workforce/data.ts** → `fetchWorkforceData()` — extends CEODataView with department slices. Real data only.
+  6. **src/app/api/dashboard/route.ts** → tenant-scoped Prisma aggregates (totalClients, totalInvoices, filedReturns, pendingReturns, overdueReturns, averageHealthScore, criticalIssues, warnings, matchPercentage, riskPercentage, recentAuditLogs, filingCalendar, monthlyFilingStatus). Real data only.
+  7. **src/hooks/use-firestore.ts** → `useLiveDashboardMetrics()` (client-side computed from Firestore hooks), `useFireClients/Invoices/Returns/Documents/RecentActivities/Priorities/Memberships`. Real data only.
+- Pages/Components consuming mock data (trace):
+  * DashboardPage (src/components/dashboard/DashboardPage.tsx) → uses REAL hooks. **No mock data.** However, the underlying useBanking() and useGSTTransactions() hooks read bank_transactions + gst_transactions collections, which were populated by the mock generators in connections/{bank,gstn}-data.ts when the user "connected" their bank/GSTN. So the dashboard shows REAL rows from the DB — but those rows themselves are synthetic. Removing the mock generators without first disconnecting all existing connections will leave the dashboard empty (correct, honest behaviour).
+  * DigitalTwinPage (src/components/digital-twin/DigitalTwinPage.tsx) → fetches /api/twin/snapshots (REAL).
+  * BusinessGraphPanel (src/components/oracle/BusinessGraphPanel.tsx) → fetches /api/business-graph (REAL).
+  * WorkingCapitalPage → fetches /api/dashboard (REAL).
+  * CommandCenterPage → renders INITIAL_ACTIONS hardcoded mock array directly.
+  * InvoiceExchangePage, MarketplacePage, CreditScoringEnginePage, DataCloudPage, UniversalBusinessIDPage, MultiCurrencySystem, MultiLanguagePlatform, AutomationStudio, EconomicGraphPage → all render hardcoded mock arrays directly.
+  * OrganizationDashboard (src/components/enterprise-org/OrganizationDashboard.tsx) → uses real hooks (useEnterpriseOrg/useOrg/usePermissions) — "Acme Pvt Ltd" is only an HTML placeholder.
+- Recommended consolidation target for a single Business Snapshot service:
+  * **PRIMARY: src/lib/twin/snapshots.ts** — already implements the canonical BusinessSnapshot type with all 12 metrics (Revenue/Profit/Cash/GST/HealthScore/RiskScore/Forecast/Collections/Expenses/Employees/Assets/Liabilities), 5 frequencies, 3 comparisons, REAL Prisma data, 120s cache. Already exposed via /api/twin/snapshots.
+  * **MERGE: src/lib/connections/index.ts::loadOracleLiveData()** — should be refactored to consume twin/snapshots.ts for the historical/trend fields, keep only the live-connection orchestration (which connections are active) + health-engine (the 6-sub-score breakdown) + change-detection. The mock generateGstnDataset()/generateBankDataset() calls must be replaced with: (a) real GSTN/Bank API fetches when available, (b) honest empty-state returns otherwise — never synthetic data.
+  * **DEPRECATE: src/lib/connections/gstn-data.ts + src/lib/connections/bank-data.ts** — these are the single largest sources of mock data leaking into production dashboards. Either rewrite to call real NIC GSTN APIs + real bank APIs (Razorpay/Decentro/MBS), or delete and let the empty-state flow through.
+  * **DEPRECATE: src/lib/erp-provider/server/mock-data.ts + the 4 mock-*-provider.ts** — these are intentional mock-provider architecture; either gate behind a `MOCK_ERP_PROVIDER=true` env flag (dev-only, disabled in prod), or remove entirely now that real Zoho Books customer sync (Phase 4) is in place.
+  * **DEPRECATE: src/app/api/connectors/[id]/sync/route.ts** stub generators (gstnStubRecords/bankStubRecords/whatsappStubRecords/accountingStubRecords) — replace with real connector sync calls or 501 "not implemented" responses (the same honest pattern already applied to /api/execution-cloud/{gstn,banking,invoice}).
+  * **REMOVE: src/lib/platform/organizations.ts::buildDemoCustomerOrgs()** — never seed synthetic SaaS customer orgs into PlatformOrganization. Show empty-state in the platform dashboard instead.
+  * **REMOVE: src/lib/enterprise/seed.ts, src/lib/marketplace/seed.ts, src/lib/app-platform/seed.ts** — these dev-seed files persist synthetic users/orgs/integrations/apps/reviews. Gate behind `NODE_ENV !== 'production' && GSTPILOT_ALLOW_SEED === 'true'` (same pattern as /api/seed/route.ts) — never run on a real tenant.
+  * **REPLACE UI mock arrays in components** (items #9-18): each one needs a real API route + hook. Components to refactor: InvoiceExchangePage, MarketplacePage, CreditScoringEnginePage, DataCloudPage, UniversalBusinessIDPage, CommandCenterPage, MultiCurrencySystem, MultiLanguagePlatform, AutomationStudio, EconomicGraphPage.
+  * **KEEP: src/components/landing/GSTPilotLanding.tsx** MARKETPLACE + TESTIMONIALS — legitimate marketing copy on the public landing page.
+- This was a READ-ONLY audit. Zero files modified.
+
+---
+Task ID: bug-gst-return-audit
+Agent: Explore Agent (GST return bug)
+Task: Audit GST Return module disconnection from ZohoCustomer table
+
+Work Log:
+- Read worklog.md tail for prior context (Phase 4 Zoho Books customer sync already shipped; ZohoCustomer + ZohoCustomerSyncRun Prisma models + /api/integrations/zoho/customers routes + useZohoBooks.listCustomers all real and production-grade).
+- Grep'd codebase for "No clients found", "Create New Return", "Client Registry" to locate the UI surface.
+- Located ReturnsPage at src/components/returns/ReturnsPage.tsx — rendered as the `returns` view via DashboardViews.tsx (no dedicated Next.js route; it's the dashboard view at src/app/page.tsx).
+- Read the "Create New Return" dialog code (ReturnsPage.tsx lines 1281-1361) — dropdown reads from `clients` array sourced from `useClients()` (line 345) mapped to ClientItem via `mapApiClientToItem` (line 126).
+- Read useClients hook (src/hooks/useClients.ts) — calls `GET /api/clients?organizationId={orgId}` via TanStack Query, returns ClientOption[] with shape {id, gstin, tradeName, ...}.
+- Read /api/clients GET handler (src/app/api/clients/route.ts lines 16-107) — queries `db.client.findMany({ where: { firmId: tenantId } })` against the Prisma `Client` model, enriched with invoice/filing/health aggregates. Returns `{ clients: [...] }`.
+- Read Prisma schema Client model (prisma/schema.prisma lines 28-73) — GST-centric fields (gstin unique, tradeName, legalName, address, state, stateCode, contactEmail, contactPhone, entityType, returnPeriod, lastFilingDate, status, healthScore, firmId). Relations to Invoice/GSTRFiling/etc.
+- Read Prisma schema ZohoCustomer model (prisma/schema.prisma lines 5753-5780) — ERP-grade fields (zohoContactId, contactName, companyName, gstNumber, email, phone, currency, paymentTerms, outstandingReceivable, status, billingAddress JSON, shippingAddress JSON, lastSyncedAt, zohoCreatedAt, zohoUpdatedAt). Unique on (organizationId, zohoOrgId, zohoContactId). NO FK or clientId field linking to Client.
+- Read /api/integrations/zoho/customers GET handler (src/app/api/integrations/zoho/customers/route.ts) — calls `listLocalCustomers()` (src/lib/integrations/zoho-books/customers.ts line 748) querying `db.zohoCustomer.findMany({ where: { organizationId, zohoOrgId } })`. Returns `{ ok, customers: [...], total, zohoOrgId }`.
+- Read useZohoBooks hook (src/hooks/useZohoBooks.ts) — listCustomers signature: `(opts?: { search?; status?: 'active'|'inactive'|'all'; limit?; offset? }) => Promise<{ ok; customers: ZohoCustomerRecord[]; total; error }>`. Already fetches from /api/integrations/zoho/customers with x-gstpilot-orgid + x-gstpilot-actor headers.
+- Read createReturn() in src/lib/firestore-service.ts (lines 396-425) — writes to Firestore `RETURNS` collection (not Prisma GSTRFiling) with `clientId: newClientId` (Prisma Client.id from dropdown). Note: this is a separate data-flow oddity — Returns list is read from Firestore, not Prisma.
+- Confirmed ReturnsPage.tsx imports: `useClients, type ClientOption` from `@/hooks/useClients` and `createReturn, fileReturn` from `@/lib/firestore-service` (lines 61-62 of ReturnsPage). ZohoCustomer data is NOT imported.
+- Verified the dropdown only references useClients() → /api/clients → Prisma Client table. Zero references to /api/integrations/zoho/customers or useZohoBooks in ReturnsPage.
+- Cross-checked all other "No clients found" sites — same useClients() pattern in ReviewPage, ReconciliationPage, AITaskGeneratorPage, AuditLogsPage, AIBenchmarkPage, ErrorResolutionPage, ClientHealthPage. GSTRFilingPage uses a different source (Firestore `useFireClients` hook), but the underlying issue (no client rows) is the same.
+- READ-ONLY audit. Zero files modified.
+
+Stage Summary:
+- ROOT CAUSE: The "Create New Return" dialog's client dropdown is populated by `useClients()` → `GET /api/clients?organizationId={orgId}` → `db.client.findMany({ where: { firmId } })` against the Prisma `Client` model. The user's 1 synced Zoho customer ("TechCorp Pvt Ltd") lives in the Prisma `ZohoCustomer` model — a completely separate table with NO foreign key to Client and NO automatic sync into Client. The dropdown is correctly empty because the Client table genuinely has zero rows for this tenant. This is a data-modeling gap, not a hook/API bug.
+- Data-flow mismatch: createReturn() also writes to Firestore `RETURNS` collection (not Prisma GSTRFiling), and stores clientId as a Prisma Client.id — so even the read path (/api/returns) won't join correctly to a ZohoCustomer row. Three independent client stores exist in the codebase: (1) Prisma `Client` table, (2) Firestore `clients` collection (useFireClients), (3) Prisma `ZohoCustomer` table. None are linked.
+- Recommended fix: option (c) — auto-populate the Prisma `Client` table from `ZohoCustomer` on every customer sync. Modify `syncZohoCustomersIntoDb()` in src/lib/integrations/zoho-books/customers.ts to additionally upsert a `Client` row (matched by `gstin` within the same firmId) for each synced Zoho customer. This is the lowest-risk, highest-coherence fix because every existing page already reads from /api/clients — no UI changes needed, no schema changes needed. Map ZohoCustomer→Client: contactName→tradeName, companyName→legalName, gstNumber→gstin, email→contactEmail, phone→contactPhone, state/city from billingAddress JSON→state/stateCode, status→status, firmId=organizationId. Edge case: ZohoCustomer rows with null gstNumber cannot become Client rows (gstin is @unique + required) — skip them or generate a synthetic placeholder GSTIN (NOT recommended; better to skip + log).
+- Alternative (b) — unified /api/clients route that merges Client + ZohoCustomer with a `source` discriminator — more invasive (requires schema change to ClientOption, every dropdown must handle two id namespaces, createReturn flow needs to know which table the id points to). Only worth it if product wants to keep Client and ZohoCustomer permanently separate.
+- Alternative (a) — make the dropdown read ZohoCustomer directly — NOT recommended: ClientOption shape (gstin required, healthScore, _aggregations) doesn't match ZohoCustomerRecord, and createReturn stores clientId as Prisma Client.id (would break the Firestore write/join).
+- Other "No clients found" surfaces (all same root cause, all will auto-fix once Client table is populated): ReviewPage.tsx:592, ReconciliationPage.tsx:747/874, AITaskGeneratorPage.tsx:719, AuditLogsPage.tsx:361, AIBenchmarkPage.tsx:409, ErrorResolutionPage.tsx:536, ClientHealthPage.tsx:841. GSTRFilingPage.tsx:1360 uses Firestore useFireClients (different store) — will need a separate Firestore mirror or migration to Prisma to fix the same symptom there.
+- "Client Registry" text references (for cross-linking UX, no bug): ClientRegistryPage.tsx:431 (heading), CommandPalette.tsx (nav entry), ClientWorkspacePage.tsx (link), ReturnsPage.tsx:1311 + ReviewPage.tsx:592 (empty-state CTA), /api/intelligence/route.ts:579 (drill-down description).

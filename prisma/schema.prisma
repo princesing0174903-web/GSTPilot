@@ -5640,6 +5640,9 @@ model ZohoSyncLog {
   // — typically the next page token or the last_modified_time watermark).
   lastEntity      String?  // customer | vendor | invoice | bill | expense | ...
   lastCursor      String?  // entity-specific cursor (page token or timestamp)
+  // Phase 5 — live progress: the entity currently being synced. The UI polls
+  // GET /sync/status and shows "Fetching {currentEntity}…" in real time.
+  currentEntity   String?  // customer | vendor | invoice | bill | ... | creditnote
   error           String?  // top-level error message if status=failed
   stats           String   @default("{}") // JSON: { customers: {imported, updated, failed}, ... }
   startedAt       DateTime @default(now())
@@ -5801,4 +5804,53 @@ model ZohoCustomerSyncRun {
 
   @@index([organizationId, zohoOrgId, startedAt])
   @@index([status])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 5 — ZohoCreditNote: Credit notes issued to customers
+//
+// Mirrors Zoho Books /creditnotes. A credit note is a negative invoice —
+// issued when a customer returns goods, gets a discount post-invoice, or
+// overpays. Linked to a customer (contact_id) and optionally to an invoice.
+//
+// Oracle reads db.zohoCreditNote.findMany to answer:
+//   "How much credit have I issued?"
+//   "Which customers have credit notes?"
+//   "Show me all credit notes for TechCorp"
+//
+// Sync flow: GET /books/v3/creditnotes → upsert by (orgId, zohoOrgId, zohoCreditNoteId)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model ZohoCreditNote {
+  id                String   @id @default(cuid())
+  organizationId    String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId         String   // Zoho Books numeric organization ID
+  zohoCreditNoteId  String   // Zoho's creditnote_id (durable external key)
+  creditNoteNumber  String?  // Zoho `creditnote_number` (e.g. "CN-00001")
+  date              String?  // ISO date string
+  status            String   @default("open") // open | closed | void | draft
+  customerId        String?  // Zoho `customer_id` (links to ZohoCustomer.zohoContactId)
+  customerName      String?  // Zoho `customer_name`
+  invoiceId         String?  // Zoho `invoice_id` (optional — if linked to an invoice)
+  invoiceNumber     String?  // Zoho `invoice_number`
+  total             Float    @default(0) // Zoho `total` (credit note total)
+  subTotal          Float    @default(0) // Zoho `sub_total`
+  totalCredited     Float    @default(0) // Zoho `total_credited` (amount already applied)
+  balance           Float    @default(0) // Zoho `balance` (unapplied credit)
+  currencyCode      String?  // Zoho `currency_code` (e.g. "INR")
+  reason            String?  // Zoho `reason` (e.g. "Goods returned")
+  notes             String?  // Zoho `notes`
+  // JSON array of line items: { item_id, name, quantity, rate, amount, tax }
+  lineItems         String   @default("[]")
+  lastSyncedAt      DateTime @default(now())
+  zohoCreatedAt     DateTime? // Zoho `created_time`
+  zohoUpdatedAt     DateTime? // Zoho `last_modified_time`
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoCreditNoteId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([customerId])
+  @@index([invoiceId])
 }

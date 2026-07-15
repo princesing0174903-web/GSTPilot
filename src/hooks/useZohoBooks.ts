@@ -103,6 +103,96 @@ export interface ZohoSyncStatusInfo {
   isRunning: boolean;
 }
 
+// ─── Phase 4 — Customer Sync types ───────────────────────────────────────────
+
+export interface ZohoCustomerAddress {
+  attention?: string;
+  address?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+  phone?: string;
+}
+
+export interface ZohoCustomerRecord {
+  id: string;
+  organizationId: string;
+  zohoOrgId: string;
+  zohoContactId: string;
+  contactName: string;
+  companyName: string | null;
+  gstNumber: string | null;
+  email: string | null;
+  phone: string | null;
+  currency: string | null;
+  paymentTerms: number | null;
+  outstandingReceivable: number;
+  status: string;
+  billingAddress: string | null;
+  shippingAddress: string | null;
+  lastSyncedAt: string;
+  zohoCreatedAt: string | null;
+  zohoUpdatedAt: string | null;
+}
+
+export interface ZohoCustomerInput {
+  contactName: string;
+  companyName?: string | null;
+  gstNumber?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  currency?: string | null;
+  paymentTerms?: number | null;
+  billingAddress?: ZohoCustomerAddress | null;
+  shippingAddress?: ZohoCustomerAddress | null;
+}
+
+export interface ZohoCustomerSyncResult {
+  ok: boolean;
+  status: 'completed' | 'partial' | 'failed';
+  totalFetched: number;
+  imported: number;
+  updated: number;
+  failed: number;
+  durationMs: number;
+  lastSyncedAt: string | null;
+  syncRunId: string | null;
+  error: string | null;
+}
+
+export interface ZohoCustomerSyncStatus {
+  ok: boolean;
+  connected: boolean;
+  zohoOrgId: string | null;
+  organizationName: string | null;
+  customerCount: number;
+  lastSync: {
+    id: string;
+    trigger: 'manual' | 'auto';
+    status: 'running' | 'completed' | 'partial' | 'failed';
+    totalFetched: number;
+    imported: number;
+    updated: number;
+    failed: number;
+    durationMs: number;
+    error: string | null;
+    startedAt: string;
+    completedAt: string | null;
+  } | null;
+  autoSync: { enabled: boolean; intervalMinutes: number };
+}
+
+export interface ZohoCustomerWriteResult {
+  ok: boolean;
+  httpStatus: number;
+  customer: ZohoCustomerRecord | null;
+  error: string | null;
+  zohoCode: number | null;
+  zohoMessage: string | null;
+}
+
 interface ApiError {
   error: string;
 }
@@ -172,6 +262,15 @@ export function useZohoBooks() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Phase 4 — Customer Sync state
+  const [customers, setCustomers] = useState<ZohoCustomerRecord[]>([]);
+  const [customersTotal, setCustomersTotal] = useState(0);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
+  const [customerSyncRunning, setCustomerSyncRunning] = useState(false);
+  const [customerSyncStatus, setCustomerSyncStatus] = useState<ZohoCustomerSyncStatus | null>(null);
+  const [customerSyncResult, setCustomerSyncResult] = useState<ZohoCustomerSyncResult | null>(null);
 
   const orgId = organization?.id ?? null;
 
@@ -334,6 +433,174 @@ export function useZohoBooks() {
     };
   }, [buildHeaders]);
 
+  // ─── Phase 4 — Customer Sync ──────────────────────────────────────────────
+
+  /** Fetch the customer-sync status (last run, count, auto-sync flag). */
+  const refreshCustomerSyncStatus = useCallback(async (): Promise<ZohoCustomerSyncStatus | null> => {
+    if (!orgId) return null;
+    const res = await zfetch<ZohoCustomerSyncStatus>(
+      '/api/integrations/zoho/customers/sync-status',
+      buildHeaders(),
+    );
+    if (res.ok && res.data) {
+      setCustomerSyncStatus(res.data);
+      return res.data;
+    }
+    return null;
+  }, [orgId, buildHeaders]);
+
+  /** List synced customers from the DB (with optional search + pagination). */
+  const listCustomers = useCallback(
+    async (opts?: {
+      search?: string;
+      status?: 'active' | 'inactive' | 'all';
+      limit?: number;
+      offset?: number;
+    }): Promise<{ ok: boolean; customers: ZohoCustomerRecord[]; total: number; error: string | null }> => {
+      setCustomersLoading(true);
+      setCustomersError(null);
+      const url = new URL('/api/integrations/zoho/customers', window.location.origin);
+      if (opts?.search) url.searchParams.set('search', opts.search);
+      if (opts?.status) url.searchParams.set('status', opts.status);
+      if (typeof opts?.limit === 'number') url.searchParams.set('limit', String(opts.limit));
+      if (typeof opts?.offset === 'number') url.searchParams.set('offset', String(opts.offset));
+      const res = await zfetch<{ ok: boolean; customers: ZohoCustomerRecord[]; total: number }>(
+        `${url.pathname}${url.search}`,
+        buildHeaders(),
+      );
+      setCustomersLoading(false);
+      if (res.ok && res.data) {
+        setCustomers(res.data.customers);
+        setCustomersTotal(res.data.total);
+        return { ok: true, customers: res.data.customers, total: res.data.total, error: null };
+      }
+      setCustomersError(res.error);
+      return { ok: false, customers: [], total: 0, error: res.error };
+    },
+    [buildHeaders],
+  );
+
+  /** Trigger a real customer sync (POST /api/integrations/zoho/customers/sync). */
+  const syncCustomers = useCallback(
+    async (opts?: { trigger?: 'manual' | 'auto' }): Promise<ZohoCustomerSyncResult> => {
+      setCustomerSyncRunning(true);
+      setCustomerSyncResult(null);
+      const res = await zfetch<ZohoCustomerSyncResult>(
+        '/api/integrations/zoho/customers/sync',
+        buildHeaders(),
+        {
+          method: 'POST',
+          body: JSON.stringify({ trigger: opts?.trigger ?? 'manual' }),
+        },
+      );
+      setCustomerSyncRunning(false);
+      const result: ZohoCustomerSyncResult = res.data ?? {
+        ok: false,
+        status: 'failed',
+        totalFetched: 0,
+        imported: 0,
+        updated: 0,
+        failed: 0,
+        durationMs: 0,
+        lastSyncedAt: null,
+        syncRunId: null,
+        error: res.error ?? 'Sync failed.',
+      };
+      setCustomerSyncResult(result);
+      // Refresh the sync-status + customer list so the UI reflects the new state.
+      await Promise.all([refreshCustomerSyncStatus(), listCustomers()]);
+      return result;
+    },
+    [buildHeaders, refreshCustomerSyncStatus, listCustomers],
+  );
+
+  /** Create a customer (POST /api/integrations/zoho/customers → POST /contacts). */
+  const createCustomer = useCallback(
+    async (input: ZohoCustomerInput): Promise<ZohoCustomerWriteResult> => {
+      setPending(true);
+      const res = await zfetch<ZohoCustomerWriteResult>(
+        '/api/integrations/zoho/customers',
+        buildHeaders(),
+        { method: 'POST', body: JSON.stringify(input) },
+      );
+      setPending(false);
+      const result: ZohoCustomerWriteResult = res.data ?? {
+        ok: false,
+        httpStatus: res.status,
+        customer: null,
+        error: res.error ?? 'Failed to create customer.',
+        zohoCode: null,
+        zohoMessage: null,
+      };
+      if (result.ok) {
+        // Refresh the customer list to include the new row.
+        await listCustomers();
+      }
+      return result;
+    },
+    [buildHeaders, listCustomers],
+  );
+
+  /** Update a customer (PUT /api/integrations/zoho/customers/{id} → PUT /contacts/{id}). */
+  const updateCustomer = useCallback(
+    async (id: string, input: ZohoCustomerInput): Promise<ZohoCustomerWriteResult> => {
+      setPending(true);
+      const res = await zfetch<ZohoCustomerWriteResult>(
+        `/api/integrations/zoho/customers/${encodeURIComponent(id)}`,
+        buildHeaders(),
+        { method: 'PUT', body: JSON.stringify(input) },
+      );
+      setPending(false);
+      const result: ZohoCustomerWriteResult = res.data ?? {
+        ok: false,
+        httpStatus: res.status,
+        customer: null,
+        error: res.error ?? 'Failed to update customer.',
+        zohoCode: null,
+        zohoMessage: null,
+      };
+      if (result.ok) {
+        await listCustomers();
+      }
+      return result;
+    },
+    [buildHeaders, listCustomers],
+  );
+
+  /** Toggle the auto-sync flag (POST /api/integrations/zoho/customers/auto-sync). */
+  const toggleAutoSync = useCallback(
+    async (enabled: boolean, intervalMinutes?: number): Promise<{
+      ok: boolean;
+      autoSync: { enabled: boolean; intervalMinutes: number } | null;
+      error: string | null;
+    }> => {
+      const res = await zfetch<{
+        ok: boolean;
+        autoSync: { enabled: boolean; intervalMinutes: number };
+        error?: string;
+      }>('/api/integrations/zoho/customers/auto-sync', buildHeaders(), {
+        method: 'POST',
+        body: JSON.stringify({ enabled, intervalMinutes }),
+      });
+      if (res.ok && res.data) {
+        // Refresh the sync-status so the UI reflects the new flag.
+        await refreshCustomerSyncStatus();
+        return { ok: true, autoSync: res.data.autoSync, error: null };
+      }
+      return { ok: false, autoSync: null, error: res.error };
+    },
+    [buildHeaders, refreshCustomerSyncStatus],
+  );
+
+  // Initial load: fetch the customer-sync status + customer list when the org changes.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!orgId) return;
+    void refreshCustomerSyncStatus();
+    void listCustomers();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [orgId, refreshCustomerSyncStatus, listCustomers]);
+
   return {
     status,
     statusLoading,
@@ -353,5 +620,19 @@ export function useZohoBooks() {
     syncing,
     refreshSyncStatus,
     triggerSync,
+    // Phase 4 — Customer Sync
+    customers,
+    customersTotal,
+    customersLoading,
+    customersError,
+    customerSyncStatus,
+    customerSyncRunning,
+    customerSyncResult,
+    refreshCustomerSyncStatus,
+    listCustomers,
+    syncCustomers,
+    createCustomer,
+    updateCustomer,
+    toggleAutoSync,
   };
 }

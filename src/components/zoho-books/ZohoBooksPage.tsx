@@ -60,6 +60,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useZohoBooks, type ZohoSyncEntity } from '@/hooks/useZohoBooks';
 import { useOrg } from '@/contexts/OrgContext';
+import { ZohoCustomersSyncPanel } from './ZohoCustomersSyncPanel';
 
 // ─── Zoho Books brand mark (red "Z" tile) ────────────────────────────────────
 
@@ -839,6 +840,7 @@ export default function ZohoBooksPage() {
       <NotConnectedGate>
         <div className="flex flex-col gap-4">
           <SyncPanel />
+          <ZohoCustomersSyncPanel />
           <ConnectionDetails />
         </div>
       </NotConnectedGate>

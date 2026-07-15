@@ -5569,6 +5569,11 @@ model ZohoBooksToken {
   connectedAt      DateTime @default(now())
   updatedAt        DateTime @updatedAt
   revokedAt        DateTime?
+  // ── Phase 4 — Customer Auto-Sync toggle ──
+  // When true, the customer-sync cron will run periodically using the stored
+  // refresh token. Default false — explicit opt-in per Zoho connection.
+  autoSyncCustomers       Boolean @default(false)
+  autoSyncIntervalMinutes Int    @default(60)
 
   @@unique([organizationId, userId])
   @@index([organizationId])
@@ -5707,4 +5712,93 @@ model ZohoItem {
   @@unique([organizationId, zohoOrgId, zohoItemId])
   @@index([organizationId, zohoOrgId])
   @@index([name])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Real Customer Sync (Zoho Books /contacts)
+//
+// Dedicated customer table that mirrors the Zoho Books contact shape 1:1 so the
+// UI, Oracle, and the Invoice Cloud can read full customer records (currency,
+// payment terms, outstanding receivable, billing/shipping address) without
+// overloading the existing `Client` model (which is GST-centric and lacks these
+// financial-ERP fields).
+//
+// Sync flow:
+//   • POST /api/integrations/zoho/customers/sync →
+//       GET /books/v3/contacts?contact_type=customer →
+//       upsert each into ZohoCustomer by (organizationId, zohoOrgId, zohoContactId)
+//
+// Create flow (when user adds a customer inside GSTPilot):
+//   • POST /api/integrations/zoho/customers →
+//       POST /books/v3/contacts → save returned contact_id →
+//       INSERT ZohoCustomer row
+//
+// Update flow (when user edits an existing customer):
+//   • PUT /api/integrations/zoho/customers/{id} →
+//       PUT /books/v3/contacts/{contact_id} →
+//       UPDATE ZohoCustomer row
+//
+// `lastSyncedAt` is bumped on every sync run (full or incremental) for every
+// touched row, so the UI can show "Last synced 2 minutes ago" per customer.
+//
+// `ZohoCustomerSyncRun` records each sync execution: total fetched, imported,
+// updated, failed, duration, status (completed | partial | failed), and the
+// top-level error if any. Drives the "Sync Successful — N customers synced in
+// X seconds" toast and the sync history.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model ZohoCustomer {
+  id                    String   @id @default(cuid())
+  organizationId        String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId             String   // Zoho Books numeric organization ID (multi-tenant)
+  zohoContactId         String   // Zoho's contact_id (the durable external key)
+  contactName           String   // Zoho `contact_name`
+  companyName           String?  // Zoho `company_name`
+  gstNumber             String?  // Zoho `gstin` (null for B2C / unregistered)
+  email                 String?  // primary contact person email
+  phone                 String?  // primary contact person phone
+  currency              String?  // Zoho `currency_code` (e.g. "INR")
+  paymentTerms          Int?     // Zoho `payment_terms` (days)
+  outstandingReceivable Float    @default(0) // Zoho `outstanding_receivable_amount`
+  status                String   @default("active") // Zoho `status`: active | inactive | etc.
+  billingAddress        String?  // JSON-stringified Zoho billing_address object
+  shippingAddress       String?  // JSON-stringified Zoho shipping_address object
+  lastSyncedAt          DateTime @default(now()) // bumped on every successful sync
+  zohoCreatedAt         DateTime? // Zoho `created_time`
+  zohoUpdatedAt         DateTime? // Zoho `last_modified_time`
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoContactId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([organizationId, zohoOrgId, contactName])
+  @@index([gstNumber])
+}
+
+// ─── ZohoCustomerSyncRun: one row per customer-sync execution ─────────────────
+//
+// Drives the "Sync Successful — N customers synced in X seconds" UI. Records
+// every sync run (manual or auto), with status, count, duration, and the
+// triggering user. Supports a future "Sync History" view.
+model ZohoCustomerSyncRun {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  userId          String?  // → User.id (null for auto/system runs)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  trigger         String   @default("manual") // manual | auto
+  status          String   @default("running") // running | completed | partial | failed
+  totalFetched    Int      @default(0) // records returned by Zoho for this run
+  imported        Int      @default(0) // newly inserted ZohoCustomer rows
+  updated         Int      @default(0) // updated existing ZohoCustomer rows
+  failed          Int      @default(0) // records that failed to upsert
+  durationMs      Int      @default(0) // wall-clock duration of the sync
+  error           String?  // top-level error message (status=failed)
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, startedAt])
+  @@index([status])
 }

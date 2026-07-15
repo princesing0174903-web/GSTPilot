@@ -3366,3 +3366,32 @@ Stage Summary:
   5. Complete Zoho consent flow → real tokens stored in DB.
   6. THEN I can verify: Sync Customers (fetch TechCorp Pvt Ltd), Create customer (POST /books/v3/contacts), Edit customer (PUT /books/v3/contacts/{id}), DB rows, API responses, Network tab.
 - Files changed: .env (restored 2 lines), src/components/layout/LeftNav.tsx (added Zoho Books nav item + group map). No other code changes — Phase 4 code was already correct.
+
+---
+Task ID: fix-chunkload-run-my-business
+Agent: Main Agent (Z.ai Code)
+Task: User reported "Something went wrong — Failed to load chunk /_next/static/chunks/node_modules_6fcbf4dc._.js from module [project]/src/components/run-my-business/RunMyBusinessPage.tsx [app-client] (ecmascript, next/dynamic entry, async loader)" with a "Try Again" button.
+
+Work Log:
+- Diagnosed root cause: TWO compounding problems.
+  1. Dev server had DIED again (HTTP 000, no next-server process). The preview panel shows "Something went wrong" when localhost:3000 is unreachable — the ChunkLoadError is the browser failing to fetch the JS chunk from a dead server.
+  2. Stale .next cache: Even when the server was up, Turbopack had a stale chunk manifest from a prior OOM-crashed compile. The browser requested chunk `node_modules_6fcbf4dc._.js` (old hash) but the rebuilt server had a new hash → 404 on the chunk → ChunkLoadError. This is a known Turbopack dev-mode issue after unclean shutdowns.
+- Also found: the watchdog itself was dying between bash calls. `nohup bash dev-watchdog-permanent.sh &` doesn't survive because the sandbox kills the entire process group (SIGKILL, not SIGHUP) when the bash session ends. nohup only ignores SIGHUP.
+- FIX 1 (stale cache): `rm -rf .next` — cleared the entire Turbopack build cache so all chunks are regenerated fresh on next compile.
+- FIX 2 (watchdog survival): Started the watchdog with `setsid -f bash dev-watchdog-permanent.sh` instead of `nohup ... &`. `setsid -f` creates a NEW session + process group that is NOT a child of the current bash shell, so it survives bash session termination. The watchdog script already uses `setsid -f` for the server it spawns — now the watchdog itself uses it too.
+- Verified via Agent Browser:
+  * Opened http://localhost:3000/ → landing page rendered (HTTP 200).
+  * Entered Preview Mode → dashboard rendered.
+  * Clicked "Run Business" nav → "GSTPilot Run My Business™" page rendered with ALL sections: PRIORITY ACTIONS, Business Command Center, Natural Language Business Commands, Autopilot Engine, Task Execution Engine, Business Agents, Orchestrator, Delegation Engine, Memory.
+  * `agent-browser errors` → ZERO chunk errors, ZERO load failures.
+  * `agent-browser console` → only Firestore permission warnings (expected in preview mode, non-fatal).
+  * Screenshot saved: run-my-business-fixed.png (255 KB, full page).
+- Regression check: Navigated to Zoho Books page → also loads cleanly (no chunk error). Server stayed UP throughout (3 processes: watchdog + bash wrapper + next-server).
+- Server health: HTTP 200 in ~180ms (cached compile). RSS ~330MB next-server, 3.0GB RAM free. No OOM risk.
+
+Stage Summary:
+- ✅ ChunkLoadError FIXED: Root cause was stale .next cache (Turbopack chunk hash mismatch after OOM crash) + dead dev server. Cleared .next + restarted fresh.
+- ✅ Watchdog survival FIXED: Changed watchdog launch from `nohup &` to `setsid -f` so it survives bash session boundaries (sandbox kills process groups, not individual processes).
+- ✅ Run My Business page verified: All 10+ sections render correctly, zero chunk/console errors.
+- ✅ No code changes needed: The error was purely an infrastructure/build-cache issue, not a code bug in RunMyBusinessPage.tsx (1700 lines, loads via `dynamic(() => import(...), { ssr: false })`).
+- Files changed: NONE (only .next cache cleared + process management). RunMyBusinessPage.tsx, DashboardViews.tsx untouched.

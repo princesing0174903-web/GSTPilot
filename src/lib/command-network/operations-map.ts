@@ -37,7 +37,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
     for (const c of countries) {
       const ents = byCountry[c.isoCode] ?? [];
       if (ents.length === 0 && c.isoCode !== 'IN') continue; // include India always
-      const health = ents.length > 0 ? 90 : 75;
+      // Country health score: 0 (no real per-country health metric exists yet).
       nodes.push({
         id: `country-${c.isoCode}`,
         type: 'country',
@@ -45,7 +45,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
         country: c.isoCode,
         parent: null,
         status: 'active',
-        healthScore: health,
+        healthScore: 0,
         metrics: { entities: ents.length, region: 1 },
         lastUpdate: new Date().toISOString(),
       });
@@ -58,7 +58,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
           country: c.isoCode,
           parent: `country-${c.isoCode}`,
           status: 'active',
-          healthScore: 88,
+          healthScore: 0,
           metrics: { kind: 1 },
           lastUpdate: new Date().toISOString(),
         });
@@ -75,7 +75,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
         country: null,
         parent: null,
         status: 'active',
-        healthScore: 85,
+        healthScore: 0,
         metrics: {},
         lastUpdate: new Date().toISOString(),
       });
@@ -110,7 +110,9 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
         country: null,
         parent: null,
         status: conn.status === 'connected' ? 'active' : conn.status === 'syncing' ? 'busy' : 'error',
-        healthScore: conn.status === 'connected' ? 95 : conn.status === 'error' ? 30 : 70,
+        // Connector health is derived from real sync status text only — no
+        // synthetic numeric score mapping (would be mock data).
+        healthScore: 0,
         metrics: { sync: 1 },
         lastUpdate: conn.lastSyncAt?.toISOString() ?? null,
       });
@@ -129,7 +131,8 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
       country: null,
       parent: null,
       status: queueStats[0] + queueStats[1] > 0 ? 'busy' : 'idle',
-      healthScore: 80,
+      // Queue health score: 0 (no real SLA/throughput metric wired yet).
+      healthScore: 0,
       metrics: { queued: queueStats[0], running: queueStats[1], jobs: queueStats[2] },
       lastUpdate: new Date().toISOString(),
     });
@@ -147,7 +150,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
         country: 'IN',
         parent: 'country-IN',
         status: 'active',
-        healthScore: 85,
+        healthScore: 0,
         metrics: { headcount: empCount },
         lastUpdate: new Date().toISOString(),
       });
@@ -160,7 +163,7 @@ export async function getOperationsMap(): Promise<OperationsMapSummary> {
         country: 'IN',
         parent: 'country-IN',
         status: 'active',
-        healthScore: 80,
+        healthScore: 0,
         metrics: { clients: clientCount },
         lastUpdate: new Date().toISOString(),
       });

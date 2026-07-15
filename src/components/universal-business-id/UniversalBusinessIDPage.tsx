@@ -319,19 +319,12 @@ const BELL_CURVE: { score: number; count: number; cumulativePct: number }[] = ((
   return buckets
 })()
 
-// Industry averages
-const INDUSTRY_AVG: { name: string; key: string; icon: React.ElementType; avg: number; businesses: number; growth: number }[] = [
-  { name: 'IT Services',      key: 'it',      icon: Cpu,          avg: 88.4, businesses: 48230, growth: 14.2 },
-  { name: 'Banking',          key: 'banking', icon: Landmark,    avg: 92.1, businesses: 1840,  growth: 8.7 },
-  { name: 'Pharmaceuticals',  key: 'pharma',  icon: Stethoscope, avg: 86.7, businesses: 12380, growth: 11.5 },
-  { name: 'Automobile',       key: 'auto',    icon: Wrench,      avg: 84.2, businesses: 8920,  growth: 6.3 },
-  { name: 'Telecom',          key: 'telecom', icon: Network,     avg: 79.5, businesses: 480,   growth: 4.1 },
-  { name: 'Manufacturing',    key: 'mfg',     icon: Building2,   avg: 81.3, businesses: 68450, growth: 9.8 },
-  { name: 'Energy',           key: 'energy',  icon: Zap,         avg: 75.8, businesses: 3120,  growth: 7.2 },
-  { name: 'Retail',           key: 'retail',  icon: ShoppingBag, avg: 73.4, businesses: 124800,growth: 12.6 },
-  { name: 'Real Estate',      key: 'realty',  icon: Building2,   avg: 68.2, businesses: 24360, growth: 5.4 },
-  { name: 'Agriculture',      key: 'agri',    icon: Wheat,       avg: 64.7, businesses: 89240, growth: 3.8 },
-]
+// Industry averages — previously 10 hardcoded mock industries (IT Services,
+// Banking, Pharmaceuticals, Automobile, Telecom, Manufacturing, Energy, Retail,
+// Real Estate, Agriculture) with fabricated avg scores / business counts /
+// growth rates. Removed during mock-data audit (Task 7). Empty until a real
+// industry-benchmark API is wired.
+const INDUSTRY_AVG: { name: string; key: string; icon: React.ElementType; avg: number; businesses: number; growth: number }[] = []
 
 // Indian States Heatmap (simplified grid layout)
 const STATE_GRID: { name: string; abbr: string; row: number; col: number; score: number; businesses: number }[] = [
@@ -1624,7 +1617,7 @@ function PercentileCalculator() {
 
 function IndustryTable() {
   const sorted = [...INDUSTRY_AVG].sort((a, b) => b.avg - a.avg)
-  const max = Math.max(...sorted.map(s => s.avg))
+  const max = sorted.length > 0 ? Math.max(...sorted.map(s => s.avg)) : 0
 
   return (
     <Card className="border-slate-200">

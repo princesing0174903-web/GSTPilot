@@ -80,7 +80,7 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         status: 'active',
         industry: 'Chartered Accountancy',
         employeeCount: Math.max(realTeamMembers, realUserCount, 1),
-        monthlyRevenue: 49999,
+        monthlyRevenue: 0,
         seatsUsed: Math.max(realUserCount, 1),
         seatsLimit: 250,
         storageUsedMb: Math.min(1024 * 8, realInvoiceCount * 0.5 + 200),
@@ -88,8 +88,11 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         apiCallsMonth: realClientCount * 120 + 5000,
         aiCreditsUsed: realClientCount * 8 + 200,
         aiCreditsLimit: 1000000,
-        healthScore: 88,
-        churnRisk: 0.05,
+        // Health/risk scores set to 0 — no real per-org health metric is
+        // computed here. The Business Snapshot service is the single source
+        // of truth for health scores.
+        healthScore: 0,
+        churnRisk: 0,
         branding: JSON.stringify({
           logoUrl: firm?.logoUrl ?? null,
           primaryColor: '#0ea5e9',
@@ -170,7 +173,9 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           code: cc.code,
           name: cc.name,
           budget: cc.budget,
-          spent: Math.round(cc.budget * (0.4 + Math.random() * 0.3)),
+          // Spent is a real financial KPI — never fabricate via Math.random.
+          // Stays 0 until real cost-center accounting is wired.
+          spent: 0,
           currency: 'INR',
         },
       });
@@ -269,12 +274,15 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           status: env.status,
           strategy: env.strategy,
           replicas: env.replicas,
-          uptimePct: 99.9 + Math.random() * 0.09,
-          latencyMs: 80 + Math.random() * 60,
-          errorRatePct: Math.random() * 0.4,
-          cpuUsagePct: 25 + Math.random() * 35,
-          memUsageMb: 400 + Math.random() * 600,
-          lastDeployAt: new Date(Date.now() - Math.random() * 86400000 * 3),
+          // DevOps KPIs (uptime / latency / error rate / CPU / mem) must be
+          // sourced from real telemetry — never fabricated via Math.random.
+          // Stays at 0 until a real metrics collector is wired.
+          uptimePct: 0,
+          latencyMs: 0,
+          errorRatePct: 0,
+          cpuUsagePct: 0,
+          memUsageMb: 0,
+          lastDeployAt: null,
           lastDeployBy: 'oracle',
         },
       });
@@ -299,7 +307,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           rateLimitPerDay: 100000,
           callsTotal: k.calls,
           callsToday: Math.round(k.calls / 30),
-          lastUsedAt: new Date(Date.now() - Math.random() * 86400000),
+          // lastUsedAt left null — never fabricated via Math.random.
+          lastUsedAt: null,
           status: 'active',
           createdBy: 'platform-owner',
         },
@@ -390,7 +399,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
             role: i === 0 ? 'owner' : i === 1 ? 'admin' : 'member',
             status: 'active',
             mfaEnabled: i < 2,
-            lastActiveAt: new Date(Date.now() - Math.random() * 86400000 * 7),
+            // lastActiveAt left null — never fabricated via Math.random.
+            lastActiveAt: null,
             joinedAt: new Date(Date.now() - demo.ageDays * 86400000),
           },
         });
@@ -430,7 +440,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           rateLimitPerDay: 100000,
           callsTotal: demo.apiCalls,
           callsToday: Math.round(demo.apiCalls / 30),
-          lastUsedAt: new Date(Date.now() - Math.random() * 86400000),
+          // lastUsedAt left null — never fabricated via Math.random.
+          lastUsedAt: null,
           status: 'active',
           createdBy: 'owner',
         },
@@ -440,13 +451,16 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         data: {
           organizationId: childOrg.id,
           score: demo.healthScore,
-          adoptionPct: Math.min(100, 40 + Math.random() * 55),
+          // adoptionPct is a real KPI — never fabricated via Math.random.
+          adoptionPct: 0,
           featureUsage: JSON.stringify({ gst: 0.9, ai: 0.6, banking: 0.4, marketplace: 0.3 }),
           churnRisk: demo.churnRisk,
           expansionScore: demo.healthScore > 80 ? 0.7 : 0.3,
-          openTickets: demo.healthScore < 60 ? Math.round(Math.random() * 3) : 0,
+          // openTickets stays 0 — never fabricated via Math.random.
+          openTickets: 0,
           satisfaction: 3.5 + (demo.healthScore / 100) * 1.5,
-          lastContactAt: new Date(Date.now() - Math.random() * 86400000 * 14),
+          // lastContactAt left null — never fabricated via Math.random.
+          lastContactAt: null,
           recommendedActions: JSON.stringify(demo.recommendedActions),
         },
       });

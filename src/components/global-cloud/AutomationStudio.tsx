@@ -86,14 +86,11 @@ const RECENT_RUNS: RecentRun[] = [
 ];
 
 // ─── Sample workflow canvas (deterministic) ───────────────────────────────────
-// A visual mock of "Vendor Invoice → Auto-Approve" workflow.
-const SAMPLE_CANVAS_NODES = [
-  { type: 'Trigger'   as const, name: 'Invoice Created',  desc: 'Fires when a new invoice is created',                icon: 'file-plus',      accent: 'emerald' as Accent },
-  { type: 'Condition' as const, name: 'Amount > Threshold', desc: 'Branch based on a numeric threshold',             icon: 'filter',         accent: 'amber'   as Accent },
-  { type: 'AI Node'   as const, name: 'Oracle™ Classify', desc: 'AI categorization of documents & transactions',     icon: 'brain',          accent: 'violet'  as Accent },
-  { type: 'Action'    as const, name: 'Create Journal Entry', desc: 'Post a double-entry journal voucher',           icon: 'book-open',      accent: 'cyan'    as Accent },
-  { type: 'Webhook'   as const, name: 'Emit Webhook',     desc: 'Emit a webhook event to subscribers',                icon: 'webhook',        accent: 'emerald' as Accent },
-];
+// SAMPLE_CANVAS_NODES — previously a 5-node hardcoded mock workflow visualization
+// ("Invoice Created → Amount > Threshold → Oracle™ Classify → Create Journal
+// Entry → Emit Webhook"). Removed during mock-data audit (Task 7). The canvas
+// now renders an empty state until a real workflow is loaded from the API.
+const SAMPLE_CANVAS_NODES: { type: 'Trigger' | 'Condition' | 'AI Node' | 'Action' | 'Webhook'; name: string; desc: string; icon: string; accent: Accent }[] = [];
 
 // ─── KPI tile helper ──────────────────────────────────────────────────────────
 function KpiTile({

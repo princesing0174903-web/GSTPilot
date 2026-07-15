@@ -216,7 +216,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   dashboard: MissionControlPage,
   returns: ReturnsPage,
   reconcile: ReconciliationPage,
-  invoices: GSTpilotInvoicesView,
+  invoices: InvoiceWorkspacePage,
   vendors: GSTpilotVendorsView,
   expenses: GSTpilotExpensesView,
   clients: ClientRegistryPage,

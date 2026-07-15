@@ -105,68 +105,11 @@ interface IndustryCluster {
   topCompanies: string[]
 }
 
-const INDUSTRY_CLUSTERS: IndustryCluster[] = [
-  {
-    id: 'mfg', name: 'Manufacturing', shortName: 'MFG',
-    cx: 130, cy: 120, color: '#10b981', fill: 'rgba(16, 185, 129, 0.08)',
-    companies: 84520, revenue: 1845000, growth: 12.4, health: 82, avgRevenue: 21.8, connectedIndustries: 8,
-    topCompanies: ['Tata Steel Ltd', 'JSW Steel', 'Larsen & Toubro'],
-  },
-  {
-    id: 'it', name: 'IT / ITeS', shortName: 'IT',
-    cx: 560, cy: 95, color: '#14b8a6', fill: 'rgba(20, 184, 166, 0.08)',
-    companies: 42180, revenue: 1450000, growth: 18.7, health: 91, avgRevenue: 34.4, connectedIndustries: 9,
-    topCompanies: ['TCS Ltd', 'Infosys', 'Wipro Technologies'],
-  },
-  {
-    id: 'pharma', name: 'Pharma', shortName: 'PHARMA',
-    cx: 360, cy: 75, color: '#059669', fill: 'rgba(5, 150, 105, 0.08)',
-    companies: 28940, revenue: 680000, growth: 14.2, health: 88, avgRevenue: 23.5, connectedIndustries: 6,
-    topCompanies: ['Sun Pharma', 'Dr Reddy\'s Labs', 'Cipla Ltd'],
-  },
-  {
-    id: 'auto', name: 'Automobile', shortName: 'AUTO',
-    cx: 230, cy: 270, color: '#0d9488', fill: 'rgba(13, 148, 136, 0.08)',
-    companies: 18650, revenue: 920000, growth: 8.9, health: 74, avgRevenue: 49.3, connectedIndustries: 7,
-    topCompanies: ['Maruti Suzuki', 'Tata Motors', 'Mahindra & Mahindra'],
-  },
-  {
-    id: 'textile', name: 'Textiles', shortName: 'TEXT',
-    cx: 470, cy: 230, color: '#16a34a', fill: 'rgba(22, 163, 74, 0.08)',
-    companies: 64210, revenue: 380000, growth: 9.6, health: 78, avgRevenue: 5.9, connectedIndustries: 6,
-    topCompanies: ['Reliance Industries', 'Arvind Ltd', 'Welspun India'],
-  },
-  {
-    id: 'agri', name: 'Agriculture', shortName: 'AGRI',
-    cx: 110, cy: 380, color: '#65a30d', fill: 'rgba(101, 163, 13, 0.08)',
-    companies: 124800, revenue: 540000, growth: 6.8, health: 65, avgRevenue: 4.3, connectedIndustries: 5,
-    topCompanies: ['ITC Agri', 'UPL Ltd', 'Coromandel Intl'],
-  },
-  {
-    id: 'bank', name: 'Banking', shortName: 'BANK',
-    cx: 590, cy: 385, color: '#0f766e', fill: 'rgba(15, 118, 110, 0.08)',
-    companies: 12450, revenue: 2150000, growth: 11.2, health: 86, avgRevenue: 172.7, connectedIndustries: 10,
-    topCompanies: ['HDFC Bank', 'State Bank of India', 'ICICI Bank'],
-  },
-  {
-    id: 'retail', name: 'Retail', shortName: 'RETAIL',
-    cx: 360, cy: 175, color: '#22c55e', fill: 'rgba(34, 197, 94, 0.08)',
-    companies: 98740, revenue: 410000, growth: 15.3, health: 72, avgRevenue: 4.2, connectedIndustries: 7,
-    topCompanies: ['Reliance Retail', 'DMart', 'Trent Ltd'],
-  },
-  {
-    id: 'const', name: 'Construction', shortName: 'CONST',
-    cx: 80, cy: 255, color: '#15803d', fill: 'rgba(21, 128, 61, 0.08)',
-    companies: 35680, revenue: 620000, growth: 7.4, health: 68, avgRevenue: 17.4, connectedIndustries: 6,
-    topCompanies: ['L&T Construction', 'UltraTech', 'Shapoorji Pallonji'],
-  },
-  {
-    id: 'telecom', name: 'Telecom', shortName: 'TEL',
-    cx: 620, cy: 250, color: '#34d399', fill: 'rgba(52, 211, 153, 0.08)',
-    companies: 8920, revenue: 720000, growth: 5.8, health: 80, avgRevenue: 80.7, connectedIndustries: 8,
-    topCompanies: ['Reliance Jio', 'Bharti Airtel', 'Vodafone Idea'],
-  },
-]
+// INDUSTRY_CLUSTERS — previously 10 hardcoded mock industry clusters (MFG, IT,
+// PHARMA, AUTO, TEXT, AGRI, BANK, RETAIL, CONST, TELECOM) with fabricated
+// companies/revenue/growth/health metrics and topCompanies lists. Removed
+// during mock-data audit (Task 7). Empty until a real economic-graph API is wired.
+const INDUSTRY_CLUSTERS: IndustryCluster[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DATA — ~40 COMPANY NODES (with cluster offsets, Indian names)
@@ -503,18 +446,11 @@ const SUPPLY_CHAINS: SupplyChain[] = [
 
 const INDUSTRY_IDS: IndustryId[] = ['mfg', 'it', 'pharma', 'auto', 'textile', 'agri', 'bank', 'retail', 'const', 'telecom']
 
-const INDUSTRY_MATRIX: Record<IndustryId, Record<IndustryId, number>> = {
-  mfg:    { mfg: 100, it: 62, pharma: 38, auto: 84, textile: 48, agri: 28, bank: 78, retail: 32, const: 76, telecom: 22 },
-  it:     { mfg: 62, it: 100, pharma: 56, auto: 72, textile: 38, agri: 44, bank: 88, retail: 78, const: 48, telecom: 92 },
-  pharma: { mfg: 38, it: 56, pharma: 100, auto: 18, textile: 12, agri: 42, bank: 64, retail: 58, const: 16, telecom: 28 },
-  auto:   { mfg: 84, it: 72, pharma: 18, auto: 100, textile: 24, agri: 14, bank: 72, retail: 68, const: 38, telecom: 52 },
-  textile:{ mfg: 48, it: 38, pharma: 12, auto: 24, textile: 100, agri: 64, bank: 56, retail: 82, const: 22, telecom: 18 },
-  agri:   { mfg: 28, it: 44, pharma: 42, auto: 14, textile: 64, agri: 100, bank: 68, retail: 76, const: 18, telecom: 22 },
-  bank:   { mfg: 78, it: 88, pharma: 64, auto: 72, textile: 56, agri: 68, bank: 100, retail: 82, const: 74, telecom: 86 },
-  retail: { mfg: 32, it: 78, pharma: 58, auto: 68, textile: 82, agri: 76, bank: 82, retail: 100, const: 28, telecom: 64 },
-  const:  { mfg: 76, it: 48, pharma: 16, auto: 38, textile: 22, agri: 18, bank: 74, retail: 28, const: 100, telecom: 32 },
-  telecom:{ mfg: 22, it: 92, pharma: 28, auto: 52, textile: 18, agri: 22, bank: 86, retail: 64, const: 32, telecom: 100 },
-}
+// INDUSTRY_MATRIX — previously a 10×10 hardcoded mock matrix of inter-industry
+// connection strengths (0-100) between MFG/IT/PHARMA/AUTO/TEXTILE/AGRI/BANK/
+// RETAIL/CONST/TELECOM. Removed during mock-data audit (Task 7). Empty object
+// until a real economic-graph API is wired; render code falls back to 0.
+const INDUSTRY_MATRIX: Record<IndustryId, Record<IndustryId, number>> = {} as Record<IndustryId, Record<IndustryId, number>>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DATA — EMERGING INDUSTRIES
@@ -669,7 +605,8 @@ function LiveEconomicGraph() {
   const totalRelationships = useCountUp(1000000000)
 
   const nodes = useMemo(() => COMPANY_NODES.map(n => {
-    const cluster = INDUSTRY_CLUSTERS.find(c => c.id === n.cluster)!
+    const cluster = INDUSTRY_CLUSTERS.find(c => c.id === n.cluster)
+    if (!cluster) return { ...n, x: 0, y: 0, clusterColor: '#94a3b8' }
     return { ...n, x: cluster.cx + n.dx, y: cluster.cy + n.dy, clusterColor: cluster.color }
   }), [])
 
@@ -1476,72 +1413,80 @@ function IndustryNetworkIntelligence() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6 pt-0">
-            <div className="w-full overflow-x-auto">
-              <svg viewBox="0 0 540 460" className="w-full h-auto" style={{ minWidth: 480 }}>
-                {/* Column headers */}
-                {INDUSTRY_IDS.map((id, i) => {
-                  const ind = INDUSTRY_CLUSTERS.find(c => c.id === id)!
-                  return (
-                    <text
-                      key={`col-${id}`}
-                      x={120 + i * 40 + 20}
-                      y={86}
-                      textAnchor="end"
-                      transform={`rotate(-45, ${120 + i * 40 + 20}, 86)`}
-                      className="fill-slate-600 font-medium"
-                      style={{ fontSize: 9 }}
-                    >
-                      {ind.shortName}
-                    </text>
-                  )
-                })}
-                {/* Row headers + cells */}
-                {INDUSTRY_IDS.map((rowId, ri) => {
-                  const rowInd = INDUSTRY_CLUSTERS.find(c => c.id === rowId)!
-                  return (
-                    <g key={`row-${rowId}`}>
-                      <text x={114} y={100 + ri * 32 + 18} textAnchor="end" className="fill-slate-700 font-medium" style={{ fontSize: 10 }}>
-                        {rowInd.shortName}
+            {INDUSTRY_CLUSTERS.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-12 text-center">
+                No industry relationship data yet.
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto">
+                <svg viewBox="0 0 540 460" className="w-full h-auto" style={{ minWidth: 480 }}>
+                  {/* Column headers */}
+                  {INDUSTRY_IDS.map((id, i) => {
+                    const ind = INDUSTRY_CLUSTERS.find(c => c.id === id)
+                    if (!ind) return null
+                    return (
+                      <text
+                        key={`col-${id}`}
+                        x={120 + i * 40 + 20}
+                        y={86}
+                        textAnchor="end"
+                        transform={`rotate(-45, ${120 + i * 40 + 20}, 86)`}
+                        className="fill-slate-600 font-medium"
+                        style={{ fontSize: 9 }}
+                      >
+                        {ind.shortName}
                       </text>
-                      {INDUSTRY_IDS.map((colId, ci) => {
-                        const val = INDUSTRY_MATRIX[rowId][colId]
-                        const opacity = val / 100
-                        const isDiagonal = rowId === colId
-                        const color = isDiagonal ? '#64748b' : '#10b981'
-                        return (
-                          <g key={`cell-${rowId}-${colId}`}>
-                            <motion.rect
-                              x={120 + ci * 40}
-                              y={100 + ri * 32}
-                              width={36}
-                              height={28}
-                              rx={3}
-                              fill={color}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: isDiagonal ? 0.15 : 0.15 + opacity * 0.85 }}
-                              transition={{ delay: (ri * 10 + ci) * 0.012, duration: 0.4 }}
-                            />
-                            {!isDiagonal && val > 0 && (
-                              <text x={120 + ci * 40 + 18} y={100 + ri * 32 + 18} textAnchor="middle" className="fill-white font-medium" style={{ fontSize: 9 }}>
-                                {val}
-                              </text>
-                            )}
-                          </g>
-                        )
-                      })}
-                    </g>
-                  )
-                })}
-                {/* Legend */}
-                <g transform="translate(120, 432)">
-                  <text x={0} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Weak</text>
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <rect key={i} x={32 + i * 14} y={-10} width={14} height={10} fill="#10b981" opacity={0.15 + (i / 10) * 0.85} />
-                  ))}
-                  <text x={184} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Strong</text>
-                </g>
-              </svg>
-            </div>
+                    )
+                  })}
+                  {/* Row headers + cells */}
+                  {INDUSTRY_IDS.map((rowId, ri) => {
+                    const rowInd = INDUSTRY_CLUSTERS.find(c => c.id === rowId)
+                    if (!rowInd) return null
+                    return (
+                      <g key={`row-${rowId}`}>
+                        <text x={114} y={100 + ri * 32 + 18} textAnchor="end" className="fill-slate-700 font-medium" style={{ fontSize: 10 }}>
+                          {rowInd.shortName}
+                        </text>
+                        {INDUSTRY_IDS.map((colId, ci) => {
+                          const val = INDUSTRY_MATRIX[rowId]?.[colId] ?? 0
+                          const opacity = val / 100
+                          const isDiagonal = rowId === colId
+                          const color = isDiagonal ? '#64748b' : '#10b981'
+                          return (
+                            <g key={`cell-${rowId}-${colId}`}>
+                              <motion.rect
+                                x={120 + ci * 40}
+                                y={100 + ri * 32}
+                                width={36}
+                                height={28}
+                                rx={3}
+                                fill={color}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: isDiagonal ? 0.15 : 0.15 + opacity * 0.85 }}
+                                transition={{ delay: (ri * 10 + ci) * 0.012, duration: 0.4 }}
+                              />
+                              {!isDiagonal && val > 0 && (
+                                <text x={120 + ci * 40 + 18} y={100 + ri * 32 + 18} textAnchor="middle" className="fill-white font-medium" style={{ fontSize: 9 }}>
+                                  {val}
+                                </text>
+                              )}
+                            </g>
+                          )
+                        })}
+                      </g>
+                    )
+                  })}
+                  {/* Legend */}
+                  <g transform="translate(120, 432)">
+                    <text x={0} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Weak</text>
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <rect key={i} x={32 + i * 14} y={-10} width={14} height={10} fill="#10b981" opacity={0.15 + (i / 10) * 0.85} />
+                    ))}
+                    <text x={184} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Strong</text>
+                  </g>
+                </svg>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>

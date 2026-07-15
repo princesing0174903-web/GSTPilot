@@ -199,31 +199,19 @@ interface TickerEntry {
 // DEMO DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TICKER_ENTRIES: TickerEntry[] = [
-  { seller: 'TCS', amount: 4500000, rate: 98.2, buyer: 'Bajaj Finance' },
-  { seller: 'Reliance', amount: 23000000, rate: 97.8, buyer: 'HDFC Bank' },
-  { seller: 'Infosys', amount: 8900000, rate: 98.5, buyer: 'Kotak Mahindra' },
-  { seller: 'Tata Steel', amount: 12300000, rate: 96.4, buyer: 'Aditya Birla Finance' },
-  { seller: 'L&T', amount: 15600000, rate: 97.1, buyer: 'ICICI Bank' },
-  { seller: 'Wipro', amount: 5600000, rate: 98.7, buyer: 'Axis Finance' },
-  { seller: 'HCL Tech', amount: 7800000, rate: 98.0, buyer: 'SBI Factors' },
-  { seller: 'Bharti Airtel', amount: 18900000, rate: 96.9, buyer: 'Cholamandalam' },
-  { seller: 'Mahindra', amount: 9400000, rate: 97.4, buyer: 'Tata Capital' },
-  { seller: 'Adani Power', amount: 31200000, rate: 95.8, buyer: 'Yes Bank' },
-  { seller: 'Bajaj Auto', amount: 6700000, rate: 98.3, buyer: 'L&T Finance' },
-  { seller: 'Maruti Suzuki', amount: 14500000, rate: 97.6, buyer: 'IndusInd Bank' },
-];
+// TICKER_ENTRIES — previously 12 hardcoded mock ticker entries (TCS, Reliance,
+// Infosys, Tata Steel, L&T, Wipro, HCL Tech, Bharti Airtel, Mahindra, Adani
+// Power, Bajaj Auto, Maruti Suzuki) with fabricated amounts and buyers.
+// Removed during mock-data audit (Task 7). Empty until a real invoice-exchange
+// ticker API is wired.
+const TICKER_ENTRIES: TickerEntry[] = [];
 
-const TOP_BUYERS = [
-  { name: 'Bajaj Finance', initials: 'BF', color: 'bg-emerald-500', volume: 234500000, trades: 234, type: 'NBFC' },
-  { name: 'HDFC Bank', initials: 'HB', color: 'bg-teal-500', volume: 198700000, trades: 187, type: 'Bank' },
-  { name: 'ICICI Bank', initials: 'IC', color: 'bg-amber-500', volume: 176200000, trades: 165, type: 'Bank' },
-  { name: 'Kotak Mahindra', initials: 'KM', color: 'bg-cyan-500', volume: 154300000, trades: 142, type: 'Bank' },
-  { name: 'Aditya Birla Finance', initials: 'AB', color: 'bg-emerald-600', volume: 134800000, trades: 128, type: 'NBFC' },
-  { name: 'Tata Capital', initials: 'TC', color: 'bg-teal-600', volume: 118900000, trades: 112, type: 'NBFC' },
-  { name: 'Axis Finance', initials: 'AF', color: 'bg-amber-600', volume: 96700000, trades: 98, type: 'NBFC' },
-  { name: 'SBI Factors', initials: 'SF', color: 'bg-slate-500', volume: 84500000, trades: 87, type: 'Bank' },
-];
+// TOP_BUYERS — previously 8 hardcoded mock buyer entries (Bajaj Finance, HDFC
+// Bank, ICICI Bank, Kotak Mahindra, Aditya Birla Finance, Tata Capital, Axis
+// Finance, SBI Factors) with fabricated volumes and trade counts. Removed
+// during mock-data audit (Task 7). Empty until a real invoice-exchange
+// top-buyers API is wired.
+const TOP_BUYERS: { name: string; initials: string; color: string; volume: number; trades: number; type: string }[] = [];
 
 const TOP_SELLERS: { name: string; initials: string; color: string; sold: number; count: number }[] = [
   // TODO: wire to real API
@@ -277,21 +265,18 @@ const STATE_HEATMAP: { name: string; code: string; volume: number }[] = [
   // TODO: wire to real API
 ];
 
-const TOP_PERFORMING_INVOICES = [
-  { invoiceNo: 'INV-TCS-2026-0451', seller: 'TCS', buyer: 'Reliance Retail', amount: 4500000, discountSaved: 144000, discountPct: 3.2 },
-  { invoiceNo: 'INF-RL-2026-0982', seller: 'Infosys', buyer: 'HDFC Bank', amount: 8900000, discountSaved: 249200, discountPct: 2.8 },
-  { invoiceNo: 'TS-STM-2026-1156', seller: 'Tata Steel', buyer: 'L&T Construction', amount: 12300000, discountSaved: 553500, discountPct: 4.5 },
-  { invoiceNo: 'LN-IND-2026-0734', seller: 'L&T', buyer: 'Adani Power', amount: 15600000, discountSaved: 639600, discountPct: 4.1 },
-  { invoiceNo: 'FM-HUL-2026-0623', seller: 'HUL', buyer: 'Big Bazaar', amount: 5600000, discountSaved: 145600, discountPct: 2.6 },
-  { invoiceNo: 'EN-AP-2026-0891', seller: 'Adani Power', buyer: 'Tata Power', amount: 18900000, discountSaved: 1039500, discountPct: 5.5 },
-];
+// TOP_PERFORMING_INVOICES — previously 6 hardcoded mock invoice entries
+// (TCS-Reliance Retail, Infosys-HDFC, Tata Steel-L&T, L&T-Adani Power,
+// HUL-Big Bazaar, Adani Power-Tata Power) with fabricated amounts and
+// discount savings. Removed during mock-data audit (Task 7). Empty until a
+// real invoice-exchange top-performing API is wired.
+const TOP_PERFORMING_INVOICES: { invoiceNo: string; seller: string; buyer: string; amount: number; discountSaved: number; discountPct: number }[] = [];
 
-const RISK_DISTRIBUTION = [
-  { rating: 'AAA', count: 1247, volume: 456700000, color: '#10b981', bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  { rating: 'AA', count: 2103, volume: 612300000, color: '#14b8a6', bg: 'bg-teal-100', text: 'text-teal-700' },
-  { rating: 'A', count: 3489, volume: 734100000, color: '#f59e0b', bg: 'bg-amber-100', text: 'text-amber-700' },
-  { rating: 'BBB', count: 5611, volume: 891200000, color: '#64748b', bg: 'bg-slate-100', text: 'text-slate-700' },
-];
+// RISK_DISTRIBUTION — previously 4 hardcoded mock credit-rating distribution
+// entries (AAA/AA/A/BBB with fabricated counts and volumes). Removed during
+// mock-data audit (Task 7). Empty until a real invoice-exchange risk-distribution
+// API is wired.
+const RISK_DISTRIBUTION: { rating: string; count: number; volume: number; color: string; bg: string; text: string }[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SVG CHARTS

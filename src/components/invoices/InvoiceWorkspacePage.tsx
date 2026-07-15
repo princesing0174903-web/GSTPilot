@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Card,
@@ -15,6 +15,12 @@ import {
 import {
   Input,
 } from '@/components/ui/input';
+import {
+  Label,
+} from '@/components/ui/label';
+import {
+  Textarea,
+} from '@/components/ui/textarea';
 import {
   Skeleton,
 } from '@/components/ui/skeleton';
@@ -37,31 +43,31 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  CloudUpload,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   FileText,
   CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  ShieldCheck,
-  FileUp,
-  Upload,
   AlertCircle,
   ThumbsUp,
   Inbox,
   Loader2,
   Search,
   Trash2,
+  Plus,
+  X,
   FileSpreadsheet,
   FileJson,
   TrendingUp,
   Clock,
   ShieldAlert,
+  CalendarPlus,
 } from 'lucide-react';
-import type {
-  FirestoreInvoice,
-  FirestoreClient,
-  FirestoreDocument,
-} from '@/lib/firestore-schema';
 import type {
   InvoiceStatus,
   RiskLevel,
@@ -77,22 +83,16 @@ import {
   formatCurrency,
   formatNumber,
 } from '@/lib/gst-utils';
-import {
-  useFireInvoices,
-  useFireClients,
-  useFireDocuments,
-} from '@/hooks/use-firestore';
-import {
-  createInvoice,
-  approveInvoice,
-  deleteInvoice,
-} from '@/lib/firestore-service';
-import { useDocuments } from '@/hooks/useDocuments';
-import { validateFile } from '@/lib/firebase/storage-service';
 import { toast } from 'sonner';
-import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { useApp } from '@/contexts/AppContext';
+import { useOrg } from '@/contexts/OrgContext';
+import {
+  useInvoicesApi,
+  type ApiInvoice,
+  type CreateInvoicePayload,
+} from '@/hooks/useInvoicesApi';
+import { useClientsApi } from '@/hooks/useClientsApi';
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -123,6 +123,17 @@ const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> 
   cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
 };
 
+// The Prisma `Invoice.status` column is a free-form String and the Invoice
+// Cloud™ API writes `'issued'` for new invoices. Map that onto the badge set
+// so the table doesn't render a blank status pill.
+const STATUS_BADGE_EXTENDED: Record<string, { label: string; className: string }> = {
+  ...STATUS_BADGE,
+  issued: { label: 'Issued', className: 'bg-sky-50 text-sky-700 border-sky-200' },
+  paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  partially_paid: { label: 'Partial', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  overdue: { label: 'Overdue', className: 'bg-red-50 text-red-700 border-red-200' },
+};
+
 const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
   low: { label: 'Low', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   medium: { label: 'Medium', className: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -130,53 +141,59 @@ const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
   critical: { label: 'Critical', className: 'bg-red-50 text-red-700 border-red-200' },
 };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Create Invoice dialog helpers ────────────────────────────────────────────
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+interface LineItemInput {
+  description: string;
+  hsnCode: string;
+  quantity: string;
+  unitPrice: string;
+  gstRate: string;
 }
 
-function getFileIcon(fileName: string) {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
-  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
-  return <FileText className="size-4 text-slate-500" />;
-}
+const EMPTY_LINE_ITEM: LineItemInput = {
+  description: '',
+  hsnCode: '',
+  quantity: '1',
+  unitPrice: '0',
+  gstRate: '18',
+};
+
+const GST_RATES = [0, 5, 12, 18, 28];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InvoiceWorkspacePage() {
-  // ── App navigation ──
+  // ── App navigation + org context ──
   const { setCurrentView } = useApp();
+  const { organization } = useOrg();
 
-  // ── Firestore data hooks ──
-  const { data: invoices, loading: invoicesLoading, error: invoicesError } = useFireInvoices();
-  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
-  const { data: documents, loading: documentsLoading } = useFireDocuments();
+  // ── Prisma-backed data hooks ──
+  const {
+    invoices,
+    loading: invoicesLoading,
+    error: invoicesError,
+    refetch: refetchInvoices,
+    createInvoice,
+    approveInvoice,
+    deleteInvoice,
+    saving,
+  } = useInvoicesApi();
+
+  const {
+    clients,
+    loading: clientsLoading,
+    error: clientsError,
+  } = useClientsApi();
 
   // ── Client map for name lookups ──
   const clientMap = useMemo(() => {
-    const map = new Map<string, FirestoreClient & { id: string }>();
+    const map = new Map<string, { id: string; tradeName: string; gstin: string }>();
     for (const c of clients) {
-      map.set(c.clientId, c);
+      map.set(c.id, { id: c.id, tradeName: c.tradeName, gstin: c.gstin });
     }
     return map;
   }, [clients]);
-
-  // ── Upload State ──
-  // useDocuments() drives real uploads to Firebase Storage (org-isolated,
-  // category='invoices') and surfaces live per-file progress through the
-  // `uploads` array. We project that array into the legacy {id,name,progress}
-  // shape so the existing progress UI stays untouched.
-  const { uploads, uploadMany, isUploading } = useDocuments('invoices');
-  const uploadingFiles = useMemo(
-    () => uploads.map(u => ({ id: u.id, name: u.fileName, progress: Math.round(u.progress) })),
-    [uploads],
-  );
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Filter State ──
   const [clientFilter, setClientFilter] = useState<string>('all');
@@ -189,16 +206,33 @@ export default function InvoiceWorkspacePage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // ── Create Invoice dialog state ──
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formClient, setFormClient] = useState<string>('');
+  const [formInvoiceDate, setFormInvoiceDate] = useState<string>(
+    new Date().toISOString().split('T')[0],
+  );
+  const [formDueDate, setFormDueDate] = useState<string>('');
+  const [formNotes, setFormNotes] = useState<string>('');
+  const [lineItems, setLineItems] = useState<LineItemInput[]>([{ ...EMPTY_LINE_ITEM }]);
+  const [submitting, setSubmitting] = useState(false);
+
   // ── Loading ──
   const loading = invoicesLoading || clientsLoading;
 
   // ── Summary Metrics ──
   const summary = useMemo(() => {
     const total = invoices.length;
-    const approved = invoices.filter(i => i.status === 'approved').length;
-    const pending = invoices.filter(i => i.status === 'draft').length;
-    const taxVolume = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
-    const riskItems = invoices.filter(i => i.riskLevel === 'high' || i.riskLevel === 'critical').length;
+    const approved = invoices.filter(
+      i => i.status === 'approved' || i.status === 'filed',
+    ).length;
+    const pending = invoices.filter(
+      i => i.status === 'draft' || i.status === 'issued',
+    ).length;
+    const taxVolume = invoices.reduce((sum, i) => sum + (i.totalAmount ?? 0), 0);
+    const riskItems = invoices.filter(
+      i => i.riskLevel === 'high' || i.riskLevel === 'critical',
+    ).length;
     return { total, approved, pending, taxVolume, riskItems };
   }, [invoices]);
 
@@ -212,7 +246,7 @@ export default function InvoiceWorkspacePage() {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const clientName = clientMap.get(inv.clientId)?.tradeName ?? '';
-        const matchesNumber = inv.invoiceNumber.toLowerCase().includes(q);
+        const matchesNumber = (inv.invoiceNumber ?? '').toLowerCase().includes(q);
         const matchesBuyer = (inv.buyerName ?? '').toLowerCase().includes(q);
         const matchesClient = clientName.toLowerCase().includes(q);
         if (!matchesNumber && !matchesBuyer && !matchesClient) return false;
@@ -221,88 +255,127 @@ export default function InvoiceWorkspacePage() {
     });
   }, [invoices, clientFilter, statusFilter, riskFilter, typeFilter, searchQuery, clientMap]);
 
-  // ── Upload Handlers ──
-  // Pre-flight each file with the shared `validateFile` helper (100 MB cap +
-  // supported extensions), then delegate to useDocuments().uploadMany() which
-  // uploads to Firebase Storage (organizations/{orgId}/invoices/...) and writes
-  // a Firestore `documents` metadata row. Live progress is tracked in the
-  // `uploads` array and surfaced through `uploadingFiles` above.
-  const handleUpload = useCallback(async (files: File[]) => {
-    const valid: File[] = [];
-    for (const file of files) {
-      const err = validateFile(file);
-      if (err) {
-        toast.error(`${file.name}: ${err}`);
-        continue;
-      }
-      valid.push(file);
-    }
-    if (valid.length === 0) return;
+  // ── Line item helpers ──
+  const addLineItem = useCallback(() => {
+    setLineItems(prev => [...prev, { ...EMPTY_LINE_ITEM }]);
+  }, []);
 
+  const removeLineItem = useCallback((idx: number) => {
+    setLineItems(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const updateLineItem = useCallback((idx: number, field: keyof LineItemInput, value: string) => {
+    setLineItems(prev =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)),
+    );
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setFormClient('');
+    setFormInvoiceDate(new Date().toISOString().split('T')[0]);
+    setFormDueDate('');
+    setFormNotes('');
+    setLineItems([{ ...EMPTY_LINE_ITEM }]);
+  }, []);
+
+  const openCreateDialog = useCallback(() => {
+    resetForm();
+    setCreateOpen(true);
+  }, [resetForm]);
+
+  // ── Submit Create Invoice ──
+  const handleSubmitCreate = useCallback(async () => {
+    // ── Validate ──
+    if (!formClient) {
+      toast.error('Please select a client for this invoice.');
+      return;
+    }
+    const selectedClient = clientMap.get(formClient);
+    if (!selectedClient) {
+      toast.error('Selected client could not be found. Please refresh and try again.');
+      return;
+    }
+
+    // Build clean line items, skipping fully-blank rows.
+    const cleanedItems = lineItems
+      .map(it => ({
+        description: it.description.trim(),
+        hsnCode: it.hsnCode.trim() || undefined,
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+        gstRate: Number(it.gstRate),
+      }))
+      .filter(it => it.description && Number.isFinite(it.quantity) && Number.isFinite(it.unitPrice));
+
+    if (cleanedItems.length === 0) {
+      toast.error('Add at least one line item with a description, quantity, and unit price.');
+      return;
+    }
+
+    const payload: CreateInvoicePayload = {
+      cloud: true,
+      clientId: formClient,
+      customerName: selectedClient.tradeName,
+      buyerGstin: selectedClient.gstin,
+      sellerGstin: organization?.gstin ?? undefined,
+      date: formInvoiceDate || undefined,
+      dueDate: formDueDate || undefined,
+      items: cleanedItems,
+      notes: formNotes.trim() || undefined,
+    };
+
+    setSubmitting(true);
     try {
-      const uploaded = await uploadMany(valid, { category: 'invoices' });
-      const failed = valid.length - uploaded.length;
-      if (uploaded.length > 0) {
-        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded to Firebase Storage`);
-      }
-      if (failed > 0) {
-        toast.error(`${failed} file${failed !== 1 ? 's' : ''} failed to upload`);
+      const created = await createInvoice(payload);
+      if (created) {
+        toast.success(`Invoice ${created.invoiceNumber} created`);
+        setCreateOpen(false);
+        resetForm();
+      } else {
+        toast.error('Unable to create this invoice right now. Please try again.');
       }
     } catch (err) {
-      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('[InvoiceWorkspacePage] create failed:', err);
+      toast.error('Unable to create this invoice right now. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-  }, [uploadMany]);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) handleUpload(files);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) handleUpload(files);
-    e.target.value = '';
-  };
+  }, [formClient, lineItems, clientMap, organization, formInvoiceDate, formDueDate, formNotes, createInvoice, resetForm]);
 
   // ── Invoice action handlers ──
-  const handleApprove = async (invoiceId: string, invoiceNumber: string) => {
+  const handleApprove = useCallback(async (invoiceId: string, invoiceNumber: string) => {
     setApprovingId(invoiceId);
     try {
-      await approveInvoice(invoiceId);
-      toast.success(`Invoice ${invoiceNumber} approved`);
+      const updated = await approveInvoice(invoiceId);
+      if (updated) {
+        toast.success(`Invoice ${invoiceNumber} approved`);
+      } else {
+        toast.error('Unable to approve this invoice right now. Please try again.');
+      }
     } catch (err) {
-      toast.error(`Failed to approve: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('[InvoiceWorkspacePage] approve failed:', err);
+      toast.error('Unable to approve this invoice right now. Please try again.');
     } finally {
       setApprovingId(null);
     }
-  };
+  }, [approveInvoice]);
 
-  const handleDelete = async (invoiceId: string, invoiceNumber: string) => {
+  const handleDelete = useCallback(async (invoiceId: string, invoiceNumber: string) => {
     setDeletingId(invoiceId);
     try {
-      await deleteInvoice(invoiceId);
-      toast.success(`Invoice ${invoiceNumber} deleted`);
+      const ok = await deleteInvoice(invoiceId);
+      if (ok) {
+        toast.success(`Invoice ${invoiceNumber} deleted`);
+      } else {
+        toast.error('Unable to delete this invoice. Please try again.');
+      }
     } catch (err) {
-      toast.error(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('[InvoiceWorkspacePage] delete failed:', err);
+      toast.error('Unable to delete this invoice. Please try again.');
     } finally {
       setDeletingId(null);
     }
-  };
+  }, [deleteInvoice]);
 
   // ── Loading Skeleton ──
   if (loading) {
@@ -313,7 +386,7 @@ export default function InvoiceWorkspacePage() {
             <Skeleton className="h-7 w-56" />
             <Skeleton className="h-4 w-72" />
           </div>
-          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-9 w-40" />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -330,18 +403,26 @@ export default function InvoiceWorkspacePage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle className="size-10 text-red-400 mb-4" />
-        <h3 className="text-lg font-semibold text-foreground">Failed to load data</h3>
+        <h3 className="text-lg font-semibold text-foreground">We couldn&apos;t load your invoices</h3>
         <p className="text-sm text-muted-foreground mt-1 max-w-md">
-          {invoicesError || clientsError}
+          Please check your connection and try again.
         </p>
+        <Button
+          onClick={() => {
+            refetchInvoices();
+          }}
+          className="mt-4 gap-2"
+          variant="outline"
+        >
+          <Loader2 className="size-4" />
+          Retry
+        </Button>
       </div>
     );
   }
 
   // ── Empty state when no invoices exist ──
-  // `isUploading` is true while any file is mid-upload, so we never flash the
-  // empty state at the user while their first upload is in flight.
-  if (invoices.length === 0 && !isUploading) {
+  if (invoices.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
         <div className="space-y-6 p-4 md:p-6 lg:p-8">
@@ -356,20 +437,27 @@ export default function InvoiceWorkspacePage() {
                 Invoice Workspace
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Upload, extract, and validate GST invoices
+                Create, validate, and track GST invoices
               </p>
             </div>
+            <Button
+              onClick={openCreateDialog}
+              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+            >
+              <Plus className="size-4" />
+              Create Invoice
+            </Button>
           </motion.div>
 
           <ProfessionalEmptyState
-            icon={FileUp}
+            icon={FileText}
             title="No invoices yet"
-            description="Upload your first purchase or sales document — GSTPilot will extract, validate, and match each invoice automatically."
+            description="Create your first invoice — GSTPilot will calculate the totals, apply the right GST split (CGST/SGST or IGST), and track it through approval."
             accent="emerald"
             action={{
-              label: 'Upload your first document',
-              onClick: () => fileInputRef.current?.click(),
-              icon: Upload,
+              label: 'Create your first invoice',
+              onClick: openCreateDialog,
+              icon: Plus,
             }}
             secondaryAction={{
               label: 'Add a client first',
@@ -377,13 +465,28 @@ export default function InvoiceWorkspacePage() {
             }}
           />
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
-          className="hidden"
-          onChange={handleFileSelect}
+
+        <CreateInvoiceDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          clients={clients}
+          clientsLoading={clientsLoading}
+          formClient={formClient}
+          setFormClient={setFormClient}
+          formInvoiceDate={formInvoiceDate}
+          setFormInvoiceDate={setFormInvoiceDate}
+          formDueDate={formDueDate}
+          setFormDueDate={setFormDueDate}
+          formNotes={formNotes}
+          setFormNotes={setFormNotes}
+          lineItems={lineItems}
+          addLineItem={addLineItem}
+          removeLineItem={removeLineItem}
+          updateLineItem={updateLineItem}
+          sellerGstin={organization?.gstin ?? null}
+          submitting={submitting}
+          saving={saving}
+          onSubmit={handleSubmitCreate}
         />
       </div>
     );
@@ -444,15 +547,15 @@ export default function InvoiceWorkspacePage() {
               Invoice Workspace
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {documents.length} document{documents.length !== 1 ? 's' : ''}
+              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {clients.length} client{clients.length !== 1 ? 's' : ''}
             </p>
           </div>
           <Button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={openCreateDialog}
             className="bg-emerald-600 hover:bg-emerald-700 gap-2"
           >
-            <Upload className="size-4" />
-            Upload Document
+            <Plus className="size-4" />
+            Create Invoice
           </Button>
         </motion.div>
 
@@ -482,78 +585,33 @@ export default function InvoiceWorkspacePage() {
           ))}
         </motion.div>
 
-        {/* ── Upload Area ── */}
+        {/* ── Create Invoice CTA (replaces Firebase Storage upload area) ── */}
         <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-          <Card className={`border-2 border-dashed transition-colors ${
-            isDragging ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 bg-white'
-          }`}>
+          <Card className="border-2 border-dashed border-slate-200 bg-white">
             <CardContent className="p-6">
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className="flex flex-col items-center gap-3 text-center"
+              <button
+                type="button"
+                onClick={openCreateDialog}
+                className="flex w-full flex-col items-center gap-3 text-center focus:outline-none"
               >
-                <div className="flex items-center justify-center size-12 rounded-xl bg-slate-50">
-                  <CloudUpload className="size-6 text-slate-400" />
+                <div className="flex items-center justify-center size-12 rounded-xl bg-emerald-50">
+                  <CalendarPlus className="size-6 text-emerald-600" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    Drag & drop files here, or{' '}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2"
-                    >
-                      browse
-                    </button>
+                    Create a new invoice, or{' '}
+                    <span className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2">
+                      get started
+                    </span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Supports JSON, CSV, XLSX, PDF &middot; Max 10MB per file
+                    Sequential invoice numbers are auto-generated (INV-YYYY-NNN) &middot; CGST/SGST or IGST auto-applied
                   </p>
                 </div>
-
-                {/* Uploading files indicator */}
-                <AnimatePresence>
-                  {uploadingFiles.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="w-full max-w-md mt-2 space-y-2"
-                    >
-                      {uploadingFiles.map(f => (
-                        <div key={f.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
-                          {getFileIcon(f.name)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{f.name}</p>
-                            <div className="w-full h-1.5 bg-slate-200 rounded-full mt-1">
-                              <motion.div
-                                className="h-full bg-emerald-500 rounded-full"
-                                initial={{ width: 0 }}
-                                animate={{ width: `${f.progress}%` }}
-                                transition={{ duration: 0.3 }}
-                              />
-                            </div>
-                          </div>
-                          <span className="text-xs text-muted-foreground">{f.progress}%</span>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              </button>
             </CardContent>
           </Card>
         </motion.div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
 
         {/* ── Filters ── */}
         <motion.div
@@ -578,7 +636,7 @@ export default function InvoiceWorkspacePage() {
             <SelectContent>
               <SelectItem value="all">All Clients</SelectItem>
               {clients.map(c => (
-                <SelectItem key={c.clientId} value={c.clientId}>
+                <SelectItem key={c.id} value={c.id}>
                   {c.tradeName}
                 </SelectItem>
               ))}
@@ -591,6 +649,7 @@ export default function InvoiceWorkspacePage() {
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="issued">Issued</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="filed">Filed</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -650,16 +709,23 @@ export default function InvoiceWorkspacePage() {
                     </TableHeader>
                     <TableBody>
                       <AnimatePresence>
-                        {filteredInvoices.map((inv) => {
+                        {filteredInvoices.map((inv: ApiInvoice) => {
                           const client = clientMap.get(inv.clientId);
                           const clientName = client?.tradeName ?? inv.buyerName ?? 'Unknown';
-                          const statusCfg = STATUS_BADGE[inv.status as InvoiceStatus] ?? STATUS_BADGE.draft;
+                          const statusCfg = STATUS_BADGE_EXTENDED[inv.status] ?? STATUS_BADGE.draft;
                           const riskCfg = RISK_BADGE[inv.riskLevel as RiskLevel] ?? RISK_BADGE.low;
                           const matchCfg = MATCH_STATUS_CONFIG[inv.matchStatus as MatchStatus];
-                          const totalTax = inv.cgst + inv.sgst + inv.igst + inv.cess;
+                          const totalTax = (inv.cgst ?? 0) + (inv.sgst ?? 0) + (inv.igst ?? 0) + (inv.cess ?? 0);
                           const isApproving = approvingId === inv.id;
                           const isDeleting = deletingId === inv.id;
                           const isActionLoading = isApproving || isDeleting;
+                          // Invoice Cloud™ writes `issued`; treat issued + draft as approve-able.
+                          const canApprove = inv.status === 'draft' || inv.status === 'issued';
+                          // Allow delete for any non-filed state (mirrors prior UX).
+                          const canDelete =
+                            inv.status === 'draft' ||
+                            inv.status === 'issued' ||
+                            inv.status === 'approved';
 
                           return (
                             <motion.tr
@@ -697,13 +763,13 @@ export default function InvoiceWorkspacePage() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right text-sm">
-                                {formatCurrency(inv.taxableValue)}
+                                {formatCurrency(inv.taxableValue ?? 0)}
                               </TableCell>
                               <TableCell className="text-right text-sm">
                                 {formatCurrency(totalTax)}
                               </TableCell>
                               <TableCell className="text-right text-sm font-semibold">
-                                {formatCurrency(inv.totalAmount)}
+                                {formatCurrency(inv.totalAmount ?? 0)}
                               </TableCell>
                               <TableCell>
                                 <Badge variant="outline" className={`text-[10px] font-medium ${statusCfg.className}`}>
@@ -717,7 +783,7 @@ export default function InvoiceWorkspacePage() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1">
-                                  {inv.status === 'draft' && (
+                                  {canApprove && (
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -732,7 +798,7 @@ export default function InvoiceWorkspacePage() {
                                       )}
                                     </Button>
                                   )}
-                                  {(inv.status === 'draft' || inv.status === 'approved') && (
+                                  {canDelete && (
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -760,55 +826,351 @@ export default function InvoiceWorkspacePage() {
             </CardContent>
           </Card>
         </motion.div>
-
-        {/* ── Recent Documents ── */}
-        {documents.length > 0 && (
-          <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Recent Documents</h3>
-                <ScrollArea className="max-h-48">
-                  <div className="space-y-2">
-                    {documents.slice(0, 10).map((doc) => {
-                      const client = clientMap.get(doc.clientId);
-                      return (
-                        <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          {getFileIcon(doc.fileName)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{doc.fileName}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {client?.tradeName ?? 'Unknown'} &middot; {formatFileSize(doc.fileSize)} &middot; {doc.documentType.replace(/_/g, ' ')}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${
-                              doc.status === 'extracted'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : doc.status === 'processing'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : doc.status === 'failed'
-                                ? 'bg-red-50 text-red-700 border-red-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {doc.status}
-                          </Badge>
-                          {doc.extractedInvoiceCount > 0 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {doc.extractedInvoiceCount} invoice{doc.extractedInvoiceCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
       </div>
+
+      <CreateInvoiceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        clients={clients}
+        clientsLoading={clientsLoading}
+        formClient={formClient}
+        setFormClient={setFormClient}
+        formInvoiceDate={formInvoiceDate}
+        setFormInvoiceDate={setFormInvoiceDate}
+        formDueDate={formDueDate}
+        setFormDueDate={setFormDueDate}
+        formNotes={formNotes}
+        setFormNotes={setFormNotes}
+        lineItems={lineItems}
+        addLineItem={addLineItem}
+        removeLineItem={removeLineItem}
+        updateLineItem={updateLineItem}
+        sellerGstin={organization?.gstin ?? null}
+        submitting={submitting}
+        saving={saving}
+        onSubmit={handleSubmitCreate}
+      />
     </div>
   );
 }
+
+// ─── Create Invoice Dialog (sub-component) ────────────────────────────────────
+
+interface CreateInvoiceDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clients: Array<{ id: string; tradeName: string; gstin: string }>;
+  clientsLoading: boolean;
+  formClient: string;
+  setFormClient: (v: string) => void;
+  formInvoiceDate: string;
+  setFormInvoiceDate: (v: string) => void;
+  formDueDate: string;
+  setFormDueDate: (v: string) => void;
+  formNotes: string;
+  setFormNotes: (v: string) => void;
+  lineItems: LineItemInput[];
+  addLineItem: () => void;
+  removeLineItem: (idx: number) => void;
+  updateLineItem: (idx: number, field: keyof LineItemInput, value: string) => void;
+  sellerGstin: string | null;
+  submitting: boolean;
+  saving: boolean;
+  onSubmit: () => void;
+}
+
+function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
+  const {
+    open,
+    onOpenChange,
+    clients,
+    clientsLoading,
+    formClient,
+    setFormClient,
+    formInvoiceDate,
+    setFormInvoiceDate,
+    formDueDate,
+    setFormDueDate,
+    formNotes,
+    setFormNotes,
+    lineItems,
+    addLineItem,
+    removeLineItem,
+    updateLineItem,
+    sellerGstin,
+    submitting,
+    saving,
+    onSubmit,
+  } = props;
+
+  // Live preview totals — purely cosmetic so the user sees what they're creating.
+  const previewTotals = useMemo(() => {
+    let taxable = 0;
+    let tax = 0;
+    for (const it of lineItems) {
+      const qty = Number(it.quantity) || 0;
+      const price = Number(it.unitPrice) || 0;
+      const rate = Number(it.gstRate) || 0;
+      const line = qty * price;
+      taxable += line;
+      tax += (line * rate) / 100;
+    }
+    return {
+      taxable: Math.round(taxable * 100) / 100,
+      tax: Math.round(tax * 100) / 100,
+      total: Math.round((taxable + tax) * 100) / 100,
+    };
+  }, [lineItems]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create Invoice</DialogTitle>
+          <DialogDescription>
+            Sequential invoice number is auto-generated (INV-YYYY-NNN). GST is split
+            automatically based on seller/buyer state codes.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {/* ── Client + dates ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="inv-client">Client *</Label>
+              <Select value={formClient} onValueChange={setFormClient}>
+                <SelectTrigger id="inv-client" className="bg-white">
+                  <SelectValue placeholder={
+                    clientsLoading ? 'Loading clients…' : 'Select a client'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.length === 0 && !clientsLoading && (
+                    <SelectItem value="__none" disabled>
+                      No clients yet — add one first
+                    </SelectItem>
+                  )}
+                  {clients.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.tradeName} ({c.gstin})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {clients.length === 0 && !clientsLoading && (
+                <p className="text-xs text-amber-600">
+                  You need at least one client before you can create an invoice.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-seller-gstin">Seller GSTIN</Label>
+              <Input
+                id="inv-seller-gstin"
+                value={sellerGstin ?? ''}
+                readOnly
+                placeholder="No seller GSTIN set on your organization"
+                className="bg-slate-50 text-muted-foreground"
+              />
+              <p className="text-xs text-muted-foreground">
+                Pulled from your organization profile.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-date">Invoice Date *</Label>
+              <Input
+                id="inv-date"
+                type="date"
+                value={formInvoiceDate}
+                onChange={(e) => setFormInvoiceDate(e.target.value)}
+                className="bg-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-due">Due Date</Label>
+              <Input
+                id="inv-due"
+                type="date"
+                value={formDueDate}
+                onChange={(e) => setFormDueDate(e.target.value)}
+                className="bg-white"
+              />
+            </div>
+          </div>
+
+          {/* ── Line items ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Line Items *</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={addLineItem}
+                className="gap-1"
+              >
+                <Plus className="size-3.5" />
+                Add Item
+              </Button>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="col-span-5">Description</div>
+                <div className="col-span-2">HSN</div>
+                <div className="col-span-1 text-right">Qty</div>
+                <div className="col-span-2 text-right">Unit Price</div>
+                <div className="col-span-1 text-right">GST %</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {lineItems.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-12 gap-2 px-3 py-2 items-center"
+                  >
+                    <div className="col-span-5">
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateLineItem(idx, 'description', e.target.value)}
+                        placeholder="Item or service description"
+                        className="h-8 bg-white text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Input
+                        value={item.hsnCode}
+                        onChange={(e) => updateLineItem(idx, 'hsnCode', e.target.value)}
+                        placeholder="HSN"
+                        className="h-8 bg-white text-sm"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={item.quantity}
+                        onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
+                        className="h-8 bg-white text-sm text-right"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateLineItem(idx, 'unitPrice', e.target.value)}
+                        className="h-8 bg-white text-sm text-right"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <Select
+                        value={item.gstRate}
+                        onValueChange={(v) => updateLineItem(idx, 'gstRate', v)}
+                      >
+                        <SelectTrigger className="h-8 bg-white text-sm px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GST_RATES.map(r => (
+                            <SelectItem key={r} value={String(r)}>{r}%</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                        onClick={() => removeLineItem(idx)}
+                        disabled={lineItems.length === 1}
+                        aria-label="Remove line item"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Preview totals ── */}
+              <div className="bg-slate-50 px-3 py-2 border-t border-slate-200">
+                <div className="flex justify-end gap-6 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Taxable: </span>
+                    <span className="font-semibold">{formatCurrency(previewTotals.taxable)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tax: </span>
+                    <span className="font-semibold">{formatCurrency(previewTotals.tax)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total: </span>
+                    <span className="font-semibold text-emerald-700">{formatCurrency(previewTotals.total)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Notes ── */}
+          <div className="space-y-2">
+            <Label htmlFor="inv-notes">Notes</Label>
+            <Textarea
+              id="inv-notes"
+              value={formNotes}
+              onChange={(e) => setFormNotes(e.target.value)}
+              placeholder="Optional notes for this invoice (visible internally)"
+              rows={3}
+              className="bg-white"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting || saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={onSubmit}
+            disabled={submitting || saving || clients.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+          >
+            {(submitting || saving) && <Loader2 className="size-4 animate-spin" />}
+            Create Invoice
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Unused-but-retained helpers (kept to avoid breaking any future imports) ──
+// These were used by the old Firebase-Storage upload UI. They are kept here so
+// any external consumers that import them from this module still resolve. They
+// are not currently called from this component.
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function getFileIcon(fileName: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
+  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
+  return <FileText className="size-4 text-slate-500" />;
+}
+
+// Re-export so callers that imported the helper previously still compile.
+export { formatFileSize, getFileIcon };

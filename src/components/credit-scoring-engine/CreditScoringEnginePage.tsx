@@ -279,44 +279,21 @@ const DECLINED_FACTORS: TrendItem[] = [
   { factor: 'Receivables Aging', change: -1.4, reason: 'Two large B2B clients slipped to 60+ days bucket' },
 ];
 
-const INDUSTRY_COMPARISON: IndustryScore[] = [
-  { industry: 'Petroleum & Refineries', gstCredit: 84, collection: 75, compliance: 92, growth: 80, risk: 73, businesses: 12480 },
-  { industry: 'IT & Software Services', gstCredit: 88, collection: 82, compliance: 90, growth: 85, risk: 68, businesses: 48720 },
-  { industry: 'Pharmaceuticals', gstCredit: 86, collection: 78, compliance: 94, growth: 82, risk: 70, businesses: 22340 },
-  { industry: 'Automobile & Auto Components', gstCredit: 80, collection: 72, compliance: 86, growth: 74, risk: 76, businesses: 31250 },
-  { industry: 'Textiles & Apparel', gstCredit: 74, collection: 68, compliance: 80, growth: 70, risk: 78, businesses: 68940 },
-  { industry: 'Steel & Metals', gstCredit: 78, collection: 70, compliance: 82, growth: 72, risk: 80, businesses: 18420 },
-  { industry: 'FMCG & Consumer Goods', gstCredit: 85, collection: 80, compliance: 88, growth: 78, risk: 71, businesses: 42180 },
-  { industry: 'Construction & Infrastructure', gstCredit: 72, collection: 64, compliance: 76, growth: 76, risk: 82, businesses: 56320 },
-  { industry: 'Chemicals & Petrochemicals', gstCredit: 82, collection: 74, compliance: 88, growth: 76, risk: 74, businesses: 19480 },
-  { industry: 'Agriculture & Agri-Processing', gstCredit: 70, collection: 66, compliance: 74, growth: 68, risk: 84, businesses: 84210 },
-];
+// INDUSTRY_COMPARISON — previously 10 hardcoded mock industries with
+// fabricated gstCredit/collection/compliance/growth/risk/businesses scores.
+// Removed during mock-data audit (Task 7). Empty until a real industry-benchmark
+// API is wired.
+const INDUSTRY_COMPARISON: IndustryScore[] = [];
 
-const TOP_BUSINESSES: TopBusiness[] = [
-  { rank: 1, name: 'Tata Consultancy Services Ltd.', industry: 'IT & Software Services', overall: 871, rating: 'AAA', score: 95 },
-  { rank: 2, name: 'Hindustan Unilever Ltd.', industry: 'FMCG & Consumer Goods', overall: 865, rating: 'AAA', score: 94 },
-  { rank: 3, name: 'Infosys Ltd.', industry: 'IT & Software Services', overall: 858, rating: 'AAA', score: 93 },
-  { rank: 4, name: 'Asian Paints Ltd.', industry: 'Chemicals & Petrochemicals', overall: 849, rating: 'AAA', score: 92 },
-  { rank: 5, name: 'Reliance Industries Ltd.', industry: 'Petroleum & Refineries', overall: 794, rating: 'AAA', score: 88 },
-  { rank: 6, name: 'HDFC Bank Ltd.', industry: 'Financial Services', overall: 842, rating: 'AA', score: 91 },
-  { rank: 7, name: 'Larsen & Toubro Ltd.', industry: 'Construction & Infrastructure', overall: 836, rating: 'AA', score: 90 },
-  { rank: 8, name: 'Sun Pharmaceutical Industries', industry: 'Pharmaceuticals', overall: 831, rating: 'AA', score: 89 },
-  { rank: 9, name: 'Maruti Suzuki India Ltd.', industry: 'Automobile & Auto Components', overall: 824, rating: 'AA', score: 88 },
-  { rank: 10, name: 'Bajaj Finance Ltd.', industry: 'Financial Services', overall: 818, rating: 'AA', score: 87 },
-];
+// TOP_BUSINESSES — previously 10 hardcoded mock top-business entries (TCS, HUL,
+// Infosys, Asian Paints, Reliance, HDFC, L&T, Sun Pharma, Maruti Suzuki, Bajaj
+// Finance) with fabricated scores. Removed during mock-data audit (Task 7).
+const TOP_BUSINESSES: TopBusiness[] = [];
 
-const BOTTOM_BUSINESSES: BottomBusiness[] = [
-  { rank: 1, name: 'Ananya Textiles Pvt Ltd (Mumbai)', industry: 'Textiles & Apparel', overall: 412, rating: 'CCC', score: 28, riskFactors: ['3 late filings', 'GST notice pending', 'Negative cash flow'] },
-  { rank: 2, name: 'Bharat Steel Works (Kolkata)', industry: 'Steel & Metals', overall: 428, rating: 'CCC', score: 32, riskFactors: ['ITC mismatch 38%', 'Pending tax ₹14L', 'Vendor disputes'] },
-  { rank: 3, name: 'Coastal Traders LLP (Chennai)', industry: 'Trading', overall: 445, rating: 'CCC', score: 35, riskFactors: ['2 consecutive late filings', 'High DSO 92 days', 'Working capital stress'] },
-  { rank: 4, name: 'Deccan Agro Mart (Hyderabad)', industry: 'Agriculture & Agri-Processing', overall: 461, rating: 'CCC', score: 38, riskFactors: ['E-way bill violations', 'Audit observation', 'Declining revenue'] },
-  { rank: 5, name: 'Eastern Logistics Co (Guwahati)', industry: 'Logistics', overall: 478, rating: 'CCC', score: 41, riskFactors: ['GSTR-3B not filed', 'Penalty ₹2.4L', 'Bank guarantee invoked'] },
-  { rank: 6, name: 'Frontier Pharma Distributors (Jaipur)', industry: 'Pharmaceuticals', overall: 495, rating: 'B', score: 44, riskFactors: ['Reconciliation failure', 'Bad debt 8.2%', 'Tax short payment'] },
-  { rank: 7, name: 'Gemini Constructions (Indore)', industry: 'Construction & Infrastructure', overall: 512, rating: 'B', score: 47, riskFactors: ['5 late filings in 12m', 'High leverage', 'Client concentration 68%'] },
-  { rank: 8, name: 'Hari Om Enterprises (Lucknow)', industry: 'Trading', overall: 528, rating: 'B', score: 50, riskFactors: ['ITC reversal notice', 'Supplier disputes', 'Late fee accumulation'] },
-  { rank: 9, name: 'Indus Auto Components (Pune)', industry: 'Automobile & Auto Components', overall: 545, rating: 'B', score: 53, riskFactors: ['Cash flow volatility', 'Receivables aging 78 days', 'Currency exposure'] },
-  { rank: 10, name: 'Jamuna Chemicals Ltd (Surat)', industry: 'Chemicals & Petrochemicals', overall: 562, rating: 'BB', score: 56, riskFactors: ['Compliance gaps', 'Working capital stress', 'Sector headwinds'] },
-];
+// BOTTOM_BUSINESSES — previously 10 hardcoded mock bottom-business entries
+// (Ananya Textiles, Bharat Steel Works, Coastal Traders, etc.) with fabricated
+// scores and risk factors. Removed during mock-data audit (Task 7).
+const BOTTOM_BUSINESSES: BottomBusiness[] = [];
 
 // Migration matrix: from-row, to-column. Ratings ordered worst→best
 const MIGRATION_RATINGS = ['CCC', 'B', 'BB', 'BBB', 'A', 'AA', 'AAA'];

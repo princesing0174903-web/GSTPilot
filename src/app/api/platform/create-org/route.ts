@@ -52,7 +52,10 @@ export async function POST(request: Request) {
         seatsUsed: 1, seatsLimit: planDef.limits.seats ?? 250,
         storageUsedMb: 0, storageLimitMb: planDef.limits.storageGb * 1024,
         apiCallsMonth: 0, aiCreditsUsed: 0, aiCreditsLimit: planDef.limits.aiCreditsPerMonth,
-        healthScore: 75, churnRisk: 0.2,
+        // Health/risk scores set to 0 for freshly-created orgs — no real
+        // metrics yet. The Business Snapshot service computes these from
+        // real Prisma rows once the org has activity.
+        healthScore: 0, churnRisk: 0,
         branding: JSON.stringify({ primaryColor: '#0ea5e9', accentColor: '#14b8a6', loginHeading: name, emailFromName: name, domain: slug + '.in' }),
         settings: JSON.stringify({ isolatedTenant: true, agiInstance: plan, region: 'ap-south-1' }),
         provisioningState: 'provisioned', provisionedAt: new Date(),
@@ -97,8 +100,12 @@ export async function POST(request: Request) {
         data: {
           organizationId: org.id, name: env.name, environmentType: env.type,
           region: 'ap-south-1', version: 'v1.0.0', status: 'healthy', strategy: env.strategy,
-          replicas: env.replicas, uptimePct: 100, latencyMs: 95, errorRatePct: 0,
-          cpuUsagePct: 25, memUsageMb: 450, lastDeployAt: new Date(), lastDeployBy: 'oracle',
+          replicas: env.replicas,
+          // Real DevOps KPIs (uptime / latency / error rate / CPU / mem) come
+          // from live telemetry — never hardcoded. Stays at 0 until metrics
+          // collector is wired.
+          uptimePct: 0, latencyMs: 0, errorRatePct: 0,
+          cpuUsagePct: 0, memUsageMb: 0, lastDeployAt: null, lastDeployBy: 'oracle',
         },
       });
     }
@@ -106,11 +113,14 @@ export async function POST(request: Request) {
     // Provision customer health record
     await db.platformCustomerHealth.create({
       data: {
-        organizationId: org.id, score: 75, adoptionPct: 30,
-        featureUsage: JSON.stringify({ gst: 0.4, ai: 0.1, banking: 0, marketplace: 0 }),
-        churnRisk: 0.2, expansionScore: 0.1, openTickets: 0, satisfaction: 4.0,
+        // All health KPIs default to 0 for a brand-new org — they will be
+        // populated by real metrics (login events, sync runs, feature usage)
+        // as the org activates. Never fabricate values.
+        organizationId: org.id, score: 0, adoptionPct: 0,
+        featureUsage: JSON.stringify({ gst: 0, ai: 0, banking: 0, marketplace: 0 }),
+        churnRisk: 0, expansionScore: 0, openTickets: 0, satisfaction: 0,
         lastContactAt: new Date(),
-        recommendedActions: JSON.stringify(['Schedule onboarding call', 'Demo AI CFO', 'Configure branding']),
+        recommendedActions: JSON.stringify([]),
       },
     });
 

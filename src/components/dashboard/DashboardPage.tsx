@@ -48,6 +48,7 @@ import { useBanking } from '@/hooks/useBanking';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
 import { useCommunications } from '@/hooks/useCommunications';
 import { useOrg } from '@/contexts/OrgContext';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
 import type {
   FirestoreClient,
@@ -546,6 +547,11 @@ export default function DashboardPage() {
   const { organization } = useOrg();
   const orgId = organization?.id ?? null;
 
+  // ── Business Snapshot (Single Source of Truth) ────────────────────────
+  // Every financial metric flows through the centralized Financial Engine.
+  // Health Score, Revenue, Cash, Risk, GST — all computed once, read everywhere.
+  const { snapshot: businessSnapshot } = useBusinessSnapshot();
+
   // ── Firebase Firestore hooks ──────────────────────────────────────────
   const { metrics, loading, error } = useLiveDashboardMetrics();
   const { data: clients } = useFireClients();
@@ -684,24 +690,23 @@ export default function DashboardPage() {
     [metrics, pendingCollection],
   );
 
-  // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
-  // Prefers the GST Return Engine's real `healthScore` (computed from actual
-  // gst_transactions: output tax vs input tax, ITC utilisation, liability
-  // status) when available — it is the most accurate GST-specific signal.
+  // ── Business Health Score (Single Source of Truth: Financial Engine) ──
+  // The health score is computed ONCE by the centralized Financial Engine
+  // from real data (collection rate, profit margin, compliance, cash position,
+  // overdue control). Every page reads this same value — no duplicate calcs.
   const businessHealthScore = useMemo<number>(() => {
+    // The snapshot is the canonical source. Use it when it has live data.
+    if (businessSnapshot.hasLiveData && businessSnapshot.healthScore > 0) {
+      return businessSnapshot.healthScore;
+    }
+    // Graceful fallback for when the snapshot is still loading or empty
     if (gstHealthScore > 0) return gstHealthScore;
     if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
       return execScores.firmHealth;
     }
     if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
-    // Fallback computation — start at 100, subtract weighted penalties
-    let score = 100;
-    score -= metrics.criticalIssues * 6;
-    score -= metrics.warnings * 2;
-    score -= metrics.overdueReturns * 8;
-    score -= metrics.pendingReturns * 2;
-    return Math.max(0, Math.min(100, Math.round(score)));
-  }, [execScores, metrics, gstHealthScore]);
+    return 0;
+  }, [businessSnapshot, gstHealthScore, execScores, metrics.averageHealthScore]);
 
   // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
   const complianceScore = useMemo<number>(() => {
@@ -723,14 +728,21 @@ export default function DashboardPage() {
     return Math.round(metrics.matchPercentage);
   }, [execScores, metrics.matchPercentage]);
 
-  // ── Risk Score (0-100): inverse of risk percentage, with critical issues penalty ──
+  // ── Risk Score (Single Source of Truth: Financial Engine) ────────────
+  // Uses the centralized risk calculation (overdue exposure, cash flow risk,
+  // compliance risk, concentration risk). Inverted to "posture" (higher = safer)
+  // to match the existing UI semantics. Falls back gracefully when no data.
   const riskScore = useMemo<number>(() => {
-    // riskScore represents risk POSTURE (higher = safer), not raw risk
+    if (businessSnapshot.hasLiveData) {
+      // snapshot.risks.overallRisk is 0-100 (higher = worse). Invert for posture.
+      return Math.max(0, Math.min(100, 100 - businessSnapshot.risks.overallRisk));
+    }
+    // Fallback to the legacy heuristic when snapshot has no data
     const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
     const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
     const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
     return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
-  }, [metrics]);
+  }, [businessSnapshot, metrics]);
 
   // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
   const todaysPriorities = useMemo<
@@ -1122,16 +1134,17 @@ export default function DashboardPage() {
     );
   }
 
-  // ── KPI values ────────────────────────────────────────────────────────
-  // Revenue KPI: REAL revenue from the invoice engine — Σ grandTotal of
-  // non-draft, non-cancelled invoices (server-calculated per invoice).
+  // ── KPI values (Single Source of Truth: Business Snapshot) ───────────
+  // Revenue and Cash come from the centralized Financial Engine so every
+  // page shows the same number. Falls back to the invoice engine when the
+  // snapshot is still loading.
+  const snapshotRevenue = businessSnapshot.hasLiveData ? businessSnapshot.revenue : invoiceStats.totalRevenue;
+  const snapshotCash = businessSnapshot.hasLiveData ? businessSnapshot.bankBalance : invoiceStats.totalOutstanding;
   const revenueValue =
-    invoiceStats.totalRevenue > 0 ? `₹${formatINR(invoiceStats.totalRevenue)}` : '—';
+    snapshotRevenue > 0 ? `₹${formatINR(snapshotRevenue)}` : '—';
   const complianceValue = String(pendingComplianceCount);
-  // Cash Position KPI: REAL outstanding from the invoice engine — Σ balanceDue
-  // of non-draft, non-cancelled invoices.
   const cashValue =
-    invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
+    snapshotCash > 0 ? `₹${formatINR(snapshotCash)}` : '—';
 
   // ── KPI subtitles — augmented with REAL GST + Banking data ────────────
   // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep

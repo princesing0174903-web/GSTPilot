@@ -40,8 +40,11 @@ export async function resolveOrgId(explicit?: string): Promise<string> {
       apiCallsMonth: 0,
       aiCreditsUsed: 0,
       aiCreditsLimit: 100000,
-      healthScore: 90,
-      churnRisk: 0.1,
+      // Health/risk scores set to 0 — no real metrics available for a freshly
+      // provisioned anchor org. The platform dashboard will display the empty
+      // state until real signals (sync runs, invoices, filings) exist.
+      healthScore: 0,
+      churnRisk: 0,
       branding: JSON.stringify({}),
       settings: JSON.stringify({ isolatedTenant: true, agiInstance: 'enterprise', region: 'ap-south-1' }),
       provisioningState: 'provisioned',

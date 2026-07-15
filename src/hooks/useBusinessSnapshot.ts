@@ -1,58 +1,109 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// useBusinessSnapshot() — THE client hook for business metrics
-// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — useBusinessSnapshot() Hook
 //
-// Every client component that needs Revenue, Cash, Profit, Customers, Invoices,
-// Receivables, Payables, GST Liability, ITC, Health Score, Forecast, Risk Score,
-// Collection Rate, Working Capital, or Runway MUST use this hook.
-//
-// This is the single source of truth on the client. No component is allowed to
-// fetch business metrics from any other endpoint or compute them independently.
+// The single hook every GSTPilot component uses to read the business snapshot.
+// Auto-refreshes every 60 seconds and on window focus.
 //
 // Usage:
-//   const { snapshot, loading, error, refetch } = useBusinessSnapshot();
+//   const { snapshot, loading, error, refresh } = useBusinessSnapshot();
 //   if (loading) return <Skeleton />;
-//   return <div>Revenue: ₹{snapshot.revenue}</div>;
+//   if (error) return <ErrorState onRetry={refresh} />;
+//   if (!snapshot.hasLiveData) return <EmptyState />;
+//   return <Dashboard revenue={snapshot.revenue} />;
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useQuery } from '@tanstack/react-query';
-import { useCurrentOrgId } from '@/contexts/OrgContext';
-import type { BusinessSnapshot } from '@/lib/business/snapshot';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useOrg } from '@/contexts/OrgContext';
+import type { BusinessSnapshot } from '@/lib/financial-engine';
+import { emptySnapshot } from '@/lib/financial-engine';
+
+const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
 
 export interface UseBusinessSnapshotResult {
-  snapshot: BusinessSnapshot | null;
+  snapshot: BusinessSnapshot;
   loading: boolean;
   error: string | null;
-  refetch: () => void;
+  hasLiveData: boolean;
+  refresh: () => void;
 }
 
 export function useBusinessSnapshot(): UseBusinessSnapshotResult {
-  const orgId = useCurrentOrgId();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['business-snapshot', orgId ?? 'no-org'],
-    queryFn: async ({ signal }) => {
-      if (!orgId) return null;
+  const [snapshot, setSnapshot] = useState<BusinessSnapshot>(emptySnapshot());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
+  const fetchSnapshot = useCallback(async () => {
+    const currentOrgId = orgIdRef.current;
+    if (!currentOrgId) {
+      setSnapshot(emptySnapshot());
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    try {
       const res = await fetch(
-        `/api/business-snapshot?organizationId=${encodeURIComponent(orgId)}`,
-        { signal },
+        `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}`,
+        { cache: 'no-store' },
       );
+
       if (!res.ok) {
-        throw new Error(`Failed to load business snapshot (HTTP ${res.status})`);
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Request failed (${res.status})`);
       }
-      return (await res.json()) as BusinessSnapshot;
-    },
-    enabled: Boolean(orgId),
-    staleTime: 30 * 1000,
-    retry: 1,
-  });
+
+      const data: BusinessSnapshot = await res.json();
+      setSnapshot(data);
+      setError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load business data.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Initial fetch + refetch when org changes ──
+  useEffect(() => {
+    setLoading(true);
+    fetchSnapshot();
+  }, [orgId, refreshTick, fetchSnapshot]);
+
+  // ── Auto-refresh every 60 seconds ──
+  useEffect(() => {
+    if (!orgId) return;
+    const interval = setInterval(() => {
+      fetchSnapshot();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [orgId, fetchSnapshot]);
+
+  // ── Refresh on window focus ──
+  useEffect(() => {
+    const handleFocus = () => {
+      if (orgIdRef.current) fetchSnapshot();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchSnapshot]);
+
+  const refresh = useCallback(() => {
+    setRefreshTick((t) => t + 1);
+  }, []);
 
   return {
-    snapshot: data ?? null,
-    loading: isLoading || !orgId,
-    error: error instanceof Error ? error.message : null,
-    refetch: () => void refetch(),
+    snapshot,
+    loading,
+    error,
+    hasLiveData: snapshot.hasLiveData,
+    refresh,
   };
 }

@@ -157,13 +157,17 @@ const AI_INSIGHTS = [
   { title: 'Late fee avoidance saved ₹2,345 Crore for GSTPilot users', category: 'Savings', impact: 'high', trend: [150, 280, 420, 680, 1050, 1680, 2345] },
 ];
 
-const SECTOR_INTELLIGENCE = [
-  { sector: 'Manufacturing', dataVolume: '12,50,00,000', growth: '+18%', healthScore: 87, trend: [60, 65, 70, 72, 78, 82, 87] },
-  { sector: 'Trading', dataVolume: '9,80,00,000', growth: '+22%', healthScore: 82, trend: [55, 58, 63, 68, 74, 78, 82] },
-  { sector: 'Services', dataVolume: '8,40,00,000', growth: '+15%', healthScore: 91, trend: [70, 73, 76, 80, 84, 88, 91] },
-  { sector: 'IT', dataVolume: '6,20,00,000', growth: '+28%', healthScore: 94, trend: [65, 70, 76, 80, 85, 90, 94] },
-  { sector: 'Healthcare', dataVolume: '3,10,00,000', growth: '+12%', healthScore: 78, trend: [58, 62, 65, 68, 72, 75, 78] },
-];
+// Sector Intelligence — previously a hardcoded mock array of 5 sectors with
+// fabricated `healthScore` KPIs (87/82/91/94/78) and trend series. Removed
+// during mock-data audit (Task 7). The card now renders an empty state until
+// a real sector-intelligence API is wired.
+const SECTOR_INTELLIGENCE: Array<{
+  sector: string;
+  dataVolume: string;
+  growth: string;
+  healthScore: number;
+  trend: number[];
+}> = [];
 
 const GEO_INTELLIGENCE = [
   { state: 'Maharashtra', dataVolume: '8,50,00,000', firms: '12,34,567', growth: '+21%' },
@@ -759,33 +763,39 @@ function DataIntelligenceTab() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {SECTOR_INTELLIGENCE.map((sec, i) => (
-                <motion.div
-                  key={sec.sector}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.45 + i * 0.06 }}
-                  className="flex items-center gap-4 p-3 rounded-lg bg-slate-50/70 hover:bg-slate-100/80 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{sec.sector}</span>
-                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] hover:bg-emerald-50">
-                        <ArrowUpRight className="h-2.5 w-2.5 mr-0.5" />
-                        {sec.growth}
-                      </Badge>
+              {SECTOR_INTELLIGENCE.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  No sector intelligence data yet.
+                </div>
+              ) : (
+                SECTOR_INTELLIGENCE.map((sec, i) => (
+                  <motion.div
+                    key={sec.sector}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.45 + i * 0.06 }}
+                    className="flex items-center gap-4 p-3 rounded-lg bg-slate-50/70 hover:bg-slate-100/80 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{sec.sector}</span>
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] hover:bg-emerald-50">
+                          <ArrowUpRight className="h-2.5 w-2.5 mr-0.5" />
+                          {sec.growth}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {sec.dataVolume} data points
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {sec.dataVolume} data points
+                    <Sparkline data={sec.trend} width={80} height={26} color="#059669" />
+                    <div className="text-right shrink-0 w-16">
+                      <div className="text-lg font-bold text-emerald-700">{sec.healthScore}</div>
+                      <div className="text-[10px] text-muted-foreground">Health</div>
                     </div>
-                  </div>
-                  <Sparkline data={sec.trend} width={80} height={26} color="#059669" />
-                  <div className="text-right shrink-0 w-16">
-                    <div className="text-lg font-bold text-emerald-700">{sec.healthScore}</div>
-                    <div className="text-[10px] text-muted-foreground">Health</div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

@@ -1111,7 +1111,7 @@ export async function convertLeadToClient(leadId: string): Promise<string> {
     returnPeriod: null,
     lastFilingDate: null,
     status: 'active',
-    healthScore: 80,
+    healthScore: 0,
   });
 
   // Mark the lead as converted

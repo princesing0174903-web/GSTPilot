@@ -16,7 +16,7 @@ echo "[$(date +%H:%M:%S)] permanent watchdog started (single-instance)" >> /home
 while true; do
   if ! pgrep -f "next-server" > /dev/null 2>&1; then
     echo "[$(date +%H:%M:%S)] next-server down — starting with setsid -f..." >> /home/z/my-project/watchdog.log
-    setsid -f bash -c 'NODE_OPTIONS="--max-old-space-size=1200 --max-semi-space-size=32" node /home/z/my-project/node_modules/.bin/next dev -p 3000 --turbopack > /home/z/my-project/dev.log 2>&1'
+    setsid -f bash -c 'NODE_OPTIONS="--max-old-space-size=768 --max-semi-space-size=32" node /home/z/my-project/node_modules/.bin/next dev -p 3000 --turbopack > /home/z/my-project/dev.log 2>&1'
     sleep 12  # wait for server to be ready before checking again
   fi
   sleep 8

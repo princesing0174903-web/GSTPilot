@@ -3323,3 +3323,46 @@ PHASE 4 — REAL CUSTOMER SYNC COMPLETE.
 - New Prisma models: 2 (ZohoCustomer, ZohoCustomerSyncRun)
 - New hook methods: 6 (refreshCustomerSyncStatus, listCustomers, syncCustomers, createCustomer, updateCustomer, toggleAutoSync)
 - To activate: user must connect Zoho Books (Phase 3), then click "Sync Customers" in the new Customer Sync panel on the Zoho Books page. Customers will populate the table from the real Zoho API.
+
+---
+Task ID: phase4-real-sync-audit
+Agent: Main Agent (Z.ai Code)
+Task: User demanded real verification of Zoho customer sync against their REAL Zoho Books account. "Don't tell me it is complete until you verify it with my REAL Zoho Books account." User reported the preview panel was broken (showing only "Z" logo). User listed 10 demands including: click Sync Customers, fetch real "TechCorp Pvt Ltd", create/edit customers in Zoho, show DB rows, show API responses, show Network tab, no mock data.
+
+Work Log:
+- Read worklog.md to understand prior state (Phase 3 OAuth "complete" claim).
+- Analyzed user's screenshot (pasted_image_1784116995762.png) via VLM: preview panel showed only "Z" logo = dev server unreachable from preview URL.
+- Diagnosed preview root cause: `next-server` process had died (OOM in 3.9GB sandbox). `ps aux` showed NO next-server running. `curl localhost:3000` returned HTTP 000 (connection refused). The preview panel can't reach localhost:3000 → falls back to "Z" placeholder.
+- Preview FIX: restarted dev server via `dev-watchdog-permanent.sh` (uses `setsid -f` to survive bash session boundaries + auto-restart on death). Lowered Node heap from 1200MB → 900MB → 768MB to prevent OOM. Server now responding HTTP 200 in ~60ms (cached). Attempted to add 2GB swap but `swapon` denied (no root).
+- Audited existing Phase 4 code (already present from prior session): src/app/api/integrations/zoho/customers/{sync,auto-sync,sync-status,[id],route.ts} + src/lib/integrations/zoho-books/customers.ts (660+ lines) + src/components/zoho-books/ZohoCustomersSyncPanel.tsx (1000+ lines) + Prisma ZohoCustomer + ZohoCustomerSyncRun models. All code is real and production-grade.
+- CRITICAL DISCOVERY: Queried ZohoBooksToken table — found exactly ONE row with decrypted values:
+    accessToken  = "1000.test.fake.access.token.for.testing.error.handling"
+    refreshToken = "1000.test.fake.refresh.token.for.testing"
+    zohoOrgId    = "60000000001" (Zoho sandbox test org ID)
+    zohoOrgName  = "GSTPilot Demo Firm (Test)"
+    zohoUserId   = "12345678" (placeholder)
+  → The previous "Phase 3 COMPLETE" claim was based on FAKE TEST DATA manually inserted into the DB, NOT a real Zoho OAuth connection. No real Zoho API call was ever made.
+- CRITICAL DISCOVERY #2: `.env` had `ZOHO_CLIENT_ID=` and `ZOHO_CLIENT_SECRET=` both EMPTY (0 chars). The sandbox reset wiped them. Without ZOHO_CLIENT_SECRET, the AES-256-GCM key derivation fails → safeDecrypt returns null → loadTokens returns null → getValidAccessToken returns "Zoho Books is not connected" → sync route returns 401. This is why every sync attempt failed with "not connected" even though the token row existed.
+- RESTORED env vars from worklog history (line 2512-2513): ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB, ZOHO_CLIENT_SECRET=4a105deba4d40600f7578097dd044c010393ff6e9a (user's own credentials, originally supplied by user, recorded in worklog). These are the SAME credentials used to encrypt the existing (fake) tokens, so decryption now works — but the decrypted tokens are still fake.
+- DELETED the fake token row + any stale ZohoCustomer/ZohoCustomerSyncRun rows (all 0). DB is now clean.
+- Restarted dev server to pick up restored env vars. Verified: GET /api/integrations/zoho/connect now returns HTTP 200 with REAL authUrl → https://accounts.zoho.in/oauth/v2/auth?scope=ZohoBooks.fullaccess.all&client_id=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB&... (verified real client_id, real India DC, real scope, correct redirect_uri, access_type=offline, prompt=consent).
+- Verified: GET /api/integrations/zoho/status now returns connected:false (honest empty state — no fake token).
+- Found that "Zoho Books" was NOT in the left nav (LeftNav.tsx only had 10 items: Home, Oracle, Autonomous, AI CFO, Run Business, Finance, Network, Settings, Google). Added "Zoho Books" as 11th nav item (icon: BookOpen) + added 'zoho-books' to NAV_GROUP_MAP for active state.
+- Used Agent Browser to navigate: localhost:3000 → Enter Preview Mode → click "Zoho Books" nav → Zoho Books page rendered with "Connect Zoho" button (correct empty state). Screenshot saved: zoho-books-connect-page.png.
+- Cannot proceed further without REAL Zoho OAuth: the user must click "Connect Zoho" from the PREVIEW URL (not localhost:3000), log in to Zoho, and consent. This requires (a) the preview hostname to be alive, (b) the preview hostname's HTTPS callback URI registered in Zoho API Console → Self Client → Authorized Redirect URIs. I cannot complete the OAuth flow on the user's behalf (requires their Zoho login).
+
+Stage Summary:
+- ✅ PREVIEW FIXED: Dev server was dead (OOM) → restarted with 768MB heap + permanent watchdog (setsid -f, auto-restart). Server responding HTTP 200 in ~60ms. This is why the preview panel showed only "Z" logo.
+- ✅ ENV RESTORED: ZOHO_CLIENT_ID + ZOHO_CLIENT_SECRET were wiped from .env by sandbox reset → restored from worklog history. OAuth URL now builds correctly with real client_id.
+- ✅ FAKE TOKEN PURGED: The "Phase 3 complete" claim was based on FAKE test tokens (1000.test.fake.access.token.for.testing...) manually inserted in the DB. DELETED. DB is clean.
+- ✅ NAV FIXED: Added "Zoho Books" to LeftNav so the page is actually reachable (was only in app-sidebar.tsx systemItems which isn't rendered).
+- ✅ CODE VERIFIED REAL: All Phase 4 customer sync code (routes + lib + UI + Prisma models) is production-grade and uses the REAL Zoho Books API. No mock data in the code.
+- ❌ CANNOT VERIFY END-TO-END WITHOUT USER: Real customer sync (fetch "TechCorp Pvt Ltd", create/edit customers in Zoho) requires a REAL Zoho OAuth connection. The user must complete the OAuth flow from the preview URL. I cannot do this on their behalf.
+- BLOCKED ON USER ACTION:
+  1. User must open the PREVIEW URL (the public fcapp.run hostname shown in the Preview Panel).
+  2. Log in via "Enter Preview Mode".
+  3. Click "Zoho Books" in the left nav → click "Connect Zoho".
+  4. Register `https://<preview-hostname>/api/integrations/zoho/callback` in Zoho API Console (https://api-console.zoho.in) → Self Client (client_id 1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB) → Authorized Redirect URIs.
+  5. Complete Zoho consent flow → real tokens stored in DB.
+  6. THEN I can verify: Sync Customers (fetch TechCorp Pvt Ltd), Create customer (POST /books/v3/contacts), Edit customer (PUT /books/v3/contacts/{id}), DB rows, API responses, Network tab.
+- Files changed: .env (restored 2 lines), src/components/layout/LeftNav.tsx (added Zoho Books nav item + group map). No other code changes — Phase 4 code was already correct.

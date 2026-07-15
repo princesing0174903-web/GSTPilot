@@ -111,6 +111,8 @@ export interface ZohoConnectionStatus {
   userEmail: string | null;
   zohoUserId: string | null;
   connectedAt: string | null;
+  /** ISO timestamp of the last token update (refresh / reconnect). */
+  lastConnectedAt: string | null;
   scopes: string[];
   /** Zoho Books organization display name (multi-tenant mapping). */
   organizationName: string | null;

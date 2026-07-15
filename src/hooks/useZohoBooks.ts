@@ -24,6 +24,8 @@ export interface ZohoConnectionStatus {
   userEmail: string | null;
   zohoUserId: string | null;
   connectedAt: string | null;
+  /** ISO timestamp of the last token update (refresh / reconnect). */
+  lastConnectedAt: string | null;
   scopes: string[];
   /** Zoho Books organization display name (multi-tenant mapping). */
   organizationName: string | null;
@@ -61,6 +63,26 @@ export type ZohoSyncEntity =
 
 export type ZohoSyncMode = 'full' | 'incremental';
 export type ZohoSyncStatus = 'running' | 'completed' | 'failed' | 'partial';
+
+// ─── Test Connection types ───────────────────────────────────────────────────
+
+/** Organization detail returned by the Test Connection probe. */
+export interface ZohoTestConnectionOrganization {
+  organization_id: string;
+  name: string;
+  is_org_active: boolean | null;
+  is_default_org: boolean | null;
+  plan_name: string | null;
+  plan_type: string | null;
+  contact_name: string | null;
+  email: string | null;
+  country_name: string | null;
+  country_code: string | null;
+  currency_code: string | null;
+  currency_symbol: string | null;
+  time_zone: string | null;
+  gst_no: string | null;
+}
 
 export interface ZohoSyncStatusInfo {
   connected: boolean;
@@ -188,10 +210,10 @@ export function useZohoBooks() {
   }, [orgId, buildHeaders]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    /* eslint-disable react-hooks/set-state-in-effect */
     void refreshStatus();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSyncStatus();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [refreshStatus, refreshSyncStatus]);
 
   // Phase 2 — trigger a manual sync (POST /api/integrations/zoho/sync)
@@ -280,6 +302,38 @@ export function useZohoBooks() {
     [buildHeaders],
   );
 
+  // ─── Test Connection ───────────────────────────────────────────────────────
+  // Calls POST /api/integrations/zoho/test which probes Zoho Books with a real
+  // authenticated GET /organizations/{org_id} request. Returns a detailed,
+  // human-readable result so the UI can show "Connection Successful" or a
+  // specific error message (401 / 403 / 404 / 429 / 5xx / network).
+  const testConnection = useCallback(async (): Promise<{
+    ok: boolean;
+    httpStatus: number;
+    organization: ZohoTestConnectionOrganization | null;
+    error: string | null;
+    testedAt: string | null;
+  }> => {
+    setPending(true);
+    const res = await zfetch<{
+      ok: boolean;
+      connected: boolean;
+      httpStatus: number;
+      organization?: ZohoTestConnectionOrganization;
+      error?: string;
+      testedAt?: string;
+      needsReconnect?: boolean;
+    }>('/api/integrations/zoho/test', buildHeaders(), { method: 'POST' });
+    setPending(false);
+    return {
+      ok: res.ok,
+      httpStatus: res.data?.httpStatus ?? res.status,
+      organization: res.data?.organization ?? null,
+      error: res.error ?? res.data?.error ?? null,
+      testedAt: res.data?.testedAt ?? null,
+    };
+  }, [buildHeaders]);
+
   return {
     status,
     statusLoading,
@@ -290,6 +344,8 @@ export function useZohoBooks() {
     refresh,
     pending,
     call,
+    // Test Connection
+    testConnection,
     // Phase 2 — Data Sync
     syncStatus,
     syncLoading,

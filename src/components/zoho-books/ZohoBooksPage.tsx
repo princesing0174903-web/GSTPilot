@@ -479,7 +479,23 @@ function SyncMetric({
 // ─── Connected-state details card ────────────────────────────────────────────
 
 function ConnectionDetails() {
-  const { status } = useZohoBooks();
+  const { status, testConnection, pending } = useZohoBooks();
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    httpStatus: number;
+    organization: import('@/hooks/useZohoBooks').ZohoTestConnectionOrganization | null;
+    error: string | null;
+    testedAt: string | null;
+  } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const handleTest = useCallback(async () => {
+    setTesting(true);
+    setTestResult(null);
+    const result = await testConnection();
+    setTestResult(result);
+    setTesting(false);
+  }, [testConnection]);
 
   if (!status?.connected) {
     return null;
@@ -489,16 +505,93 @@ function ConnectionDetails() {
     <Card className="border-border/60 bg-card/50 backdrop-blur">
       <CardContent className="p-6">
         <div className="flex flex-col gap-5">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            <span className="text-sm font-semibold tracking-tight">Connection Details</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-semibold tracking-tight">Connection Details</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testing || pending}
+              className="h-8 gap-1.5"
+              title="Probes the Zoho Books API with a real authenticated request to verify the connection"
+            >
+              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
+              {testing ? 'Testing…' : 'Test Connection'}
+            </Button>
           </div>
+
+          {/* Test Connection result */}
+          <AnimatePresence>
+            {testResult ? (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={`flex flex-col gap-2 rounded-lg border px-3 py-3 text-xs ${
+                  testResult.ok
+                    ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
+                    : 'border-red-500/30 bg-red-500/5 text-red-400'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  {testResult.ok ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0" />
+                  )}
+                  <span>
+                    {testResult.ok
+                      ? 'Connection Successful'
+                      : `Connection Failed (HTTP ${testResult.httpStatus || '—'})`}
+                  </span>
+                  {testResult.testedAt ? (
+                    <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                      {new Date(testResult.testedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
+                {testResult.ok && testResult.organization ? (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-6 text-[11px] sm:grid-cols-3">
+                    <DetailRow label="Organization" value={testResult.organization.name} />
+                    <DetailRow label="Org ID" value={testResult.organization.organization_id} mono />
+                    <DetailRow
+                      label="Active"
+                      value={
+                        testResult.organization.is_org_active === null
+                          ? '—'
+                          : testResult.organization.is_org_active
+                          ? 'Yes'
+                          : 'No'
+                      }
+                    />
+                    <DetailRow label="Plan" value={testResult.organization.plan_name ?? '—'} />
+                    <DetailRow label="Country" value={testResult.organization.country_name ?? '—'} />
+                    <DetailRow label="Currency" value={testResult.organization.currency_code ?? '—'} />
+                    {testResult.organization.gst_no ? (
+                      <DetailRow label="GSTIN" value={testResult.organization.gst_no} mono />
+                    ) : null}
+                    {testResult.organization.email ? (
+                      <DetailRow label="Contact" value={testResult.organization.email} />
+                    ) : null}
+                  </div>
+                ) : null}
+                {testResult.error ? (
+                  <div className="pl-6 text-[11px] leading-relaxed text-red-400/90">
+                    {testResult.error}
+                  </div>
+                ) : null}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
           {/* Organization */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               <Building2 className="h-3 w-3" />
-              Current Organization
+              Organization Name
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
@@ -543,6 +636,12 @@ function ConnectionDetails() {
           {/* Meta grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border/40">
             <MetaItem
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Last Connected"
+              value={status.lastConnectedAt ? new Date(status.lastConnectedAt).toLocaleString() : '—'}
+              valueClassName="text-muted-foreground"
+            />
+            <MetaItem
               icon={<KeyRound className="h-3.5 w-3.5" />}
               label="Access Token"
               value="AES-256-GCM encrypted"
@@ -560,10 +659,41 @@ function ConnectionDetails() {
               value={status.connectedAt ? new Date(status.connectedAt).toLocaleString() : '—'}
               valueClassName="text-muted-foreground"
             />
+            <MetaItem
+              icon={<Building2 className="h-3.5 w-3.5" />}
+              label="User Email"
+              value={status.userEmail ?? '—'}
+              valueClassName="text-muted-foreground"
+            />
+            <MetaItem
+              icon={<Server className="h-3.5 w-3.5" />}
+              label="Zoho User ID"
+              value={status.zohoUserId ?? '—'}
+              valueClassName="text-muted-foreground font-mono"
+            />
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </span>
+      <span className={`text-[11px] text-foreground ${mono ? 'font-mono' : ''}`}>{value}</span>
+    </div>
   );
 }
 

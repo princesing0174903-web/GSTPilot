@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { useApp } from '@/contexts/AppContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
-  MessageSquare, Send, Check, CheckCheck, Clock, User,
+  MessageSquare, Send, Check, CheckCheck,
   ThumbsUp, ThumbsDown, AlertCircle, FileText, Users,
   CornerDownLeft, AtSign,
 } from 'lucide-react'
@@ -60,147 +59,14 @@ interface Approval {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SAMPLE DATA
+// CURRENT USER
 // ═══════════════════════════════════════════════════════════════════════════════
+// No fake user. Real user identity will be wired up from auth context in a follow-up.
+const CURRENT_USER: { id: string; name: string; initials: string } | null = null
 
-const CURRENT_USER = { id: 'user-1', name: 'Rajesh Kumar', initials: 'RK' }
-
-const SAMPLE_COMMENTS: Comment[] = [
-  {
-    id: 'c1', userId: 'user-2', userName: 'Priya Sharma', userInitials: 'PS',
-    content: 'The GSTR-1 for ABC Traders has a few invoices that need re-verification. @Rajesh Kumar can you check the B2B section?',
-    entityLink: 'GSTR-1 Mar 2025 - ABC Traders', entityType: 'Return',
-    timestamp: '2025-03-17T10:30:00',
-  },
-  {
-    id: 'c2', userId: 'user-1', userName: 'Rajesh Kumar', userInitials: 'RK',
-    content: 'Checked the B2B section — looks like 3 invoices have GSTIN mismatches. I\'ve flagged them for reconciliation.',
-    entityLink: 'GSTR-1 Mar 2025 - ABC Traders', entityType: 'Return',
-    timestamp: '2025-03-17T10:45:00',
-  },
-  {
-    id: 'c3', userId: 'user-3', userName: 'Amit Patel', userInitials: 'AP',
-    content: 'Purchase register for XYZ Industries is uploaded. @Priya Sharma please start the extraction when you have a moment.',
-    entityLink: 'Purchase Register Feb 2025 - XYZ Industries', entityType: 'Document',
-    timestamp: '2025-03-17T09:15:00',
-  },
-  {
-    id: 'c4', userId: 'user-2', userName: 'Priya Sharma', userInitials: 'PS',
-    content: 'Already on it! Extraction started — should be done in about 5 minutes.',
-    entityLink: 'Purchase Register Feb 2025 - XYZ Industries', entityType: 'Document',
-    timestamp: '2025-03-17T09:22:00',
-  },
-  {
-    id: 'c5', userId: 'user-4', userName: 'Neha Gupta', userInitials: 'NG',
-    content: 'GST department notice for Patel Enterprises requires a response by March 25th. @Rajesh Kumar should we prepare the reply draft?',
-    entityLink: 'Notice GST Dept - Patel Enterprises', entityType: 'Notice',
-    timestamp: '2025-03-16T14:00:00',
-  },
-  {
-    id: 'c6', userId: 'user-1', userName: 'Rajesh Kumar', userInitials: 'RK',
-    content: 'Yes, let\'s draft the response today. I\'ll review the notice details and assign the task to @Amit Patel for preparation.',
-    entityLink: 'Notice GST Dept - Patel Enterprises', entityType: 'Notice',
-    timestamp: '2025-03-16T14:20:00',
-  },
-  {
-    id: 'c7', userId: 'user-3', userName: 'Amit Patel', userInitials: 'AP',
-    content: 'GSTR-3B filing for Kumar Ltd is ready for final review. All ITC claims verified against purchase register.',
-    entityLink: 'GSTR-3B Feb 2025 - Kumar Ltd', entityType: 'Return',
-    timestamp: '2025-03-15T16:30:00',
-  },
-  {
-    id: 'c8', userId: 'user-4', userName: 'Neha Gupta', userInitials: 'NG',
-    content: 'The reconciliation for Sharma & Co found 2 mismatches in the Q4 sales data. Creating correction tasks now.',
-    entityLink: 'Reconciliation Q4 2024 - Sharma & Co', entityType: 'Reconciliation',
-    timestamp: '2025-03-15T11:00:00',
-  },
-]
-
-const SAMPLE_MESSAGES: ChatMessage[] = [
-  {
-    id: 'm1', userId: 'user-2', userName: 'Priya Sharma', userInitials: 'PS',
-    content: 'Good morning everyone! Starting on the ABC Traders returns today.',
-    timestamp: '2025-03-17T09:00:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm2', userId: 'user-1', userName: 'Rajesh Kumar', userInitials: 'RK',
-    content: 'Morning Priya! Don\'t forget the GSTR-1 deadline is March 20th for all March filings.',
-    timestamp: '2025-03-17T09:05:00', isOwn: true, read: true,
-  },
-  {
-    id: 'm3', userId: 'user-3', userName: 'Amit Patel', userInitials: 'AP',
-    content: 'I just uploaded the purchase register for XYZ Industries. Can someone run the extraction?',
-    timestamp: '2025-03-17T09:10:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm4', userId: 'user-2', userName: 'Priya Sharma', userInitials: 'PS',
-    content: 'On it! I\'ll start the extraction right away.',
-    timestamp: '2025-03-17T09:15:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm5', userId: 'user-4', userName: 'Neha Gupta', userInitials: 'NG',
-    content: 'Heads up — the GST department notice for Patel Enterprises needs a response by the 25th.',
-    timestamp: '2025-03-17T09:30:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm6', userId: 'user-1', userName: 'Rajesh Kumar', userInitials: 'RK',
-    content: 'Thanks Neha. I\'ll review the notice and draft the response. Amit, can you help with the compliance details?',
-    timestamp: '2025-03-17T09:35:00', isOwn: true, read: true,
-  },
-  {
-    id: 'm7', userId: 'user-3', userName: 'Amit Patel', userInitials: 'AP',
-    content: 'Sure! I\'ll pull up the compliance history for Patel Enterprises this afternoon.',
-    timestamp: '2025-03-17T09:40:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm8', userId: 'user-4', userName: 'Neha Gupta', userInitials: 'NG',
-    content: 'Reconciliation for Sharma & Co is complete. Found 2 ITC mismatches — I\'ve logged them in the system.',
-    timestamp: '2025-03-17T10:00:00', isOwn: false, read: true,
-  },
-  {
-    id: 'm9', userId: 'user-1', userName: 'Rajesh Kumar', userInitials: 'RK',
-    content: 'Good catch Neha. Let\'s prioritize resolving those before filing the GSTR-3B.',
-    timestamp: '2025-03-17T10:05:00', isOwn: true, read: true,
-  },
-  {
-    id: 'm10', userId: 'user-2', userName: 'Priya Sharma', userInitials: 'PS',
-    content: 'Extraction complete for XYZ purchase register. 47 invoices processed — 3 flagged for review.',
-    timestamp: '2025-03-17T10:30:00', isOwn: false, read: false,
-  },
-]
-
-const SAMPLE_APPROVALS: Approval[] = [
-  {
-    id: 'a1', title: 'GSTR-1 Filing Approval — ABC Traders',
-    description: 'March 2025 GSTR-1 return with 23 B2B invoices, 15 B2C invoices. Total taxable value: ₹12,45,000.',
-    requestedBy: 'Priya Sharma', requestedByInitials: 'PS',
-    requestDate: '2025-03-17T10:00:00', status: 'pending', type: 'Filing',
-  },
-  {
-    id: 'a2', title: 'Invoice Correction — Sharma & Co',
-    description: 'Correction of GSTIN in 2 sales invoices for Q4 2024. Original: 27AABCS1234F1ZH → Correct: 27AABCS1234F1Z5.',
-    requestedBy: 'Amit Patel', requestedByInitials: 'AP',
-    requestDate: '2025-03-16T14:30:00', status: 'pending', type: 'Correction',
-  },
-  {
-    id: 'a3', title: 'GSTR-3B Filing Approval — Kumar Ltd',
-    description: 'February 2025 GSTR-3B. ITC claimed: ₹1,87,500. Output tax: ₹2,34,000. Net payable: ₹46,500.',
-    requestedBy: 'Amit Patel', requestedByInitials: 'AP',
-    requestDate: '2025-03-15T16:45:00', status: 'approved', type: 'Filing',
-  },
-  {
-    id: 'a4', title: 'Notice Response — Patel Enterprises',
-    description: 'Response to GST ASMT-10 notice for discrepancy in annual return. Draft reply attached with supporting documents.',
-    requestedBy: 'Neha Gupta', requestedByInitials: 'NG',
-    requestDate: '2025-03-16T14:00:00', status: 'pending', type: 'Notice',
-  },
-  {
-    id: 'a5', title: 'ITC Reversal — Mehta Group',
-    description: 'Reversal of ₹45,000 ITC for invoices where supplier has not filed GSTR-1. Rule 37A of CGST Rules.',
-    requestedBy: 'Priya Sharma', requestedByInitials: 'PS',
-    requestDate: '2025-03-14T11:20:00', status: 'rejected', type: 'ITC',
-  },
-]
+const SAMPLE_COMMENTS: Comment[] = []
+const SAMPLE_MESSAGES: ChatMessage[] = []
+const SAMPLE_APPROVALS: Approval[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AVATAR COLOR HELPER
@@ -284,12 +150,16 @@ function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function CommentsTab() {
-  const [comments, setComments] = useState<Comment[]>(SAMPLE_COMMENTS)
+  const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
   const [selectedEntity, setSelectedEntity] = useState('')
 
   const handleSubmitComment = () => {
     if (!newComment.trim()) return
+    if (!CURRENT_USER) {
+      toast.error('Sign in to collaborate')
+      return
+    }
     const c: Comment = {
       id: `c-${Date.now()}`,
       userId: CURRENT_USER.id,
@@ -312,48 +182,59 @@ function CommentsTab() {
   return (
     <div className="space-y-4">
       {/* Add Comment */}
-      <Card className="border-border/60 dark:bg-gray-900">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <AtSign className="h-4 w-4 text-muted-foreground shrink-0" />
-            <Select value={selectedEntity} onValueChange={setSelectedEntity}>
-              <SelectTrigger className="h-8 text-xs w-full max-w-xs">
-                <SelectValue placeholder="Link to entity (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="GSTR-1 Mar 2025 - ABC Traders">GSTR-1 Mar 2025 - ABC Traders</SelectItem>
-                <SelectItem value="GSTR-3B Feb 2025 - Kumar Ltd">GSTR-3B Feb 2025 - Kumar Ltd</SelectItem>
-                <SelectItem value="Purchase Register Feb 2025 - XYZ">Purchase Register Feb 2025 - XYZ</SelectItem>
-                <SelectItem value="Notice GST Dept - Patel Enterprises">Notice GST Dept - Patel Enterprises</SelectItem>
-                <SelectItem value="Reconciliation Q4 2024 - Sharma & Co">Reconciliation Q4 2024 - Sharma & Co</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex gap-2">
-            <Textarea
-              placeholder="Write a comment... Use @mention to tag team members"
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              className="min-h-[60px] text-sm resize-none"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleSubmitComment()
-                }
-              }}
-            />
-            <Button
-              onClick={handleSubmitComment}
-              disabled={!newComment.trim()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 self-end"
-              size="sm"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {CURRENT_USER ? (
+        <Card className="border-border/60 dark:bg-gray-900">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <AtSign className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                <SelectTrigger className="h-8 text-xs w-full max-w-xs">
+                  <SelectValue placeholder="Link to entity (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GSTR-1 Mar 2025 - ABC Traders">GSTR-1 Mar 2025 - ABC Traders</SelectItem>
+                  <SelectItem value="GSTR-3B Feb 2025 - Kumar Ltd">GSTR-3B Feb 2025 - Kumar Ltd</SelectItem>
+                  <SelectItem value="Purchase Register Feb 2025 - XYZ">Purchase Register Feb 2025 - XYZ</SelectItem>
+                  <SelectItem value="Notice GST Dept - Patel Enterprises">Notice GST Dept - Patel Enterprises</SelectItem>
+                  <SelectItem value="Reconciliation Q4 2024 - Sharma & Co">Reconciliation Q4 2024 - Sharma & Co</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Textarea
+                placeholder="Write a comment... Use @mention to tag team members"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                className="min-h-[60px] text-sm resize-none"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleSubmitComment()
+                  }
+                }}
+              />
+              <Button
+                onClick={handleSubmitComment}
+                disabled={!newComment.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 self-end"
+                size="sm"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="rounded-lg border border-dashed border-border/60 p-4 text-center">
+          <p className="text-sm text-muted-foreground">Sign in to collaborate and add comments.</p>
+        </div>
+      )}
 
       {/* Comments List */}
+      {sortedComments.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+          <p className="text-sm text-muted-foreground">No comments yet</p>
+        </div>
+      ) : (
       <ScrollArea className="max-h-[calc(100vh-380px)]">
         <div className="space-y-1">
           <AnimatePresence mode="popLayout">
@@ -393,6 +274,7 @@ function CommentsTab() {
           </AnimatePresence>
         </div>
       </ScrollArea>
+      )}
     </div>
   )
 }
@@ -402,7 +284,7 @@ function CommentsTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ChatTab() {
-  const [messages, setMessages] = useState<ChatMessage[]>(SAMPLE_MESSAGES)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -414,6 +296,10 @@ function ChatTab() {
 
   const handleSend = () => {
     if (!newMessage.trim()) return
+    if (!CURRENT_USER) {
+      toast.error('Sign in to collaborate')
+      return
+    }
     const msg: ChatMessage = {
       id: `m-${Date.now()}`,
       userId: CURRENT_USER.id,
@@ -437,12 +323,17 @@ function ChatTab() {
         </div>
         <div>
           <p className="text-sm font-medium text-foreground">Firm Team Chat</p>
-          <p className="text-[11px] text-muted-foreground">4 members · 2 online</p>
+          <p className="text-[11px] text-muted-foreground">Team members appear once collaboration is enabled</p>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 p-4 bg-gray-50/50 dark:bg-gray-950/50 overflow-y-auto" ref={scrollRef}>
+        {messages.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">No messages yet</p>
+          </div>
+        ) : (
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {messages.map(msg => (
@@ -488,9 +379,11 @@ function ChatTab() {
             ))}
           </AnimatePresence>
         </div>
+        )}
       </div>
 
       {/* Message Input */}
+      {CURRENT_USER ? (
       <div className="flex items-center gap-2 border-t bg-white px-4 py-3 rounded-b-xl dark:bg-gray-900">
         <Input
           placeholder="Type a message..."
@@ -514,6 +407,11 @@ function ChatTab() {
           <span className="hidden sm:inline">Send</span>
         </Button>
       </div>
+      ) : (
+      <div className="flex items-center gap-2 border-t bg-white px-4 py-3 rounded-b-xl dark:bg-gray-900">
+        <p className="text-sm text-muted-foreground w-full text-center">Sign in to collaborate</p>
+      </div>
+      )}
     </div>
   )
 }
@@ -523,7 +421,7 @@ function ChatTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ApprovalsTab() {
-  const [approvals, setApprovals] = useState<Approval[]>(SAMPLE_APPROVALS)
+  const [approvals, setApprovals] = useState<Approval[]>([])
 
   const handleApprove = (id: string) => {
     setApprovals(prev => prev.map(a => a.id === id ? { ...a, status: 'approved' as ApprovalStatus } : a))
@@ -568,6 +466,11 @@ function ApprovalsTab() {
       </div>
 
       {/* Approval Cards */}
+      {approvals.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+          <p className="text-sm text-muted-foreground">No approvals pending</p>
+        </div>
+      ) : (
       <ScrollArea className="max-h-[calc(100vh-380px)]">
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
@@ -640,6 +543,7 @@ function ApprovalsTab() {
           </AnimatePresence>
         </div>
       </ScrollArea>
+      )}
     </div>
   )
 }

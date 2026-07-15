@@ -11,9 +11,9 @@ import { Input } from '@/components/ui/input'
 import { motion } from 'framer-motion'
 import {
   ShieldCheck, TrendingUp, TrendingDown, Search,
-  ChevronRight, Download, Filter, Plus, AlertTriangle,
+  ChevronRight, Download, Plus, AlertTriangle,
   Building2, Users, Calendar, Clock, CheckCircle2,
-  FileText, XCircle, UserCheck, Briefcase, Landmark,
+  FileText, XCircle, Landmark,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -21,49 +21,18 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const statCards = [
-  { label: 'Annual Filings', value: '24', change: '+3', up: true, icon: FileText, color: 'emerald' },
-  { label: 'Pending Filings', value: '7', change: '-2', up: true, icon: Clock, color: 'amber' },
-  { label: 'Overdue', value: '2', change: '+1', up: false, icon: AlertTriangle, color: 'red' },
-  { label: 'Directors', value: '18', change: '+2', up: true, icon: Users, color: 'emerald' },
-  { label: 'Companies', value: '6', change: '0', up: true, icon: Building2, color: 'emerald' },
+  { label: 'Annual Filings', value: '0', change: '0', up: true, icon: FileText, color: 'emerald' },
+  { label: 'Pending Filings', value: '0', change: '0', up: true, icon: Clock, color: 'amber' },
+  { label: 'Overdue', value: '0', change: '0', up: true, icon: AlertTriangle, color: 'red' },
+  { label: 'Directors', value: '0', change: '0', up: true, icon: Users, color: 'emerald' },
+  { label: 'Companies', value: '0', change: '0', up: true, icon: Building2, color: 'emerald' },
 ]
 
-const filings = [
-  { id: 'FIL001', form: 'AOC-4', company: 'Sharma Enterprises Pvt Ltd', cin: 'U74999MH2020PTC345678', dueDate: '29/10/2025', filedDate: '25/10/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL002', form: 'MGT-7', company: 'Sharma Enterprises Pvt Ltd', cin: 'U74999MH2020PTC345678', dueDate: '28/11/2025', filedDate: '20/11/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL003', form: 'ADT-1', company: 'Sharma Enterprises Pvt Ltd', cin: 'U74999MH2020PTC345678', dueDate: '14/10/2025', filedDate: '10/10/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL004', form: 'AOC-4', company: 'Patel Industries LLP', cin: 'AAB-1234', dueDate: '29/10/2025', filedDate: null, status: 'Pending', period: 'FY 2024-25' },
-  { id: 'FIL005', form: 'MGT-7', company: 'Patel Industries LLP', cin: 'AAB-5678', dueDate: '28/11/2025', filedDate: null, status: 'Pending', period: 'FY 2024-25' },
-  { id: 'FIL006', form: 'DIR-3 KYC', company: 'All Companies', cin: '—', dueDate: '30/09/2025', filedDate: null, status: 'Overdue', period: 'FY 2025-26' },
-  { id: 'FIL007', form: 'AOC-4', company: 'Mehta Consulting Pvt Ltd', cin: 'U74140DL2019PTC352190', dueDate: '29/10/2025', filedDate: '28/10/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL008', form: 'MGT-7', company: 'Mehta Consulting Pvt Ltd', cin: 'U74140DL2019PTC352190', dueDate: '28/11/2025', filedDate: '22/11/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL009', form: 'ADT-1', company: 'Kumar Textiles Pvt Ltd', cin: 'U18101RJ2021PTC078456', dueDate: '14/10/2025', filedDate: null, status: 'Overdue', period: 'FY 2024-25' },
-  { id: 'FIL010', form: 'INC-20A', company: 'Singh Logistics LLP', cin: 'AAR-9876', dueDate: '15/01/2026', filedDate: '12/01/2026', status: 'Filed', period: 'FY 2025-26' },
-  { id: 'FIL011', form: 'AOC-4', company: 'Reddy Infra Pvt Ltd', cin: 'U45200AP2020PTC114567', dueDate: '29/10/2025', filedDate: '27/10/2025', status: 'Filed', period: 'FY 2024-25' },
-  { id: 'FIL012', form: 'MGT-7', company: 'Reddy Infra Pvt Ltd', cin: 'U45200AP2020PTC114567', dueDate: '28/11/2025', filedDate: null, status: 'Pending', period: 'FY 2024-25' },
-]
+const filings: { id: string; form: string; company: string; cin: string; dueDate: string; filedDate: string | null; status: string; period: string }[] = []
 
-const companies = [
-  { name: 'Sharma Enterprises Pvt Ltd', cin: 'U74999MH2020PTC345678', roc: 'Mumbai', type: 'Private Limited', authCapital: '₹50,00,000', paidUp: '₹25,00,000', directors: 3, status: 'Active', address: '302, Pinnacle Business Park, Andheri East, Mumbai - 400069' },
-  { name: 'Patel Industries LLP', cin: 'AAB-1234', roc: 'Ahmedabad', type: 'LLP', authCapital: '—', paidUp: '—', directors: 2, status: 'Active', address: '501, Titanium City Centre, Satelite, Ahmedabad - 380015' },
-  { name: 'Mehta Consulting Pvt Ltd', cin: 'U74140DL2019PTC352190', roc: 'Delhi', type: 'Private Limited', authCapital: '₹1,00,00,000', paidUp: '₹50,00,000', directors: 4, status: 'Active', address: '12, Connaught Place, New Delhi - 110001' },
-  { name: 'Kumar Textiles Pvt Ltd', cin: 'U18101RJ2021PTC078456', roc: 'Jaipur', type: 'Private Limited', authCapital: '₹25,00,000', paidUp: '₹10,00,000', directors: 2, status: 'Active', address: '45, Jhotwara Industrial Area, Jaipur - 302012' },
-  { name: 'Singh Logistics LLP', cin: 'AAR-9876', roc: 'Lucknow', type: 'LLP', authCapital: '—', paidUp: '—', directors: 2, status: 'Active', address: '78, Gomti Nagar, Lucknow - 226010' },
-  { name: 'Reddy Infra Pvt Ltd', cin: 'U45200AP2020PTC114567', roc: 'Hyderabad', type: 'Private Limited', authCapital: '₹2,00,00,000', paidUp: '₹1,00,00,000', directors: 3, status: 'Active', address: '22, Hi-Tech City, Hyderabad - 500081' },
-]
+const companies: { name: string; cin: string; roc: string; type: string; authCapital: string; paidUp: string; directors: number; status: string; address: string }[] = []
 
-const directors = [
-  { name: 'Rajesh Sharma', din: '08765432', companies: ['Sharma Enterprises Pvt Ltd'], designation: 'Managing Director', dob: '15/06/1975', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Anita Sharma', din: '08765433', companies: ['Sharma Enterprises Pvt Ltd'], designation: 'Director', dob: '22/03/1978', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Suresh Sharma', din: '08765434', companies: ['Sharma Enterprises Pvt Ltd'], designation: 'Director', dob: '10/11/1972', nationality: 'Indian', kycStatus: 'Pending' },
-  { name: 'Ramesh Patel', din: '09123456', companies: ['Patel Industries LLP'], designation: 'Designated Partner', dob: '05/01/1980', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Ketan Patel', din: '09123457', companies: ['Patel Industries LLP'], designation: 'Designated Partner', dob: '18/09/1982', nationality: 'Indian', kycStatus: 'Overdue' },
-  { name: 'Vikram Mehta', din: '08567890', companies: ['Mehta Consulting Pvt Ltd'], designation: 'Managing Director', dob: '03/04/1970', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Sunita Mehta', din: '08567891', companies: ['Mehta Consulting Pvt Ltd'], designation: 'Director', dob: '28/12/1974', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Arjun Mehta', din: '08567892', companies: ['Mehta Consulting Pvt Ltd'], designation: 'Director', dob: '14/07/1985', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Pradeep Kumar', din: '09345678', companies: ['Kumar Textiles Pvt Ltd'], designation: 'Managing Director', dob: '20/05/1968', nationality: 'Indian', kycStatus: 'Verified' },
-  { name: 'Manoj Singh', din: '09012345', companies: ['Singh Logistics LLP'], designation: 'Designated Partner', dob: '11/08/1977', nationality: 'Indian', kycStatus: 'Pending' },
-]
+const directors: { name: string; din: string; companies: string[]; designation: string; dob: string; nationality: string; kycStatus: string }[] = []
 
 const calendarEvents = [
   { form: 'AOC-4', description: 'Financial Statement Filing', dueDate: '29/10/2026', category: 'Annual', companies: 'All' },
@@ -84,15 +53,25 @@ const calendarEvents = [
 
 function FilingStatusChart() {
   const data = [
-    { label: 'Filed', value: 17, color: '#10b981' },
-    { label: 'Pending', value: 7, color: '#f59e0b' },
-    { label: 'Overdue', value: 2, color: '#ef4444' },
+    { label: 'Filed', value: 0, color: '#10b981' },
+    { label: 'Pending', value: 0, color: '#f59e0b' },
+    { label: 'Overdue', value: 0, color: '#ef4444' },
   ]
   const cx = 80
   const cy = 80
   const r = 60
   const innerR = 40
   const total = data.reduce((s, d) => s + d.value, 0)
+
+  if (total === 0) {
+    return (
+      <div className="h-36 flex flex-col items-center justify-center text-slate-400">
+        <ShieldCheck className="h-10 w-10 mb-3 text-slate-200" />
+        <p className="text-sm font-medium">No ROC compliance data yet</p>
+        <p className="text-xs text-slate-400 mt-1 text-center">Add your companies to track ROC filings</p>
+      </div>
+    )
+  }
 
   let startAngle = -90
   const slices = data.map(d => {
@@ -139,7 +118,16 @@ function FilingStatusChart() {
 
 function ComplianceTimelineChart() {
   const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov']
-  const filed = [3, 2, 4, 2, 3, 3, 5, 4]
+  const filed: number[] = []
+  if (filed.length === 0) {
+    return (
+      <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+        <Calendar className="h-10 w-10 mb-3 text-slate-200" />
+        <p className="text-xs font-medium">No filing history yet</p>
+        <p className="text-[10px] text-slate-400 mt-1 text-center">Monthly filings trend will appear once you file returns</p>
+      </div>
+    )
+  }
   const maxVal = Math.max(...filed)
   const w = 360
   const h = 160
@@ -311,7 +299,13 @@ export default function ROCCompliancePage() {
                 <CardTitle className="text-sm font-semibold">Overdue Filings</CardTitle>
               </CardHeader>
               <CardContent>
-                {filings.filter(f => f.status === 'Overdue').map((f, i) => (
+                {filings.filter(f => f.status === 'Overdue').length === 0 ? (
+                  <div className="h-32 flex flex-col items-center justify-center text-slate-400">
+                    <CheckCircle2 className="h-10 w-10 mb-3 text-slate-200" />
+                    <p className="text-sm font-medium">No overdue filings</p>
+                    <p className="text-xs text-slate-300 mt-1">Overdue ROC filings will appear here</p>
+                  </div>
+                ) : filings.filter(f => f.status === 'Overdue').map((f, i) => (
                   <motion.div
                     key={f.id}
                     initial={{ opacity: 0, x: -8 }}
@@ -358,7 +352,13 @@ export default function ROCCompliancePage() {
               <CardContent>
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
-                    {filteredFilings.map((f, i) => (
+                    {filteredFilings.length === 0 ? (
+                      <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                        <FileText className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No ROC compliance data yet</p>
+                        <p className="text-xs text-slate-400 mt-1 text-center">Add your companies to track ROC filings</p>
+                      </div>
+                    ) : filteredFilings.map((f, i) => (
                       <motion.div
                         key={f.id}
                         initial={{ opacity: 0, y: 8 }}
@@ -396,6 +396,17 @@ export default function ROCCompliancePage() {
 
           {/* Companies Tab */}
           <TabsContent value="companies" className="mt-4 space-y-4">
+            {companies.length === 0 ? (
+              <Card>
+                <CardContent className="p-8">
+                  <div className="flex flex-col items-center justify-center text-slate-400">
+                    <Building2 className="h-12 w-12 mb-4 text-slate-200" />
+                    <p className="text-sm font-medium">No companies added yet</p>
+                    <p className="text-xs text-slate-400 mt-1 text-center max-w-sm">Add your companies to track ROC filings, directors, and compliance status</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {companies.map((c, i) => (
                 <motion.div
@@ -446,6 +457,7 @@ export default function ROCCompliancePage() {
                 </motion.div>
               ))}
             </div>
+            )}
           </TabsContent>
 
           {/* Directors Tab */}
@@ -457,7 +469,13 @@ export default function ROCCompliancePage() {
               <CardContent>
                 <ScrollArea className="max-h-96">
                   <div className="space-y-2">
-                    {directors.map((d, i) => (
+                    {directors.length === 0 ? (
+                      <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                        <Users className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No directors added yet</p>
+                        <p className="text-xs text-slate-400 mt-1 text-center">Directors will appear here once you add your companies</p>
+                      </div>
+                    ) : directors.map((d, i) => (
                       <motion.div
                         key={d.din}
                         initial={{ opacity: 0, y: 8 }}

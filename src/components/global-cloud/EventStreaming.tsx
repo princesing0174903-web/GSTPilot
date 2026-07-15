@@ -31,8 +31,9 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 
-// ─── Deterministic mock live event stream (NO Date.now, NO Math.random) ───────
-// Pre-curated to look realistic — every value hand-picked.
+// ─── Live event stream shape ───────────────────────────────────────────────────
+// No hardcoded events. Real events stream from the backend event bus when wired;
+// this type is kept so the UI can render honest empty states until then.
 interface MockEvent {
   time: string;     // HH:MM:SS
   topic: string;
@@ -42,23 +43,7 @@ interface MockEvent {
   payload: string;  // short preview
 }
 
-const MOCK_EVENTS: MockEvent[] = [
-  { time: '14:23:42', topic: 'invoices.created',   eventType: 'Invoice Created',    accent: 'emerald', entity: 'INV-2025-1042', payload: '{"id":"INV-2025-1042","customer":"ACME Corp","amount":18400.00,"currency":"INR"}' },
-  { time: '14:23:39', topic: 'payments.received',  eventType: 'Payment Received',   accent: 'teal',    entity: 'PAY-8821',      payload: '{"id":"PAY-8821","invoice":"INV-2025-0918","amount":4250.50,"mode":"UPI"}' },
-  { time: '14:23:36', topic: 'webhooks.delivered', eventType: 'Webhook Delivery',   accent: 'cyan',    entity: 'WH-44218',      payload: '{"endpoint":"wh_001","event":"invoices.created","status":200,"ms":142}' },
-  { time: '14:23:33', topic: 'gst.filed',          eventType: 'GST Filed',          accent: 'cyan',    entity: 'GSTR-2025-10',  payload: '{"gstin":"27ABCDE1234F1Z5","period":"2025-10","arn":"AA2709241234567"}' },
-  { time: '14:23:31', topic: 'expenses.added',     eventType: 'Expense Added',      accent: 'violet',  entity: 'EXP-55214',     payload: '{"id":"EXP-55214","category":"Travel","amount":12480.00,"vendor":"Uber"}' },
-  { time: '14:23:28', topic: 'bank.synced',        eventType: 'Bank Synced',        accent: 'amber',   entity: 'BANK-HDFC-77',  payload: '{"account":"****8821","newTxns":12,"balance":482140.50,"bank":"HDFC"}' },
-  { time: '14:23:25', topic: 'invoices.created',   eventType: 'Invoice Created',    accent: 'emerald', entity: 'INV-2025-1041', payload: '{"id":"INV-2025-1041","customer":"Reliance Retail","amount":248000.00}' },
-  { time: '14:23:22', topic: 'ai.action',          eventType: 'AI Action',          accent: 'rose',    entity: 'AI-9182',       payload: '{"agent":"Oracle™","action":"classify","target":"INV-2025-1040","result":"valid"}' },
-  { time: '14:23:19', topic: 'documents.uploaded', eventType: 'Document Uploaded',  accent: 'emerald', entity: 'DOC-22841',     payload: '{"id":"DOC-22841","type":"Invoice PDF","size":184320,"pages":2}' },
-  { time: '14:23:16', topic: 'payments.received',  eventType: 'Payment Received',   accent: 'teal',    entity: 'PAY-8820',      payload: '{"id":"PAY-8820","invoice":"INV-2025-0914","amount":6800.00,"mode":"NEFT"}' },
-  { time: '14:23:13', topic: 'approvals.granted',  eventType: 'Approval Granted',   accent: 'teal',    entity: 'APR-1204',      payload: '{"id":"APR-1204","entity":"PO-8821","approver":"CFO","amount":84000.00}' },
-  { time: '14:23:10', topic: 'webhooks.delivered', eventType: 'Webhook Delivery',   accent: 'cyan',    entity: 'WH-44217',      payload: '{"endpoint":"wh_004","event":"expenses.added","status":200,"ms":96}' },
-  { time: '14:23:07', topic: 'invoices.created',   eventType: 'Invoice Created',    accent: 'emerald', entity: 'INV-2025-1040', payload: '{"id":"INV-2025-1040","customer":"Tata Steel","amount":1240000.00}' },
-  { time: '14:23:04', topic: 'bank.synced',        eventType: 'Bank Synced',        accent: 'amber',   entity: 'BANK-ICICI-12', payload: '{"account":"****7741","newTxns":8,"balance":92480.00,"bank":"ICICI"}' },
-  { time: '14:23:01', topic: 'ai.action',          eventType: 'AI Action',          accent: 'rose',    entity: 'AI-9181',       payload: '{"agent":"Oracle™","action":"forecast","horizon":"13w","p95":4.2}' },
-];
+const MOCK_EVENTS: MockEvent[] = []
 
 // ─── KPI tile helper ──────────────────────────────────────────────────────────
 function KpiTile({
@@ -288,6 +273,11 @@ export default function EventStreaming() {
                 </div>
               </CardHeader>
               <CardContent>
+                {MOCK_EVENTS.length === 0 ? (
+                  <div className="flex h-[420px] items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-black/20 px-6 text-center">
+                    <p className="text-sm text-white/60">No live events yet — events will stream here as they occur.</p>
+                  </div>
+                ) : (
                 <ScrollArea className="h-[420px] rounded-lg border border-white/[0.04] bg-black/30">
                   <div className="divide-y divide-white/[0.04]">
                     {MOCK_EVENTS.map((ev, i) => {
@@ -328,6 +318,7 @@ export default function EventStreaming() {
                     })}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </motion.section>

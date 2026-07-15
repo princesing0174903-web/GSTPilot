@@ -597,13 +597,7 @@ export interface SavedQuery {
   cacheHit: number;
 }
 
-export const SAVED_QUERIES: SavedQuery[] = [
-  { name: 'Monthly Revenue by Country',  sql: 'SELECT country, SUM(total_usd) FROM fact_invoices WHERE ...', author: 'A. Sharma', runs: 18_400, avgMs: 142, cacheHit: 94 },
-  { name: 'Top 100 Vendors by Spend',    sql: 'SELECT v.name, SUM(i.total) FROM fact_invoices i JOIN dim_vendors v ...', author: 'M. Iyer', runs: 12_200, avgMs:  86, cacheHit: 88 },
-  { name: 'GST Filing Accuracy Trend',   sql: 'SELECT period, accuracy_pct FROM fact_gst_filings ORDER BY period ...', author: 'R. Khan', runs:  8_400, avgMs:  62, cacheHit: 96 },
-  { name: 'DSO by Customer Segment',     sql: 'SELECT segment, AVG(dso_days) FROM fact_ar_aging GROUP BY segment ...', author: 'P. Reddy', runs:  6_200, avgMs: 124, cacheHit: 82 },
-  { name: 'Cash Runway Forecast 13wk',   sql: 'SELECT week, projected_balance FROM fact_cash_forecast WHERE ...', author: 'S. Nair', runs:  4_800, avgMs: 184, cacheHit: 78 },
-];
+export const SAVED_QUERIES: SavedQuery[] = [];
 
 export interface BIDashboard {
   name: string;
@@ -756,14 +750,7 @@ export interface DeveloperApp {
   accent: Accent;
 }
 
-export const TOP_DEVELOPER_APPS: DeveloperApp[] = [
-  { name: 'Acme ERP Bridge',       publisher: 'Acme Corp',       calls24h: 8_420_000, errorRate: 0.04, revenue: 142_000, trend: +12, accent: 'emerald' },
-  { name: 'TallySync Pro',         publisher: 'Tally Solutions', calls24h: 6_240_000, errorRate: 0.02, revenue:  98_000, trend:  +8, accent: 'teal'    },
-  { name: 'Zoho Books Bridge',     publisher: 'Zoho Corp',       calls24h: 5_140_000, errorRate: 0.03, revenue:  84_000, trend:  +6, accent: 'cyan'    },
-  { name: 'QuickBooks Live Sync',  publisher: 'Intuit Inc.',     calls24h: 4_280_000, errorRate: 0.05, revenue:  72_000, trend:  +4, accent: 'violet'  },
-  { name: 'WhatsApp Invoicing',    publisher: 'Meta Cloud',      calls24h: 3_840_000, errorRate: 0.06, revenue:  48_000, trend: +18, accent: 'amber'   },
-  { name: 'Stripe Auto-Recon',     publisher: 'Stripe Inc.',     calls24h: 2_940_000, errorRate: 0.08, revenue:  42_000, trend:  -4, accent: 'rose'    },
-];
+export const TOP_DEVELOPER_APPS: DeveloperApp[] = [];
 
 export interface DeveloperMetric {
   label: string;

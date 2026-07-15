@@ -111,7 +111,12 @@ export function AICFO() {
         <div className="space-y-4 lg:col-span-3">
           {/* KPI row */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {cfoKpis.map((k) => {
+            {cfoKpis.length === 0 ? (
+              <div className="col-span-full rounded-lg border border-dashed border-border/60 p-8 text-center">
+                <p className="text-sm text-muted-foreground">No KPI data yet</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">KPIs will populate once financial data is available.</p>
+              </div>
+            ) : cfoKpis.map((k) => {
               const Icon = KPI_ICONS[k.icon as keyof typeof KPI_ICONS] || TrendingUp
               return (
                 <KpiCard

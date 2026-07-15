@@ -66,6 +66,7 @@ import {
   useFireClients,
   useFireInvoices,
 } from '@/hooks/use-firestore';
+import { EmptyState } from '@/components/shared';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -117,13 +118,7 @@ interface ApiKey {
   permissions: string[];
 }
 
-const demoApiKeys: ApiKey[] = [
-  { id: '1', key: 'gpi_live_sk_a4k8m2n9p1q3r5s7t9u0v1w2x3y4z5', name: 'Production Key', created: '15 Jan 2025', lastUsed: '2 min ago', status: 'active', rateLimit: '1,000/min', permissions: ['gst', 'invoice', 'payment', 'reconciliation'] },
-  { id: '2', key: 'gpi_live_sk_b7c9d1e3f5g7h9i1j3k5l7m9n1o2p3', name: 'Sandbox Key', created: '20 Dec 2024', lastUsed: '1 hour ago', status: 'active', rateLimit: '500/min', permissions: ['gst', 'accounting', 'invoice'] },
-  { id: '3', key: 'gpi_live_sk_c2d4e6f8g0h2i4j6k8l0m2n4o6p8q0', name: 'Mobile App Key', created: '05 Nov 2024', lastUsed: '3 days ago', status: 'active', rateLimit: '200/min', permissions: ['invoice', 'payment'] },
-  { id: '4', key: 'gpi_live_sk_d9e1f3g5h7i9j1k3l5m7n9o1p3q5r7', name: 'Legacy Integration', created: '10 Aug 2024', lastUsed: '15 days ago', status: 'revoked', rateLimit: '100/min', permissions: ['gst'] },
-  { id: '5', key: 'gpi_live_sk_e4f6g8h0i2j4k6l8m0n2o4p6q8r0s2', name: 'Partner API Key', created: '01 Oct 2024', lastUsed: '5 hours ago', status: 'active', rateLimit: '2,000/min', permissions: ['gst', 'invoice', 'payment', 'reconciliation', 'ai', 'compliance'] },
-];
+const demoApiKeys: ApiKey[] = [];
 
 // --- Webhooks ---
 interface Webhook {
@@ -135,12 +130,7 @@ interface Webhook {
   successRate: number;
 }
 
-const demoWebhooks: Webhook[] = [
-  { id: '1', url: 'https://api.myfirm.in/webhooks/gst', events: ['return.filed', 'return.failed', 'gstin.verified'], status: 'active', lastDelivery: '30 sec ago', successRate: 99.2 },
-  { id: '2', url: 'https://api.myfirm.in/webhooks/invoice', events: ['invoice.created', 'invoice.cancelled', 'e-invoice.generated'], status: 'active', lastDelivery: '2 min ago', successRate: 98.7 },
-  { id: '3', url: 'https://hooks.slack.com/services/T0/B0/xxx', events: ['payment.received', 'payment.failed'], status: 'active', lastDelivery: '15 min ago', successRate: 97.1 },
-  { id: '4', url: 'https://api.myfirm.in/webhooks/legacy', events: ['return.filed'], status: 'failed', lastDelivery: '2 days ago', successRate: 84.3 },
-];
+const demoWebhooks: Webhook[] = [];
 
 // --- Webhook Delivery Log ---
 interface DeliveryLog {
@@ -153,16 +143,7 @@ interface DeliveryLog {
   latency: string;
 }
 
-const demoDeliveryLogs: DeliveryLog[] = [
-  { id: '1', webhookId: '1', timestamp: '28 Feb 2025, 14:32:05', event: 'return.filed', status: 'success', responseCode: 200, latency: '142ms' },
-  { id: '2', webhookId: '2', timestamp: '28 Feb 2025, 14:30:12', event: 'invoice.created', status: 'success', responseCode: 200, latency: '98ms' },
-  { id: '3', webhookId: '3', timestamp: '28 Feb 2025, 14:28:45', event: 'payment.received', status: 'success', responseCode: 200, latency: '203ms' },
-  { id: '4', webhookId: '4', timestamp: '28 Feb 2025, 14:25:00', event: 'return.filed', status: 'failed', responseCode: 503, latency: '5002ms' },
-  { id: '5', webhookId: '1', timestamp: '28 Feb 2025, 14:20:33', event: 'gstin.verified', status: 'success', responseCode: 200, latency: '87ms' },
-  { id: '6', webhookId: '2', timestamp: '28 Feb 2025, 14:18:22', event: 'e-invoice.generated', status: 'success', responseCode: 200, latency: '156ms' },
-  { id: '7', webhookId: '3', timestamp: '28 Feb 2025, 14:15:01', event: 'payment.failed', status: 'success', responseCode: 200, latency: '112ms' },
-  { id: '8', webhookId: '1', timestamp: '28 Feb 2025, 14:10:44', event: 'return.failed', status: 'success', responseCode: 200, latency: '134ms' },
-];
+const demoDeliveryLogs: DeliveryLog[] = [];
 
 // --- OAuth Apps ---
 interface OAuthApp {
@@ -173,14 +154,7 @@ interface OAuthApp {
   status: 'active' | 'disabled';
 }
 
-const demoOAuthApps: OAuthApp[] = [
-  { id: '1', name: 'Tally Connector', clientId: 'gpi_oa_t4l7m9n1', redirectUri: 'https://tally.gstpilot.in/callback', status: 'active' },
-  { id: '2', name: 'Zoho Books Sync', clientId: 'gpi_oa_z3h6k8m0', redirectUri: 'https://zoho.gstpilot.in/oauth/callback', status: 'active' },
-  { id: '3', name: 'WhatsApp Bot', clientId: 'gpi_oa_w2a5c7e9', redirectUri: 'https://wa.gstpilot.in/auth/callback', status: 'active' },
-  { id: '4', name: 'Mobile App', clientId: 'gpi_oa_m1b3d5f7', redirectUri: 'gstpilot://oauth/callback', status: 'active' },
-  { id: '5', name: 'Slack Integration', clientId: 'gpi_oa_s9r2t4v6', redirectUri: 'https://slack.gstpilot.in/callback', status: 'active' },
-  { id: '6', name: 'Legacy Desktop App', clientId: 'gpi_oa_l8p0q2s4', redirectUri: 'http://localhost:8080/callback', status: 'disabled' },
-];
+const demoOAuthApps: OAuthApp[] = [];
 
 // --- Integrations ---
 interface Integration {
@@ -191,20 +165,7 @@ interface Integration {
   icon: string;
 }
 
-const demoIntegrations: Integration[] = [
-  { id: '1', name: 'Tally', category: 'Accounting', status: 'connected', icon: '🧮' },
-  { id: '2', name: 'Zoho Books', category: 'Accounting', status: 'connected', icon: '📚' },
-  { id: '3', name: 'Busy', category: 'Accounting', status: 'available', icon: '📋' },
-  { id: '4', name: 'SAP', category: 'ERP', status: 'available', icon: '🏢' },
-  { id: '5', name: 'QuickBooks', category: 'Accounting', status: 'available', icon: '💼' },
-  { id: '6', name: 'WhatsApp', category: 'Communication', status: 'connected', icon: '💬' },
-  { id: '7', name: 'Slack', category: 'Communication', status: 'connected', icon: '📱' },
-  { id: '8', name: 'Gmail', category: 'Communication', status: 'available', icon: '✉️' },
-  { id: '9', name: 'AWS', category: 'Cloud', status: 'available', icon: '☁️' },
-  { id: '10', name: 'GCP', category: 'Cloud', status: 'available', icon: '🌐' },
-  { id: '11', name: 'Azure', category: 'Cloud', status: 'coming_soon', icon: '🔷' },
-  { id: '12', name: 'Zapier', category: 'Automation', status: 'available', icon: '⚡' },
-];
+const demoIntegrations: Integration[] = [];
 
 // --- Billing History ---
 interface Invoice {
@@ -216,13 +177,7 @@ interface Invoice {
   plan: string;
 }
 
-const demoInvoices: Invoice[] = [
-  { id: 'INV-2025-002', date: '01 Feb 2025', amount: '₹4,999', calls: 87420, status: 'paid', plan: 'Pro' },
-  { id: 'INV-2025-001', date: '01 Jan 2025', amount: '₹4,999', calls: 92150, status: 'paid', plan: 'Pro' },
-  { id: 'INV-2024-012', date: '01 Dec 2024', amount: '₹999', calls: 9800, status: 'paid', plan: 'Starter' },
-  { id: 'INV-2024-011', date: '01 Nov 2024', amount: '₹999', calls: 8700, status: 'paid', plan: 'Starter' },
-  { id: 'INV-2024-010', date: '01 Oct 2024', amount: '₹0', calls: 890, status: 'paid', plan: 'Free' },
-];
+const demoInvoices: Invoice[] = [];
 
 // --- Monthly Usage Trend ---
 const monthlyUsage = [
@@ -1077,45 +1032,58 @@ print(filing.arn)  # AA110125001234F`,
                 </tr>
               </thead>
               <tbody>
-                {demoApiKeys.map((apiKey) => (
-                  <tr key={apiKey.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <code className="text-[11px] font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {showKey[apiKey.id] ? apiKey.key : maskKey(apiKey.key)}
-                        </code>
-                        <button onClick={() => toggleKeyVisibility(apiKey.id)} className="text-slate-400 hover:text-slate-600">
-                          {showKey[apiKey.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-slate-700">{apiKey.name}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{apiKey.created}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{apiKey.lastUsed}</td>
-                    <td className="px-4 py-3">
-                      <Badge className={`text-[10px] ${
-                        apiKey.status === 'active'
-                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                          : 'bg-red-100 text-red-700 border-red-200'
-                      }`}>
-                        {apiKey.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600 font-mono">{apiKey.rateLimit}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-slate-500 hover:text-slate-700">
-                          <RotateCw className="h-3 w-3" />
-                          Rotate
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-red-500 hover:text-red-700 hover:bg-red-50">
-                          <Trash2 className="h-3 w-3" />
-                          Revoke
-                        </Button>
-                      </div>
+                {demoApiKeys.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10">
+                      <EmptyState
+                        icon={Key}
+                        title="No API keys yet"
+                        description="Generate your first API key to start using the GSTPilot API."
+                        compact
+                      />
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  demoApiKeys.map((apiKey) => (
+                    <tr key={apiKey.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <code className="text-[11px] font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                            {showKey[apiKey.id] ? apiKey.key : maskKey(apiKey.key)}
+                          </code>
+                          <button onClick={() => toggleKeyVisibility(apiKey.id)} className="text-slate-400 hover:text-slate-600">
+                            {showKey[apiKey.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium text-slate-700">{apiKey.name}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{apiKey.created}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{apiKey.lastUsed}</td>
+                      <td className="px-4 py-3">
+                        <Badge className={`text-[10px] ${
+                          apiKey.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : 'bg-red-100 text-red-700 border-red-200'
+                        }`}>
+                          {apiKey.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600 font-mono">{apiKey.rateLimit}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-slate-500 hover:text-slate-700">
+                            <RotateCw className="h-3 w-3" />
+                            Rotate
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-red-500 hover:text-red-700 hover:bg-red-50">
+                            <Trash2 className="h-3 w-3" />
+                            Revoke
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1132,18 +1100,27 @@ print(filing.arn)  # AA110125001234F`,
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {demoApiKeys.filter(k => k.status === 'active').map((apiKey) => {
-              const usage = Math.round(Math.random() * 40 + 10);
-              return (
-                <div key={apiKey.id} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-700">{apiKey.name}</span>
-                    <span className="text-slate-500">{usage}% of {apiKey.rateLimit}</span>
+            {demoApiKeys.filter(k => k.status === 'active').length === 0 ? (
+              <EmptyState
+                icon={BarChart3}
+                title="No rate limit data yet"
+                description="Rate limit usage will appear here once you have active API keys."
+                compact
+              />
+            ) : (
+              demoApiKeys.filter(k => k.status === 'active').map((apiKey) => {
+                const usage = Math.round(Math.random() * 40 + 10);
+                return (
+                  <div key={apiKey.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-700">{apiKey.name}</span>
+                      <span className="text-slate-500">{usage}% of {apiKey.rateLimit}</span>
+                    </div>
+                    <Progress value={usage} className="h-2" />
                   </div>
-                  <Progress value={usage} className="h-2" />
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1220,38 +1197,51 @@ print(filing.arn)  # AA110125001234F`,
                 </tr>
               </thead>
               <tbody>
-                {demoWebhooks.map((wh) => (
-                  <tr key={wh.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
-                    <td className="px-4 py-3">
-                      <code className="text-[11px] font-mono text-slate-600 max-w-[200px] truncate block">{wh.url}</code>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {wh.events.map((evt) => (
-                          <Badge key={evt} variant="outline" className="text-[9px] px-1.5 py-0">{evt}</Badge>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge className={`text-[10px] ${
-                        wh.status === 'active'
-                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                          : 'bg-red-100 text-red-700 border-red-200'
-                      }`}>
-                        {wh.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{wh.lastDelivery}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Progress value={wh.successRate} className="h-2 flex-1" />
-                        <span className={`text-xs font-medium ${wh.successRate > 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {wh.successRate}%
-                        </span>
-                      </div>
+                {demoWebhooks.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10">
+                      <EmptyState
+                        icon={Webhook}
+                        title="No webhooks yet"
+                        description="Add a webhook endpoint to receive real-time event notifications."
+                        compact
+                      />
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  demoWebhooks.map((wh) => (
+                    <tr key={wh.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
+                      <td className="px-4 py-3">
+                        <code className="text-[11px] font-mono text-slate-600 max-w-[200px] truncate block">{wh.url}</code>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {wh.events.map((evt) => (
+                            <Badge key={evt} variant="outline" className="text-[9px] px-1.5 py-0">{evt}</Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={`text-[10px] ${
+                          wh.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : 'bg-red-100 text-red-700 border-red-200'
+                        }`}>
+                          {wh.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{wh.lastDelivery}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Progress value={wh.successRate} className="h-2 flex-1" />
+                          <span className={`text-xs font-medium ${wh.successRate > 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {wh.successRate}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1269,29 +1259,38 @@ print(filing.arn)  # AA110125001234F`,
         <CardContent>
           <ScrollArea className="max-h-64">
             <div className="space-y-2">
-              {demoDeliveryLogs.map((log) => (
-                <div key={log.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50">
-                  {log.status === 'success' ? (
-                    <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <code className="text-[11px] font-mono text-slate-600">{log.event}</code>
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
-                        log.responseCode >= 200 && log.responseCode < 300
-                          ? 'text-emerald-600 border-emerald-200'
-                          : 'text-red-600 border-red-200'
-                      }`}>
-                        {log.responseCode}
-                      </Badge>
-                      <span className="text-[10px] text-slate-400">{log.latency}</span>
+              {demoDeliveryLogs.length === 0 ? (
+                <EmptyState
+                  icon={Activity}
+                  title="No delivery logs yet"
+                  description="Recent webhook delivery attempts will appear here once events fire."
+                  compact
+                />
+              ) : (
+                demoDeliveryLogs.map((log) => (
+                  <div key={log.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50">
+                    {log.status === 'success' ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <code className="text-[11px] font-mono text-slate-600">{log.event}</code>
+                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                          log.responseCode >= 200 && log.responseCode < 300
+                            ? 'text-emerald-600 border-emerald-200'
+                            : 'text-red-600 border-red-200'
+                        }`}>
+                          {log.responseCode}
+                        </Badge>
+                        <span className="text-[10px] text-slate-400">{log.latency}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">{log.timestamp}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">{log.timestamp}</span>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -1438,26 +1437,39 @@ print(filing.arn)  # AA110125001234F`,
                 </tr>
               </thead>
               <tbody>
-                {demoOAuthApps.map((app) => (
-                  <tr key={app.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
-                    <td className="px-4 py-2.5 text-xs font-medium text-slate-700">{app.name}</td>
-                    <td className="px-4 py-2.5">
-                      <code className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{app.clientId}</code>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <code className="text-[11px] font-mono text-slate-500 truncate block max-w-[200px]">{app.redirectUri}</code>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge className={`text-[10px] ${
-                        app.status === 'active'
-                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}>
-                        {app.status}
-                      </Badge>
+                {demoOAuthApps.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-10">
+                      <EmptyState
+                        icon={Lock}
+                        title="No OAuth applications yet"
+                        description="Register an OAuth application to enable third-party integrations."
+                        compact
+                      />
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  demoOAuthApps.map((app) => (
+                    <tr key={app.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
+                      <td className="px-4 py-2.5 text-xs font-medium text-slate-700">{app.name}</td>
+                      <td className="px-4 py-2.5">
+                        <code className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{app.clientId}</code>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <code className="text-[11px] font-mono text-slate-500 truncate block max-w-[200px]">{app.redirectUri}</code>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge className={`text-[10px] ${
+                          app.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}>
+                          {app.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1474,30 +1486,41 @@ print(filing.arn)  # AA110125001234F`,
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {demoIntegrations.map((int) => (
-              <motion.div
-                key={int.id}
-                whileHover={{ scale: 1.02 }}
-                className="border border-slate-100 rounded-lg p-3 hover:border-emerald-200 hover:shadow-sm transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">{int.icon}</span>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-700">{int.name}</div>
-                    <div className="text-[10px] text-slate-400">{int.category}</div>
+            {demoIntegrations.length === 0 ? (
+              <div className="col-span-full">
+                <EmptyState
+                  icon={Server}
+                  title="No integrations available yet"
+                  description="Connected and available integrations will appear here once configured."
+                  compact
+                />
+              </div>
+            ) : (
+              demoIntegrations.map((int) => (
+                <motion.div
+                  key={int.id}
+                  whileHover={{ scale: 1.02 }}
+                  className="border border-slate-100 rounded-lg p-3 hover:border-emerald-200 hover:shadow-sm transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">{int.icon}</span>
+                    <div>
+                      <div className="text-xs font-semibold text-slate-700">{int.name}</div>
+                      <div className="text-[10px] text-slate-400">{int.category}</div>
+                    </div>
                   </div>
-                </div>
-                <Badge className={`text-[9px] ${
-                  int.status === 'connected'
-                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                    : int.status === 'available'
-                      ? 'bg-sky-100 text-sky-700 border-sky-200'
-                      : 'bg-slate-100 text-slate-500 border-slate-200'
-                }`}>
-                  {int.status === 'connected' ? 'Connected' : int.status === 'available' ? 'Available' : 'Coming Soon'}
-                </Badge>
-              </motion.div>
-            ))}
+                  <Badge className={`text-[9px] ${
+                    int.status === 'connected'
+                      ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                      : int.status === 'available'
+                        ? 'bg-sky-100 text-sky-700 border-sky-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}>
+                    {int.status === 'connected' ? 'Connected' : int.status === 'available' ? 'Available' : 'Coming Soon'}
+                  </Badge>
+                </motion.div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1671,26 +1694,39 @@ print(filing.arn)  # AA110125001234F`,
                 </tr>
               </thead>
               <tbody>
-                {demoInvoices.map((inv) => (
-                  <tr key={inv.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
-                    <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{inv.id}</td>
-                    <td className="px-4 py-2.5 text-xs text-slate-500">{inv.date}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="text-[10px]">{inv.plan}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-slate-600">{formatNumber(inv.calls)}</td>
-                    <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{inv.amount}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge className={`text-[10px] ${
-                        inv.status === 'paid'
-                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                          : 'bg-amber-100 text-amber-700 border-amber-200'
-                      }`}>
-                        {inv.status}
-                      </Badge>
+                {demoInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10">
+                      <EmptyState
+                        icon={FileText}
+                        title="No invoices yet"
+                        description="Billing invoices will appear here once you upgrade from the Free plan."
+                        compact
+                      />
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  demoInvoices.map((inv) => (
+                    <tr key={inv.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
+                      <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{inv.id}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500">{inv.date}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="outline" className="text-[10px]">{inv.plan}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">{formatNumber(inv.calls)}</td>
+                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{inv.amount}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge className={`text-[10px] ${
+                          inv.status === 'paid'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-100 text-amber-700 border-amber-200'
+                        }`}>
+                          {inv.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

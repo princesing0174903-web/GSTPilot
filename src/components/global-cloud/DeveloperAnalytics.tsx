@@ -372,7 +372,13 @@ export default function DeveloperAnalytics() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {TOP_DEVELOPER_APPS.map((app, idx) => {
+                {TOP_DEVELOPER_APPS.length === 0 ? (
+                  <div className="col-span-full h-32 flex flex-col items-center justify-center text-white/40">
+                    <Boxes className="h-8 w-8 mb-2 text-white/20" />
+                    <p className="text-sm font-medium">No developer apps yet</p>
+                    <p className="text-xs text-white/30 mt-1">Top developer apps by call volume will appear here once published</p>
+                  </div>
+                ) : TOP_DEVELOPER_APPS.map((app, idx) => {
                   const a = ACCENT_CLASSES[app.accent];
                   const errorColor = app.errorRate < 0.03 ? 'text-emerald-300' :
                     app.errorRate < 0.06 ? 'text-amber-300' : 'text-rose-300';

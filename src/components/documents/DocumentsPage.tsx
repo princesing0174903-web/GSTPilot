@@ -285,106 +285,9 @@ function getFieldsForType(type: DocType): ExtractedField[] {
   }
 }
 
-const SAMPLE_ANOMALIES: DocAnomaly[] = [
-  { id: 'an-1', type: 'duplicate_invoice', description: 'Invoice INV-2025-00142 appears in both March and April uploads with identical amounts', severity: 'high', sourceDocId: 'doc-1', sourceDocName: 'Invoice_Mar2025_ABC.pdf', investigated: false },
-  { id: 'an-2', type: 'gstin_invalid', description: 'GSTIN "27AAFCD1234F1Z5" checksum validation failed — possible data entry error', severity: 'high', sourceDocId: 'doc-6', sourceDocName: 'Invoice_Batch_Mar2025.pdf', investigated: false },
-  { id: 'an-3', type: 'tax_mismatch', description: 'CGST + SGST does not equal 18% of taxable value (calculated: ₹44,100, actual: ₹44,000)', severity: 'medium', sourceDocId: 'doc-3', sourceDocName: 'SalesRegister_Q4_2024.pdf', investigated: false },
-  { id: 'an-4', type: 'unusual_amount', description: 'Total invoice amount ₹89,00,000 is 4.2x higher than average for this supplier', severity: 'medium', sourceDocId: 'doc-9', sourceDocName: 'SalesRegister_Mar2025.xlsx', investigated: true },
-  { id: 'an-5', type: 'date_inconsistency', description: 'Invoice date (01/04/2025) is after the reporting period (Mar 2025)', severity: 'low', sourceDocId: 'doc-2', sourceDocName: 'PurchaseRegister_Feb2025.xlsx', investigated: false },
-]
-
-const SAMPLE_TASKS: DocTask[] = [
-  { id: 'task-1', title: 'Reconcile duplicate invoice INV-2025-00142', sourceDocId: 'doc-1', sourceDocName: 'Invoice_Mar2025_ABC.pdf', priority: 'high', status: 'todo', assignedTo: 'Rajesh K.' },
-  { id: 'task-2', title: 'Respond to Show Cause Notice — Section 73', sourceDocId: 'doc-4', sourceDocName: 'Notice_GSTDept_Patel.pdf', priority: 'urgent', status: 'in_progress', assignedTo: 'Priya S.' },
-  { id: 'task-3', title: 'Verify bank statement transactions for Mar 2025', sourceDocId: 'doc-8', sourceDocName: 'BankStatement_Mar2025.pdf', priority: 'medium', status: 'todo', assignedTo: 'Amit T.' },
-  { id: 'task-4', title: 'Correct GSTIN format in invoice batch upload', sourceDocId: 'doc-6', sourceDocName: 'Invoice_Batch_Mar2025.pdf', priority: 'high', status: 'review', assignedTo: 'Rajesh K.' },
-  { id: 'task-5', title: 'Investigate tax calculation mismatch in Q4 sales', sourceDocId: 'doc-3', sourceDocName: 'SalesRegister_Q4_2024.pdf', priority: 'medium', status: 'todo', assignedTo: 'Sneha M.' },
-]
-
-const SAMPLE_DOCS: SmartDocument[] = [
-  {
-    id: 'doc-1', name: 'Invoice_Mar2025_ABC.pdf', type: 'invoice', client: 'ABC Traders',
-    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-15', size: '2.4 MB', sizeBytes: 2516582,
-    format: 'PDF', extractedFields: INVOICE_FIELDS, extractedText: 'TAX INVOICE\nInvoice No: INV-2025-00142\nDate: 15/03/2025\nSupplier: ABC Traders, GSTIN: 27AAFCD1234F1Z5\nBuyer: XYZ Industries, GSTIN: 27AABCU9603R1ZM\nTaxable Value: ₹2,45,000.00\nCGST 9%: ₹22,050.00\nSGST 9%: ₹22,050.00\nTotal: ₹2,89,100.00',
-    classificationConfidence: 96, extractionAccuracy: 94, ocrProgress: 100,
-    summary: { text: 'Tax invoice from ABC Traders to XYZ Industries for ₹2,89,100 (including ₹44,100 GST). Dated March 15, 2025. Both parties are Maharashtra-registered under GST.', highlights: ['₹2,89,100 total', 'GSTIN verified', 'March 2025'], generated: true },
-    anomalies: [SAMPLE_ANOMALIES[0]], tasks: [SAMPLE_TASKS[0]],
-  },
-  {
-    id: 'doc-2', name: 'PurchaseRegister_Feb2025.xlsx', type: 'purchase_register', client: 'XYZ Industries',
-    status: 'processing', ocrStatus: 'processing', uploadDate: '2025-03-14', size: '5.1 MB', sizeBytes: 5347737,
-    format: 'XLSX', extractedFields: PURCHASE_FIELDS, extractedText: 'Purchase Register - February 2025\nXYZ Industries\nTotal Entries: 142\nTotal Taxable Value: ₹45,67,890\nTotal ITC: ₹8,22,220',
-    classificationConfidence: 92, extractionAccuracy: 78, ocrProgress: 67,
-    summary: null, anomalies: [SAMPLE_ANOMALIES[4]], tasks: [],
-  },
-  {
-    id: 'doc-3', name: 'SalesRegister_Q4_2024.pdf', type: 'sales_register', client: 'Sharma & Co',
-    status: 'extracted', ocrStatus: 'reviewed', uploadDate: '2025-03-12', size: '3.8 MB', sizeBytes: 3984588,
-    format: 'PDF', extractedFields: SALES_FIELDS, extractedText: 'Sales Register - Q4 2024\nSharma & Co\nTotal Entries: 256\nTotal Taxable Value: ₹1,23,45,678\nGSTR-1 Section: B2B Large - 180, B2B Small - 76',
-    classificationConfidence: 98, extractionAccuracy: 91, ocrProgress: 100,
-    summary: { text: 'Q4 2024 Sales Register for Sharma & Co with 256 entries totaling ₹1.23 Cr taxable value. Majority classified as B2B Large (180 entries). Tax calculation discrepancy detected.', highlights: ['256 entries', '₹1.23 Cr taxable', 'B2B Large dominant'], generated: true },
-    anomalies: [SAMPLE_ANOMALIES[2]], tasks: [SAMPLE_TASKS[4]],
-  },
-  {
-    id: 'doc-4', name: 'Notice_GSTDept_Patel.pdf', type: 'gst_notice', client: 'Patel Enterprises',
-    status: 'reviewed', ocrStatus: 'reviewed', uploadDate: '2025-03-10', size: '1.2 MB', sizeBytes: 1258291,
-    format: 'PDF', extractedFields: NOTICE_FIELDS, extractedText: 'SHOW CAUSE NOTICE\nSection 73 of CGST Act, 2017\nTo: Patel Enterprises, GSTIN: 24AABCP1234F1Z5\nIssue Date: 10/03/2025\nResponse Required By: 10/04/2025\nAmount: ₹3,50,000.00\nAuthority: DC, CGST & Central Excise, Mumbai',
-    classificationConfidence: 99, extractionAccuracy: 97, ocrProgress: 100,
-    summary: { text: 'Show Cause Notice under Section 73 from CGST Mumbai for Patel Enterprises. Amount involved: ₹3.5 Lakh. Response deadline: April 10, 2025. Requires immediate attention.', highlights: ['Section 73', '₹3.5 Lakh', 'Deadline: Apr 10'], generated: true },
-    anomalies: [], tasks: [SAMPLE_TASKS[1]],
-  },
-  {
-    id: 'doc-5', name: 'BankStatement_Mar2025.pdf', type: 'bank_statement', client: 'Kumar Ltd',
-    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-09', size: '1.8 MB', sizeBytes: 1887436,
-    format: 'PDF', extractedFields: BANK_FIELDS, extractedText: 'Bank Statement\nHDFC Bank\nAccount: XXXX-XXXX-4523\nPeriod: March 2025\nOpening Balance: ₹12,45,230.50\nClosing Balance: ₹15,67,890.25\nTotal Transactions: 47',
-    classificationConfidence: 94, extractionAccuracy: 89, ocrProgress: 100,
-    summary: { text: 'HDFC Bank statement for Kumar Ltd, March 2025. Net inflow of ₹3.22 Lakh (opening ₹12.45L → closing ₹15.68L). 47 transactions recorded.', highlights: ['₹3.22L net inflow', '47 transactions', 'HDFC Bank'], generated: true },
-    anomalies: [], tasks: [],
-  },
-  {
-    id: 'doc-6', name: 'Invoice_Batch_Mar2025.pdf', type: 'invoice', client: 'Mehta Group',
-    status: 'processing', ocrStatus: 'processing', uploadDate: '2025-03-08', size: '4.5 MB', sizeBytes: 4718592,
-    format: 'PDF', extractedFields: INVOICE_FIELDS.slice(0, 4), extractedText: 'Batch Invoice Upload - March 2025\nMehta Group\nProcessing...',
-    classificationConfidence: 85, extractionAccuracy: 42, ocrProgress: 38,
-    summary: null, anomalies: [SAMPLE_ANOMALIES[1]], tasks: [SAMPLE_TASKS[3]],
-  },
-  {
-    id: 'doc-7', name: 'GSTR-1_Feb2025_Sharma.pdf', type: 'sales_register', client: 'Sharma & Co',
-    status: 'reviewed', ocrStatus: 'reviewed', uploadDate: '2025-02-28', size: '2.1 MB', sizeBytes: 2202009,
-    format: 'PDF', extractedFields: SALES_FIELDS, extractedText: 'GSTR-1 Return - February 2025\nSharma & Co\nFiled Successfully',
-    classificationConfidence: 97, extractionAccuracy: 96, ocrProgress: 100,
-    summary: { text: 'GSTR-1 return for February 2025 filed by Sharma & Co. Successfully processed with high accuracy.', highlights: ['Filed', 'Feb 2025', 'High accuracy'], generated: true },
-    anomalies: [], tasks: [],
-  },
-  {
-    id: 'doc-8', name: 'BankStatement_Mar2025.pdf', type: 'bank_statement', client: 'ABC Traders',
-    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-02-20', size: '3.2 MB', sizeBytes: 3355443,
-    format: 'PDF', extractedFields: BANK_FIELDS, extractedText: 'Bank Statement - March 2025\nABC Traders\nSBI Account\nOpening: ₹8,90,000\nClosing: ₹11,23,450\nTransactions: 62',
-    classificationConfidence: 93, extractionAccuracy: 88, ocrProgress: 100,
-    summary: { text: 'SBI Bank statement for ABC Traders. Net inflow of ₹2.33 Lakh with 62 transactions in March 2025.', highlights: ['₹2.33L net inflow', '62 transactions', 'SBI Bank'], generated: true },
-    anomalies: [], tasks: [SAMPLE_TASKS[2]],
-  },
-  {
-    id: 'doc-9', name: 'SalesRegister_Mar2025.xlsx', type: 'sales_register', client: 'Patel Enterprises',
-    status: 'extracted', ocrStatus: 'extracted', uploadDate: '2025-03-16', size: '6.7 MB', sizeBytes: 7025459,
-    format: 'XLSX', extractedFields: SALES_FIELDS, extractedText: 'Sales Register - March 2025\nPatel Enterprises\nTotal Entries: 312\nHigh-value transactions detected',
-    classificationConfidence: 91, extractionAccuracy: 86, ocrProgress: 100,
-    summary: { text: 'March 2025 Sales Register for Patel Enterprises. 312 entries with unusually high-value transactions flagged.', highlights: ['312 entries', 'High-value flagged'], generated: true },
-    anomalies: [SAMPLE_ANOMALIES[3]], tasks: [],
-  },
-  {
-    id: 'doc-10', name: 'Invoice_Apr2025_XYZ.pdf', type: 'invoice', client: 'XYZ Industries',
-    status: 'uploading', ocrStatus: 'queued', uploadDate: '2025-03-17', size: '1.9 MB', sizeBytes: 1992294,
-    format: 'PDF', extractedFields: [], extractedText: '', classificationConfidence: 0, extractionAccuracy: 0, ocrProgress: 0,
-    summary: null, anomalies: [], tasks: [],
-  },
-  {
-    id: 'doc-11', name: 'GSTR-3B_Mar2025_ABC.pdf', type: 'purchase_register', client: 'ABC Traders',
-    status: 'failed', ocrStatus: 'queued', uploadDate: '2025-03-17', size: '2.0 MB', sizeBytes: 2097152,
-    format: 'PDF', extractedFields: [], extractedText: '', classificationConfidence: 0, extractionAccuracy: 0, ocrProgress: 0,
-    summary: null, anomalies: [], tasks: [],
-  },
-]
+const SAMPLE_ANOMALIES: DocAnomaly[] = []
+const SAMPLE_TASKS: DocTask[] = []
+const SAMPLE_DOCS: SmartDocument[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPER COMPONENTS
@@ -1463,8 +1366,8 @@ export default function DocumentsPage() {
   // size, folder, client, createdAt).
   const [documents, setDocuments] = useState<SmartDocument[]>([])
   const [docsLoading, setDocsLoading] = useState(true)
-  const [anomalies, setAnomalies] = useState<DocAnomaly[]>(SAMPLE_ANOMALIES)
-  const [allTasks, setAllTasks] = useState<DocTask[]>(SAMPLE_TASKS)
+  const [anomalies, setAnomalies] = useState<DocAnomaly[]>([])
+  const [allTasks, setAllTasks] = useState<DocTask[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDoc, setSelectedDoc] = useState<SmartDocument | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)

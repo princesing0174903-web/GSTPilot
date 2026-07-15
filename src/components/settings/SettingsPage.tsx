@@ -232,11 +232,7 @@ interface Session {
   current?: boolean
 }
 
-const MOCK_SESSIONS: Session[] = [
-  { id: '1', device: 'Chrome on MacOS', location: 'Mumbai, India', lastActive: 'Now', icon: <Monitor className="h-4 w-4" />, current: true },
-  { id: '2', device: 'GSTPilot Mobile App', location: 'Mumbai, India', lastActive: '2 hours ago', icon: <Smartphone className="h-4 w-4" /> },
-  { id: '3', device: 'Firefox on Windows', location: 'Pune, India', lastActive: 'Yesterday', icon: <Globe className="h-4 w-4" /> },
-]
+const MOCK_SESSIONS: Session[] = []
 
 // ─── Billing History ────────────────────────────────────────────────────
 interface BillingInvoice {
@@ -263,11 +259,7 @@ interface ApiConnection {
   icon: React.ReactNode
 }
 
-const MOCK_API_CONNECTIONS: ApiConnection[] = [
-  { id: 'gst-portal', name: 'GST Portal API', description: 'GSTN portal for filing returns and viewing status', status: 'Connected', lastSync: '5 minutes ago', icon: <Globe className="h-4 w-4" /> },
-  { id: 'eway-bill', name: 'E-Way Bill API', description: 'Generate and manage e-way bills for transport', status: 'Disconnected', lastSync: '2 hours ago', icon: <ClipboardList className="h-4 w-4" /> },
-  { id: 'e-invoice', name: 'E-Invoice API', description: 'IRN generation and e-invoice management', status: 'Not Configured', icon: <ClipboardList className="h-4 w-4" /> },
-]
+const MOCK_API_CONNECTIONS: ApiConnection[] = []
 
 // ─── Audit Log Entry ──────────────────────────────────────────────────
 interface AuditLogEntry {
@@ -279,18 +271,8 @@ interface AuditLogEntry {
   actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
 }
 
-const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
-  { id: '1', timestamp: '2025-06-04 14:32', user: 'Rajesh Kumar', action: 'Filed GSTR-1 for Sharma Enterprises', entity: 'GSTR-1 May 2025', actionType: 'filing' },
-  { id: '2', timestamp: '2025-06-04 13:15', user: 'Priya Sharma', action: 'Updated client Patel & Sons', entity: 'Client Profile', actionType: 'client_update' },
-  { id: '3', timestamp: '2025-06-04 11:48', user: 'Rajesh Kumar', action: 'Uploaded 24 invoices for Krishna Traders', entity: 'Invoice Batch', actionType: 'invoice' },
-  { id: '4', timestamp: '2025-06-04 10:30', user: 'Amit Patel', action: 'Reconciled GSTR-2B for Metro Retail Solutions', entity: 'Reconciliation', actionType: 'reconciliation' },
-  { id: '5', timestamp: '2025-06-03 17:22', user: 'Priya Sharma', action: 'Changed notification preferences', entity: 'Settings', actionType: 'settings' },
-  { id: '6', timestamp: '2025-06-03 16:10', user: 'Rajesh Kumar', action: 'Filed GSTR-3B for Sunrise Exports Ltd', entity: 'GSTR-3B May 2025', actionType: 'filing' },
-  { id: '7', timestamp: '2025-06-03 14:45', user: 'Amit Patel', action: 'Approved 6 invoices for Gupta Manufacturing', entity: 'Invoice Queue', actionType: 'invoice' },
-  { id: '8', timestamp: '2025-06-03 11:20', user: 'Priya Sharma', action: 'Added new client Digital Commerce India', entity: 'Client Profile', actionType: 'client_update' },
-  { id: '9', timestamp: '2025-06-02 16:55', user: 'Rajesh Kumar', action: 'Reconciled ITC for Apex Logistics', entity: 'Reconciliation', actionType: 'reconciliation' },
-  { id: '10', timestamp: '2025-06-02 10:05', user: 'Amit Patel', action: 'Generated e-way bill for Sharma Enterprises', entity: 'E-Way Bill', actionType: 'invoice' },
-]
+// NOTE: Audit logs are loaded from real Firestore activities via
+// useFireRecentActivities (see the SettingsPage component below).
 
 // ─── Save Button with Animated States ──────────────────────────────────
 function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
@@ -410,13 +392,15 @@ export default function SettingsPage() {
   const orgInitializedRef = useRef<string | null>(null)
 
   // ── Firm Profile State ──────────────────────────────────────────────
-  const [firmName, setFirmName] = useState('Sharma & Associates')
-  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
-  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
-  const [firmState, setFirmState] = useState('Maharashtra')
-  const [entityType, setEntityType] = useState('LLP')
-  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
-  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
+  // Defaults are intentionally empty — the form hydrates from the real
+  // organization document in the effect at line ~571 below.
+  const [firmName, setFirmName] = useState('')
+  const [legalName, setLegalName] = useState('')
+  const [firmGstin, setFirmGstin] = useState('')
+  const [firmState, setFirmState] = useState('')
+  const [entityType, setEntityType] = useState('')
+  const [caRegNumber, setCaRegNumber] = useState('')
+  const [officeAddress, setOfficeAddress] = useState('')
 
   // ── GST Config State ────────────────────────────────────────────────
   const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
@@ -1783,7 +1767,12 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="space-y-3">
-                  {MOCK_SESSIONS.map((session) => (
+                  {MOCK_SESSIONS.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-muted-foreground">No active sessions</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Sessions will appear here when you sign in on other devices.</p>
+                    </div>
+                  ) : MOCK_SESSIONS.map((session) => (
                     <div
                       key={session.id}
                       className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
@@ -2015,7 +2004,12 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-4">
-              {MOCK_API_CONNECTIONS.map((connection) => {
+              {MOCK_API_CONNECTIONS.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-muted-foreground">No API connections configured</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">API connections will appear here once configured on your organization.</p>
+                </div>
+              ) : MOCK_API_CONNECTIONS.map((connection) => {
                 const live = apiConnStatuses[connection.id]
                 const status: ApiConnStatus = live?.status ?? connection.status
                 const lastSync = live?.lastSync

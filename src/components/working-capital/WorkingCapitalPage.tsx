@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useFireClients, useFireInvoices, useFireReturns } from '@/hooks/use-firestore';
+import { EmptyState } from '@/components/shared';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INDIAN FORMATTING UTILS
@@ -46,34 +47,46 @@ function formatDate(dateStr: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// DATA (empty — populated by real APIs when available)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const demoInvoices = [
-  { id: 'INV-001', number: 'INV/2025/001', client: 'Sharma Textiles Pvt Ltd', amount: 456000, age: 15, status: 'unpaid' as const, eligible: true, advancePct: 90 },
-  { id: 'INV-002', number: 'INV/2025/002', client: 'Patel Engineering Works', amount: 1280000, age: 22, status: 'unpaid' as const, eligible: true, advancePct: 85 },
-  { id: 'INV-003', number: 'INV/2025/003', client: 'Krishna Industries', amount: 345000, age: 38, status: 'unpaid' as const, eligible: true, advancePct: 80 },
-  { id: 'INV-004', number: 'INV/2025/004', client: 'Mehta Exports Ltd', amount: 2100000, age: 45, status: 'unpaid' as const, eligible: true, advancePct: 80 },
-  { id: 'INV-005', number: 'INV/2025/005', client: 'Gupta Trading Co', amount: 189000, age: 52, status: 'overdue' as const, eligible: true, advancePct: 75 },
-  { id: 'INV-006', number: 'INV/2025/006', client: 'Reddy Constructions', amount: 3200000, age: 67, status: 'overdue' as const, eligible: true, advancePct: 70 },
-  { id: 'INV-007', number: 'INV/2025/007', client: 'Jain Pharma Distributors', amount: 567000, age: 78, status: 'overdue' as const, eligible: false, advancePct: 0 },
-  { id: 'INV-008', number: 'INV/2025/008', client: 'Singh Agro Products', amount: 890000, age: 90, status: 'overdue' as const, eligible: false, advancePct: 0 },
-  { id: 'INV-009', number: 'INV/2025/009', client: 'Desai Auto Components', amount: 725000, age: 18, status: 'unpaid' as const, eligible: true, advancePct: 88 },
-  { id: 'INV-010', number: 'INV/2025/010', client: 'Kumar Electronics Ltd', amount: 1560000, age: 30, status: 'unpaid' as const, eligible: true, advancePct: 85 },
-];
+interface WorkingCapitalInvoice {
+  id: string;
+  number: string;
+  client: string;
+  amount: number;
+  age: number;
+  status: 'unpaid' | 'overdue';
+  eligible: boolean;
+  advancePct: number;
+}
 
-const demoFinancingDeals = [
-  { id: 'FD-001', financier: 'HDFC Bank', invoice: 'INV/2024/089', client: 'Sharma Textiles Pvt Ltd', advanceAmount: 855000, fee: 25650, status: 'active' as const, maturityDate: '2025-04-15', advancePct: 90 },
-  { id: 'FD-002', financier: 'ICICI Bank', invoice: 'INV/2024/092', client: 'Mehta Exports Ltd', advanceAmount: 1680000, fee: 67200, status: 'active' as const, maturityDate: '2025-03-28', advancePct: 85 },
-  { id: 'FD-003', financier: 'Kotak Mahindra', invoice: 'INV/2024/095', client: 'Patel Engineering Works', advanceAmount: 960000, fee: 38400, status: 'repaid' as const, maturityDate: '2025-02-10', advancePct: 80 },
-  { id: 'FD-004', financier: 'Axis Bank', invoice: 'INV/2024/088', client: 'Krishna Industries', advanceAmount: 270000, fee: 10800, status: 'repaid' as const, maturityDate: '2025-01-20', advancePct: 80 },
-];
+interface FinancingDeal {
+  id: string;
+  financier: string;
+  invoice: string;
+  client: string;
+  advanceAmount: number;
+  fee: number;
+  status: 'active' | 'repaid';
+  maturityDate: string;
+  advancePct: number;
+}
 
-const demoActiveLoans = [
-  { id: 'LN-001', type: 'Working Capital Loan', amount: 2500000, interestRate: 12.5, emi: 58400, outstanding: 1850000, nextDue: '2025-04-05', tenure: '24 months' },
-  { id: 'LN-002', type: 'Overdraft Facility', amount: 5000000, interestRate: 11.0, emi: 0, outstanding: 2300000, nextDue: '2025-04-01', tenure: 'Revolving' },
-  { id: 'LN-003', type: 'Invoice Discounting', amount: 1500000, interestRate: 13.5, emi: 42500, outstanding: 1100000, nextDue: '2025-04-15', tenure: '12 months' },
-];
+interface ActiveLoan {
+  id: string;
+  type: string;
+  amount: number;
+  interestRate: number;
+  emi: number;
+  outstanding: number;
+  nextDue: string;
+  tenure: string;
+}
+
+const demoInvoices: WorkingCapitalInvoice[] = [];
+const demoFinancingDeals: FinancingDeal[] = [];
+const demoActiveLoans: ActiveLoan[] = [];
 
 const loanProducts = [
   { name: 'Working Capital Loan', icon: Banknote, interestRate: '10.5% - 14%', maxAmount: 5000000, tenure: '12-36 months', processingFee: '1.5%', eligibility: 'Min ₹10L annual turnover, 2+ years in business', color: 'emerald' },
@@ -798,44 +811,53 @@ function InvoiceFinancingTab({ scores, invoices }: { scores: ReturnType<typeof c
         <CardContent className="px-4 pb-4">
           <ScrollArea className="max-h-64">
             <div className="space-y-2">
-              {demoFinancingDeals.map((deal, idx) => (
-                <motion.div
-                  key={deal.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3, delay: idx * 0.08 }}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`rounded-lg p-2 ${deal.status === 'active' ? 'bg-emerald-50' : 'bg-slate-50'}`}>
-                      <Building2 className={`h-4 w-4 ${deal.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              {demoFinancingDeals.length === 0 ? (
+                <EmptyState
+                  icon={Building2}
+                  title="No financing deals yet"
+                  description="Active and repaid financing deals will appear here once you discount an invoice."
+                  compact
+                />
+              ) : (
+                demoFinancingDeals.map((deal, idx) => (
+                  <motion.div
+                    key={deal.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, delay: idx * 0.08 }}
+                    className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-lg p-2 ${deal.status === 'active' ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+                        <Building2 className={`h-4 w-4 ${deal.status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-700">{deal.financier}</p>
+                        <p className="text-[10px] text-slate-400">{deal.invoice} — {deal.client}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">{deal.financier}</p>
-                      <p className="text-[10px] text-slate-400">{deal.invoice} — {deal.client}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-xs font-semibold text-slate-700">{formatINR(deal.advanceAmount)}</p>
+                        <p className="text-[10px] text-amber-500">Fee: {formatINR(deal.fee)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-400">Due: {formatDate(deal.maturityDate)}</p>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            deal.status === 'active'
+                              ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                              : 'border-slate-300 text-slate-500 bg-slate-50'
+                          }`}
+                        >
+                          {deal.status === 'active' ? 'Active' : 'Repaid'}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-slate-700">{formatINR(deal.advanceAmount)}</p>
-                      <p className="text-[10px] text-amber-500">Fee: {formatINR(deal.fee)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400">Due: {formatDate(deal.maturityDate)}</p>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${
-                          deal.status === 'active'
-                            ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
-                            : 'border-slate-300 text-slate-500 bg-slate-50'
-                        }`}
-                      >
-                        {deal.status === 'active' ? 'Active' : 'Repaid'}
-                      </Badge>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -1032,43 +1054,52 @@ function WorkingCapitalLoansTab() {
         <CardContent className="px-4 pb-4">
           <ScrollArea className="max-h-64">
             <div className="space-y-2">
-              {demoActiveLoans.map((loan, idx) => (
-                <motion.div
-                  key={loan.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3, delay: idx * 0.1 }}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg p-2 bg-emerald-50">
-                      <Banknote className="h-4 w-4 text-emerald-600" />
+              {demoActiveLoans.length === 0 ? (
+                <EmptyState
+                  icon={Banknote}
+                  title="No active loans yet"
+                  description="Active loans will appear here once your working capital loan applications are approved."
+                  compact
+                />
+              ) : (
+                demoActiveLoans.map((loan, idx) => (
+                  <motion.div
+                    key={loan.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, delay: idx * 0.1 }}
+                    className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg p-2 bg-emerald-50">
+                        <Banknote className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-700">{loan.type}</p>
+                        <p className="text-[10px] text-slate-400">{loan.tenure} • {loan.interestRate}% p.a.</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">{loan.type}</p>
-                      <p className="text-[10px] text-slate-400">{loan.tenure} • {loan.interestRate}% p.a.</p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-400">Amount</p>
+                        <p className="text-xs font-semibold text-slate-700">{formatINR(loan.amount)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-400">Outstanding</p>
+                        <p className="text-xs font-semibold text-amber-600">{formatINR(loan.outstanding)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-400">{loan.emi > 0 ? 'EMI' : 'Interest Only'}</p>
+                        <p className="text-xs font-semibold text-slate-700">{loan.emi > 0 ? formatINR(loan.emi) : 'Variable'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-400">Next Due</p>
+                        <p className="text-xs text-slate-600">{formatDate(loan.nextDue)}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400">Amount</p>
-                      <p className="text-xs font-semibold text-slate-700">{formatINR(loan.amount)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400">Outstanding</p>
-                      <p className="text-xs font-semibold text-amber-600">{formatINR(loan.outstanding)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400">{loan.emi > 0 ? 'EMI' : 'Interest Only'}</p>
-                      <p className="text-xs font-semibold text-slate-700">{loan.emi > 0 ? formatINR(loan.emi) : 'Variable'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400">Next Due</p>
-                      <p className="text-xs text-slate-600">{formatDate(loan.nextDue)}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              )}
             </div>
           </ScrollArea>
         </CardContent>

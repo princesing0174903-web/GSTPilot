@@ -350,7 +350,13 @@ export default function DataWarehouse() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SAVED_QUERIES.map((q, i) => (
+            {SAVED_QUERIES.length === 0 ? (
+              <div className="col-span-full h-32 flex flex-col items-center justify-center text-white/40">
+                <Database className="h-8 w-8 mb-2 text-white/20" />
+                <p className="text-sm font-medium">No saved queries yet</p>
+                <p className="text-xs text-white/30 mt-1">Curated SQL snippets will appear here once saved</p>
+              </div>
+            ) : SAVED_QUERIES.map((q, i) => (
               <SavedQueryCard key={q.name} query={q} index={i} />
             ))}
           </div>

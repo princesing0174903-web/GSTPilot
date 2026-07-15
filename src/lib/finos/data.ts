@@ -1,7 +1,11 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot FinOS — Shared types + mock data for an Indian SME business.
+ * GSTPilot FinOS — Shared types + seed data for an Indian SME business.
  * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * NOTE: `company` and `executiveKpis` are intentionally empty placeholders.
+ * Hardcoded company/KPI values have been removed so the UI renders honest
+ * empty states until real per-organization data is loaded.
  *
  * All modules consume this single source of truth. Mutations from the UI
  * (create invoice, mark paid, restock, etc.) are applied to an in-memory store
@@ -10,20 +14,23 @@
  */
 
 // ─── Company profile ───────────────────────────────────────────────────────────
+// No hardcoded company. Real company profile is loaded per-organization from
+// the database; this export is intentionally blank so consumers can render
+// honest empty states until real data is available.
 export const company = {
-  name: 'Aurum Industries Pvt. Ltd.',
-  legalName: 'Aurum Industries Private Limited',
-  gstin: '27AABCA1234L1Z5',
-  pan: 'AABCA1234L',
-  cin: 'U15490MH2018PTC312456',
-  incorporationDate: '2018-04-12',
-  registeredAddress: '14, MIDC Industrial Estate, Pune, Maharashtra 411019',
-  financialYear: 'FY 2024-25',
-  taxRegime: 'Regular',
-  industry: 'Manufacturing — Industrial Components',
-  employees: 47,
-  annualRevenue: 184000000, // ₹18.4 Cr
-  fiscalYearStart: 'April',
+  name: '',
+  legalName: '',
+  gstin: '',
+  pan: '',
+  cin: '',
+  incorporationDate: '',
+  registeredAddress: '',
+  financialYear: '',
+  taxRegime: '',
+  industry: '',
+  employees: 0,
+  annualRevenue: 0,
+  fiscalYearStart: '',
 }
 
 // ─── KPIs for the Executive Dashboard ──────────────────────────────────────────
@@ -40,104 +47,10 @@ export interface Kpi {
   insight: string
 }
 
-export const executiveKpis: Kpi[] = [
-  {
-    id: 'revenue',
-    label: 'Revenue (MTD)',
-    value: '₹1.84 Cr',
-    rawValue: 18400000,
-    rawUnit: 'inr',
-    changePct: 12.4,
-    trend: [12.1, 13.5, 11.8, 14.2, 15.1, 16.8, 18.4],
-    icon: 'TrendingUp',
-    accent: 'emerald',
-    insight: '12.4% above last month, driven by 3 enterprise orders.',
-  },
-  {
-    id: 'netProfit',
-    label: 'Net Profit',
-    value: '₹38.6 L',
-    rawValue: 3860000,
-    rawUnit: 'inr',
-    changePct: 8.1,
-    trend: [22, 24, 26, 28, 31, 34, 38.6],
-    icon: 'Wallet',
-    accent: 'emerald',
-    insight: 'Margin improved to 21% from 18.4% — vendor renegotiation paying off.',
-  },
-  {
-    id: 'gstLiability',
-    label: 'GST Liability',
-    value: '₹24.8 L',
-    rawValue: 2480000,
-    rawUnit: 'inr',
-    changePct: -3.2,
-    trend: [32, 30, 28, 29, 27, 26, 24.8],
-    icon: 'Receipt',
-    accent: 'amber',
-    insight: 'Down 3.2% — input credit from new vendor reconciled.',
-  },
-  {
-    id: 'receivables',
-    label: 'Outstanding Receivables',
-    value: '₹62.4 L',
-    rawValue: 6240000,
-    rawUnit: 'inr',
-    changePct: -6.7,
-    trend: [82, 78, 75, 72, 70, 66, 62.4],
-    icon: 'Clock',
-    accent: 'sky',
-    insight: 'DSO down to 38 days — automation nudges working.',
-  },
-  {
-    id: 'cashBalance',
-    label: 'Cash & Bank Balance',
-    value: '₹2.4 Cr',
-    rawValue: 24000000,
-    rawUnit: 'inr',
-    changePct: 4.5,
-    trend: [21, 22, 20.5, 22.3, 23.1, 22.8, 24],
-    icon: 'Landmark',
-    accent: 'emerald',
-    insight: '6 months runway at current burn.',
-  },
-  {
-    id: 'complianceScore',
-    label: 'Compliance Score',
-    value: '94/100',
-    rawValue: 94,
-    rawUnit: 'pct',
-    changePct: 2.1,
-    trend: [88, 89, 90, 91, 92, 93, 94],
-    icon: 'ShieldCheck',
-    accent: 'violet',
-    insight: 'GSTR-1 filed on time; 2 minor TDS notices pending.',
-  },
-  {
-    id: 'inventoryValue',
-    label: 'Inventory Value',
-    value: '₹1.1 Cr',
-    rawValue: 11000000,
-    rawUnit: 'inr',
-    changePct: 1.8,
-    trend: [10.5, 10.7, 10.6, 10.9, 11.0, 10.8, 11.0],
-    icon: 'Package',
-    accent: 'amber',
-    insight: 'Stock turn 7.2x — healthy; 4 SKUs in slow-moving alert.',
-  },
-  {
-    id: 'payroll',
-    label: 'Payroll (MTD)',
-    value: '₹18.2 L',
-    rawValue: 1820000,
-    rawUnit: 'inr',
-    changePct: 0.4,
-    trend: [17.8, 17.9, 18.0, 18.1, 18.0, 18.1, 18.2],
-    icon: 'Users',
-    accent: 'sky',
-    insight: '2 new hires onboarded; PF & TDS deposited on time.',
-  },
-]
+// No hardcoded KPIs. Real KPIs are computed from live financial data and
+// surfaced through the executive dashboard hooks; this export is intentionally
+// empty so the UI shows honest empty states.
+export const executiveKpis: Kpi[] = []
 
 // ─── Revenue trend (last 12 months) ────────────────────────────────────────────
 export const revenueTrend = [

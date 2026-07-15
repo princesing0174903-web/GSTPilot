@@ -167,11 +167,11 @@ function Sidebar({
         {/* Company card */}
         <div className="border-t border-border/60 p-3">
           <div className="rounded-xl bg-muted/50 p-3">
-            <p className="text-xs font-semibold text-foreground truncate">{company.name}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">GSTIN {company.gstin}</p>
+            <p className="text-xs font-semibold text-foreground truncate">{company.name || 'No company profile'}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">GSTIN {company.gstin || '—'}</p>
             <div className="mt-2 flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[10px] text-muted-foreground">FY 2024-25 · Regular</span>
+              <span className="text-[10px] text-muted-foreground">{company.financialYear || 'No FY set'} · {company.taxRegime || 'No regime'}</span>
             </div>
           </div>
         </div>

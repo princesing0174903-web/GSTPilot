@@ -131,126 +131,9 @@ const DEAL_STAGE_CONFIG: Record<DealStage, { label: string; color: string; bg: s
   closed_lost: { label: 'Closed Lost', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
 }
 
-const SAMPLE_LEADS: FirestoreLead[] = [
-  {
-    leadId: 'lead-1', firmId: 'firm-1', contactName: 'Rajesh Sharma', contactEmail: 'rajesh@acme.in',
-    contactPhone: '+91 98765 43210', company: 'Acme Industries Pvt Ltd', gstin: '27AADCA1234F1Z5',
-    source: 'referral', status: 'new', leadScore: 75, estimatedValue: 250000, notes: 'Interested in GST compliance package',
-    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 2 * 86400000).toISOString(),
-    convertedClientId: null, tags: ['manufacturing', 'high-value'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-2', firmId: 'firm-1', contactName: 'Anita Desai', contactEmail: 'anita@technowave.in',
-    contactPhone: '+91 87654 32109', company: 'TechnoWave Solutions', gstin: null,
-    source: 'website', status: 'contacted', leadScore: 62, estimatedValue: 180000, notes: 'Responded to email, wants demo',
-    assignedTo: 'Amit Kumar', nextFollowUp: new Date(Date.now() + 1 * 86400000).toISOString(),
-    convertedClientId: null, tags: ['IT', 'SaaS'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-3', firmId: 'firm-1', contactName: 'Vikram Mehta', contactEmail: 'vikram@greenearth.in',
-    contactPhone: '+91 76543 21098', company: 'Green Earth Exports', gstin: '27AABCG5678H1Z3',
-    source: 'event', status: 'qualified', leadScore: 88, estimatedValue: 450000, notes: 'Met at CA conference, very interested',
-    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
-    convertedClientId: null, tags: ['export', 'premium'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-4', firmId: 'firm-1', contactName: 'Sunita Patel', contactEmail: 'sunita@retailking.in',
-    contactPhone: '+91 65432 10987', company: 'Retail King Mart', gstin: null,
-    source: 'social_media', status: 'proposal_sent', leadScore: 55, estimatedValue: 120000, notes: 'Proposal sent for quarterly filing',
-    assignedTo: 'Amit Kumar', nextFollowUp: new Date(Date.now() + 5 * 86400000).toISOString(),
-    convertedClientId: null, tags: ['retail'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-5', firmId: 'firm-1', contactName: 'Deepak Joshi', contactEmail: 'deepak@steelworks.in',
-    contactPhone: '+91 54321 09876', company: 'Steel Works India', gstin: '27AABCS9012K1Z7',
-    source: 'cold_call', status: 'negotiation', leadScore: 91, estimatedValue: 600000, notes: 'Discussing annual retainer, close to signing',
-    assignedTo: 'Priya Patel', nextFollowUp: new Date(Date.now() + 1 * 86400000).toISOString(),
-    convertedClientId: null, tags: ['manufacturing', 'high-value', 'retainer'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-6', firmId: 'firm-1', contactName: 'Meera Krishnan', contactEmail: 'meera@healthfirst.in',
-    contactPhone: '+91 43210 98765', company: 'Health First Pharma', gstin: '27AABCH3456L1Z2',
-    source: 'referral', status: 'converted', leadScore: 95, estimatedValue: 350000, notes: 'Successfully converted to client',
-    assignedTo: 'Amit Kumar', nextFollowUp: null,
-    convertedClientId: 'client-converted-1', tags: ['pharma', 'premium'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    leadId: 'lead-7', firmId: 'firm-1', contactName: 'Karan Singh', contactEmail: 'karan@logipro.in',
-    contactPhone: '+91 32109 87654', company: 'LogiPro Transport', gstin: null,
-    source: 'advertisement', status: 'lost', leadScore: 30, estimatedValue: 80000, notes: 'Chose competitor, may revisit next year',
-    assignedTo: 'Priya Patel', nextFollowUp: null,
-    convertedClientId: null, tags: ['logistics'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-]
-
-const SAMPLE_DEALS: FirestoreDeal[] = [
-  {
-    dealId: 'deal-1', firmId: 'firm-1', leadId: 'lead-5', clientId: null,
-    title: 'Steel Works Annual Retainer', description: 'Full GST compliance + monthly filing for FY 2025-26',
-    value: 600000, stage: 'negotiation', probability: 75,
-    expectedCloseDate: new Date(Date.now() + 15 * 86400000).toISOString(), assignedTo: 'Priya Patel',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    dealId: 'deal-2', firmId: 'firm-1', leadId: 'lead-3', clientId: null,
-    title: 'Green Earth GST Package', description: 'Export filings + compliance management',
-    value: 450000, stage: 'proposal', probability: 40,
-    expectedCloseDate: new Date(Date.now() + 30 * 86400000).toISOString(), assignedTo: 'Priya Patel',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    dealId: 'deal-3', firmId: 'firm-1', leadId: 'lead-6', clientId: 'client-converted-1',
-    title: 'Health First Quarterly Filing', description: 'GSTR-1 + GSTR-3B quarterly filing',
-    value: 350000, stage: 'closed_won', probability: 100,
-    expectedCloseDate: new Date().toISOString(), assignedTo: 'Amit Kumar',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    dealId: 'deal-4', firmId: 'firm-1', leadId: null, clientId: null,
-    title: 'Acme Industries Setup', description: 'GST registration + initial compliance setup',
-    value: 250000, stage: 'proposal', probability: 35,
-    expectedCloseDate: new Date(Date.now() + 45 * 86400000).toISOString(), assignedTo: 'Amit Kumar',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    dealId: 'deal-5', firmId: 'firm-1', leadId: null, clientId: null,
-    title: 'Retail King Quarterly', description: 'GST filing for retail operations',
-    value: 120000, stage: 'closed_lost', probability: 0,
-    expectedCloseDate: new Date(Date.now() - 5 * 86400000).toISOString(), assignedTo: 'Amit Kumar',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-]
-
-const SAMPLE_MEETINGS: FirestoreMeeting[] = [
-  {
-    meetingId: 'meet-1', firmId: 'firm-1', clientId: null, leadId: 'lead-5',
-    title: 'Steel Works Deal Discussion', description: 'Final negotiation for annual retainer',
-    dateTime: new Date(Date.now() + 1 * 86400000 + 10 * 3600000).toISOString(), duration: 60,
-    type: 'video_call', status: 'scheduled', attendees: ['Priya Patel', 'Deepak Joshi'],
-    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    meetingId: 'meet-2', firmId: 'firm-1', clientId: null, leadId: 'lead-3',
-    title: 'Green Earth GST Demo', description: 'Demo of GST compliance workflow',
-    dateTime: new Date(Date.now() + 2 * 86400000 + 14 * 3600000).toISOString(), duration: 45,
-    type: 'in_person', status: 'scheduled', attendees: ['Priya Patel', 'Vikram Mehta'],
-    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    meetingId: 'meet-3', firmId: 'firm-1', clientId: 'client-converted-1', leadId: null,
-    title: 'Health First Onboarding', description: 'Onboarding call for GST filing',
-    dateTime: new Date(Date.now() + 3 * 86400000 + 11 * 3600000).toISOString(), duration: 30,
-    type: 'phone_call', status: 'scheduled', attendees: ['Amit Kumar', 'Meera Krishnan'],
-    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-  {
-    meetingId: 'meet-4', firmId: 'firm-1', clientId: null, leadId: 'lead-1',
-    title: 'Acme Industries Follow-up', description: 'Follow up on GST compliance interest',
-    dateTime: new Date(Date.now() + 4 * 86400000 + 15 * 3600000).toISOString(), duration: 30,
-    type: 'video_call', status: 'scheduled', attendees: ['Priya Patel', 'Rajesh Sharma'],
-    notes: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  },
-]
+const SAMPLE_LEADS: FirestoreLead[] = []
+const SAMPLE_DEALS: FirestoreDeal[] = []
+const SAMPLE_MEETINGS: FirestoreMeeting[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // KANBAN LEAD CARD
@@ -499,6 +382,11 @@ function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: s
       </div>
 
       {/* Kanban Board */}
+      {filteredLeads.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+          <p className="text-sm text-muted-foreground">No leads yet</p>
+        </div>
+      ) : (
       <div className="flex gap-4 overflow-x-auto pb-4">
         {PIPELINE_COLUMNS.map(col => {
           const columnLeads = filteredLeads.filter(l => l.status === col.status)
@@ -562,6 +450,7 @@ function PipelineView({ leads, loading }: { leads: Array<FirestoreLead & { id: s
           )
         })}
       </div>
+      )}
     </div>
   )
 }
@@ -696,6 +585,11 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
         </Button>
       </div>
 
+      {sortedDeals.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
+          <p className="text-sm text-muted-foreground">No deals yet</p>
+        </div>
+      ) : (
       <Card className="border shadow-sm">
         <Table>
           <TableHeader>
@@ -758,6 +652,7 @@ function DealsView({ deals, leads, loading }: { deals: Array<FirestoreDeal & { i
           </TableBody>
         </Table>
       </Card>
+      )}
 
       {/* Delete Deal Confirmation */}
       <AlertDialog open={deleteDealId !== null} onOpenChange={(open) => { if (!open) setDeleteDealId(null) }}>
@@ -1543,8 +1438,6 @@ export default function CRMPage() {
   const [showAddLead, setShowAddLead] = useState(false)
 
   // Use real Firestore data only. Empty arrays render honest empty states.
-  // (SAMPLE_LEADS/SAMPLE_DEALS/SAMPLE_MEETINGS constants are retained for reference
-  // but are NOT used as a fallback — see audit 1d.)
   const leads = fireLeads as unknown as Array<FirestoreLead & { id: string }>
   const deals = fireDeals as unknown as Array<FirestoreDeal & { id: string }>
   const meetings = fireMeetings as unknown as Array<FirestoreMeeting & { id: string }>
@@ -1553,14 +1446,12 @@ export default function CRMPage() {
   const error = leadsError || dealsError || meetingsError
 
   // ── Trust indicator: last sync time ──
-  // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers a
-  // fresh snapshot on every backend write, so this reflects the true last
-  // update from Firestore.
-  const [lastSync, setLastSync] = useState<Date | null>(null)
-  useEffect(() => {
-    if (loading) return
-    setLastSync(new Date())
-  }, [loading, fireLeads, fireDeals, fireMeetings])
+  // Derive from a timestamp captured when Firestore data updates (via useMemo
+  // dependency on the data arrays — no setState-in-effect).
+  const lastSync = useMemo(() => {
+    if (loading) return null
+    return new Date()
+  }, [loading, leads, deals, meetings])
 
   // Quick stats
   const activeLeads = leads.filter(l => l.status !== 'converted' && l.status !== 'lost')

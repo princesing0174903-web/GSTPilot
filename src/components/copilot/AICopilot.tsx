@@ -35,15 +35,15 @@ const QUICK_ACTIONS = [
 
 const AI_RESPONSES: Record<string, string> = {
   'show pending filings':
-    'You have **5 pending GSTR-1 filings** and **3 pending GSTR-3B filings** this month. The next deadline is **March 11th for GSTR-1**. Would you like me to navigate to the filing center?',
+    'I can help you check pending filings — navigate to the Returns page to see the current filing status for each client and period.',
   'show client issues':
-    '**3 clients have critical issues:**\n\n• TechCorp India — missing GSTIN on 5 invoices\n• Sharma Enterprises — filing delay 15 days\n• Global Traders — 2 duplicate invoices detected\n\nShall I open the Client Health Center for details?',
+    'I can help you identify at-risk clients — navigate to Client Health to see which clients have open issues that need attention.',
   'find invoice':
-    'Please provide the **invoice number** or **vendor name** you\'d like to search for. I can also search by GSTIN or date range.',
+    'Please provide the **invoice number** or **vendor name** you\'d like to search for. You can also search by GSTIN or date range on the Invoices page.',
   'explain gst mismatch':
-    'A **GST mismatch** occurs when the tax data in your books doesn\'t match what appears on the GST portal.\n\n**Common causes:**\n• GSTIN errors\n• Amount discrepancies\n• Missing invoices in GSTR-2B\n• Duplicate entries\n\nI can run a reconciliation to identify specific mismatches.',
+    'A **GST mismatch** occurs when the tax data in your books doesn\'t match what appears on the GST portal.\n\n**Common causes:**\n• GSTIN errors\n• Amount discrepancies\n• Missing invoices in GSTR-2B\n• Duplicate entries\n\nYou can run a reconciliation on the Reconciliation page to identify specific mismatches.',
   'generate compliance summary':
-    '**Current Period Compliance Summary:**\n\n• Score: **82/100**\n• Match Rate: **87%** achieved\n• Pending Filings: **5**\n• Issues Resolved: **12** this month\n• Clients Needing Attention: **2** before filing deadline',
+    'I can help you generate a compliance summary — navigate to the Compliance page to see the current period score, match rate, pending filings, and resolved issues.',
 };
 
 function getAIResponse(input: string): string {
@@ -79,13 +79,13 @@ function getAIResponse(input: string): string {
     return 'You\'re welcome! Let me know if you need anything else regarding GST compliance. I\'m always here to help! 🙏';
   }
   if (lower.includes('gstr-1') || lower.includes('gstr1')) {
-    return 'GSTR-1 is the **return for outward supplies**. It must be filed by the **11th of the following month**. Currently, you have **5 pending GSTR-1 filings**. Would you like me to show the details?';
+    return 'GSTR-1 is the **return for outward supplies**. It must be filed by the **11th of the following month**. Navigate to the Returns page to see your current GSTR-1 filing status.';
   }
   if (lower.includes('gstr-3b') || lower.includes('gstr3b')) {
-    return 'GSTR-3B is the **summary return** for tax payment. Due date is the **20th of the following month**. You have **3 pending GSTR-3B filings** this period.';
+    return 'GSTR-3B is the **summary return** for tax payment. Due date is the **20th of the following month**. Navigate to the Returns page to see your current GSTR-3B filing status.';
   }
   if (lower.includes('deadline') || lower.includes('due date')) {
-    return '**Upcoming GST Deadlines:**\n\n• GSTR-1: March 11, 2026\n• GSTR-3B: March 20, 2026\n• GSTR-2B: March 13, 2026\n\nWould you like to see the full Deadline Center?';
+    return 'You can see all upcoming GST deadlines in the Deadline Center on the Returns page. Deadlines include GSTR-1, GSTR-3B, and GSTR-2B.';
   }
 
   return 'I can help you with GST compliance queries. Try asking about:\n\n• Pending filings\n• Client issues\n• Invoice searches\n• GST mismatches\n• Compliance summaries\n\nOr click one of the quick actions below!';

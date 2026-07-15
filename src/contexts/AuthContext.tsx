@@ -100,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!initialized) {
         initialized = true;
         setIsInitializing(false);
+        console.log('[Auth] Initialization complete — isInitializing=false');
       }
     };
 
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // networks or in restricted sandbox environments.
     const safetyTimer = setTimeout(() => {
       if (mounted && !initialized) {
-        console.warn('[Auth] Initialization timeout — unblocking UI');
+        console.warn('[Auth] Initialization timeout (3s) — unblocking UI so login is reachable');
         setUser(null);
         setIsInitializing(false);
       }
@@ -122,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored) as AuthUser;
         if (parsed.id) {
+          console.log('[Auth] Restored session from cache for user:', parsed.id);
           setUser(parsed);
           cachedUserIdRef.current = parsed.id;
           restoredFromCache = true;
@@ -134,6 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(SESSION_KEY);
     }
 
+    console.log('[Auth] Subscribing to onAuthStateChanged…');
+
     // ── onAuthStateChanged — the single source of truth ──
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -141,16 +145,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
 
         if (fbUser) {
+          console.log('[Auth] User Loaded — uid:', fbUser.uid, 'email:', fbUser.email);
           const authUser = firebaseToAuthUser(fbUser);
 
           // Fast path: cache matched Firebase user → unblock immediately.
           if (restoredFromCache && cachedUserIdRef.current === fbUser.uid) {
+            console.log('[Auth] Cache matched — fast path, unblocking immediately');
             setUser(authUser);
             markInitialized();
             return;
           }
 
           // Full new sign-in (or cache mismatch).
+          console.log('[Auth] Session Created — new sign-in detected');
           setUser(authUser);
           cachedUserIdRef.current = authUser.id;
           try {
@@ -161,12 +168,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           markInitialized();
         } else {
           // No Firebase user — session expired or signed out.
-          // BUT: if the cached user is a demo user (preview mode), keep it
-          // so the app remains usable when Firebase is unreachable.
+          console.log('[Auth] No Firebase user — session ended or signed out');
           if (!restoredDemoUser) {
             localStorage.removeItem(SESSION_KEY);
             setUser(null);
             cachedUserIdRef.current = null;
+          } else {
+            console.log('[Auth] Keeping demo user (preview mode)');
           }
           markInitialized();
         }
@@ -246,58 +254,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // was declared but never set to true, causing the success card to flash
   // while OrgContext spent 1–5s resolving.
   const signInWithEmail = useCallback(async (email: string, password: string) => {
+    console.log('[Auth] Login Started — email:', email);
     setIsLoading(true);
     try {
       const { signInWithEmail: firebaseSignIn } = await import('@/lib/auth');
       const result = await firebaseSignIn(email, password);
       if (result.error) {
+        console.warn('[Auth] Login failed:', result.error);
         setError(result.error);
+        setIsLoading(false);
+      } else {
+        console.log('[Auth] Login successful — waiting for onAuthStateChanged + OrgContext');
       }
       return result;
     } catch (err) {
+      console.error('[Auth] Login exception:', err);
       setError(friendlyAuthError(err));
+      setIsLoading(false);
       throw err;
-    } finally {
-      // NOTE: we do NOT flip isLoading=false here. OrgContext will resolve
-      // the org (1–3s) and the app shell appears. We clear isLoading when
-      // OrgContext finishes OR after a 3s safety window below.
-      setTimeout(() => setIsLoading(false), 3000);
     }
   }, []);
 
   // ── Sign up with email/password ──
   const signUpWithEmail = useCallback(async (name: string, email: string, password: string) => {
+    console.log('[Auth] Sign Up Started — email:', email);
     setIsLoading(true);
     try {
       const { signUpWithEmail: firebaseSignUp } = await import('@/lib/auth');
       const result = await firebaseSignUp(name, email, password);
       if (result.error) {
+        console.warn('[Auth] Sign up failed:', result.error);
         setError(result.error);
+        setIsLoading(false);
+      } else {
+        console.log('[Auth] Sign up successful — waiting for onAuthStateChanged');
       }
       return result;
     } catch (err) {
+      console.error('[Auth] Sign up exception:', err);
       setError(friendlyAuthError(err));
+      setIsLoading(false);
       throw err;
-    } finally {
-      setTimeout(() => setIsLoading(false), 3000);
     }
   }, []);
 
   // ── Sign in with Google ──
   const signInWithGoogle = useCallback(async () => {
+    console.log('[Auth] Google Sign-In Started');
     setIsLoading(true);
     try {
       const { signInWithGoogle: googleSignIn } = await import('@/lib/auth');
       const result = await googleSignIn();
       if (result.error) {
+        console.warn('[Auth] Google sign-in failed:', result.error);
         setError(result.error);
+        setIsLoading(false);
+      } else {
+        console.log('[Auth] Google sign-in successful — waiting for onAuthStateChanged');
       }
       return result;
     } catch (err) {
+      console.error('[Auth] Google sign-in exception:', err);
       setError(friendlyAuthError(err));
+      setIsLoading(false);
       throw err;
-    } finally {
-      setTimeout(() => setIsLoading(false), 3000);
     }
   }, []);
 
@@ -306,6 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox
   // preview). The OrgContext will create a matching demo org.
   const signInDemo = useCallback(() => {
+    console.log('[Auth] Demo sign-in (preview mode)');
     const demoUser: AuthUser = {
       id: 'demo-user-' + Date.now(),
       name: 'Preview User',
@@ -320,6 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setIsInitializing(false);
     setIsLoading(false);
+    console.log('[Auth] Demo user set — uid:', demoUser.id);
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
     } catch {
@@ -338,6 +360,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearIsLoading = useCallback(() => {
     setIsLoading(false);
   }, []);
+
+  // ── Safety: clear isLoading after 5s if OrgContext hasn't ──
+  // This prevents the login page from showing "Signing in..." forever if
+  // OrgContext stalls. The dashboard will still render because AppRouter
+  // switches to 'app' as soon as isAuthenticated becomes true.
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => {
+      console.warn('[Auth] isLoading safety timeout (5s) — clearing to prevent stuck spinner');
+      setIsLoading(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   return (
     <AuthContext.Provider

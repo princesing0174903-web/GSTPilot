@@ -66,11 +66,11 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   }
 
   // ── Email/Password Sign In ──
-  // We use `localLoading` only for the Firebase Auth call itself. On success
-  // we do NOT clear localLoading — `isLoading` (from AuthContext, driven by
-  // OrgContext) keeps the "Redirecting…" card visible until the org resolves.
-  // Previously localLoading was cleared in `finally`, causing the success
-  // card to flash off before the dashboard appeared (perceived slow login).
+  // We use `localLoading` for the Firebase Auth call itself. On success we
+  // clear `localLoading` immediately — AppRouter switches to the 'app' screen
+  // as soon as `isAuthenticated` becomes true (typically <100ms after
+  // onAuthStateChanged fires). The AuthContext.isLoading flag is cleared by
+  // OrgContext or a 5s safety timeout.
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
@@ -78,18 +78,19 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
     try {
       const { signInWithEmail } = await import('@/lib/auth');
-      const { user, error: authError } = await signInWithEmail(email, password, rememberMe);
+      const { user: authUser, error: authError } = await signInWithEmail(email, password, rememberMe);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (user) {
+      if (authUser) {
+        console.log('[LoginPage] Login successful — Redirecting to Dashboard');
         setSuccessMessage('Login successful! Redirecting...');
         setShowSuccess(true);
-        // Do NOT clear localLoading here. AuthContext.isLoading takes over
-        // and stays true until OrgContext resolves the organization. The
-        // combinedLoading flag keeps the spinner visible the whole time.
+        // Clear localLoading — AppRouter will switch to 'app' immediately
+        // when isAuthenticated becomes true.
+        setLocalLoading(false);
       }
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
@@ -111,16 +112,17 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
     try {
       const { signUpWithEmail } = await import('@/lib/auth');
-      const { user, error: authError } = await signUpWithEmail(email, password, name);
+      const { user: authUser, error: authError } = await signUpWithEmail(email, password, name);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (user) {
+      if (authUser) {
+        console.log('[LoginPage] Sign up successful — Redirecting to Dashboard');
         setSuccessMessage('Account created! Please check your email to verify your account.');
         setShowSuccess(true);
-        // Keep localLoading true — OrgContext.isLoading takes over.
+        setLocalLoading(false);
       }
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
@@ -136,13 +138,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       const { signInWithGoogle } = await import('@/lib/auth');
       const { error: googleError } = await signInWithGoogle(rememberMe);
       if (googleError) {
-        // Show the specific Firebase error (e.g., unauthorized-domain, popup-blocked)
         setLocalError(googleError);
         setLocalLoading(false);
+      } else {
+        console.log('[LoginPage] Google sign-in initiated — waiting for onAuthStateChanged');
+        // Don't clear localLoading — the popup/redirect will trigger
+        // onAuthStateChanged which switches to the dashboard.
+        setLocalLoading(false);
       }
-      // If successful via popup: onAuthStateChanged will update the user state
-      // and AuthContext.isLoading takes over. Do NOT clear localLoading.
-      // If redirect was triggered: page navigates away, isInitializing will show on return
     } catch {
       setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
       setLocalLoading(false);

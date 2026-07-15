@@ -146,6 +146,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const resolveOrgContext = useCallback(async (fbUser: FirebaseUser) => {
     if (loadingForRef.current === fbUser.uid) return;
     loadingForRef.current = fbUser.uid;
+    console.log('[Org] Resolving org context for uid:', fbUser.uid);
     setLoading(true);
     setError(null);
 
@@ -162,6 +163,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
         // 1. Fetch / create the user profile AND the user's org memberships
         //    in PARALLEL (previously sequential — saved ~200-500ms on login).
+        console.log('[Org] Fetching profile + memberships (attempt', attempt + 1, ')');
         const [profileResult, membershipsResult] = await Promise.all([
           fetchOrCreateUserProfile({
             uid: fbUser.uid,
@@ -177,6 +179,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         const { memberships, error: memberError } = membershipsResult;
 
         if (profileError || !userProfile) {
+          console.warn('[Org] Profile fetch error:', profileError);
           if (attempt < MAX_RETRIES) {
             return 'retry';
           }
@@ -189,8 +192,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           return 'fail';
         }
 
+        console.log('[Org] Profile loaded. Orgs found:', memberships.length);
         setProfile(userProfile);
-        // Set memberships immediately so the org switcher renders.
         if (!memberError) {
           setOrganizations(memberships);
         }
@@ -198,36 +201,28 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         // 2. Resolve the current organization.
         let orgId = userProfile.currentOrganizationId;
 
-        // If the profile has no current org, fall back to the first active
-        // membership (if any) and persist the choice.
         if (!orgId && memberships.length > 0) {
           orgId = memberships[0].organization.id;
-          // Fire-and-forget the persistence — don't block the UI on it.
           setCurrentOrganizationService(fbUser.uid, orgId).catch(() => {});
         }
 
         if (!orgId) {
-          // Authenticated but no organization yet — onboarding will handle this.
+          console.log('[Org] No organization found — needs onboarding');
           setOrganization(null);
           setMembership(null);
           setMembers([]);
           return 'done';
         }
 
-        // 3. We already have the org + membership from fetchUserOrganizations
-        //    (it does the parallel getDocs). Use that data directly instead
-        //    of re-fetching. Previously this did Promise.all([fetchOrganization,
-        //    fetchMembership, fetchOrganizationMembers]) which re-fetched the
-        //    same org + membership — 2 redundant round-trips per login.
         const membershipFromList = memberships.find(
           (m) => m.organization.id === orgId
         );
 
         if (membershipFromList) {
+          console.log('[Org] Organization resolved:', membershipFromList.organization.name);
           setOrganization(membershipFromList.organization);
           setMembership(membershipFromList.member);
         } else {
-          // Org in profile but not in memberships list — fetch directly.
           const [orgResult, memberResult] = await Promise.all([
             fetchOrganization(orgId),
             fetchMembership(orgId, fbUser.uid),
@@ -247,17 +242,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setMembership(memberResult.member);
         }
 
-        // 4. Fetch the full member roster (separate query, not in the
-        //    initial parallel batch, because it's only needed for the team
-        //    management UI — don't block the dashboard on it).
         fetchOrganizationMembers(orgId).then((membersResult) => {
           setMembers(membersResult.members);
-        }).catch(() => {
-          // Non-fatal — team list will be empty but the app still works.
-        });
+        }).catch(() => {});
 
+        console.log('[Org] Context resolved successfully — loading=false');
         return 'done';
       } catch (err) {
+        console.warn('[Org] Resolution error:', err);
         if (attempt < MAX_RETRIES) return 'retry';
         setError(friendlyAuthError(err));
         setOrganization(null);
@@ -268,7 +260,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Run the attempt loop with backoff.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const result = await attemptResolve(attempt);
       if (result === 'done') {
@@ -276,22 +267,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         loadingForRef.current = null;
         return;
       }
-      // On 'fail' or 'retry', continue the loop. We DON'T return early on
-      // 'fail' — we let the loop exhaust so the preview-mode fallback below
-      // can create a demo org when Firestore is unreachable.
       if (attempt < MAX_RETRIES) {
         const delay = BACKOFF_MS[attempt] || 1000;
-        console.warn(`[Org] Retrying org context load in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        console.warn(`[Org] Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
         await new Promise((r) => setTimeout(r, delay));
       }
     }
 
-    // Exhausted retries. If Firestore is unreachable (network/unavailable
-    // error), fall back to a preview-mode demo org so the app UI is visible.
-    // This is the common case in sandbox/preview environments without network
-    // egress to Google. In production with Firestore reachable, the real org
-    // loads and this path is never hit.
+    // Exhausted retries — Firestore is likely unreachable. Fall back to a
+    // preview-mode demo org so the dashboard renders. In production with
+    // Firestore reachable, this path is never hit.
     if (fbUser) {
+      console.warn('[Org] Firestore unreachable — falling back to preview-mode demo org');
       const demoOrg: OrganizationDoc = {
         id: 'preview-org',
         name: 'Preview Workspace',
@@ -335,22 +322,19 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      console.warn('[Org] Firestore unreachable — switching to preview mode with demo org.');
       setProfile(demoProfile);
       setOrganization(demoOrg);
       setMembership(demoMembership);
       setMembers([demoMembership]);
-      // In preview mode the user only has access to the demo org, so the
-      // switcher will render a single (non-interactive) org name.
       setOrganizations([{ organization: demoOrg, member: demoMembership }]);
       setIsPreviewMode(true);
       setError(null);
       setLoading(false);
       loadingForRef.current = null;
+      console.log('[Org] Preview mode active — dashboard will render with empty data states');
       return;
     }
 
-    // No Firebase user at all — show the error screen.
     setError('Could not connect to the workspace service. Please check your connection and try again.');
     setLoading(false);
     loadingForRef.current = null;
@@ -452,15 +436,15 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       resolveOrgContext(auth.currentUser);
     }
 
-    // Safety timer — if Firebase hasn't provided a currentUser within 4s
+    // Safety timer — if Firebase hasn't provided a currentUser within 2s
     // (e.g. Firestore/Auth backend unreachable in a sandbox), fall back to
     // the demo org using the cached auth user so the UI is visible.
+    // Reduced from 4s → 2s so the dashboard appears faster.
     let safetyTimer: ReturnType<typeof setTimeout> | null = null;
     if (!auth.currentUser && user) {
       safetyTimer = setTimeout(() => {
         if (loadingForRef.current === null && !organization) {
-          console.warn('[Org] No Firebase user after 4s — creating preview org from cached session.');
-          // Synthesize a minimal FirebaseUser-like object from the cached auth user.
+          console.warn('[Org] No Firebase user after 2s — creating preview org from cached session.');
           const syntheticUser = {
             uid: user.id,
             email: user.email,
@@ -471,7 +455,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           } as FirebaseUser;
           resolveOrgContext(syntheticUser);
         }
-      }, 4000);
+      }, 2000);
     }
 
     return () => {

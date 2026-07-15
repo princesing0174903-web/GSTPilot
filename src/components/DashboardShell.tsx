@@ -17,7 +17,7 @@
  * this module is compiled on-demand AFTER the user authenticates.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
@@ -61,6 +61,12 @@ const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
 export function DashboardContent() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
+
+  // ── Log when the dashboard shell mounts (for the "Dashboard Loaded" step) ──
+  useEffect(() => {
+    console.log('[Dashboard] Shell mounted — rendering progressive layout')
+    console.log('[Dashboard] Dashboard Loaded — shell visible, views lazy-loading')
+  }, [])
 
   // ── Notifications sheet state ──────────────────────────────────────────────
   // Oracle is now a full page (/oracle), not a docked sidebar popup.

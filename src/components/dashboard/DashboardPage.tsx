@@ -260,16 +260,16 @@ interface KpiCardProps {
   subtitle: string;
   icon: React.ReactNode;
   index: number;
-  /** When true, renders an inline empty-state CTA instead of the value. */
-  empty?: {
-    title: string;
-    description: string;
-    ctaLabel: string;
-    onCta: () => void;
+  /** Optional inline CTA rendered as a small link below the subtitle.
+   *  Used for empty/half-empty states so the real value (e.g. ₹0) stays
+   *  visible while still offering a path forward. */
+  cta?: {
+    label: string;
+    onClick: () => void;
   };
 }
 
-function KpiCard({ label, value, subtitle, icon, index, empty }: KpiCardProps) {
+function KpiCard({ label, value, subtitle, icon, index, cta }: KpiCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -278,47 +278,30 @@ function KpiCard({ label, value, subtitle, icon, index, empty }: KpiCardProps) {
       className="h-full"
     >
       <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.2)]">
-        {empty ? (
-          <div className="flex flex-col h-full">
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                {label}
-              </p>
-              <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-                {icon}
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <p className="text-sm font-semibold text-foreground">{empty.title}</p>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                {empty.description}
-              </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              {label}
+            </p>
+            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
+              {value}
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{subtitle}</p>
+            {cta && (
               <button
                 type="button"
-                onClick={empty.onCta}
-                className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity self-start"
+                onClick={cta.onClick}
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
               >
-                {empty.ctaLabel}
+                {cta.label}
                 <ArrowRight className="h-3 w-3" />
               </button>
-            </div>
+            )}
           </div>
-        ) : (
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1.5 min-w-0">
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                {label}
-              </p>
-              <p className="text-3xl font-bold text-foreground tracking-tight truncate">
-                {value}
-              </p>
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
-            </div>
-            <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-              {icon}
-            </div>
+          <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+            {icon}
           </div>
-        )}
+        </div>
       </div>
     </motion.div>
   );
@@ -944,23 +927,30 @@ export default function DashboardPage() {
   }
 
   // ── KPI values (Single Source of Truth: Business Snapshot) ──
-  const revenueValue = businessSnapshot.revenue > 0 ? `₹${formatINR(businessSnapshot.revenue)}` : '—';
+  // IMPORTANT: We ALWAYS show the real value, even when it is ₹0. We never
+  // substitute "—" or hide the number behind an empty-state card. The user
+  // asked to "see 0, not fake data" — so ₹0 is shown with an honest subtitle
+  // explaining why it is zero and a CTA to start populating it.
+  const revenueValue = `₹${formatINR(businessSnapshot.revenue)}`;
   const complianceValue = String(pendingComplianceCount);
-  const cashValue = businessSnapshot.bankBalance > 0 ? `₹${formatINR(businessSnapshot.bankBalance)}` : '—';
+  const cashValue = `₹${formatINR(businessSnapshot.bankBalance)}`;
 
-  // Empty-state flags
+  // Empty-state flags (used to pick an honest subtitle + CTA, NOT to hide the value)
   const revenueEmpty = businessSnapshot.revenue === 0;
   const cashEmpty = businessSnapshot.bankBalance === 0;
   const complianceEmpty = pendingComplianceCount === 0 && returns.length === 0;
 
-  const revenueSubtitle = `Total revenue · ${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'}`;
-  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
-  const cashSubtitle = businessSnapshot.bankBalance > 0
-    ? `Bank balance · ₹${formatINR(businessSnapshot.bankBalance)}`
-    : 'Banking integration coming soon';
+  const revenueSubtitle = revenueEmpty
+    ? 'No revenue recorded yet · connect Zoho Books or create invoices'
+    : `Total revenue · ${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'}`;
+  const complianceSubtitle = complianceEmpty
+    ? 'No returns pending · GSTN integration coming soon'
+    : `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
+  const cashSubtitle = cashEmpty
+    ? 'No bank connected · banking integration coming soon'
+    : `Bank balance · ₹${formatINR(businessSnapshot.bankBalance)}`;
 
   const firstName = getFirstName(user?.name);
-  const unavailableReason = 'Connect supported integrations to generate this metric.';
 
   return (
     <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
@@ -1040,6 +1030,8 @@ export default function DashboardPage() {
         )}
 
         {/* ═══ KPI CARDS — Revenue / Compliance / Cash ═══ */}
+        {/* Every card shows the REAL value (₹0 when empty) — never "—" and never
+            a fake number. An honest subtitle + optional CTA explain the state. */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <KpiCard
             index={0}
@@ -1047,11 +1039,9 @@ export default function DashboardPage() {
             value={revenueValue}
             subtitle={revenueSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
-            empty={revenueEmpty ? {
-              title: 'No financial data connected',
-              description: 'Connect Zoho Books or create invoices to calculate live revenue.',
-              ctaLabel: 'Connect Zoho Books',
-              onCta: () => setCurrentView('zoho-books'),
+            cta={revenueEmpty ? {
+              label: 'Connect Zoho Books',
+              onClick: () => setCurrentView('zoho-books'),
             } : undefined}
           />
           <KpiCard
@@ -1060,11 +1050,9 @@ export default function DashboardPage() {
             value={complianceValue}
             subtitle={complianceSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
-            empty={complianceEmpty ? {
-              title: 'No compliance data yet',
-              description: 'Create returns to track compliance deadlines. GSTN integration is coming soon.',
-              ctaLabel: 'Create Return',
-              onCta: () => setCurrentView('returns'),
+            cta={complianceEmpty ? {
+              label: 'Create Return',
+              onClick: () => setCurrentView('returns'),
             } : undefined}
           />
           <KpiCard
@@ -1073,30 +1061,31 @@ export default function DashboardPage() {
             value={cashValue}
             subtitle={cashSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
-            empty={cashEmpty ? {
-              title: 'Banking integration coming soon',
-              description: 'Bank APIs are under development. We will never invent a cash position.',
-              ctaLabel: 'View Integrations',
-              onCta: () => setCurrentView('google-workspace'),
+            cta={cashEmpty ? {
+              label: 'View Integrations',
+              onClick: () => setCurrentView('google-workspace'),
             } : undefined}
           />
         </div>
 
         {/* ═══ Score Cards — Unavailable when no real data ═══ */}
+        {/* Scores are computed only from real financial data. Until then we show
+            "Unavailable" (never an invented number like 75 or 80). Each card has
+            a specific, honest reason explaining exactly what data is missing. */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <UnavailableMetricCard
             index={0}
             label="Compliance Score"
             icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-            reason={unavailableReason}
-            ctaLabel="Connect Zoho Books"
-            onCta={() => setCurrentView('zoho-books')}
+            reason="Awaiting GST return data — connect Zoho Books or create returns to calculate filing compliance."
+            ctaLabel="Create Return"
+            onCta={() => setCurrentView('returns')}
           />
           <UnavailableMetricCard
             index={1}
             label="Collection Score"
             icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-            reason={unavailableReason}
+            reason="Awaiting invoice + payment data — connect Zoho Books or create invoices to measure collection rate."
             ctaLabel="Connect Zoho Books"
             onCta={() => setCurrentView('zoho-books')}
           />
@@ -1104,7 +1093,7 @@ export default function DashboardPage() {
             index={2}
             label="Risk Score"
             icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />}
-            reason={unavailableReason}
+            reason="Awaiting financial data — connect Zoho Books to evaluate overdue, cash-flow, and concentration risk."
             ctaLabel="Connect Zoho Books"
             onCta={() => setCurrentView('zoho-books')}
           />

@@ -2,11 +2,15 @@
 // GSTPilot Oracle CFO™ — GSTPilot Live Data Context Block
 //
 // Server-side loader that reads the REAL Firestore collections at:
-//   organizations/GSTpilot_SAAS/{customers,products,invoices}
+//   organizations/{organizationId}/{customers,products,invoices,vendors,expenses,payments}
 //
 // Produces a formatted context block injected into the Oracle system prompt so
 // that when the user asks "Show customers / invoices / products", Oracle replies
 // with the ACTUAL live data — never fabricated, never mock.
+//
+// ORG-SCOPED (MULTI-TENANT): the caller must pass the real `organizationId`
+// (sourced from the request context). If null/empty, the loader returns an
+// empty snapshot — no Firestore read, no permission error.
 //
 // Firestore is the ONLY source of truth.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -78,16 +82,42 @@ export interface GSTpilotSnapshot {
  * Load a one-shot snapshot of all three GSTPilot collections from Firestore.
  * Safe to call server-side (API route). Returns an empty (loaded:false) snapshot
  * if Firestore is unreachable or permission is denied (preview mode).
+ *
+ * ORG-SCOPED: pass the real `organizationId` from the request context. If null/
+ * empty, no Firestore read is attempted — returns an unloaded snapshot.
  */
-export async function loadGSTpilotSnapshot(): Promise<GSTpilotSnapshot> {
+export async function loadGSTpilotSnapshot(
+  organizationId: string | null | undefined,
+): Promise<GSTpilotSnapshot> {
+  if (!organizationId || !organizationId.trim()) {
+    return {
+      customers: [],
+      products: [],
+      invoices: [],
+      vendors: [],
+      expenses: [],
+      payments: [],
+      invoiceStats: computeInvoiceStatsLocal([]),
+      productStats: computeProductStats([]),
+      expenseStats: computeExpenseStatsLocal([]),
+      paymentStats: computePaymentStatsLocal([]),
+      vendorStats: { count: 0, totalPayable: 0, withGstin: 0 },
+      customerCount: 0,
+      withGstin: 0,
+      totalCustomerOutstanding: 0,
+      vendorCount: 0,
+      totalPayable: 0,
+      loaded: false,
+    };
+  }
   try {
     const [customers, products, invoices, vendors, expenses, payments] = await Promise.all([
-      getCustomersOnce(),
-      getProductsOnce(),
-      getInvoicesOnce(),
-      getVendorsOnce(),
-      getExpensesOnce(),
-      getPaymentsOnce(),
+      getCustomersOnce(organizationId),
+      getProductsOnce(organizationId),
+      getInvoicesOnce(organizationId),
+      getVendorsOnce(organizationId),
+      getExpensesOnce(organizationId),
+      getPaymentsOnce(organizationId),
     ]);
 
     const invoiceStats = computeInvoiceStatsLocal(invoices);
@@ -318,14 +348,19 @@ When the user asks to "show customers / invoices / products / vendors / expenses
 /**
  * Convenience: load + format in one call. Fail-safe (returns a graceful
  * "unavailable" block on any error so the Oracle prompt still builds).
+ *
+ * Pass the real `organizationId` from the request context. If null/empty, the
+ * returned block reports the registry as unavailable (honest empty state).
  */
-export async function buildGSTpilotContextBlock(): Promise<string> {
+export async function buildGSTpilotContextBlock(
+  organizationId: string | null | undefined,
+): Promise<string> {
   try {
-    const snap = await loadGSTpilotSnapshot();
+    const snap = await loadGSTpilotSnapshot(organizationId);
     return formatGSTpilotContextBlock(snap);
   } catch (err) {
     console.warn('[Oracle] GSTPilot context unavailable:', err);
-    return `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
+    return `## GSTPILOT LIVE REGISTRY (organizations/${organizationId ?? '(no org)'})
 The live GSTPilot registry could not be loaded right now. If the user asks to "show customers / invoices / products / vendors / expenses / payments", reply that the registry is temporarily unavailable and suggest they try again in a moment. NEVER fabricate customer, product, invoice, vendor, expense, or payment records.`;
   }
 }

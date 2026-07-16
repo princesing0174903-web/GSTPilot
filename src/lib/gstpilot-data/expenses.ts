@@ -2,7 +2,13 @@
 // GSTPilot Infinity™ — Expenses Firestore Service
 //
 // CRUD + real-time subscription for expense documents at:
-//   organizations/GSTpilot_SAAS/expenses/{expenseId}
+//   organizations/{organizationId}/expenses/{expenseId}
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Every function accepts an `organizationId` parameter (from OrgContext).
+//   The Firestore path is built dynamically — NEVER hardcoded.
+//   If organizationId is null/empty, functions return empty results
+//   (honest empty state) instead of writing to a fallback path.
 //
 // Firestore is the ONLY source of truth. No mock data, no localStorage.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -22,7 +28,11 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { EXPENSES_COLLECTION } from './config';
+import {
+  orgCollectionPath,
+  orgDocPath,
+  EXPENSES_SUB,
+} from './config';
 import type {
   Expense,
   CreateExpenseInput,
@@ -111,13 +121,29 @@ function buildPayload(input: CreateExpenseInput) {
   };
 }
 
+/** No-op unsubscribe — returned when organizationId is null (preview mode). */
+const noopUnsubscribe: Unsubscribe = () => {};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * Subscribe to ALL expenses in real-time (onSnapshot) for the given org.
+ *
+ * If `organizationId` is null/empty (preview mode / no org), calls onData([])
+ * immediately and returns a no-op unsubscribe — does NOT touch Firestore.
+ */
 export function subscribeExpenses(
+  organizationId: string | null | undefined,
   onData: (expenses: Expense[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  const q = query(collection(db, EXPENSES_COLLECTION), orderBy('date', 'desc'));
+  const path = orgCollectionPath(organizationId, EXPENSES_SUB);
+  if (!path) {
+    onData([]);
+    return noopUnsubscribe;
+  }
+
+  const q = query(collection(db, path), orderBy('date', 'desc'));
   return onSnapshot(
     q,
     (snap) => {
@@ -129,15 +155,29 @@ export function subscribeExpenses(
   );
 }
 
-export async function getExpense(id: string): Promise<Expense | null> {
-  const snap = await getDoc(doc(db, EXPENSES_COLLECTION, id));
+/** Fetch a single expense by id (one-shot). */
+export async function getExpense(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Expense | null> {
+  const path = orgDocPath(organizationId, EXPENSES_SUB, id);
+  if (!path) return null;
+  const snap = await getDoc(doc(db, path));
   if (!snap.exists()) return null;
   return toExpense(snap.id, snap.data() as Record<string, unknown>);
 }
 
-export async function getExpensesOnce(): Promise<Expense[]> {
+/**
+ * Fetch ALL expenses in one shot (server-side / API-route friendly).
+ * Returns an empty array on permission-denied / unavailable / no org.
+ */
+export async function getExpensesOnce(
+  organizationId: string | null | undefined,
+): Promise<Expense[]> {
+  const path = orgCollectionPath(organizationId, EXPENSES_SUB);
+  if (!path) return [];
   try {
-    const q = query(collection(db, EXPENSES_COLLECTION), orderBy('date', 'desc'));
+    const q = query(collection(db, path), orderBy('date', 'desc'));
     const snap = await getDocs(q);
     const list: Expense[] = [];
     snap.forEach((d) => list.push(toExpense(d.id, d.data() as Record<string, unknown>)));
@@ -147,7 +187,25 @@ export async function getExpensesOnce(): Promise<Expense[]> {
   }
 }
 
-export async function createExpense(input: CreateExpenseInput): Promise<Expense> {
+/**
+ * Create a new expense in the given org's subcollection.
+ * Throws on validation errors. Returns the created Expense.
+ *
+ * If organizationId is null/empty, throws a friendly error — the caller
+ * must resolve the org context before creating.
+ */
+export async function createExpense(
+  organizationId: string | null | undefined,
+  input: CreateExpenseInput,
+): Promise<Expense> {
+  const path = orgCollectionPath(organizationId, EXPENSES_SUB);
+  if (!path) {
+    throw new Error(
+      'Unable to save expense.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   if (!input.description?.trim()) throw new Error('Expense description is required.');
   if (!input.amount || Number(input.amount) <= 0) {
     throw new Error('Expense amount must be greater than zero.');
@@ -155,7 +213,7 @@ export async function createExpense(input: CreateExpenseInput): Promise<Expense>
 
   const payload = buildPayload(input);
   const now = serverTimestamp();
-  const ref = await addDoc(collection(db, EXPENSES_COLLECTION), {
+  const ref = await addDoc(collection(db, path), {
     ...payload,
     createdAt: now,
     updatedAt: now,
@@ -165,10 +223,19 @@ export async function createExpense(input: CreateExpenseInput): Promise<Expense>
   return toExpense(snap.id, snap.data() as Record<string, unknown>);
 }
 
+/** Update an existing expense. */
 export async function updateExpense(
+  organizationId: string | null | undefined,
   id: string,
   patch: UpdateExpenseInput,
 ): Promise<Expense> {
+  const path = orgDocPath(organizationId, EXPENSES_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to update expense.\n\nReason: No organization is currently selected.',
+    );
+  }
+
   const update: Record<string, unknown> = {};
   const built = buildPayload({
     description: patch.description ?? '__NOOP__',
@@ -189,13 +256,23 @@ export async function updateExpense(
   if (patch.notes !== undefined) update.notes = built.notes;
   update.updatedAt = serverTimestamp();
 
-  await updateDoc(doc(db, EXPENSES_COLLECTION, id), update);
-  const snap = await getDoc(doc(db, EXPENSES_COLLECTION, id));
+  await updateDoc(doc(db, path), update);
+  const snap = await getDoc(doc(db, path));
   return toExpense(snap.id, snap.data() as Record<string, unknown>);
 }
 
-export async function deleteExpense(id: string): Promise<void> {
-  await deleteDoc(doc(db, EXPENSES_COLLECTION, id));
+/** Permanently delete an expense. */
+export async function deleteExpense(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<void> {
+  const path = orgDocPath(organizationId, EXPENSES_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to delete expense.\n\nReason: No organization is currently selected.',
+    );
+  }
+  await deleteDoc(doc(db, path));
 }
 
 // ─── Search + stats ──────────────────────────────────────────────────────────

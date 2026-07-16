@@ -4,10 +4,17 @@
 // GSTPilot — useGSTpilotPayments() Hook
 //
 // Real-time payments list (onSnapshot) + CRUD + search.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/payments
 //
-// Creating a customer payment linked to an invoice auto-updates the invoice's
-// paidAmount / balanceDue / paymentStatus (handled in the payments service).
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/payments/{paymentId}
+//
+//   Creating a customer payment linked to an invoice auto-updates the invoice's
+//   paidAmount / balanceDue / paymentStatus (handled in the payments service).
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -23,6 +30,7 @@ import {
   type UpdatePaymentInput,
   type PaymentStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotPaymentsResult {
   payments: Payment[];
@@ -40,6 +48,9 @@ export interface UseGSTpilotPaymentsResult {
 }
 
 export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,9 +61,16 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
   const paymentsRef = useRef<Payment[]>([]);
   paymentsRef.current = payments;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
     setLoading(true);
+    const currentOrgId = orgIdRef.current;
     const unsubscribe = subscribePayments(
+      currentOrgId,
       (list) => {
         setPayments(list);
         setLoading(false);
@@ -62,16 +80,22 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/payments.'
+            ? 'Unable to load payments.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached payments.'
               : err.message || 'Could not load payments.';
         setError(msg);
         setLoading(false);
+        console.error('[useGSTpilotPayments] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/payments` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -82,11 +106,16 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
   const create = useCallback(async (input: CreatePaymentInput) => {
     setSaving(true);
     try {
-      const payment = await svcCreate(input);
+      const payment = await svcCreate(orgIdRef.current, input);
       setPayments((prev) => [payment, ...prev]);
       return payment;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create payment.');
+      const msg = err instanceof Error ? err.message : 'Failed to create payment.';
+      setError(msg);
+      console.error('[useGSTpilotPayments] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -96,11 +125,17 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
   const update = useCallback(async (id: string, patch: UpdatePaymentInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setPayments((prev) => prev.map((p) => (p.id === id ? updated : p)));
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update payment.');
+      const msg = err instanceof Error ? err.message : 'Failed to update payment.';
+      setError(msg);
+      console.error('[useGSTpilotPayments] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -113,14 +148,20 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
       const prev = paymentsRef.current;
       setPayments((cur) => cur.filter((p) => p.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setPayments(prev);
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete payment.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete payment.';
+      setError(msg);
+      console.error('[useGSTpilotPayments] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);

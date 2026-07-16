@@ -153,11 +153,11 @@ export async function loadLiveBusinessData(organizationId: string): Promise<Live
     fetchCollection(COLLECTIONS.INVOICES, organizationId, 100),
     fetchCollection(COLLECTIONS.GST_RETURNS, organizationId, 50),
     fetchCollection(COLLECTIONS.GST_PROFILES, organizationId, 5),
-    // ── REAL gstpilot-data (organizations/GSTpilot_SAAS/*) ──
+    // ── REAL gstpilot-data (organizations/{organizationId}/*) ──
     // These are the user's actual customers + invoices. Merge them in so the
     // tool extractParams can resolve real names/numbers. Fail-safe (→ []).
-    getCustomersOnce(),
-    getInvoicesOnce(),
+    getCustomersOnce(organizationId),
+    getInvoicesOnce(organizationId),
   ]);
 
   // Legacy clients (firestore-schema) — mapped as before.

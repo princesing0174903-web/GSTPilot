@@ -2,7 +2,13 @@
 // GSTPilot Infinity™ — Customers Firestore Service
 //
 // CRUD + real-time subscription for customer documents at:
-//   organizations/GSTpilot_SAAS/customers/{customerId}
+//   organizations/{organizationId}/customers/{customerId}
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Every function accepts an `organizationId` parameter (from OrgContext).
+//   The Firestore path is built dynamically — NEVER hardcoded.
+//   If organizationId is null/empty, functions return empty results
+//   (honest empty state) instead of writing to a fallback path.
 //
 // Firestore is the ONLY source of truth. No mock data, no localStorage.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -23,7 +29,12 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { CUSTOMERS_COLLECTION, STATE_CODES } from './config';
+import {
+  orgCollectionPath,
+  orgDocPath,
+  CUSTOMERS_SUB,
+  STATE_CODES,
+} from './config';
 import { validateGstin } from './gst';
 import type {
   Customer,
@@ -85,19 +96,33 @@ function buildPayload(input: CreateCustomerInput) {
   };
 }
 
+/** No-op unsubscribe — returned when organizationId is null (preview mode). */
+const noopUnsubscribe: Unsubscribe = () => {};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Subscribe to ALL customers in real-time (onSnapshot).
+ * Subscribe to ALL customers in real-time (onSnapshot) for the given org.
  * Calls `onData` with a fresh sorted array whenever anything changes.
  * Returns an unsubscribe function.
+ *
+ * If `organizationId` is null/empty (preview mode / no org), calls onData([])
+ * immediately and returns a no-op unsubscribe — does NOT touch Firestore.
  */
 export function subscribeCustomers(
+  organizationId: string | null | undefined,
   onData: (customers: Customer[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const path = orgCollectionPath(organizationId, CUSTOMERS_SUB);
+  if (!path) {
+    // No org → honest empty state, no Firestore read, no permission error.
+    onData([]);
+    return noopUnsubscribe;
+  }
+
   const q = query(
-    collection(db, CUSTOMERS_COLLECTION),
+    collection(db, path),
     orderBy('name'),
   );
   return onSnapshot(
@@ -112,8 +137,13 @@ export function subscribeCustomers(
 }
 
 /** Fetch a single customer by id (one-shot). */
-export async function getCustomer(id: string): Promise<Customer | null> {
-  const snap = await getDoc(doc(db, CUSTOMERS_COLLECTION, id));
+export async function getCustomer(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Customer | null> {
+  const path = orgDocPath(organizationId, CUSTOMERS_SUB, id);
+  if (!path) return null;
+  const snap = await getDoc(doc(db, path));
   if (!snap.exists()) return null;
   return toCustomer(snap.id, snap.data() as Record<string, unknown>);
 }
@@ -121,11 +151,15 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 /**
  * Fetch ALL customers in one shot (server-side / API-route friendly).
  * Use this when you need a snapshot without a real-time listener (e.g. Oracle).
- * Returns an empty array on permission-denied / unavailable (preview mode).
+ * Returns an empty array on permission-denied / unavailable / no org.
  */
-export async function getCustomersOnce(): Promise<Customer[]> {
+export async function getCustomersOnce(
+  organizationId: string | null | undefined,
+): Promise<Customer[]> {
+  const path = orgCollectionPath(organizationId, CUSTOMERS_SUB);
+  if (!path) return [];
   try {
-    const q = query(collection(db, CUSTOMERS_COLLECTION), orderBy('name'));
+    const q = query(collection(db, path), orderBy('name'));
     const snap = await getDocs(q);
     const list: Customer[] = [];
     snap.forEach((d) => list.push(toCustomer(d.id, d.data() as Record<string, unknown>)));
@@ -136,12 +170,24 @@ export async function getCustomersOnce(): Promise<Customer[]> {
 }
 
 /**
- * Create a new customer document.
+ * Create a new customer document in the given org's subcollection.
  * Throws on validation errors. Returns the created Customer.
+ *
+ * If organizationId is null/empty, throws a friendly error — the caller
+ * must resolve the org context before creating.
  */
 export async function createCustomer(
+  organizationId: string | null | undefined,
   input: CreateCustomerInput,
 ): Promise<Customer> {
+  const path = orgCollectionPath(organizationId, CUSTOMERS_SUB);
+  if (!path) {
+    throw new Error(
+      'Unable to save customer.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   const name = input.name?.trim();
   if (!name) throw new Error('Customer name is required.');
 
@@ -150,7 +196,7 @@ export async function createCustomer(
 
   const payload = buildPayload(input);
   const now = serverTimestamp();
-  const ref = await addDoc(collection(db, CUSTOMERS_COLLECTION), {
+  const ref = await addDoc(collection(db, path), {
     ...payload,
     totalBilled: 0,
     totalPaid: 0,
@@ -167,9 +213,17 @@ export async function createCustomer(
  * Update an existing customer. Merges the patch; re-validates GSTIN.
  */
 export async function updateCustomer(
+  organizationId: string | null | undefined,
   id: string,
   patch: UpdateCustomerInput,
 ): Promise<Customer> {
+  const path = orgDocPath(organizationId, CUSTOMERS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to update customer.\n\nReason: No organization is currently selected.',
+    );
+  }
+
   const gstinError = validateGstin(patch.gstin ?? null);
   if (gstinError) throw new Error(gstinError);
 
@@ -194,14 +248,23 @@ export async function updateCustomer(
   if (patch.notes !== undefined) update.notes = built.notes;
   update.updatedAt = serverTimestamp();
 
-  await updateDoc(doc(db, CUSTOMERS_COLLECTION, id), update);
-  const snap = await getDoc(doc(db, CUSTOMERS_COLLECTION, id));
+  await updateDoc(doc(db, path), update);
+  const snap = await getDoc(doc(db, path));
   return toCustomer(snap.id, snap.data() as Record<string, unknown>);
 }
 
 /** Permanently delete a customer. */
-export async function deleteCustomer(id: string): Promise<void> {
-  await deleteDoc(doc(db, CUSTOMERS_COLLECTION, id));
+export async function deleteCustomer(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<void> {
+  const path = orgDocPath(organizationId, CUSTOMERS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to delete customer.\n\nReason: No organization is currently selected.',
+    );
+  }
+  await deleteDoc(doc(db, path));
 }
 
 // ─── Search (client-side filter — keeps it simple + offline-friendly) ────────

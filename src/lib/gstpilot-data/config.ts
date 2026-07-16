@@ -4,54 +4,101 @@
 // Single source of truth for the Firestore collection paths the
 // Customers / Products / Invoices modules write to.
 //
-// The user has manually created these collections in Firebase Firestore:
+// IMPORTANT — ORG-SCOPED PATHS (MULTI-TENANT):
+//   Every Firestore path is now dynamically built from the authenticated
+//   user's organizationId. The OLD code hardcode `organizations/GSTpilot_SAAS/...`
+//   which caused FirebaseError: Missing or insufficient permissions because
+//   the user is NOT a member of the `GSTpilot_SAAS` org — they are a member of
+//   their OWN org (e.g. `preview-org` or a real Firestore org id).
 //
-//   organizations
-//      └── GSTpilot_SAAS              ← organization document
-//             ├── customers           ← subcollection
-//             ├── products            ← subcollection
-//             └── invoices            ← subcollection
+//   The Firestore security rules require:
+//     isOrgMember(orgId)  →  the path's orgId must match an org the user belongs to
 //
-// Firestore is the ONLY source of truth. No mock data, no local JSON,
-// no placeholder arrays. Every list reads via onSnapshot(); every write
-// goes directly to these paths.
+//   So every read/write MUST use:
+//     currentUser → organization membership → organizationId → Firestore path
+//
+//   The path builders below accept an `organizationId` parameter. Callers
+//   (hooks) obtain it from OrgContext and pass it through. If no orgId is
+//   provided, the functions return empty results (honest empty state) rather
+//   than writing to a hardcoded path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * The fixed organization document id the user created in Firestore.
- * All three modules live as subcollections under this document.
+ * Build the Firestore collection path for a given org's subcollection.
+ *
+ *   organizations/{organizationId}/{subcollection}
+ *
+ * Example: orgCollectionPath('preview-org', 'customers')
+ *       → 'organizations/preview-org/customers'
+ *
+ * If organizationId is null/empty, returns null (caller should short-circuit
+ * to an empty result rather than writing to a fallback path).
+ */
+export function orgCollectionPath(
+  organizationId: string | null | undefined,
+  subcollection: string,
+): string | null {
+  if (!organizationId || !organizationId.trim()) return null;
+  return `organizations/${organizationId}/${subcollection}`;
+}
+
+/**
+ * Build the Firestore document path for a specific doc in an org subcollection.
+ *
+ *   organizations/{organizationId}/{subcollection}/{docId}
+ */
+export function orgDocPath(
+  organizationId: string | null | undefined,
+  subcollection: string,
+  docId: string,
+): string | null {
+  const base = orgCollectionPath(organizationId, subcollection);
+  if (!base) return null;
+  return `${base}/${docId}`;
+}
+
+// ─── Subcollection names (single source of truth) ────────────────────────────
+
+export const CUSTOMERS_SUB = 'customers';
+export const PRODUCTS_SUB = 'products';
+export const INVOICES_SUB = 'invoices';
+export const VENDORS_SUB = 'vendors';
+export const EXPENSES_SUB = 'expenses';
+export const PAYMENTS_SUB = 'payments';
+export const COUNTERS_SUB = 'counters';
+export const ACTIVITIES_SUB = 'activities';
+
+/**
+ * DEPRECATED — kept only for backward compatibility with any caller that
+ * hasn't been migrated yet. Returns the literal 'GSTpilot_SAAS' string.
+ * New code MUST use orgCollectionPath(realOrgId, ...) instead.
+ *
+ * @deprecated Use orgCollectionPath(organizationId, subcollection) instead.
  */
 export const ORG_ID = 'GSTpilot_SAAS';
 
-/** Root organization document path. */
+/**
+ * DEPRECATED — same as above. New code should call:
+ *   orgCollectionPath(orgId, CUSTOMERS_SUB)
+ *
+ * @deprecated Use orgCollectionPath(organizationId, CUSTOMERS_SUB) instead.
+ */
 export const ORG_PATH = `organizations/${ORG_ID}`;
 
-/** Subcollection paths — used by collection(db, ...). */
+/**
+ * DEPRECATED — hardcoded collection paths. New code should use the dynamic
+ * path builders with the real organizationId.
+ *
+ * @deprecated Use orgCollectionPath(orgId, ...) instead.
+ */
 export const CUSTOMERS_COLLECTION = `${ORG_PATH}/customers`;
 export const PRODUCTS_COLLECTION = `${ORG_PATH}/products`;
 export const INVOICES_COLLECTION = `${ORG_PATH}/invoices`;
 export const VENDORS_COLLECTION = `${ORG_PATH}/vendors`;
 export const EXPENSES_COLLECTION = `${ORG_PATH}/expenses`;
 export const PAYMENTS_COLLECTION = `${ORG_PATH}/payments`;
-
-/**
- * Counters subcollection — used for atomic sequence generation
- * (invoice numbers, etc.). Lives at `organizations/{orgId}/counters`
- * so each counter is a document with an EVEN number of path segments:
- *
- *   organizations/{orgId}/counters/{counterName}   ← 4 segments ✓
- *
- * IMPORTANT: Never place a counter inside a data subcollection such as
- * `organizations/{orgId}/invoices/_counter/invoiceCounter` — that path
- * has 5 segments (odd) and Firestore rejects it with
- * "Invalid document reference. Document references must have an even
- * number of segments." because `invoices` is a collection and a
- * counter document cannot nest under another collection's document.
- */
 export const COUNTERS_COLLECTION = `${ORG_PATH}/counters`;
-
-/** Full document path for the invoice-number counter (4 segments — valid). */
-export const INVOICE_COUNTER_DOC = `${COUNTERS_COLLECTION}/invoiceCounter`;
+export const INVOICE_COUNTER_DOC = `${ORG_PATH}/counters/invoiceCounter`;
 
 /** Standard GST rates (%) supported by the invoice line items. */
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28] as const;

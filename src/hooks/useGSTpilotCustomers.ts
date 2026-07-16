@@ -4,7 +4,14 @@
 // GSTPilot — useGSTpilotCustomers() Hook
 //
 // Real-time customers list (onSnapshot) + CRUD + search.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/customers
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/customers/{customerId}
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -19,6 +26,7 @@ import {
   type UpdateCustomerInput,
   type CustomerStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotCustomersResult {
   customers: Customer[];
@@ -36,6 +44,9 @@ export interface UseGSTpilotCustomersResult {
 }
 
 export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +57,19 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
   const customersRef = useRef<Customer[]>([]);
   customersRef.current = customers;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
     setLoading(true);
+    // Pass the REAL orgId to the subscription. If orgId is null (preview mode
+    // or no org), subscribeCustomers returns a no-op + calls onData([]) —
+    // no Firestore read, no permission error.
+    const currentOrgId = orgIdRef.current;
     const unsubscribe = subscribeCustomers(
+      currentOrgId,
       (list) => {
         setCustomers(list);
         setLoading(false);
@@ -58,16 +79,23 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/customers.'
+            ? 'Unable to load customers.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached customers.'
               : err.message || 'Could not load customers.';
         setError(msg);
         setLoading(false);
+        // Detailed error in console only — never show raw FirebaseError to user.
+        console.error('[useGSTpilotCustomers] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/customers` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -78,14 +106,19 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
   const create = useCallback(async (input: CreateCustomerInput) => {
     setSaving(true);
     try {
-      const customer = await svcCreate(input);
+      const customer = await svcCreate(orgIdRef.current, input);
       // Optimistic insert; onSnapshot will confirm.
       setCustomers((prev) =>
         [customer, ...prev].sort((a, b) => a.name.localeCompare(b.name)),
       );
       return customer;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create customer.');
+      const msg = err instanceof Error ? err.message : 'Failed to create customer.';
+      setError(msg);
+      console.error('[useGSTpilotCustomers] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -95,7 +128,7 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
   const update = useCallback(async (id: string, patch: UpdateCustomerInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setCustomers((prev) =>
         prev
           .map((c) => (c.id === id ? updated : c))
@@ -103,7 +136,13 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
       );
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update customer.');
+      const msg = err instanceof Error ? err.message : 'Failed to update customer.';
+      setError(msg);
+      console.error('[useGSTpilotCustomers] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -116,14 +155,20 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
       const prev = customersRef.current;
       setCustomers((cur) => cur.filter((c) => c.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setCustomers(prev); // rollback
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete customer.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete customer.';
+      setError(msg);
+      console.error('[useGSTpilotCustomers] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);

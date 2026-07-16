@@ -4,7 +4,14 @@
 // GSTPilot — useGSTpilotVendors() Hook
 //
 // Real-time vendors list (onSnapshot) + CRUD + search.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/vendors
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/vendors/{vendorId}
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -19,6 +26,7 @@ import {
   type UpdateVendorInput,
   type VendorStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotVendorsResult {
   vendors: Vendor[];
@@ -36,6 +44,9 @@ export interface UseGSTpilotVendorsResult {
 }
 
 export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +57,16 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
   const vendorsRef = useRef<Vendor[]>([]);
   vendorsRef.current = vendors;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
     setLoading(true);
+    const currentOrgId = orgIdRef.current;
     const unsubscribe = subscribeVendors(
+      currentOrgId,
       (list) => {
         setVendors(list);
         setLoading(false);
@@ -58,16 +76,22 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/vendors.'
+            ? 'Unable to load vendors.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached vendors.'
               : err.message || 'Could not load vendors.';
         setError(msg);
         setLoading(false);
+        console.error('[useGSTpilotVendors] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/vendors` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -78,13 +102,18 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
   const create = useCallback(async (input: CreateVendorInput) => {
     setSaving(true);
     try {
-      const vendor = await svcCreate(input);
+      const vendor = await svcCreate(orgIdRef.current, input);
       setVendors((prev) =>
         [vendor, ...prev].sort((a, b) => a.name.localeCompare(b.name)),
       );
       return vendor;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create vendor.');
+      const msg = err instanceof Error ? err.message : 'Failed to create vendor.';
+      setError(msg);
+      console.error('[useGSTpilotVendors] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -94,7 +123,7 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
   const update = useCallback(async (id: string, patch: UpdateVendorInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setVendors((prev) =>
         prev
           .map((v) => (v.id === id ? updated : v))
@@ -102,7 +131,13 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
       );
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update vendor.');
+      const msg = err instanceof Error ? err.message : 'Failed to update vendor.';
+      setError(msg);
+      console.error('[useGSTpilotVendors] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -115,14 +150,20 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
       const prev = vendorsRef.current;
       setVendors((cur) => cur.filter((v) => v.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setVendors(prev);
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete vendor.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete vendor.';
+      setError(msg);
+      console.error('[useGSTpilotVendors] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);

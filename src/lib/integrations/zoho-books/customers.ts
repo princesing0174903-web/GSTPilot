@@ -27,6 +27,7 @@ import { zohoGet, zohoPost, zohoPut } from './client';
 import type { ZohoContact, ZohoContactsResponse, ZohoPageContext } from './sync/types';
 import { mapCustomerToClient, syntheticGstinForContact } from './sync/mapper';
 import { safeAudit } from '@/lib/audit/safe-write';
+import { invalidateSnapshotCache } from '@/lib/financial-engine';
 
 // ─── Client mirror helper (Phase 5 BUG FIX) ─────────────────────────────────
 //
@@ -698,6 +699,15 @@ export async function createZohoCustomer(opts: {
       /* non-fatal — Client mirror is best-effort */
     }
 
+    // Invalidate the server-side business snapshot cache so the next
+    // /api/business/snapshot request recomputes the customer count from
+    // the fresh DB state (the client hook also fires a window event).
+    try {
+      invalidateSnapshotCache(opts.organizationId);
+    } catch {
+      /* non-fatal — cache invalidation is best-effort */
+    }
+
     return {
       ok: true,
       httpStatus: 200,
@@ -825,6 +835,13 @@ export async function updateZohoCustomer(opts: {
       await mirrorZohoCustomerToClient(opts.organizationId, c);
     } catch {
       /* non-fatal — Client mirror is best-effort */
+    }
+
+    // Invalidate the server-side business snapshot cache.
+    try {
+      invalidateSnapshotCache(opts.organizationId);
+    } catch {
+      /* non-fatal */
     }
 
     return {

@@ -844,7 +844,7 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
     buildCEOContextBlock(),
     mem.userId ? buildRealDataSnapshot(mem.userId).then(formatRealDataContextBlock) : Promise.resolve(''),
     formatDynamicRecommendationsBlock(mem.userId),
-    buildGSTpilotContextBlock(),
+    buildGSTpilotContextBlock(req.context?.organizationId),
     buildBusinessSnapshotContextBlock(req.context?.organizationId),
   ]);
 
@@ -873,7 +873,7 @@ Dynamic recommendation engine is not available right now. If the user asks for r
 
   let gstpilotContextBlock = gstpilotResult.status === 'fulfilled'
     ? gstpilotResult.value
-    : `## GSTPILOT LIVE REGISTRY (organizations/GSTpilot_SAAS)
+    : `## GSTPILOT LIVE REGISTRY (organizations/${req.context?.organizationId ?? '(no org)'})
 The live GSTPilot registry could not be loaded. If the user asks to "show customers / invoices / products", say the registry is temporarily unavailable. NEVER fabricate records.`;
 
   return `${BRAND_IDENTITY_PROMPT_BLOCK}

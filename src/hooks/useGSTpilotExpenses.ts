@@ -4,7 +4,14 @@
 // GSTPilot — useGSTpilotExpenses() Hook
 //
 // Real-time expenses list (onSnapshot) + CRUD + search.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/expenses
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/expenses/{expenseId}
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -20,6 +27,7 @@ import {
   type UpdateExpenseInput,
   type ExpenseStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotExpensesResult {
   expenses: Expense[];
@@ -37,6 +45,9 @@ export interface UseGSTpilotExpensesResult {
 }
 
 export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,9 +58,16 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
   const expensesRef = useRef<Expense[]>([]);
   expensesRef.current = expenses;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
     setLoading(true);
+    const currentOrgId = orgIdRef.current;
     const unsubscribe = subscribeExpenses(
+      currentOrgId,
       (list) => {
         setExpenses(list);
         setLoading(false);
@@ -59,16 +77,22 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/expenses.'
+            ? 'Unable to load expenses.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached expenses.'
               : err.message || 'Could not load expenses.';
         setError(msg);
         setLoading(false);
+        console.error('[useGSTpilotExpenses] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/expenses` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -79,11 +103,16 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
   const create = useCallback(async (input: CreateExpenseInput) => {
     setSaving(true);
     try {
-      const expense = await svcCreate(input);
+      const expense = await svcCreate(orgIdRef.current, input);
       setExpenses((prev) => [expense, ...prev]);
       return expense;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create expense.');
+      const msg = err instanceof Error ? err.message : 'Failed to create expense.';
+      setError(msg);
+      console.error('[useGSTpilotExpenses] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -93,11 +122,17 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
   const update = useCallback(async (id: string, patch: UpdateExpenseInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update expense.');
+      const msg = err instanceof Error ? err.message : 'Failed to update expense.';
+      setError(msg);
+      console.error('[useGSTpilotExpenses] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -110,14 +145,20 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
       const prev = expensesRef.current;
       setExpenses((cur) => cur.filter((e) => e.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setExpenses(prev);
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete expense.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete expense.';
+      setError(msg);
+      console.error('[useGSTpilotExpenses] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);

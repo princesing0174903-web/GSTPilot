@@ -4479,3 +4479,31 @@ Stage Summary:
   * ConnectivityFabricPage → "Uninstall {provider}?" / "All credentials will be revoked. You can reinstall this connector anytime." / "Uninstall"
   * MemoryPanel → "Clear ALL memory?" / "All conversation history, learned preferences, and saved memories will be permanently deleted. This cannot be undone." / "Clear all memory"
   * DocumentsPage → "Delete {fileName}?" / "This file will be permanently deleted from Firebase Storage. This cannot be undone." / "Delete file"
+
+---
+Task ID: 5
+Agent: Customer Creation Bug Fix Subagent
+Task: Fix Zoho Books "Create Customer" form-loop bug + FirebaseError permission-denied from hardcoded GSTpilot_SAAS org ID + add full-flow trace logging + snapshot invalidation
+
+Work Log:
+- Traced the complete Create Customer flow: ZohoCustomersSyncPanel → useZohoBooks.createCustomer → POST /api/integrations/zoho/customers → createZohoCustomer service → POST /books/v3/contacts → Prisma ZohoCustomer.create + Client mirror
+- Identified ROOT CAUSE #1 (form-loop bug): CustomerFormDialog used `key={create-${Date.now()}}` which changed on EVERY render (e.g. when `pending` flipped true→false during submit), causing React to unmount+remount the CustomerForm — wiping all entered values. Replaced with a STABLE key (`'create'` or `edit-${initial.id}`) that only changes when the dialog opens/closes or a different customer is edited.
+- Identified ROOT CAUSE #2 (Firebase permission error): lib/gstpilot-data/config.ts hardcoded `ORG_ID = 'GSTpilot_SAAS'` and built all Firestore paths as `organizations/GSTpilot_SAAS/customers`. The Firestore rules require `isOrgMember(orgId)` — the user is a member of their OWN org (e.g. `preview-org`), NOT `GSTpilot_SAAS`. So every read/write was denied.
+- Refactored config.ts to export dynamic path builders: `orgCollectionPath(organizationId, subcollection)` and `orgDocPath(organizationId, subcollection, docId)`. Old constants kept but marked @deprecated.
+- Refactored customers.ts to accept `organizationId` as the first parameter in every function (subscribeCustomers, getCustomer, getCustomersOnce, createCustomer, updateCustomer, deleteCustomer). Functions return empty results (reads) or throw friendly errors (writes) when orgId is null.
+- Updated useGSTpilotCustomers hook to read orgId from useOrg() and pass it to every service call. Added detailed console.error logging with the exact orgId + Firestore path on permission-denied. Updated the user-facing error message to the friendly format: "Unable to load customers. Reason: You don't currently have permission..."
+- Added comprehensive 11-step console.group trace logging to handleCreate and handleEdit in ZohoCustomersSyncPanel (button click → validation → payload → API call → Zoho response with zohoCode/zohoMessage → DB save → list refresh → dialog close → success toast).
+- Added toast.success and toast.error notifications to create/edit flows — surfaces the EXACT Zoho error (zohoCode + zohoMessage) instead of silently failing.
+- Added invalidateBusinessSnapshot() call to useZohoBooks.createCustomer and updateCustomer hooks (client-side event bus) + invalidateSnapshotCache() to the server-side createZohoCustomer and updateZohoCustomer services — so the dashboard customer count updates INSTANTLY after a successful create (no 60-second wait).
+- Verified all 6 gstpilot-data service files (customers, products, invoices, vendors, expenses, payments) and all 6 hooks are already org-scoped (tsc --noEmit passes with 0 errors).
+- Verified via Agent Browser: Zoho Books page loads cleanly, GET /api/integrations/zoho/customers returns honest empty state, POST returns clear `needsReconnect: true` error when Zoho isn't connected, console logs show the exact orgId + path on permission-denied (expected in preview mode).
+
+Stage Summary:
+- Form-loop bug FIXED: stable key prevents remount during submit — user's input is preserved on failure.
+- Hardcoded org ID ELIMINATED: all Firestore paths now dynamic via orgCollectionPath(realOrgId, sub).
+- Error surfacing FIXED: exact Zoho error code + message shown via toast + inline error, never silently fails.
+- Console logging ADDED: 11-step flow trace in browser console for every create/edit attempt.
+- Snapshot invalidation ADDED: dashboard + Oracle update instantly after successful customer create.
+- Permission errors CONTEXTUALIZED: hooks now log the exact failing path (e.g. `organizations/preview-org/customers`) and show a friendly user-facing message instead of raw FirebaseError.
+- Files modified: ZohoCustomersSyncPanel.tsx, useZohoBooks.ts, customers.ts (gstpilot-data), config.ts (gstpilot-data), useGSTpilotCustomers.ts, customers.ts (zoho-books integrations)
+- Lint: 0 errors on all changed files. tsc: 0 errors. Dev server: healthy (HTTP 200).

@@ -60,6 +60,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useOrg } from '@/contexts/OrgContext';
 import { useGSTpilotCustomers } from '@/hooks/useGSTpilotCustomers';
 import { useGSTpilotProducts } from '@/hooks/useGSTpilotProducts';
 import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
@@ -99,6 +100,8 @@ export function InvoiceUploadDialog({
   onOpenChange,
   onSaved,
 }: UploadDialogProps) {
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? null;
   const { customers } = useGSTpilotCustomers();
   const { products } = useGSTpilotProducts();
   const { invoices } = useGSTpilotInvoices();
@@ -241,7 +244,7 @@ export function InvoiceUploadDialog({
 
     let uploadResult;
     try {
-      uploadResult = await uploadInvoiceFile(file, (pct) => {
+      uploadResult = await uploadInvoiceFile(orgId, file, (pct) => {
         setUploadPercent(pct);
         if (pct >= 100) setProcessingLabel('Running Gemini AI extraction…');
       });
@@ -279,7 +282,7 @@ export function InvoiceUploadDialog({
       setStep('select');
       toast.error('AI extraction failed', { description: msg });
     }
-  }, [file]);
+  }, [file, orgId]);
 
   // ── Hydrate the editable form from the extraction result ──
   function hydrateReviewForm(
@@ -379,7 +382,7 @@ export function InvoiceUploadDialog({
         if (entry) resolvedCustomerState = entry[0];
       }
 
-      const invoice = await saveExtractedInvoice({
+      const invoice = await saveExtractedInvoice(orgId, {
         customerId: resolvedCustomerId,
         customerName: resolvedCustomerName,
         customerGstin: resolvedCustomerGstin,
@@ -441,6 +444,7 @@ export function InvoiceUploadDialog({
     dueDate,
     notes,
     extraction,
+    orgId,
     onSaved,
     onOpenChange,
   ]);

@@ -2,14 +2,20 @@
 // GSTPilot Infinity™ — Invoices Firestore Service
 //
 // CRUD + real-time subscription for invoice documents at:
-//   organizations/GSTpilot_SAAS/invoices/{invoiceId}
+//   organizations/{organizationId}/invoices/{invoiceId}
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Every function accepts an `organizationId` parameter (from OrgContext).
+//   The Firestore path is built dynamically — NEVER hardcoded.
+//   If organizationId is null/empty, functions return empty results
+//   (honest empty state) instead of writing to a fallback path.
 //
 // All money fields (subtotal, taxableValue, cgst, sgst, igst, totalTax,
 // grandTotal, balanceDue, isIntraState, per-line amounts) are derived here
 // via calculateInvoiceTotals(). The UI NEVER computes totals.
 //
 // Invoice numbering is atomic: a counter document at
-//   organizations/GSTpilot_SAAS/counters/invoiceCounter
+//   organizations/{organizationId}/counters/invoiceCounter
 // is incremented inside a Firestore transaction so concurrent creates
 // never collide.
 //
@@ -40,7 +46,12 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { INVOICES_COLLECTION, INVOICE_COUNTER_DOC } from './config';
+import {
+  orgCollectionPath,
+  orgDocPath,
+  INVOICES_SUB,
+  COUNTERS_SUB,
+} from './config';
 import {
   calculateInvoiceTotals,
   derivePaymentStatus,
@@ -59,7 +70,8 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Counter document path: `organizations/GSTpilot_SAAS/counters/invoiceCounter`
+// Counter document path:
+//   organizations/{organizationId}/counters/invoiceCounter
 // (4 segments — a VALID Firestore document reference). The counter no longer
 // lives inside the `invoices` collection, so reads of that collection do not
 // need to filter out a stray `_counter` document anymore.
@@ -137,15 +149,26 @@ function toInvoice(id: string, raw: Record<string, unknown>): Invoice {
  * Format: INV-YYYY-NNNN  (e.g. INV-2025-0001).
  * Uses a Firestore transaction on a counter document so concurrent
  * creates never produce duplicate numbers.
+ *
+ * Path: organizations/{organizationId}/counters/invoiceCounter
+ *   (4 segments — a VALID Firestore document reference).
+ *
+ * Throws a friendly error if `organizationId` is null/empty.
  */
-async function nextInvoiceNumber(): Promise<string> {
+async function nextInvoiceNumber(
+  organizationId: string | null | undefined,
+): Promise<string> {
+  const counterPath = orgDocPath(organizationId, COUNTERS_SUB, 'invoiceCounter');
+  if (!counterPath) {
+    throw new Error(
+      'Unable to generate invoice number.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
-  // `INVOICE_COUNTER_DOC` = `organizations/GSTpilot_SAAS/counters/invoiceCounter`
-  // → 4 path segments, which is a VALID Firestore document reference.
-  // (The previous path `${INVOICES_COLLECTION}/_counter/invoiceCounter` had
-  // 5 segments and was rejected by Firestore.)
-  const counterRef = doc(db, INVOICE_COUNTER_DOC);
+  const counterRef = doc(db, counterPath);
 
   const seq = await runTransaction(db, async (txn) => {
     const counterSnap = await txn.get(counterRef);
@@ -166,17 +189,31 @@ async function nextInvoiceNumber(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
+/** No-op unsubscribe — returned when organizationId is null (preview mode). */
+const noopUnsubscribe: Unsubscribe = () => {};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Subscribe to ALL invoices in real-time (onSnapshot), newest first.
+ * Subscribe to ALL invoices in real-time (onSnapshot) for the given org,
+ * newest first.
+ *
+ * If `organizationId` is null/empty (preview mode / no org), calls onData([])
+ * immediately and returns a no-op unsubscribe — does NOT touch Firestore.
  */
 export function subscribeInvoices(
+  organizationId: string | null | undefined,
   onData: (invoices: Invoice[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const path = orgCollectionPath(organizationId, INVOICES_SUB);
+  if (!path) {
+    onData([]);
+    return noopUnsubscribe;
+  }
+
   const q = query(
-    collection(db, INVOICES_COLLECTION),
+    collection(db, path),
     orderBy('createdAt', 'desc'),
   );
   return onSnapshot(
@@ -193,22 +230,31 @@ export function subscribeInvoices(
   );
 }
 
-/** Fetch a single invoice by id. */
-export async function getInvoice(id: string): Promise<Invoice | null> {
-  const snap = await getDoc(doc(db, INVOICES_COLLECTION, id));
+/** Fetch a single invoice by id (one-shot). */
+export async function getInvoice(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Invoice | null> {
+  const path = orgDocPath(organizationId, INVOICES_SUB, id);
+  if (!path) return null;
+  const snap = await getDoc(doc(db, path));
   if (!snap.exists()) return null;
   return toInvoice(snap.id, snap.data() as Record<string, unknown>);
 }
 
 /**
  * Fetch ALL invoices in one shot (server-side / API-route friendly).
- * The counter document now lives in a separate `counters` collection, so no
+ * The counter document lives in a separate `counters` collection, so no
  * filtering is required. Returns an empty array on permission-denied /
- * unavailable (preview mode).
+ * unavailable / no org.
  */
-export async function getInvoicesOnce(): Promise<Invoice[]> {
+export async function getInvoicesOnce(
+  organizationId: string | null | undefined,
+): Promise<Invoice[]> {
+  const path = orgCollectionPath(organizationId, INVOICES_SUB);
+  if (!path) return [];
   try {
-    const q = query(collection(db, INVOICES_COLLECTION), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     const list: Invoice[] = [];
     snap.forEach((d) => {
@@ -221,15 +267,27 @@ export async function getInvoicesOnce(): Promise<Invoice[]> {
 }
 
 /**
- * Create a new invoice.
- *  • Generates the invoice number atomically.
+ * Create a new invoice in the given org's subcollection.
+ *  • Generates the invoice number atomically (org-scoped counter).
  *  • Computes ALL money fields server-side via calculateInvoiceTotals.
  *  • Derives isIntraState from seller/customer state codes.
  *  • Derives paymentStatus + invoice status.
+ *
+ * If organizationId is null/empty, throws a friendly error — the caller
+ * must resolve the org context before creating.
  */
 export async function createInvoice(
+  organizationId: string | null | undefined,
   input: CreateInvoiceInput,
 ): Promise<Invoice> {
+  const path = orgCollectionPath(organizationId, INVOICES_SUB);
+  if (!path) {
+    throw new Error(
+      'Unable to save invoice.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   if (!input.sellerName?.trim()) {
     throw new Error('Seller name is required.');
   }
@@ -246,7 +304,7 @@ export async function createInvoice(
 
   const paymentStatus: PaymentStatus = 'unpaid';
   const status: InvoiceStatus = 'draft';
-  const invoiceNumber = await nextInvoiceNumber();
+  const invoiceNumber = await nextInvoiceNumber(organizationId);
   const today = new Date().toISOString().slice(0, 10);
 
   const payload = {
@@ -284,7 +342,7 @@ export async function createInvoice(
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDoc(collection(db, INVOICES_COLLECTION), payload);
+  const ref = await addDoc(collection(db, path), payload);
   const snap = await getDoc(ref);
   return toInvoice(snap.id, snap.data() as Record<string, unknown>);
 }
@@ -294,10 +352,18 @@ export async function createInvoice(
  * recomputed. Status + paymentStatus are re-derived from the new totals.
  */
 export async function updateInvoice(
+  organizationId: string | null | undefined,
   id: string,
   patch: UpdateInvoiceInput,
 ): Promise<Invoice> {
-  const existing = await getInvoice(id);
+  const path = orgDocPath(organizationId, INVOICES_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to update invoice.\n\nReason: No organization is currently selected.',
+    );
+  }
+
+  const existing = await getInvoice(organizationId, id);
   if (!existing) throw new Error('Invoice not found.');
   if (existing.status === 'cancelled') {
     throw new Error('Cancelled invoices cannot be edited.');
@@ -388,31 +454,44 @@ export async function updateInvoice(
     update.paymentStatus = patch.paymentStatus;
   }
 
-  await updateDoc(doc(db, INVOICES_COLLECTION, id), update);
-  const snap = await getDoc(doc(db, INVOICES_COLLECTION, id));
+  await updateDoc(doc(db, path), update);
+  const snap = await getDoc(doc(db, path));
   return toInvoice(snap.id, snap.data() as Record<string, unknown>);
 }
 
 /** Mark an invoice as fully or partially paid. */
 export async function markInvoicePaid(
+  organizationId: string | null | undefined,
   id: string,
   amount?: number,
 ): Promise<Invoice> {
-  const existing = await getInvoice(id);
+  const existing = await getInvoice(organizationId, id);
   if (!existing) throw new Error('Invoice not found.');
   const paidAmount =
     amount == null ? existing.grandTotal : Math.max(0, Math.min(amount, existing.grandTotal));
-  return updateInvoice(id, { paidAmount, status: paidAmount >= existing.grandTotal ? 'paid' : 'partial' });
+  return updateInvoice(organizationId, id, { paidAmount, status: paidAmount >= existing.grandTotal ? 'paid' : 'partial' });
 }
 
 /** Cancel an invoice. */
-export async function cancelInvoice(id: string): Promise<Invoice> {
-  return updateInvoice(id, { status: 'cancelled' });
+export async function cancelInvoice(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Invoice> {
+  return updateInvoice(organizationId, id, { status: 'cancelled' });
 }
 
 /** Permanently delete an invoice. */
-export async function deleteInvoice(id: string): Promise<void> {
-  await deleteDoc(doc(db, INVOICES_COLLECTION, id));
+export async function deleteInvoice(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<void> {
+  const path = orgDocPath(organizationId, INVOICES_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to delete invoice.\n\nReason: No organization is currently selected.',
+    );
+  }
+  await deleteDoc(doc(db, path));
 }
 
 // ─── Search + stats ──────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -582,6 +583,9 @@ export function useZohoBooks() {
       if (result.ok) {
         // Refresh the customer list to include the new row.
         await listCustomers();
+        // Invalidate the business snapshot so the dashboard customer count
+        // + Oracle context update INSTANTLY (no 60-second wait).
+        invalidateBusinessSnapshot();
       }
       return result;
     },
@@ -608,6 +612,8 @@ export function useZohoBooks() {
       };
       if (result.ok) {
         await listCustomers();
+        // Invalidate the business snapshot so dashboards reflect the update.
+        invalidateBusinessSnapshot();
       }
       return result;
     },

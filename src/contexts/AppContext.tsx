@@ -228,6 +228,17 @@ export interface ReturnPrepContext {
 
 export type AppScreen = 'landing' | 'login' | 'app';
 
+/**
+ * Optional deep-link target for the Settings page.
+ *
+ * Set this BEFORE navigating to the 'settings' view (e.g. when the user clicks
+ * "Connect GSTN" on the Home page) so SettingsPage can open the correct
+ * section automatically. SettingsPage consumes + clears it on mount.
+ *
+ * Mirrors the returnPrepCtx pattern.
+ */
+export type SettingsSection = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit';
+
 interface AppContextType {
   currentView: AppView;
   selectedClientId: string | null;
@@ -235,12 +246,14 @@ interface AppContextType {
   currentScreen: AppScreen;
   returnPrepCtx: ReturnPrepContext;
   commandPaletteOpen: boolean;
+  pendingSettingsSection: SettingsSection | null;
   setCurrentView: (view: AppView) => void;
   setSelectedClientId: (id: string | null) => void;
   setSidebarOpen: (open: boolean) => void;
   setCurrentScreen: (screen: AppScreen) => void;
   setReturnPrepCtx: (ctx: ReturnPrepContext) => void;
   setCommandPaletteOpen: (open: boolean) => void;
+  setPendingSettingsSection: (section: SettingsSection | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -284,6 +297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     period: '2025-06',
   });
   const [commandPaletteOpen, setCommandPaletteOpen] = useState<boolean>(false);
+  const [pendingSettingsSection, setPendingSettingsSection] = useState<SettingsSection | null>(null);
 
   const handleSetCurrentView = useCallback((view: AppView) => {
     setCurrentView(view);
@@ -309,6 +323,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCommandPaletteOpen(open);
   }, []);
 
+  const handleSetPendingSettingsSection = useCallback((section: SettingsSection | null) => {
+    setPendingSettingsSection(section);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -318,12 +336,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         currentScreen,
         returnPrepCtx,
         commandPaletteOpen,
+        pendingSettingsSection,
         setCurrentView: handleSetCurrentView,
         setSelectedClientId: handleSetSelectedClientId,
         setSidebarOpen: handleSetSidebarOpen,
         setCurrentScreen: handleSetCurrentScreen,
         setReturnPrepCtx: handleSetReturnPrepCtx,
         setCommandPaletteOpen: handleSetCommandPaletteOpen,
+        setPendingSettingsSection: handleSetPendingSettingsSection,
       }}
     >
       {children}

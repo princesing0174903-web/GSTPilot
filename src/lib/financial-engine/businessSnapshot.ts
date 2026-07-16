@@ -169,7 +169,18 @@ export async function getBusinessSnapshot(
     notices: data.notices.length,
 
     updatedAt: new Date().toISOString(),
-    hasLiveData: true,
+    // hasLiveData is TRUE only when there is at least one real financial
+    // record (invoice, purchase bill, expense, payment, OR bank account).
+    // Without this gate, dashboards would display "Health Score 0" and
+    // "Revenue ₹0" as if they were real metrics — which the stabilization
+    // directive explicitly forbids. When hasLiveData is false, every UI
+    // should show the "Unavailable — connect supported integrations" state.
+    hasLiveData:
+      data.invoices.length > 0 ||
+      data.purchaseBills.length > 0 ||
+      data.expenses.length > 0 ||
+      data.payments.length > 0 ||
+      data.bankAccounts.length > 0,
   };
 
   // ── Cache the result ──

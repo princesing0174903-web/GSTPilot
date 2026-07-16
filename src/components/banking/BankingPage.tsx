@@ -899,7 +899,7 @@ export default function BankingPage() {
                         compact
                         action={{
                           label: 'Connect Bank',
-                          onClick: () => setCurrentView('connections'),
+                          onClick: () => setCurrentView('google-workspace'),
                           icon: Plus,
                         }}
                       />
@@ -1064,7 +1064,7 @@ export default function BankingPage() {
                       accent="cyan"
                       action={{
                         label: 'Connect Bank',
-                        onClick: () => setCurrentView('connections'),
+                        onClick: () => setCurrentView('google-workspace'),
                         icon: Plus,
                       }}
                       secondaryAction={{
@@ -1150,7 +1150,7 @@ export default function BankingPage() {
                       accent="cyan"
                       action={{
                         label: 'Connect Bank',
-                        onClick: () => setCurrentView('connections'),
+                        onClick: () => setCurrentView('google-workspace'),
                         icon: Plus,
                       }}
                     />
@@ -1301,7 +1301,7 @@ export default function BankingPage() {
                           accent="cyan"
                           action={{
                             label: 'Import Statement',
-                            onClick: () => setCurrentView('connections'),
+                            onClick: () => setCurrentView('google-workspace'),
                             icon: Download,
                           }}
                         />

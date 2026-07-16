@@ -1,10 +1,27 @@
 'use client';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot Infinity™ — HOME (Production Command Center)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// This is the canonical HOME page. Per the stabilization directive:
+//
+//   • Only show integrations that ACTUALLY exist (Google + Zoho Books).
+//   • GSTN / Bank / WhatsApp / Gmail / Outlook → "Coming Soon" modal.
+//   • No fake scores (Health / Compliance / Risk / Collection). If the
+//     underlying data is unavailable, show "Unavailable — connect supported
+//     integrations to generate this metric."
+//   • Business Health Score is NOT shown until real data is connected.
+//   • Every Connect button routes to the real integration page or the
+//     Coming Soon modal — never to a deleted Connections page.
+//   • Single source of truth: useBusinessSnapshot() → /api/business/snapshot.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { ProSkeleton } from '@/components/ui-pro';
 import {
   Upload,
@@ -14,25 +31,33 @@ import {
   Sparkles,
   FileText,
   ShieldCheck,
-  ClipboardCheck,
   Users,
   IndianRupee,
   Plus,
   ArrowRight,
   Loader2,
-  Rocket,
   Activity,
   CheckSquare,
   Brain,
-  Plug,
   MessageSquare,
   Zap,
   TrendingUp,
   ShieldAlert,
+  Mail,
+  UserPlus,
+  RefreshCw,
+  LifeBuoy,
+  ChevronRight,
+  Building2,
+  Cloud,
+  BookOpen,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrg } from '@/contexts/OrgContext';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import {
   useLiveDashboardMetrics,
   useFireClients,
@@ -43,20 +68,25 @@ import {
   useFirePriorities,
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
-import { useGSTTransactions } from '@/hooks/useGSTTransactions';
-import { useBanking } from '@/hooks/useBanking';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
-import { useCommunications } from '@/hooks/useCommunications';
-import { useOrg } from '@/contexts/OrgContext';
-import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
+import { useGoogleWorkspace } from '@/hooks/useGoogleWorkspace';
+import { useZohoBooks } from '@/hooks/useZohoBooks';
+import { fileReturn } from '@/lib/firestore-service';
+import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+import { toast } from 'sonner';
+
+// ── Home sub-components ──────────────────────────────────────────────────────
+import { BusinessSetupProgress, type SetupTask } from '@/components/dashboard/home/BusinessSetupProgress';
+import { InviteTeamModal } from '@/components/dashboard/home/InviteTeamModal';
+import { ActivateOracleWizard } from '@/components/dashboard/home/ActivateOracleWizard';
+import { ConnectedServicesCard, type ServiceRow } from '@/components/dashboard/home/ConnectedServicesCard';
+import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal';
+import { EmptyState } from '@/components/dashboard/home/EmptyState';
 import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
 } from '@/lib/firestore-schema';
-import { fileReturn } from '@/lib/firestore-service';
-import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
-import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -112,38 +142,35 @@ function getGreeting(): string {
 }
 
 function getFirstName(name: string | undefined | null): string {
-  // Previously fell back to 'Prince' (developer name) — now uses a neutral
-  // greeting so production users don't see someone else's name.
   if (!name) return 'there';
   const first = name.trim().split(/\s+/)[0];
   return first || 'there';
 }
 
-// One-sentence AI insight derived from live metrics.
+// One-sentence insight. Never invents numbers — only uses snapshot values or
+// suggests connecting an integration.
 function buildInsightSentence(
-  metrics: LiveDashboardMetrics,
+  snapshot: ReturnType<typeof useBusinessSnapshot>['snapshot'],
   pendingCollection: number,
+  hasAnyIntegration: boolean,
 ): string {
-  const parts: string[] = [];
-  if (metrics.overdueReturns > 0) {
-    parts.push(
-      `${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
-    );
-  } else if (metrics.pendingReturns > 0) {
-    parts.push(
-      `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} to file`,
-    );
+  if (!hasAnyIntegration && !snapshot.hasLiveData) {
+    return 'Connect Google or Zoho Books to start syncing real business data.';
   }
-  if (pendingCollection > 0) {
+  if (!snapshot.hasLiveData) {
+    return 'Your workspace is ready. Create a customer or invoice to see live insights here.';
+  }
+  const parts: string[] = [];
+  if (snapshot.invoices.overdue > 0) {
+    parts.push(`${snapshot.invoices.overdue} overdue invoice${snapshot.invoices.overdue > 1 ? 's' : ''}`);
+  } else if (pendingCollection > 0) {
     parts.push(`₹${formatINR(pendingCollection)} pending collection`);
   }
-  if (metrics.criticalIssues > 0) {
-    parts.push(
-      `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
-    );
+  if (snapshot.revenue > 0) {
+    parts.push(`₹${formatINR(snapshot.revenue)} revenue`);
   }
   if (parts.length === 0) {
-    return `All clear — ${metrics.filedReturns} returns filed and ${metrics.totalClients} clients in good standing.`;
+    return `All clear — ${snapshot.customers} customers, ${snapshot.invoices.count} invoices.`;
   }
   if (parts.length === 1) return `${parts[0]}.`;
   const last = parts.pop();
@@ -151,14 +178,14 @@ function buildInsightSentence(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACTIVITY ICON — returns just the icon shape; color is applied via accent-text
+// ACTIVITY ICON
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function activityIcon(type: string): React.ReactNode {
   if (type.includes('filed')) return <CheckCircle2 className="h-3.5 w-3.5 accent-text" />;
   if (type.includes('upload') || type.includes('document'))
     return <Upload className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('review')) return <ClipboardCheck className="h-3.5 w-3.5 accent-text" />;
+  if (type.includes('review')) return <CheckSquare className="h-3.5 w-3.5 accent-text" />;
   if (type.includes('client')) return <Users className="h-3.5 w-3.5 accent-text" />;
   if (type.includes('reconcil') || type.includes('mismatch'))
     return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
@@ -168,47 +195,7 @@ function activityIcon(type: string): React.ReactNode {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// KPI CARD
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface KpiCardProps {
-  label: string;
-  value: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  index: number;
-}
-
-function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1.5 min-w-0">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              {label}
-            </p>
-            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
-              {value}
-            </p>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-          </div>
-          <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-            {icon}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION CARD — glass wrapper with header (icon chip + title + optional action)
+// SECTION CARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface SectionCardProps {
@@ -264,31 +251,147 @@ function SectionCard({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// BUSINESS HEALTH SCORE — prominent SVG gauge (0-100)
+// KPI CARD — with empty-state support
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function healthTier(score: number): { label: string; tone: string } {
-  if (score >= 85) return { label: 'Excellent', tone: 'text-emerald-400' };
-  if (score >= 70) return { label: 'Healthy', tone: 'text-emerald-400' };
-  if (score >= 50) return { label: 'At Risk', tone: 'text-amber-400' };
-  return { label: 'Critical', tone: 'text-amber-400' };
+interface KpiCardProps {
+  label: string;
+  value: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  index: number;
+  /** When true, renders an inline empty-state CTA instead of the value. */
+  empty?: {
+    title: string;
+    description: string;
+    ctaLabel: string;
+    onCta: () => void;
+  };
 }
 
-function BusinessHealthGauge({
-  score,
-  insight,
-}: {
-  score: number;
-  insight: string;
-}) {
-  const size = 180;
-  const stroke = 12;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, score)) / 100;
-  const offset = c * (1 - pct);
-  const tier = healthTier(score);
+function KpiCard({ label, value, subtitle, icon, index, empty }: KpiCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
+      className="h-full"
+    >
+      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.2)]">
+        {empty ? (
+          <div className="flex flex-col h-full">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                {label}
+              </p>
+              <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+                {icon}
+              </div>
+            </div>
+            <div className="flex-1 flex flex-col justify-center">
+              <p className="text-sm font-semibold text-foreground">{empty.title}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                {empty.description}
+              </p>
+              <button
+                type="button"
+                onClick={empty.onCta}
+                className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity self-start"
+              >
+                {empty.ctaLabel}
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5 min-w-0">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                {label}
+              </p>
+              <p className="text-3xl font-bold text-foreground tracking-tight truncate">
+                {value}
+              </p>
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            </div>
+            <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+              {icon}
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// METRIC UNAVAILABLE CARD — replaces fake scores (Health/Compliance/Risk)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface UnavailableMetricCardProps {
+  label: string;
+  icon: React.ReactNode;
+  index: number;
+  reason: string;
+  ctaLabel?: string;
+  onCta?: () => void;
+}
+
+function UnavailableMetricCard({
+  label,
+  icon,
+  index,
+  reason,
+  ctaLabel,
+  onCta,
+}: UnavailableMetricCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
+      className="h-full"
+    >
+      <div className="glass-surface rounded-2xl p-5 h-full">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="space-y-1 min-w-0">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              {label}
+            </p>
+            <p className="text-sm font-semibold text-muted-foreground/80">
+              Unavailable
+            </p>
+          </div>
+          <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/[0.04] shrink-0">
+            {icon}
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+          <div className="h-full w-0" />
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+          {reason}
+        </p>
+        {ctaLabel && onCta && (
+          <button
+            type="button"
+            onClick={onCta}
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+          >
+            {ctaLabel}
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUSINESS HEALTH — Unavailable state (no fake score)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BusinessHealthUnavailable({ onConnect }: { onConnect: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -297,49 +400,21 @@ function BusinessHealthGauge({
       className="h-full"
     >
       <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
-        <div className="relative shrink-0" style={{ width: size, height: size }}>
-          <svg width={size} height={size} className="-rotate-90">
-            <defs>
-              <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10b981" />
-                <stop offset="60%" stopColor="#06b6d4" />
-                <stop offset="100%" stopColor="#f59e0b" />
-              </linearGradient>
-            </defs>
+        <div className="relative shrink-0 flex items-center justify-center h-[180px] w-[180px]">
+          <svg width={180} height={180} className="-rotate-90">
             <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
+              cx={90}
+              cy={90}
+              r={84}
               fill="none"
               stroke="rgba(255,255,255,0.06)"
-              strokeWidth={stroke}
-            />
-            <motion.circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="url(#bhsGradient)"
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={c}
-              initial={{ strokeDashoffset: c }}
-              animate={{ strokeDashoffset: offset }}
-              transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.3 }}
+              strokeWidth={12}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <motion.span
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.7 }}
-              className={`text-5xl font-bold tracking-tight ${tier.tone}`}
-            >
-              {Math.round(score)}
-            </motion.span>
-            <span className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-              / 100
-            </span>
+            <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
+              <Brain className="h-6 w-6 text-muted-foreground" />
+            </div>
           </div>
         </div>
         <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
@@ -351,13 +426,23 @@ function BusinessHealthGauge({
               Business Health Score
             </h3>
           </div>
-          <p className={`text-lg font-semibold ${tier.tone}`}>{tier.label}</p>
+          <p className="text-lg font-semibold text-muted-foreground">Unavailable</p>
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-            {insight}
+            Connect your business data to generate a live health score. A real
+            health score is calculated from connected GSTN, Banking, Invoices,
+            and Expenses — we never invent a number.
           </p>
-          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-2">
+            <Button
+              size="sm"
+              onClick={onConnect}
+              className="accent-gradient text-white hover:opacity-90 gap-1.5 h-8"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Connect Integration
+            </Button>
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Live · auto-refreshing
+              Google · Zoho Books available now
             </span>
           </div>
         </div>
@@ -367,77 +452,7 @@ function BusinessHealthGauge({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SCORE CARD — small 0-100 score with progress bar
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface ScoreCardProps {
-  label: string;
-  score: number; // 0-100
-  subtitle: string;
-  icon: React.ReactNode;
-  index: number;
-  tone?: 'emerald' | 'amber' | 'cyan';
-}
-
-function ScoreCard({
-  label,
-  score,
-  subtitle,
-  icon,
-  index,
-  tone = 'emerald',
-}: ScoreCardProps) {
-  const clamped = Math.max(0, Math.min(100, score));
-  const barColor =
-    tone === 'amber'
-      ? 'from-amber-500 to-amber-400'
-      : tone === 'cyan'
-        ? 'from-cyan-500 to-cyan-400'
-        : 'from-emerald-500 to-emerald-400';
-  const textColor =
-    tone === 'amber'
-      ? 'text-amber-400'
-      : tone === 'cyan'
-        ? 'text-cyan-400'
-        : 'text-emerald-400';
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl p-5 h-full hover-lift">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="space-y-1 min-w-0">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              {label}
-            </p>
-            <p className={`text-2xl font-bold tracking-tight ${textColor}`}>
-              {Math.round(clamped)}
-              <span className="text-sm text-muted-foreground ml-0.5">/100</span>
-            </p>
-          </div>
-          <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
-            {icon}
-          </div>
-        </div>
-        <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${clamped}%` }}
-            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' as const }}
-            className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
-          />
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2">{subtitle}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// LOADING SKELETON — matches new layout (3 KPI + 3 sections)
+// LOADING SKELETON
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function DashboardSkeleton() {
@@ -447,9 +462,16 @@ function DashboardSkeleton() {
         <ProSkeleton className="h-9 w-64" />
         <ProSkeleton className="h-4 w-80" />
       </div>
+      <ProSkeleton className="h-24 rounded-2xl" />
+      <ProSkeleton className="h-40 rounded-2xl" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {Array.from({ length: 3 }).map((_, i) => (
           <ProSkeleton key={i} className="h-32 rounded-2xl" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <ProSkeleton key={i} className="h-28 rounded-2xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -458,74 +480,6 @@ function DashboardSkeleton() {
         ))}
       </div>
     </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// EMPTY STATE — Fresh onboarding (re-styled with accent gradient logo)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function WelcomeEmptyState({
-  onAddClient,
-  onUploadDoc,
-}: {
-  onAddClient: () => void;
-  onUploadDoc: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' as const }}
-      className="flex flex-col items-center justify-center text-center py-20 px-4"
-    >
-      <div className="relative mb-6">
-        <div className="flex items-center justify-center h-20 w-20 rounded-2xl accent-gradient accent-ring">
-          <Rocket className="h-10 w-10 text-white" />
-        </div>
-        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full accent-gradient flex items-center justify-center">
-          <Sparkles className="h-3 w-3 text-white" />
-        </div>
-      </div>
-      <h2 className="text-2xl font-bold text-foreground tracking-tight">
-        Welcome to GSTPilot
-      </h2>
-      <p className="text-sm text-muted-foreground mt-2 max-w-md">
-        Start by adding your first client to unlock the full workflow —
-        from document upload to automated GST filing.
-      </p>
-      <div className="flex items-center gap-3 mt-6">
-        <Button
-          onClick={onAddClient}
-          className="accent-gradient text-white hover:opacity-90 gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Add Client
-        </Button>
-        <Button
-          variant="outline"
-          onClick={onUploadDoc}
-          className="gap-1.5 border-border"
-        >
-          <Upload className="h-4 w-4" />
-          Upload Document
-        </Button>
-      </div>
-      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
-        {[
-          { icon: <Users className="h-5 w-5 accent-text" />, label: 'Add Clients' },
-          { icon: <FileText className="h-5 w-5 accent-text" />, label: 'Upload Docs' },
-          { icon: <CheckCircle2 className="h-5 w-5 accent-text" />, label: 'File Returns' },
-        ].map((step, i) => (
-          <div key={i} className="flex flex-col items-center gap-1.5">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg accent-gradient-soft">
-              {step.icon}
-            </div>
-            <span className="text-[11px] text-muted-foreground">{step.label}</span>
-          </div>
-        ))}
-      </div>
-    </motion.div>
   );
 }
 
@@ -542,131 +496,135 @@ interface Recommendation {
 }
 
 export default function DashboardPage() {
-  const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+  const {
+    setCurrentView,
+    setSelectedClientId,
+    setReturnPrepCtx,
+    setPendingSettingsSection,
+  } = useApp();
   const { user } = useAuth();
-  const { organization } = useOrg();
+  const { organization, reload: reloadOrg } = useOrg();
   const orgId = organization?.id ?? null;
 
-  // ── Business Snapshot (Single Source of Truth) ────────────────────────
-  // Every financial metric flows through the centralized Financial Engine.
-  // Health Score, Revenue, Cash, Risk, GST — all computed once, read everywhere.
-  const { snapshot: businessSnapshot } = useBusinessSnapshot();
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 15 — Single Source of Truth: Business Snapshot
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { snapshot: businessSnapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useBusinessSnapshot();
 
-  // ── Firebase Firestore hooks ──────────────────────────────────────────
-  const { metrics, loading, error } = useLiveDashboardMetrics();
+  // ── Firebase hooks (clients, returns, activities, memberships) ──
+  const { metrics, loading: metricsLoading, error: metricsError } = useLiveDashboardMetrics();
   const { data: clients } = useFireClients();
   const { data: returns } = useFireReturns();
   const { data: recentActivities } = useFireRecentActivities(10);
-  const { scores: execScores } = useFirmExecutiveScores();
   const { data: memberships } = useFireMemberships(null);
   const { data: priorityQueue } = useFirePriorities('pending');
 
-  // ── AI Oracle™ — real AI-generated recommendations (Phase 7) ──────────
-  // Replaces the locally-computed heuristic recommendations with real
-  // AI-sourced recommendations persisted in the ai_memory collection. The
-  // hook subscribes to ai_memory (type='recommendation') in real-time and
-  // exposes a refresh() to regenerate. Falls back to the local heuristic
-  // computation below when no AI recommendations are available yet (so the
-  // UI never breaks and looks identical either way).
-  const {
-    recommendations: aiRecommendations,
-    loading: aiRecsLoading,
-  } = useAIRecommendations();
+  // ── AI Oracle recommendations ──
+  const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
 
-  // ── Real Invoice Engine™ — org-scoped, real-time, server-calculated ──
-  // Replaces the old firmId-scoped useFireInvoices() for revenue / outstanding
-  // KPIs. The engine computes totals server-side (subtotal, taxes, grandTotal,
-  // paidAmount, balanceDue) and exposes a stats aggregate via computeInvoiceStats.
-  const {
-    invoices: engineInvoices,
-    stats: invoiceStats,
-    loading: invoicesLoading,
-  } = useInvoices();
+  // ── Real Invoice Engine ──
+  const { invoices: engineInvoices, stats: invoiceStats, loading: invoicesLoading } = useInvoices();
 
-  // ── Real GST Return Engine™ — org-scoped, real-time, server-calculated ──
-  // Replaces fallback / heuristic GST values with real GSTSummary (output tax,
-  // input tax, net liability, health score, transaction counts) and ITCSummary
-  // (eligible / blocked / used / remaining ITC) computed from the
-  // gst_transactions collection via the GST Return Engine.
-  const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
-  const {
-    summary: gstSummary,
-    itcSummary,
-    loading: gstLoading,
-  } = useGSTTransactions({ period: currentPeriod });
+  // ── REAL integrations: Google + Zoho Books ──
+  const { status: googleStatus, loading: googleLoading } = useGoogleWorkspace();
+  const { status: zohoStatus, loading: zohoLoading } = useZohoBooks();
 
-  // GST-derived values (real data from the GST Return Engine).
-  // All gracefully fall back to 0 when there's no GST data yet (summary is
-  // null) — matching the same pattern the invoice KPIs use for missing data.
-  const gstLiability = gstSummary?.netLiability ?? 0;
-  const availableITC = itcSummary?.remainingITC ?? 0;
-  const outputTax = gstSummary?.totalOutputTax ?? 0;
-  const inputTax = gstSummary?.totalInputTax ?? 0;
-  const cgstCollected = gstSummary?.cgstCollected ?? 0;
-  const sgstCollected = gstSummary?.sgstCollected ?? 0;
-  const igstCollected = gstSummary?.igstCollected ?? 0;
-  const gstHealthScore = gstSummary?.healthScore ?? 0;
-  const gstTotalTransactions = gstSummary?.totalTransactions ?? 0;
-  const gstSalesCount = gstSummary?.salesCount ?? 0;
-  const gstPurchaseCount = gstSummary?.purchaseCount ?? 0;
-
-  // ── Real Banking Foundation™ — org-scoped, real-time, server-calculated ──
-  // Surfaces REAL bank-account data (total balance, available balance, incoming
-  // /outgoing payments, pending reconciliation, transaction counts) computed
-  // from the bank_connections + bank_transactions collections via the banking
-  // provider architecture. Used to AUGMENT the existing KPI / ScoreCard
-  // subtitles with real banking context — same pattern as the GST augmentation
-  // above. The Cash Position KPI still derives its primary value from invoice
-  // `balanceDue` (per the task constraint) — only the subtitle is enriched.
-  const {
-    summary: bankingSummary,
-    loading: bankingLoading,
-    isConnected: bankConnected,
-  } = useBanking();
-
-  // ── Phase 8 — Gmail & WhatsApp Business Automation ──────────────────────
-  // The communications hook provides real-time data on Gmail / WhatsApp
-  // connections + messages + scheduled reminders. The dashboard only USES the
-  // summary (counts) — no new UI components, no redesign. Counts are
-  // conditionally appended to existing subtitles when > 0 (mirrors the GST +
-  // banking augmentation pattern).
-  const {
-    summary: communicationSummary,
-    gmailConnected: gmailConnReal,
-    whatsappConnected: whatsappConnReal,
-  } = useCommunications();
-  const unreadGstNotices = communicationSummary?.unreadGstNotices ?? 0;
-  const unreadWhatsAppMessages = communicationSummary?.unreadWhatsAppMessages ?? 0;
-  const pendingReminders = communicationSummary?.pendingReminders ?? 0;
-  const pendingClientReplies = communicationSummary?.pendingClientReplies ?? 0;
-
-  // Banking-derived values (real data from the Banking Foundation).
-  // All gracefully fall back to 0 when there's no banking data yet (summary
-  // fields default to 0) — matching the same pattern the invoice / GST KPIs
-  // use for missing data. `bankConnected` is also tracked so future
-  // affordances (e.g. a "Bank not connected" hint) can gate on actual
-  // connectivity. `bankAvailable` and `outgoingPayments` are wired in and
-  // available for future subtitle expansion (mirrors the GST pattern where
-  // inputTax / CGST / SGST / IGST were pre-computed for the same reason).
-  const bankBalance = bankingSummary?.totalBalance ?? 0;
-  const bankAvailable = bankingSummary?.availableBalance ?? 0;
-  const incomingPayments = bankingSummary?.incomingPayments ?? 0;
-  const outgoingPayments = bankingSummary?.outgoingPayments ?? 0;
-  const pendingReconciliation = bankingSummary?.pendingReconciliation ?? 0;
-  const bankTxnCount =
-    (bankingSummary?.incomingCount ?? 0) + (bankingSummary?.outgoingCount ?? 0);
-
-  // ── Filing state ──────────────────────────────────────────────────────
+  // ── Filing state ──
   const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
 
-  // ── Client lookup map ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Modal open-states
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [oracleWizardOpen, setOracleWizardOpen] = useState(false);
+  const [comingSoonModal, setComingSoonModal] = useState<{
+    open: boolean;
+    name: string;
+    icon?: LucideIcon;
+    description?: string;
+  }>({ open: false, name: '' });
+
+  // ── Client lookup map ──
   const clientMap = useMemo(() => {
     const map = new Map<string, FirestoreClient & { id: string }>();
     for (const c of clients) map.set(c.clientId, c);
     return map;
   }, [clients]);
 
-  // ── KPI derivations ───────────────────────────────────────────────────
+  // ── Real integration state ──
+  const googleConnected = googleStatus?.connected ?? false;
+  const zohoConnected = zohoStatus?.connected ?? false;
+  const oracleActivated = Boolean(
+    organization?.integrations &&
+      (organization.integrations as Record<string, { connected?: boolean }> | null)?.oracle?.connected,
+  );
+
+  const hasInvoices = businessSnapshot.invoices.count > 0 || invoiceStats.count > 0;
+  const hasCustomers = businessSnapshot.customers > 0 || clients.length > 0;
+  const hasAnyIntegration = googleConnected || zohoConnected;
+  // A real health score requires actual financial data (invoices + expenses
+  // + bank). Until then we NEVER display an invented number.
+  const canComputeHealthScore =
+    businessSnapshot.hasLiveData &&
+    businessSnapshot.invoices.count > 0 &&
+    businessSnapshot.healthScore > 0;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 5 — Real Onboarding Engine (only real integrations)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const setupTasks: SetupTask[] = useMemo(
+    () => [
+      {
+        id: 'google',
+        label: 'Connect Google',
+        icon: Cloud,
+        done: googleConnected,
+        onAction: () => setCurrentView('google-workspace'),
+      },
+      {
+        id: 'zoho',
+        label: 'Connect Zoho Books',
+        icon: BookOpen,
+        done: zohoConnected,
+        onAction: () => setCurrentView('zoho-books'),
+      },
+      {
+        id: 'invoice',
+        label: 'Create First Invoice',
+        icon: FileText,
+        done: hasInvoices,
+        onAction: () => setCurrentView('invoices'),
+      },
+      {
+        id: 'customer',
+        label: 'Create First Customer',
+        icon: Users,
+        done: hasCustomers,
+        onAction: () => setCurrentView('clients'),
+      },
+      {
+        id: 'team',
+        label: 'Invite Team',
+        icon: UserPlus,
+        done: memberships.length > 0,
+        onAction: () => setInviteModalOpen(true),
+      },
+      {
+        id: 'oracle',
+        label: 'Activate Oracle',
+        icon: Sparkles,
+        done: oracleActivated,
+        onAction: () => setOracleWizardOpen(true),
+      },
+    ],
+    [googleConnected, zohoConnected, hasInvoices, hasCustomers, memberships.length, oracleActivated, setCurrentView],
+  );
+
+  const setupComplete = setupTasks.filter((t) => t.done).length;
+  const setupTotal = setupTasks.length;
+  const onboardingDone = setupComplete === setupTotal;
+
+  // ── KPI derivations ──
   const pendingComplianceCount = useMemo(
     () => returns.filter((r) => r.status !== 'filed').length,
     [returns],
@@ -675,80 +633,21 @@ export default function DashboardPage() {
   const pendingInvoices = useMemo(
     () =>
       engineInvoices.filter(
-        (i) =>
-          i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
+        (i) => i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
       ),
     [engineInvoices],
   );
-
-  // Real outstanding from the invoice engine — Σ balanceDue of non-draft,
-  // non-cancelled invoices (server-calculated per invoice).
   const pendingCollection = invoiceStats.totalOutstanding;
 
   const insight = useMemo(
-    () => buildInsightSentence(metrics, pendingCollection),
-    [metrics, pendingCollection],
+    () => buildInsightSentence(businessSnapshot, pendingCollection, hasAnyIntegration),
+    [businessSnapshot, pendingCollection, hasAnyIntegration],
   );
 
-  // ── Business Health Score (Single Source of Truth: Financial Engine) ──
-  // The health score is computed ONCE by the centralized Financial Engine
-  // from real data (collection rate, profit margin, compliance, cash position,
-  // overdue control). Every page reads this same value — no duplicate calcs.
-  const businessHealthScore = useMemo<number>(() => {
-    // The snapshot is the canonical source. Use it when it has live data.
-    if (businessSnapshot.hasLiveData && businessSnapshot.healthScore > 0) {
-      return businessSnapshot.healthScore;
-    }
-    // Graceful fallback for when the snapshot is still loading or empty
-    if (gstHealthScore > 0) return gstHealthScore;
-    if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
-      return execScores.firmHealth;
-    }
-    if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
-    return 0;
-  }, [businessSnapshot, gstHealthScore, execScores, metrics.averageHealthScore]);
-
-  // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
-  const complianceScore = useMemo<number>(() => {
-    if (execScores && typeof execScores.compliance === 'number' && execScores.compliance > 0) {
-      return execScores.compliance;
-    }
-    const totalReturns = returns.length;
-    if (totalReturns === 0) return 100;
-    const filed = returns.filter((r) => r.status === 'filed').length;
-    return Math.round((filed / totalReturns) * 100);
-  }, [execScores, returns]);
-
-  // ── Collection Score (0-100): match percentage from reconciliation ──
-  const collectionScore = useMemo<number>(() => {
-    if (execScores && typeof execScores.cashFlow === 'number' && execScores.cashFlow > 0) {
-      // Use a blend: cashFlow score and match percentage
-      return Math.round((execScores.cashFlow + metrics.matchPercentage) / 2);
-    }
-    return Math.round(metrics.matchPercentage);
-  }, [execScores, metrics.matchPercentage]);
-
-  // ── Risk Score (Single Source of Truth: Financial Engine) ────────────
-  // Uses the centralized risk calculation (overdue exposure, cash flow risk,
-  // compliance risk, concentration risk). Inverted to "posture" (higher = safer)
-  // to match the existing UI semantics. Falls back gracefully when no data.
-  const riskScore = useMemo<number>(() => {
-    if (businessSnapshot.hasLiveData) {
-      // snapshot.risks.overallRisk is 0-100 (higher = worse). Invert for posture.
-      return Math.max(0, Math.min(100, 100 - businessSnapshot.risks.overallRisk));
-    }
-    // Fallback to the legacy heuristic when snapshot has no data
-    const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
-    const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
-    const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
-    return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
-  }, [businessSnapshot, metrics]);
-
-  // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
+  // ── Today's Priorities ──
   const todaysPriorities = useMemo<
     Array<{ id: string; label: string; category: string; urgency: number; view: AppView }>
   >(() => {
-    // 1. Use real priority queue data if available
     if (priorityQueue && priorityQueue.length > 0) {
       return priorityQueue.slice(0, 5).map((p) => ({
         id: p.priorityId || p.id,
@@ -758,7 +657,6 @@ export default function DashboardPage() {
         view: 'tasks' as AppView,
       }));
     }
-    // 2. Fallback: derive from live metrics
     const list: Array<{ id: string; label: string; category: string; urgency: number; view: AppView }> = [];
     if (metrics.overdueReturns > 0) {
       list.push({
@@ -787,42 +685,48 @@ export default function DashboardPage() {
         view: 'invoices',
       });
     }
-    if (metrics.extractionsPending > 0) {
-      list.push({
-        id: 'fb-extractions',
-        label: `Review ${metrics.extractionsPending} pending extraction${metrics.extractionsPending > 1 ? 's' : ''}`,
-        category: 'upload',
-        urgency: 5,
-        view: 'invoices',
-      });
-    }
     return list.slice(0, 5);
   }, [priorityQueue, metrics, pendingCollection]);
 
-  // ── Connected services (catalog — reflect real Gmail/WhatsApp/Bank state) ──
-  // Phase 8: Gmail + WhatsApp reflect real connection state from
-  // useCommunications(). Bank APIs reflects real state from useBanking().
-  // GSTN connection state is derived from the organization's gstin field
-  // (previously faked as `metrics.totalClients > 0` which incorrectly showed
-  // GSTN as "Connected" whenever any client existed).
-  // The other entries (E-Invoice, GSTR-2B) remain "not connected" by default
-  // until their Phase 9 ERP integrations ship.
-  const orgGstin = organization?.gstin;
-  const connectedServices = useMemo(
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Connected Services — ONLY Google + Zoho Books (real integrations)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const connectedServices: ServiceRow[] = useMemo(
     () => [
-      { id: 'gstn', name: 'GSTN', initial: 'G', connected: Boolean(orgGstin) },
-      { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
-      { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
-      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: bankConnected },
-      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: whatsappConnReal },
-      { id: 'gmail', name: 'Gmail', initial: 'M', connected: gmailConnReal },
+      {
+        id: 'google',
+        name: 'Google',
+        icon: Cloud,
+        color: '#ea4335',
+        connected: googleConnected,
+        lastSync: googleStatus?.connectedAt ?? null,
+        account: googleStatus?.userEmail ?? null,
+        health: googleConnected ? 'healthy' : 'unknown',
+      },
+      {
+        id: 'zoho',
+        name: 'Zoho Books',
+        icon: BookOpen,
+        color: '#e43536',
+        connected: zohoConnected,
+        lastSync: zohoStatus?.connectedAt ?? null,
+        account: zohoStatus?.organizationName ?? zohoStatus?.userEmail ?? null,
+        health: zohoConnected ? 'healthy' : 'unknown',
+      },
     ],
-    [orgGstin, bankConnected, whatsappConnReal, gmailConnReal],
+    [googleConnected, zohoConnected, googleStatus, zohoStatus],
   );
 
-  // ── Team members from memberships hook ──
-  // Use userDisplayName / userEmail (previously parsed userId as an email
-  // and displayed raw UIDs as names).
+  const handleConnectService = (serviceId: 'google' | 'zoho') => {
+    if (serviceId === 'google') setCurrentView('google-workspace');
+    else if (serviceId === 'zoho') setCurrentView('zoho-books');
+  };
+
+  const showComingSoon = (name: string, icon?: LucideIcon, description?: string) => {
+    setComingSoonModal({ open: true, name, icon, description });
+  };
+
+  // ── Team members ──
   const teamMembers = useMemo(
     () => memberships.slice(0, 6).map((m) => ({
       id: m.id,
@@ -833,7 +737,7 @@ export default function DashboardPage() {
     [memberships],
   );
 
-  // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
+  // ── Upcoming filings ──
   const upcomingFilings = useMemo(() => {
     return returns
       .filter((r) => r.status !== 'filed')
@@ -846,86 +750,7 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [returns]);
 
-  // ── AI Recommendations (local heuristic fallback) ────────────────────────
-  // These locally-computed recommendations are used as a FALLBACK when the
-  // real AI Oracle (ai_memory) has no recommendations yet. The primary source
-  // is the useAIRecommendations() hook above (Phase 7). See the merged
-  // `recommendations` memo below for the priority logic.
-  const localRecommendations = useMemo<Recommendation[]>(() => {
-    const recs: Recommendation[] = [];
-
-    // Overdue returns → file now
-    for (const r of returns) {
-      if (recs.length >= 5) break;
-      if (r.status === 'filed' || !isOverdue(r.period)) continue;
-      const client = clientMap.get(r.clientId);
-      const name = client?.tradeName ?? 'Unknown client';
-      recs.push({
-        id: `rec-overdue-${r.id}`,
-        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
-        title: `File ${r.returnType} for ${name} — overdue`,
-        actionLabel: 'File now',
-        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
-      });
-    }
-
-    // Returns due soon (≤ 7 days)
-    for (const r of returns) {
-      if (recs.length >= 5) break;
-      if (r.status === 'filed' || isOverdue(r.period)) continue;
-      const dueDate = getFilingDueDate(r.returnType, r.period);
-      const days = getDaysRemaining(dueDate);
-      if (days > 7) continue;
-      const client = clientMap.get(r.clientId);
-      const name = client?.tradeName ?? 'Unknown client';
-      recs.push({
-        id: `rec-soon-${r.id}`,
-        icon: <Clock className="h-3.5 w-3.5 accent-text" />,
-        title: `File ${r.returnType} for ${name} — due in ${days} day${days === 1 ? '' : 's'}`,
-        actionLabel: 'Prepare',
-        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
-      });
-    }
-
-    // Low health score clients
-    for (const c of clients) {
-      if (recs.length >= 5) break;
-      if (c.healthScore >= 60) continue;
-      recs.push({
-        id: `rec-health-${c.clientId}`,
-        icon: <ShieldCheck className="h-3.5 w-3.5 accent-text" />,
-        title: `${c.tradeName} — health score ${Math.round(c.healthScore)}% needs attention`,
-        actionLabel: 'Open',
-        onAction: () => handleOpenClient(c.clientId),
-      });
-    }
-
-    // Pending collection
-    if (recs.length < 5 && pendingCollection > 0) {
-      recs.push({
-        id: 'rec-collection',
-        icon: <IndianRupee className="h-3.5 w-3.5 accent-text" />,
-        title: `₹${formatINR(pendingCollection)} pending collection across ${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'}`,
-        actionLabel: 'Review',
-        onAction: () => setCurrentView('invoices'),
-      });
-    }
-
-    // Critical issues
-    if (recs.length < 5 && metrics.criticalIssues > 0) {
-      recs.push({
-        id: 'rec-critical',
-        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
-        title: `${metrics.criticalIssues} critical compliance issue${metrics.criticalIssues === 1 ? '' : 's'} need${metrics.criticalIssues === 1 ? 's' : ''} review`,
-        actionLabel: 'Review',
-        onAction: () => setCurrentView('reconcile'),
-      });
-    }
-
-    return recs;
-  }, [returns, clients, clientMap, pendingCollection, pendingInvoices.length, metrics.criticalIssues]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────
+  // ── Handlers ──
   const handleOpenClient = (clientId: string) => {
     setSelectedClientId(clientId);
     setCurrentView('client-workspace');
@@ -962,11 +787,7 @@ export default function DashboardPage() {
     }
   };
 
-  // ── AI Oracle™ — map real AI recommendations to the card shape ─────────
-  // Each AI recommendation (from ai_memory via useAIRecommendations) is mapped
-  // to the local Recommendation shape with an icon + navigation handler derived
-  // from its actionType. This keeps the rendered card IDENTICAL to before —
-  // only the data source changed (heuristic → real AI).
+  // ── AI recommendation action mapping ──
   const iconForAIRec = (type: AIRecommendation['type']): React.ReactNode => {
     switch (type) {
       case 'file_gstr3b':
@@ -995,37 +816,25 @@ export default function DashboardPage() {
   const handleAIRecAction = (rec: AIRecommendation) => {
     switch (rec.actionType) {
       case 'client-workspace':
-        if (rec.relatedEntityId) {
-          handleOpenClient(rec.relatedEntityId);
-        } else {
-          setCurrentView('clients');
-        }
+        if (rec.relatedEntityId) handleOpenClient(rec.relatedEntityId);
+        else setCurrentView('clients');
         break;
       case 'return-prep':
-        if (rec.relatedEntityId && rec.relatedEntityType === 'period') {
-          // Navigate to return-prep with the period context if available.
-          setReturnPrepCtx({
-            clientId: rec.relatedEntityId,
-            returnType: rec.type === 'file_gstr3b' ? 'GSTR-3B' : 'GSTR-1',
-            period: rec.relatedEntityId,
-          });
-        }
         setCurrentView('return-prep');
         break;
       case 'invoices':
-        setCurrentView('invoices');
-        break;
-      case 'expenses':
         setCurrentView('invoices');
         break;
       case 'reconcile':
         setCurrentView('reconcile');
         break;
       case 'banking':
-        setCurrentView('banking');
+        // Banking is "Coming Soon" — show the modal, never a fake page.
+        showComingSoon('Banking', IndianRupee, 'Banking APIs are under development. Connect Google or Zoho Books to start syncing data.');
         break;
       case 'gstn':
-        setCurrentView('returns');
+        // GSTN is "Coming Soon".
+        showComingSoon('GSTN', ShieldCheck, 'GSTN integration is under development. Connect Google or Zoho Books to start syncing data.');
         break;
       case 'reports':
         setCurrentView('reports');
@@ -1035,7 +844,6 @@ export default function DashboardPage() {
         break;
       default:
         setCurrentView('dashboard');
-        break;
     }
   };
 
@@ -1049,28 +857,13 @@ export default function DashboardPage() {
     }));
   }, [aiRecommendations]);
 
-  // ── Merged recommendations — prefer real AI, fall back to local ────────
-  // When the AI Oracle has generated recommendations (ai_memory populated),
-  // those take priority. Otherwise the local heuristic recommendations keep
-  // the card populated so the UI is never empty. The card renders identically
-  // in both cases — same icon, title, action label, and click behavior.
-  const recommendations = useMemo<Recommendation[]>(() => {
-    if (mappedAIRecommendations.length > 0) return mappedAIRecommendations;
-    return localRecommendations;
-  }, [mappedAIRecommendations, localRecommendations]);
-
-  // ── Background AI analysis trigger (Phase 7) ───────────────────────────
-  // On mount, if the AI Oracle has no recommendations yet (ai_memory empty),
-  // trigger a background analysis run to populate it. This is the "auto
-  // analyse every invoice / payment / GST sync / bank sync" behavior — it
-  // runs once per mount, guarded by a ref, and is non-blocking (fire-and-
-  // forget). The real-time subscription in useAIRecommendations will surface
-  // the generated recommendations as soon as they're persisted.
+  // ── Background AI analysis trigger (only when Oracle active) ──
   const bgAnalysisTriggered = useRef(false);
   useEffect(() => {
     if (bgAnalysisTriggered.current) return;
     if (!orgId) return;
     if (aiRecsLoading) return;
+    if (!oracleActivated) return;
     if (aiRecommendations.length > 0) {
       bgAnalysisTriggered.current = true;
       return;
@@ -1080,116 +873,105 @@ export default function DashboardPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgId }),
-    }).catch(() => {
-      // Non-fatal — the local heuristic recommendations still render.
-    });
-  }, [orgId, aiRecsLoading, aiRecommendations.length]);
+    }).catch(() => {});
+  }, [orgId, aiRecsLoading, aiRecommendations.length, oracleActivated]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Loading ───────────────────────────────────────────────────────────
-  // Wait for the live dashboard metrics, the real invoice engine, the
-  // GST Return Engine, AND the Banking Foundation initial subscriptions to
-  // settle before rendering — otherwise the Revenue / Cash Position KPIs
-  // would briefly show "—" (invoice engine), the Business Health Score /
-  // subtitles would miss the real GST signals before the gst_transactions
-  // snapshot arrives, and the Cash Position / Risk subtitles would miss
-  // the real bank balance before the bank_transactions snapshot arrives.
-  if (loading || invoicesLoading || gstLoading || bankingLoading)
+  if (snapshotLoading || metricsLoading || invoicesLoading || googleLoading || zohoLoading) {
     return <DashboardSkeleton />;
+  }
 
-  // ── Error ─────────────────────────────────────────────────────────────
-  if (error) {
+  // ── Error state ──
+  // The dashboard is designed to degrade gracefully. In preview mode (no real
+  // Firestore), several hooks surface "permission-denied" errors — those are
+  // EXPECTED and must NOT block the dashboard from rendering. We only show
+  // the hard error screen for genuine, non-permission failures that mean we
+  // truly cannot render anything useful.
+  const isPermissionOrNetworkError = (msg: string | null): boolean => {
+    if (!msg) return false;
+    return /permission|insufficient|unauthenticated|not authorized|missing or|network|fetch|failed to fetch|load failed/i.test(msg);
+  };
+  const combinedError =
+    (snapshotError && !isPermissionOrNetworkError(snapshotError) ? snapshotError : null)
+    ?? (metricsError && !isPermissionOrNetworkError(metricsError) ? metricsError : null);
+  if (combinedError) {
     return (
       <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
         <Card className="glass-surface border-red-500/20">
-          <CardContent className="p-6 text-center">
-            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-            <h3 className="font-semibold text-foreground">Failed to load dashboard</h3>
-            <p className="text-sm text-muted-foreground mt-1">{error}</p>
-            <Button
-              variant="outline"
-              className="mt-4 border-border"
-              onClick={() => window.location.reload()}
-            >
-              Retry
-            </Button>
+          <CardContent className="p-8 text-center">
+            <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-red-500/10 border border-red-500/20 mx-auto mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-400" />
+            </div>
+            <h3 className="font-semibold text-foreground text-lg">
+              We couldn&apos;t load your dashboard
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+              {combinedError.includes('permission') || combinedError.includes('Permission')
+                ? 'Your workspace data is unreachable right now. This is usually a permissions issue — retry, or contact support if it persists.'
+                : 'Something went wrong while fetching your business data. Please try again.'}
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-5">
+              <Button
+                onClick={refreshSnapshot}
+                className="accent-gradient text-white hover:opacity-90 gap-1.5"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()}
+                className="border-border gap-1.5"
+              >
+                Reload page
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setCurrentView('settings')}
+                className="text-muted-foreground gap-1.5"
+              >
+                <LifeBuoy className="h-4 w-4" />
+                Support
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  // ── Empty state — no clients at all ───────────────────────────────────
-  if (metrics.totalClients === 0) {
-    return (
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-        <WelcomeEmptyState
-          onAddClient={() => setCurrentView('clients')}
-          onUploadDoc={() => setCurrentView('invoices')}
-        />
-      </div>
-    );
-  }
-
-  // ── KPI values (Single Source of Truth: Business Snapshot) ───────────
-  // Revenue and Cash come from the centralized Financial Engine so every
-  // page shows the same number. Falls back to the invoice engine when the
-  // snapshot is still loading.
-  const snapshotRevenue = businessSnapshot.hasLiveData ? businessSnapshot.revenue : invoiceStats.totalRevenue;
-  const snapshotCash = businessSnapshot.hasLiveData ? businessSnapshot.bankBalance : invoiceStats.totalOutstanding;
-  const revenueValue =
-    snapshotRevenue > 0 ? `₹${formatINR(snapshotRevenue)}` : '—';
+  // ── KPI values (Single Source of Truth: Business Snapshot) ──
+  const revenueValue = businessSnapshot.revenue > 0 ? `₹${formatINR(businessSnapshot.revenue)}` : '—';
   const complianceValue = String(pendingComplianceCount);
-  const cashValue =
-    snapshotCash > 0 ? `₹${formatINR(snapshotCash)}` : '—';
+  const cashValue = businessSnapshot.bankBalance > 0 ? `₹${formatINR(businessSnapshot.bankBalance)}` : '—';
 
-  // ── KPI subtitles — augmented with REAL GST + Banking data ────────────
-  // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep
-  // their original layout, colors, and structure — only the subtitle text
-  // is enriched with real GST-derived and bank-derived values when the
-  // respective engines have data for the current period. All banking
-  // augmentations are conditional on the value being > 0 so the original
-  // subtitle text is preserved verbatim when there's no banking data yet
-  // (mirrors the GST augmentation pattern).
-  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}${incomingPayments > 0 ? ` · ₹${formatINR(incomingPayments)} incoming` : ''}`;
-  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}${unreadGstNotices > 0 ? ` · ${unreadGstNotices} unread notice${unreadGstNotices === 1 ? '' : 's'}` : ''}`;
-  const cashSubtitle =
-    pendingInvoices.length > 0
-      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`
-      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`;
+  // Empty-state flags
+  const revenueEmpty = businessSnapshot.revenue === 0;
+  const cashEmpty = businessSnapshot.bankBalance === 0;
+  const complianceEmpty = pendingComplianceCount === 0 && returns.length === 0;
 
-  // ── Score card subtitles — augmented with REAL GST + Banking data ─────
-  // Compliance / Collection / Risk score cards keep their original layout
-  // and tone — only the subtitle text is enriched with real GST context
-  // (output tax + CGST/SGST/IGST breakdown, available ITC + input tax,
-  // GST liability) and real banking context (pending reconciliation count,
-  // real bank balance for liquidity) when available.
-  const complianceScoreSubtitle = metrics.filedReturns > 0
-    ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
-    : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
-  const collectionScoreSubtitle = pendingCollection > 0
-    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`
-    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`;
-  const riskScoreSubtitle = metrics.criticalIssues > 0
-    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`
-    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`;
+  const revenueSubtitle = `Total revenue · ${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'}`;
+  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
+  const cashSubtitle = businessSnapshot.bankBalance > 0
+    ? `Bank balance · ₹${formatINR(businessSnapshot.bankBalance)}`
+    : 'Banking integration coming soon';
 
   const firstName = getFirstName(user?.name);
+  const unavailableReason = 'Connect supported integrations to generate this metric.';
 
   return (
     <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-      {/* ── Ambient radial glow at top ── */}
+      {/* ── Ambient radial glow ── */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
       />
 
-      {/* ── Content ── */}
       <div className="relative space-y-8">
-        {/* ═══ GREETING + AI INSIGHT ═══ */}
+        {/* ═══ GREETING + QUICK ACTIONS ═══ */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1205,24 +987,59 @@ export default function DashboardPage() {
               <span className="leading-relaxed">{insight}</span>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView('clients')}
-            className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Client
-          </Button>
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('clients')}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Add Client
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('invoices')}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Create Invoice
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('returns')}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Create Return
+            </Button>
+          </div>
         </motion.div>
 
-        {/* ═══ BUSINESS HEALTH SCORE — prominent gauge ═══ */}
-        <BusinessHealthGauge
-          score={businessHealthScore}
-          insight={insight}
-        />
+        {/* ═══ Business Setup Progress ═══ */}
+        {!onboardingDone && (
+          <BusinessSetupProgress tasks={setupTasks} />
+        )}
 
-        {/* ═══ KPI CARDS — exactly 3 ═══ */}
+        {/* ═══ Business Health Score — Unavailable state (no fake number) ═══ */}
+        {canComputeHealthScore ? (
+          <BusinessHealthGauge
+            score={businessSnapshot.healthScore}
+            insight={insight}
+          />
+        ) : (
+          <BusinessHealthUnavailable
+            onConnect={() => {
+              // Prefer the already-connected integration; otherwise open Google.
+              if (zohoConnected) setCurrentView('zoho-books');
+              else setCurrentView('google-workspace');
+            }}
+          />
+        )}
+
+        {/* ═══ KPI CARDS — Revenue / Compliance / Cash ═══ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <KpiCard
             index={0}
@@ -1230,6 +1047,12 @@ export default function DashboardPage() {
             value={revenueValue}
             subtitle={revenueSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
+            empty={revenueEmpty ? {
+              title: 'No financial data connected',
+              description: 'Connect Zoho Books or create invoices to calculate live revenue.',
+              ctaLabel: 'Connect Zoho Books',
+              onCta: () => setCurrentView('zoho-books'),
+            } : undefined}
           />
           <KpiCard
             index={1}
@@ -1237,6 +1060,12 @@ export default function DashboardPage() {
             value={complianceValue}
             subtitle={complianceSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+            empty={complianceEmpty ? {
+              title: 'No compliance data yet',
+              description: 'Create returns to track compliance deadlines. GSTN integration is coming soon.',
+              ctaLabel: 'Create Return',
+              onCta: () => setCurrentView('returns'),
+            } : undefined}
           />
           <KpiCard
             index={2}
@@ -1244,55 +1073,126 @@ export default function DashboardPage() {
             value={cashValue}
             subtitle={cashSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
+            empty={cashEmpty ? {
+              title: 'Banking integration coming soon',
+              description: 'Bank APIs are under development. We will never invent a cash position.',
+              ctaLabel: 'View Integrations',
+              onCta: () => setCurrentView('google-workspace'),
+            } : undefined}
           />
         </div>
 
-        {/* ═══ SCORE CARDS — Compliance / Collection / Risk (0-100) ═══ */}
+        {/* ═══ Score Cards — Unavailable when no real data ═══ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <ScoreCard
+          <UnavailableMetricCard
             index={0}
             label="Compliance Score"
-            score={complianceScore}
-            subtitle={complianceScoreSubtitle}
-            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
-            tone="emerald"
+            icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
+            reason={unavailableReason}
+            ctaLabel="Connect Zoho Books"
+            onCta={() => setCurrentView('zoho-books')}
           />
-          <ScoreCard
+          <UnavailableMetricCard
             index={1}
             label="Collection Score"
-            score={collectionScore}
-            subtitle={collectionScoreSubtitle}
-            icon={<TrendingUp className="h-4 w-4 accent-text" />}
-            tone="cyan"
+            icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
+            reason={unavailableReason}
+            ctaLabel="Connect Zoho Books"
+            onCta={() => setCurrentView('zoho-books')}
           />
-          <ScoreCard
+          <UnavailableMetricCard
             index={2}
             label="Risk Score"
-            score={riskScore}
-            subtitle={riskScoreSubtitle}
-            icon={<ShieldAlert className="h-4 w-4 accent-text" />}
-            tone="amber"
+            icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />}
+            reason={unavailableReason}
+            ctaLabel="Connect Zoho Books"
+            onCta={() => setCurrentView('zoho-books')}
           />
         </div>
 
-        {/* ═══ BOTTOM SECTIONS — 3 in a row ═══ */}
+        {/* ═══ LIVE BUSINESS REGISTRY — real counts only ═══ */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.36, ease: 'easeOut' as const }}
+        >
+          <div className="glass-surface rounded-2xl p-5 md:p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
+                  <Building2 className="h-4 w-4 accent-text" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground tracking-tight">
+                  Live Business Registry
+                </h3>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Customers', value: businessSnapshot.customers, icon: Users, view: 'clients' as AppView, emptyHint: 'No customers yet. Add your first client to begin.' },
+                { label: 'Invoices', value: businessSnapshot.invoices.count, icon: FileText, view: 'invoices' as AppView, emptyHint: 'No invoices created. Create one to track revenue.' },
+                { label: 'Revenue', value: businessSnapshot.revenue, icon: IndianRupee, view: 'invoices' as AppView, isCurrency: true, emptyHint: 'No revenue recorded. Create invoices to populate.' },
+                { label: 'Vendors', value: businessSnapshot.vendors, icon: Building2, view: 'vendors' as AppView, emptyHint: 'No vendors tracked. Connect Zoho Books to sync.' },
+              ].map((metric) => {
+                const Icon = metric.icon;
+                const isEmpty = metric.value === 0;
+                return (
+                  <button
+                    key={metric.label}
+                    type="button"
+                    onClick={() => setCurrentView(metric.view)}
+                    className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center h-7 w-7 rounded-lg accent-gradient-soft">
+                        <Icon className="h-3.5 w-3.5 accent-text" />
+                      </div>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                        {metric.label}
+                      </span>
+                    </div>
+                    <span className={`text-2xl font-bold tracking-tight ${isEmpty ? 'text-muted-foreground/50' : 'text-foreground'}`}>
+                      {metric.isCurrency ? `₹${formatINR(metric.value)}` : metric.value}
+                    </span>
+                    {isEmpty && (
+                      <span className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
+                        {metric.emptyHint}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ═══ AI Recommendations + Today's Priorities + Tasks ═══ */}
         <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── AI Recommendations ─────────────────────────────────────── */}
           <SectionCard
             index={0}
             title="AI Recommendations"
             icon={<Sparkles className="h-4 w-4 accent-text" />}
           >
-            {recommendations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  You&apos;re all caught up. Nothing needs your attention right now.
-                </p>
-              </div>
+            {!oracleActivated ? (
+              <EmptyState
+                icon={Brain}
+                title="Oracle requires connected business data"
+                description="Activate Oracle to generate AI-powered recommendations from your live business snapshot."
+                primaryLabel="Activate Oracle"
+                onPrimary={() => setOracleWizardOpen(true)}
+                compact
+              />
+            ) : mappedAIRecommendations.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="You're all caught up"
+                description="Oracle has no recommendations right now. Connect more data sources for richer insights."
+                compact
+                tone="emerald"
+              />
             ) : (
               <ul className="space-y-1">
-                {recommendations.map((rec) => (
+                {mappedAIRecommendations.map((rec) => (
                   <li key={rec.id}>
                     <div className="group flex items-start gap-3 py-2.5">
                       <div className="flex items-center justify-center h-6 w-6 rounded-md accent-gradient-soft shrink-0 mt-0.5">
@@ -1318,7 +1218,6 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          {/* ── Today's Priorities ───────────────────────────────────── */}
           <SectionCard
             index={1}
             title="Today's Priorities"
@@ -1327,12 +1226,13 @@ export default function DashboardPage() {
             onAction={() => setCurrentView('tasks')}
           >
             {todaysPriorities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No priorities today — you&apos;re ahead of schedule!
-                </p>
-              </div>
+              <EmptyState
+                icon={CheckCircle2}
+                title="No priorities today"
+                description="You're ahead of schedule. New priorities will appear here as they arise."
+                compact
+                tone="emerald"
+              />
             ) : (
               <ScrollArea className="max-h-[280px] -mx-1 px-1">
                 <ul className="space-y-1">
@@ -1377,7 +1277,6 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          {/* ── Tasks (upcoming filings) ─────────────────────────────── */}
           <SectionCard
             index={2}
             title="Tasks"
@@ -1386,12 +1285,13 @@ export default function DashboardPage() {
             onAction={() => setCurrentView('returns')}
           >
             {upcomingFilings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  All returns filed — you&apos;re all caught up!
-                </p>
-              </div>
+              <EmptyState
+                icon={CheckCircle2}
+                title="All returns filed"
+                description="You're all caught up! New filing tasks will appear here."
+                compact
+                tone="emerald"
+              />
             ) : (
               <ScrollArea className="max-h-[280px] -mx-1 px-1">
                 <ul className="space-y-1">
@@ -1406,10 +1306,8 @@ export default function DashboardPage() {
                       <li key={r.id}>
                         <button
                           type="button"
-                          onClick={() =>
-                            handleFileReturn(r.clientId, r.returnType, r.period)
-                          }
-                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
+                          onClick={() => handleFileReturn(r.clientId, r.returnType, r.period)}
+                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -1457,9 +1355,8 @@ export default function DashboardPage() {
           </SectionCard>
         </div>
 
-        {/* ═══ ADDITIONAL WIDGETS — Activity / Services / Team ═══ */}
+        {/* ═══ Timeline + Connected Services + Team ═══ */}
         <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Business Timeline (Recent Activity) ──────────────────── */}
           <SectionCard
             index={0}
             title="Business Timeline"
@@ -1468,12 +1365,12 @@ export default function DashboardPage() {
             onAction={() => setCurrentView('timeline')}
           >
             {recentActivities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Activity className="h-7 w-7 text-muted-foreground/60 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No activity yet — actions you take will appear here.
-                </p>
-              </div>
+              <EmptyState
+                icon={Activity}
+                title="No activity yet"
+                description="Actions you take — invoices created, returns filed, integrations connected — will appear here."
+                compact
+              />
             ) : (
               <ScrollArea className="max-h-[280px] -mx-1 px-1">
                 <div className="relative">
@@ -1492,9 +1389,12 @@ export default function DashboardPage() {
                             <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
                           </span>
                           <div className="min-w-0 flex-1 pt-0.5">
-                            <p className="text-[13px] font-medium text-foreground leading-snug">
-                              {a.title}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              {activityIcon(a.type)}
+                              <p className="text-[13px] font-medium text-foreground leading-snug">
+                                {a.title}
+                              </p>
+                            </div>
                             {a.description && (
                               <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
                                 {a.description}
@@ -1513,118 +1413,86 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          {/* ── Connected Services ───────────────────────────────────── */}
-          <SectionCard
-            index={1}
-            title="Connected Services"
-            icon={<Plug className="h-4 w-4 accent-text" />}
-            actionLabel="Manage"
-            onAction={() => setCurrentView('connections')}
-          >
-            <div className="grid grid-cols-2 gap-2">
-              {connectedServices.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
-                      {s.initial}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {s.name}
-                      </p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            s.connected ? 'bg-emerald-400' : 'bg-muted-foreground/40'
-                          }`}
-                        />
-                        <span className="text-[10px] text-muted-foreground">
-                          {s.connected ? 'Connected' : 'Not connected'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-muted-foreground text-center pt-3">
-              Connect services to sync automatically.
-            </p>
-          </SectionCard>
+          <ConnectedServicesCard
+            services={connectedServices}
+            onConnect={handleConnectService}
+          />
 
-          {/* ── Team Status ──────────────────────────────────────────── */}
           <SectionCard
             index={2}
             title="Team Status"
             icon={<Users className="h-4 w-4 accent-text" />}
             actionLabel="Manage"
-            onAction={() => setCurrentView('team')}
+            onAction={() => {
+              setPendingSettingsSection('team');
+              setCurrentView('settings');
+            }}
           >
             {teamMembers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft mb-2">
-                  <Users className="h-4 w-4 accent-text" />
-                </div>
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No team members yet — invite your team to collaborate.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('team')}
-                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
-                >
-                  [ Invite your team ]
-                  <ArrowRight className="h-3 w-3" />
-                </button>
-              </div>
+              <EmptyState
+                icon={UserPlus}
+                title="No team members yet"
+                description="Invite your team to collaborate on clients, returns, and filings."
+                primaryLabel="Invite Team"
+                onPrimary={() => setInviteModalOpen(true)}
+                compact
+              />
             ) : (
-              <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <ul className="space-y-1">
-                  {teamMembers.map((m) => {
-                    const initials = m.name.slice(0, 2).toUpperCase();
-                    const isActive = m.status === 'active';
-                    return (
-                      <li key={m.id}>
-                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full accent-gradient text-[11px] font-bold text-white shrink-0">
-                            {initials}
+              <>
+                <ScrollArea className="max-h-[240px] -mx-1 px-1">
+                  <ul className="space-y-1">
+                    {teamMembers.map((m) => {
+                      const initials = m.name.slice(0, 2).toUpperCase();
+                      const isActive = m.status === 'active';
+                      return (
+                        <li key={m.id}>
+                          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full accent-gradient text-[11px] font-bold text-white shrink-0">
+                              {initials}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-medium text-foreground truncate capitalize">
+                                {m.name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground capitalize">
+                                {m.role}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  isActive ? 'bg-emerald-400' : 'bg-amber-400'
+                                }`}
+                              />
+                              <span
+                                className={`text-[10px] capitalize ${
+                                  isActive ? 'text-emerald-400' : 'text-amber-400'
+                                }`}
+                              >
+                                {m.status}
+                              </span>
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-medium text-foreground truncate capitalize">
-                              {m.name}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground capitalize">
-                              {m.role}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isActive ? 'bg-emerald-400' : 'bg-amber-400'
-                              }`}
-                            />
-                            <span
-                              className={`text-[10px] capitalize ${
-                                isActive ? 'text-emerald-400' : 'text-amber-400'
-                              }`}
-                            >
-                              {m.status}
-                            </span>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </ScrollArea>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </ScrollArea>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInviteModalOpen(true)}
+                  className="w-full mt-3 border-border gap-1.5 h-8"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Invite Member
+                </Button>
+              </>
             )}
           </SectionCard>
         </div>
 
-        {/* ═══ ORACLE QUICK-ASK — AI assistant entry ═══ */}
+        {/* ═══ Ask Oracle (gated) ═══ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1634,8 +1502,8 @@ export default function DashboardPage() {
           <div className="glass-surface rounded-2xl p-6 hover-lift">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient shrink-0">
-                  <Brain className="h-5 w-5 text-white" />
+                <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
+                  <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'accent-text'}`} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -1644,46 +1512,66 @@ export default function DashboardPage() {
                     </h3>
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/30 text-emerald-400"
+                      className={`text-[10px] px-1.5 py-0 h-5 ${
+                        oracleActivated
+                          ? 'border-emerald-500/30 text-emerald-400'
+                          : 'border-amber-500/30 text-amber-400'
+                      }`}
                     >
-                      AI
+                      {oracleActivated ? 'Active' : 'Not Activated'}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.
+                    {oracleActivated
+                      ? 'Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.'
+                      : 'Connect your business data to unlock Oracle. Activate to enable advanced analysis, predictions, and automated actions.'}
                   </p>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                    {[
-                      'What should I prioritize today?',
-                      'Show overdue returns',
-                      'Which clients are at risk?',
-                    ].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setCurrentView('ai-business-copilot')}
-                        className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
+                  {oracleActivated && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                      {[
+                        'What should I prioritize today?',
+                        'Show overdue returns',
+                        'Which clients are at risk?',
+                      ].map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => setCurrentView('ai-business-copilot')}
+                          className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <Button
-                size="sm"
-                className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                onClick={() => setCurrentView('ai-business-copilot')}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                Ask Oracle
-                <ArrowRight className="h-3 w-3" />
-              </Button>
+              {oracleActivated ? (
+                <Button
+                  size="sm"
+                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+                  onClick={() => setCurrentView('ai-business-copilot')}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Ask Oracle
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+                  onClick={() => setOracleWizardOpen(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Activate Oracle
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </div>
         </motion.div>
 
-        {/* ── Ready-to-file quick action footer (subtle, optional) ── */}
+        {/* ── Ready-to-file footer ── */}
         {(() => {
           const ready = returns.filter((r) =>
             ['validated', 'reviewed', 'generated'].includes(r.status),
@@ -1730,6 +1618,140 @@ export default function DashboardPage() {
           );
         })()}
       </div>
+
+      {/* ═══ Premium Modals ═══ */}
+      <InviteTeamModal
+        open={inviteModalOpen}
+        onOpenChange={setInviteModalOpen}
+        onInvited={() => reloadOrg()}
+      />
+      <ActivateOracleWizard
+        open={oracleWizardOpen}
+        onOpenChange={setOracleWizardOpen}
+        onActivated={() => {
+          reloadOrg();
+          refreshSnapshot();
+        }}
+        integrations={{
+          gstn: false,    // Coming soon
+          bank: false,    // Coming soon
+          google: googleConnected,
+          zoho: zohoConnected,
+          invoices: hasInvoices,
+        }}
+        dataQuality={{
+          customers: businessSnapshot.customers,
+          invoices: businessSnapshot.invoices.count,
+          hasRevenue: businessSnapshot.revenue > 0,
+        }}
+      />
+      <IntegrationComingSoonModal
+        open={comingSoonModal.open}
+        onOpenChange={(open) => setComingSoonModal((prev) => ({ ...prev, open }))}
+        integrationName={comingSoonModal.name}
+        integrationIcon={comingSoonModal.icon}
+        description={comingSoonModal.description}
+        onConnectGoogle={() => {
+          setComingSoonModal({ open: false, name: '' });
+          setCurrentView('google-workspace');
+        }}
+        onConnectZoho={() => {
+          setComingSoonModal({ open: false, name: '' });
+          setCurrentView('zoho-books');
+        }}
+      />
     </div>
+  );
+}
+
+// Local BusinessHealthGauge kept for the rare case the snapshot DOES have a
+// real, data-backed health score (e.g. after Zoho sync completes). In that
+// case we render the gauge; otherwise we render BusinessHealthUnavailable.
+function BusinessHealthGauge({
+  score,
+  insight,
+}: {
+  score: number;
+  insight: string;
+}) {
+  const size = 180;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score)) / 100;
+  const offset = c * (1 - pct);
+  const tier =
+    score >= 85 ? { label: 'Excellent', tone: 'text-emerald-400' }
+      : score >= 70 ? { label: 'Healthy', tone: 'text-emerald-400' }
+        : score >= 50 ? { label: 'At Risk', tone: 'text-amber-400' }
+          : { label: 'Critical', tone: 'text-amber-400' };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' as const }}
+      className="h-full"
+    >
+      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} className="-rotate-90">
+            <defs>
+              <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#10b981" />
+                <stop offset="60%" stopColor="#06b6d4" />
+                <stop offset="100%" stopColor="#f59e0b" />
+              </linearGradient>
+            </defs>
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
+            <motion.circle
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke="url(#bhsGradient)"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={c}
+              initial={{ strokeDashoffset: c }}
+              animate={{ strokeDashoffset: score > 0 ? offset : c }}
+              transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.3 }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.7 }}
+              className={`text-5xl font-bold tracking-tight ${tier.tone}`}
+            >
+              {Math.round(score)}
+            </motion.span>
+            <span className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
+              / 100
+            </span>
+          </div>
+        </div>
+        <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft">
+              <Brain className="h-4 w-4 accent-text" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground tracking-tight">
+              Business Health Score
+            </h3>
+          </div>
+          <p className={`text-lg font-semibold ${tier.tone}`}>{tier.label}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {insight}
+          </p>
+          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              Live · auto-refreshing
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

@@ -69,6 +69,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
+import { useApp } from '@/contexts/AppContext'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useOrgMembers, useFireRecentActivities } from '@/hooks/use-firestore'
 import type { FirestoreActivity, ActivityType } from '@/lib/firestore-schema'
@@ -367,6 +368,7 @@ const contentVariants = {
 export default function SettingsPage() {
   const { user } = useAuth()
   const { organization, reload: reloadOrg, isPreviewMode } = useOrg()
+  const { pendingSettingsSection, setPendingSettingsSection } = useApp()
   const orgId = organization?.id ?? null
   const isMobile = useIsMobile()
 
@@ -377,7 +379,19 @@ export default function SettingsPage() {
   const isPreview = !orgId || isPreviewMode || orgId === 'preview-org'
 
   // ── Active Section ──────────────────────────────────────────────────
-  const [activeSection, setActiveSection] = useState<SectionId>('firm')
+  // Initialise from the pending deep-link section (set by the Home page when
+  // the user clicks "Connect GSTN" etc.) so we land on the right tab. The
+  // pending value is consumed once and cleared so a later manual visit to
+  // Settings starts on the default 'firm' section.
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    () => (pendingSettingsSection ?? 'firm') as SectionId,
+  )
+  useEffect(() => {
+    if (pendingSettingsSection) {
+      setActiveSection(pendingSettingsSection as SectionId)
+      setPendingSettingsSection(null)
+    }
+  }, [pendingSettingsSection, setPendingSettingsSection])
 
   // ── Logo upload state ───────────────────────────────────────────────
   // `logoPreview` holds a local object-URL while the upload is in flight so

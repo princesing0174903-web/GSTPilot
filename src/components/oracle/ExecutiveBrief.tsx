@@ -726,9 +726,11 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
     if (!cash.hasData && !gst.hasData && !collections.hasData && notices.data.length === 0 && returns.data.length === 0 && tasks.data.length === 0) {
       out.push({
         id: 'act-onboard',
-        label: 'Connect your first data source',
-        detail: 'Link bank, GSTN, or import clients to unlock the brief',
-        view: 'connections',
+        label: 'Connect your first integration',
+        detail: 'Connect Google or Zoho Books to start syncing real business data',
+        // The old 'connections' view has been removed — route to the real
+        // Google Workspace integration page instead.
+        view: 'google-workspace',
         tone: 'emerald',
       });
     }

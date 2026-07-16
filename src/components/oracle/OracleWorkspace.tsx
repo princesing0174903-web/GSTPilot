@@ -1706,9 +1706,10 @@ function buildActionChips(content: string): OracleActionChip[] | undefined {
   if (/(insight|recommend|suggest|advice|forecast|predict)/.test(lower)) {
     chips.push({ label: 'AI Insights', intent: 'open_insights', view: 'ai-insights' });
   }
-  // Connections / connect data
+  // Connections / connect data — the old 'connections' view has been removed.
+  // Route to the real Google Workspace integration page instead.
   if (/(connect|integration|gstn|sync|link your|link the)/.test(lower)) {
-    chips.push({ label: 'Connect Services', intent: 'open_connections', view: 'connections' });
+    chips.push({ label: 'Connect Google', intent: 'open_connections', view: 'google-workspace' });
   }
   // Settings / profile
   if (/(setting|profile|account|configur|preference)/.test(lower)) {

@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 
 // ─── Types (mirror the Prisma Invoice model) ─────────────────────────────────
 
@@ -164,6 +165,9 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         const json = (await res.json()) as { invoice: ApiInvoice };
         // Optimistic: insert at the top of the list.
         setInvoices((prev) => [json.invoice, ...prev]);
+        // Instantly refresh every dashboard / Oracle / AI CFO that reads
+        // from the Business Snapshot (revenue, GST, health score, etc.).
+        invalidateBusinessSnapshot();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] create failed:', err);
@@ -203,6 +207,8 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         const json = (await res.json()) as { invoice: ApiInvoice };
         // Replace with the canonical server value.
         setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
+        // Snapshot changed (totals, status, payment) — refresh everywhere.
+        invalidateBusinessSnapshot();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] update failed:', err);
@@ -246,6 +252,8 @@ export function useInvoicesApi(): UseInvoicesApiResult {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `HTTP ${res.status}`);
         }
+        // Invoice removed — revenue / GST / outstanding all change.
+        invalidateBusinessSnapshot();
         return true;
       } catch (err) {
         console.error('[useInvoicesApi] delete failed:', err);

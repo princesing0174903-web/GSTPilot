@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ProSkeleton } from '@/components/ui-pro';
+import { ProSkeleton, AnimatedNumber } from '@/components/ui-pro';
 import {
   Upload,
   CheckCircle2,
@@ -68,6 +68,11 @@ import {
   useFirePriorities,
 } from '@/hooks/use-firestore';
 import { useInvoices } from '@/hooks/useInvoices';
+// NOTE: useInvoices (Firestore) is imported for legacy compatibility but the
+// Dashboard no longer reads invoice DATA from it — all financial figures come
+// from useBusinessSnapshot() (Prisma). This is the Phase 3 "One Business
+// Snapshot" architecture: every number on this page traces back to a single
+// server-side calculation.
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
 import { useGoogleWorkspace } from '@/hooks/useGoogleWorkspace';
 import { useZohoBooks } from '@/hooks/useZohoBooks';
@@ -256,7 +261,12 @@ function SectionCard({
 
 interface KpiCardProps {
   label: string;
-  value: string;
+  /** Numeric value for count-up animation. When provided, takes precedence over `value`. */
+  numericValue?: number;
+  /** Format for the animated number: 'currency' = ₹1,18,000, 'integer' = 1,180, 'decimal' = 68.5 */
+  numericFormat?: 'currency' | 'integer' | 'decimal';
+  /** Fallback string value (used when numericValue is not provided). */
+  value?: string;
   subtitle: string;
   icon: React.ReactNode;
   index: number;
@@ -269,7 +279,7 @@ interface KpiCardProps {
   };
 }
 
-function KpiCard({ label, value, subtitle, icon, index, cta }: KpiCardProps) {
+function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtitle, icon, index, cta }: KpiCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -284,7 +294,11 @@ function KpiCard({ label, value, subtitle, icon, index, cta }: KpiCardProps) {
               {label}
             </p>
             <p className="text-3xl font-bold text-foreground tracking-tight truncate">
-              {value}
+              {numericValue !== undefined ? (
+                <AnimatedNumber value={numericValue} format={numericFormat} />
+              ) : (
+                value ?? '—'
+              )}
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">{subtitle}</p>
             {cta && (
@@ -505,8 +519,12 @@ export default function DashboardPage() {
   // ── AI Oracle recommendations ──
   const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
 
-  // ── Real Invoice Engine ──
-  const { invoices: engineInvoices, stats: invoiceStats, loading: invoicesLoading } = useInvoices();
+  // ── Legacy Firestore invoice hook (loading-state only) ──
+  // We no longer read invoice DATA from Firestore — the Business Snapshot
+  // (Prisma) is the single source of truth. This hook is retained only so
+  // the loading gate doesn't flash stale content; it resolves to false
+  // quickly when Firestore is unavailable.
+  const { loading: invoicesLoading } = useInvoices();
 
   // ── REAL integrations: Google + Zoho Books ──
   const { status: googleStatus, loading: googleLoading } = useGoogleWorkspace();
@@ -542,8 +560,8 @@ export default function DashboardPage() {
       (organization.integrations as Record<string, { connected?: boolean }> | null)?.oracle?.connected,
   );
 
-  const hasInvoices = businessSnapshot.invoices.count > 0 || invoiceStats.count > 0;
-  const hasCustomers = businessSnapshot.customers > 0 || clients.length > 0;
+  const hasInvoices = businessSnapshot.invoices.count > 0;
+  const hasCustomers = businessSnapshot.customers > 0;
   const hasAnyIntegration = googleConnected || zohoConnected;
   // A real health score requires actual financial data (invoices + expenses
   // + bank). Until then we NEVER display an invented number.
@@ -613,14 +631,12 @@ export default function DashboardPage() {
     [returns],
   );
 
-  const pendingInvoices = useMemo(
-    () =>
-      engineInvoices.filter(
-        (i) => i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
-      ),
-    [engineInvoices],
-  );
-  const pendingCollection = invoiceStats.totalOutstanding;
+  // Phase 3 — Single Source of Truth: all invoice/collection numbers come
+  // from the Business Snapshot (Prisma), NOT from the Firestore-based
+  // useInvoices hook (which fails with permission-denied in preview mode).
+  // This guarantees the Dashboard's "pending collection" figure always
+  // matches the revenue figure and the Oracle's view of the business.
+  const pendingCollection = businessSnapshot.collections.totalOutstanding;
 
   const insight = useMemo(
     () => buildInsightSentence(businessSnapshot, pendingCollection, hasAnyIntegration),
@@ -927,13 +943,11 @@ export default function DashboardPage() {
   }
 
   // ── KPI values (Single Source of Truth: Business Snapshot) ──
-  // IMPORTANT: We ALWAYS show the real value, even when it is ₹0. We never
+  // IMPORTANT: We ALWAYS show the real value, even when it is ₹0. The
+  // AnimatedNumber component handles the count-up animation. We never
   // substitute "—" or hide the number behind an empty-state card. The user
   // asked to "see 0, not fake data" — so ₹0 is shown with an honest subtitle
   // explaining why it is zero and a CTA to start populating it.
-  const revenueValue = `₹${formatINR(businessSnapshot.revenue)}`;
-  const complianceValue = String(pendingComplianceCount);
-  const cashValue = `₹${formatINR(businessSnapshot.bankBalance)}`;
 
   // Empty-state flags (used to pick an honest subtitle + CTA, NOT to hide the value)
   const revenueEmpty = businessSnapshot.revenue === 0;
@@ -1036,7 +1050,8 @@ export default function DashboardPage() {
           <KpiCard
             index={0}
             label="Revenue"
-            value={revenueValue}
+            numericValue={businessSnapshot.revenue}
+            numericFormat="currency"
             subtitle={revenueSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
             cta={revenueEmpty ? {
@@ -1047,7 +1062,8 @@ export default function DashboardPage() {
           <KpiCard
             index={1}
             label="Pending Compliance"
-            value={complianceValue}
+            numericValue={pendingComplianceCount}
+            numericFormat="integer"
             subtitle={complianceSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
             cta={complianceEmpty ? {
@@ -1058,7 +1074,8 @@ export default function DashboardPage() {
           <KpiCard
             index={2}
             label="Cash Position"
-            value={cashValue}
+            numericValue={businessSnapshot.bankBalance}
+            numericFormat="currency"
             subtitle={cashSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
             cta={cashEmpty ? {
@@ -1141,7 +1158,11 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <span className={`text-2xl font-bold tracking-tight ${isEmpty ? 'text-muted-foreground/50' : 'text-foreground'}`}>
-                      {metric.isCurrency ? `₹${formatINR(metric.value)}` : metric.value}
+                      {metric.isCurrency ? (
+                        <AnimatedNumber value={metric.value} format="currency" />
+                      ) : (
+                        <AnimatedNumber value={metric.value} format="integer" />
+                      )}
                     </span>
                     {isEmpty && (
                       <span className="text-[10px] text-muted-foreground leading-tight line-clamp-2">

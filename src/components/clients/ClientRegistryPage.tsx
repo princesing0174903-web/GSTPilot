@@ -76,6 +76,7 @@ import type { AppView } from '@/contexts/AppContext';
 import { useClients, type ClientOption } from '@/hooks/useClients';
 import { INDIAN_STATES, ENTITY_TYPES as ENTITY_TYPE_OPTIONS } from '@/lib/constants';
 import { validateGSTIN, formatGSTIN } from '@/lib/gst-utils';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
@@ -364,6 +365,8 @@ export default function ClientRegistryPage() {
           throw new Error(body.error || `Failed to update client (HTTP ${res.status})`);
         }
         toast.success(`${form.tradeName} updated`);
+        // Customer count changed — refresh dashboards.
+        invalidateBusinessSnapshot();
       } else {
         // POST /api/clients
         const res = await fetch('/api/clients', {
@@ -376,6 +379,8 @@ export default function ClientRegistryPage() {
           throw new Error(body.error || `Failed to create client (HTTP ${res.status})`);
         }
         toast.success(`${form.tradeName} added to your firm`);
+        // New customer — refresh dashboards / Oracle / AI CFO.
+        invalidateBusinessSnapshot();
       }
       setDialogOpen(false);
       // Instantly refresh the list so the new/edited client appears.
@@ -399,6 +404,8 @@ export default function ClientRegistryPage() {
         throw new Error(body.error || `Failed to delete client (HTTP ${res.status})`);
       }
       toast.success(`${deleteTarget.tradeName} removed`);
+      // Customer removed — refresh dashboards.
+      invalidateBusinessSnapshot();
       refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete client');

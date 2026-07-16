@@ -242,3 +242,6 @@ export const backdropVariants = {
   visible: { opacity: 1 },
   exit: { opacity: 0 },
 };
+
+// Re-export AnimatedNumber from the dedicated module
+export { AnimatedNumber } from './AnimatedNumber';

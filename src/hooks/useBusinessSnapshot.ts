@@ -40,7 +40,7 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
   const orgIdRef = useRef<string | null>(null);
   orgIdRef.current = orgId;
 
-  const fetchSnapshot = useCallback(async () => {
+  const fetchSnapshot = useCallback(async (forceRefresh = false) => {
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId) {
       setSnapshot(emptySnapshot());
@@ -50,10 +50,10 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
     }
 
     try {
-      const res = await fetch(
-        `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}`,
-        { cache: 'no-store' },
-      );
+      const url = forceRefresh
+        ? `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}&forceRefresh=true`
+        : `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}`;
+      const res = await fetch(url, { cache: 'no-store' });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -70,6 +70,12 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
       setLoading(false);
     }
   }, []);
+
+  // Force-refresh variant for the invalidation event bus. Bypasses the
+  // 30-second server cache so dashboards update INSTANTLY after a mutation.
+  const fetchSnapshotWithForceRefresh = useCallback(() => {
+    void fetchSnapshot(true);
+  }, [fetchSnapshot]);
 
   // ── Initial fetch + refetch when org changes ──
   useEffect(() => {
@@ -94,6 +100,31 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [fetchSnapshot]);
+
+  // ── INSTANT refresh on global invalidation events ──
+  // When ANY mutation happens (create invoice, create client, Zoho sync,
+  // payment recorded, etc.), the mutation calls `invalidateBusinessSnapshot()`
+  // and this hook re-fetches immediately with forceRefresh=true. This is
+  // what makes the dashboard update INSTANTLY after a save — no 60-second wait.
+  useEffect(() => {
+    const handler = () => {
+      if (orgIdRef.current) {
+        // Bypass the 30s server cache by fetching with forceRefresh=true
+        setLoading(true);
+        fetchSnapshotWithForceRefresh();
+      }
+    };
+    // Late import to avoid circular dependency in SSR
+    import('@/lib/business-snapshot-events').then(({ onBusinessSnapshotInvalidated }) => {
+      const off = onBusinessSnapshotInvalidated(handler);
+      // Store cleanup on the handler so the effect's return can call it
+      (handler as unknown as { _cleanup?: () => void })._cleanup = off;
+    });
+    return () => {
+      const cleanup = (handler as unknown as { _cleanup?: () => void })._cleanup;
+      if (cleanup) cleanup();
+    };
+  }, []);
 
   const refresh = useCallback(() => {
     setRefreshTick((t) => t + 1);

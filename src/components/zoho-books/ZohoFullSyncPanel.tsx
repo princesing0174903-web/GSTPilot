@@ -342,7 +342,7 @@ export function ZohoFullSyncPanel() {
           <MetricCard
             icon={<Database className="h-4 w-4" />}
             label="Records Imported"
-            value={result?.totalImported ?? lastSync?.totals.imported ?? snapshot?.perEntity.zohoCustomers ?? 0}
+            value={result?.totalImported ?? lastSync?.totals.imported ?? snapshot?.perEntity?.zohoCustomers ?? 0}
             subtext={result ? `${result.totalFetched} fetched` : undefined}
           />
           <MetricCard
@@ -378,7 +378,8 @@ export function ZohoFullSyncPanel() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {MODULE_ORDER.map((key) => {
                 const meta = MODULE_META[key];
-                const count = (snapshot.perEntity as Record<string, number>)[
+                const perEntity = (snapshot.perEntity ?? {}) as Record<string, number | undefined>;
+                const count = perEntity[
                   key === 'customers' ? 'zohoCustomers'
                   : key === 'vendors' ? 'zohoVendors'
                   : key === 'items' ? 'zohoItems'

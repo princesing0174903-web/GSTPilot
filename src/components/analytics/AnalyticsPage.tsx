@@ -14,6 +14,8 @@ import {
   useFireReturns,
   useFireFirm,
 } from '@/hooks/use-firestore';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
+import type { BusinessSnapshot } from '@/lib/financial-engine';
 import type {
   FirestoreClient,
   FirestoreInvoice,
@@ -518,6 +520,7 @@ function computeAnalytics(
   clients: (FirestoreClient & { id: string })[],
   invoices: (FirestoreInvoice & { id: string })[],
   returns: (FirestoreReturn & { id: string })[],
+  snapshot: BusinessSnapshot,
 ): ComputedAnalytics {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -559,11 +562,17 @@ function computeAnalytics(
   const expansionMrr = Math.round(mrr * 0.08);
   const churnedMrr = Math.round(mrr * 0.04);
 
+  // MRR by segment — REAL per-segment MRR computed from client tax volume × 1% fee model.
+  // Empty array when no clients have tax volume; chart shows "No data yet" empty state.
+  const mrrBySegmentMap: Record<string, number> = {};
+  for (const c of segments) {
+    mrrBySegmentMap[c.segment] = (mrrBySegmentMap[c.segment] || 0) + (c.totalTaxPaid || 0) * 0.01;
+  }
   const mrrBySegment = [
-    { segment: 'SMB', value: Math.round(mrr * 0.35), color: C.teal },
-    { segment: 'Mid-Market', value: Math.round(mrr * 0.40), color: C.emerald },
-    { segment: 'Enterprise', value: Math.round(mrr * 0.25), color: C.purple },
-  ];
+    { segment: 'SMB', value: Math.round(mrrBySegmentMap['SMB'] || 0), color: C.teal },
+    { segment: 'Mid-Market', value: Math.round(mrrBySegmentMap['Mid-Market'] || 0), color: C.emerald },
+    { segment: 'Enterprise', value: Math.round(mrrBySegmentMap['Enterprise'] || 0), color: C.purple },
+  ].filter(s => s.value > 0);
 
   const mrrWaterfall = [
     { label: 'Starting', value: Math.round(mrr * 0.85) },
@@ -580,13 +589,9 @@ function computeAnalytics(
   const arr = mrr * 12;
   const arrByMonth = mrrByMonth.map(m => ({ ...m, value: m.value * 12 }));
 
-  const arrByService = [
-    { service: 'GST Filing', value: Math.round(arr * 0.45), color: C.emerald },
-    { service: 'Reconciliation', value: Math.round(arr * 0.20), color: C.teal },
-    { service: 'Advisory', value: Math.round(arr * 0.18), color: C.purple },
-    { service: 'Compliance', value: Math.round(arr * 0.12), color: C.amber },
-    { service: 'Audit', value: Math.round(arr * 0.05), color: C.cyan },
-  ];
+  // ARR by service — REAL per-service breakdown not tracked (no service tag on invoices).
+  // Empty array — chart shows "No data yet" empty state.
+  const arrByService: { service: string; value: number; color: string }[] = [];
 
   const growthFactor = mrrTrend > 0 ? 1 + (mrrTrend / 100) : 1.02;
   const arrProjection = last12.map((p, i) => ({
@@ -605,9 +610,11 @@ function computeAnalytics(
   const forecast6m = monthlyAvg * 6 * Math.pow(growthFactor, 2);
   const forecast12m = monthlyAvg * 12 * Math.pow(growthFactor, 4);
 
+  // Forecast vs actual: for past periods, forecast = actual (no Math.random variance).
+  // Real forward forecast comes from snapshot.forecast.nextMonthRevenue elsewhere.
   const forecastVsActual = last12.slice(-6).map(p => ({
     label: periodToMonth(p),
-    forecast: (revenueByPeriod[p] || 0) * (0.9 + Math.random() * 0.2),
+    forecast: revenueByPeriod[p] || 0,
     actual: revenueByPeriod[p] || 0,
   }));
 
@@ -621,21 +628,13 @@ function computeAnalytics(
     };
   });
 
-  const revenueByService = [
-    { service: 'GST Returns', value: Math.round(totalRevenue * 0.42), color: C.emerald },
-    { service: 'Reconciliation', value: Math.round(totalRevenue * 0.22), color: C.teal },
-    { service: 'Advisory', value: Math.round(totalRevenue * 0.18), color: C.purple },
-    { service: 'Compliance Audit', value: Math.round(totalRevenue * 0.12), color: C.amber },
-    { service: 'ITC Optimization', value: Math.round(totalRevenue * 0.06), color: C.cyan },
-  ];
+  // Revenue by service — REAL per-service breakdown not tracked (no service tag on invoices).
+  // Empty array — chart shows "No data yet" empty state.
+  const revenueByService: { service: string; value: number; color: string }[] = [];
 
-  const revenueDrivers = [
-    { driver: 'New client acquisitions', impact: 18, direction: 'up' as const },
-    { driver: 'Upsell advisory services', impact: 12, direction: 'up' as const },
-    { driver: 'GST filing volume increase', impact: 9, direction: 'up' as const },
-    { driver: 'Client churn', impact: -6, direction: 'down' as const },
-    { driver: 'Price compression', impact: -3, direction: 'down' as const },
-  ];
+  // Revenue drivers — REAL driver-impact data not tracked.
+  // Empty array — chart shows "No data yet" empty state.
+  const revenueDrivers: { driver: string; impact: number; direction: 'up' | 'down' }[] = [];
 
   // ── Churn ──
   const inactiveClients = clients.filter(c => c.status === 'inactive' || c.status === 'churned');
@@ -657,13 +656,9 @@ function computeAnalytics(
     .slice(0, 8)
     .map(c => ({ name: c.tradeName, healthScore: c.healthScore, segment: c.segment }));
 
-  const churnReasons = [
-    { reason: 'Poor compliance score', pct: 32, color: C.red },
-    { reason: 'Switched to competitor', pct: 24, color: C.orange },
-    { reason: 'Business closed', pct: 18, color: C.amber },
-    { reason: 'Cost concerns', pct: 14, color: C.slate },
-    { reason: 'Service quality', pct: 12, color: C.purple },
-  ];
+  // Churn reasons — REAL exit-reason data not tracked in the data model.
+  // Empty array — chart shows "No data yet" empty state.
+  const churnReasons: { reason: string; pct: number; color: string }[] = [];
 
   const retentionRate = 100 - churnRate;
 
@@ -676,39 +671,35 @@ function computeAnalytics(
   ];
 
   // ── Profitability ──
-  const grossMargin = 68;
-  const netMargin = 24;
-  const operatingMargin = 32;
+  // Margins computed from the canonical Business Snapshot (single source of truth).
+  // The snapshot exposes revenue, expenses, profit — but does NOT decompose expenses
+  // into COGS vs operating, so gross/operating/net all use profit/revenue. When
+  // revenue is 0, margin is 0 (honest empty state, no fabricated percentages).
+  const netMargin = snapshot.revenue > 0
+    ? Math.round((snapshot.profit / snapshot.revenue) * 1000) / 10
+    : 0;
+  const grossMargin = netMargin;
+  const operatingMargin = netMargin;
 
-  const profitabilityBySegment = [
-    { segment: 'SMB', margin: 22, color: C.teal },
-    { segment: 'Mid-Market', margin: 35, color: C.emerald },
-    { segment: 'Enterprise', margin: 42, color: C.purple },
-  ];
+  // Profitability by segment — REAL per-segment margin not tracked.
+  // Empty array — chart shows "No data yet" empty state.
+  const profitabilityBySegment: { segment: string; margin: number; color: string }[] = [];
 
-  const profitabilityByService = [
-    { service: 'GST Filing', margin: 55, color: C.emerald },
-    { service: 'Reconciliation', margin: 48, color: C.teal },
-    { service: 'Advisory', margin: 72, color: C.purple },
-    { service: 'Compliance', margin: 38, color: C.amber },
-    { service: 'Audit', margin: 62, color: C.cyan },
-  ];
+  // Profitability by service — REAL per-service margin not tracked.
+  // Empty array — chart shows "No data yet" empty state.
+  const profitabilityByService: { service: string; margin: number; color: string }[] = [];
 
-  const totalCosts = totalRevenue * (1 - netMargin / 100);
-  const costBreakdown = [
-    { category: 'Personnel', amount: Math.round(totalCosts * 0.55), color: C.slate },
-    { category: 'Technology', amount: Math.round(totalCosts * 0.20), color: C.emerald },
-    { category: 'Compliance', amount: Math.round(totalCosts * 0.12), color: C.amber },
-    { category: 'Operations', amount: Math.round(totalCosts * 0.08), color: C.cyan },
-    { category: 'Marketing', amount: Math.round(totalCosts * 0.05), color: C.purple },
-  ];
+  // Cost breakdown — REAL per-category expense data not decomposed in the snapshot
+  // (snapshot only exposes total expenses). Empty array — chart shows "No data yet".
+  const costBreakdown: { category: string; amount: number; color: string }[] = [];
 
   const topByRev = [...segments].sort((a, b) => (b.totalTaxPaid || 0) - (a.totalTaxPaid || 0));
+  // Per-client margin is NOT tracked in the data model — set to 0 (no Math.random).
   const mostProfitableClients = topByRev.slice(0, 5).map(c => ({
-    name: c.tradeName, revenue: c.totalTaxPaid || 0, margin: 30 + Math.random() * 20,
+    name: c.tradeName, revenue: c.totalTaxPaid || 0, margin: 0,
   }));
   const leastProfitableClients = topByRev.slice(-5).reverse().map(c => ({
-    name: c.tradeName, revenue: c.totalTaxPaid || 0, margin: 5 + Math.random() * 10,
+    name: c.tradeName, revenue: c.totalTaxPaid || 0, margin: 0,
   }));
 
   // ── Workload ──
@@ -725,20 +716,17 @@ function computeAnalytics(
   }
 
   const avgReturnsPerMonth = returns.length / 12;
+  // Forward returns projection — use historical monthly average (no Math.random variance).
   const returnsByMonth = next6Months.map(p => ({
     label: periodToMonth(p),
-    value: Math.round(avgReturnsPerMonth * (0.8 + Math.random() * 0.4)),
+    value: Math.round(avgReturnsPerMonth),
   }));
 
   const capacityUtilization = Math.min(95, Math.round((returns.length / 12 / 30) * 100));
 
-  const bottleneckAreas = [
-    { area: 'GSTR-3B Filing', load: 92 },
-    { area: 'Reconciliation', load: 85 },
-    { area: 'ITC Verification', load: 78 },
-    { area: 'Document Processing', load: 65 },
-    { area: 'Client Communication', load: 58 },
-  ];
+  // Bottleneck areas — REAL per-process load data not tracked.
+  // Empty array — chart shows "No data yet" empty state.
+  const bottleneckAreas: { area: string; load: number }[] = [];
 
   const hiringRecommendations = capacityUtilization > 80
     ? [
@@ -749,13 +737,25 @@ function computeAnalytics(
       ]
     : ['Current capacity is adequate for the projected workload'];
 
+  // Workload by segment — REAL per-segment return count computed from returns data.
+  // Empty array when no returns are mapped to clients; chart shows "No data yet".
+  const workloadBySegmentMap: Record<string, number> = {};
+  for (const c of segments) {
+    const segReturns = returns.filter(r => r.clientId === c.clientId).length;
+    if (segReturns > 0) {
+      workloadBySegmentMap[c.segment] = (workloadBySegmentMap[c.segment] || 0) + segReturns;
+    }
+  }
   const workloadBySegment = [
-    { segment: 'SMB', returns: Math.round(returns.length * 0.45), color: C.teal },
-    { segment: 'Mid-Market', returns: Math.round(returns.length * 0.35), color: C.emerald },
-    { segment: 'Enterprise', returns: Math.round(returns.length * 0.20), color: C.purple },
-  ];
+    { segment: 'SMB', returns: workloadBySegmentMap['SMB'] || 0, color: C.teal },
+    { segment: 'Mid-Market', returns: workloadBySegmentMap['Mid-Market'] || 0, color: C.emerald },
+    { segment: 'Enterprise', returns: workloadBySegmentMap['Enterprise'] || 0, color: C.purple },
+  ].filter(s => s.returns > 0);
 
   // ── Productivity ──
+  // REAL team productivity computed from actual returns assigned to each team member.
+  // avgTime and satisfaction are NOT tracked in the data model — set to 0 (honest empty).
+  // NO fake team fallback — empty array shows "No data yet" empty state.
   const uniqueAssignees = [...new Set(returns.map(r => r.assignedTo).filter(Boolean))];
   const teamProductivity = uniqueAssignees.length > 0
     ? uniqueAssignees.map(name => {
@@ -763,19 +763,13 @@ function computeAnalytics(
         const filed = personReturns.filter(r => r.status === 'filed').length;
         return {
           name: name || 'Unassigned',
-          score: Math.min(100, 50 + filed * 5 + Math.random() * 15),
+          score: Math.min(100, 50 + filed * 5),
           returns: personReturns.length,
-          avgTime: 2 + Math.random() * 4,
-          satisfaction: 70 + Math.random() * 25,
+          avgTime: 0,
+          satisfaction: 0,
         };
       })
-    : [
-        { name: 'CA Sharma', score: 92, returns: 28, avgTime: 2.4, satisfaction: 94 },
-        { name: 'CA Patel', score: 87, returns: 24, avgTime: 3.1, satisfaction: 88 },
-        { name: 'CA Gupta', score: 78, returns: 20, avgTime: 3.8, satisfaction: 82 },
-        { name: 'CA Singh', score: 72, returns: 18, avgTime: 4.2, satisfaction: 76 },
-        { name: 'CA Kumar', score: 85, returns: 22, avgTime: 3.3, satisfaction: 90 },
-      ];
+    : [];
 
   const returnsPerPerson = teamProductivity.length > 0
     ? teamProductivity.reduce((s, t) => s + t.returns, 0) / teamProductivity.length
@@ -787,10 +781,12 @@ function computeAnalytics(
     ? teamProductivity.reduce((s, t) => s + t.satisfaction, 0) / teamProductivity.length
     : 0;
 
+  // Productivity trend by weekday — REAL per-day productivity not tracked.
+  // Set to 0 (flat line at 0 — honest empty state, no Math.random).
   const last7 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const productivityTrend = last7.map(d => ({
     label: d,
-    value: 60 + Math.random() * 35,
+    value: 0,
   }));
 
   // ── CLV ──
@@ -817,15 +813,24 @@ function computeAnalytics(
     color: r.color,
   }));
 
+  // CLV by segment — REAL per-segment CLV computed from client tax volume × 1% × 24mo.
+  // Empty array when no clients; chart shows "No data yet" empty state.
+  const clvBySegmentMap: Record<string, number> = {};
+  for (const c of segments) {
+    const clv = (c.totalTaxPaid || 0) * 0.01 * 24;
+    clvBySegmentMap[c.segment] = (clvBySegmentMap[c.segment] || 0) + clv;
+  }
   const clvBySegment = [
-    { segment: 'SMB', value: Math.round(avgClv * 0.4), color: C.teal },
-    { segment: 'Mid-Market', value: Math.round(avgClv * 1.2), color: C.emerald },
-    { segment: 'Enterprise', value: Math.round(avgClv * 3.5), color: C.purple },
-  ];
+    { segment: 'SMB', value: Math.round(clvBySegmentMap['SMB'] || 0), color: C.teal },
+    { segment: 'Mid-Market', value: Math.round(clvBySegmentMap['Mid-Market'] || 0), color: C.emerald },
+    { segment: 'Enterprise', value: Math.round(clvBySegmentMap['Enterprise'] || 0), color: C.purple },
+  ].filter(s => s.value > 0);
 
+  // CLV trend — use avgClv as flat baseline (no Math.random variance).
+  // REAL per-month CLV history is not tracked.
   const clvTrend = last12.map(p => ({
     label: periodToMonth(p),
-    value: avgClv * (0.85 + Math.random() * 0.3),
+    value: avgClv,
   }));
 
   const topClvClients = [...clientRevenues]
@@ -838,11 +843,9 @@ function computeAnalytics(
       segment: c.segment,
     }));
 
-  const clvVsAcquisition = [
-    { segment: 'SMB', clv: Math.round(avgClv * 0.4), cac: Math.round(avgClv * 0.08) },
-    { segment: 'Mid-Market', clv: Math.round(avgClv * 1.2), cac: Math.round(avgClv * 0.15) },
-    { segment: 'Enterprise', clv: Math.round(avgClv * 3.5), cac: Math.round(avgClv * 0.25) },
-  ];
+  // CLV vs acquisition cost — REAL CAC not tracked in the data model.
+  // Empty array — chart shows "No data yet" empty state.
+  const clvVsAcquisition: { segment: string; clv: number; cac: number }[] = [];
 
   return {
     mrr, mrrByMonth, newMrr, expansionMrr, churnedMrr, mrrBySegment, mrrWaterfall, mrrTrend,
@@ -865,9 +868,9 @@ function MRRPanel({ data }: { data: ComputedAnalytics }) {
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <BigMetric title="Monthly Recurring Revenue" value={fmtINR(data.mrr)} trend={data.mrrTrend} icon={IndianRupee} color={C.emerald} subtitle="vs last month" />
-        <BigMetric title="New MRR" value={fmtINR(data.newMrr)} trend={12.4} icon={ArrowUpRight} color={C.teal} subtitle="new clients" />
-        <BigMetric title="Expansion MRR" value={fmtINR(data.expansionMrr)} trend={8.2} icon={TrendingUp} color={C.purple} subtitle="upsells" />
-        <BigMetric title="Churned MRR" value={fmtINR(data.churnedMrr)} trend={-2.1} icon={TrendingDown} color={C.red} subtitle="lost revenue" />
+        <BigMetric title="New MRR" value={fmtINR(data.newMrr)} trend={0} icon={ArrowUpRight} color={C.teal} subtitle="new clients" />
+        <BigMetric title="Expansion MRR" value={fmtINR(data.expansionMrr)} trend={0} icon={TrendingUp} color={C.purple} subtitle="upsells" />
+        <BigMetric title="Churned MRR" value={fmtINR(data.churnedMrr)} trend={0} icon={TrendingDown} color={C.red} subtitle="lost revenue" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -900,19 +903,23 @@ function MRRPanel({ data }: { data: ComputedAnalytics }) {
             <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">MRR by Client Segment</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {data.mrrBySegment.map(seg => (
-                <div key={seg.segment} className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                  <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ background: `${seg.color}15` }}>
-                    <Users className="h-5 w-5" style={{ color: seg.color }} />
+            {data.mrrBySegment.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {data.mrrBySegment.map(seg => (
+                  <div key={seg.segment} className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ background: `${seg.color}15` }}>
+                      <Users className="h-5 w-5" style={{ color: seg.color }} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">{seg.segment}</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{fmtINR(seg.value)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500">{seg.segment}</p>
-                    <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{fmtINR(seg.value)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -926,7 +933,7 @@ function ARRPanel({ data }: { data: ComputedAnalytics }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <BigMetric title="Annual Recurring Revenue" value={fmtINR(data.arr)} trend={data.arrGrowthRate} icon={IndianRupee} color={C.emerald} subtitle="annualized" />
         <BigMetric title="ARR Growth Rate" value={`${data.arrGrowthRate.toFixed(1)}%`} trend={data.arrGrowthRate} icon={TrendingUp} color={C.teal} subtitle="YoY" />
-        <BigMetric title="ARR per Client" value={fmtINR(data.arr / Math.max(data.mrrBySegment.reduce((s, seg) => s + 1, 0), 1))} trend={5.3} icon={Users} color={C.purple} subtitle="average" />
+        <BigMetric title="ARR per Client" value={fmtINR(data.arr / Math.max(data.mrrBySegment.reduce((s, seg) => s + 1, 0), 1))} trend={0} icon={Users} color={C.purple} subtitle="average" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -953,9 +960,13 @@ function ARRPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">ARR by Service Type</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.arrByService.map(s => ({ label: s.service, value: s.value, color: s.color }))}
-              />
+              {data.arrByService.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <SVGHorizontalBars
+                  items={data.arrByService.map(s => ({ label: s.service, value: s.value, color: s.color }))}
+                />
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -999,9 +1010,9 @@ function ForecastPanel({ data }: { data: ComputedAnalytics }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <BigMetric title="3-Month Forecast" value={fmtINR(data.forecast3m)} trend={8.5} icon={Target} color={C.emerald} subtitle="short-term" />
-        <BigMetric title="6-Month Forecast" value={fmtINR(data.forecast6m)} trend={12.3} icon={CalendarDays} color={C.teal} subtitle="mid-term" />
-        <BigMetric title="12-Month Forecast" value={fmtINR(data.forecast12m)} trend={18.7} icon={TrendingUp} color={C.purple} subtitle="long-term" />
+        <BigMetric title="3-Month Forecast" value={fmtINR(data.forecast3m)} trend={0} icon={Target} color={C.emerald} subtitle="short-term" />
+        <BigMetric title="6-Month Forecast" value={fmtINR(data.forecast6m)} trend={0} icon={CalendarDays} color={C.teal} subtitle="mid-term" />
+        <BigMetric title="12-Month Forecast" value={fmtINR(data.forecast12m)} trend={0} icon={TrendingUp} color={C.purple} subtitle="long-term" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1063,9 +1074,13 @@ function ForecastPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Revenue by Service</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.revenueByService.map(s => ({ label: s.service, value: s.value, color: s.color }))}
-              />
+              {data.revenueByService.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <SVGHorizontalBars
+                  items={data.revenueByService.map(s => ({ label: s.service, value: s.value, color: s.color }))}
+                />
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1076,24 +1091,28 @@ function ForecastPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Key Revenue Drivers</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {data.revenueDrivers.map((d, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${d.direction === 'up' ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
-                    {d.direction === 'up'
-                      ? <ChevronUp className="h-4 w-4 text-emerald-600" />
-                      : <ChevronDown className="h-4 w-4 text-red-600" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{d.driver}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Progress value={Math.abs(d.impact) * 4} className="h-1.5" />
-                      <span className={`text-xs font-semibold ${d.direction === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {d.direction === 'up' ? '+' : ''}{d.impact}%
-                      </span>
+              {data.revenueDrivers.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                data.revenueDrivers.map((d, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className={`p-1.5 rounded-lg ${d.direction === 'up' ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                      {d.direction === 'up'
+                        ? <ChevronUp className="h-4 w-4 text-emerald-600" />
+                        : <ChevronDown className="h-4 w-4 text-red-600" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{d.driver}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Progress value={Math.abs(d.impact) * 4} className="h-1.5" />
+                        <span className={`text-xs font-semibold ${d.direction === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {d.direction === 'up' ? '+' : ''}{d.impact}%
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1107,7 +1126,7 @@ function ChurnPanel({ data }: { data: ComputedAnalytics }) {
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <BigMetric title="Churn Rate" value={`${data.churnRate.toFixed(1)}%`} trend={data.churnTrend} icon={TrendingDown} color={C.red} subtitle="this month" />
-        <BigMetric title="Retention Rate" value={`${data.retentionRate.toFixed(1)}%`} trend={2.3} icon={Shield} color={C.emerald} subtitle="vs last month" />
+        <BigMetric title="Retention Rate" value={`${data.retentionRate.toFixed(1)}%`} trend={0} icon={Shield} color={C.emerald} subtitle="vs last month" />
         <BigMetric title="Clients at Risk" value={fmtNum(data.clientsAtRisk.length)} icon={AlertTriangle} color={C.amber} />
       </div>
 
@@ -1129,23 +1148,27 @@ function ChurnPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Churn Reasons</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {data.churnReasons.map((r, i) => (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{r.reason}</span>
-                    <span className="text-xs font-semibold" style={{ color: r.color }}>{r.pct}%</span>
+              {data.churnReasons.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                data.churnReasons.map((r, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{r.reason}</span>
+                      <span className="text-xs font-semibold" style={{ color: r.color }}>{r.pct}%</span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${r.pct}%` }}
+                        transition={{ duration: 0.8, delay: i * 0.1 }}
+                        className="h-full rounded-full"
+                        style={{ background: r.color }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${r.pct}%` }}
-                      transition={{ duration: 0.8, delay: i * 0.1 }}
-                      className="h-full rounded-full"
-                      style={{ background: r.color }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1225,9 +1248,9 @@ function ProfitabilityPanel({ data }: { data: ComputedAnalytics }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <BigMetric title="Gross Margin" value={`${data.grossMargin}%`} trend={2.8} icon={TrendingUp} color={C.emerald} />
-        <BigMetric title="Net Margin" value={`${data.netMargin}%`} trend={1.5} icon={Target} color={C.teal} />
-        <BigMetric title="Operating Margin" value={`${data.operatingMargin}%`} trend={3.2} icon={Activity} color={C.purple} />
+        <BigMetric title="Gross Margin" value={`${data.grossMargin}%`} trend={0} icon={TrendingUp} color={C.emerald} />
+        <BigMetric title="Net Margin" value={`${data.netMargin}%`} trend={0} icon={Target} color={C.teal} />
+        <BigMetric title="Operating Margin" value={`${data.operatingMargin}%`} trend={0} icon={Activity} color={C.purple} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1237,10 +1260,16 @@ function ProfitabilityPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Profitability by Client Segment</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.profitabilityBySegment.map(s => ({ label: s.segment, value: s.margin, color: s.color }))}
-              />
-              <p className="text-xs text-slate-400 mt-2">Margin % shown</p>
+              {data.profitabilityBySegment.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <>
+                  <SVGHorizontalBars
+                    items={data.profitabilityBySegment.map(s => ({ label: s.segment, value: s.margin, color: s.color }))}
+                  />
+                  <p className="text-xs text-slate-400 mt-2">Margin % shown</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1251,10 +1280,16 @@ function ProfitabilityPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Profitability by Service</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.profitabilityByService.map(s => ({ label: s.service, value: s.margin, color: s.color }))}
-              />
-              <p className="text-xs text-slate-400 mt-2">Margin % shown</p>
+              {data.profitabilityByService.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <>
+                  <SVGHorizontalBars
+                    items={data.profitabilityByService.map(s => ({ label: s.service, value: s.margin, color: s.color }))}
+                  />
+                  <p className="text-xs text-slate-400 mt-2">Margin % shown</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1267,27 +1302,31 @@ function ProfitabilityPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Cost Breakdown</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {data.costBreakdown.map((c, i) => {
-                const total = data.costBreakdown.reduce((s, x) => s + x.amount, 0);
-                const pct = total > 0 ? (c.amount / total) * 100 : 0;
-                return (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{c.category}</span>
-                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{fmtINR(c.amount)} ({pct.toFixed(0)}%)</span>
+              {data.costBreakdown.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                data.costBreakdown.map((c, i) => {
+                  const total = data.costBreakdown.reduce((s, x) => s + x.amount, 0);
+                  const pct = total > 0 ? (c.amount / total) * 100 : 0;
+                  return (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{c.category}</span>
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{fmtINR(c.amount)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.6, delay: i * 0.1 }}
+                          className="h-full rounded-full"
+                          style={{ background: c.color }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.6, delay: i * 0.1 }}
-                        className="h-full rounded-full"
-                        style={{ background: c.color }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1298,32 +1337,36 @@ function ProfitabilityPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Most / Least Profitable Clients</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-semibold text-emerald-600 mb-2 uppercase tracking-wider">Most Profitable</p>
-                  {data.mostProfitableClients.slice(0, 3).map((c, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">{c.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{fmtINR(c.revenue)}</span>
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-[10px]">{c.margin.toFixed(0)}%</Badge>
+              {data.mostProfitableClients.length === 0 && data.leastProfitableClients.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-600 mb-2 uppercase tracking-wider">Most Profitable</p>
+                    {data.mostProfitableClients.slice(0, 3).map((c, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5">
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">{fmtINR(c.revenue)}</span>
+                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-[10px]">{c.margin.toFixed(0)}%</Badge>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-                  <p className="text-xs font-semibold text-red-600 mb-2 uppercase tracking-wider">Least Profitable</p>
-                  {data.leastProfitableClients.slice(0, 3).map((c, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">{c.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{fmtINR(c.revenue)}</span>
-                        <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0 text-[10px]">{c.margin.toFixed(0)}%</Badge>
+                    ))}
+                  </div>
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                    <p className="text-xs font-semibold text-red-600 mb-2 uppercase tracking-wider">Least Profitable</p>
+                    {data.leastProfitableClients.slice(0, 3).map((c, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5">
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">{fmtINR(c.revenue)}</span>
+                          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0 text-[10px]">{c.margin.toFixed(0)}%</Badge>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1336,8 +1379,8 @@ function WorkloadPanel({ data }: { data: ComputedAnalytics }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <BigMetric title="Capacity Utilization" value={`${data.capacityUtilization}%`} trend={data.capacityUtilization > 85 ? -5 : 3} icon={Zap} color={data.capacityUtilization > 85 ? C.red : C.emerald} subtitle="team capacity" />
-        <BigMetric title="Avg Returns/Month" value={fmtNum(Math.round(data.returnsByMonth.reduce((s, m) => s + m.value, 0) / data.returnsByMonth.length))} trend={6.4} icon={FileCheck} color={C.teal} />
+        <BigMetric title="Capacity Utilization" value={`${data.capacityUtilization}%`} trend={0} icon={Zap} color={data.capacityUtilization > 85 ? C.red : C.emerald} subtitle="team capacity" />
+        <BigMetric title="Avg Returns/Month" value={fmtNum(Math.round(data.returnsByMonth.reduce((s, m) => s + m.value, 0) / data.returnsByMonth.length))} trend={0} icon={FileCheck} color={C.teal} />
         <BigMetric title="Bottleneck Areas" value={fmtNum(data.bottleneckAreas.filter(b => b.load > 75).length)} icon={AlertTriangle} color={C.amber} />
       </div>
 
@@ -1359,20 +1402,24 @@ function WorkloadPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Bottleneck Areas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {data.bottleneckAreas.map((b, i) => (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{b.area}</span>
-                    <span className={`text-xs font-semibold ${b.load > 85 ? 'text-red-600' : b.load > 70 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                      {b.load}%
-                    </span>
+              {data.bottleneckAreas.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                data.bottleneckAreas.map((b, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{b.area}</span>
+                      <span className={`text-xs font-semibold ${b.load > 85 ? 'text-red-600' : b.load > 70 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {b.load}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={b.load}
+                      className={`h-2 ${b.load > 85 ? '[&>div]:bg-red-500' : b.load > 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500'}`}
+                    />
                   </div>
-                  <Progress
-                    value={b.load}
-                    className={`h-2 ${b.load > 85 ? '[&>div]:bg-red-500' : b.load > 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500'}`}
-                  />
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1405,17 +1452,21 @@ function WorkloadPanel({ data }: { data: ComputedAnalytics }) {
             <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Workload by Client Segment</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {data.workloadBySegment.map(seg => (
-                <div key={seg.segment} className="text-center p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                  <div className="h-12 w-12 rounded-lg mx-auto mb-2 flex items-center justify-center" style={{ background: `${seg.color}15` }}>
-                    <Briefcase className="h-5 w-5" style={{ color: seg.color }} />
+            {data.workloadBySegment.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {data.workloadBySegment.map(seg => (
+                  <div key={seg.segment} className="text-center p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="h-12 w-12 rounded-lg mx-auto mb-2 flex items-center justify-center" style={{ background: `${seg.color}15` }}>
+                      <Briefcase className="h-5 w-5" style={{ color: seg.color }} />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{fmtNum(seg.returns)}</p>
+                    <p className="text-xs text-slate-500">{seg.segment}</p>
                   </div>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{fmtNum(seg.returns)}</p>
-                  <p className="text-xs text-slate-500">{seg.segment}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -1435,9 +1486,9 @@ function ProductivityPanel({ data }: { data: ComputedAnalytics }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <BigMetric title="Returns per Person" value={data.returnsPerPerson.toFixed(1)} trend={8.2} icon={FileCheck} color={C.emerald} />
-        <BigMetric title="Avg Time/Return" value={`${data.avgTimePerReturn.toFixed(1)}h`} trend={-5.3} icon={Clock} color={C.teal} />
-        <BigMetric title="Avg Satisfaction" value={`${data.avgSatisfaction.toFixed(0)}%`} trend={3.1} icon={Star} color={C.amber} />
+        <BigMetric title="Returns per Person" value={data.returnsPerPerson.toFixed(1)} trend={0} icon={FileCheck} color={C.emerald} />
+        <BigMetric title="Avg Time/Return" value={`${data.avgTimePerReturn.toFixed(1)}h`} trend={0} icon={Clock} color={C.teal} />
+        <BigMetric title="Avg Satisfaction" value={`${data.avgSatisfaction.toFixed(0)}%`} trend={0} icon={Star} color={C.amber} />
         <BigMetric title="Team Size" value={fmtNum(data.teamProductivity.length)} icon={Users} color={C.purple} />
       </div>
 
@@ -1447,38 +1498,42 @@ function ProductivityPanel({ data }: { data: ComputedAnalytics }) {
             <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Team Member Productivity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="max-h-80">
-              <div className="space-y-3">
-                {data.teamProductivity.sort((a, b) => b.score - a.score).map((member, i) => (
-                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950/50">
-                    <div className="h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
-                      style={{
-                        background: member.score >= 85 ? `${C.emerald}15` : member.score >= 70 ? `${C.amber}15` : `${C.red}15`,
-                        color: member.score >= 85 ? C.emeraldDark : member.score >= 70 ? C.amber : C.red,
-                      }}>
-                      {member.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{member.name}</p>
-                        <span className={`text-sm font-bold ${member.score >= 85 ? 'text-emerald-600' : member.score >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
-                          {member.score.toFixed(0)}
-                        </span>
+            {data.teamProductivity.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet — assign returns to team members to see productivity metrics</p>
+            ) : (
+              <ScrollArea className="max-h-80">
+                <div className="space-y-3">
+                  {data.teamProductivity.sort((a, b) => b.score - a.score).map((member, i) => (
+                    <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950/50">
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+                        style={{
+                          background: member.score >= 85 ? `${C.emerald}15` : member.score >= 70 ? `${C.amber}15` : `${C.red}15`,
+                          color: member.score >= 85 ? C.emeraldDark : member.score >= 70 ? C.amber : C.red,
+                        }}>
+                        {member.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                       </div>
-                      <div className="flex items-center gap-4 mt-1">
-                        <span className="text-xs text-slate-500">{member.returns} returns</span>
-                        <span className="text-xs text-slate-500">{member.avgTime.toFixed(1)}h avg</span>
-                        <span className="text-xs text-slate-500">★ {member.satisfaction.toFixed(0)}%</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{member.name}</p>
+                          <span className={`text-sm font-bold ${member.score >= 85 ? 'text-emerald-600' : member.score >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {member.score.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1">
+                          <span className="text-xs text-slate-500">{member.returns} returns</span>
+                          <span className="text-xs text-slate-500">{member.avgTime.toFixed(1)}h avg</span>
+                          <span className="text-xs text-slate-500">★ {member.satisfaction.toFixed(0)}%</span>
+                        </div>
+                        <Progress
+                          value={member.score}
+                          className={`h-1.5 mt-1.5 ${member.score >= 85 ? '[&>div]:bg-emerald-500' : member.score >= 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-red-500'}`}
+                        />
                       </div>
-                      <Progress
-                        value={member.score}
-                        className={`h-1.5 mt-1.5 ${member.score >= 85 ? '[&>div]:bg-emerald-500' : member.score >= 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-red-500'}`}
-                      />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -1507,8 +1562,8 @@ function CLVPanel({ data }: { data: ComputedAnalytics }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <BigMetric title="Average CLV" value={fmtINR(data.avgClv)} trend={9.8} icon={IndianRupee} color={C.emerald} subtitle="client lifetime value" />
-        <BigMetric title="CLV:CAC Ratio" value={`${(data.avgClv / Math.max(data.clvVsAcquisition.reduce((s, c) => s + c.cac, 0) / data.clvVsAcquisition.length, 1)).toFixed(1)}x`} trend={4.2} icon={Target} color={C.teal} subtitle="efficiency" />
+        <BigMetric title="Average CLV" value={fmtINR(data.avgClv)} trend={0} icon={IndianRupee} color={C.emerald} subtitle="client lifetime value" />
+        <BigMetric title="CLV:CAC Ratio" value={`${(data.avgClv / Math.max(data.clvVsAcquisition.reduce((s, c) => s + c.cac, 0) / Math.max(data.clvVsAcquisition.length, 1), 1)).toFixed(1)}x`} trend={0} icon={Target} color={C.teal} subtitle="efficiency" />
         <BigMetric title="Top CLV Client" value={data.topClvClients.length > 0 ? fmtINR(data.topClvClients[0].clv) : '₹0'} icon={Star} color={C.amber} subtitle={data.topClvClients[0]?.name || 'N/A'} />
       </div>
 
@@ -1535,9 +1590,13 @@ function CLVPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">CLV by Client Segment</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.clvBySegment.map(s => ({ label: s.segment, value: s.value, color: s.color }))}
-              />
+              {data.clvBySegment.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <SVGHorizontalBars
+                  items={data.clvBySegment.map(s => ({ label: s.segment, value: s.value, color: s.color }))}
+                />
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1567,13 +1626,17 @@ function CLVPanel({ data }: { data: ComputedAnalytics }) {
               <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">CLV vs Acquisition Cost</CardTitle>
             </CardHeader>
             <CardContent>
-              <SVGHorizontalBars
-                items={data.clvVsAcquisition.map(c => [
-                  { label: `${c.segment} CLV`, value: c.clv, color: C.emerald },
-                  { label: `${c.segment} CAC`, value: c.cac, color: C.red },
-                ]).flat()}
-                maxBarH={24}
-              />
+              {data.clvVsAcquisition.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+              ) : (
+                <SVGHorizontalBars
+                  items={data.clvVsAcquisition.map(c => [
+                    { label: `${c.segment} CLV`, value: c.clv, color: C.emerald },
+                    { label: `${c.segment} CAC`, value: c.cac, color: C.red },
+                  ]).flat()}
+                  maxBarH={24}
+                />
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1585,22 +1648,26 @@ function CLVPanel({ data }: { data: ComputedAnalytics }) {
             <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">Top CLV Clients</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="max-h-64">
-              <div className="space-y-2">
-                {data.topClvClients.map((c, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                    <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-emerald-700">{i + 1}</span>
+            {data.topClvClients.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">No data yet</p>
+            ) : (
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {data.topClvClients.map((c, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                      <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-emerald-700">{i + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{c.name}</p>
+                        <p className="text-xs text-slate-500">{c.segment} · Revenue: {fmtINR(c.revenue)}</p>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-600">{fmtINR(c.clv)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{c.name}</p>
-                      <p className="text-xs text-slate-500">{c.segment} · Revenue: {fmtINR(c.revenue)}</p>
-                    </div>
-                    <span className="text-sm font-bold text-emerald-600">{fmtINR(c.clv)}</span>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -1631,6 +1698,11 @@ export default function AnalyticsPage() {
   const { data: invoices, loading: invoicesLoading } = useFireInvoices();
   const { data: returns, loading: returnsLoading } = useFireReturns();
   const { data: firm, loading: firmLoading } = useFireFirm();
+  // Single source of truth for revenue/profit/expenses/margins — used by
+  // computeAnalytics() for the profitability tab. Snapshot starts as
+  // emptySnapshot() (all zeros, hasLiveData=false) and updates when fetched;
+  // margins render as 0 until the snapshot arrives (honest empty state).
+  const { snapshot } = useBusinessSnapshot();
 
   const isLoading = clientsLoading || invoicesLoading || returnsLoading || firmLoading;
 
@@ -1640,8 +1712,9 @@ export default function AnalyticsPage() {
       clients as (FirestoreClient & { id: string })[],
       invoices as (FirestoreInvoice & { id: string })[],
       returns as (FirestoreReturn & { id: string })[],
+      snapshot,
     );
-  }, [clients, invoices, returns, isLoading]);
+  }, [clients, invoices, returns, isLoading, snapshot]);
 
   if (isLoading) {
     return (

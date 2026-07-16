@@ -34,6 +34,16 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 
 // ─── Types (mirror /api/connections response) ─────────────────────────────────
@@ -192,6 +202,9 @@ export default function DataConnectionsPage() {
   const [queueItems, setQueueItems] = useState<QueueItemRow[]>([]);
   const [autoSyncStatus, setAutoSyncStatus] = useState<AutoSyncStatusRow | null>(null);
   const [runningSync, setRunningSync] = useState(false);
+  // ── Disconnect confirmation dialog state ──
+  const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   // ── Fetch connections ──
   const refresh = useCallback(async () => {
@@ -333,16 +346,26 @@ export default function DataConnectionsPage() {
     }
   }, []);
 
-  const handleDisconnect = useCallback(async (conn: ConnectionRow) => {
-    if (!confirm(`Disconnect ${conn.type === 'gstn' ? 'GSTN' : conn.provider}? Live data from this source will stop syncing.`)) return;
+  const handleDisconnect = useCallback((conn: ConnectionRow) => {
+    const name = conn.type === 'gstn' ? 'GSTN' : conn.provider;
+    setPendingDisconnect({ id: conn.id, name });
+    setConfirmDialogOpen(true);
+  }, []);
+
+  const confirmDisconnect = useCallback(async () => {
+    setConfirmDialogOpen(false);
+    const pending = pendingDisconnect;
+    if (!pending) return;
     try {
-      await fetch(`/api/connections/${conn.id}`, { method: 'DELETE' });
+      await fetch(`/api/connections/${pending.id}`, { method: 'DELETE' });
       window.dispatchEvent(new CustomEvent('connections-updated'));
       refresh();
     } catch {
       // swallow
+    } finally {
+      setPendingDisconnect(null);
     }
-  }, [refresh]);
+  }, [pendingDisconnect, refresh]);
 
   const openLogs = useCallback(async (conn: ConnectionRow) => {
     setLogsFor(conn);
@@ -651,6 +674,29 @@ export default function DataConnectionsPage() {
           </ScrollArea>
         </SheetContent>
       </Sheet>
+
+      {/* ═══ Disconnect Confirmation Dialog ═══ */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDisconnect ? `Disconnect ${pendingDisconnect.name}?` : 'Disconnect?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Live data from this source will stop syncing. You can reconnect anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDisconnect}
+              className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+            >
+              Disconnect
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

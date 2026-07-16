@@ -135,7 +135,7 @@ function errorBadge(httpStatus?: number): { label: string; variant: 'destructive
 export function ZohoFullSyncPanel() {
   const { organization } = useOrg();
   const orgId = organization?.id ?? 'preview-org';
-  const { snapshot, refetch: refetchSnapshot } = useBusinessSnapshot();
+  const { snapshot, refresh: refreshSnapshot } = useBusinessSnapshot();
 
   const [mode, setMode] = useState<'full' | 'incremental'>('full');
   const [syncing, setSyncing] = useState(false);
@@ -161,13 +161,13 @@ export function ZohoFullSyncPanel() {
           }
           setSyncing(false);
           // Refresh the business snapshot so the dashboard shows fresh data
-          refetchSnapshot();
+          refreshSnapshot();
         }
       }
     } catch {
       /* polling is best-effort */
     }
-  }, [orgId, refetchSnapshot]);
+  }, [orgId, refreshSnapshot]);
 
   // Trigger a sync
   const handleSync = useCallback(async () => {

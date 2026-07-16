@@ -3,70 +3,92 @@
  * on demand. The frontend calls this with a `topic` (e.g. "Q2 forecast",
  * "working capital optimization", "GST liability for August") and gets back
  * a structured LLM analysis tailored to the company's actual KPIs.
+ *
+ * Context is sourced from the real Business Snapshot service
+ * (@/lib/business/snapshot) — never fabricated. If the org has no data,
+ * the route returns an honest "no data yet" response.
+ *
+ * Request body:
+ *   {
+ *     topic: string,
+ *     followUp?: string,
+ *     organizationId?: string  // optional tenant scope
+ *   }
+ *
+ * Response (200, data available):
+ *   { ok: true, content: string, hasLiveData: true }
+ *
+ * Response (200, no data):
+ *   { ok: false, message: "...", data: null }
  */
 
 import { NextRequest } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
-import {
-  company,
-  executiveKpis,
-  revenueTrend,
-  cashFlow,
-  gstReturns,
-  complianceItems,
-  aiInsights,
-  invoices,
-  bills,
-  bankAccounts,
-} from '@/lib/finos/data'
+import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const CONTEXT = `# Company
-${company.name} | ${company.industry} | GSTIN ${company.gstin}
-Annual revenue: ₹${(company.annualRevenue / 10000000).toFixed(2)} Cr | Employees: ${company.employees}
+function snapshotHasLiveData(s: BusinessSnapshot): boolean {
+  return (
+    s.revenue > 0 ||
+    s.expenses > 0 ||
+    s.cash > 0 ||
+    s.invoiceCount > 0 ||
+    s.billCount > 0 ||
+    s.expenseRecordCount > 0 ||
+    s.receivables > 0 ||
+    s.payables > 0 ||
+    s.outputTax > 0 ||
+    s.inputTax > 0 ||
+    s.filedReturns > 0 ||
+    s.pendingReturns > 0
+  )
+}
 
-# KPIs (current)
-${executiveKpis.map((k) => `- ${k.label}: ${k.value} | ${k.changePct >= 0 ? '+' : ''}${k.changePct}% MoM | ${k.insight}`).join('\n')}
+function buildContextBlock(s: BusinessSnapshot): string {
+  const inrL = (n: number) => `₹${(n / 100000).toFixed(2)}L`
+  const trend = s.forecast.trend
+  const trendLabel = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'
 
-# 12-month revenue trend (₹)
-${revenueTrend.map((t) => `- ${t.month}: Rev ₹${(t.revenue / 100000).toFixed(1)}L | Exp ₹${(t.expense / 100000).toFixed(1)}L | Profit ₹${(t.profit / 100000).toFixed(1)}L`).join('\n')}
+  return `# Company snapshot (real data from database)
+- Organization: ${s.organizationId}
+- Generated at: ${s.generatedAt}
 
-# 6-month cash flow (₹)
-${cashFlow.map((c) => `- ${c.month}: In ₹${(c.inflow / 100000).toFixed(1)}L | Out ₹${(c.outflow / 100000).toFixed(1)}L | Net ₹${(c.net / 100000).toFixed(1)}L`).join('\n')}
+# Headline financials (this financial year)
+- Revenue: ${inrL(s.revenue)} (from ${s.invoiceCount} invoices)
+- Expenses: ${inrL(s.expenses)} (purchases + opex)
+- Profit: ${inrL(s.profit)} | Margin: ${(s.profitMargin * 100).toFixed(1)}%
+- Cash position: ${inrL(s.cash)}
+- Working capital: ${inrL(s.workingCapital)}
+- Runway: ${s.runwayDays === Infinity ? 'unlimited (no burn)' : s.runwayDays + ' days'}
 
-# Outstanding receivables
-${invoices.filter((i) => i.status === 'Pending' || i.status === 'Overdue').map((i) => `- ${i.number} ${i.customer} ₹${(i.total / 100000).toFixed(2)}L ${i.status} (due ${i.dueDate})`).join('\n')}
+# Receivables & payables
+- Outstanding receivables: ${inrL(s.receivables)}
+- Outstanding payables: ${inrL(s.payables)}
+- Collection rate: ${(s.collectionRate * 100).toFixed(1)}%
 
-# Outstanding payables
-${bills.filter((b) => b.status === 'Pending' || b.status === 'Overdue').map((b) => `- ${b.number} ${b.vendor} ₹${(b.total / 100000).toFixed(2)}L ${b.status} (due ${b.dueDate})`).join('\n')}
+# GST
+- Output tax (GST collected): ${inrL(s.outputTax)}
+- Input tax (ITC available): ${inrL(s.inputTax)}
+- Net GST liability: ${inrL(s.gstLiability)}
+- Filed returns: ${s.filedReturns} | Pending: ${s.pendingReturns} | Overdue: ${s.overdueReturns}
 
-# Bank balances
-${bankAccounts.map((b) => `- ${b.bank} ${b.type}: ₹${(b.balance / 100000).toFixed(2)}L`).join('\n')}
+# Forecast (next month)
+- Projected revenue: ${inrL(s.forecast.nextMonthRevenue)} ${trendLabel}
+- Projected expenses: ${inrL(s.forecast.nextMonthExpenses)}
+- Confidence: ${(s.forecast.confidence * 100).toFixed(0)}%
 
-# GST returns
-${gstReturns.map((r) => `- ${r.type} ${r.period}: ${r.status} | Net ₹${(r.netPayable / 100000).toFixed(2)}L | due ${r.dueDate}`).join('\n')}
+# Health
+- Health score: ${s.healthScore}/100
+- Risk score: ${s.riskScore}/100
 
-# Compliance items
-${complianceItems.map((c) => `- ${c.title} (${c.category}) ${c.status} ${c.severity} | ${c.description}`).join('\n')}
+# Data sources
+- Last sync: ${s.lastSyncStatus}${s.lastSyncAt ? ' at ' + new Date(s.lastSyncAt).toLocaleString('en-IN') : ''}
+- Zoho Books synced entities: ${s.perEntity.zohoCustomers} customers, ${s.perEntity.zohoVendors} vendors, ${s.perEntity.zohoInvoices} invoices, ${s.perEntity.zohoBills} bills, ${s.perEntity.zohoBankAccounts} bank accounts.`
+}
 
-# Pre-existing AI insights
-${aiInsights.map((i) => `- ${i.title}: ${i.summary} | Impact: ${i.impact}`).join('\n')}
-`
-
-export async function POST(req: NextRequest) {
-  try {
-    const { topic, followUp } = (await req.json()) as { topic: string; followUp?: string }
-
-    if (!topic) {
-      return new Response(JSON.stringify({ error: 'topic required' }), {
-        status: 400,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-
-    const systemPrompt = `You are the AI CFO inside GSTPilot FinOS. You produce sharp, decision-grade financial analyses for the CEO/CFO of ${company.name}.
+const BASE_INSTRUCTIONS = `You are the AI CFO inside GSTPilot FinOS. You produce sharp, decision-grade financial analyses for the CEO/CFO.
 
 Use ONLY the data provided below. If data is missing, say so — do NOT fabricate.
 
@@ -77,9 +99,68 @@ Output format (markdown):
 4. **Risk watch** (1-2 specific risks to monitor)
 5. **Expected impact** (1 sentence — quantified where possible)
 
-Keep under 350 words. Use Indian formatting (₹, Lakhs, Crores).
+Keep under 350 words. Use Indian formatting (₹, Lakhs, Crores).`
 
-${CONTEXT}`
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json().catch(() => ({}))) as {
+      topic?: string
+      followUp?: string
+      organizationId?: string
+    }
+
+    const { topic, followUp, organizationId: bodyOrgId } = body
+
+    if (!topic) {
+      return new Response(JSON.stringify({ error: 'topic required' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    const url = new URL(req.url)
+    const organizationId =
+      bodyOrgId ||
+      url.searchParams.get('organizationId') ||
+      url.searchParams.get('firmId') ||
+      req.headers.get('x-gstpilot-orgid') ||
+      ''
+
+    if (!organizationId) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          message:
+            'No business data available yet. Connect Google or Zoho Books, or create your first invoice, to activate AI insights.',
+          data: null,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      )
+    }
+
+    const snapshot = await getBusinessSnapshot(organizationId)
+
+    if (!snapshotHasLiveData(snapshot)) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          message:
+            'No business data available yet. Connect Google or Zoho Books, or create your first invoice, to activate AI insights.',
+          data: null,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      )
+    }
+
+    const systemPrompt = `${BASE_INSTRUCTIONS}
+
+${buildContextBlock(snapshot)}`
 
     const userPrompt = followUp
       ? `Topic: ${topic}\n\nFollow-up question: ${followUp}`
@@ -95,10 +176,13 @@ ${CONTEXT}`
     })
 
     const content = completion.choices?.[0]?.message?.content ?? ''
-    return new Response(JSON.stringify({ ok: true, content }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify({ ok: true, content, hasLiveData: true }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      },
+    )
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     console.error('[cfo-insights] error:', msg)

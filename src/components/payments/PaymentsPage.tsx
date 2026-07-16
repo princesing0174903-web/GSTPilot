@@ -18,6 +18,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
+} from '@/components/ui/select'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { EmptyState, ProfessionalEmptyState } from '@/components/shared'
 import { useApp } from '@/contexts/AppContext'
 import { toast } from 'sonner'
@@ -201,6 +210,14 @@ export default function PaymentsPage() {
   const [retryKey, setRetryKey] = useState(0)
   const [busyId, setBusyId] = useState<string | null>(null)
 
+  // ── Record Payment dialog state ────────────────────────────────────────────
+  const [recordPaymentOpen, setRecordPaymentOpen] = useState(false)
+  const [paymentPartyName, setPaymentPartyName] = useState('')
+  const [paymentPartyType, setPaymentPartyType] = useState<'vendor' | 'customer'>('customer')
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMode, setPaymentMode] = useState('upi')
+  const [paymentSaving, setPaymentSaving] = useState(false)
+
   // ── Firestore hooks (real-time, firm-scoped) ───────────────────────────────
   const paymentsHook = useFirePayments()
   const expensesHook = useFireExpenses()
@@ -316,36 +333,59 @@ export default function PaymentsPage() {
 
   // ── Write handlers (Firestore service functions) ───────────────────────────
 
-  const handleRecordPayment = useCallback(async (partyType: 'customer' | 'vendor') => {
-    const partyName = window.prompt(partyType === 'vendor' ? 'Vendor name:' : 'Client / customer name:')
-    if (!partyName?.trim()) return
-    const amountStr = window.prompt('Amount (₹):', '0')
-    if (amountStr === null) return
-    const amount = Number(amountStr) || 0
-    const mode = window.prompt('Payment mode (upi / bank / card / cheque / cash):', 'upi') || 'upi'
+  const openRecordPaymentDialog = useCallback((partyType: 'vendor' | 'customer') => {
+    setPaymentPartyType(partyType)
+    setPaymentPartyName('')
+    setPaymentAmount('')
+    setPaymentMode('upi')
+    setRecordPaymentOpen(true)
+  }, [])
+
+  const handleRecordPayment = useCallback(async () => {
+    const trimmedName = paymentPartyName.trim()
+    if (!trimmedName) {
+      toast.error('Party name is required', {
+        description: paymentPartyType === 'vendor'
+          ? 'Enter the vendor name you paid.'
+          : 'Enter the client or customer name who paid you.',
+      })
+      return
+    }
+    const amount = Number(paymentAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a valid amount greater than ₹0')
+      return
+    }
+    const mode = (paymentMode || 'upi').toLowerCase()
+    setPaymentSaving(true)
     setBusyId('new-payment')
     try {
       await createPayment({
         clientId: null,
         invoiceId: null,
         purchaseBillId: null,
-        partyName: partyName.trim(),
-        partyType,
+        partyName: trimmedName,
+        partyType: paymentPartyType,
         amount,
         paymentDate: new Date().toISOString(),
-        paymentMode: mode.toLowerCase(),
+        paymentMode: mode,
         referenceNo: null,
         status: 'completed',
         reconciled: false,
         notes: null,
       })
-      toast.success(partyType === 'vendor' ? 'Vendor payment recorded' : 'Receipt recorded')
+      toast.success(paymentPartyType === 'vendor' ? 'Vendor payment recorded' : 'Receipt recorded')
+      setRecordPaymentOpen(false)
+      setPaymentPartyName('')
+      setPaymentAmount('')
+      setPaymentMode('upi')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to record payment')
     } finally {
+      setPaymentSaving(false)
       setBusyId(null)
     }
-  }, [])
+  }, [paymentPartyName, paymentAmount, paymentMode, paymentPartyType])
 
   const handleAutoReconcile = useCallback(async () => {
     const unmatched = reconciliationItems.filter((r) => r.status !== 'matched')
@@ -396,11 +436,11 @@ export default function PaymentsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
+            <Button variant="outline" size="sm" className="gap-1.5" disabled title="Export coming soon"><Download className="h-3.5 w-3.5" />Export</Button>
             <Button
               size="sm"
               className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => handleRecordPayment('customer')}
+              onClick={() => openRecordPaymentDialog('customer')}
               disabled={busyId === 'new-payment'}
             >
               {busyId === 'new-payment' ? (
@@ -614,14 +654,14 @@ export default function PaymentsPage() {
                   <Input placeholder="Search receivables..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
                   <div className="flex gap-1">
                     {['All', 'Pending', 'Received', 'Overdue'].map(f => (
-                      <Button key={f} variant="outline" size="sm" className="h-7 text-[10px] px-2">{f}</Button>
+                      <Button key={f} variant="outline" size="sm" className="h-7 text-[10px] px-2" disabled title="Status filters coming soon">{f}</Button>
                     ))}
                   </div>
                 </div>
                 <Button
                   size="sm"
                   className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => handleRecordPayment('customer')}
+                  onClick={() => openRecordPaymentDialog('customer')}
                   disabled={busyId === 'new-payment'}
                 >
                   {busyId === 'new-payment' ? (
@@ -642,7 +682,7 @@ export default function PaymentsPage() {
                       accent="emerald"
                       action={{
                         label: 'Record Receipt',
-                        onClick: () => handleRecordPayment('customer'),
+                        onClick: () => openRecordPaymentDialog('customer'),
                         icon: Plus,
                       }}
                       secondaryAction={{
@@ -690,7 +730,7 @@ export default function PaymentsPage() {
                 <Button
                   size="sm"
                   className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => handleRecordPayment('vendor')}
+                  onClick={() => openRecordPaymentDialog('vendor')}
                   disabled={busyId === 'new-payment'}
                 >
                   {busyId === 'new-payment' ? (
@@ -711,7 +751,7 @@ export default function PaymentsPage() {
                       accent="amber"
                       action={{
                         label: 'Schedule Payment',
-                        onClick: () => handleRecordPayment('vendor'),
+                        onClick: () => openRecordPaymentDialog('vendor'),
                         icon: Plus,
                       }}
                       secondaryAction={{
@@ -754,7 +794,7 @@ export default function PaymentsPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Links</h3>
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Link2 className="h-3.5 w-3.5" />Create Link</Button>
+                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled title="Payment links coming soon"><Link2 className="h-3.5 w-3.5" />Create Link</Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {paymentLinks.length === 0 ? (
@@ -793,7 +833,7 @@ export default function PaymentsPage() {
                           </div>
                           <div className="flex items-center justify-between mt-2">
                             <span className="text-[10px] text-muted-foreground">{pl.visits} visits</span>
-                            <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1"><Link2 className="h-3 w-3" />Copy Link</Button>
+                            <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1" disabled title="No link to copy"><Link2 className="h-3 w-3" />Copy Link</Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -896,6 +936,148 @@ export default function PaymentsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ── Record Payment Dialog (replaces window.prompt chain) ──────────── */}
+      <Dialog
+        open={recordPaymentOpen}
+        onOpenChange={(open) => {
+          if (!paymentSaving) setRecordPaymentOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="h-7 w-7 rounded-md bg-emerald-600 flex items-center justify-center">
+                <Receipt className="h-4 w-4 text-white" />
+              </span>
+              Record Payment
+            </DialogTitle>
+            <DialogDescription>
+              Capture a receipt (money in) or a vendor payment (money out). All fields are required.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            {/* Payment type */}
+            <div className="space-y-2">
+              <Label>Payment type</Label>
+              <RadioGroup
+                value={paymentPartyType}
+                onValueChange={(v) => setPaymentPartyType(v as 'vendor' | 'customer')}
+                className="grid grid-cols-2 gap-2"
+              >
+                <label
+                  htmlFor="pt-customer"
+                  className={`flex items-center gap-2 rounded-md border p-2.5 cursor-pointer transition-colors ${
+                    paymentPartyType === 'customer'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <RadioGroupItem value="customer" id="pt-customer" disabled={paymentSaving} />
+                  <span className="text-xs font-medium">Receipt (In)</span>
+                </label>
+                <label
+                  htmlFor="pt-vendor"
+                  className={`flex items-center gap-2 rounded-md border p-2.5 cursor-pointer transition-colors ${
+                    paymentPartyType === 'vendor'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <RadioGroupItem value="vendor" id="pt-vendor" disabled={paymentSaving} />
+                  <span className="text-xs font-medium">Vendor Payment (Out)</span>
+                </label>
+              </RadioGroup>
+            </div>
+
+            {/* Party name */}
+            <div className="space-y-2">
+              <Label htmlFor="payment-party-name">
+                {paymentPartyType === 'vendor' ? 'Vendor name' : 'Client / customer name'}
+              </Label>
+              <Input
+                id="payment-party-name"
+                value={paymentPartyName}
+                onChange={(e) => setPaymentPartyName(e.target.value)}
+                placeholder={paymentPartyType === 'vendor'
+                  ? 'e.g. Acme Suppliers Pvt Ltd'
+                  : 'e.g. Globex Industries'}
+                disabled={paymentSaving}
+                autoFocus
+              />
+            </div>
+
+            {/* Amount + Mode */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="payment-amount">Amount</Label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₹</span>
+                  <Input
+                    id="payment-amount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="pl-7"
+                    disabled={paymentSaving}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payment-mode">Payment mode</Label>
+                <Select
+                  value={paymentMode}
+                  onValueChange={setPaymentMode}
+                  disabled={paymentSaving}
+                >
+                  <SelectTrigger id="payment-mode" className="w-full">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRecordPaymentOpen(false)}
+              disabled={paymentSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
+              onClick={handleRecordPayment}
+              disabled={paymentSaving || busyId === 'new-payment'}
+            >
+              {paymentSaving ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  Save Payment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

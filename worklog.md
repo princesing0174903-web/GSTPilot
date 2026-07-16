@@ -4143,3 +4143,339 @@ Stage Summary:
 - Files changed: 9 (DashboardPage, useBusinessSnapshot, useInvoicesApi, ClientRegistryPage, business-snapshot-events, ZohoFullSyncPanel, banking/engine, AnimatedNumber, ui-pro/index.tsx, AnalyticsPage)
 - Lint: ALL files pass (0 errors, 0 warnings)
 - Browser: Home page loads, shows ₹0 everywhere, no errors
+
+---
+Task ID: 2-b
+Agent: Payments + Reports Dialog Subagent
+Task: Replace window.prompt chain in PaymentsPage with a real record-payment modal; replace 6× alert() calls in ReportsPage with sonner toasts; replace JSON debug alert in DataIntelligenceCloudPage with console.info + toast.info; disable dead Payments buttons
+
+Work Log:
+- Read /home/z/my-project/worklog.md (tail, last 200 lines) to understand prior Task 6-b (AnalyticsPage cleanup) and Task 2 (Phase stabilization) context. Read /home/z/my-project/src/components/payments/PaymentsPage.tsx in full (902 lines original) to map imports, the handleRecordPayment prompt chain at lines 319-348, the 5 onClick trigger sites (header button line 403, receivables tab button line 624, receivables empty-state CTA line 645, payables tab button line 693, payables empty-state CTA line 714), the 4 dead buttons (Export line 399, Filter chips line 617, Create Link line 757, Copy Link line 796), and the render section closing structure at lines 898-902. Confirmed `useState`, `useCallback`, `toast` from sonner, `Input`, `createPayment` already imported. Confirmed `Dialog`, `Label`, `Select`, `RadioGroup` primitives exist in `src/components/ui/` (dialog.tsx, label.tsx, select.tsx, radio-group.tsx) — no new dependencies needed.
+- Read ReportsPage.tsx alert sites: confirmed 6 byte-identical `alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');` calls at lines 926, 1030, 1168, 1256, 1348, 1451 — each wrapped in the same `const ok = openPrintWindow(html); if (!ok) { alert(...); return; }` pattern. Confirmed `toast` from `sonner` already imported at line 60.
+- Read DataIntelligenceCloudPage.tsx alert site at line 503: `if (d.ok) alert(\`Replay snapshot:\n${JSON.stringify(d.replay?.snapshot ?? {}, null, 2).slice(0, 500)}\`);` inside the lineage event Replay button onClick. Confirmed `toast` from sonner was NOT imported.
+
+CHANGES TO src/components/payments/PaymentsPage.tsx (file grew from 902 → 1084 lines, +182 lines):
+
+1. IMPORTS (lines 21-29): Added `import { Label } from '@/components/ui/label';`, `import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';`, `import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';`, `import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';`. All shadcn primitives already exist in the project — no new dependencies.
+
+2. STATE (lines 213-219): Added 6 new useState hooks for the Record Payment dialog:
+   - `recordPaymentOpen` (boolean) — controls Dialog open state
+   - `paymentPartyName` (string) — party name input
+   - `paymentPartyType` ('vendor' | 'customer') — radio group value
+   - `paymentAmount` (string) — amount input (string for controlled input, parsed on save)
+   - `paymentMode` (string) — payment mode select value (default 'upi')
+   - `paymentSaving` (boolean) — disable form fields + show spinner during save
+
+3. HANDLER REWRITE (lines 336-388):
+   - Removed old `handleRecordPayment(partyType)` that chained 3 `window.prompt()` calls.
+   - Added `openRecordPaymentDialog(partyType: 'vendor' | 'customer')` — resets form fields, sets partyType, opens dialog. Pure UI action, no async.
+   - Rewrote `handleRecordPayment()` (no args) to validate form state then save:
+     * Validates `paymentPartyName` non-empty (toast.error with description if empty)
+     * Validates `paymentAmount` parses to a finite number > 0 (toast.error if invalid)
+     * Sets `paymentSaving=true` + `busyId='new-payment'`
+     * Calls `createPayment({...})` with the EXACT same body shape as before (clientId/invoiceId/purchaseBillId null, partyName trimmed, partyType from state, amount parsed, paymentDate now ISO, paymentMode lowercased, referenceNo null, status 'completed', reconciled false, notes null)
+     * On success: toast.success (vendor→'Vendor payment recorded' / customer→'Receipt recorded'), close dialog, reset form fields
+     * On error: toast.error with err.message (keep dialog open so user can retry)
+     * Finally: paymentSaving=false, busyId=null
+     * useCallback deps: [paymentPartyName, paymentAmount, paymentMode, paymentPartyType]
+
+4. TRIGGER WIRING (5 sites): Replaced all 5 `handleRecordPayment('customer'|'vendor')` calls with `openRecordPaymentDialog('customer'|'vendor')`:
+   - Line 443: header "Record Payment" button onClick
+   - Line 664: receivables tab "Record Receipt" button onClick
+   - Line 685: receivables empty-state CTA action.onClick
+   - Line 733: payables tab "Schedule Payment" button onClick
+   - Line 754: payables empty-state CTA action.onClick
+   (Used MultiEdit with replace_all=true for the 2 identical arrow-function forms per party type, plus 2 individual edits for the colon-form empty-state CTAs.)
+
+5. NEW DIALOG JSX (lines 940-1080): Added a controlled `<Dialog open={recordPaymentOpen} onOpenChange={...}>` block as a sibling before the outer page container's closing `</div>`. Dialog blocks close while `paymentSaving` is true (prevents accidental cancel mid-save). Contents:
+   - DialogHeader: Receipt icon (in emerald square) + "Record Payment" title + description "Capture a receipt (money in) or a vendor payment (money out). All fields are required."
+   - Payment type RadioGroup (2 cards: "Receipt (In)" / "Vendor Payment (Out)") with selected-state emerald border + bg
+   - Party name Input with dynamic label ("Vendor name" / "Client / customer name") and dynamic placeholder ("e.g. Acme Suppliers Pvt Ltd" / "e.g. Globex Industries"), autoFocus
+   - 2-col grid: Amount Input (with ₹ prefix absolutely positioned inside a relative wrapper, type=number, inputMode=decimal, min=0, step=0.01) + Payment mode Select (upi/bank/card/cheque/cash with friendly labels UPI/Bank Transfer/Card/Cheque/Cash)
+   - DialogFooter: Cancel button (closes dialog) + Save Payment button (emerald bg, calls handleRecordPayment, shows Loader2 + "Saving…" while paymentSaving, disabled while saving or busyId==='new-payment')
+   - All form inputs disabled while paymentSaving to prevent mid-save edits
+
+6. DEAD BUTTONS DISABLED (Fix 4):
+   - Line 439: Export button — added `disabled title="Export coming soon"`
+   - Line 657: Filter chips (All/Pending/Received/Overdue, 4 buttons mapped from array) — added `disabled title="Status filters coming soon"` to each chip
+   - Line 797: Create Link button — added `disabled title="Payment links coming soon"`
+   - Line 836: Copy Link button (per-row in payment-links grid) — added `disabled title="No link to copy"`
+
+CHANGES TO src/components/reports/ReportsPage.tsx (no line-count change — direct in-place replacement):
+
+- Replaced all 6 byte-identical `alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');` calls with `toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });` via Edit with `replace_all: true`. `toast` was already imported from `sonner` at line 60 — no import changes needed. All 6 sites confirmed replaced (grep `alert(` → 0 matches; grep `toast.error('Pop-up blocked` → 6 matches).
+
+CHANGES TO src/components/data-intelligence/DataIntelligenceCloudPage.tsx (+5 lines):
+
+- Line 33: Added `import { toast } from 'sonner';` (was not previously imported).
+- Lines 504-507: Replaced single-line `if (d.ok) alert(\`Replay snapshot:\n${JSON.stringify(...).slice(0, 500)}\`);` with a 4-line block:
+  ```ts
+  if (d.ok) {
+    console.info('Replay snapshot:', d.replay?.snapshot ?? {});
+    toast.info('Snapshot replayed', { description: 'See browser console for full snapshot data.' });
+  }
+  ```
+  Console.info preserves the full snapshot for devs (no 500-char truncation); toast.info gives the user visible feedback that the replay fired (otherwise the click would appear to do nothing — a UX regression vs. the old alert).
+
+VERIFICATION:
+- `npx eslint src/components/payments/PaymentsPage.tsx src/components/reports/ReportsPage.tsx src/components/data-intelligence/DataIntelligenceCloudPage.tsx --max-warnings=0` → EXIT CODE: 0 (clean, no errors, no warnings).
+- `grep -rn "alert(" src/components/payments/PaymentsPage.tsx src/components/reports/ReportsPage.tsx src/components/data-intelligence/DataIntelligenceCloudPage.tsx` → 0 matches.
+- `grep -n "window.prompt" src/components/payments/PaymentsPage.tsx` → 1 match (only in a comment: "Record Payment Dialog (replaces window.prompt chain)").
+- Dev server (Next.js 16.1.3 Turbopack) still running on port 3000 per `tail -5 /home/z/my-project/dev.log` (shows "✓ Ready in 10.1s" + "○ Compiling / ..."); `ps -ef` confirms `next-server (v16.1.3)` process listening on `*:3000`.
+- `bun run lint` (full project) timed out at 120s due to the large codebase — substituted targeted eslint on the 3 modified files (above), which is the surgical verification needed for this task.
+
+Stage Summary:
+- PaymentsPage: window.prompt chain (3 prompts) GONE — replaced with a professional shadcn Dialog form (RadioGroup party-type, Input party name, ₹-prefixed Input amount, Select payment mode, Save/Cancel footer with loading state). All 5 trigger entry points (header, receivables tab, receivables empty CTA, payables tab, payables empty CTA) now open the dialog instead of chaining prompts. Backend API call (createPayment body shape, success/error toasts, busyId gating) preserved exactly — only the input mechanism changed. 4 dead buttons (Export, Filter chips, Create Link, Copy Link) now visibly disabled with helpful `title` tooltips. File: 902 → 1084 lines (+182).
+- ReportsPage: 6× `alert('Pop-up blocked…')` GONE — replaced with `toast.error(..., { description: '...' })`. No import changes (toast already imported). In-place replacement, file length unchanged.
+- DataIntelligenceCloudPage: 1× `alert(\`Replay snapshot:…\`)` GONE — replaced with `console.info('Replay snapshot:', ...)` (full data, dev-only) + `toast.info('Snapshot replayed', { description: 'See browser console…' })` (user feedback). Added `import { toast } from 'sonner';`. File: +5 lines.
+- ESLint clean on all 3 files (--max-warnings=0, exit 0). No new dependencies introduced. No files outside the 3 listed were touched. Dev server still running on port 3000.
+
+
+---
+Task ID: 2-a
+Agent: Banking + Zoho Fix Subagent
+Task: Fix ZohoFullSyncPanel refetch→refresh bug + repoint BankingPage Connect-Bank CTAs to IntegrationComingSoonModal + disable dead banking buttons
+
+Work Log:
+- Read /home/z/my-project/worklog.md (tail, ~245 lines from offset 3900) to understand prior work (Task 6-a audit, Task 6-b AnalyticsPage cleanup, Task 2 10-Phase Stabilization).
+- Read /home/z/my-project/src/hooks/useBusinessSnapshot.ts to confirm hook return shape: `{ snapshot, loading, error, hasLiveData, refresh }` — NO `refetch` field (Fix 1 root cause confirmed).
+- Read /home/z/my-project/eslint.config.mjs to confirm `no-unused-vars` is OFF — safe to leave `createBankAccount` import in BankingPage unused after Fix 4 (per task constraint "Preserve all existing imports — only ADD what's needed").
+- Read /home/z/my-project/src/contexts/AppContext.tsx to confirm `'google-workspace'` (line 217) and `'zoho-books'` (line 219) are valid `AppView` values for the modal's onConnectGoogle / onConnectZoho callbacks.
+- Read /home/z/my-project/src/components/dashboard/home/IntegrationComingSoonModal.tsx to confirm prop shape: `{ open, onOpenChange, integrationName, integrationIcon?, description?, onConnectGoogle?, onConnectZoho? }`.
+- Read full BankingPage.tsx (1339 lines) to locate all 4 `setCurrentView('google-workspace')` call sites (lines 902, 1067, 1153, 1304), the 4 dead buttons (lines 1139 Filter, 1141 Download, 1290 Import Statement, 1325 per-row Download), and the `handleAddAccount` window.prompt chain (lines 456-485).
+
+Changes made:
+
+1. src/components/zoho-books/ZohoFullSyncPanel.tsx (Fix 1 — refetch→refresh, 3 edits):
+   - Line 138: `const { snapshot, refetch: refetchSnapshot } = useBusinessSnapshot();` → `const { snapshot, refresh: refreshSnapshot } = useBusinessSnapshot();`
+   - Line 164: `refetchSnapshot();` → `refreshSnapshot();` (called after polling detects sync finished — refreshes dashboard)
+   - Line 170: `}, [orgId, refetchSnapshot]);` → `}, [orgId, refreshSnapshot]);` (useCallback dep array)
+   - This eliminates the `TypeError: refetchSnapshot is not a function` runtime crash that fired whenever a Zoho sync completed.
+
+2. src/components/banking/BankingPage.tsx (Fix 2 — repoint 4 Connect Bank / Import Statement CTAs to IntegrationComingSoonModal, 6 edits):
+   - Added import (line 23): `import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal'`
+   - Added state (line 359, after `syncStatusMap` state): `const [comingSoonOpen, setComingSoonOpen] = useState(false)` with a 3-line comment explaining the policy.
+   - Line 880: Overview empty-state "Connect Bank" CTA → `onClick: () => setComingSoonOpen(true)`
+   - Line 1045: Accounts tab empty-state "Connect Bank" CTA → `onClick: () => setComingSoonOpen(true)`
+   - Line 1131: Transactions tab empty-state "Connect Bank" CTA → `onClick: () => setComingSoonOpen(true)`
+   - Line 1282: Statements tab empty-state "Import Statement" CTA → `onClick: () => setComingSoonOpen(true)`
+   - Rendered the modal ONCE at end of component JSX (lines 1316-1324), before the outermost closing `</div>`:
+     ```tsx
+     <IntegrationComingSoonModal
+       open={comingSoonOpen}
+       onOpenChange={setComingSoonOpen}
+       integrationName="Banking"
+       description="Live bank feeds (HDFC, ICICI, SBI, Axis, Kotak) are under development. Connect Google or Zoho Books to start syncing real financial data today."
+       onConnectGoogle={() => { setComingSoonOpen(false); setCurrentView('google-workspace') }}
+       onConnectZoho={() => { setComingSoonOpen(false); setCurrentView('zoho-books') }}
+     />
+     ```
+   - Grep confirms only ONE `setCurrentView('google-workspace')` remains in BankingPage (the intentional one inside onConnectGoogle).
+
+3. src/components/banking/BankingPage.tsx (Fix 3 — disable 4 dead buttons, 4 edits):
+   - Line 1117 Filter button: added `disabled title="Banking integration coming soon"`
+   - Line 1119 Download button: added `disabled title="Banking integration coming soon"`
+   - Line 1268 Import Statement button: added `disabled title="Banking integration coming soon"`
+   - Line 1303 per-row Download button: added `disabled title="Banking integration coming soon"`
+   - All 4 buttons retained (NOT removed) — just disabled with a tooltip so the UI does not look broken. Variant/size/className preserved unchanged.
+
+4. src/components/banking/BankingPage.tsx (Fix 4 — replace handleAddAccount, 1 edit):
+   - Replaced the entire `useCallback(async () => {...}, [user?.id])` block (30 lines, including 3 `window.prompt` calls, `createBankAccount` Firestore write, try/catch/finally with `setBusyId`/`toast`) with a 3-line function:
+     ```ts
+     const handleAddAccount = () => {
+       setComingSoonOpen(true)
+     }
+     ```
+   - Consistent with user's policy: "Replace placeholder connections (GSTN, Banks, WhatsApp, Tally, QuickBooks) with 'Coming Soon'".
+   - `createBankAccount` import preserved per task constraint (eslint `no-unused-vars` is OFF in eslint.config.mjs, so no lint error from the now-unused import).
+
+VERIFICATION:
+- `./node_modules/.bin/eslint src/components/zoho-books/ZohoFullSyncPanel.tsx src/components/banking/BankingPage.tsx` → EXIT CODE: 0 (clean, no errors, no warnings). No NEW lint errors introduced in either touched file.
+- Grep `refetchSnapshot` in ZohoFullSyncPanel.tsx → 0 matches (renamed cleanly to `refreshSnapshot`, 3 occurrences updated: destructure + call site + dep array).
+- Grep `setCurrentView\('google-workspace'\)` in BankingPage.tsx → 1 match (the intentional one inside `onConnectGoogle` callback). All 4 original CTAs repointed to `setComingSoonOpen(true)`.
+- Grep `window\.prompt` in BankingPage.tsx → 1 match (only the explanatory comment we added at line 358). The 3 actual `window.prompt(...)` calls are GONE.
+- Dev server confirmed running: `curl http://localhost:3000/` → `HTTP 200 in 11.4s`. dev.log tail shows `GET / 200 in 2.3s`, `GET / 200 in 11.4s`, `GET / 200 in 3.6s`.
+- Note: Two orphan `eslint .` processes from earlier timed-out `bun run lint` runs were consuming CPU/memory and causing the dev server watchdog to repeatedly fail Turbopack compilation (OOM at 768MB heap). Killed PID 4877; dev server recovered within ~15s. The watchdog script (dev-watchdog.sh) was NOT modified — only stale lint processes were cleaned up.
+
+Stage Summary:
+- 4 surgical fixes applied across 2 files (ZohoFullSyncPanel.tsx, BankingPage.tsx) — 11 total line-level edits.
+- ZohoFullSyncPanel: `refetchSnapshot` → `refreshSnapshot` (3 sites). Fixes the runtime TypeError that fired after every completed Zoho sync.
+- BankingPage: All 4 "Connect Bank" / "Import Statement" CTAs now open the IntegrationComingSoonModal with `integrationName="Banking"` (instead of routing to google-workspace, which is the WRONG page). The modal offers Connect Google / Connect Zoho Books as honest alternatives.
+- BankingPage: All 4 dead buttons (Filter, Download×2, Import Statement) now render with `disabled` + `title="Banking integration coming soon"` — UI no longer looks broken.
+- BankingPage: The `handleAddAccount` function no longer fires 3 `window.prompt()` calls and a Firestore write — it opens the Coming Soon modal, consistent with the user's "Banks = Coming Soon" directive.
+- All existing imports preserved; only ADDED `IntegrationComingSoonModal` import + `comingSoonOpen` useState.
+- ESLint clean (exit 0) on both touched files. Dev server HTTP 200 confirmed.
+
+
+---
+Task ID: 2-c
+Agent: Dead Code Removal Subagent
+Task: Delete dead FinOS showcase (unmounted + 35 fake buttons + fabricated data) and verify no consumer breaks; hide global-expansion nav entry if it's still exposed
+
+Work Log:
+- Read /home/z/my-project/worklog.md (4145 lines) to absorb prior agent context — confirmed Phase 2 cleanup mandate ("no fake data anywhere") and the existence of dead FinOS showcase + global-expansion demo data.
+- Step 1 — Verified FinOsApp is truly unmounted. Used Grep (NOT bash grep) for 4 patterns across the whole project root:
+  * Pattern `FinOsApp` → 3 matches: `src/components/finos/FinOsApp.tsx` (the definition itself), `worklog.md` (doc), `agent-ctx/finos-refactor-charts-full-stack-developer.md` (agent briefing doc). ZERO live-code references.
+  * Pattern `from '@/components/finos` → 12 matches, ALL inside `src/components/finos/modules/*.tsx` (self-contained — modules importing from `ui/primitives` + `ui/charts`). ZERO external importers.
+  * Pattern `from '@/lib/finos/data'` → 15 matches: 12 modules + FinOsApp.tsx (all to be deleted) AND 3 LIVE API routes: `src/app/api/finos/oracle/route.ts`, `src/app/api/finos/accountant/route.ts`, `src/app/api/finos/cfo-insights/route.ts`. ⚠️ `data.ts` CANNOT be deleted — these 3 routes are live (Next.js route handlers under `src/app/api/`).
+  * Pattern `from '@/lib/finos'` → 15 matches (same set as above + format.ts importers).
+  * Verified no dynamic `import('@/components/finos/...')` calls anywhere — Pattern `import\(['\"]@/(components|lib)/finos` → 0 matches.
+- Decision: Delete the unmounted component tree + the orphaned `format.ts` (only used by the 12 modules being deleted). KEEP `lib/finos/data.ts` because 3 live API routes import it; report this to parent agent for follow-up.
+
+- Step 2 — Deleted dead FinOS code via `rm -rf`:
+  * `src/components/finos/` (entire directory) — removed FinOsApp.tsx + 12 module .tsx files + ui/primitives.tsx + ui/charts.tsx (15 files total). All 35+ fake no-`onClick` buttons and the FinOsApp showcase go with them.
+  * `src/lib/finos/format.ts` — verified zero external importers (only the 11 modules that were just deleted imported it); removed.
+  * Kept: `src/lib/finos/data.ts` (still imported by 3 live API routes — see Step 1 finding). Parent directory `src/lib/finos/` therefore also KEPT (still contains data.ts).
+
+- Step 3 — Verified nothing broke:
+  * `npx eslint src/app/api/finos/oracle/route.ts src/app/api/finos/accountant/route.ts src/app/api/finos/cfo-insights/route.ts src/lib/finos/data.ts` → EXIT 0, no output (clean). The 3 live API routes still type-check; their `@/lib/finos/data` import resolves.
+  * `npx eslint src/components/command-palette/CommandPalette.tsx` → EXIT 0 (clean — see Step 4 below for the edit).
+  * Re-grep `from '@/components/finos|from '@/lib/finos/format` across `src/` → 0 matches. No dangling imports.
+  * Re-grep `FinOsApp` across `src/` → 0 matches. No leftover references.
+  * `tail -30 /home/z/my-project/dev.log` → Next.js 16.1.3 Turbopack "✓ Ready in 4.9s" with no compile errors. HTTP GET `/` → 200 (11.2s compile + 216ms render, then 32ms cached). HTTP GET `/api/finos/oracle` (POST probe) → 400 `{"error":"messages[] required"}` — route file compiles cleanly and runs its validation. All integration endpoints (zoho, google, business/snapshot) returning 200.
+
+- Step 4 — Hid global-expansion nav entry. Found the user-facing nav config:
+  * `src/components/AppRouter.tsx` → does NOT define nav items (it routes between landing/login/onboarding/dashboard screens).
+  * `src/components/DashboardShell.tsx` → renders `<LeftNav />` from `@/components/layout/LeftNav`.
+  * `src/components/layout/LeftNav.tsx` → defines 10 `NAV_ITEMS` (dashboard, oracle-brain, autonomous-finance, ai-cfo, run-my-business, reconcile, business-graph, settings, google-workspace, zoho-books). NO global entry. NAV_GROUP_MAP also has zero `global-*` entries. So the primary left nav does NOT expose global-expansion.
+  * `src/components/dashboard/**` → zero matches for `global-expansion|global-dashboard|multi-country|GlobalExpansion|GlobalDashboard` (DashboardPage.tsx + home/* subcomponents do not surface Global).
+  * `src/components/command-palette/CommandPalette.tsx` → MATCH. The "Phase 14 — Global" section (lines 598-730 in the original file) exposes 12 commands that `setCurrentView('...')` to the 12 `global-expansion/*` components (verified: all 12 components import from `@/lib/global` — i.e. the fabricated `data.ts` / `data-enterprise.ts`). Commands: multi-country-accounting, multi-tax-engine, multi-currency-system, international-banking, global-compliance-engine, international-erp, multi-language-platform, ai-global-advisor, global-dashboard, cross-border-payments, international-reports, global-performance.
+  * Action: Commented out the entire "Phase 14 — Global" command block (12 entries, ~135 lines) by wrapping it in a `/* ... */` block comment. Did NOT delete the route registrations in `DashboardViews.tsx` (lines 188-199 + 334-376) — those remain reachable via direct `setCurrentView('global-dashboard')` etc. if any code calls it, but no user-facing nav button appears in the Command Palette anymore.
+  * Comment markers placed at:
+    - src/components/command-palette/CommandPalette.tsx:598 — `// Hidden per stabilization directive — global expansion uses demo data (src/lib/global/data.ts, data-enterprise.ts contain fabricated per-country revenue/tax).`
+    - src/components/command-palette/CommandPalette.tsx:599 — `// The 12 components under src/components/global-expansion/* are still registered in DashboardViews.tsx (routes remain reachable) but their Command Palette nav buttons are hidden until the demo data is replaced with real per-country records.`
+    - src/components/command-palette/CommandPalette.tsx:600 — `/* ─── Phase 14 — Global Expansion & International Financial Operating System™ ─── HIDDEN` (block-comment open)
+    - src/components/command-palette/CommandPalette.tsx:733 — `*/ // ─── END Phase 14 — Global Expansion (HIDDEN per stabilization directive) ───` (block-comment close)
+  * ESLint on the edited file → EXIT 0 (clean). No syntax errors from the block comment.
+  * NOTE: Did NOT touch the `global-enterprise-network` command (line 454-460) or the `Phase 16 — Global Financial Cloud™` section (line 731+) — those point at `src/components/global-enterprise-network/` and `src/components/global-cloud/`, NOT `src/components/global-expansion/`, and the audit only flagged `src/lib/global/data.ts` + `data-enterprise.ts` as fabricated-data sources for the 12 `global-expansion/*` components. Parent agent can decide whether to extend the gate to global-enterprise-network and global-cloud in a separate task.
+
+Stage Summary:
+- DELETED (15 files, all confirmed unmounted dead code with zero external importers):
+  * `src/components/finos/FinOsApp.tsx` (the showcase with 35+ fake no-`onClick` buttons)
+  * `src/components/finos/modules/*.tsx` (12 module files — AIAccountant, AICFO, AutomationBuilder, Banking, ComplianceCenter, ExecutiveDashboard, GSTIntelligence, Inventory, OracleAI, Payroll, Purchases, Sales)
+  * `src/components/finos/ui/primitives.tsx` + `src/components/finos/ui/charts.tsx`
+  * `src/lib/finos/format.ts` (orphaned after module deletion — verified zero importers)
+- KEPT (live-code dependency — DO NOT TOUCH without first removing consumers):
+  * `src/lib/finos/data.ts` — STILL IMPORTED BY 3 LIVE Next.js API route handlers: `src/app/api/finos/oracle/route.ts`, `src/app/api/finos/accountant/route.ts`, `src/app/api/finos/cfo-insights/route.ts`. Per task constraints ("If you find any file still imports the deleted code, STOP and report — do not attempt to fix the import"), I did NOT delete `data.ts`. Recommend follow-up task to either (a) refactor these 3 routes to consume real `useBusinessSnapshot`-style data instead of the fabricated `lib/finos/data.ts` exports (then delete data.ts), or (b) gate/remove the 3 routes if they're also dead. Until that follow-up lands, `data.ts` remains in the repo as a live dependency.
+- HIDDEN (not deleted — route registrations preserved):
+  * 12 Command Palette entries in the "Phase 14 — Global" section of `src/components/command-palette/CommandPalette.tsx` (lines 598-733) wrapped in `/* ... */` block comment with explicit `// Hidden per stabilization directive — global expansion uses demo data` marker. The 12 `global-expansion/*` view registrations in `DashboardViews.tsx` remain intact (routes reachable programmatically), but the user-facing nav buttons in the Command Palette no longer appear.
+- VERIFICATION: ESLint clean on all touched files (3 finos API routes + data.ts + CommandPalette.tsx). Dev server shows no compile errors; `GET /` → 200; `POST /api/finos/oracle` → 400 with proper validation error (route alive, data.ts import resolves). No `cannot find module '@/components/finos...'` or `'FinOsApp' is not defined` errors anywhere.
+- Net dead-code reduction: 15 files deleted, ~135 lines of nav entries hidden. `lib/finos/data.ts` remains as the sole outstanding piece of the original FinOS showcase — pending parent-agent decision on the 3 live API consumers.
+
+---
+Task ID: 3-b
+Agent: FinOS API + PredictiveCompliance Subagent
+Task: Refactor 3× /api/finos/* routes to use real business snapshot instead of fabricated lib/finos/data.ts, then delete the fake data file; fix PredictiveCompliancePage 'Connect GSTN' to open Coming Soon modal
+
+Work Log:
+- Step 1 — Read all relevant files: 3 API routes (`src/app/api/finos/{oracle,accountant,cfo-insights}/route.ts`), the fake `src/lib/finos/data.ts` (788-line fabricated dataset — company, executiveKpis, revenueTrend, cashFlow, gstReturns, invoices, bills, bankAccounts, bankTransactions, customers, vendors, products, employees, payrollRuns, complianceItems, aiInsights, automations, auditLog, modules), and the real `src/lib/business/snapshot.ts` (the canonical `getBusinessSnapshot(organizationId)` service that reads Prisma Invoice / PurchaseBill / Expense / Payment / BankAccount / GSTRFiling + Zoho-synced entities — returns `{ revenue, expenses, profit, cash, profitMargin, customerCount, vendorCount, invoiceCount, billCount, expenseRecordCount, receivables, payables, outputTax, inputTax, itcAvailable, gstLiability, totalCollected, totalPaid, netCashFlow, filedReturns, pendingReturns, overdueReturns, healthScore, riskScore, collectionRate, workingCapital, runwayDays, forecast: {nextMonthRevenue, nextMonthExpenses, trend, confidence}, perEntity: {zoho*}, lastSyncAt, lastSyncStatus }`).
+  * Verified zero frontend callers of `/api/finos/*` — `rg "finos/oracle|finos/accountant|finos/cfo-insights"` in src/ → 0 matches. Free to refactor response shape, but kept `{ ok, content }` shape for forward-compat with any external/integration callers.
+  * Verified the only importers of `@/lib/finos/data` were exactly the 3 target API routes (no other consumers in src/).
+
+- Step 2 — Refactored `src/app/api/finos/oracle/route.ts` (POST `/api/finos/oracle`):
+  * Removed `import { company, executiveKpis, aiInsights, gstReturns, complianceItems } from '@/lib/finos/data'`.
+  * Added `import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot'`.
+  * Added `snapshotHasLiveData(s)` helper that returns true if any of: revenue, expenses, cash, invoiceCount, billCount, expenseRecordCount, customerCount, vendorCount, receivables, payables, outputTax, inputTax, filedReturns, pendingReturns is non-zero.
+  * Request body now accepts optional `organizationId` field; falls back to `?organizationId=` / `?firmId=` query param, then `x-gstpilot-orgid` header (mirrors the `/api/business-snapshot` convention).
+  * If no `organizationId` resolvable → returns HTTP 200 with `{ ok: false, message: "No business data available yet. Connect Google or Zoho Books, or create your first invoice, to activate AI insights.", data: null }` (never leaks cross-tenant data, never fabricates context).
+  * If `getBusinessSnapshot()` returns an all-zero snapshot (`!snapshotHasLiveData`) → returns the same honest "no data yet" response.
+  * If live data exists → builds a `buildContextBlock(snapshot)` system-prompt section from real numbers (revenue, expenses, profit, profitMargin, cash, customers/vendors, invoices/bills/expense records, receivables/payables, working capital, outputTax/inputTax/gstLiability, healthScore, riskScore, collectionRate, runwayDays, filed/pending/overdue returns, next-month forecast, last sync info, Zoho perEntity counts) and calls `zai.chat.completions.create({ messages: [{role:'assistant', content: systemPrompt}, ...messages], thinking: { type: 'disabled' } })`. Returns `{ ok: true, content, hasLiveData: true }`.
+  * Preserved BASE_INSTRUCTIONS (CFO persona, Indian formatting, ≤250 words, markdown bold + bullets, no fabrication) and POST request validation (`messages[]` required → 400).
+
+- Step 3 — Refactored `src/app/api/finos/accountant/route.ts` (POST `/api/finos/accountant`):
+  * Removed `import { company, bankTransactions, bills, invoices } from '@/lib/finos/data'`.
+  * Added `import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot'`.
+  * Same `snapshotHasLiveData()` + same `organizationId` resolution flow (body / query / header) + same honest "no data yet" response when org missing or snapshot empty.
+  * `buildContextBlock()` for accountant shows aggregate financials (revenue across N invoices, expenses across N bills + N expense records, receivables, payables, outputTax, inputTax, gstLiability, customerCount, vendorCount) and explicitly notes per-transaction line items are NOT included (the snapshot is aggregate-only) — instructs the LLM to ask the user for specific transaction details if needed. Adds Indian accounting refs (Ind AS / Schedule III, GST Act Schedules I–III, Section 16 ITC eligibility).
+  * Response shape preserved: `{ ok: true, content, hasLiveData: true }` on success, `{ ok: false, message, data: null }` on no-data, 400 on missing `question`, 500 on internal error.
+
+- Step 4 — Refactored `src/app/api/finos/cfo-insights/route.ts` (POST `/api/finos/cfo-insights`):
+  * Removed the 10-symbol import from `@/lib/finos/data` (company, executiveKpis, revenueTrend, cashFlow, gstReturns, complianceItems, aiInsights, invoices, bills, bankAccounts).
+  * Added `import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot'`.
+  * Same `snapshotHasLiveData()` + same `organizationId` resolution + same honest "no data yet" response when org missing or snapshot empty.
+  * `buildContextBlock()` for CFO is the richest of the three — headline financials (revenue, expenses, profit, margin, cash, working capital, runway), receivables & payables + collection rate, GST block (outputTax/inputTax/gstLiability/filed/pending/overdue returns), forecast (nextMonthRevenue with ↑↓→ trend arrow, nextMonthExpenses, confidence %), health (healthScore, riskScore), data sources (lastSyncStatus, lastSyncAt, Zoho perEntity counts). All values formatted in ₹ Lakhs.
+  * Preserved BASE_INSTRUCTIONS (5-section markdown output: Headline insight / Analysis / Recommendation / Risk watch / Expected impact, ≤350 words, Indian formatting, no fabrication) and request validation (`topic` required → 400, optional `followUp` accepted and prepended to user prompt).
+
+- Step 5 — Verified zero importers of `lib/finos/data.ts` across src/:
+  * `rg "from '@/lib/finos" src/` → 0 matches
+  * `rg 'from "@/lib/finos/data"' src/` → 0 matches
+  * `rg "lib/finos/data" src/` → 0 matches
+  * Confirmed `src/lib/finos/` contained ONLY `data.ts` (no other files). Deleted `src/lib/finos/data.ts` via `rm -f` and removed the now-empty `src/lib/finos/` directory via `rmdir`. Both confirmed gone: `ls src/lib/finos` → "No such file or directory".
+
+- Step 6 — Fixed `PredictiveCompliancePage` 'Connect GSTN' fake toast:
+  * File: `src/components/autonomous-finance/PredictiveCompliancePage.tsx`.
+  * Added 2 imports: `import { useApp } from '@/contexts/AppContext';` and `import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal';`.
+  * Added `const { setCurrentView } = useApp();` at top of `PredictiveCompliancePage()` (mirrors the pattern in `BankingPage.tsx:344`).
+  * Added state: `const [comingSoonOpen, setComingSoonOpen] = useState(false);` (added to existing `useState` import — already imported on line 8).
+  * Replaced the fake `action={{ label: 'Connect GSTN', onClick: () => toast.info('Navigate to Settings → GST API Connections') }}` with `action={{ label: 'Connect GSTN', onClick: () => setComingSoonOpen(true) }}`.
+  * Rendered `<IntegrationComingSoonModal>` at the end of the component's JSX (after the inner content `</div>`s, before the outer `</div>` of `<div className="min-h-screen flex flex-col bg-background">`). Props: `open={comingSoonOpen}`, `onOpenChange={setComingSoonOpen}`, `integrationName="GSTN"`, `description="Live GST portal integration (GSTR-1/3B filing, e-invoice, e-way bill) is under development. Connect Google or Zoho Books to start syncing real financial data today."`, `onConnectGoogle={() => { setComingSoonOpen(false); setCurrentView('google-workspace'); }}`, `onConnectZoho={() => { setComingSoonOpen(false); setCurrentView('zoho-books'); }}`.
+  * Verified view names `google-workspace` and `zoho-books` match the actual AppView values used elsewhere in the codebase (`BankingPage.tsx:1322-1323`, `DashboardPage.tsx:583,720,1041,1083,1666`).
+  * Kept the `toast` import from `sonner` because it's still used on line 64 (`onRefresh={() => { setRefreshKey((k) => k + 1); toast.success('Recomputed'); }}`).
+
+- Step 7 — Verification:
+  * `./node_modules/.bin/eslint src/app/api/finos/oracle/route.ts src/app/api/finos/accountant/route.ts src/app/api/finos/cfo-insights/route.ts src/components/autonomous-finance/PredictiveCompliancePage.tsx 2>&1 | tail -40` → EXIT 0, no output (clean).
+  * `./node_modules/.bin/tsc --noEmit -p tsconfig.json 2>&1 | grep -E "(finos|PredictiveCompliancePage)"` → 0 matches (my 4 files contribute zero TypeScript errors).
+  * `rg "from '@/lib/finos" src/` → 0 matches (no dangling imports).
+  * `ls src/lib/finos 2>&1` → "No such file or directory" (file + dir both gone).
+  * `tail -5 /home/z/my-project/dev.log` → Next.js 16.1.3 Turbopack "✓ Ready in 4.3s", no compile errors attributed to my files.
+
+Stage Summary:
+- REFACTORED (3 API routes — all now consume real `getBusinessSnapshot()` data instead of fabricated `lib/finos/data.ts` exports):
+  * `src/app/api/finos/oracle/route.ts` — Oracle AI chat. Returns honest "no data yet" response (`{ ok: false, message, data: null }`) when org not resolvable or snapshot is all-zero; otherwise builds LLM system-prompt context from real snapshot numbers (revenue, expenses, profit, cash, customers, invoices, receivables, payables, GST liability, health score, forecast, Zoho sync status, etc.) and returns `{ ok: true, content, hasLiveData: true }`.
+  * `src/app/api/finos/accountant/route.ts` — AI Accountant. Same honest-no-data pattern; aggregate context block (no per-transaction lines — accountant asks user to paste specific transactions if needed).
+  * `src/app/api/finos/cfo-insights/route.ts` — AI CFO. Same honest-no-data pattern; richest context block (headline financials + receivables/payables + GST + forecast + health + data sources, all in ₹ Lakhs).
+- DELETED (file + empty directory):
+  * `src/lib/finos/data.ts` — 788-line fabricated dataset (the last remaining piece of the original FinOS showcase demo data). Verified zero importers across src/ before deletion.
+  * `src/lib/finos/` — directory removed (was empty after data.ts deletion).
+- FIXED (1 component):
+  * `src/components/autonomous-finance/PredictiveCompliancePage.tsx` — 'Connect GSTN' button now opens `<IntegrationComingSoonModal>` (the same honest "GSTN — Coming Soon" modal used elsewhere in the app: lists Google + Zoho Books as Available Now, GSTN/Banking/WhatsApp/Gmail/Outlook/QuickBooks/Tally as Coming Soon, with "Connect Google" / "Connect Zoho Books" CTAs that route to `google-workspace` / `zoho-books` views via `useApp().setCurrentView`). No more fake `toast.info('Navigate to Settings → GST API Connections')`.
+- VERIFICATION: ESLint clean on all 4 touched files (EXIT 0, no output). Project-wide `tsc --noEmit -p tsconfig.json` returns ZERO errors attributable to my files. Zero dangling imports of `@/lib/finos/*` anywhere in src/. Dev server is up (Turbopack "✓ Ready in 4.3s").
+- PRE-EXISTING / CONCURRENT BUG (NOT in my scope — flagging for parent agent): `./node_modules/.bin/tsc --noEmit -p tsconfig.json` reports 2 JSX errors in files I was explicitly told NOT to touch:
+  * `src/components/google-workspace/GoogleWorkspacePage.tsx(87,5): error TS2657: JSX expressions must have one parent element.`
+  * `src/components/zoho-books/ZohoBooksPage.tsx(130,5): error TS2657: JSX expressions must have one parent element.`
+  Both files appear to have been modified by a concurrent subagent (git diff shows a recent `AlertDialog` import + JSX block added to GoogleWorkspacePage.tsx). These errors cause HTTP 500 on `GET /` and on any `/api/finos/*` POST because Turbopack fails to compile the page.tsx → AppRoot → AppRouter → DashboardShell → DashboardViews tree. The 500s are NOT caused by my refactored API routes (the route files themselves lint and type-check clean in isolation). Recommend the parent agent route a follow-up to whichever subagent owns GoogleWorkspacePage.tsx and ZohoBooksPage.tsx to wrap their newly-added `<AlertDialog>` blocks in a single parent fragment.
+
+---
+Task ID: 3-a
+Agent: Confirm Dialog Subagent
+Task: Replace 6× window.confirm() calls across live pages with shadcn AlertDialog
+
+Work Log:
+- Read /home/z/my-project/worklog.md (4363 lines) to absorb prior agent context — confirmed Phase 3 stabilization mandate and the AlertDialog primitive already installed at src/components/ui/alert-dialog.tsx (AlertDialogAction renders `buttonVariants()` + className passthrough via Slot — destructive styling confirmed supported).
+- Step 1 — Verified AlertDialog primitive at src/components/ui/alert-dialog.tsx exports the 9 named components I needed (AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogPortal/Overlay/Trigger). AlertDialogAction accepts className and merges with `buttonVariants()` via cn() — confirmed I can pass `bg-red-600 hover:bg-red-700 text-white focus:ring-red-600` for destructive styling.
+- Step 2 — Read all 6 target files to map the exact `confirm()` call site + surrounding JSX + parent component structure for each:
+  * GoogleWorkspacePage.tsx — `confirm()` at line 65 in `ConnectionHeader` (a child component, not the default export). useState already imported.
+  * ZohoBooksPage.tsx — `confirm()` at line 103 in `ConnectionHeader`. useState already imported.
+  * DataConnectionsPage.tsx — `confirm()` at line 337 inside `handleDisconnect(conn: ConnectionRow)` callback. The `conn` argument carries the per-row source identity (id + type + provider). Main component returns JSX ending at line 654-655 with closing `</Sheet></div>`. useState already imported.
+  * ConnectivityFabricPage.tsx — `confirm()` at line 275 inside `handleUninstall(connectorId, provider)`. Main component's return JSX ends at line 808-810 (closing `</div>` of page wrapper after the Footer). useState already imported.
+  * MemoryPanel.tsx — `confirm()` at line 254 inside an inline `onClick` async arrow on the "Clear All Memory" button (footer of the slide-in panel). Component is `export function MemoryPanel` (not default export). useState already imported.
+  * DocumentsPage.tsx — `window.confirm()` at line 1249 inside an inline `onClick` arrow on a Delete button in the `DocumentViewer` sub-component (lines 1020-1274). The early-return `if (!doc) return null` at line 1041 needed preserving. useState already imported.
+- Step 3 — Applied the consistent 4-step pattern to each file (add AlertDialog imports; add `confirmDialogOpen` state + per-item `pendingX` state where applicable; split the old `confirm()`-and-execute handler into `handleX` (opens dialog) + `confirmX` (executes); render `<AlertDialog>` at end of JSX with destructive `AlertDialogAction` className):
+  * GoogleWorkspacePage.tsx — added AlertDialog imports after `Tabs`; added `const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)`; replaced `handleDisconnect` (was async+confirm+disconnect) with synchronous `() => setConfirmDialogOpen(true)`; added `confirmDisconnect = useCallback(async () => { setConfirmDialogOpen(false); await disconnect(); ... }, [disconnect])`; rendered `<AlertDialog>` with title "Disconnect Google Workspace?" and description "Live data from Gmail, Drive, and Calendar will stop syncing. You can reconnect anytime." Action button label "Disconnect" with destructive className. Wrapped the Card+AlertDialog return in a Fragment.
+  * ZohoBooksPage.tsx — same pattern; description tailored per task spec: "All synced customers, invoices, bills, and payments will remain in GSTPilot, but live sync will stop. You can reconnect anytime." Action label "Disconnect" with destructive className. Fragment-wrapped return.
+  * DataConnectionsPage.tsx — added `const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; name: string } | null>(null)` + `confirmDialogOpen`; rewrote `handleDisconnect` from `async (conn) => { if (!confirm(...)) return; ... DELETE fetch ... }` to sync `(conn) => { setPendingDisconnect({id, name}); setConfirmDialogOpen(true); }` (computes name as `conn.type === 'gstn' ? 'GSTN' : conn.provider`); added `confirmDisconnect = useCallback(async () => { setConfirmDialogOpen(false); const pending = pendingDisconnect; if (!pending) return; await fetch DELETE ...; refresh(); setPendingDisconnect(null); }, [pendingDisconnect, refresh])`. AlertDialog title uses template literal `Disconnect ${pendingDisconnect.name}?`. Rendered AlertDialog after the Logs Sheet, before the page-wrapper closing `</div>`.
+  * ConnectivityFabricPage.tsx — added `const [pendingUninstall, setPendingUninstall] = useState<{ connectorId: string; provider: string } | null>(null)` + `confirmDialogOpen`; rewrote `handleUninstall` from `async (id, provider) => { if (!confirm(...)) return; ... POST fetch ... }` to sync `(id, provider) => { setPendingUninstall({connectorId, provider}); setConfirmDialogOpen(true); }`; added `confirmUninstall = async () => { setConfirmDialogOpen(false); const pending = pendingUninstall; if (!pending) return; setActionLoading(...); POST fetch; toast; fetchDashboard; setPendingUninstall(null); }`. AlertDialog title `Uninstall ${pendingUninstall.provider}?`, description "All credentials will be revoked. You can reinstall this connector anytime.", action label "Uninstall" with destructive className. Rendered AlertDialog after the Footer, before the page-wrapper closing `</div>`.
+  * MemoryPanel.tsx — added `confirmDialogOpen` state; extracted the inline `onClick={async () => { if (!confirm(...)) return; fetch DELETE; toast; fetchMemory; }}` to two named callbacks: `handleClearAllClick = useCallback(() => setConfirmDialogOpen(true), [])` and `confirmClearMemory = useCallback(async () => { setConfirmDialogOpen(false); if (!userEmail) return; fetch DELETE; toast; fetchMemory; }, [userEmail, fetchMemory])`. The "Clear All Memory" button's `onClick` is now `handleClearAllClick`. AlertDialog title "Clear ALL memory?", description "All conversation history, learned preferences, and saved memories will be permanently deleted. This cannot be undone.", action label "Clear all memory" with destructive className. Rendered AlertDialog as a sibling of the AnimatePresence children (between `)}` and `</AnimatePresence>`).
+  * DocumentsPage.tsx — added `pendingDelete` + `confirmDialogOpen` state to the `DocumentViewer` sub-component; added `handleDeleteClick = () => { if (!doc) return; setPendingDelete({ id: doc.id, name: doc.name }); setConfirmDialogOpen(true); }` and `confirmDelete = () => { setConfirmDialogOpen(false); if (pendingDelete) { onDelete(pendingDelete.id); setPendingDelete(null); } }`; replaced the inline `onClick={() => { if (window.confirm(...)) onDelete(doc.id) }}` with `onClick={handleDeleteClick}`. AlertDialog title uses `Delete ${pendingDelete?.name ?? 'this file'}?`, description "This file will be permanently deleted from Firebase Storage. This cannot be undone.", action label "Delete file" with destructive className. Wrapped the Sheet+AlertDialog return in a Fragment so the AlertDialog renders as a sibling of Sheet (Sheet uses Radix Dialog, only DialogContent/Trigger/Portal are allowed as direct children — hence the Fragment).
+- Step 4 — Hit 3 JSX parsing errors (`JSX expressions must have one parent element`) because each of GoogleWorkspacePage.tsx, ZohoBooksPage.tsx, DocumentsPage.tsx ended up with two sibling top-level JSX elements (Card/Sheet + AlertDialog) in the return. Fixed by wrapping each return body in a `<>...</>` Fragment — exactly 1 edit per file (6 lines added per file: `<>` open + `</>` close + newlines).
+- Step 5 — Initial MultiEdit attempt on GoogleWorkspacePage.tsx partially applied (added AlertDialog imports + replaced handleDisconnect) but failed to add the end-of-JSX AlertDialog block due to non-unique `        ) : null}` pattern (7 occurrences). A duplicate AlertDialog import block was left behind. Cleaned up by deleting the duplicate import block via a single Edit, then re-applied the end-of-JSX AlertDialog edit anchored on the unique scopes block (`{status?.connected && status.scopes.length > 0 ? ( ... )}`).
+- Step 6 — Verification:
+  * `./node_modules/.bin/eslint <6 files>` → EXIT CODE: 0, no output. Zero new lint errors introduced.
+  * `tail -5 dev.log` → `✓ Ready in 4.9s`, no compile errors. `curl http://localhost:3000/` → `HTTP 200 in 0.034735s`. Dev server still healthy.
+  * `rg "confirm\(" <6 files>` → EXIT CODE: 1 (no matches). All 6 `confirm()` / `window.confirm()` calls have been replaced. Verified with a second regex `rg "window\.confirm|[^.]\bconfirm\(" <6 files>` → also EXIT 1 (no matches). The only remaining `confirm`-like tokens in these files are `confirmDialogOpen` / `confirmDisconnect` / `confirmUninstall` / `confirmClearMemory` / `confirmDelete` / `setConfirmDialogOpen` state identifiers — not `confirm(` function calls.
+
+Stage Summary:
+- 6 files surgically modified — exactly 6 `window.confirm()`/`confirm()` calls replaced with shadcn AlertDialog primitives. Zero untouched logic; all underlying DELETE/POST/disconnect/uninstall/clear-memory flows preserved verbatim.
+- 4 files needed the state-capture pattern for per-item context (DataConnectionsPage: pendingDisconnect={id,name}; ConnectivityFabricPage: pendingUninstall={connectorId,provider}; MemoryPanel: no per-item state needed (single global "Clear All Memory" action); DocumentsPage: pendingDelete={id,name}). 2 files had a single global disconnect action (GoogleWorkspacePage, ZohoBooksPage) so only `confirmDialogOpen` boolean state was needed.
+- All 6 AlertDialog instances use the destructive className `bg-red-600 hover:bg-red-700 text-white focus:ring-red-600` on `AlertDialogAction` per task spec.
+- All 6 AlertDialog instances render `<AlertDialogCancel>Cancel</AlertDialogCancel>` as the dismiss button (no destructive styling on Cancel — default outline variant).
+- 3 files (GoogleWorkspacePage.tsx, ZohoBooksPage.tsx, DocumentsPage.tsx) required wrapping the return body in a `<>...</>` Fragment to accommodate the new sibling AlertDialog next to the existing Card/Sheet root element.
+- ESLint clean (exit 0) on all 6 files. Dev server HTTP 200 confirmed. Zero `confirm(` function calls remain in any of the 6 files (only state identifiers like `confirmDialogOpen` / `confirmDisconnect` remain — these are not `confirm(` invocations).
+- Imports preserved: all existing imports left untouched; only ADDED the AlertDialog primitive imports + (where missing) used existing `useState` from React. No `useState` re-imports needed because all 6 files already imported it.
+- Per-file dialog titles + descriptions + action button labels match the task spec verbatim:
+  * GoogleWorkspacePage → "Disconnect Google Workspace?" / "Live data from Gmail, Drive, and Calendar will stop syncing. You can reconnect anytime." / "Disconnect"
+  * ZohoBooksPage → "Disconnect Zoho Books?" / "All synced customers, invoices, bills, and payments will remain in GSTPilot, but live sync will stop. You can reconnect anytime." / "Disconnect"
+  * DataConnectionsPage → "Disconnect {GSTN|provider}?" / "Live data from this source will stop syncing. You can reconnect anytime." / "Disconnect"
+  * ConnectivityFabricPage → "Uninstall {provider}?" / "All credentials will be revoked. You can reinstall this connector anytime." / "Uninstall"
+  * MemoryPanel → "Clear ALL memory?" / "All conversation history, learned preferences, and saved memories will be permanently deleted. This cannot be undone." / "Clear all memory"
+  * DocumentsPage → "Delete {fileName}?" / "This file will be permanently deleted from Firebase Storage. This cannot be undone." / "Delete file"

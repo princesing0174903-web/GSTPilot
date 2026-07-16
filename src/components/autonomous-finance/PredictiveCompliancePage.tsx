@@ -20,6 +20,8 @@ import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptySta
 import { TrustBar } from '@/components/shared/TrustBar';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { useApp } from '@/contexts/AppContext';
+import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -33,12 +35,14 @@ function sevText(s: string) {
 }
 
 export function PredictiveCompliancePage() {
+  const { setCurrentView } = useApp();
   const { data: returns, loading: retLoading } = useFireReturns();
   const { data: invoices } = useFireInvoices();
   const { data: bankTx } = useFireBankTransactions();
   const { data: tasks } = useFireTasks();
   const { data: notices } = useFireNotices();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [comingSoonOpen, setComingSoonOpen] = useState(false);
 
   const report = useMemo(() => computePredictiveCompliance({
     returns: returns as unknown as Array<Record<string, unknown>>,
@@ -70,7 +74,7 @@ export function PredictiveCompliancePage() {
               title="No compliance data yet"
               description="Connect GSTN returns and tasks to unlock predictive compliance — late filing probability, GST mismatch risk, penalty prediction, cash shortage alerts, and proactive reminders weeks before deadlines."
               accent="amber"
-              action={{ label: 'Connect GSTN', onClick: () => toast.info('Navigate to Settings → GST API Connections') }}
+              action={{ label: 'Connect GSTN', onClick: () => setComingSoonOpen(true) }}
             />
           ) : (
             <>
@@ -187,6 +191,16 @@ export function PredictiveCompliancePage() {
           )}
         </div>
       </div>
+
+      {/* ── GSTN integration Coming Soon modal ── */}
+      <IntegrationComingSoonModal
+        open={comingSoonOpen}
+        onOpenChange={setComingSoonOpen}
+        integrationName="GSTN"
+        description="Live GST portal integration (GSTR-1/3B filing, e-invoice, e-way bill) is under development. Connect Google or Zoho Books to start syncing real financial data today."
+        onConnectGoogle={() => { setComingSoonOpen(false); setCurrentView('google-workspace'); }}
+        onConnectZoho={() => { setComingSoonOpen(false); setCurrentView('zoho-books'); }}
+      />
     </div>
   );
 }

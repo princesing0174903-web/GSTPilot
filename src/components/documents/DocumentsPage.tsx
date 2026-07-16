@@ -29,6 +29,16 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -1037,6 +1047,23 @@ function DocumentViewer({
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showExtractedText, setShowExtractedText] = useState(false)
+  // ── Delete confirmation dialog state ──
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+
+  const handleDeleteClick = () => {
+    if (!doc) return
+    setPendingDelete({ id: doc.id, name: doc.name })
+    setConfirmDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
+    setConfirmDialogOpen(false)
+    if (pendingDelete) {
+      onDelete(pendingDelete.id)
+      setPendingDelete(null)
+    }
+  }
 
   if (!doc) return null
 
@@ -1061,6 +1088,7 @@ function DocumentViewer({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
         <SheetHeader className="pr-8">
@@ -1245,11 +1273,7 @@ function DocumentViewer({
               variant="outline"
               size="sm"
               className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-              onClick={() => {
-                if (window.confirm('Delete this file? This removes it from Firebase Storage permanently.')) {
-                  onDelete(doc.id)
-                }
-              }}
+              onClick={handleDeleteClick}
               title="Delete from Firebase Storage"
             >
               <Trash2 className="h-4 w-4" />
@@ -1270,6 +1294,26 @@ function DocumentViewer({
         </div>
       </SheetContent>
     </Sheet>
+    <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {pendingDelete?.name ?? 'this file'}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This file will be permanently deleted from Firebase Storage. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmDelete}
+            className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+          >
+            Delete file
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 

@@ -32,6 +32,16 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useGoogleWorkspace } from '@/hooks/useGoogleWorkspace';
 import { useOrg } from '@/contexts/OrgContext';
 
@@ -61,13 +71,20 @@ function ConnectionHeader() {
     }
   }, [connect]);
 
-  const handleDisconnect = useCallback(async () => {
-    if (!confirm('Disconnect Google Workspace? You will need to reconnect to use Gmail, Drive, Docs, Sheets, and Calendar.')) return;
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+
+  const handleDisconnect = useCallback(() => {
+    setConfirmDialogOpen(true);
+  }, []);
+
+  const confirmDisconnect = useCallback(async () => {
+    setConfirmDialogOpen(false);
     const { error } = await disconnect();
     if (error) setConnectError(error);
   }, [disconnect]);
 
   return (
+    <>
     <Card className="border-border/60 bg-card/50 backdrop-blur">
       <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
@@ -155,6 +172,26 @@ function ConnectionHeader() {
         ) : null}
       </CardContent>
     </Card>
+    <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Disconnect Google Workspace?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Live data from Gmail, Drive, and Calendar will stop syncing. You can reconnect anytime.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmDisconnect}
+            className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+          >
+            Disconnect
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

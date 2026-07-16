@@ -595,7 +595,9 @@ export default function CommandPalette() {
         },
         group: 'Phase 13 — Enterprise',
       },
-      // ─── Phase 14 — Global Expansion & International Financial Operating System™ ───
+      // Hidden per stabilization directive — global expansion uses demo data (src/lib/global/data.ts, data-enterprise.ts contain fabricated per-country revenue/tax).
+      // The 12 components under src/components/global-expansion/* are still registered in DashboardViews.tsx (routes remain reachable) but their Command Palette nav buttons are hidden until the demo data is replaced with real per-country records.
+      /* ─── Phase 14 — Global Expansion & International Financial Operating System™ ─── HIDDEN
       {
         id: 'cmd-open-multi-country-accounting',
         label: 'Open Multi-Country Accounting™',
@@ -728,6 +730,7 @@ export default function CommandPalette() {
         },
         group: 'Phase 14 — Global',
       },
+      */ // ─── END Phase 14 — Global Expansion (HIDDEN per stabilization directive) ───
       // ─── Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ───
       {
         id: 'cmd-open-global-financial-cloud',

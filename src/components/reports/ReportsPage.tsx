@@ -923,7 +923,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1027,7 +1027,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1165,7 +1165,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1253,7 +1253,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1345,7 +1345,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1448,7 +1448,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({

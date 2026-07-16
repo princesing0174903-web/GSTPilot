@@ -42,6 +42,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   CATEGORY_LABELS,
@@ -161,6 +171,9 @@ export default function ConnectivityFabricPage() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<ConnectorCategory | 'all'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // ── Uninstall confirmation dialog state ──
+  const [pendingUninstall, setPendingUninstall] = useState<{ connectorId: string; provider: string } | null>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -271,14 +284,21 @@ export default function ConnectivityFabricPage() {
     }
   };
 
-  const handleUninstall = async (connectorId: string, provider: string) => {
-    if (!confirm(`Uninstall ${provider}? All credentials will be revoked.`)) return;
-    setActionLoading(`uninstall-${connectorId}`);
+  const handleUninstall = (connectorId: string, provider: string) => {
+    setPendingUninstall({ connectorId, provider });
+    setConfirmDialogOpen(true);
+  };
+
+  const confirmUninstall = async () => {
+    setConfirmDialogOpen(false);
+    const pending = pendingUninstall;
+    if (!pending) return;
+    setActionLoading(`uninstall-${pending.connectorId}`);
     try {
       const res = await fetch('/api/connectivity/uninstall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectorId }),
+        body: JSON.stringify({ connectorId: pending.connectorId }),
       });
       const result = await res.json();
       toast({
@@ -291,6 +311,7 @@ export default function ConnectivityFabricPage() {
       toast({ title: 'Uninstall failed', description: String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
+      setPendingUninstall(null);
     }
   };
 
@@ -805,6 +826,29 @@ export default function ConnectivityFabricPage() {
         <p>{dashboard.founder}</p>
         <p className="mt-1">Connect Everything · Synchronize Everything · Automate Everything</p>
       </div>
+
+      {/* ─── Uninstall Confirmation Dialog ─── */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingUninstall ? `Uninstall ${pendingUninstall.provider}?` : 'Uninstall?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All credentials will be revoked. You can reinstall this connector anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmUninstall}
+              className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+            >
+              Uninstall
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

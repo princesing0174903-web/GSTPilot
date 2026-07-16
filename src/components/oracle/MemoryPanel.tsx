@@ -32,6 +32,16 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -98,6 +108,7 @@ export function MemoryPanel({ open, onClose, userEmail }: MemoryPanelProps) {
   const [memory, setMemory] = useState<FullMemory | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const fetchMemory = useCallback(async () => {
     if (!userEmail) return;
@@ -120,6 +131,23 @@ export function MemoryPanel({ open, onClose, userEmail }: MemoryPanelProps) {
       fetchMemory();
     }
   }, [open, userEmail, fetchMemory]);
+
+  // ── Clear ALL memory (opens confirmation AlertDialog) ──
+  const handleClearAllClick = useCallback(() => {
+    setConfirmDialogOpen(true);
+  }, []);
+
+  const confirmClearMemory = useCallback(async () => {
+    setConfirmDialogOpen(false);
+    if (!userEmail) return;
+    try {
+      await fetch(`/api/memory?email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
+      toast.success('All memory cleared');
+      await fetchMemory();
+    } catch {
+      toast.error('Failed to clear memory');
+    }
+  }, [userEmail, fetchMemory]);
 
   // ── Generic save helper for profile/firm/preferences ──
   const saveCategory = async (category: 'profile' | 'firm' | 'preferences', data: Record<string, unknown>) => {
@@ -250,16 +278,7 @@ export function MemoryPanel({ open, onClose, userEmail }: MemoryPanelProps) {
                     variant="ghost"
                     size="sm"
                     className="w-full text-xs text-red-500 hover:bg-red-500/10 hover:text-red-400"
-                    onClick={async () => {
-                      if (!confirm('Clear ALL memory? This cannot be undone.')) return;
-                      try {
-                        await fetch(`/api/memory?email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
-                        toast.success('All memory cleared');
-                        await fetchMemory();
-                      } catch {
-                        toast.error('Failed to clear memory');
-                      }
-                    }}
+                    onClick={handleClearAllClick}
                   >
                     <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                     Clear All Memory
@@ -270,6 +289,25 @@ export function MemoryPanel({ open, onClose, userEmail }: MemoryPanelProps) {
           </motion.div>
         </>
       )}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear ALL memory?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All conversation history, learned preferences, and saved memories will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmClearMemory}
+              className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+            >
+              Clear all memory
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AnimatePresence>
   );
 }

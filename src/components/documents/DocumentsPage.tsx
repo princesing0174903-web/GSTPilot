@@ -44,7 +44,7 @@ import { toast } from 'sonner'
 import {
   Upload, FileText, FileSpreadsheet, AlertTriangle, File,
   Clock, ChevronRight, ChevronDown, CheckCircle2, XCircle,
-  Loader2, RefreshCw, Eye, Edit3, Check, Sparkles, Zap,
+  Loader2, RefreshCw, Edit3, Check, Sparkles, Zap,
   Search, BarChart3, Shield, FileSearch, Brain, ListTodo,
   AlertCircle, Copy, TrendingUp, Hash, ArrowRight,
   FileCheck, FileWarning, Landmark, X, Paperclip,
@@ -1111,7 +1111,7 @@ function DocumentViewer({
             {doc.classificationConfidence > 0 && <ConfidenceBadge confidence={doc.classificationConfidence} />}
           </div>
 
-          {/* File Preview Placeholder */}
+          {/* File Preview */}
           <Card className="border-border/40 bg-slate-50">
             <CardContent className="p-4">
               <div className="flex flex-col items-center justify-center h-40 rounded-lg border-2 border-dashed border-slate-200 bg-white">
@@ -1120,10 +1120,6 @@ function DocumentViewer({
                 </div>
                 <p className="text-xs font-medium text-foreground">{doc.name}</p>
                 <p className="text-[10px] text-muted-foreground">{doc.size} • {doc.format}</p>
-                <Button variant="outline" size="sm" className="mt-2 h-7 text-xs gap-1" onClick={() => toast.info('File preview coming soon')}>
-                  <Eye className="h-3 w-3" />
-                  Preview File
-                </Button>
               </div>
             </CardContent>
           </Card>

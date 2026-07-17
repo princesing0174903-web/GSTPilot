@@ -254,6 +254,7 @@ async function zfetch<T>(
 export function useZohoBooks() {
   const buildHeaders = useZohoHeaders();
   const { organization } = useOrg();
+  const { user } = useAuth();
 
   const [status, setStatus] = useState<ZohoConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -277,9 +278,14 @@ export function useZohoBooks() {
   const [customerSyncResult, setCustomerSyncResult] = useState<ZohoCustomerSyncResult | null>(null);
 
   const orgId = organization?.id ?? null;
+  const userId = user?.id ?? null;
 
   const refreshStatus = useCallback(async () => {
-    if (!orgId) return;
+    // Skip until BOTH orgId + userId are present. Calling /status with an
+    // empty actor.uid would force the route to return its
+    // `requiresAuth: true` placeholder forever (the user never "logs in"),
+    // which the UI would misread as "credentials not configured".
+    if (!orgId || !userId) return;
     setStatusLoading(true);
     setStatusError(null);
     const res = await zfetch<{ ok: boolean; status: ZohoConnectionStatus }>(
@@ -292,7 +298,7 @@ export function useZohoBooks() {
       setStatusError(res.error);
     }
     setStatusLoading(false);
-  }, [orgId, buildHeaders]);
+  }, [orgId, userId, buildHeaders]);
 
   // Phase 2 — fetch sync status (separate endpoint from connection status)
   const refreshSyncStatus = useCallback(async () => {

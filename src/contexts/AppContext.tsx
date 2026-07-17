@@ -237,7 +237,18 @@ export type AppScreen = 'landing' | 'login' | 'app';
  *
  * Mirrors the returnPrepCtx pattern.
  */
-export type SettingsSection = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit';
+export type SettingsSection =
+  | 'firm'
+  | 'gst'
+  | 'team'
+  | 'integrations'
+  | 'notifications'
+  | 'security'
+  | 'billing'
+  | 'audit'
+  | 'ai'
+  | 'data'
+  | 'apikeys';
 
 interface AppContextType {
   currentView: AppView;

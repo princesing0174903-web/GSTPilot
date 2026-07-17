@@ -27,7 +27,7 @@ import {
   ArrowLeft, Building2, MapPin, Mail, Phone, Clock, FileText, Upload,
   GitCompareArrows, Activity, CheckCircle2, AlertTriangle, XCircle,
   Plus, Trash2, Loader2, CloudUpload, FileSpreadsheet, FileJson,
-  File as FileIcon, Image as ImageIcon, Send, Download, Pencil, ShieldCheck,
+  File as FileIcon, Image as ImageIcon, Send, Pencil, ShieldCheck,
   Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell,
 } from 'lucide-react';
 import type { ReturnType, DocumentType, FilingStatus, MatchStatus } from '@/types/gst';
@@ -814,7 +814,6 @@ export default function ClientDetailPage() {
                             {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => handleMarkReady(r.id)} disabled={updateFilingStatusMutation.isPending}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
                             {r.status === 'ready' && <Button size="sm" className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)} disabled={fileReturnMutation.isPending}><Send className="h-3 w-3" /> File</Button>}
                             {r.status === 'filed' && <span className="text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
-                            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => toast.info('JSON download coming soon')}><Download className="h-3 w-3" /> JSON</Button>
                           </div>
                         </TableCell>
                       </TableRow>

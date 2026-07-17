@@ -1,9 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — Shared Data Fetcher
+// GSTPilot AI CFO™ Phase 1 — Shared Data Fetcher (TENANT-SCOPED)
 //
 // Single source of truth for fetching all connected business data from Prisma.
 // Every Phase 1 engine imports RawCFOData from here — no engine touches Prisma
 // directly. This keeps data sources centralized and easy to audit.
+//
+// 🔒 TENANT ISOLATION: Every query is scoped by `client: { firmId: organizationId }`.
+// An empty/missing organizationId returns EMPTY data (never global/cross-tenant).
+// This is a hard security guarantee — no caller can accidentally leak another
+// tenant's invoices, expenses, payments, or filings.
 //
 // Data sources covered:
 //   • GSTN  (GSTRFilings, Notices, Clients with GSTIN)
@@ -186,9 +191,31 @@ export interface RawCFOData {
   dataSources: string[];
 }
 
-// ─── Fetcher ──────────────────────────────────────────────────────────────────
+// ─── Fetcher (TENANT-SCOPED) ─────────────────────────────────────────────────
 
-export async function fetchRawCFOData(): Promise<RawCFOData> {
+/**
+ * Fetch all connected business data for a SINGLE organization.
+ *
+ * 🔒 SECURITY: Every query is scoped by `client: { firmId: organizationId }`.
+ * If organizationId is empty/null, returns EMPTY data (never global/cross-tenant).
+ *
+ * @param organizationId The org/firm id (from OrgContext). REQUIRED for any data.
+ */
+export async function fetchRawCFOData(organizationId: string): Promise<RawCFOData> {
+  // 🔒 Hard tenant gate: no orgId → no data. Never fall through to a global query.
+  if (!organizationId) {
+    return {
+      invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
+      filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
+      fetchedAt: new Date().toISOString(),
+      hasLiveData: false,
+      dataSources: [],
+    };
+  }
+
+  // The tenant filter applied to every client-owned table.
+  const firmScope = { client: { firmId: organizationId } };
+
   const [
     invoices,
     expenses,
@@ -202,6 +229,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
     dataConnections,
   ] = await Promise.all([
     db.invoice.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, invoiceNumber: true, invoiceDate: true,
         sellerGstin: true, buyerGstin: true, buyerName: true, invoiceType: true,
@@ -213,6 +241,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 10000,
     }) as Promise<InvoiceRow[]>,
     db.expense.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, category: true, description: true, vendor: true,
         amount: true, gst: true, gstClaimable: true, date: true,
@@ -221,6 +250,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 10000,
     }) as Promise<ExpenseRow[]>,
     db.payment.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, invoiceId: true, purchaseBillId: true,
         partyName: true, partyType: true, amount: true, paymentDate: true,
@@ -229,6 +259,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 10000,
     }) as Promise<PaymentRow[]>,
     db.purchaseBill.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, vendorName: true, vendorGstin: true,
         invoiceNo: true, invoiceDate: true, dueDate: true, taxableValue: true,
@@ -239,6 +270,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 10000,
     }) as Promise<PurchaseBillRow[]>,
     db.client.findMany({
+      where: { firmId: organizationId },
       select: {
         id: true, gstin: true, tradeName: true, legalName: true, state: true,
         stateCode: true, status: true, healthScore: true, entityType: true,
@@ -246,6 +278,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 5000,
     }) as Promise<ClientRow[]>,
     db.gSTRFiling.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, returnType: true, period: true, status: true,
         filedDate: true, totalTaxableValue: true, totalTax: true, financialYear: true,
@@ -253,6 +286,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 5000,
     }) as Promise<FilingRow[]>,
     db.notice.findMany({
+      where: firmScope,
       select: {
         id: true, clientId: true, noticeType: true, noticeNumber: true,
         noticeDate: true, subject: true, description: true, status: true,
@@ -260,13 +294,11 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       },
       take: 2000,
     }) as Promise<NoticeRow[]>,
-    db.employee.findMany({
-      select: {
-        id: true, name: true, designation: true, department: true, salary: true, status: true,
-      },
-      take: 2000,
-    }) as Promise<EmployeeRow[]>,
+    // Employee has no firmId relation — return empty rather than leak cross-tenant.
+    // Re-enable once Employee gains an organizationId column.
+    Promise.resolve([]) as Promise<EmployeeRow[]>,
     db.syncedRecord.findMany({
+      where: firmScope,
       select: {
         id: true, connectionId: true, sourceType: true, externalId: true, title: true,
         amount: true, date: true, rawData: true, category: true, processed: true,
@@ -274,6 +306,7 @@ export async function fetchRawCFOData(): Promise<RawCFOData> {
       take: 5000,
     }) as Promise<SyncedRecordRow[]>,
     db.dataConnection.findMany({
+      where: firmScope,
       select: { id: true, type: true, status: true, label: true, identifier: true, metadata: true, lastSyncAt: true },
       take: 200,
     }) as Promise<DataConnectionRow[]>,

@@ -15,19 +15,41 @@ export const runtime = 'nodejs';
 export async function GET(req: Request) {
   try {
     const { orgId, userId } = resolveOrgUserFromHeaders(req);
+    // Status check is a SAFE READ — never throw 400 when auth context is
+    // missing. Instead return a deterministic `connected: false` status so
+    // the client UI shows "Not connected" (rather than a misleading
+    // "credentials missing" error). The hook still retries once the
+    // org/user context becomes available.
     if (!orgId || !userId) {
-      return NextResponse.json(
-        { ok: false, error: 'Organization + user context required.' },
-        { status: 400 },
-      );
+      return NextResponse.json({
+        ok: true,
+        status: {
+          connected: false,
+          userEmail: null,
+          googleUserId: null,
+          connectedAt: null,
+          scopes: [],
+          requiresAuth: true,
+        },
+      });
     }
     const status = await getConnectionStatus(orgId, userId);
     return NextResponse.json({ ok: true, status });
   } catch (err) {
     console.error('[/api/integrations/google/status] error:', err);
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'Status check failed.' },
-      { status: 500 },
-    );
+    // Even on a server error, return `connected: false` rather than 500 —
+    // a transient DB error should never make the UI report
+    // "credentials not configured".
+    return NextResponse.json({
+      ok: true,
+      status: {
+        connected: false,
+        userEmail: null,
+        googleUserId: null,
+        connectedAt: null,
+        scopes: [],
+        requiresAuth: true,
+      },
+    });
   }
 }

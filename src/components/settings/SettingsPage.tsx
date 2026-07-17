@@ -64,6 +64,20 @@ import {
   ChevronRight,
   Download,
   LockKeyhole,
+  Sparkles,
+  Database,
+  Key,
+  Plug,
+  Languages,
+  Power,
+  RefreshCw,
+  Trash2,
+  Copy,
+  Eye,
+  Plus,
+  Building,
+  Banknote,
+  Clock,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -133,7 +147,21 @@ const INDIAN_STATES = [
 const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
 
 // ─── Section IDs ────────────────────────────────────────────────────────
-type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
+// The 11 sections surfaced in the Settings sidebar. Mirrors the
+// `SettingsSection` union in src/contexts/AppContext.tsx so the Home page's
+// deep-link helper (`setPendingSettingsSection(...)`) can land on any tab.
+type SectionId =
+  | 'firm'
+  | 'gst'
+  | 'team'
+  | 'integrations'
+  | 'notifications'
+  | 'security'
+  | 'billing'
+  | 'audit'
+  | 'ai'
+  | 'data'
+  | 'apikeys'
 
 interface NavSection {
   id: SectionId
@@ -142,13 +170,16 @@ interface NavSection {
 }
 
 const SECTIONS: NavSection[] = [
-  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
+  { id: 'firm', label: 'Organization', icon: <Building2 className="h-4 w-4" /> },
   { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
-  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
+  { id: 'integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
   { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
   { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
+  { id: 'apikeys', label: 'API Keys', icon: <Key className="h-4 w-4" /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
+  { id: 'ai', label: 'AI Preferences', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'data', label: 'Data & Backup', icon: <Database className="h-4 w-4" /> },
   { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
 ]
 
@@ -224,43 +255,110 @@ function getInitials(name: string, email: string): string {
 }
 
 // ─── Session Type ───────────────────────────────────────────────────────
+// Sessions are sourced from /api/security (active-session list). The icon is
+// resolved at render time from the `device` field so the type stays serializable.
 interface Session {
   id: string
   device: string
   location: string
   lastActive: string
-  icon: React.ReactNode
   current?: boolean
 }
 
-const MOCK_SESSIONS: Session[] = []
-
-// ─── Billing History ────────────────────────────────────────────────────
-interface BillingInvoice {
-  id: string
-  date: string
-  amount: string
-  status: 'Paid' | 'Pending' | 'Failed'
-}
-
-const BILLING_HISTORY: BillingInvoice[] = [
-  { id: '1', date: '1 Jun 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '2', date: '1 May 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '3', date: '1 Apr 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '4', date: '1 Mar 2025', amount: '₹1,499', status: 'Paid' },
-]
-
-// ─── GST API Connection Status ──────────────────────────────────────────
-interface ApiConnection {
+// ─── Integration Catalog ─────────────────────────────────────────────────
+// Static descriptor for each provider surfaced on the Integrations tab. Live
+// status (Connected / Disconnected) is read from /api/integrations/installed
+// + per-provider status endpoints and merged into this catalog at render time.
+interface IntegrationCatalogItem {
   id: string
   name: string
   description: string
-  status: 'Connected' | 'Disconnected' | 'Not Configured'
-  lastSync?: string
+  /** Endpoint slug used to wire the Connect button:
+   *  - `google` → GET /api/integrations/google/connect (OAuth redirect)
+   *  - `zoho`   → GET /api/integrations/zoho/connect (OAuth redirect)
+   *  - `bank`/`gstn`/`whatsapp`/`gmail`/`accounting` → POST /api/connect/{slug}
+   *  Disconnect hits /api/integrations/{google|zoho}/disconnect (OAuth providers)
+   *  or DELETE /api/connections/{id} for the /api/connect/* providers. */
+  connectKind: 'oauth-google' | 'oauth-zoho' | 'connect-slug'
+  connectSlug?: string
   icon: React.ReactNode
 }
 
-const MOCK_API_CONNECTIONS: ApiConnection[] = []
+const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
+  {
+    id: 'google',
+    name: 'Google Workspace',
+    description: 'Gmail, Drive, Calendar, Sheets — OAuth-based read + write access.',
+    connectKind: 'oauth-google',
+    icon: <Globe className="h-5 w-5" />,
+  },
+  {
+    id: 'zoho',
+    name: 'Zoho Books',
+    description: 'Sync customers, invoices, bills, payments, and items from Zoho Books.',
+    connectKind: 'oauth-zoho',
+    icon: <Building className="h-5 w-5" />,
+  },
+  {
+    id: 'bank',
+    name: 'Banking',
+    description: 'Connect your bank account to track cash position and reconcile transactions.',
+    connectKind: 'connect-slug',
+    connectSlug: 'bank',
+    icon: <Banknote className="h-5 w-5" />,
+  },
+  {
+    id: 'gstn',
+    name: 'GSTN',
+    description: 'Connect your GSTIN for live returns, notices, and taxpayer profile data.',
+    connectKind: 'connect-slug',
+    connectSlug: 'gstn',
+    icon: <Shield className="h-5 w-5" />,
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp Business',
+    description: 'Track client conversations and payment reminders via WhatsApp.',
+    connectKind: 'connect-slug',
+    connectSlug: 'whatsapp',
+    icon: <Mail className="h-5 w-5" />,
+  },
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Sync GST notices, vendor invoices, and client invoices from your inbox.',
+    connectKind: 'connect-slug',
+    connectSlug: 'gmail',
+    icon: <Mail className="h-5 w-5" />,
+  },
+  {
+    id: 'accounting',
+    name: 'Accounting (Tally / QuickBooks)',
+    description: 'Sync sales + purchase invoices from Tally, QuickBooks, or other accounting software.',
+    connectKind: 'connect-slug',
+    connectSlug: 'accounting',
+    icon: <ClipboardList className="h-5 w-5" />,
+  },
+]
+
+// ─── AI Preferences defaults ─────────────────────────────────────────────
+const AI_LANGUAGES = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Gujarati', 'Bengali'] as const
+type AiLanguage = (typeof AI_LANGUAGES)[number]
+const AI_FREQS = ['real-time', 'daily', 'weekly'] as const
+type AiInsightFreq = (typeof AI_FREQS)[number]
+const AI_REPORT_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
+
+// ─── Currency + Timezone catalogues ──────────────────────────────────────
+const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD'] as const
+const TIMEZONES = [
+  'Asia/Kolkata (IST)',
+  'UTC',
+  'America/Los_Angeles (PST)',
+  'America/New_York (EST)',
+  'Europe/London (GMT)',
+  'Asia/Dubai (GST)',
+  'Asia/Singapore (SGT)',
+] as const
 
 // ─── Audit Log Entry ──────────────────────────────────────────────────
 interface AuditLogEntry {

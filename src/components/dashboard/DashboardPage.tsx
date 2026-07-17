@@ -87,7 +87,6 @@ import { BusinessSetupProgress, type SetupTask } from '@/components/dashboard/ho
 import { InviteTeamModal } from '@/components/dashboard/home/InviteTeamModal';
 import { ActivateOracleWizard } from '@/components/dashboard/home/ActivateOracleWizard';
 import { ConnectedServicesCard, type ServiceRow } from '@/components/dashboard/home/ConnectedServicesCard';
-import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal';
 import { EmptyState } from '@/components/dashboard/home/EmptyState';
 import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
 import type {
@@ -587,12 +586,6 @@ export default function DashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [oracleWizardOpen, setOracleWizardOpen] = useState(false);
-  const [comingSoonModal, setComingSoonModal] = useState<{
-    open: boolean;
-    name: string;
-    icon?: LucideIcon;
-    description?: string;
-  }>({ open: false, name: '' });
 
   // ── Client lookup map ──
   const clientMap = useMemo(() => {
@@ -770,10 +763,6 @@ export default function DashboardPage() {
     else if (serviceId === 'zoho') setCurrentView('zoho-books');
   };
 
-  const showComingSoon = (name: string, icon?: LucideIcon, description?: string) => {
-    setComingSoonModal({ open: true, name, icon, description });
-  };
-
   // ── Team members ──
   const teamMembers = useMemo(
     () => memberships.slice(0, 6).map((m) => ({
@@ -877,12 +866,10 @@ export default function DashboardPage() {
         setCurrentView('reconcile');
         break;
       case 'banking':
-        // Banking is "Coming Soon" — show the modal, never a fake page.
-        showComingSoon('Banking', IndianRupee, 'Banking APIs are under development. Connect Google or Zoho Books to start syncing data.');
-        break;
       case 'gstn':
-        // GSTN is "Coming Soon".
-        showComingSoon('GSTN', ShieldCheck, 'GSTN integration is under development. Connect Google or Zoho Books to start syncing data.');
+        // These integrations are not shipped — route to dashboard instead
+        // of surfacing an incomplete feature.
+        setCurrentView('dashboard');
         break;
       case 'reports':
         setCurrentView('reports');
@@ -1756,8 +1743,8 @@ export default function DashboardPage() {
           refreshSnapshot();
         }}
         integrations={{
-          gstn: false,    // Coming soon
-          bank: false,    // Coming soon
+          gstn: false,
+          bank: false,
           google: googleConnected,
           zoho: zohoConnected,
           invoices: hasInvoices,
@@ -1766,21 +1753,6 @@ export default function DashboardPage() {
           customers: businessSnapshot.customers,
           invoices: businessSnapshot.invoices.count,
           hasRevenue: businessSnapshot.revenue > 0,
-        }}
-      />
-      <IntegrationComingSoonModal
-        open={comingSoonModal.open}
-        onOpenChange={(open) => setComingSoonModal((prev) => ({ ...prev, open }))}
-        integrationName={comingSoonModal.name}
-        integrationIcon={comingSoonModal.icon}
-        description={comingSoonModal.description}
-        onConnectGoogle={() => {
-          setComingSoonModal({ open: false, name: '' });
-          setCurrentView('google-workspace');
-        }}
-        onConnectZoho={() => {
-          setComingSoonModal({ open: false, name: '' });
-          setCurrentView('zoho-books');
         }}
       />
     </div>

@@ -311,11 +311,12 @@ export async function getBusinessSnapshot(
         createdAt: { lt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000) },
       },
     }).catch(() => 0),
-    // Bank balance (BankAccount has no orgId field — sum all connected accounts)
-    db.bankAccount.aggregate({
-      where: { status: 'connected' },
-      _sum: { balance: true },
-    }).catch(() => ({ _sum: { balance: null } })),
+    // ⚠️ SECURITY: BankAccount has NO organizationId/firmId column, so a global
+    // aggregate would leak OTHER tenants' bank balances into this org's snapshot.
+    // We intentionally return null here so `cash` falls back to the org-scoped
+    // ZohoBankAccount aggregate + org-scoped net payment flow. Native bank
+    // balances will be re-enabled once BankAccount gains an organizationId column.
+    Promise.resolve({ _sum: { balance: null } as const } as const),
     // ── Zoho synced entity counts (Phase 5) ──
     // safeCount handles models that don't exist in the generated client yet
     safeCount(db.zohoCustomer, { organizationId }),

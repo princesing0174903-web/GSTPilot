@@ -83,6 +83,7 @@ async function gfetch<T>(
 export function useGoogleWorkspace() {
   const buildHeaders = useGoogleHeaders();
   const { organization } = useOrg();
+  const { user } = useAuth();
 
   const [status, setStatus] = useState<GoogleConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -90,10 +91,15 @@ export function useGoogleWorkspace() {
   const [pending, setPending] = useState(false);
 
   const orgId = organization?.id ?? null;
+  const userId = user?.id ?? null;
 
   // ── Refresh the connection status ──
+  // Skip until BOTH orgId + userId are present. Calling /status with an
+  // empty actor.uid would force the route to return its
+  // `requiresAuth: true` placeholder forever (the user never "logs in"),
+  // which the UI would misread as "credentials not configured".
   const refreshStatus = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId || !userId) return;
     setStatusLoading(true);
     setStatusError(null);
     const res = await gfetch<{ ok: boolean; status: GoogleConnectionStatus }>(
@@ -106,7 +112,7 @@ export function useGoogleWorkspace() {
       setStatusError(res.error);
     }
     setStatusLoading(false);
-  }, [orgId, buildHeaders]);
+  }, [orgId, userId, buildHeaders]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

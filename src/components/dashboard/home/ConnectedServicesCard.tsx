@@ -188,10 +188,6 @@ export function ConnectedServicesCard({
             </div>
           );
         })}
-
-        <p className="text-[11px] text-muted-foreground text-center pt-2">
-          More integrations coming soon — GSTN, Banking, WhatsApp.
-        </p>
       </div>
     </motion.div>
   );

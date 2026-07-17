@@ -206,10 +206,20 @@ async function safeAsync<T>(label: string, fn: () => Promise<T>, fallback: T): P
   }
 }
 
-// ─── Main orchestrator ────────────────────────────────────────────────────────
+// ─── Main orchestrator (TENANT-SCOPED) ────────────────────────────────────────
 
-export async function computeFinancialIntelligence(): Promise<FinancialIntelligenceBundle> {
-  const data: RawCFOData = await safeAsync('fetchRawCFOData', fetchRawCFOData, {
+/**
+ * Compute the full Financial Intelligence bundle for a SINGLE organization.
+ *
+ * 🔒 SECURITY: `organizationId` is REQUIRED. An empty string returns a valid
+ * but empty bundle (never global/cross-tenant data). Every downstream engine
+ * (revenue, profitability, cash flow, risk, health, recommendations) operates
+ * ONLY on the tenant-scoped RawCFOData returned by fetchRawCFOData.
+ *
+ * @param organizationId The org/firm id from OrgContext.
+ */
+export async function computeFinancialIntelligence(organizationId: string): Promise<FinancialIntelligenceBundle> {
+  const data: RawCFOData = await safeAsync('fetchRawCFOData', () => fetchRawCFOData(organizationId), {
     invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
     filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
     fetchedAt: new Date().toISOString(), hasLiveData: false, dataSources: [],

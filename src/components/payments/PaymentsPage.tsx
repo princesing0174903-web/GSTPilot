@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Receipt, ArrowUpRight, ArrowDownRight, TrendingUp,
   IndianRupee, FileText, CheckCircle2, Clock,
-  AlertCircle, Download, Plus, Search, Filter,
+  AlertCircle, Plus, Search,
   ChevronRight, Link2, CreditCard, Building2,
   Wallet, RefreshCw, Send, ArrowRightLeft,
   Smartphone, Monitor, BadgeCheck, XCircle,
@@ -436,7 +436,6 @@ export default function PaymentsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" disabled title="Export coming soon"><Download className="h-3.5 w-3.5" />Export</Button>
             <Button
               size="sm"
               className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
@@ -652,11 +651,6 @@ export default function PaymentsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Input placeholder="Search receivables..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-                  <div className="flex gap-1">
-                    {['All', 'Pending', 'Received', 'Overdue'].map(f => (
-                      <Button key={f} variant="outline" size="sm" className="h-7 text-[10px] px-2" disabled title="Status filters coming soon">{f}</Button>
-                    ))}
-                  </div>
                 </div>
                 <Button
                   size="sm"
@@ -794,7 +788,6 @@ export default function PaymentsPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Links</h3>
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled title="Payment links coming soon"><Link2 className="h-3.5 w-3.5" />Create Link</Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {paymentLinks.length === 0 ? (
@@ -833,7 +826,6 @@ export default function PaymentsPage() {
                           </div>
                           <div className="flex items-center justify-between mt-2">
                             <span className="text-[10px] text-muted-foreground">{pl.visits} visits</span>
-                            <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1" disabled title="No link to copy"><Link2 className="h-3 w-3" />Copy Link</Button>
                           </div>
                         </CardContent>
                       </Card>

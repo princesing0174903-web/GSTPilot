@@ -20,7 +20,6 @@ import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { EmptyState, ProfessionalEmptyState } from '@/components/shared'
 import { TrustBar } from '@/components/shared/TrustBar'
-import { IntegrationComingSoonModal } from '@/components/dashboard/home/IntegrationComingSoonModal'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -353,10 +352,6 @@ export default function BankingPage() {
   // persisted to Firestore (would be misleading — there is no live bank API
   // behind this button yet; see handleSyncAccount for the honest message).
   const [syncStatusMap, setSyncStatusMap] = useState<Record<string, 'syncing' | 'idle'>>({})
-  // Banking integration is Coming Soon — open this modal whenever the user
-  // clicks "Connect Bank" / "Add Account" / "Import Statement" instead of
-  // routing to google-workspace or showing a fake window.prompt flow.
-  const [comingSoonOpen, setComingSoonOpen] = useState(false)
 
   // ── Firestore hooks (real-time, firm-scoped) ───────────────────────────────
   const bankAcctsHook = useFireBankAccounts()
@@ -457,10 +452,6 @@ export default function BankingPage() {
   ]
 
   // ── Write handlers (Firestore service functions) ───────────────────────────
-
-  const handleAddAccount = () => {
-    setComingSoonOpen(true)
-  }
 
   const handleSyncAccount = useCallback(async (acc: BankAccount) => {
     setBusyId(acc.id)
@@ -875,11 +866,6 @@ export default function BankingPage() {
                         description="Link your first bank account to see live balances, transactions, and auto-reconciliation."
                         accent="cyan"
                         compact
-                        action={{
-                          label: 'Connect Bank',
-                          onClick: () => setComingSoonOpen(true),
-                          icon: Plus,
-                        }}
                       />
                     ) : (
                       bankAccounts.map(acc => {
@@ -1040,11 +1026,6 @@ export default function BankingPage() {
                       title="No bank accounts yet"
                       description="Connect your first bank account to unlock live balances, transaction sync, and automatic bank-to-book reconciliation."
                       accent="cyan"
-                      action={{
-                        label: 'Connect Bank',
-                        onClick: () => setComingSoonOpen(true),
-                        icon: Plus,
-                      }}
                       secondaryAction={{
                         label: 'Open reconciliation instead',
                         onClick: () => setCurrentView('reconcile'),
@@ -1114,9 +1095,8 @@ export default function BankingPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Input placeholder="Search transactions..." className="w-64 h-8 text-xs" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8" disabled title="Banking integration coming soon"><Filter className="h-3 w-3" />Filter</Button>
                 </div>
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" disabled title="Banking integration coming soon"><Download className="h-3.5 w-3.5" />Download</Button>
+                <Button variant="outline" size="sm" className="gap-1.5 h-8" disabled><Download className="h-3.5 w-3.5" />Download</Button>
               </div>
               <Card className="border-slate-200/60 dark:border-slate-800/60">
                 <CardContent className="p-0">
@@ -1126,11 +1106,6 @@ export default function BankingPage() {
                       title="No transactions yet"
                       description="Bank transactions will appear here automatically once you connect and sync a bank account."
                       accent="cyan"
-                      action={{
-                        label: 'Connect Bank',
-                        onClick: () => setComingSoonOpen(true),
-                        icon: Plus,
-                      }}
                     />
                   ) : (
                     <ScrollArea className="max-h-[600px]">
@@ -1265,7 +1240,7 @@ export default function BankingPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Bank Statements</h3>
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled title="Banking integration coming soon"><Download className="h-3.5 w-3.5" />Import Statement</Button>
+                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled><Download className="h-3.5 w-3.5" />Import Statement</Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {statements.length === 0 ? (
@@ -1277,11 +1252,6 @@ export default function BankingPage() {
                           title="No statements imported"
                           description="Imported bank statements will appear here for download and review."
                           accent="cyan"
-                          action={{
-                            label: 'Import Statement',
-                            onClick: () => setComingSoonOpen(true),
-                            icon: Download,
-                          }}
                         />
                       </CardContent>
                     </Card>
@@ -1300,7 +1270,7 @@ export default function BankingPage() {
                           <p className="text-[10px] text-muted-foreground">{st.transactions} transactions &middot; Generated: {st.generated}</p>
                           <Separator className="my-2" />
                           <div className="flex justify-end">
-                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled title="Banking integration coming soon"><Download className="h-3 w-3" />Download</Button>
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled><Download className="h-3 w-3" />Download</Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -1312,16 +1282,6 @@ export default function BankingPage() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* ── Banking integration Coming Soon modal ── */}
-      <IntegrationComingSoonModal
-        open={comingSoonOpen}
-        onOpenChange={setComingSoonOpen}
-        integrationName="Banking"
-        description="Live bank feeds (HDFC, ICICI, SBI, Axis, Kotak) are under development. Connect Google or Zoho Books to start syncing real financial data today."
-        onConnectGoogle={() => { setComingSoonOpen(false); setCurrentView('google-workspace') }}
-        onConnectZoho={() => { setComingSoonOpen(false); setCurrentView('zoho-books') }}
-      />
     </div>
   )
 }

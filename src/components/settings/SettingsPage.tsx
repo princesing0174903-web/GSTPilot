@@ -116,7 +116,7 @@ function isPermissionError(err: unknown): boolean {
 const PERMISSION_DENIED_MSG =
   "You don't have permission to save these changes. Contact your organization admin."
 const PREVIEW_MODE_MSG =
-  'Preview mode — your changes are shown here but not persisted to the cloud.'
+  'Sign in to save these changes to the cloud.'
 
 // ─── Indian States ──────────────────────────────────────────────────────
 const INDIAN_STATES = [
@@ -697,7 +697,7 @@ export default function SettingsPage() {
     // available. Don't attempt the call.
     const fbUser = auth.currentUser
     if (!fbUser || isPreview) {
-      toast.info('Preview mode — password changes are not available. Sign in to enable.')
+      toast.info('Sign in to change your password.')
       throw new Error('preview-mode')
     }
     try {
@@ -745,7 +745,7 @@ export default function SettingsPage() {
     // shows the new logo for the rest of the session but it won't persist.
     if (isPreview) {
       setLogoUploading(false)
-      toast.info('Preview mode — logo change is shown here but not persisted to the cloud.')
+      toast.info('Sign in to save your logo to the cloud.')
       return
     }
 
@@ -2262,11 +2262,12 @@ export default function SettingsPage() {
       )}
 
       <div className="flex-1 flex min-h-0">
-        {/* ── Desktop: Left Navigation ── */}
+        {/* ── Desktop: Left Navigation (Stripe/Linear/Vercel style) ── */}
         {!isMobile && (
-          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
+          <aside className="w-[240px] shrink-0 border-r border-white/[0.06] bg-background/40 backdrop-blur-xl flex flex-col">
             <div className="p-5 pb-4">
-              <h1 className="text-lg font-bold text-foreground">Settings</h1>
+              <h1 className="text-lg font-bold text-foreground tracking-tight">Settings</h1>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Manage your workspace</p>
             </div>
 
             <nav className="flex-1 px-3 space-y-0.5">
@@ -2274,23 +2275,25 @@ export default function SettingsPage() {
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer sidebar-smooth ${
                     activeSection === section.id
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
+                      ? 'accent-gradient-soft text-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.05]'
                   }`}
                 >
-                  {section.icon}
+                  <span className={activeSection === section.id ? 'accent-text' : ''}>
+                    {section.icon}
+                  </span>
                   {section.label}
                 </button>
               ))}
             </nav>
 
             {/* Version & Status */}
-            <div className="p-4 border-t border-border mt-auto">
+            <div className="p-4 border-t border-white/[0.06] mt-auto">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
                   v1.0.0
                 </Badge>
               </div>
@@ -2303,18 +2306,15 @@ export default function SettingsPage() {
         )}
 
         {/* ── Right Content Area ── */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
-            {/* Preview-mode banner — shown only when OrgContext fell back to
-                the demo workspace (Firestore unreachable / no real org). The
-                form below still works visually but saves are no-ops. */}
             {isPreview && (
-              <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 flex items-start gap-2.5">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="mb-5 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Preview mode</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-0.5">
-                    You&rsquo;re viewing a preview workspace. Settings edits are shown here but won&rsquo;t be persisted to the cloud.
+                  <p className="text-sm font-medium text-amber-300">Workspace not connected</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">
+                    Sign in to persist your settings to the cloud. You can browse settings now, but changes won&rsquo;t be saved until you&rsquo;re connected.
                   </p>
                 </div>
               </div>

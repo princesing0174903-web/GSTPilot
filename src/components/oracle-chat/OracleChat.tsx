@@ -124,11 +124,8 @@ export function OracleChat() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-zinc-950 text-zinc-100">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 top-0 h-96 w-96 rounded-full bg-emerald-500/[0.07] blur-3xl" />
-        <div className="absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-teal-500/[0.05] blur-3xl" />
-      </div>
+      {/* Ambient background — Oracle futuristic theme (animated gradient orbs) */}
+      <div className="oracle-ambient" aria-hidden />
 
       {/* Desktop Sidebar */}
       <AnimatePresence>
@@ -273,13 +270,13 @@ export function OracleChat() {
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400/20 to-emerald-500/5 ring-1 ring-emerald-400/30">
-              <Brain className="h-5 w-5 text-emerald-300" />
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400/20 to-emerald-500/5 ring-1 ring-emerald-400/30 oracle-ai-glow">
+              <Brain className="h-5 w-5 text-emerald-300 oracle-icon-premium" />
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-zinc-950" />
             </div>
             <div>
               <h1 className="flex items-center gap-1.5 text-base font-semibold leading-tight text-white">
-                Oracle
+                <span className="oracle-gradient-text">Oracle</span>
                 <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
                   AI CFO
                 </span>

@@ -539,7 +539,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 </Button>
               </form>
 
-              {/* Preview Mode — bypass auth for sandbox/preview environments */}
+              {/* Demo access — explore the platform without an account */}
               <div className="mt-6 pt-6 border-t border-white/[0.06]">
                 <p className="text-center text-xs text-white/35 mb-3">
                   Exploring the platform? Try it without an account.
@@ -548,7 +548,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                   onClick={signInDemo}
                   className="w-full h-10 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/[0.04] border border-white/[0.08] transition-all press-scale"
                 >
-                  Enter Preview Mode
+                  Explore Demo
                 </button>
               </div>
             </>

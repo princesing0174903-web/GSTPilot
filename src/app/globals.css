@@ -1241,3 +1241,261 @@ html, body {
 .oracle-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.35);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   UNIFIED DESIGN SYSTEM — Semantic Tokens & Oracle Futuristic Theme
+   ═══════════════════════════════════════════════════════════════════════════════
+   ONE source of truth for spacing, typography, color semantics, shadows,
+   radius, and animations. Every page uses these tokens via the standard
+   primitives in src/components/ui-pro/standard.tsx.
+
+   Color semantics (mapped to brand palette):
+     • Success  → Emerald (#10b981)  — positive deltas, "online", completed
+     • Warning  → Amber   (#f59e0b)  — deadlines, "due soon", partial
+     • Danger   → Red     (#ef4444)  — errors, overdue, destructive
+     • Info     → Blue    (#3b82f6)  — neutral info, "new", tips
+     • Primary  → Emerald gradient   — the ONE primary action color
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Semantic color tokens ── */
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --success-soft: rgba(16, 185, 129, 0.10);
+  --success-border: rgba(16, 185, 129, 0.25);
+
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+  --warning-soft: rgba(245, 158, 11, 0.10);
+  --warning-border: rgba(245, 158, 11, 0.25);
+
+  --danger: #ef4444;
+  --danger-foreground: #ffffff;
+  --danger-soft: rgba(239, 68, 68, 0.10);
+  --danger-border: rgba(239, 68, 68, 0.25);
+
+  --info: #3b82f6;
+  --info-foreground: #ffffff;
+  --info-soft: rgba(59, 130, 246, 0.10);
+  --info-border: rgba(59, 130, 246, 0.25);
+
+  /* ── Typography scale (ONE heading system) ── */
+  --text-h1: 1.875rem;    /* 30px — page titles */
+  --text-h1-weight: 700;
+  --text-h2: 1.25rem;     /* 20px — section titles */
+  --text-h2-weight: 600;
+  --text-h3: 1rem;        /* 16px — card titles */
+  --text-h3-weight: 600;
+  --text-body: 0.875rem;  /* 14px — body text */
+  --text-body-weight: 400;
+  --text-caption: 0.75rem;/* 12px — labels, captions */
+  --text-caption-weight: 500;
+
+  /* ── Spacing scale (4px base) ── */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.5rem;   /* 24px */
+  --space-6: 2rem;     /* 32px */
+  --space-7: 3rem;     /* 48px */
+
+  /* ── Radius scale (ONE radius system) ── */
+  --radius-sm: 0.375rem;   /* 6px — chips, small buttons */
+  --radius-md: 0.5rem;     /* 8px — inputs */
+  --radius-lg: 0.75rem;    /* 12px — buttons, small cards */
+  --radius-xl: 1rem;       /* 16px — cards (default) */
+  --radius-2xl: 1.25rem;   /* 20px — large cards, modals */
+
+  /* ── Shadow scale (ONE shadow system) ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px -8px rgba(0, 0, 0, 0.6);
+  --shadow-glow-emerald: 0 4px 24px -4px rgba(16, 185, 129, 0.25);
+}
+
+/* ── Typography utility classes (ONE heading system) ── */
+.text-h1 { font-size: var(--text-h1); font-weight: var(--text-h1-weight); line-height: 1.2; letter-spacing: -0.02em; }
+.text-h2 { font-size: var(--text-h2); font-weight: var(--text-h2-weight); line-height: 1.3; letter-spacing: -0.01em; }
+.text-h3 { font-size: var(--text-h3); font-weight: var(--text-h3-weight); line-height: 1.4; letter-spacing: -0.01em; }
+.text-body { font-size: var(--text-body); font-weight: var(--text-body-weight); line-height: 1.55; }
+.text-caption { font-size: var(--text-caption); font-weight: var(--text-caption-weight); line-height: 1.4; letter-spacing: 0.02em; }
+
+/* ── Semantic color utility classes ── */
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+.text-info { color: var(--info); }
+
+.bg-success { background-color: var(--success); }
+.bg-warning { background-color: var(--warning); }
+.bg-danger { background-color: var(--danger); }
+.bg-info { background-color: var(--info); }
+
+.bg-success-soft { background-color: var(--success-soft); }
+.bg-warning-soft { background-color: var(--warning-soft); }
+.bg-danger-soft { background-color: var(--danger-soft); }
+.bg-info-soft { background-color: var(--info-soft); }
+
+.border-success { border-color: var(--success-border); }
+.border-warning { border-color: var(--warning-border); }
+.border-danger { border-color: var(--danger-border); }
+.border-info { border-color: var(--info-border); }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   ORACLE FUTURISTIC THEME — animated background, glass cards, AI glow
+   Performance-safe: uses CSS transforms + opacity only (no layout thrash).
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Oracle ambient background — slow-moving gradient orbs (CSS only, GPU-accelerated) */
+.oracle-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.oracle-ambient::before,
+.oracle-ambient::after {
+  content: '';
+  position: absolute;
+  width: 50vw;
+  height: 50vw;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.25;
+  will-change: transform;
+}
+.oracle-ambient::before {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.5) 0%, transparent 70%);
+  top: -15%;
+  left: -10%;
+  animation: oracle-drift-1 24s ease-in-out infinite;
+}
+.oracle-ambient::after {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%);
+  bottom: -15%;
+  right: -10%;
+  animation: oracle-drift-2 28s ease-in-out infinite;
+}
+@keyframes oracle-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(8%, 5%) scale(1.08); }
+  66% { transform: translate(-5%, 8%) scale(0.95); }
+}
+@keyframes oracle-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-6%, -4%) scale(1.06); }
+  66% { transform: translate(4%, -8%) scale(0.97); }
+}
+
+/* Oracle glass card — stronger blur + subtle inner glow */
+.oracle-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    0 8px 32px -8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Oracle AI glow — emerald ring pulse around the brain avatar */
+@keyframes oracle-ai-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(16, 185, 129, 0.4),
+      0 0 24px -4px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(16, 185, 129, 0),
+      0 0 36px -4px rgba(16, 185, 129, 0.5);
+  }
+}
+.oracle-ai-glow {
+  animation: oracle-ai-glow 3s ease-in-out infinite;
+}
+
+/* Oracle moving gradient text — for "Oracle" wordmark */
+@keyframes oracle-gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.oracle-gradient-text {
+  background: linear-gradient(90deg, #10b981, #06b6d4, #3b82f6, #10b981);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: oracle-gradient-shift 6s ease-in-out infinite;
+}
+
+/* Oracle premium icon — subtle glow on hover */
+.oracle-icon-premium {
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+.oracle-icon-premium:hover {
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.5));
+  transform: scale(1.08);
+}
+
+/* ── Modal slide-up animation (Framer Motion config mirror) ── */
+@keyframes modal-slide-up {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-slide-up {
+  animation: modal-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Card fade-in on mount ── */
+@keyframes card-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-fade-in {
+  animation: card-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Dropdown scale-in ── */
+@keyframes dropdown-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.dropdown-scale-in {
+  animation: dropdown-scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top;
+}
+
+/* ── Button hover micro-interaction (smooth, no jarring) ── */
+.btn-hover-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-hover-smooth:hover {
+  transform: translateY(-1px);
+}
+.btn-hover-smooth:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* ── Sidebar smooth transition ── */
+.sidebar-smooth {
+  transition: background-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+}
+
+/* ── Reduced motion: disable Oracle ambient + AI glow ── */
+@media (prefers-reduced-motion: reduce) {
+  .oracle-ambient::before,
+  .oracle-ambient::after,
+  .oracle-ai-glow,
+  .oracle-gradient-text,
+  .modal-slide-up,
+  .card-fade-in,
+  .dropdown-scale-in {
+    animation: none !important;
+  }
+}

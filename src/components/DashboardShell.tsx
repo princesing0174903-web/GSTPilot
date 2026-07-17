@@ -21,6 +21,8 @@ import React, { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
+import { getViewMeta } from '@/lib/navigation-registry'
+import { ChevronRight } from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -99,6 +101,23 @@ export function DashboardContent() {
             </span>
           </div>
         </button>
+
+        {/* Breadcrumb — shows current view location */}
+        {currentView !== 'dashboard' && (
+          <div className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+            <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className="transition-colors hover:text-foreground"
+            >
+              Home
+            </button>
+            <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
+            <span className="font-medium text-foreground">
+              {getViewMeta(currentView).label}
+            </span>
+          </div>
+        )}
 
         {/* Right cluster: Search · Notifications · Theme · Profile */}
         <div className="ml-auto flex items-center gap-1.5">

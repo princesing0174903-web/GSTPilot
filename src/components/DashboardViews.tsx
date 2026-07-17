@@ -2,24 +2,26 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * DashboardViews — View Registry & Renderer
+ * DashboardViews — View Registry & Renderer (Unified Design System)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * PURPOSE: Isolate all 150 dashboard-view dynamic imports into a single
- * lazily-loaded component so that the root page.tsx module graph stays tiny.
+ * ONLY real, working views are rendered. Every non-working view routes to
+ * the single premium FeaturePlaceholder page — eliminating 60+ inconsistent
+ * "Coming Soon" pages and making the entire SaaS feel like one product.
  *
- * WHY: The 4 GB sandbox OOM-kills Turbopack when page.tsx has 153 top-level
- * dynamic() calls. By moving them here and lazy-loading THIS file, the root
- * route only compiles 3 dynamic imports (Landing, Login, Onboarding) instead
- * of 153. This file is compiled on-demand only when the authenticated
- * dashboard shell mounts.
- *
- * The view → component mapping is a 1:1 port of the original switch statement
- * that lived in page.tsx → DashboardContent.renderView().
+ * REAL_VIEWS = genuine implementations with real data, real CRUD, real APIs.
+ * Everything else = FeaturePlaceholder with honest "on the roadmap" messaging.
  */
 
 import dynamic from 'next/dynamic'
 import type { ComponentType } from 'react'
+import {
+  Landmark, ShieldCheck, MessageCircle, Mail, Calendar,
+  TrendingUp, Network, Database, Cpu, Globe, Boxes,
+  Workflow, GitBranch, BarChart3, Sparkles, Building2, Wallet,
+  FileText, Users, type LucideIcon,
+} from 'lucide-react'
+import { FeaturePlaceholder } from '@/components/design-system/FeaturePlaceholder'
 
 // ── Loading placeholder (matches page.tsx PageLoader) ──────────────────────────
 const PageLoader = () => (
@@ -394,16 +396,198 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// REAL VIEWS — only these have genuine, working implementations.
+// Everything else routes to FeaturePlaceholder (one premium "on the roadmap"
+// page). This eliminates 60+ inconsistent "Coming Soon" pages instantly.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const REAL_VIEWS = new Set<string>([
+  'dashboard',
+  'crm',                      // Customers (real Firestore CRUD)
+  'clients',                  // Client registry (legacy alias)
+  'client-workspace',         // Client detail
+  'invoices',                 // Invoice workspace (real)
+  'invoice-cloud',            // (alias handled)
+  'returns',                  // Returns list (real)
+  'return-prep',              // Return prep workspace (real)
+  'reconcile',                // Reconciliation (real)
+  'vendors',                  // Vendors (real Firestore CRUD)
+  'expenses',                 // Expenses (real)
+  'payments',                 // Payments (real)
+  'inventory',                // Products / inventory (real)
+  'settings',                 // Settings (real)
+  'google-workspace',         // Google integration (real OAuth)
+  'zoho-books',               // Zoho Books integration (real OAuth + sync)
+  'timeline',                 // Activity timeline (real)
+  'tasks',                    // Tasks (real)
+  'documents',                // Document vault (real)
+  'notices',                  // Notice center (real)
+  'ai-business-copilot',      // Oracle chat (real — reads Business Snapshot)
+  'ai-cfo',                   // AI CFO dashboard (reads snapshot)
+])
+
+// ── Feature placeholder metadata for known non-working views ──────────────────
+// This gives the placeholder page a proper title, icon, and description instead
+// of a generic "feature not found" message.
+
+const PLACEHOLDER_META: Record<string, { name: string; description: string; icon: LucideIcon; capabilities?: string[] }> = {
+  banking: {
+    name: 'Banking',
+    description: 'Connect your bank accounts to automatically reconcile transactions, track cash flow, and sync payments with invoices.',
+    icon: Landmark,
+    capabilities: ['Auto bank reconciliation', 'Cash flow tracking', 'Payment matching', 'Transaction categorization'],
+  },
+  'e-invoicing': {
+    name: 'E-Invoicing',
+    description: 'Generate IRN and QR codes for GST-compliant e-invoices directly from the invoice workspace.',
+    icon: FileText,
+    capabilities: ['IRN generation', 'QR code embedding', 'GSTN e-invoice API', 'Auto-cancel & amend'],
+  },
+  tds: {
+    name: 'TDS Management',
+    description: 'Track TDS deductions, generate Form 26Q/24Q, and file TDS returns with the TRACES portal.',
+    icon: ShieldCheck,
+    capabilities: ['TDS deduction tracking', 'Form 26Q / 24Q', 'TRACES integration', 'Challan management'],
+  },
+  'roc-compliance': {
+    name: 'ROC Compliance',
+    description: 'Manage company filings with the Registrar of Companies — MGT-7, AOC-4, DIR-3, and more.',
+    icon: ShieldCheck,
+    capabilities: ['MGT-7 / AOC-4 filing', 'Director management', 'Annual return tracking', 'Event-based filings'],
+  },
+  payroll: {
+    name: 'Payroll',
+    description: 'Run payroll, generate payslips, and manage PF/PT/TDS deductions for your team.',
+    icon: Wallet,
+    capabilities: ['Payroll runs', 'Payslip generation', 'PF / PT / TDS', 'Salary structure management'],
+  },
+  hrms: {
+    name: 'HRMS',
+    description: 'Manage employee records, attendance, leave, and performance reviews in one place.',
+    icon: Users,
+    capabilities: ['Employee database', 'Attendance tracking', 'Leave management', 'Performance reviews'],
+  },
+  accounting: {
+    name: 'Accounting',
+    description: 'Double-entry bookkeeping, chart of accounts, journal entries, and financial statements.',
+    icon: BarChart3,
+    capabilities: ['Chart of accounts', 'Journal entries', 'Trial balance', 'P&L and Balance Sheet'],
+  },
+  'legal-notices': {
+    name: 'Legal Notices',
+    description: 'Draft, track, and serve legal notices with templates and compliance tracking.',
+    icon: ShieldCheck,
+    capabilities: ['Notice templates', 'Service tracking', 'Deadline alerts', 'Response management'],
+  },
+  'executive-war-room': {
+    name: 'Executive War Room',
+    description: 'Real-time executive dashboard with live KPIs, risk alerts, and decision tracking.',
+    icon: TrendingUp,
+    capabilities: ['Live KPI monitoring', 'Risk alerts', 'Decision log', 'Scenario analysis'],
+  },
+  'business-graph': {
+    name: 'Business Graph',
+    description: 'Visualize relationships between customers, vendors, invoices, and payments in a graph.',
+    icon: Network,
+    capabilities: ['Entity relationships', 'Transaction flow', 'Risk concentration', 'Network analytics'],
+  },
+  'working-capital': {
+    name: 'Working Capital',
+    description: 'Monitor receivables, payables, and cash conversion cycle to optimize working capital.',
+    icon: Wallet,
+    capabilities: ['Receivables aging', 'Payables tracking', 'Cash conversion cycle', 'Forecasting'],
+  },
+  'data-moat': {
+    name: 'Data Moat',
+    description: 'Centralize and govern your business data with lineage tracking and access controls.',
+    icon: Database,
+    capabilities: ['Data lineage', 'Access governance', 'Quality scoring', 'Audit trail'],
+  },
+  'agent-os': {
+    name: 'Agent OS',
+    description: 'Build, deploy, and monitor autonomous AI agents for finance and compliance workflows.',
+    icon: Cpu,
+    capabilities: ['Agent builder', 'Workflow automation', 'Agent monitoring', 'Audit logs'],
+  },
+  'digital-twin': {
+    name: 'Digital Twin',
+    description: 'Create a digital replica of your business to simulate decisions before executing them.',
+    icon: Boxes,
+    capabilities: ['Business simulation', 'Scenario modeling', 'Impact prediction', 'What-if analysis'],
+  },
+  'app-store': {
+    name: 'App Store',
+    description: 'Extend GSTPilot with third-party apps and integrations from the marketplace.',
+    icon: Boxes,
+    capabilities: ['App catalog', 'One-click install', 'Unified billing', 'App management'],
+  },
+  'event-engine': {
+    name: 'Event Engine',
+    description: 'Event-driven automation that triggers workflows based on business events.',
+    icon: Workflow,
+    capabilities: ['Event triggers', 'Workflow automation', 'Webhook dispatch', 'Event replay'],
+  },
+  'decision-engine': {
+    name: 'Decision Engine',
+    description: 'Rule-based decision engine for approvals, thresholds, and policy enforcement.',
+    icon: GitBranch,
+    capabilities: ['Decision rules', 'Approval workflows', 'Policy enforcement', 'Audit trail'],
+  },
+  'run-india-business': {
+    name: 'Run India Business',
+    description: 'State-wise GST compliance, branch management, and local tax tracking.',
+    icon: Globe,
+    capabilities: ['State-wise GST', 'Branch management', 'Local tax rules', 'Inter-state reconciliation'],
+  },
+  'run-my-business': {
+    name: 'Run My Business',
+    description: 'Autopilot mode for daily operations — auto-file, auto-remind, auto-reconcile.',
+    icon: Sparkles,
+    capabilities: ['Autopilot filing', 'Auto reminders', 'Auto reconciliation', 'Exception alerts'],
+  },
+  'multi-firm': {
+    name: 'Multi-Firm',
+    description: 'Manage multiple firms or business entities from a single dashboard.',
+    icon: Building2,
+    capabilities: ['Multi-entity dashboard', 'Consolidated reports', 'Inter-entity transactions', 'Role-based access'],
+  },
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // DashboardViewRenderer — the actual component consumed by page.tsx
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function DashboardViews({ view }: { view: string }) {
-  // Per the stabilization directive: the deleted 'connections' view must
-  // never render. Any caller that still passes 'connections' (or any other
-  // removed/unknown view) is redirected to a REAL integration page
-  // (Google Workspace) instead of the deprecated Mission Control dashboard.
-  // This guarantees no user can reach a removed or fake page.
+  // The deleted 'connections' view must never render — redirect to Google.
   const safeView = view === 'connections' ? 'google-workspace' : view;
-  const Component = VIEW_COMPONENTS[safeView] || DashboardHomePage;
-  return <Component />
+
+  // If this is a REAL working view, render its component.
+  if (REAL_VIEWS.has(safeView)) {
+    const Component = VIEW_COMPONENTS[safeView];
+    if (Component) return <Component />;
+  }
+
+  // Everything else → ONE premium FeaturePlaceholder page.
+  // This replaces 60+ inconsistent "Coming Soon" pages with a single,
+  // beautiful, honest "on the roadmap" page.
+  const meta = PLACEHOLDER_META[safeView];
+  if (meta) {
+    return (
+      <FeaturePlaceholder
+        featureName={meta.name}
+        description={meta.description}
+        icon={meta.icon}
+        capabilities={meta.capabilities}
+      />
+    );
+  }
+
+  // Unknown view with no metadata → generic placeholder.
+  return (
+    <FeaturePlaceholder
+      featureName="This module is on the roadmap"
+      description="GSTPilot is focused on delivering a polished experience for the features that are live today. This module will be built once the core is rock-solid."
+      icon={Sparkles}
+    />
+  )
 }

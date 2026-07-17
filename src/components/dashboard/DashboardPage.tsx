@@ -1033,7 +1033,7 @@ export default function DashboardPage() {
         >
           <div className="space-y-2 min-w-0">
             <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-              {getGreeting()}, {firstName} <span className="inline-block">👋</span>
+              {getGreeting()}, {firstName}
             </h1>
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
               <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />

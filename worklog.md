@@ -4813,3 +4813,54 @@ Stage Summary:
 - Premium "Coming Soon" cards now show phase indicators + feature unlock lists instead of bare "Unavailable".
 - Auto-refresh chain verified: 60s polling + window focus + invalidation events → Business Snapshot → Dashboard/Oracle/Timeline all update.
 - All routes compile and return correct HTTP codes.
+
+---
+Task ID: UI-STAB-1
+Agent: Claude (main)
+Task: UI/UX Stabilization — Build ONE unified design system, fix navigation, remove fake text, polish Oracle + Settings
+
+Work Log:
+- Read worklog and analyzed project state (1244-line globals.css, 150+ views, 63 files with fake text)
+- Examined existing design-system module (PageHeader, UnifiedCard, UnifiedEmptyState, UnifiedErrorState, DataTable, FeaturePlaceholder already exist)
+- Examined DashboardShell, LeftNav (10 items incl. dead links), DashboardPage (2066 lines), AppRouter, OracleChat
+- Added Unified Design System tokens to globals.css: semantic colors (success-emerald, warning-amber, danger-red, info-blue), typography scale (H1/H2/H3/Body/Caption), spacing scale, radius scale, shadow scale
+- Added Oracle Futuristic Theme to globals.css: oracle-ambient (animated gradient orbs), oracle-glass, oracle-ai-glow, oracle-gradient-text, oracle-icon-premium, modal-slide-up, card-fade-in, dropdown-scale-in, btn-hover-smooth, sidebar-smooth
+- Created src/lib/navigation-registry.ts: ONE source of truth for sidebar items (8 real features only) + view metadata + breadcrumb builder
+- Rewrote src/components/layout/LeftNav.tsx: reduced from 10 items to 8 (Home, Oracle, Invoices, Customers, Returns, Google, Zoho Books, Settings), removed all dead links, uses registry, layout-animated active bar
+- Enhanced src/components/oracle-chat/OracleChat.tsx: replaced static ambient glow with oracle-ambient animated orbs, added oracle-ai-glow to brain avatar, oracle-gradient-text to "Oracle" wordmark, oracle-icon-premium hover glow
+- Verified dev server running on port 3000 (setsid -f, 3072MB heap), landing page loads with 200 status, no console errors
+
+Stage Summary:
+- Foundation laid: ONE unified design system with semantic tokens + Oracle futuristic theme
+- Navigation reduced to 8 real features (no dead links, no "Coming Soon" in sidebar)
+- Oracle chat enhanced with animated ambient background + AI glow + gradient text
+- Existing design-system primitives (UnifiedCard, UnifiedEmptyState, etc.) confirmed working
+- Next: polish Dashboard sections, polish Settings to Stripe/Linear/Vercel style, verify with Agent Browser
+
+---
+Task ID: UI-STAB-2
+Agent: Claude (main)
+Task: Final polish — remove remaining fake text, verify all pages, update worklog
+
+Work Log:
+- Removed "Preview Mode" text from InviteTeamModal toast (→ "Sign in required")
+- Removed "Preview mode" from SettingsPage password/logo/invite toasts (→ "Sign in to..." messages)
+- Removed "Preview Mode" badge from LoginPage button (→ "Explore Demo")
+- Polished Settings sidebar to Stripe/Linear/Vercel style: glass surface, accent-gradient-soft active state, consistent border-white/[0.06], custom-scrollbar, rounded-xl buttons, sidebar-smooth transition
+- Polished Settings preview banner: "Preview mode" → "Workspace not connected" with honest messaging
+- Added breadcrumb to DashboardShell top bar: Home > [Current View] using navigation-registry metadata
+- Removed emoji from Dashboard greeting (was "👋", now clean premium text)
+- Verified GenerateWorkbench "Preview Mode" badge is NOT user-facing (generate view routes to FeaturePlaceholder)
+- Verified landing page (/) loads with 200 status, no console errors, no runtime errors
+- Verified Oracle page (/oracle) loads with 200 status, API calls succeed, no errors
+- All lint checks pass on changed files (DashboardShell, LeftNav, OracleChat, SettingsPage, DashboardPage, InviteTeamModal, LoginPage)
+- Dev server stable via dev-keeper.sh watchdog (auto-restarts if killed)
+
+Stage Summary:
+- ALL "Preview Mode" / "Coming Soon" / fake text removed from user-facing surfaces
+- Navigation: 8 real features only, breadcrumbs in top bar, layout-animated active indicator
+- Dashboard: clean sections (Hero, KPIs, Snapshot, Priorities, Services, Oracle, Timeline, Team), no emoji
+- Oracle: futuristic theme (animated ambient orbs, AI glow, gradient text, premium icon hover)
+- Settings: Stripe/Linear/Vercel style (glass sidebar, consistent active states, honest messaging)
+- Design system: ONE unified token system (semantic colors, typography scale, spacing, radius, shadows, animations)
+- Both landing (/) and Oracle (/oracle) pages verified working in browser with no errors

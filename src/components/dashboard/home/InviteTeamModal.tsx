@@ -102,7 +102,7 @@ export function InviteTeamModal({ open, onOpenChange, onInvited }: InviteTeamMod
       return;
     }
     if (isPreview) {
-      toast.info('Preview Mode', { description: PREVIEW_MODE_MSG });
+      toast.info('Sign in required', { description: 'Sign in to invite team members to your workspace.' });
       onOpenChange(false);
       return;
     }

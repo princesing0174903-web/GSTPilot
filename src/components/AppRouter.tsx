@@ -327,7 +327,7 @@ function AuthErrorScreen({ message, onRetry }: { message: string; onRetry: () =>
 export function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp();
   const { isAuthenticated, isInitializing, needsEmailVerification, error: authError, logout } = useAuth();
-  const { needsOrganization, loading: orgLoading, organization, error: orgError, reload: reloadOrg } = useOrg();
+  const { needsOrganization, loading: orgLoading, organization, error: orgError, reload: reloadOrg, isPreviewMode } = useOrg();
 
   const needsOnboarding = isAuthenticated && needsOrganization;
 

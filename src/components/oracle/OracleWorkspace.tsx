@@ -51,6 +51,7 @@ import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
 import { InvoiceActionCard } from '@/components/oracle-cfo/InvoiceActionCard';
 import { PaymentLinkActionCard } from '@/components/oracle-cfo/PaymentLinkActionCard';
 import { CommunicationActionCard } from '@/components/oracle-cfo/CommunicationActionCard';
+import { StructuredQueryCard } from '@/components/oracle/StructuredQueryCard';
 import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
@@ -641,6 +642,20 @@ export function OracleWorkspace({
               continue;
             }
             if (chunk.language) setActiveLanguage(chunk.language);
+            if (chunk.structured) {
+              // ── Structured data card (Task 4) ──
+              // The server emits this as the FIRST SSE event when the user's
+              // message matches a structured-query intent. Store it on the
+              // oracle message so it can be rendered above the text answer
+              // by the OracleMessageBubble component.
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === oracleId
+                    ? { ...m, structuredQuery: chunk.structured }
+                    : m,
+                ),
+              );
+            }
             if (chunk.token) {
               acc += chunk.token;
               setMessages((prev) =>
@@ -1375,6 +1390,17 @@ function MessageBubble({
           <div className="mb-1 text-xs" aria-hidden>
             {emotionGlyph}
           </div>
+        )}
+
+        {/* ─── Structured data card (Task 4) ──────────────────────────────
+            When the user's message matches a structured-query intent
+            ("unpaid invoices", "top customers", "GST payable", etc.), the
+            server emits the structured result as the FIRST SSE event of the
+            stream. We render the card ABOVE the conversational text answer
+            so the user sees real data instantly while the LLM still writes
+            a natural-language explanation below. */}
+        {message.structuredQuery && (
+          <StructuredQueryCard result={message.structuredQuery} />
         )}
 
         {isEmptyStreaming ? (

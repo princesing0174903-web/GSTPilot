@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createPayment } from '@/lib/gstpilot-data';
 import type { CreatePaymentInput } from '@/lib/gstpilot-data';
+import { logActivity, getOptionalUserId } from '@/lib/activity-logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,32 @@ export async function POST(req: Request) {
     };
     const payment = await createPayment(organizationId, input);
     const direction = payment.partyType === 'customer' ? 'received' : 'paid out';
+
+    // Business Timeline event — "Payment recorded"
+    // Best-effort: skip if no organizationId (we can't attribute the activity).
+    if (organizationId) {
+      const userId = await getOptionalUserId(req);
+      await logActivity({
+        organizationId,
+        userId,
+        type: 'payment_recorded',
+        title: 'Payment Recorded',
+        description: `Payment of ₹${Number(payment.amount).toLocaleString('en-IN')} ${direction} via ${payment.paymentMode}${payment.partyName ? ` — ${payment.partyName}` : ''}.`,
+        entityType: 'payment',
+        entityId: payment.id,
+        clientId: payment.partyType === 'customer' ? payment.partyId : null,
+        metadata: {
+          amount: Number(payment.amount),
+          paymentMode: payment.paymentMode,
+          partyType: payment.partyType,
+          partyName: payment.partyName,
+          invoiceId: payment.invoiceId,
+          invoiceNumber: payment.invoiceNumber,
+          status: payment.status,
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       payment,

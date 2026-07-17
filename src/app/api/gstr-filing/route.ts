@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { isOverdue } from '@/lib/gst-utils';
 import { emitGstReturnNode } from '@/lib/graph/auto-emit';
+import { logActivity, getOptionalUserId } from '@/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -28,7 +29,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientId, returnType, period, financialYear } = body;
+    const { clientId, returnType, period, financialYear, organizationId } = body;
 
     if (!clientId || !returnType || !period) {
       return NextResponse.json(
@@ -117,6 +118,52 @@ export async function POST(request: Request) {
 
     // PT-2-b: canonical graph node emit — auto-create gst-return node + Client→Filing edge
     try { await emitGstReturnNode(filing.id); } catch (e) { console.error('[graph] emitGstReturnNode failed', e); }
+
+    // Business Timeline event — "GST return created"
+    // Resolve orgId from (in priority order): body.organizationId, or
+    // Client.firmId via the clientId lookup.
+    let resolvedOrgId: string | null =
+      typeof organizationId === 'string' && organizationId.trim()
+        ? organizationId.trim()
+        : null;
+
+    if (!resolvedOrgId) {
+      try {
+        const client = await db.client.findUnique({
+          where: { id: clientId },
+          select: { firmId: true },
+        });
+        if (client?.firmId) {
+          resolvedOrgId = client.firmId;
+        }
+      } catch {
+        // ignore — best-effort
+      }
+    }
+
+    if (resolvedOrgId) {
+      const userId = await getOptionalUserId(request);
+      const clientName =
+        filing.client?.tradeName ?? filing.client?.legalName ?? 'Unknown client';
+      await logActivity({
+        organizationId: resolvedOrgId,
+        userId,
+        type: 'gst_return_created',
+        title: 'GST Return Created',
+        description: `${returnType} for period ${period} created for ${clientName} — ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}, ₹${Number(totalTaxable._sum.taxableValue ?? 0).toLocaleString('en-IN')} taxable, ₹${taxSum.toLocaleString('en-IN')} tax.`,
+        entityType: 'gstr_filing',
+        entityId: filing.id,
+        clientId,
+        metadata: {
+          returnType,
+          period,
+          invoiceCount,
+          totalTaxableValue: Number(totalTaxable._sum.taxableValue ?? 0),
+          totalTax: taxSum,
+          status: 'draft',
+        },
+      });
+    }
 
     return NextResponse.json({ filing }, { status: 201 });
   } catch (error) {

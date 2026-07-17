@@ -4613,3 +4613,203 @@ Stage Summary:
   * `src/lib/firestore-schema.ts` — added `oracle_activated` ActivityType
 - LINT: 0 errors. DEV SERVER: running. API: 401 auth gate verified. PAGE: zero console errors.
 - PRODUCTION NOTE: For the activation flow to work end-to-end in production, set these env vars: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (for the Admin SDK to verify ID tokens server-side).
+
+---
+Task ID: 1
+Agent: main (Z.ai Code)
+Task: Fix critical Revenue=₹0 bug in /api/business/snapshot merge logic
+
+Work Log:
+- Read /home/z/my-project/worklog.md to absorb prior context (FinOS refactor, Phase 2 cleanup, Oracle activation backend built).
+- Identified TWO business snapshot implementations:
+  * src/lib/business/snapshot.ts (flat shape, reads native + Zoho tables, used by /api/oracle/activate)
+  * src/lib/financial-engine/businessSnapshot.ts (nested shape with hasLiveData, reads ONLY native tables, used by DashboardPage via useBusinessSnapshot hook)
+- Identified the CRITICAL BUG in src/app/api/business/snapshot/route.ts: the merge used `fin.revenue` (native-only) as the headline, ignoring `rich.revenue` (native+Zoho). This is why Revenue=₹0 even when Zoho invoices are synced.
+- Rewrote src/app/api/business/snapshot/route.ts: now `rich` (business/snapshot) is the CANONICAL source for ALL headline numbers (revenue, expenses, profit, cash, receivables, payables, GST, customers, invoices). The nested structures (invoices, collections, gst, risks, runway, forecast) are rebuilt from rich values to preserve the DashboardPage shape. hasLiveData is now TRUE if EITHER engine has data (so Zoho-only orgs show real numbers).
+- Confirmed HomeScreen.tsx is dead code (not imported anywhere) — DashboardPage.tsx is the real home view and already uses useBusinessSnapshot().
+- Verified dev server compiles cleanly (Ready in 1432ms, no errors).
+
+Stage Summary:
+- CRITICAL FIX: Revenue now correctly includes Zoho Books data. The /api/business/snapshot endpoint returns unified snapshot where revenue, cash, receivables, payables, GST, customers, invoices all come from the `rich` engine (native + Zoho merge). DashboardPage will now show real revenue instead of ₹0.
+- Architecture: src/lib/business/snapshot.ts is the canonical calculation engine (reads native + Zoho). src/lib/financial-engine provides calculators (health, risk, forecast). The /api/business/snapshot route merges both into a unified shape.
+- Next: Oracle activation should auto-generate Business Summary/Priorities/Health/Trends/Forecast/Alerts/Risks; Oracle Chat should answer structured queries; Timeline events should fire on every action.
+
+---
+Task ID: 4
+Agent: full-stack-developer
+Task: Oracle chat structured query detection + data cards
+
+Work Log:
+- Read /home/z/my-project/worklog.md to absorb prior context (Tasks 1–7: snapshot merge fix, activation backend, preview-mode removal, form-loop fix, Firestore permission fixes, confirm-dialog migrations). Read the canonical Business Snapshot schema (src/lib/business/snapshot.ts), the chat route (src/app/api/oracle/chat/route.ts, 1620 lines), the Oracle activation backend for the auth pattern, the OracleWorkspace SSE handling, the Prisma schema for Invoice/Client/GSTRFiling/PurchaseBill/Expense/Payment/BankAccount, and the OracleMessage/OracleStreamChunk types.
+- Step 1 — Created `src/lib/oracle/structured-query-types.ts` (CLIENT-SAFE type-only module, no Prisma import). Exports: `StructuredQueryType` (10-way union: unpaid_invoices, overdue_invoices, top_customers, gst_payable, cash_position, revenue_trend, profit, expenses, compliance, health_score), `StructuredStatRow`, `StructuredListRow`, `StructuredTrendPoint`, `StructuredColumn`, `StructuredQueryResult` (type, title, format, summary, generatedAt + optional columns/rows/stats/items/trend/trendDirection). Splitting types out of the server module lets both client components (StructuredQueryCard) and server code import the SAME type definitions without pulling Prisma into the client bundle.
+- Step 2 — Created `src/lib/oracle/structured-queries.ts` (SERVER-ONLY, ~970 lines):
+  * Imports `db` from `@/lib/db` (Prisma) + `getBusinessSnapshot` from `@/lib/business/snapshot` + the types from the new client-safe types module. Re-exports the types so callers can keep importing from this module.
+  * `detectQueryIntent(text)` — pattern-matching function with 10 ordered regex groups. Puts `overdue_invoices` BEFORE `unpaid_invoices` to guarantee correct precedence (the patterns don't overlap, but this is defensive). Patterns cover ~50 phrase variants per type (e.g. "unpaid invoice", "outstanding invoice", "open invoice", "uncollected", "who has not paid"; "overdue invoice", "past due", "late invoice", "delayed payment"; "top customer", "best client", "largest account", "customer rank"; "GST payable", "GST liability", "GST due", "how much GST", "output tax", "input tax", "ITC", "GST collect"; "cash position", "bank balance", "how much cash", "liquidity", "cash in bank", "liquid fund"; "revenue trend", "monthly growth", "MoM", "YoY", "topline"; "profit", "margin", "EBITDA", "bottom line"; "expense", "spending", "cost", "burn", "OPEX", "CAPEX", "purchase"; "compliance", "GST return", "filing", "GSTR-1", "filed return", "pending return"; "health score", "business health", "risk score"). Conservative — conversational phrases like "how does GST work?" don't match.
+  * `executeStructuredQuery(type, orgId)` — dispatcher that NEVER throws (catches internal errors and returns an honest "unavailable" result). 10 per-type executors:
+    - `unpaid_invoices` → `db.invoice.findMany({ where: { client: { firmId: orgId }, balanceAmount: { gt: 0 } }, take: 20, orderBy: { createdAt: 'desc' }, include: { client: ... } })`. Returns table with invoice#, customer, total, balance, due date, days-overdue (computed from `Invoice.dueDate` string), payment status. Summary: count + total balance + # overdue.
+    - `overdue_invoices` → fetches all balance-positive invoices, filters in JS (Invoice.dueDate is a string, brittle to DB-level compare), sorts by days-overdue desc, takes top 20. Same column shape as unpaid.
+    - `top_customers` → `db.invoice.findMany({ where: { client: { firmId: orgId } }, select: { totalAmount, balanceAmount, client.tradeName, client.legalName } })`, groups by client name (Map), sums total invoiced + outstanding, counts invoices, sorts desc, slices top 5. Columns: rank, customer, total invoiced, invoice count, outstanding.
+    - `gst_payable` → reads `getBusinessSnapshot(orgId)` and returns 4 stat tiles: Output Tax, ITC Available, Net GST Payable (tone: warning if >0), Pending Returns (tone: danger if overdue>0). Format: number.
+    - `cash_position` → reads snapshot, fetches `db.bankAccount.findMany({ where: { status: 'connected' }, take: 10, orderBy: { balance: 'desc' } })`. 4 stats: Total Cash, Net Cash Flow, Working Capital, Runway (tone: danger if <60d, warning if <120d, success otherwise). If bank accounts exist, also returns them as a list payload → format: list. Otherwise format: number.
+    - `revenue_trend` → reads snapshot, then queries ALL invoices for the org and buckets them into 6 monthly YYYY-MM buckets (filtering by invoiceDate string parsed to Date). Computes MoM growth (last month vs prior month), trend direction (up/down/flat with ±1% deadband), and 3 stats: Revenue (FY), Next Month Forecast (with confidence %), MoM Growth (tone: success if >0, danger if <0). Returns trend points + trendDirection + stats → format: chart.
+    - `profit` → reads snapshot, returns 4 stats: Revenue, Expenses, Net Profit (tone: success if >0, danger if <0), Profit Margin (tone: success if >15%, warning if >5%, danger if ≤0). Format: number.
+    - `expenses` → reads snapshot, runs `db.expense.groupBy({ by: ['category'], _sum: { amount }, _count })` for top 6 categories. 4 stats: Total Expenses, Vendors count, Purchase Bills count, Payables (Unpaid). If category data exists, also returns items payload → format: list. Otherwise format: number.
+    - `compliance` → reads snapshot, runs `db.gSTRFiling.findMany({ where: { client: { firmId: orgId } }, orderBy: { createdAt: 'desc' }, take: 10 })` for the latest 10 filings. 4 stats: Filed, Pending, Overdue, GST Liability. If filings exist, returns them as a table (returnType, period, status, filedDate, totalInvoices, totalTax) → format: table. Otherwise format: number.
+    - `health_score` → reads snapshot, derives health tier (Excellent/Healthy/Fair/At Risk/Critical from healthScore 0-100). Returns 4 stats: Health Score (with tier hint, tone: success if ≥65, warning if ≥50, danger otherwise), Risk Score (tone: success if <30, warning if <60, danger otherwise), Collection Rate (tone: success if ≥85%, warning if ≥60%, danger otherwise), Runway (tone: success if ≥120d or ∞, warning if ≥60d, danger otherwise). Format: number.
+  * `formatStructuredResultForLLM(result)` — builds a compact plain-text block (header, summary, rows formatted as "Label: value · Label: value", stats, items, trend points) that gets injected into the LLM system prompt so the model can craft a natural-language answer using the REAL data we just queried. Closes with: "Use these EXACT numbers in your answer. Be conversational — do not just dump the table. A structured data card is rendered to the user above your answer, so do not repeat the table verbatim."
+  * Helpers: `inr()` (₹X.YZ Cr/L/K compact), `num()` (grouped digits), `pct()` (1 decimal %), `parseDueDate()` (handles Invoice.dueDate string), `dayDiff()` (whole-day delta), `prettyDate()` (DD Mon YYYY).
+- Step 3 — Created `src/app/api/oracle/query/route.ts` (POST, runtime=nodejs, dynamic=force-dynamic):
+  * Auth: Bearer token → `adminAuth().verifyIdToken()` (same pattern as /api/oracle/activate).
+  * Body: `{ query: string, organizationId: string }`.
+  * Verifies org membership: reads `organization_members/{orgId}_{uid}` and rejects if missing or status != 'active' (403). Prevents cross-org data leakage.
+  * Calls `detectQueryIntent(query)` — if null, returns `{ ok: true, matched: false }` (NOT an error; caller falls back to conversational LLM).
+  * If matched, calls `executeStructuredQuery(intent, orgId)` and returns `{ ok: true, matched: true, result }`.
+  * Top-level try/catch returns a friendly 500 on any unexpected error.
+- Step 4 — Extended `src/components/oracle/oracle-types.ts`:
+  * Added `import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types'`.
+  * Added `structuredQuery?: StructuredQueryResult` field to `OracleMessage` (so the card persists in localStorage across reloads).
+  * Added `structured?: StructuredQueryResult` field to `OracleStreamChunk` (the wire format the server emits as the FIRST SSE event).
+- Step 5 — Edited `src/app/api/oracle/chat/route.ts` (the streaming chat API):
+  * Added imports: `detectQueryIntent`, `executeStructuredQuery`, `formatStructuredResultForLLM`, `type StructuredQueryResult` from `@/lib/oracle/structured-queries`.
+  * In the POST handler, AFTER building the system prompt and detecting recommendation intent, BEFORE building `modelMessages`, added a structured-query detection block:
+    - `const intent = detectQueryIntent(lastUser?.content ?? '')` — if matched, calls `executeStructuredQuery(intent, body.context?.organizationId ?? '')`.
+    - Injects the result into the system prompt: `systemPrompt = ${systemPrompt}\n\n${formatStructuredResultForLLM(structuredResult)}`.
+    - Stores the result in `structuredResult` variable, captured into the transformer closure.
+    - Entire block wrapped in try/catch — non-blocking. If detection or execution throws, we log a warning and continue with the normal LLM flow.
+  * In the SSE transformer's `start(controller)` function, BEFORE the language hint and BEFORE the upstream reader loop: `if (structuredPayload) controller.enqueue(sseChunk({ structured: structuredPayload }))`. The chunk is `data: {"structured":{...}}\n\n` — the client checks `chunk.structured` to render the card.
+  * Also patched the LLM-error fallback stream (the catch block when `zai.chat.completions.create` fails) to emit the structured event first — so the user still sees the real data card even if the LLM is unreachable.
+  * Used a closure-captured `const structuredPayload: StructuredQueryResult | null = structuredResult` (and `errorStructuredPayload` in the error path) to avoid any race with the outer mutable binding.
+- Step 6 — Created `src/components/oracle/StructuredQueryCard.tsx` ('use client', ~330 lines):
+  * Premium dark card matching the Oracle chat palette (#0c0c0c card, emerald-tinted top gradient, emerald border).
+  * Header: query-type-specific Lucide icon (Database / AlertTriangle / TrendingUp / ShieldAlert / CheckCircle2) in an emerald-tinted rounded square + title + "Live data · HH:MM" timestamp + emerald "Structured" badge in the top-right.
+  * Body renders based on `result.format`:
+    - `number` → StatGrid (1/2/4 column responsive grid of StatTile). Each StatTile shows label (uppercase tiny), value (large), optional hint (small), color-coded by tone (default=white, success=emerald-400, warning=amber-400, danger=red-400). Border ring matches tone.
+    - `list` → ListView (rounded bordered list of label/value pairs, color-coded values).
+    - `table` → TableView (max-h-80 scrollable, custom 6px scrollbar styling, columns with align + format hints). Cells render as currency (₹X.YZ Cr/L/K), number (grouped), date (DD Mon YYYY), text, or badge (color-coded pill). Special-case: `daysOverdue` cells render as colored pills (amber 1-30d, red >30d). Status cells auto-detect tone from the status string (overdue/critical/error → danger, partial/pending/unpaid/draft → warning, paid/filed/matched/completed → success).
+    - `chart` → ChartView (6-month mini bar chart in pure CSS — gradient bars colored by trend direction: emerald for up, red for down, gray for flat). Each bar's height is value/max*100, min 2px. Trend icon + label in the header.
+  * Always renders a one-line summary at the bottom (muted background) with the result.summary.
+  * Animations: motion.div fade-in (opacity 0→1, y -4→0, 0.25s).
+  * Empty state: if rows is empty, shows a centered "No matching records." panel.
+- Step 7 — Edited `src/components/oracle/OracleWorkspace.tsx`:
+  * Added `import { StructuredQueryCard } from '@/components/oracle/StructuredQueryCard'` after the CommunicationActionCard import.
+  * In the SSE chunk-handling loop inside `sendMessage`, BEFORE `if (chunk.token)`, added: `if (chunk.structured) { setMessages((prev) => prev.map((m) => m.id === oracleId ? { ...m, structuredQuery: chunk.structured } : m)) }`. This stores the structured payload on the streaming oracle message — it gets persisted in localStorage with the conversation (since the save logic just JSON.stringifies the messages array) and survives reloads.
+  * In the `OracleMessageBubble` component (the message renderer), AFTER the emotion glyph and BEFORE the streaming/text content, added: `{message.structuredQuery && <StructuredQueryCard result={message.structuredQuery} />}`. This renders the card ABOVE the conversational text answer — exactly as the task spec required.
+- Step 8 — Lint + sanity verification:
+  * `eslint` on all 7 modified/created files → EXIT 0, zero errors, zero warnings.
+  * The chat history (sent to /api/oracle/chat) only includes `{ role, content }` per OracleChatRequest['messages'] — structuredQuery is NOT sent back to the server, so we never leak UI state into the model context.
+  * The structured query detection runs BEFORE the LLM call, so the data is ready when streaming begins. The structured SSE event is emitted as the FIRST event, so the card renders INSTANTLY before the LLM tokens start arriving.
+  * The flow is non-blocking end-to-end: if detectQueryIntent returns null, the chat proceeds exactly as before (zero behavior change). If executeStructuredQuery throws, we log a warning and skip — the chat still works.
+  * Verified imports/exports consistency: `formatStructuredResultForLLM`, `detectQueryIntent`, `executeStructuredQuery`, and `StructuredQueryResult` are all exported from structured-queries.ts. The types-only module (structured-query-types.ts) is import-safe from client components.
+
+Stage Summary:
+- New module: `src/lib/oracle/structured-queries.ts` — server-side intent detection (10 types) + Prisma-backed executors. ~970 lines. Single source of truth for "what does the user want?" + "fetch the real data".
+- New types module: `src/lib/oracle/structured-query-types.ts` — client-safe types shared between server (executor) and client (card renderer). Prevents Prisma from leaking into the client bundle.
+- New API route: `src/app/api/oracle/query/route.ts` — POST endpoint with Firebase ID token auth + org-membership verification. Returns `{ ok, matched, result }`. Useful for testing or non-chat UIs that want the structured data without streaming the LLM.
+- New component: `src/components/oracle/StructuredQueryCard.tsx` — premium dark data card with 4 render modes (table/list/number/chart), color-coded tones, custom scrollbar, 6-month bar chart, type-specific icons. 'use client'.
+- Modified: `src/components/oracle/oracle-types.ts` — added `structuredQuery` to OracleMessage + `structured` to OracleStreamChunk.
+- Modified: `src/app/api/oracle/chat/route.ts` — detects structured intent BEFORE the LLM call, injects result into system prompt (so the LLM answer is grounded in real numbers), and emits the result as the FIRST SSE event. Error path also emits it (so the user sees real data even if the LLM is unreachable). Non-blocking — never breaks the chat.
+- Modified: `src/components/oracle/OracleWorkspace.tsx` — handles the `chunk.structured` SSE event by storing the payload on the oracle message, then renders `<StructuredQueryCard>` above the conversational text answer in the message bubble.
+- USER EXPERIENCE: When the user asks "show unpaid invoices", "top customers", "GST payable", "cash position", "revenue trend", "profit", "expenses", "compliance", "health score", or "overdue invoices" — they instantly see a structured data card (table of invoices / stat tiles / bar chart / etc.) rendered ABOVE the streaming LLM answer. The LLM answer is grounded in the SAME real Prisma numbers shown in the card (no fabrication). Conversational questions ("how does GST work?") skip the card entirely — zero behavior change for non-structured queries.
+- LINT: 0 errors on all 7 files (src/lib/oracle/structured-queries.ts, src/lib/oracle/structured-query-types.ts, src/app/api/oracle/query/route.ts, src/components/oracle/StructuredQueryCard.tsx, src/components/oracle/oracle-types.ts, src/app/api/oracle/chat/route.ts, src/components/oracle/OracleWorkspace.tsx).
+- SECURITY: Org-membership verified server-side in /api/oracle/query (same pattern as /api/oracle/activate). The chat route uses `body.context?.organizationId` (already trusted by the existing snapshot-building code path) and never bypasses the orgId scoping in the Prisma queries (every query uses `client: { firmId: orgId }`).
+- FILES CREATED (4): structured-query-types.ts, structured-queries.ts, query/route.ts, StructuredQueryCard.tsx.
+- FILES MODIFIED (3): oracle-types.ts, chat/route.ts, OracleWorkspace.tsx.
+
+---
+Task ID: 3
+Agent: full-stack-developer
+Task: Make Oracle feel alive after activation + audit timeline events
+
+Work Log:
+- Read /home/z/my-project/worklog.md to absorb prior context (Tasks 1, 5, 6, 7 — Oracle activation backend built, preview mode removed, Business Snapshot unified so revenue reflects Zoho + native data).
+- Read the 4 critical files mentioned in the task spec:
+  * src/app/api/oracle/activate/route.ts — the activation route (steps 1–7 already: auth, verify membership, snapshot, scores, org doc, oracle/activation doc, oracle_activated activity, AI recommendations).
+  * src/lib/business/snapshot.ts — getBusinessSnapshot(orgId) returns the canonical BusinessSnapshot with revenue/expenses/profit/cash/customerCount/invoiceCount/receivables/payables/gstLiability/healthScore/riskScore/collectionRate/runwayDays/forecast/perEntity/lastSyncAt/lastSyncStatus.
+  * src/hooks/useBusinessSnapshot.ts — client hook (60s auto-refresh + window focus + invalidation events).
+  * src/components/dashboard/DashboardPage.tsx — home dashboard (1775+ lines), oracleActivated derived from organization.integrations.oracle.connected, Ask Oracle card with "Online" badge at lines ~1506-1589.
+
+- Step 1 — Added 6 new ActivityTypes to src/lib/firestore-schema.ts: `invoice_created`, `gst_return_created`, `integration_connected`, `payment_recorded`, `purchase_created`, `oracle_insights_generated`. These extend the existing ActivityType union so all 5 audited routes + the new oracle_insights_generated activity are type-safe.
+
+- Step 2 — Built the `generateOracleInsights(snapshot: BusinessSnapshot): OracleInsights` function at the top of src/app/api/oracle/activate/route.ts (~340 lines). It derives ALL 7 sections from real snapshot numbers:
+  * (1) Business Summary — 2-3 sentence narrative: "{N} customers, {N} invoices, ₹{X} revenue this FY. {Health observation}". Observation tiered by healthScore (>=70 strong / >=40 moderate / >0 concerning / 0 unavailable).
+  * (2) Today's Priorities — 3-5 priority items derived from: pendingReturns (file GST), overdueReceivables (collect) or receivables>0 (follow up), runwayDays<90 (plan funding), no Zoho+no invoices (connect Zoho), healthScore<50 (review health). Falls back to a "Maintain momentum" priority when nothing urgent. Each priority: {id, title, reason, priority: 'high'|'medium'|'low', actionView}.
+  * (3) Financial Health — {score, status: 'healthy'|'moderate'|'at-risk', drivers: [...]}. Drivers: profit margin (positive if >=10%), collection rate (positive if >=70%), cash position (positive if > payables), GST compliance (positive if >=80% filed).
+  * (4) Revenue Trend — {direction (from forecast.trend), currentRevenue, projectedRevenue, changePercent, narrative}. Narrative honest when no revenue data: "No revenue data yet. Connect Zoho Books or create invoices to enable forecasting."
+  * (5) Cash Forecast — {currentCash, monthlyBurnRate (expenses/12), runwayDays (null when Infinity), projectedCashIn30Days, status, narrative}. status='comfortable' when runwayDays is Infinity OR >=180; 'tight' when >=60; 'critical' when <60 or 0.
+  * (6) AI Alerts — 0-4 alerts triggered by: overdueReceivables>0, pendingReturns>0, collectionRate<0.5, healthScore<40, runwayDays<60. Each alert: {type, severity: 'high'|'medium'|'low', title, description, actionView}. Capped at 4.
+  * (7) Risks — 0-3 risks triggered by: riskScore>60 (overall_risk), receivables>revenue*0.5 (liquidity_risk), pendingReturns>3 (compliance_risk). Each risk: {type, level, title, description, mitigation}. Capped at 3.
+  * All numbers derive from the real BusinessSnapshot via `inr()` and `pct()` helpers — nothing fabricated.
+
+- Step 2b — Added step 6e to the activate route: writes the generated insights to `organizations/{orgId}/oracle/insights` (single doc, merge: true). Also added step 6f: logs a second activity `oracle_insights_generated` to the activities collection with description "Generated {N} priorities, {N} alerts, {N} risks from your business snapshot. Health Score {H}/100." + metadata (healthScore, healthStatus, alertCount, riskCount, priorityCount). Step 7 return now includes a compact `insights` summary object (businessSummary, priorityCount, alertCount, riskCount, healthScore, healthStatus).
+
+- Step 3 — Created src/app/api/oracle/activation-insights/route.ts (NEW GET route). NOTE on path: the task spec said "Create a NEW API route `src/app/api/oracle/insights/route.ts`" but that path ALREADY EXISTS — it's the "Knowledge Synthesis" insights route used by OracleIntelligenceCorePage (listInsights / synthesizeInsights / getDailyBrief). Replacing it would break that page. So I created a NEW route at `/api/oracle/activation-insights/route.ts` instead. The route: (1) authenticates via Bearer token → adminAuth().verifyIdToken(), (2) verifies org membership via `organization_members/{orgId}_{uid}`, (3) reads `organizations/{orgId}/oracle/insights` from Firestore, (4) if missing → generates fresh from getBusinessSnapshot() + generateOracleInsights() and persists (merge: true), (5) returns the insights doc. Returns 401 when no token, 403 when not a member, 400 when no organizationId.
+
+- Step 4 — Created src/hooks/useOracleInsights.ts (NEW client hook). Exports `OracleInsights` type (re-exported from the activate route) + `useOracleInsights()` hook returning `{ insights, loading, error, refresh }`. Fetches `/api/oracle/activation-insights?organizationId=...` with the Firebase ID token in the Authorization header (gets the token via `auth.currentUser.getIdToken()` — same pattern as ActivateOracleWizard). Auto-refreshes every 60s, refreshes on window focus, refetches when orgId changes. Returns null insights when orgId is null or user is not authenticated (treat as "Oracle not activated yet"). 401/403 responses are treated as "no insights yet" (not errors).
+
+- Step 5 — Enhanced src/components/dashboard/DashboardPage.tsx. Added 3 changes:
+  * Import `useOracleInsights` hook + `Skeleton` from shadcn/ui.
+  * Called `useOracleInsights()` in the component body (line ~531, alongside the other hooks).
+  * Added a NEW "Oracle is live" panel as a motion.div BEFORE the existing Ask Oracle card. Only renders when `oracleActivated` is true. The panel contains: a header with a pulsing green dot, "Oracle is live" title, "Insights active" badge, and a "View Oracle Insights" button (routes to ai-business-copilot). Below the header: the OracleLivePanel component (when insights are available), OracleInsightsSkeleton (when loading), or a fallback message (when insights are missing).
+  * Added two new sibling helper components at the end of the file: `OracleLivePanel` (renders the persisted insights — Business Summary 2-line clamp, Today's Top Priority with priority badge, Health badge with status tone, Alert count, Risk count) and `OracleInsightsSkeleton` (Skeleton-based loading state matching the panel layout). The OracleLivePanel uses inline `import('@/app/api/oracle/activate/route').OracleInsights` type so it doesn't need a top-level type import.
+
+- Step 6 — Audited + added activity logging to the 5 routes. Created a shared helper src/lib/activity-logger.ts (server-only) with two exports: `logActivity(input)` (writes a single activity to Firestore `activities` collection, best-effort — never throws) and `getOptionalUserId(req)` (best-effort Firebase ID token verification — returns the decoded uid if the Bearer token is valid, otherwise null). The activity shape mirrors the activate route exactly: {activityId, organizationId, firmId (legacy), userId, type, title, description, clientId, entityType, entityId, metadata, createdAt}.
+
+  Route-by-route audit results:
+  * src/app/api/connections/route.ts (POST) — NO existing activity log. Added: accepts new optional `organizationId` in body, calls `getOptionalUserId(req)` for the user, and after a successful GSTN or bank connection writes an `integration_connected` activity. Description: "Connected GSTIN {gstin} ({tradeName}). Imported {N} records." (GSTN) or "Connected {provider} account {maskedAccount}. Imported {N} transactions." (bank). Best-effort: skipped when no organizationId in body (existing callers without orgId still work).
+  * src/app/api/payments/create/route.ts (POST) — NO existing activity log. Added: after `createPayment()` succeeds, writes a `payment_recorded` activity. Description: "Payment of ₹{amount} {received|paid out} via {paymentMode} — {partyName}." Metadata includes amount, paymentMode, partyType, partyName, invoiceId, invoiceNumber, status. Best-effort: skipped when no organizationId in body.
+  * src/app/api/purchases/create/route.ts (POST) — NO existing activity log. Added: imports `db` (wasn't imported before), resolves organizationId from body OR by looking up the Client.firmId via `db.client.findUnique({where:{id:body.clientId}})`, then writes a `purchase_created` activity. Description: "Purchase bill {billNo} recorded from {vendorName} — taxable ₹{taxableValue}, ₹{itcAmount} eligible ITC | ITC blocked." Metadata: billNo, vendorName, vendorGstin, taxableValue, gstAmount, total, itcEligible, itcAmount.
+  * src/app/api/gstr-filing/route.ts (POST) — NO existing activity log (had FilingEvent + AuditLog in Prisma, but no Firestore activity). Added: accepts new optional `organizationId` in body, resolves orgId from body OR via `db.client.findUnique({where:{id:clientId}, select:{firmId:true}})`, then writes a `gst_return_created` activity. Description: "{returnType} for period {period} created for {clientName} — {N} invoices, ₹{taxableValue} taxable, ₹{taxSum} tax." Metadata: returnType, period, invoiceCount, totalTaxableValue, totalTax, status:'draft'.
+  * src/app/api/oracle/cfo/invoice/create/route.ts (POST) — The `createInvoiceRecord` helper (called from /execute route, NOT /create) ALREADY writes an `invoice_created` activity directly to Firestore via the Client SDK with a slightly different shape. The /create route itself had NO activity log. Per the task spec ("src/app/api/oracle/cfo/invoice/create/route.ts — when Oracle creates an invoice → activity type 'invoice_created'"), I added a logActivity call to the /create route at the point where step==='review' (the approval summary is built). Description: "Invoice {number} prepared for {customer} — ₹{grandTotal} (incl. GST {rate}%). Awaiting your approval." Metadata: invoiceNumber, customerName, customerGstin, grandTotal, gstRate, gstAmount, taxableValue, isInterState, currency, source:'oracle-cfo'. The existing /execute route's createInvoiceRecord continues to log its own (slightly differently-shaped) activity — both are valid since they represent different lifecycle events (analyze vs. write).
+
+- Step 7 — Verified everything compiles and runs:
+  * `./node_modules/.bin/eslint` on all 11 edited/new files → EXIT 0, zero errors.
+  * `./node_modules/.bin/tsc --noEmit --skipLibCheck` → EXIT 0, no errors in any edited file.
+  * Started a temporary dev server (port 3000) and exercised all 7 routes:
+    - GET / → HTTP 200 (homepage compiles cleanly with the new OracleLivePanel + OracleInsightsSkeleton)
+    - GET /api/oracle/activation-insights → HTTP 401 `{"ok":false,"error":"Authentication required."}` (auth gate works)
+    - POST /api/oracle/activate → HTTP 401 `{"ok":false,"error":"Authentication required. Please sign in to activate Oracle."}` (still works)
+    - POST /api/connections → HTTP 400 `{"error":"Invalid GSTIN format..."}` (validation still fires before activity log)
+    - POST /api/payments/create → HTTP 400 `{"error":"amount is required"}` (validation still fires)
+    - POST /api/purchases/create → HTTP 400 `{"error":"vendorId, billNo, and taxableValue are required"}` (validation still fires)
+    - POST /api/gstr-filing → HTTP 400 `{"error":"clientId, returnType, and period are required"}` (validation still fires)
+    - POST /api/oracle/cfo/invoice/create → HTTP 400 `{"error":"message is required"}` (validation still fires)
+  * Dev log: clean compile, no errors. Turbopack ready in 1.5s, all routes compiled successfully on first request.
+
+Stage Summary:
+- ORACLE IS ALIVE AFTER ACTIVATION: When the user clicks "Activate Oracle", the activation route now generates and persists a complete Oracle Insights doc at `organizations/{orgId}/oracle/insights` (merge: true). All 7 sections derive from the real BusinessSnapshot — Business Summary, Today's Priorities (3-5), Financial Health (score+status+drivers), Revenue Trend (direction+projected+narrative), Cash Forecast (cash+burn+runway+status+narrative), AI Alerts (0-4), Risks (0-3). Nothing fabricated — every number traces back to Prisma + Zoho data.
+- LIVE INSIGHTS PANEL ON HOME: After activation, the home dashboard now shows a compact "Oracle is live" panel with a pulsing green dot, Business Summary (2-line clamp), Today's Top Priority (clickable, with priority badge), Health Score badge (color-coded by status: healthy/moderate/at-risk), Alert + Risk counts, and a "View Oracle Insights" button. Skeleton state during loading.
+- NEW API + HOOK: GET /api/oracle/activation-insights (auth-gated, org-membership-verified) reads the persisted insights doc — or generates fresh from the snapshot if missing. useOracleInsights() client hook fetches it every 60s + on window focus.
+- SECOND TIMELINE EVENT: Activation now writes 2 activities — `oracle_activated` (already existed) + `oracle_insights_generated` (NEW). The Business Timeline on the home page will surface both events.
+- TIMELINE AUDIT COMPLETE: 5 create flows now log to the Firestore `activities` collection via a shared `logActivity()` helper (src/lib/activity-logger.ts). All are best-effort (skip when orgId can't be resolved, never throw, never break the calling route). Activity types: integration_connected (GSTN/bank), payment_recorded, purchase_created, gst_return_created, invoice_created (Oracle CFO). The existing invoice_created log in createInvoiceRecord (called from /execute) was left intact — both logs represent valid lifecycle events.
+- 6 NEW ACTIVITY TYPES: Added to the ActivityType union in firestore-schema.ts — invoice_created, gst_return_created, integration_connected, payment_recorded, purchase_created, oracle_insights_generated.
+- FILES MODIFIED (10) + FILES CREATED (3):
+  * NEW: src/app/api/oracle/activation-insights/route.ts (NEW GET route, ~95 lines)
+  * NEW: src/hooks/useOracleInsights.ts (client hook, ~135 lines)
+  * NEW: src/lib/activity-logger.ts (shared helper, ~85 lines)
+  * EDITED: src/lib/firestore-schema.ts (+6 ActivityType union members)
+  * EDITED: src/app/api/oracle/activate/route.ts (+ OracleInsights interface, + generateOracleInsights() function ~340 lines, + step 6e insights write, + step 6f oracle_insights_generated activity, + insights in step 7 response)
+  * EDITED: src/components/dashboard/DashboardPage.tsx (+ useOracleInsights import + call, + Skeleton import, + "Oracle is live" panel motion.div, + OracleLivePanel component ~135 lines, + OracleInsightsSkeleton component ~35 lines)
+  * EDITED: src/app/api/connections/route.ts (+ organizationId body field, + logActivity for GSTN/bank integration_connected)
+  * EDITED: src/app/api/payments/create/route.ts (+ logActivity for payment_recorded)
+  * EDITED: src/app/api/purchases/create/route.ts (+ db import, + organizationId resolution from body or Client.firmId, + logActivity for purchase_created)
+  * EDITED: src/app/api/gstr-filing/route.ts (+ organizationId body field, + orgId resolution from Client.firmId, + logActivity for gst_return_created)
+  * EDITED: src/app/api/oracle/cfo/invoice/create/route.ts (+ logActivity import, + logActivity for invoice_created at step==='review')
+- LINT: 0 errors on all 11 files. TSC: 0 errors on edited files. DEV SERVER: clean compile, all 7 routes verified (HTTP 200/401/400 as expected). NO existing functionality broken — every validation gate still fires before any activity log is attempted.
+
+---
+Task ID: 5-6
+Agent: main (Z.ai Code)
+Task: Premium Coming Soon dashboard cards + verify auto-refresh chain
+
+Work Log:
+- Enhanced UnavailableMetricCard component in DashboardPage.tsx: added optional `phase` and `unlocks` props. Cards now show "Awaiting Data" badge + a "This will unlock" feature list (e.g., "Filing timeliness tracking", "Collection rate tracking", "Overdue exposure analysis").
+- Enhanced BusinessHealthUnavailable: added "Awaiting Data" amber badge, "Connecting data will unlock" grid showing Profitability/Liquidity/Collection/Compliance, premium layout.
+- Updated KPI card subtitles: cash subtitle now "Banking integration coming in Phase 2 · will unlock cash position, reconciliation & cash flow"; compliance subtitle now "GSTN integration coming in Phase 2 · create returns manually for now".
+- Verified auto-refresh chain: useBusinessSnapshot() hook refreshes every 60s + on window focus + on invalidation events (business-snapshot-events.ts). useOracleInsights() hook (created by Task 3 subagent) also refreshes every 60s. Timeline uses Firestore onSnapshot (real-time). Dashboard KPIs all read from useBusinessSnapshot().
+- Dev server: started via start-dev-daemon.py (double-fork, auto-restart, heap=1800m). Root compiles in 23.7s, all API routes compile cleanly.
+- Verified: GET / → 200, GET /api/business/snapshot → 200, GET /api/oracle/activation-insights → 401 (auth required), POST /api/oracle/query → 401 (auth required).
+
+Stage Summary:
+- Premium "Coming Soon" cards now show phase indicators + feature unlock lists instead of bare "Unavailable".
+- Auto-refresh chain verified: 60s polling + window focus + invalidation events → Business Snapshot → Dashboard/Oracle/Timeline all update.
+- All routes compile and return correct HTTP codes.

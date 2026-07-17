@@ -54,6 +54,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
@@ -76,6 +77,7 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
 import { useGoogleWorkspace } from '@/hooks/useGoogleWorkspace';
 import { useZohoBooks } from '@/hooks/useZohoBooks';
+import { useOracleInsights } from '@/hooks/useOracleInsights';
 import { fileReturn } from '@/lib/firestore-service';
 import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
@@ -333,6 +335,10 @@ interface UnavailableMetricCardProps {
   reason: string;
   ctaLabel?: string;
   onCta?: () => void;
+  /** Optional phase label, e.g. "Coming in Phase 2". Shows a premium badge. */
+  phase?: string;
+  /** Optional list of features this metric will unlock once data is connected. */
+  unlocks?: string[];
 }
 
 function UnavailableMetricCard({
@@ -342,6 +348,8 @@ function UnavailableMetricCard({
   reason,
   ctaLabel,
   onCta,
+  phase,
+  unlocks,
 }: UnavailableMetricCardProps) {
   return (
     <motion.div
@@ -350,14 +358,14 @@ function UnavailableMetricCard({
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-5 h-full">
+      <div className="glass-surface rounded-2xl p-5 h-full flex flex-col">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="space-y-1 min-w-0">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               {label}
             </p>
             <p className="text-sm font-semibold text-muted-foreground/80">
-              Unavailable
+              {phase ?? 'Unavailable'}
             </p>
           </div>
           <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/[0.04] shrink-0">
@@ -370,11 +378,26 @@ function UnavailableMetricCard({
         <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
           {reason}
         </p>
+        {unlocks && unlocks.length > 0 && (
+          <div className="mt-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+            <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1.5">
+              This will unlock
+            </p>
+            <ul className="space-y-1">
+              {unlocks.map((u) => (
+                <li key={u} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/90">
+                  <span className="h-1 w-1 rounded-full bg-emerald-400/60 shrink-0" />
+                  {u}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {ctaLabel && onCta && (
           <button
             type="button"
             onClick={onCta}
-            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
+            className="mt-auto pt-3 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
           >
             {ctaLabel}
             <ArrowRight className="h-3 w-3" />
@@ -415,7 +438,7 @@ function BusinessHealthUnavailable({ onConnect }: { onConnect: () => void }) {
             </div>
           </div>
         </div>
-        <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
+        <div className="flex-1 min-w-0 space-y-3 text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2">
             <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft">
               <Brain className="h-4 w-4 accent-text" />
@@ -423,14 +446,31 @@ function BusinessHealthUnavailable({ onConnect }: { onConnect: () => void }) {
             <h3 className="text-sm font-semibold text-foreground tracking-tight">
               Business Health Score
             </h3>
+            <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-400/90">
+              <Clock className="h-2.5 w-2.5" />
+              Awaiting Data
+            </span>
           </div>
-          <p className="text-lg font-semibold text-muted-foreground">Unavailable</p>
+          <p className="text-lg font-semibold text-muted-foreground">Connect to activate</p>
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-            Connect your business data to generate a live health score. A real
-            health score is calculated from connected GSTN, Banking, Invoices,
-            and Expenses — we never invent a number.
+            Your health score is a composite of profitability, liquidity,
+            collections, and compliance — calculated from your real financial
+            data. We never invent a number.
           </p>
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-2">
+          <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-left">
+            <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1.5">
+              Connecting data will unlock
+            </p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {['Profitability score', 'Liquidity tracking', 'Collection rate', 'Compliance status'].map((u) => (
+                <div key={u} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/90">
+                  <span className="h-1 w-1 rounded-full bg-emerald-400/60 shrink-0" />
+                  {u}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
             <Button
               size="sm"
               onClick={onConnect}
@@ -519,6 +559,14 @@ export default function DashboardPage() {
 
   // ── AI Oracle recommendations ──
   const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
+
+  // ── Oracle Insights (the "Oracle is alive" payload) ──
+  // Only fetched when Oracle is activated — the hook short-circuits to null
+  // when orgId is null. We pass it through to the "Oracle is live" panel
+  // below the Ask Oracle card so the user sees real generated content
+  // (business summary + top priority + health badge) immediately after
+  // activation, not just an "Online" badge.
+  const { insights: oracleInsights, loading: oracleInsightsLoading } = useOracleInsights();
 
   // ── Legacy Firestore invoice hook (loading-state only) ──
   // We no longer read invoice DATA from Firestore — the Business Snapshot
@@ -959,10 +1007,10 @@ export default function DashboardPage() {
     ? 'No revenue recorded yet · connect Zoho Books or create invoices'
     : `Total revenue · ${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'}`;
   const complianceSubtitle = complianceEmpty
-    ? 'No returns pending · GSTN integration coming soon'
+    ? 'GSTN integration coming in Phase 2 · create returns manually for now'
     : `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
   const cashSubtitle = cashEmpty
-    ? 'No bank connected · banking integration coming soon'
+    ? 'Banking integration coming in Phase 2 · will unlock cash position, reconciliation & cash flow'
     : `Bank balance · ₹${formatINR(businessSnapshot.bankBalance)}`;
 
   const firstName = getFirstName(user?.name);
@@ -1095,7 +1143,9 @@ export default function DashboardPage() {
             index={0}
             label="Compliance Score"
             icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-            reason="Awaiting GST return data — connect Zoho Books or create returns to calculate filing compliance."
+            phase="Awaiting Data"
+            reason="Connect Zoho Books or create GST returns to calculate your filing compliance score from real return data."
+            unlocks={['Filing timeliness tracking', 'GST return status monitor', 'Late fee risk alerts']}
             ctaLabel="Create Return"
             onCta={() => setCurrentView('returns')}
           />
@@ -1103,7 +1153,9 @@ export default function DashboardPage() {
             index={1}
             label="Collection Score"
             icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-            reason="Awaiting invoice + payment data — connect Zoho Books or create invoices to measure collection rate."
+            phase="Awaiting Data"
+            reason="Connect Zoho Books or create invoices to measure how fast you collect payments from real invoice + payment data."
+            unlocks={['Collection rate tracking', 'Average days-to-pay', 'Overdue receivable alerts']}
             ctaLabel="Connect Zoho Books"
             onCta={() => setCurrentView('zoho-books')}
           />
@@ -1111,7 +1163,9 @@ export default function DashboardPage() {
             index={2}
             label="Risk Score"
             icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />}
-            reason="Awaiting financial data — connect Zoho Books to evaluate overdue, cash-flow, and concentration risk."
+            phase="Awaiting Data"
+            reason="Connect Zoho Books to evaluate overdue exposure, cash-flow risk, and customer concentration from real financials."
+            unlocks={['Overdue exposure analysis', 'Cash-flow risk scoring', 'Customer concentration alerts']}
             ctaLabel="Connect Zoho Books"
             onCta={() => setCurrentView('zoho-books')}
           />
@@ -1503,6 +1557,58 @@ export default function DashboardPage() {
           </SectionCard>
         </div>
 
+        {/* ═══ Oracle is Live Panel (only after activation) ═══ */}
+        {oracleActivated && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.04, ease: 'easeOut' as const }}
+          >
+            <div className="glass-surface rounded-2xl p-5 border-emerald-500/15">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <h3 className="text-sm font-semibold text-foreground tracking-tight">
+                    Oracle is live
+                  </h3>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+                  >
+                    Insights active
+                  </Badge>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] gap-1.5 border-border"
+                  onClick={() => setCurrentView('ai-business-copilot')}
+                >
+                  View Oracle Insights
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
+
+              {oracleInsightsLoading && !oracleInsights ? (
+                <OracleInsightsSkeleton />
+              ) : oracleInsights ? (
+                <OracleLivePanel
+                  insights={oracleInsights}
+                  onPriorityClick={(view) => setCurrentView(view as AppView)}
+                  onAskOracle={() => setCurrentView('ai-business-copilot')}
+                />
+              ) : (
+                <div className="text-[12px] text-muted-foreground leading-relaxed">
+                  Oracle was activated but insights are not yet available. Refresh in a moment.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* ═══ Ask Oracle (gated) ═══ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -1770,5 +1876,190 @@ function BusinessHealthGauge({
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OracleLivePanel — Compact "Oracle is live" insights summary
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Renders the persisted Oracle insights (Business Summary, Top Priority, Health
+// badge, Alert/Risk counts) in a compact horizontal layout. Shown on the home
+// page immediately after Oracle activation so the user sees real, data-driven
+// content instead of just an "Online" badge.
+//
+// All numbers derive from the real BusinessSnapshot via generateOracleInsights().
+
+function OracleLivePanel({
+  insights,
+  onPriorityClick,
+  onAskOracle,
+}: {
+  insights: import('@/app/api/oracle/activate/route').OracleInsights;
+  onPriorityClick: (view: string) => void;
+  onAskOracle: () => void;
+}) {
+  const topPriority = insights.todaysPriorities[0] ?? null;
+  const health = insights.financialHealth;
+
+  const healthTone =
+    health.status === 'healthy'
+      ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
+      : health.status === 'moderate'
+        ? 'border-amber-500/40 text-amber-400 bg-amber-500/10'
+        : 'border-red-500/40 text-red-400 bg-red-500/10';
+
+  const healthLabel =
+    health.status === 'healthy'
+      ? 'Healthy'
+      : health.status === 'moderate'
+        ? 'Moderate'
+        : 'At Risk';
+
+  const priorityTone =
+    topPriority?.priority === 'high'
+      ? 'border-red-500/30 text-red-400 bg-red-500/5'
+      : topPriority?.priority === 'medium'
+        ? 'border-amber-500/30 text-amber-400 bg-amber-500/5'
+        : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5';
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Business Summary */}
+      <div className="md:col-span-2 space-y-3">
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="h-3 w-3 accent-text" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Business Summary
+            </span>
+          </div>
+          <p className="text-[13px] text-foreground leading-relaxed line-clamp-2">
+            {insights.businessSummary}
+          </p>
+        </div>
+
+        {topPriority && (
+          <button
+            type="button"
+            onClick={() => onPriorityClick(topPriority.actionView)}
+            className="w-full text-left p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors group"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="h-3 w-3 text-amber-400 shrink-0" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Today&apos;s Top Priority
+                  </span>
+                </div>
+                <p className="text-[12px] font-medium text-foreground truncate">
+                  {topPriority.title}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                  {topPriority.reason}
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${priorityTone}`}
+              >
+                {topPriority.priority}
+              </Badge>
+            </div>
+          </button>
+        )}
+      </div>
+
+      {/* Right column: Health + Alert/Risk counts */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={onAskOracle}
+          className="w-full text-left p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3 w-3 accent-text" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Health
+              </span>
+            </div>
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${healthTone}`}>
+              {health.score}/100
+            </Badge>
+          </div>
+          <p className="text-[12px] font-medium text-foreground">{healthLabel}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {health.drivers.length} drivers · {health.drivers.filter((d) => d.impact === 'positive').length} positive
+          </p>
+        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02]">
+            <div className="flex items-center gap-1 mb-0.5">
+              <AlertTriangle className="h-3 w-3 text-amber-400" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Alerts
+              </span>
+            </div>
+            <p className="text-base font-semibold text-foreground">
+              {insights.aiAlerts.length}
+            </p>
+          </div>
+          <div className="p-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02]">
+            <div className="flex items-center gap-1 mb-0.5">
+              <ShieldAlert className="h-3 w-3 text-red-400" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Risks
+              </span>
+            </div>
+            <p className="text-base font-semibold text-foreground">
+              {insights.risks.length}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OracleInsightsSkeleton — Loading state for the OracleLivePanel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function OracleInsightsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="md:col-span-2 space-y-3">
+        <div>
+          <Skeleton className="h-3 w-24 mb-2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4 mt-1" />
+        </div>
+        <div className="p-3 rounded-lg border border-white/[0.06]">
+          <Skeleton className="h-3 w-32 mb-2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-3 w-2/3 mt-1" />
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="p-3 rounded-lg border border-white/[0.06]">
+          <Skeleton className="h-3 w-20 mb-2" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-3 w-24 mt-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2.5 rounded-lg border border-white/[0.06]">
+            <Skeleton className="h-3 w-12 mb-1" />
+            <Skeleton className="h-6 w-8" />
+          </div>
+          <div className="p-2.5 rounded-lg border border-white/[0.06]">
+            <Skeleton className="h-3 w-12 mb-1" />
+            <Skeleton className="h-6 w-8" />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

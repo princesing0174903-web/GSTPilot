@@ -3,6 +3,8 @@
 // Shared type definitions for the Oracle conversational brain.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types';
+
 /** Languages Oracle understands and speaks. */
 export type OracleLanguageId =
   | 'english'
@@ -66,6 +68,14 @@ export interface OracleMessage {
   /** Optional action chips — one-tap shortcuts that navigate the user to the
    *  right workspace (e.g. "File now" → returns, "Open reconcile" → reconcile). */
   actions?: OracleActionChip[];
+  /**
+   * Optional structured data card attached to an oracle message. When the
+   * user's message matches a structured-query intent (e.g. "show unpaid
+   * invoices"), the server emits the structured result as the FIRST SSE
+   * event of the stream; the client stores it here and renders it ABOVE the
+   * conversational text answer.
+   */
+  structuredQuery?: StructuredQueryResult;
 }
 
 /** A single action chip attached to an Oracle response. */
@@ -121,4 +131,10 @@ export interface OracleStreamChunk {
   error?: string;
   /** Optional action chips the server suggests for the final response. */
   actions?: OracleActionChip[];
+  /**
+   * Server emits this as the FIRST SSE event when the user's message matches
+   * a structured-query intent. Carries the full StructuredQueryResult so the
+   * client can render a data card above the streaming text answer.
+   */
+  structured?: StructuredQueryResult;
 }

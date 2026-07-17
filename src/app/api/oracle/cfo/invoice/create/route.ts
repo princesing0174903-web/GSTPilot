@@ -33,6 +33,7 @@ import { writeCfoAudit } from '@/lib/oracle-cfo/approval';
 import { getDocs, query, where, collection, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS, type FirestoreClient } from '@/lib/firestore-schema';
+import { logActivity } from '@/lib/activity-logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -230,6 +231,36 @@ export async function POST(request: NextRequest) {
       aiProvider: 'oracle-cfo-invoice-engine',
       executionMs: Date.now() - startedAt,
     }).catch(() => {});
+
+    // ─── Business Timeline event — "Invoice Created" ──────────────────
+    // Logged when Oracle finishes analyzing the natural-language request
+    // and produces the invoice approval summary (step==='review'). The
+    // actual DB write happens in /api/oracle/cfo/invoice/execute after the
+    // user approves — but from the user's perspective, Oracle has "created"
+    // the invoice at this point. The description reflects that this is a
+    // draft awaiting approval.
+    await logActivity({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      type: 'invoice_created',
+      title: 'Invoice Created',
+      description: `Invoice ${invoiceNumberResult.invoiceNumber} prepared for ${summary.customer.name} — ₹${gst.grandTotal.toLocaleString('en-IN')} (incl. GST ${intent.gstRate}%). Awaiting your approval.`,
+      entityType: 'invoice',
+      entityId: approvalId,
+      clientId: matchedClient?.clientId ?? null,
+      metadata: {
+        invoiceNumber: invoiceNumberResult.invoiceNumber,
+        customerName: summary.customer.name,
+        customerGstin: customerGstin ?? null,
+        grandTotal: gst.grandTotal,
+        gstRate: intent.gstRate ?? 0,
+        gstAmount: gst.gstAmount,
+        taxableValue: gst.taxableValue,
+        isInterState: interState,
+        currency: summary.invoice.currency,
+        source: 'oracle-cfo',
+      },
+    });
 
     // ─── Return the full approval summary ──────────────────────────────
     return NextResponse.json({

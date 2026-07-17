@@ -39,6 +39,421 @@ import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snaps
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// ─── Oracle Insights type (persisted to organizations/{orgId}/oracle/insights) ─
+//
+// This is the "Oracle is alive" payload: every page that reads Oracle state
+// (Dashboard, Oracle Workspace, AI CFO, etc.) renders from this single doc.
+// All numbers derive from the real BusinessSnapshot — nothing is fabricated.
+
+export interface OracleInsights {
+  organizationId: string;
+  generatedAt: string;
+  generatedFromSnapshotAt: string;
+
+  // 1. Business Summary — 2-3 sentence narrative
+  businessSummary: string;
+
+  // 2. Today's Priorities — 3-5 priority items
+  todaysPriorities: Array<{
+    id: string;
+    title: string;
+    reason: string;
+    priority: 'high' | 'medium' | 'low';
+    actionView: string;
+  }>;
+
+  // 3. Financial Health
+  financialHealth: {
+    score: number;
+    status: 'healthy' | 'moderate' | 'at-risk';
+    drivers: Array<{
+      label: string;
+      value: string;
+      impact: 'positive' | 'negative';
+    }>;
+  };
+
+  // 4. Revenue Trend
+  revenueTrend: {
+    direction: 'up' | 'down' | 'flat';
+    currentRevenue: number;
+    projectedRevenue: number;
+    changePercent: number;
+    narrative: string;
+  };
+
+  // 5. Cash Forecast
+  cashForecast: {
+    currentCash: number;
+    monthlyBurnRate: number;
+    runwayDays: number | null; // null when Infinity
+    projectedCashIn30Days: number;
+    status: 'comfortable' | 'tight' | 'critical';
+    narrative: string;
+  };
+
+  // 6. AI Alerts
+  aiAlerts: Array<{
+    type: string;
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    description: string;
+    actionView: string;
+  }>;
+
+  // 7. Risks
+  risks: Array<{
+    type: string;
+    level: 'high' | 'medium' | 'low';
+    title: string;
+    description: string;
+    mitigation: string;
+  }>;
+}
+
+// ─── Oracle Insights generator (from real BusinessSnapshot) ────────────────────
+//
+// Every section derives from real snapshot numbers. No fabricated data.
+// If a section has no relevant data (e.g. no alerts triggered), return an
+// empty array / honest narrative — never invented content.
+
+export function generateOracleInsights(snapshot: BusinessSnapshot): OracleInsights {
+  const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+  // ─── 1. Business Summary ───────────────────────────────────────────────────
+  // 2-3 sentence narrative. Honest observation derived from health score,
+  // revenue, customer count, and overdue receivables.
+  let observation: string;
+  if (snapshot.healthScore >= 70) {
+    observation = `Health score is strong at ${snapshot.healthScore}/100 — your business is in solid shape.`;
+  } else if (snapshot.healthScore >= 40) {
+    observation = `Health score is moderate at ${snapshot.healthScore}/100 — a few areas need attention.`;
+  } else if (snapshot.healthScore > 0) {
+    observation = `Health score is concerning at ${snapshot.healthScore}/100 — immediate action is recommended.`;
+  } else {
+    observation = `Health score is unavailable — connect integrations to compute it.`;
+  }
+  const businessSummary =
+    snapshot.invoiceCount > 0 || snapshot.customerCount > 0
+      ? `Your business has ${snapshot.customerCount} customer${snapshot.customerCount === 1 ? '' : 's'}, ` +
+        `${snapshot.invoiceCount} invoice${snapshot.invoiceCount === 1 ? '' : 's'}, and ` +
+        `${inr(snapshot.revenue)} in revenue this financial year. ${observation}`
+      : `Your business workspace is ready but has no invoices or customers yet. ` +
+        `Connect Zoho Books or create your first customer to start generating insights. ${observation}`;
+
+  // ─── 2. Today's Priorities (3-5 items) ─────────────────────────────────────
+  const priorities: OracleInsights['todaysPriorities'] = [];
+
+  if (snapshot.pendingReturns > 0) {
+    priorities.push({
+      id: 'file-pending-gst',
+      title: `File ${snapshot.pendingReturns} pending GST return${snapshot.pendingReturns === 1 ? '' : 's'}`,
+      reason: snapshot.overdueReturns > 0
+        ? `${snapshot.overdueReturns} of these are overdue — late filing attracts penalties and interest.`
+        : `Net GST liability of ${inr(snapshot.gstLiability)} is outstanding.`,
+      priority: snapshot.overdueReturns > 0 ? 'high' : 'medium',
+      actionView: 'returns',
+    });
+  }
+
+  if (snapshot.overdueReceivables > 0) {
+    priorities.push({
+      id: 'collect-overdue',
+      title: `Collect ${inr(snapshot.overdueReceivables)} in overdue receivables`,
+      reason: `${inr(snapshot.receivables)} is outstanding across ${snapshot.invoiceCount} invoices. Overdue balances strain your cash position.`,
+      priority: 'high',
+      actionView: 'receivables',
+    });
+  } else if (snapshot.receivables > 0) {
+    priorities.push({
+      id: 'collect-receivables',
+      title: `Follow up on ${inr(snapshot.receivables)} in outstanding receivables`,
+      reason: `Collection rate is currently ${pct(snapshot.collectionRate)}. Tightening payment terms can improve cash flow.`,
+      priority: 'medium',
+      actionView: 'receivables',
+    });
+  }
+
+  if (snapshot.runwayDays !== Infinity && snapshot.runwayDays > 0 && snapshot.runwayDays < 90) {
+    priorities.push({
+      id: 'manage-runway',
+      title: `Plan funding — cash runway is ${Math.round(snapshot.runwayDays)} days`,
+      reason: `At current burn rate, cash runs out in ~${Math.round(snapshot.runwayDays)} days. Secure a credit line or accelerate collections.`,
+      priority: snapshot.runwayDays < 60 ? 'high' : 'medium',
+      actionView: 'banking',
+    });
+  }
+
+  const zohoConnected =
+    snapshot.perEntity.zohoInvoices > 0 || snapshot.perEntity.zohoCustomers > 0;
+  if (!zohoConnected && snapshot.invoiceCount === 0) {
+    priorities.push({
+      id: 'connect-zoho',
+      title: 'Connect Zoho Books for richer insights',
+      reason: 'No invoices or customers yet. Zoho Books sync brings in your live ERP data automatically.',
+      priority: 'medium',
+      actionView: 'zoho-books',
+    });
+  }
+
+  if (snapshot.healthScore > 0 && snapshot.healthScore < 50) {
+    priorities.push({
+      id: 'review-health',
+      title: `Review business health (score ${snapshot.healthScore}/100)`,
+      reason: `Low health driven by ${snapshot.riskScore > 50 ? 'high risk' : 'thin margins'}. Review profitability, liquidity, and compliance drivers.`,
+      priority: 'medium',
+      actionView: 'ai-business-copilot',
+    });
+  }
+
+  // If everything is fine, add a positive "monitor" priority
+  if (priorities.length === 0) {
+    priorities.push({
+      id: 'maintain-momentum',
+      title: 'Maintain momentum — business is in good shape',
+      reason: `Health score ${snapshot.healthScore}/100, collection rate ${pct(snapshot.collectionRate)}, no overdue returns. Keep monitoring cash flow.`,
+      priority: 'low',
+      actionView: 'ai-business-copilot',
+    });
+  }
+
+  const todaysPriorities = priorities.slice(0, 5);
+
+  // ─── 3. Financial Health ───────────────────────────────────────────────────
+  // Drivers derived from profit margin, collection rate, cash position, compliance.
+  const healthDrivers: OracleInsights['financialHealth']['drivers'] = [];
+
+  if (snapshot.revenue > 0) {
+    const marginPct = snapshot.profitMargin * 100;
+    healthDrivers.push({
+      label: 'Profit margin',
+      value: `${marginPct.toFixed(1)}%`,
+      impact: marginPct >= 10 ? 'positive' : 'negative',
+    });
+  }
+
+  if (snapshot.revenue > 0 || snapshot.totalCollected > 0) {
+    const ratePct = snapshot.collectionRate * 100;
+    healthDrivers.push({
+      label: 'Collection rate',
+      value: `${ratePct.toFixed(0)}%`,
+      impact: ratePct >= 70 ? 'positive' : 'negative',
+    });
+  }
+
+  healthDrivers.push({
+    label: 'Cash position',
+    value: inr(snapshot.cash),
+    impact: snapshot.cash > snapshot.payables ? 'positive' : 'negative',
+  });
+
+  const totalReturns = snapshot.filedReturns + snapshot.pendingReturns;
+  if (totalReturns > 0) {
+    const compliancePct = (snapshot.filedReturns / totalReturns) * 100;
+    healthDrivers.push({
+      label: 'GST compliance',
+      value: `${compliancePct.toFixed(0)}% filed`,
+      impact: compliancePct >= 80 ? 'positive' : 'negative',
+    });
+  } else {
+    healthDrivers.push({
+      label: 'GST compliance',
+      value: 'No returns yet',
+      impact: 'negative',
+    });
+  }
+
+  const healthStatus: OracleInsights['financialHealth']['status'] =
+    snapshot.healthScore >= 70 ? 'healthy' : snapshot.healthScore >= 40 ? 'moderate' : 'at-risk';
+
+  const financialHealth: OracleInsights['financialHealth'] = {
+    score: snapshot.healthScore,
+    status: healthStatus,
+    drivers: healthDrivers,
+  };
+
+  // ─── 4. Revenue Trend ──────────────────────────────────────────────────────
+  // Based on forecast.trend + nextMonthRevenue vs current revenue.
+  const currentRevenue = snapshot.revenue;
+  const projectedRevenue = snapshot.forecast.nextMonthRevenue;
+  const changePercent =
+    currentRevenue > 0
+      ? ((projectedRevenue - currentRevenue) / currentRevenue) * 100
+      : projectedRevenue > 0
+        ? 100
+        : 0;
+
+  const direction = snapshot.forecast.trend; // 'up' | 'down' | 'flat'
+
+  const revenueTrendNarrative =
+    currentRevenue === 0 && projectedRevenue === 0
+      ? 'No revenue data yet. Connect Zoho Books or create invoices to enable forecasting.'
+      : direction === 'up'
+        ? `Revenue is trending up — projected ${inr(projectedRevenue)} next month (vs ${inr(currentRevenue)} current), a ${Math.abs(changePercent).toFixed(1)}% increase. Confidence: ${pct(snapshot.forecast.confidence)}.`
+        : direction === 'down'
+          ? `Revenue is trending down — projected ${inr(projectedRevenue)} next month (vs ${inr(currentRevenue)} current), a ${Math.abs(changePercent).toFixed(1)}% decrease. Confidence: ${pct(snapshot.forecast.confidence)}.`
+          : `Revenue is stable — projected ${inr(projectedRevenue)} next month, roughly flat vs current ${inr(currentRevenue)}. Confidence: ${pct(snapshot.forecast.confidence)}.`;
+
+  const revenueTrend: OracleInsights['revenueTrend'] = {
+    direction,
+    currentRevenue,
+    projectedRevenue,
+    changePercent: Math.round(changePercent * 10) / 10,
+    narrative: revenueTrendNarrative,
+  };
+
+  // ─── 5. Cash Forecast ──────────────────────────────────────────────────────
+  // If runwayDays is Infinity, status='comfortable'.
+  const monthlyBurnRate = snapshot.expenses / 12; // annual expenses / 12 (rough)
+  const projectedCashIn30Days = snapshot.cash - monthlyBurnRate;
+
+  let cashStatus: OracleInsights['cashForecast']['status'];
+  let cashNarrative: string;
+
+  if (snapshot.runwayDays === Infinity) {
+    cashStatus = 'comfortable';
+    cashNarrative = `Cash position is ${inr(snapshot.cash)} with no significant burn — runway is effectively unlimited. Continue monitoring inflows.`;
+  } else if (snapshot.runwayDays >= 180) {
+    cashStatus = 'comfortable';
+    cashNarrative = `Cash position is ${inr(snapshot.cash)} with ~${Math.round(snapshot.runwayDays)} days of runway. Healthy buffer.`;
+  } else if (snapshot.runwayDays >= 60) {
+    cashStatus = 'tight';
+    cashNarrative = `Cash position is ${inr(snapshot.cash)} with ~${Math.round(snapshot.runwayDays)} days of runway. Plan funding in the next quarter.`;
+  } else if (snapshot.runwayDays > 0) {
+    cashStatus = 'critical';
+    cashNarrative = `Cash position is ${inr(snapshot.cash)} with only ~${Math.round(snapshot.runwayDays)} days of runway. Secure funding immediately.`;
+  } else {
+    cashStatus = 'critical';
+    cashNarrative = `Cash position is ${inr(snapshot.cash)} — burn exceeds available cash. Urgent action required.`;
+  }
+
+  const cashForecast: OracleInsights['cashForecast'] = {
+    currentCash: snapshot.cash,
+    monthlyBurnRate: Math.round(monthlyBurnRate),
+    runwayDays: snapshot.runwayDays === Infinity ? null : Math.round(snapshot.runwayDays),
+    projectedCashIn30Days: Math.round(projectedCashIn30Days),
+    status: cashStatus,
+    narrative: cashNarrative,
+  };
+
+  // ─── 6. AI Alerts (0-4) ────────────────────────────────────────────────────
+  // Rules from the task spec:
+  //   - overdueReceivables > 0       → alert
+  //   - pendingReturns > 0           → alert
+  //   - collectionRate < 0.5         → alert
+  //   - healthScore < 40             → alert
+  //   - runwayDays < 60              → alert
+  const aiAlerts: OracleInsights['aiAlerts'] = [];
+
+  if (snapshot.overdueReceivables > 0) {
+    aiAlerts.push({
+      type: 'overdue_receivables',
+      severity: snapshot.overdueReceivables > snapshot.revenue * 0.3 ? 'high' : 'medium',
+      title: `${inr(snapshot.overdueReceivables)} in overdue receivables`,
+      description: `${snapshot.invoiceCount} invoices tracked. Customers with past-due balances need immediate follow-up.`,
+      actionView: 'receivables',
+    });
+  }
+
+  if (snapshot.pendingReturns > 0) {
+    aiAlerts.push({
+      type: 'pending_gst_returns',
+      severity: snapshot.overdueReturns > 0 ? 'high' : 'medium',
+      title: `${snapshot.pendingReturns} GST return${snapshot.pendingReturns === 1 ? '' : 's'} pending`,
+      description: snapshot.overdueReturns > 0
+        ? `${snapshot.overdueReturns} are overdue — late filing attracts penalties and interest.`
+        : `Net GST liability of ${inr(snapshot.gstLiability)} outstanding.`,
+      actionView: 'returns',
+    });
+  }
+
+  if (snapshot.revenue > 0 && snapshot.collectionRate < 0.5) {
+    aiAlerts.push({
+      type: 'low_collection_rate',
+      severity: 'medium',
+      title: `Collection rate is low (${pct(snapshot.collectionRate)})`,
+      description: `Collected ${inr(snapshot.totalCollected)} of ${inr(snapshot.revenue)} invoiced. Tighten payment terms and automate reminders.`,
+      actionView: 'receivables',
+    });
+  }
+
+  if (snapshot.healthScore > 0 && snapshot.healthScore < 40) {
+    aiAlerts.push({
+      type: 'low_health_score',
+      severity: 'high',
+      title: `Health score is critically low (${snapshot.healthScore}/100)`,
+      description: `Composite health is below 40 — driven by weak margins, liquidity, or compliance. Review the financial health drivers.`,
+      actionView: 'ai-business-copilot',
+    });
+  }
+
+  if (snapshot.runwayDays !== Infinity && snapshot.runwayDays > 0 && snapshot.runwayDays < 60) {
+    aiAlerts.push({
+      type: 'short_runway',
+      severity: 'high',
+      title: `Cash runway is only ${Math.round(snapshot.runwayDays)} days`,
+      description: `At current burn, cash runs out in ~${Math.round(snapshot.runwayDays)} days. Secure a credit line or accelerate collections.`,
+      actionView: 'banking',
+    });
+  }
+
+  // Cap at 4 alerts (per spec)
+  const aiAlertsCapped = aiAlerts.slice(0, 4);
+
+  // ─── 7. Risks (0-3) ────────────────────────────────────────────────────────
+  // Rules from the task spec:
+  //   - riskScore > 60                                  → high risk
+  //   - receivables > revenue * 0.5                     → liquidity risk
+  //   - pendingReturns > 3                              → compliance risk
+  const risks: OracleInsights['risks'] = [];
+
+  if (snapshot.riskScore > 60) {
+    risks.push({
+      type: 'overall_risk',
+      level: snapshot.riskScore > 75 ? 'high' : 'medium',
+      title: `Elevated business risk score (${snapshot.riskScore}/100)`,
+      description: `Composite risk is high. Drivers may include thin margins, low liquidity, or compliance gaps.`,
+      mitigation: 'Review profitability, accelerate collections, and file pending GST returns to reduce the risk score.',
+    });
+  }
+
+  if (snapshot.revenue > 0 && snapshot.receivables > snapshot.revenue * 0.5) {
+    risks.push({
+      type: 'liquidity_risk',
+      level: snapshot.receivables > snapshot.revenue * 0.75 ? 'high' : 'medium',
+      title: `Receivables are ${pct(snapshot.receivables / snapshot.revenue)} of revenue`,
+      description: `${inr(snapshot.receivables)} is tied up in outstanding invoices. High receivables-to-revenue ratio strains working capital.`,
+      mitigation: 'Tighten payment terms, send automated reminders, and offer early-payment discounts to accelerate collections.',
+    });
+  }
+
+  if (snapshot.pendingReturns > 3) {
+    risks.push({
+      type: 'compliance_risk',
+      level: snapshot.overdueReturns > 0 ? 'high' : 'medium',
+      title: `${snapshot.pendingReturns} GST returns pending`,
+      description: `Multiple pending returns increase compliance risk — late filing attracts penalties, interest, and potential notice from authorities.`,
+      mitigation: 'Prioritize filing the oldest pending returns first. Set up auto-reminders for upcoming due dates.',
+    });
+  }
+
+  const risksCapped = risks.slice(0, 3);
+
+  return {
+    organizationId: snapshot.organizationId,
+    generatedAt: new Date().toISOString(),
+    generatedFromSnapshotAt: snapshot.generatedAt,
+    businessSummary,
+    todaysPriorities,
+    financialHealth,
+    revenueTrend,
+    cashForecast,
+    aiAlerts: aiAlertsCapped,
+    risks: risksCapped,
+  };
+}
+
 // ─── AI Recommendation generator (from real snapshot) ─────────────────────────
 //
 // Takes the computed Business Snapshot and produces concrete, actionable
@@ -353,6 +768,49 @@ export async function POST(req: NextRequest) {
     });
     await batch.commit();
 
+    // ── 6e. Generate Oracle Insights FROM the snapshot ──
+    // Persisted to organizations/{orgId}/oracle/insights — the "Oracle is alive"
+    // payload that every page (Dashboard, Oracle Workspace, AI CFO) reads from
+    // to show rich, data-driven content immediately after activation.
+    // All 7 sections derive from the real BusinessSnapshot — nothing fabricated.
+    const insights = generateOracleInsights(snapshot);
+    const insightsRef = adminDb().doc(`organizations/${organizationId}/oracle/insights`);
+    await insightsRef.set(
+      {
+        ...insights,
+        activatedAt: nowIso,
+        activatedBy: decodedUid,
+      },
+      { merge: true },
+    );
+
+    // ── 6f. Log activity: "Oracle Insights Generated" ──
+    // Second timeline event (in addition to "oracle_activated") so the Business
+    // Timeline surfaces the live insights that were generated — including the
+    // health score + alert count in the description for at-a-glance context.
+    const insightsActivityRef = adminDb().collection('activities').doc();
+    await insightsActivityRef.set({
+      activityId: insightsActivityRef.id,
+      organizationId,
+      firmId: organizationId, // legacy
+      userId: decodedUid,
+      type: 'oracle_insights_generated',
+      title: 'Oracle Insights Generated',
+      description: `Generated ${insights.todaysPriorities.length} priorities, ${insights.aiAlerts.length} alerts, ${insights.risks.length} risks from your business snapshot. Health Score ${insights.financialHealth.score}/100.`,
+      clientId: null,
+      entityType: 'oracle',
+      entityId: 'insights',
+      metadata: {
+        healthScore: insights.financialHealth.score,
+        healthStatus: insights.financialHealth.status,
+        alertCount: insights.aiAlerts.length,
+        riskCount: insights.risks.length,
+        priorityCount: insights.todaysPriorities.length,
+        generatedFromSnapshotAt: insights.generatedFromSnapshotAt,
+      },
+      createdAt: nowIso,
+    });
+
     // ── 7. Return the activation result ──
     return NextResponse.json({
       ok: true,
@@ -364,6 +822,14 @@ export async function POST(req: NextRequest) {
       },
       snapshot: scores,
       recommendations: recommendations.length,
+      insights: {
+        businessSummary: insights.businessSummary,
+        priorityCount: insights.todaysPriorities.length,
+        alertCount: insights.aiAlerts.length,
+        riskCount: insights.risks.length,
+        healthScore: insights.financialHealth.score,
+        healthStatus: insights.financialHealth.status,
+      },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

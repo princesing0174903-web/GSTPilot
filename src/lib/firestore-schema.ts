@@ -284,10 +284,16 @@ export type ActivityType =
   | 'client_created' | 'client_updated' | 'client_deleted'
   | 'document_uploaded' | 'document_processed' | 'document_failed'
   | 'invoice_extracted' | 'invoice_approved' | 'invoice_corrected'
+  | 'invoice_created'
   | 'return_prepared' | 'return_reviewed' | 'return_filed' | 'return_reopened'
+  | 'gst_return_created'
   | 'reconciliation_run' | 'mismatch_resolved'
+  | 'integration_connected'
+  | 'payment_recorded'
+  | 'purchase_created'
   | 'user_login' | 'user_signup'
   | 'oracle_activated'
+  | 'oracle_insights_generated'
   | 'system';
 
 export interface FirestoreActivity {

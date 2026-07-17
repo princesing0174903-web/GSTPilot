@@ -55,6 +55,12 @@ import { getAgentRoster } from '@/lib/execution/agents';
 import type { WorkflowStep } from '@/lib/execution/types';
 import { buildRealDataSnapshot, formatRealDataContextBlock, formatDynamicRecommendationsBlock } from '@/lib/oracle/real-data';
 import { getBusinessSnapshot } from '@/lib/business/snapshot';
+import {
+  detectQueryIntent,
+  executeStructuredQuery,
+  formatStructuredResultForLLM,
+  type StructuredQueryResult,
+} from '@/lib/oracle/structured-queries';
 import { buildGSTpilotContextBlock } from '@/lib/oracle-cfo/gstpilot-context';
 import { computeTwinOracleContext } from '@/lib/twin/orchestrator';
 import type { TwinOracleContext } from '@/lib/twin/types';
@@ -1476,6 +1482,35 @@ numbers, let them know the live data engine is reconnecting and to try again.`;
     }
   }
 
+  // ── Structured Query Detection (Task 4) ──────────────────────────────────
+  // When the user's message matches a structured-query intent ("unpaid
+  // invoices", "top customers", "GST payable", etc.), we run the real Prisma
+  // queries immediately and:
+  //   (a) inject the structured result into the system prompt as additional
+  //       context so the LLM can craft a natural-language answer using the
+  //       REAL data we just queried;
+  //   (b) emit a special SSE event { structured: ... } FIRST, before the LLM
+  //       tokens, so the client can render a data card above the text answer.
+  //
+  // This is an ENHANCEMENT — it never blocks or breaks the chat. If detection
+  // or execution throws, we silently skip and continue with the normal flow.
+  let structuredResult: StructuredQueryResult | null = null;
+  try {
+    const intent = detectQueryIntent(lastUser?.content ?? '');
+    if (intent) {
+      structuredResult = await executeStructuredQuery(
+        intent,
+        body.context?.organizationId ?? '',
+      );
+      const contextBlock = formatStructuredResultForLLM(structuredResult);
+      if (contextBlock) {
+        systemPrompt = `${systemPrompt}\n\n${contextBlock}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[Oracle] structured query detection failed (non-blocking):', err);
+  }
+
   const modelMessages: { role: 'assistant' | 'user' | 'system'; content: string }[] = [
     { role: 'assistant', content: systemPrompt },
     ...(recsPreamble
@@ -1512,8 +1547,16 @@ numbers, let them know the live data engine is reconnecting and to try again.`;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
+    // Capture the structured payload (if any) for the error fallback stream
+    // so the user still sees the data card even if the LLM is unreachable.
+    const errorStructuredPayload: StructuredQueryResult | null = structuredResult;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        // Emit the structured data card FIRST (if we have one) — the user
+        // still gets the real numbers even though the prose answer failed.
+        if (errorStructuredPayload) {
+          controller.enqueue(sseChunk({ structured: errorStructuredPayload }));
+        }
         controller.enqueue(
           sseChunk({
             token: `I'm here, but I hit a temporary issue reaching my reasoning service (${message}). Please try again in a moment — your conversation is safe.`,
@@ -1528,8 +1571,18 @@ numbers, let them know the live data engine is reconnecting and to try again.`;
 
   // ── Transform the upstream SSE stream into our token stream ────────────────
   const decoder = new TextDecoder();
+  // Capture the structured result (if any) in a closure-local constant so the
+  // transformer can emit it BEFORE the LLM tokens start streaming.
+  const structuredPayload: StructuredQueryResult | null = structuredResult;
   const transformed = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // ── Structured data card (Task 4): emit FIRST so the client can render
+      //    the table/stat card above the streaming text answer. This event is
+      //    emitted BEFORE the language hint and BEFORE any LLM tokens.
+      if (structuredPayload) {
+        controller.enqueue(sseChunk({ structured: structuredPayload }));
+      }
+
       // Emit a tiny first nudge so the UI shows the pulsing cursor within the
       // first frame — real tokens follow immediately.
       if (languageHint) controller.enqueue(sseChunk({ language: languageHint }));

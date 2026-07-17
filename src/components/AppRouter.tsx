@@ -184,7 +184,13 @@ function OnboardingScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DashboardTimeoutBoundary — 8s hard timeout with Retry button
+// DashboardTimeoutBoundary — handles loading, error, and timeout states for the
+// dashboard. Once authenticated, the user ALWAYS sees this boundary (never the
+// landing page). It shows:
+//   • Inline loading shell while org resolves (up to 8s)
+//   • Error screen with Retry if org fails to load (permission / network)
+//   • Timeout screen if org takes >8s
+//   • The dashboard children once org is resolved
 // ═══════════════════════════════════════════════════════════════════════════════
 function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   const { loading: orgLoading, organization, error: orgError, reload, isPreviewMode } = useOrg();
@@ -222,6 +228,47 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
+  // ── Error state: org failed to load (network / permission / unreachable).
+  // Show immediately — don't wait 8s for a timeout.
+  if (!orgLoading && !organization && !isPreviewMode && orgError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex max-w-md flex-col items-center gap-5 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
+            <AlertTriangle className="h-7 w-7 text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Workspace unavailable</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            We couldn&apos;t load your workspace. This is usually a temporary connection issue.
+            Check your internet and try again.
+          </p>
+          {orgError ? (
+            <p className="text-xs text-amber-400/80 font-mono bg-amber-500/5 rounded-lg px-3 py-2 max-w-full break-words">
+              {orgError}
+            </p>
+          ) : null}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRetry}
+              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Reload page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Timeout state: org loading exceeded 8s.
   if (timedOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -242,7 +289,7 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <button
               onClick={handleRetry}
-              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
             >
               <RefreshCw className="h-4 w-4" />
               Retry
@@ -323,18 +370,29 @@ function AuthErrorScreen({ message, onRetry }: { message: string; onRetry: () =>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AppRouter — top-level screen routing
+//
+// GOLDEN RULE: Once authenticated, the user NEVER sees the landing page.
+// They always land on the dashboard (home page). The DashboardTimeoutBoundary
+// handles all loading / error / timeout states inline.
+//
+// Routing priority:
+//   1. isInitializing → loading splash (max 3s)
+//   2. isAuthenticated → ALWAYS dashboard (with boundary for loading/error)
+//      • If needs onboarding (no org, no error) → OnboardingScreen
+//      • Otherwise → DashboardTimeoutBoundary > DashboardContent
+//   3. currentScreen === 'login' → LoginPage
+//   4. Default → LandingPage (only for unauthenticated visitors)
 // ═══════════════════════════════════════════════════════════════════════════════
 export function AppRouter() {
   const { currentScreen, setCurrentScreen } = useApp();
   const { isAuthenticated, isInitializing, needsEmailVerification, error: authError, logout } = useAuth();
-  const { needsOrganization, loading: orgLoading, organization, error: orgError, reload: reloadOrg, isPreviewMode } = useOrg();
+  const { needsOrganization, error: orgError } = useOrg();
 
-  const needsOnboarding = isAuthenticated && needsOrganization;
+  const needsOnboarding = isAuthenticated && needsOrganization && !orgError;
 
-  // ── KEY FIX: Switch to 'app' screen IMMEDIATELY when authenticated.
-  // Do NOT wait for OrgContext to resolve. The dashboard shell renders
-  // instantly with an inline loading state while the org resolves in the
-  // background. This eliminates the "infinite Loading GSTPilot" issue.
+  // ── Switch to 'app' screen IMMEDIATELY when authenticated. Do NOT wait for
+  // OrgContext to resolve. The dashboard shell renders instantly with an inline
+  // loading state while the org resolves in the background.
   useEffect(() => {
     if (isInitializing) return;
     if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
@@ -380,21 +438,20 @@ export function AppRouter() {
     return <AuthErrorScreen message={authError} onRetry={handleRetryLogin} />;
   }
 
-  // ── Authenticated but no organization → onboarding creates one.
-  if (needsOnboarding && !orgError) {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUTHENTICATED ROUTING — the user is signed in. They NEVER see landing.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Authenticated but no organization AND no error → onboarding creates one.
+  if (isAuthenticated && needsOnboarding && !orgError) {
     return <OnboardingScreen />;
   }
 
-  // ── Org context failed to load after retries. Show a friendly error.
-  const isOrgPermissionError = !!orgError && (
-    /permission|insufficient|unauthenticated|not authorized|missing or/i.test(orgError)
-  );
-
-  // ── KEY FIX: Render the dashboard as soon as authenticated, even if org is
-  // still loading. The DashboardTimeoutBoundary handles the inline loading
-  // state + 8s timeout. This means the user sees the dashboard shell
-  // IMMEDIATELY after login — no "Loading GSTPilot" hang.
-  if (currentScreen === 'app' && isAuthenticated && (organization || isOrgPermissionError || orgLoading)) {
+  // ── Authenticated → ALWAYS render the dashboard. The DashboardTimeoutBoundary
+  // handles ALL sub-states: loading shell, org error (retry), 8s timeout, and
+  // the fully-resolved dashboard. This is the SINGLE entry point for any
+  // signed-in user — they never fall through to the landing page.
+  if (isAuthenticated) {
     return (
       <div className="flex min-h-screen flex-col">
         {needsEmailVerification && <EmailVerificationBanner />}
@@ -405,16 +462,9 @@ export function AppRouter() {
     );
   }
 
-  // ── If authenticated and org loaded but we haven't switched to 'app' yet
-  // (e.g., org just resolved), the useEffect above will fire. In the meantime,
-  // show a minimal loader.
-  if (isAuthenticated && !orgLoading && (organization || isPreviewMode) && currentScreen !== 'app') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-      </div>
-    );
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UNAUTHENTICATED ROUTING — only reached when NOT authenticated.
+  // ═══════════════════════════════════════════════════════════════════════════
 
   if (currentScreen === 'login') {
     return <LoginPage onBack={handleBackToLanding} onGetStarted={handleGetStarted} />;

@@ -65,9 +65,10 @@ interface OrgContextValue {
   role: OrgRole | null;
   /** True while the org context is being resolved (initial load). */
   loading: boolean;
-  /** Always `false` in production. Preview mode was removed — the app now
-   *  requires a real Firestore organization. Kept in the type for backward
-   *  compatibility with hooks that guard against it. */
+  /** `true` when the user is exploring via the "Explore Demo" button (no
+   *  Firebase Auth session, no Firestore org). In this mode the app shows
+   *  empty states instead of trying to fetch real data. `false` for all
+   *  real authenticated users. */
   isPreviewMode: boolean;
   /** Friendly error message if the load failed. */
   error: string | null;
@@ -362,9 +363,78 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       setMembership(null);
       setMembers([]);
       setOrganizations([]);
+      setIsPreviewMode(false);
       setLoading(false);
       setError(null);
       loadingForRef.current = null;
+      return;
+    }
+
+    // ── Demo user: create a synthetic preview org so the dashboard renders
+    //    without Firestore. Demo users have no Firebase Auth session, so
+    //    resolveOrgContext (which needs a FirebaseUser) can't be called.
+    //    Without this, `loading` stays true forever → 8s timeout screen.
+    if (user.provider === 'demo') {
+      console.log('[Org] Demo user detected — creating synthetic preview org');
+      const demoOrgId = 'demo-org-preview';
+      const demoOrg: OrganizationDoc = {
+        id: demoOrgId,
+        name: 'Preview Workspace',
+        slug: 'preview-workspace',
+        ownerId: user.id,
+        logoUrl: null,
+        gstin: null,
+        plan: 'free',
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+      };
+      const demoMember: OrganizationMemberDoc = {
+        id: `${demoOrgId}_${user.id}`,
+        organizationId: demoOrgId,
+        userId: user.id,
+        userEmail: user.email,
+        userDisplayName: user.name,
+        userPhotoURL: null,
+        role: 'owner',
+        status: 'active',
+        invitedBy: null,
+        invitedAt: null,
+        joinedAt: null,
+        createdAt: null,
+        updatedAt: null,
+      };
+      const demoProfile: UserProfileDoc = {
+        uid: user.id,
+        email: user.email,
+        displayName: user.name,
+        photoURL: null,
+        phone: null,
+        company: 'Preview Workspace',
+        gstin: null,
+        role: 'owner',
+        provider: 'email',
+        emailVerified: true,
+        onboardingCompleted: true,
+        currentOrganizationId: demoOrgId,
+        createdAt: null,
+        updatedAt: null,
+      };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProfile(demoProfile);
+      setOrganization(demoOrg);
+      setMembership(demoMember);
+      setMembers([demoMember]);
+      setOrganizations([{ organization: demoOrg, member: demoMember, role: 'owner' }]);
+      setIsPreviewMode(true);
+      setLoading(false);
+      setError(null);
+      loadingForRef.current = user.id;
+      try {
+        localStorage.setItem('gstpilot_org_id', demoOrgId);
+      } catch {
+        /* non-fatal */
+      }
       return;
     }
 
@@ -387,12 +457,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       resolveOrgContext(auth.currentUser);
     }
 
-    // NO safety-timer / synthetic-user fallback. In production, Firebase Auth
-    // resolves the current user synchronously on page load (persisted session).
-    // If `auth.currentUser` is null here, the onIdTokenChanged listener above
-    // will fire when Firebase finishes restoring the session. If Firebase is
-    // genuinely unreachable, the user sees an honest "could not connect" error
-    // from resolveOrgContext's retry-exhausted path — never a fake demo org.
     return () => {
       unsubscribe();
     };

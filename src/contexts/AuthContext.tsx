@@ -87,6 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cachedUserIdRef = useRef<string | null>(null);
+  // ── Track whether the CURRENT session is a demo session. Using a ref (not
+  //    state) so onAuthStateChanged can read the latest value without
+  //    re-subscribing. This prevents Firebase's null-fire from wiping a demo
+  //    user that was set via signInDemo() AFTER the initial page load.
+  const isDemoSessionRef = useRef<boolean>(false);
 
   // ── Core Auth Init ──
   // Strategy: restore from localStorage FIRST for instant UI, then let
@@ -117,7 +122,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // ── Restore from localStorage for instant UI ──
     let restoredFromCache = false;
-    let restoredDemoUser = false;
     try {
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored) {
@@ -127,7 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(parsed);
           cachedUserIdRef.current = parsed.id;
           restoredFromCache = true;
-          restoredDemoUser = parsed.provider === 'demo';
+          if (parsed.provider === 'demo') {
+            isDemoSessionRef.current = true;
+          }
         } else {
           localStorage.removeItem(SESSION_KEY);
         }
@@ -148,6 +154,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('[Auth] User Loaded — uid:', fbUser.uid, 'email:', fbUser.email);
           const authUser = firebaseToAuthUser(fbUser);
 
+          // A real Firebase user signed in — this is no longer a demo session.
+          isDemoSessionRef.current = false;
+
           // Fast path: cache matched Firebase user → unblock immediately.
           if (restoredFromCache && cachedUserIdRef.current === fbUser.uid) {
             console.log('[Auth] Cache matched — fast path, unblocking immediately');
@@ -167,15 +176,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           markInitialized();
         } else {
-          // No Firebase user — session expired or signed out.
-          console.log('[Auth] No Firebase user — session ended or signed out');
-          if (!restoredDemoUser) {
-            localStorage.removeItem(SESSION_KEY);
-            setUser(null);
-            cachedUserIdRef.current = null;
-          } else {
-            console.log('[Auth] Keeping demo user (preview mode)');
+          // No Firebase user. If this is a demo session (set via
+          // signInDemo), KEEP the demo user — Firebase firing null is
+          // expected because demo users don't have a Firebase Auth session.
+          if (isDemoSessionRef.current) {
+            console.log('[Auth] No Firebase user — keeping demo session (preview mode)');
+            markInitialized();
+            return;
           }
+          // Genuine sign-out / session expiry — clear everything.
+          console.log('[Auth] No Firebase user — session ended or signed out');
+          localStorage.removeItem(SESSION_KEY);
+          setUser(null);
+          cachedUserIdRef.current = null;
           markInitialized();
         }
       },
@@ -191,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(SESSION_KEY);
         setUser(null);
         cachedUserIdRef.current = null;
+        isDemoSessionRef.current = false;
         markInitialized();
       }
     );
@@ -217,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setIsLoading(false);
     cachedUserIdRef.current = null;
+    isDemoSessionRef.current = false;
     localStorage.removeItem(SESSION_KEY);
   }, []);
 
@@ -325,6 +340,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Creates an in-memory demo user + persists to localStorage so the app
   // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox
   // preview). The OrgContext will create a matching demo org.
+  //
+  // IMPORTANT: Sets isDemoSessionRef so the onAuthStateChanged listener
+  // doesn't wipe the demo user when Firebase fires null (demo users have no
+  // Firebase Auth session).
   const signInDemo = useCallback(() => {
     console.log('[Auth] Demo sign-in (preview mode)');
     const demoUser: AuthUser = {
@@ -335,6 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'demo',
       emailVerified: true,
     };
+    isDemoSessionRef.current = true;
     setUser(demoUser);
     cachedUserIdRef.current = demoUser.id;
     setNeedsOnboarding(false);

@@ -119,7 +119,7 @@ export interface UseERPResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useERP(): UseERPResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -148,7 +148,7 @@ export function useERP(): UseERPResult {
     unsubs.current.forEach((u) => u?.());
     unsubs.current = unsubs.current.map(() => null);
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setConnections([]); setSyncJobs([]); setCustomers([]); setVendors([]);
       setInvoices([]); setInventory([]); setLedgers([]); setPayments([]);
       setBankTransactions([]); setTaxes([]);
@@ -178,7 +178,7 @@ export function useERP(): UseERPResult {
     return () => {
       unsubs.current.forEach((u) => u?.());
     };
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 

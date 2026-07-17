@@ -92,7 +92,7 @@ export interface UseDocumentsResult {
 export function useDocuments(
   categoryFilter?: StorageCategory,
 ): UseDocumentsResult {
-  const { organization, profile } = useOrg();
+  const { organization, profile, isPreviewMode } = useOrg();
   const { user } = useAuth();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
@@ -105,8 +105,8 @@ export function useDocuments(
 
   // ── Real-time subscription to the org's documents ──
   useEffect(() => {
-    if (!orgId) {
-      // Genuine sign-out / no-org state — clear synchronously. This mirrors
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+      // Genuine sign-out / no-org / preview state — clear synchronously. This mirrors
       // the pattern used in OrgContext for the same auth-driven reset.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDocuments([]);
@@ -134,7 +134,7 @@ export function useDocuments(
     );
 
     return () => unsubscribe();
-  }, [orgId, categoryFilter]);
+  }, [orgId, isPreviewMode, categoryFilter]);
 
   // ── Upload ──
   // Plain async function — the React Compiler (Next.js 16) auto-memoizes it

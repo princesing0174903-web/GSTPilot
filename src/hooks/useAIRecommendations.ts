@@ -89,7 +89,7 @@ export interface UseAIRecommendationsResult {
 // ─── Hook ──────────────────────────────────────────────────────────────────
 
 export function useAIRecommendations(): UseAIRecommendationsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -104,7 +104,7 @@ export function useAIRecommendations(): UseAIRecommendationsResult {
   useEffect(() => {
     unsubRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setRecommendations([]);
       setLoading(false);
       setError(null);
@@ -131,9 +131,7 @@ export function useAIRecommendations(): UseAIRecommendationsResult {
       unsubRef.current?.();
       unsubRef.current = null;
     };
-  }, [orgId]);
-
-  // ─── Mutation: refresh ────────────────────────────────────────────────────
+  }, [orgId, isPreviewMode]);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!orgId) return;

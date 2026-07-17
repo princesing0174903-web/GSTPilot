@@ -24,21 +24,61 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Synthetic / placeholder organization ids that must NEVER be used as real
+ * Firestore paths. When OrgContext cannot resolve a real org (Firestore
+ * unreachable, no membership, etc.), it falls back to a synthetic `preview-org`
+ * demo org so the UI can render. Subscribing to
+ * `organizations/preview-org/customers` always fails with `permission-denied`
+ * because no `organization_members/preview-org_{uid}` doc exists — so every
+ * gstpilot-data service short-circuits to an empty result for these ids.
+ *
+ * This list also includes the legacy hardcoded ids that were removed during
+ * the multi-tenant migration (`GSTpilot_SAAS`, `demo`, `test`, `defaultOrg`,
+ * `organization123`). Any caller that still passes one of these gets a null
+ * path → honest empty state → NO Firestore read → NO permission error.
+ */
+const SYNTHETIC_ORG_IDS = new Set<string>([
+  'preview-org',
+  'demo',
+  'test',
+  'defaultOrg',
+  'organization123',
+  'GSTpilot_SAAS',
+]);
+
+/**
+ * True if the given org id is a known synthetic / placeholder id that must
+ * never be used as a real Firestore path. Exposed so hooks can also check
+ * (defense-in-depth) before subscribing.
+ */
+export function isSyntheticOrgId(
+  organizationId: string | null | undefined,
+): boolean {
+  if (!organizationId) return true;
+  return SYNTHETIC_ORG_IDS.has(organizationId);
+}
+
+/**
  * Build the Firestore collection path for a given org's subcollection.
  *
  *   organizations/{organizationId}/{subcollection}
  *
- * Example: orgCollectionPath('preview-org', 'customers')
- *       → 'organizations/preview-org/customers'
+ * Returns null when:
+ *   - organizationId is null/empty/whitespace, OR
+ *   - organizationId is a known synthetic id (preview-org, demo, test,
+ *     defaultOrg, organization123, GSTpilot_SAAS).
  *
- * If organizationId is null/empty, returns null (caller should short-circuit
- * to an empty result rather than writing to a fallback path).
+ * A null return means the caller MUST short-circuit to an empty result
+ * (reads) or throw a friendly "no org selected" error (writes). This is the
+ * single chokepoint that prevents every gstpilot-data service from firing a
+ * doomed Firestore read in preview mode.
  */
 export function orgCollectionPath(
   organizationId: string | null | undefined,
   subcollection: string,
 ): string | null {
   if (!organizationId || !organizationId.trim()) return null;
+  if (SYNTHETIC_ORG_IDS.has(organizationId)) return null;
   return `organizations/${organizationId}/${subcollection}`;
 }
 

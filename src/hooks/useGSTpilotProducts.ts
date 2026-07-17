@@ -45,7 +45,7 @@ export interface UseGSTpilotProductsResult {
 }
 
 export function useGSTpilotProducts(): UseGSTpilotProductsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -64,8 +64,15 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
   orgIdRef.current = orgId;
 
   useEffect(() => {
-    setLoading(true);
     const currentOrgId = orgIdRef.current;
+    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
+    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+      setProducts([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
     const unsubscribe = subscribeProducts(
       currentOrgId,
       (list) => {
@@ -92,7 +99,7 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
       },
     );
     return () => unsubscribe();
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);

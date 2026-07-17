@@ -44,7 +44,7 @@ export interface UseGSTpilotVendorsResult {
 }
 
 export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -63,8 +63,15 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
   orgIdRef.current = orgId;
 
   useEffect(() => {
-    setLoading(true);
     const currentOrgId = orgIdRef.current;
+    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
+    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+      setVendors([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
     const unsubscribe = subscribeVendors(
       currentOrgId,
       (list) => {
@@ -91,7 +98,7 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
       },
     );
     return () => unsubscribe();
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);

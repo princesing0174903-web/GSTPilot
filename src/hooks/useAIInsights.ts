@@ -96,7 +96,7 @@ export interface UseAIInsightsResult {
 // ─── Hook ──────────────────────────────────────────────────────────────────
 
 export function useAIInsights(): UseAIInsightsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [insights, setInsights] = useState<Insight[]>([]);
@@ -111,7 +111,7 @@ export function useAIInsights(): UseAIInsightsResult {
   useEffect(() => {
     unsubRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setInsights([]);
       setLoading(false);
       setError(null);
@@ -138,9 +138,7 @@ export function useAIInsights(): UseAIInsightsResult {
       unsubRef.current?.();
       unsubRef.current = null;
     };
-  }, [orgId]);
-
-  // ─── Mutation: refresh ────────────────────────────────────────────────────
+  }, [orgId, isPreviewMode]);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!orgId) return;

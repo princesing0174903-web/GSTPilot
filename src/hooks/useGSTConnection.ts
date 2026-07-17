@@ -103,7 +103,7 @@ export interface UseGSTConnectionResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useGSTConnection(): UseGSTConnectionResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -140,7 +140,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
     unsubCreditRef.current?.();
     unsubLiabilityRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setConnection(null);
       setProfile(null);
       setReturns([]);
@@ -191,9 +191,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       unsubCreditRef.current?.();
       unsubLiabilityRef.current?.();
     };
-  }, [orgId]);
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  }, [orgId, isPreviewMode]);
 
   const createdBy = {
     uid: user?.id ?? '',

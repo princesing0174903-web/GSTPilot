@@ -158,7 +158,7 @@ export interface UseBillingResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useBilling(): UseBillingResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -189,7 +189,7 @@ export function useBilling(): UseBillingResult {
     unsubs.current.forEach((u) => u?.());
     unsubs.current = unsubs.current.map(() => null);
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setSubscription(null);
       setBillingAccount(null);
       setInvoices([]);
@@ -236,7 +236,7 @@ export function useBilling(): UseBillingResult {
     return () => {
       unsubs.current.forEach((u) => u?.());
     };
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 

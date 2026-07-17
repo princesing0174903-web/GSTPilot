@@ -44,7 +44,7 @@ export interface UseGSTpilotCustomersResult {
 }
 
 export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -63,11 +63,18 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
   orgIdRef.current = orgId;
 
   useEffect(() => {
-    setLoading(true);
-    // Pass the REAL orgId to the subscription. If orgId is null (preview mode
-    // or no org), subscribeCustomers returns a no-op + calls onData([]) —
-    // no Firestore read, no permission error.
     const currentOrgId = orgIdRef.current;
+    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
+    // The service layer also guards against synthetic ids, but we
+    // short-circuit here too so the empty state appears instantly without
+    // a doomed round-trip that would log a permission-denied error.
+    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+      setCustomers([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
     const unsubscribe = subscribeCustomers(
       currentOrgId,
       (list) => {
@@ -95,7 +102,7 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
       },
     );
     return () => unsubscribe();
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);

@@ -108,7 +108,7 @@ export interface UseBankingResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useBanking(): UseBankingResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -133,7 +133,7 @@ export function useBanking(): UseBankingResult {
     unsubTxRef.current?.();
     unsubJobsRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || orgId === 'preview-org') {
       setConnections([]);
       setTransactions([]);
       setSyncJobs([]);
@@ -183,7 +183,7 @@ export function useBanking(): UseBankingResult {
       unsubTxRef.current?.();
       unsubJobsRef.current?.();
     };
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 

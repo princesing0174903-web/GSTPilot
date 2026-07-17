@@ -50,7 +50,7 @@ export interface UseGSTpilotInvoicesResult {
 }
 
 export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const orgId = organization?.id ?? null;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -69,8 +69,15 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   orgIdRef.current = orgId;
 
   useEffect(() => {
-    setLoading(true);
     const currentOrgId = orgIdRef.current;
+    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
+    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+      setInvoices([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
     const unsubscribe = subscribeInvoices(
       currentOrgId,
       (list) => {
@@ -97,7 +104,7 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
       },
     );
     return () => unsubscribe();
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);

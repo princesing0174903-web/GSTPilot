@@ -50,12 +50,18 @@ const SYNTHETIC_ORG_IDS = new Set<string>([
  * True if the given org id is a known synthetic / placeholder id that must
  * never be used as a real Firestore path. Exposed so hooks can also check
  * (defense-in-depth) before subscribing.
+ *
+ * Also returns true for local workspace IDs (prefixed `local-`) which are
+ * created when Firestore is unreachable — these have no Firestore backing.
  */
 export function isSyntheticOrgId(
   organizationId: string | null | undefined,
 ): boolean {
   if (!organizationId) return true;
-  return SYNTHETIC_ORG_IDS.has(organizationId);
+  if (SYNTHETIC_ORG_IDS.has(organizationId)) return true;
+  // Local workspace IDs (created when Firestore is unreachable)
+  if (organizationId.startsWith('local-')) return true;
+  return false;
 }
 
 /**
@@ -78,7 +84,7 @@ export function orgCollectionPath(
   subcollection: string,
 ): string | null {
   if (!organizationId || !organizationId.trim()) return null;
-  if (SYNTHETIC_ORG_IDS.has(organizationId)) return null;
+  if (isSyntheticOrgId(organizationId)) return null;
   return `organizations/${organizationId}/${subcollection}`;
 }
 

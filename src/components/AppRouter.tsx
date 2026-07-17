@@ -184,16 +184,16 @@ function OnboardingScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DashboardTimeoutBoundary — handles loading, error, and timeout states for the
-// dashboard. Once authenticated, the user ALWAYS sees this boundary (never the
-// landing page). It shows:
+// DashboardTimeoutBoundary — handles loading + timeout states for the dashboard.
+// Once authenticated, the user ALWAYS sees this boundary (never the landing
+// page). It shows:
 //   • Inline loading shell while org resolves (up to 8s)
-//   • Error screen with Retry if org fails to load (permission / network)
-//   • Timeout screen if org takes >8s
+//   • Timeout screen with Retry if org takes >8s (rare — only on very slow
+//     networks; Firestore failure falls back to a local workspace, not an error)
 //   • The dashboard children once org is resolved
 // ═══════════════════════════════════════════════════════════════════════════════
 function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
-  const { loading: orgLoading, organization, error: orgError, reload, isPreviewMode } = useOrg();
+  const { loading: orgLoading, organization, reload, isPreviewMode } = useOrg();
   const [timedOut, setTimedOut] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
@@ -228,64 +228,21 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
-  // ── Error state: org failed to load (network / permission / unreachable).
-  // Show immediately — don't wait 8s for a timeout.
-  if (!orgLoading && !organization && !isPreviewMode && orgError) {
+  // ── Timeout state: org loading exceeded 8s. This is rare because Firestore
+  // failures fall back to a local workspace. This only triggers on genuinely
+  // slow networks where the Firestore request is still pending after 8s.
+  if (timedOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="flex max-w-md flex-col items-center gap-5 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="h-7 w-7 text-amber-400" />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Workspace unavailable</h2>
+          <h2 className="text-xl font-bold text-foreground">Taking longer than usual</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            We couldn&apos;t load your workspace. This is usually a temporary connection issue.
-            Check your internet and try again.
+            Your workspace is still loading. This can happen on slow connections.
+            Give it a moment, or retry now.
           </p>
-          {orgError ? (
-            <p className="text-xs text-amber-400/80 font-mono bg-amber-500/5 rounded-lg px-3 py-2 max-w-full break-words">
-              {orgError}
-            </p>
-          ) : null}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRetry}
-              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Retry
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Reload page
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Timeout state: org loading exceeded 8s.
-  if (timedOut) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-6">
-        <div className="flex max-w-md flex-col items-center gap-5 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20">
-            <AlertTriangle className="h-7 w-7 text-red-400" />
-          </div>
-          <h2 className="text-xl font-bold text-foreground">Unable to load dashboard</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Dashboard initialization exceeded 8 seconds. This usually means the workspace
-            service is unreachable. Check your connection and try again.
-          </p>
-          {orgError ? (
-            <p className="text-xs text-red-400/80 font-mono bg-red-500/5 rounded-lg px-3 py-2">
-              {orgError}
-            </p>
-          ) : null}
           <div className="flex items-center gap-3">
             <button
               onClick={handleRetry}

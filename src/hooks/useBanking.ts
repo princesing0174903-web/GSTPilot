@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Real Banking Foundation™ — useBanking() Hook
@@ -133,7 +134,7 @@ export function useBanking(): UseBankingResult {
     unsubTxRef.current?.();
     unsubJobsRef.current?.();
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setConnections([]);
       setTransactions([]);
       setSyncJobs([]);

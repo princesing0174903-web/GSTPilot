@@ -4864,3 +4864,242 @@ Stage Summary:
 - Settings: Stripe/Linear/Vercel style (glass sidebar, consistent active states, honest messaging)
 - Design system: ONE unified token system (semantic colors, typography scale, spacing, radius, shadows, animations)
 - Both landing (/) and Oracle (/oracle) pages verified working in browser with no errors
+
+---
+Task ID: AUDIT-2
+Agent: Settings Auditor
+Task: Audit Settings page enterprise-grade status
+
+Work Log:
+- Read /home/z/my-project/worklog.md (4866 lines) to absorb prior audit + fix-fake-data history. Confirmed Batch 2 (fix-fake-data-2) already replaced SettingsPage MOCK_SESSIONS / MOCK_API_CONNECTIONS / MOCK_AUDIT_LOGS with empty arrays + empty states, and the logo upload was migrated to Supabase Storage.
+- Listed src/components/settings/ → contains ONLY SettingsPage.tsx (2330 lines, single monolith). No sub-components, no separate panels per section.
+- Grep'd SettingsPage.tsx for "Coming Soon|Preview|TODO|FIXME|placeholder|coming soon" → no explicit Coming-Soon badges; only `placeholder=` input attributes and the preview-mode banner. The "Preview only — logo change won't be saved." note fires only in preview mode.
+- Read SettingsPage.tsx top-down (lines 1-2331) in 6 chunks to map every section: SECTIONS array (lines 144-153), state declarations (408-497), handlers (600-883), renderSection switch (908-2234), main layout (2239-2329).
+- Cross-checked SettingsSection type in src/contexts/AppContext.tsx:240 → `'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'` — exactly mirrors the SECTIONS array, confirming deep-link surface area.
+- Verified src/app/api/settings/ directory DOES NOT EXIST via Glob (zero results). Audited where settings-related routes actually live: /api/firm-settings/*, /api/team-members/*, /api/billing/* (40+ routes), /api/integrations/* (50+ routes), /api/connect/{gstn,bank,whatsapp,gmail,accounting}, /api/audit-logs, /api/security, /api/roles.
+- Cross-referenced the integrations library: src/lib/integrations/ has real adapters for gstn.ts, zoho-books/, banks.ts, whatsapp.ts, drive.ts, gmail.ts — backend exists but SettingsPage does NOT surface them.
+- Mapped each section's persistence path: Firm Profile / GST Config / Notifications → `updateDoc(doc(db,'organizations',orgId), {...})`; Team → useOrgMembers() onSnapshot + inviteMember/updateMemberRole/removeMember; Audit Logs → useFireRecentActivities(50); Security password → Firebase updatePassword; Logo → Supabase Storage + Firestore logoUrl.
+- Confirmed Billing section (lines 1847-2000) is 100% hardcoded constants: "Professional Plan ₹1,499/mo", "Next billing date: 1 July 2025", usage 12/25, 347/1000, 23/50, "VISA •••• 4242 Expires 12/2025", BILLING_HISTORY 4-row array. Zero fetch calls, zero SaveButton, Upgrade button non-functional.
+- Confirmed Security section (lines 1640-1842): 2FA switch is local-only state (twoFactorEnabled, no Firestore write), Active Sessions uses empty MOCK_SESSIONS array (always "No active sessions"), Configure button permanently disabled, no API keys UI, no login history UI.
+- Confirmed GST API Connections section (lines 2005-2134): MOCK_API_CONNECTIONS is `[]`, always renders "No API connections configured" empty state. Only the Test Connection button is live (POST /api/connect/gstn + persists status to organization.gstApiConnections.{id}).
+- Verified against user's 8-section enterprise spec which sections are MISSING entirely: Data (export/backup/delete workspace/reset demo data) and AI Preferences (Oracle enabled/AI language/auto insights/daily+weekly reports) — neither has a section ID, a nav entry, nor any render branch.
+
+Stage Summary:
+- FILE INVENTORY: src/components/settings/ contains ONLY SettingsPage.tsx (2330 lines, monolith). No section sub-components. No src/app/api/settings/ directory exists.
+- VISUAL STRUCTURE: Desktop = 240px left sidebar nav (Stripe/Linear/Vercel glass style) with 8 nav buttons + version footer ("v1.0.0" / "Online"). Mobile = horizontal scrollable tab strip. Right content area max-w-2xl with framer-motion AnimatePresence transitions per section. Preview-mode amber banner when no real org.
+- CURRENT 8 SECTIONS (SectionId type, lines 136 + 144-153): firm, gst, api, team, notifications, security, billing, audit.
+- BACKEND WIRING PER SECTION:
+  • Firm Profile (`firm`) — ✅ REAL. Firestore updateDoc on organizations/{orgId} for name/legalName/gstin/state/entityType/caRegNumber/officeAddress. Logo via Supabase Storage + Firestore logoUrl. GSTIN regex validation. Indian states dropdown.
+  • GST Configuration (`gst`) — ✅ REAL. Firestore updateDoc on organizations/{orgId}.gstConfig {returnPeriod, fyStart, gstr1Pref, gstr3bPref, itcMethod, lateFilingAlert, dueDateReminderDays}.
+  • GST API Connections (`api`) — ⚠️ STUB. MOCK_API_CONNECTIONS = [] → always "No API connections configured" empty state. Only "Test Connection" button is live (POST /api/connect/gstn + persists status to org.gstApiConnections.{id}). "Configure" button permanently disabled.
+  • Team Members (`team`) — ✅ REAL. useOrgMembers() onSnapshot + inviteMember / updateMemberRole / removeMember from @/lib/auth/organizations. Invite dialog + remove confirmation + inline role edit.
+  • Notifications (`notifications`) — ✅ REAL. Firestore updateDoc on organizations/{orgId}.notifications {filingDeadline, mismatchAlerts, weeklySummary, healthScoreChanges, teamActivity, newInvoiceUploaded}.
+  • Security (`security`) — ⚠️ PARTIAL. Change Password card = REAL (Firebase updatePassword + strength meter). 2FA card = LOCAL STATE ONLY (twoFactorEnabled never persisted). Active Sessions card = EMPTY MOCK (MOCK_SESSIONS = [] → always "No active sessions"). Data Encryption card = static informational banner. NO API keys UI. NO login history UI.
+  • Billing (`billing`) — ❌ ALL HARDCODED MOCK DATA. "Professional Plan ₹1,499/mo", "Next billing date 1 July 2025", usage 12/25 + 347/1000 + 23/50, "VISA •••• 4242 Expires 12/2025", BILLING_HISTORY 4-row static array. ZERO fetch calls to /api/billing/*. Upgrade Plan button non-functional. No SaveButton.
+  • Audit Logs (`audit`) — ✅ REAL. useFireRecentActivities(50) from Firestore activities collection. Filter dropdown (all/filing/client_update/invoice/settings/reconciliation). Maps FirestoreActivity → AuditLogEntry with timestamp/user/action/entity.
+- "COMING SOON" / "PREVIEW" / PLACEHOLDER TEXTS: No explicit "Coming Soon" badges on any section. The honest empty states are: "No API connections configured / API connections will appear here once configured on your organization." (api section stub), "No active sessions / Sessions will appear here when you sign in on other devices." (security sessions stub). Preview-mode banner: "Workspace not connected — Sign in to persist your settings to the cloud." Logo: "Preview only — logo change won't be saved." "Configure" button disabled with tooltip "configuration is managed in the provider's dashboard".
+- GAP ANALYSIS vs USER'S 8-SECTION ENTERPRISE SPEC:
+  1. Organization Profile — ~60% covered by "Firm Profile". MISSING: PAN, currency, timezone (FY lives in GST Config instead).
+  2. Team Management — ~80% covered by "Team Members". GAP: role taxonomy is Admin/Manager/Staff/Viewer (translated from Firestore owner/admin/accountant/employee/auditor/viewer), NOT the requested Owner/Admin/Accountant/Staff. No per-member inline activity log (audit logs live in a separate section).
+  3. Integrations — ~10% covered by "GST API Connections" (empty stub, GSTN-only test button). MISSING UI for Google, Zoho Books, Banking, WhatsApp — despite full backend existing at /api/integrations/* and /api/connect/* and src/lib/integrations/*.
+  4. Security — ~30%. Password real. 2FA / sessions / API keys / login history all stub-or-missing. Audit logs are a SEPARATE section, not folded into Security as user spec implies.
+  5. Notifications — ~60%. Real persistence. MISSING: browser notifications, payment alerts. Has 6 email-style toggles (filing deadline, mismatch, weekly summary, health score, team activity, new invoice).
+  6. Billing — ~5%. All hardcoded mock constants. Zero backend wiring despite /api/billing/* having 40+ routes (plans, subscribe, usage, invoices, payment, upgrade, downgrade, cancel, refund, coupons).
+  7. Data — 0%. SECTION DOES NOT EXIST. No export, backup, delete workspace, or reset demo data UI.
+  8. AI Preferences — 0%. SECTION DOES NOT EXIST. No Oracle toggle, AI language, auto insights, or daily/weekly report scheduling UI.
+- TWO EXTRA SECTIONS NOT IN USER SPEC: "GST Configuration" (could merge into Organization Profile) and "Audit Logs" (could fold into Security per user spec).
+- NET VERDICT: SettingsPage is a polished single-file monolith with solid real-wiring on 4 sections (Firm, GST Config, Team, Notifications, Audit Logs = 5 actually) and serious gaps on 3 (Billing = fake, Security = partial, Integrations = stub) plus 2 entirely missing sections (Data, AI Preferences). To reach the requested enterprise-grade 8-section control center, the build-out needs: (a) add Data section, (b) add AI Preferences section, (c) replace Billing hardcoded data with /api/billing/* fetches, (d) wire 2FA + sessions + API keys + login history in Security, (e) expand GST API Connections into a full Integrations panel surfacing Google/Zoho/Banking/WhatsApp status from /api/integrations/installed + /api/connect/*, (f) add PAN/currency/timezone to Firm Profile, (g) reconcile role taxonomy (Owner/Admin/Accountant/Staff) or document the Admin/Manager/Staff/Viewer mapping, (h) optionally fold Audit Logs into Security.
+
+---
+Task ID: AUDIT-4
+Agent: Oracle Data Flow Auditor
+Task: Audit Oracle's data sources
+
+Work Log:
+- Read previous worklog (4866 lines) to understand context — multiple prior audits and stabilization passes; this is the first AUDIT-4 (Oracle data-source audit).
+- Enumerated `/src/app/api/oracle/` directory — found 45+ Oracle routes (chat, context, ask, query, activate, cfo/*, real-data, insights, recommendations, etc.).
+- Read `/api/oracle/chat/route.ts` (1,674 lines) in full — identified 11 parallel context blocks assembled by `buildSystemPrompt()`.
+- Read `/api/oracle/activate/route.ts` — confirmed it calls `getBusinessSnapshot()` and persists the snapshot.
+- Read `/api/oracle/context/route.ts` and its backing lib `lib/oracle-core/context.ts` (Context Engine™, 653 lines) — found it gathers context from raw Prisma directly.
+- Read `/api/oracle/ask/route.ts` and `/api/oracle/query/route.ts` — confirmed they delegate to `lib/oracle-core/reasoning` (Context Engine) and `lib/oracle/structured-queries` respectively.
+- Read `/lib/oracle/real-data.ts`, `/lib/oracle-cfo/gstpilot-context.ts`, and `/lib/gstpilot-data/customers.ts` to verify whether they read from the Business Snapshot.
+- Read `/components/oracle/OracleChat.tsx` (main chat component) and `/components/dashboard/home/ActivateOracleWizard.tsx` (activation flow).
+- Cross-checked `Business Snapshot` source: `/api/business-snapshot` (uses `lib/business/snapshot.ts`) and `/api/business/snapshot` (merges rich + fin engines).
+- No code was modified — audit only.
+
+Stage Summary:
+
+**1. Oracle Chat API Route**
+- Located at `/src/app/api/oracle/chat/route.ts` (1,674 lines, POST handler that streams SSE).
+- The LLM system prompt is built by `buildSystemPrompt()` which assembles ~11 parallel context blocks via `Promise.allSettled` (lines 839–855):
+  1. `BRAND_IDENTITY_PROMPT_BLOCK` (oracle-brand.ts)
+  2. `cfoContextBlock` ← `generateCFOInsights()` (lib/cfo/engine)
+  3. `rmbContextBlock` ← `getRmbState()` (lib/rmb/engine)
+  4. `graphContextBlock` ← `getGraphState()` (lib/graph/engine)
+  5. `invoiceEngineContextBlock` ← DIRECT Prisma queries
+  6. `executionContextBlock` ← DIRECT Prisma queries
+  7. `twinContextBlock` ← `computeTwinOracleContext()` (lib/twin)
+  8. `ceoContextBlock` ← `computeCEOOracleContext()` (lib/ceo)
+  9. `realDataContextBlock` ← `buildRealDataSnapshot(userId)` (DIRECT Prisma + connectors)
+  10. `dynamicRecsBlock` ← recommendations
+  11. `gstpilotContextBlock` ← `buildGSTpilotContextBlock(orgId)` (DIRECT Firestore subcollections)
+  12. `businessSnapshotBlock` ← `getBusinessSnapshot(organizationId)` ✓ THE canonical snapshot
+
+**2. Does Oracle read from Business Snapshot? — MIXED (the central problem).**
+- ✅ ONE block (`buildBusinessSnapshotContextBlock`, lines ~760–798) calls `getBusinessSnapshot(orgId)` from `@/lib/business/snapshot` and injects the canonical headline numbers (revenue, cash, profit, receivables, payables, GST, ITC, health score, runway, forecast, Zoho sync status). The block literally tells the LLM: "Use EXACTLY these values… Never compute these independently."
+- ❌ BUT the chat route simultaneously builds THREE MORE context blocks that bypass the snapshot and query Prisma/Firestore directly:
+  - `buildInvoiceEngineContextBlock()` (lines 296–307) — `db.invoice.findMany`, `db.purchaseBill.findMany`, `db.expense.findMany`, `db.payment.findMany`, `db.tDSRecord.findMany`, `db.employee.findMany`, `db.payroll.findMany` (all `orderBy createdAt desc`, no `where` filter, no org scoping).
+  - `buildExecutionContextBlock()` (lines ~470–476) — `db.businessEvent.findMany`, `db.decision.findMany`, `db.executionTask.findMany`, `db.approval.findMany`, `db.workflow.findMany`, `db.userBehaviour.findMany`, `db.executionTimeline.findMany`.
+  - `buildRealDataSnapshot()` (lib/oracle/real-data.ts) — direct Prisma reads of connections, bank transactions, GST, email sync, WhatsApp sync, accounting sync.
+- ❌ `gstpilotContextBlock` reads Firestore subcollections directly: `organizations/{orgId}/customers`, `/invoices`, `/products`, `/vendors`, `/expenses`, `/payments` (via `lib/gstpilot-data/*` and `lib/oracle-cfo/gstpilot-context.ts`).
+- ⚠️ CONFLICT RISK: The snapshot block says "Use EXACTLY these values" while `invoiceEngineContextBlock` simultaneously surfaces raw invoice/payment totals that may differ from the snapshot (snapshot merges native Prisma + Zoho Books; raw `db.invoice.findMany` is native-only and NOT org-scoped). The LLM receives conflicting revenue/invoice/GST numbers in the same prompt.
+
+**3. Oracle Context Engine (`/api/oracle/context` + `lib/oracle-core/context.ts`) — DOES NOT use Business Snapshot.**
+- The Context Engine™ (653 lines) gathers `BusinessContext` via 12 parallel module calls — ALL hit Prisma directly:
+  `db.businessEvent`, `db.invoice`, `db.document`, `db.cEODecision`, `db.cEOGoal`, `db.cEOStrategy`, `db.oracleConversation`, `db.oracleMemory` — plus CFO/graph/twin/connectivity engines.
+- CFO numbers come from `generateCFOInsights()` (a SEPARATE engine), NOT from the Business Snapshot.
+- The 30-second cache (`getCachedContext`) caches the Prisma-gathered context, but no value is sourced from `getBusinessSnapshot()`.
+- This route is used by OracleIntelligenceCorePage and other Oracle pages → those surfaces show Prisma-direct numbers, not the canonical snapshot.
+
+**4. Oracle Activation Flow — CLEAN (the model to copy).**
+- API: `/api/oracle/activate/route.ts` — POST handler, Bearer-token auth, verifies org membership, then:
+  1. Calls `getBusinessSnapshot(organizationId, { forceRefresh: true })` (the canonical snapshot, native + Zoho).
+  2. Derives scores FROM the snapshot (revenue, expenses, profit, cash, customers, invoices, GST, health, risk, runway, forecast, returns, compliance).
+  3. Persists to Firestore: `organizations/{orgId}` (integrations.oracle summary), `organizations/{orgId}/oracle/activation` (full snapshot + scores + audit metadata), `activities/{activityId}` ("Oracle Activated" event), `aiRecommendations/{recId}` (recommendations generated FROM the snapshot, replacing placeholder recs).
+  4. Returns the activation result so the client updates immediately.
+- `generateOracleInsights(snapshot)` and `generateRecommendationsFromSnapshot(snapshot)` are pure functions of the snapshot — NO direct Prisma reads.
+- Wizard UI: `/components/dashboard/home/ActivateOracleWizard.tsx` — 4 steps: Integrations → Data Quality → Snapshot → Activate. Calls `/api/oracle/activate` with Bearer token, reloads org context on success, toasts Health Score.
+
+**5. Oracle Chat Component**
+- Main component: `/src/components/oracle/OracleChat.tsx` (554 lines) — three-zone full-screen layout, `streamOracle()` posts to `/api/oracle/chat` and consumes SSE (`delta`/`followups`/`sources`/`done`/`error`).
+- Companion components in `/src/components/oracle/`: OracleWorkspace (uses /chat + /cfo/analyze), OraclePanel, OracleSidebar, OracleHistory, OracleInputBar, MemoryPanel, ConnectorsPanel, BusinessGraphPanel, OracleCommandCenter, etc.
+- The chat component does NOT assemble context client-side — it sends `{message, history, userEmail}` and the server builds all 11 context blocks. The client only supplies `req.context.organizationId` and `req.memory` (user name/firm/GSTIN/language).
+
+**6. Other Oracle endpoints that bypass the Business Snapshot (need follow-up):**
+- `/api/oracle/query/route.ts` → `executeStructuredQuery(intent, organizationId)` — `lib/oracle/structured-queries.ts` is hybrid: it calls `getBusinessSnapshot(orgId)` for some intents (lines 456, 495, 627, 665, 703, 785) but runs `db.invoice.findMany` directly for others (lines 277, 331, 391, 553).
+- `/api/oracle/ask/route.ts` → `lib/oracle-core/reasoning` → `lib/oracle-core/context.ts` (Prisma-direct, no snapshot).
+- `/api/oracle/real-data/route.ts` → `lib/oracle/real-data.ts` (Prisma-direct, connectors — intentionally different scope: bank/email/WhatsApp/accounting sync state not covered by the snapshot).
+
+**7. Direct collections queried by Oracle (chat route + context engine):**
+- Prisma (chat route): `invoice`, `purchaseBill`, `expense`, `payment`, `tDSRecord`, `employee`, `payroll`, `businessEvent`, `decision`, `executionTask`, `approval`, `workflow`, `userBehaviour`, `executionTimeline`.
+- Prisma (context engine): `businessEvent`, `invoice`, `document`, `cEODecision`, `cEOGoal`, `cEOStrategy`, `oracleConversation`, `oracleMemory`.
+- Firestore subcollections (gstpilot-context block): `organizations/{orgId}/customers`, `invoices`, `products`, `vendors`, `expenses`, `payments`.
+- None of the Prisma reads in the chat route are `organizationId`-scoped — they return the entire table. (The activation + query routes ARE org-scoped; the chat route's invoice/execution blocks are not.)
+
+**8. LLM prompt/context structure (chat route):**
+- System prompt = `BRAND_IDENTITY_PROMPT_BLOCK` + role/expertise/personality rules + ~11 live-data context blocks (above) + memory personalization (userName, firmName, GSTIN, language, recentTopics) + dashboardMetrics echo + GST/CFO/RMB/Graph personality rules + forbidden phrases.
+- The 11 context blocks each carry their own "do not fabricate" guardrail and own data source — there is NO single orchestrating call to the Business Snapshot that gates the others.
+- Net effect: the snapshot block is present and authoritative-sounding, but the LLM still sees raw invoice/payment/event/customer numbers from other blocks that bypass the snapshot.
+
+**VERDICT**: Oracle is NOT yet reading exclusively from the Central Business Snapshot. The chat route includes the Business Snapshot as ONE block (good) but simultaneously builds FOUR other context blocks that query Prisma/Firestore directly, creating conflicting numbers in the same prompt. The Context Engine (`lib/oracle-core/context.ts`) used by `/api/oracle/context` and `/api/oracle/ask` does NOT consult the Business Snapshot at all. Only the activation route (`/api/oracle/activate`) is clean — it sources everything from `getBusinessSnapshot()`.
+
+**RECOMMENDED NEXT ACTIONS (for a future code-changing task — not this audit):**
+1. Refactor `buildInvoiceEngineContextBlock()` in `/api/oracle/chat/route.ts` to source headline numbers from `getBusinessSnapshot(orgId)`; only emit record-level detail (invoice numbers, statuses) from raw Prisma, and org-scope every read.
+2. Refactor `lib/oracle-core/context.ts` (`gatherBusinessContext`) to call `getBusinessSnapshot(firmId)` for finance/invoices/receivables/payables/GST numbers instead of `gatherCFO()` + `gatherInvoices()` + raw Prisma.
+3. Decide whether `buildRealDataSnapshot()` (bank/email/WhatsApp/GSTN sync state) and `gstpilotContextBlock` (Firestore subcollections) belong inside the Business Snapshot or remain as separate "connection-state" blocks. If separate, add a clear "RULE: snapshot block is canonical for finance; this block is connection state only" guardrail to avoid the LLM conflating them.
+4. Org-scope ALL Prisma reads in the chat route (`buildInvoiceEngineContextBlock`, `buildExecutionContextBlock`) — currently they return the whole table cross-tenant.
+5. Audit `/api/oracle/query` (structured-queries.ts) to convert the remaining `db.invoice.findMany` paths to snapshot reads.
+6. Add a single test that asserts every Oracle context block cites numbers that match `getBusinessSnapshot(orgId)` — catches drift if a future change reverts to direct Prisma reads.
+
+---
+Task ID: AUDIT-1
+Agent: Business Snapshot Auditor
+Task: Audit Central Business Snapshot service
+
+Work Log:
+- Read worklog.md to understand prior work (4866 lines, 4+ prior task entries including UI-STAB, Oracle activation insights, activity logger).
+- Located snapshot service files:
+  * src/app/api/business/snapshot/route.ts (227 lines) — MAIN route, merges two engines
+  * src/app/api/business-snapshot/route.ts (57 lines) — ALT route (rich-only), NOT used by the hook
+  * src/lib/business/snapshot.ts (589 lines) — "rich" canonical engine (Prisma + Zoho* tables merged)
+  * src/lib/business/financial-engine.ts (241 lines) — computeHealthScore/RiskScore/CollectionRate/GstLiability used by rich engine
+  * src/lib/financial-engine/businessSnapshot.ts (384 lines) — "fin" legacy engine (Prisma only)
+  * src/lib/financial-engine/{calculateHealth,calculateRisk,calculateRevenue,calculateExpenses,calculateProfit,calculateCash,calculateGST,calculateCollections,calculateRunway}.ts — fin calculators
+  * src/hooks/useBusinessSnapshot.ts (141 lines) — single client hook
+  * src/lib/business-snapshot-events.ts (56 lines) — invalidation event bus
+- Read the actual files to map the response shape and data sources.
+- Searched for `getBusinessSnapshot`, `calculateHealth`, `calculateRisk`, `computeHealthScore`, `computeRiskScore`, `computeCollectionRate`, `computeGstLiability`, `computeFinancialIntelligence`, `fetchRawCFOData`, `generateCFOInsights`, `useBusinessSnapshot`, `useBusinessScore`, `local-`, `startsWith('local-')`, `isLocalOrgId`.
+- Confirmed dashboard wiring by reading DashboardPage.tsx, AnalyticsPage.tsx, ZohoFullSyncPanel.tsx.
+- Confirmed local-workspace handling via src/lib/gstpilot-data/local-workspace.ts and OrgContext.tsx (lines 284, 433).
+
+Stage Summary:
+
+1. API ROUTE LOCATIONS — TWO routes exist (confusing):
+   • PRIMARY: src/app/api/business/snapshot/route.ts — the URL the hook actually calls. MERGES two engines: `rich` (business/snapshot.ts, headline numbers + Zoho tables) + `fin` (financial-engine/businessSnapshot.ts, nested dashboard shape).
+   • DUPLICATE: src/app/api/business-snapshot/route.ts (note the hyphen) — calls rich engine only, returns the rich shape verbatim. NOT used by the hook but still mounted. Dead-ish endpoint that should be deleted or redirected.
+
+2. HOOK — src/hooks/useBusinessSnapshot.ts (the only client hook):
+   • Uses useOrg() → organization?.id
+   • Polls /api/business/snapshot?organizationId=<id> every 60s
+   • Re-fetches on window focus
+   • Subscribes to business-snapshot-events.ts invalidation bus → forceRefresh=true after any mutation (instant dashboard updates)
+   • NOTE: the hook's TS type imports `BusinessSnapshot` from `@/lib/financial-engine` (the fin/legacy type), but the actual API response is the merged object (rich + fin shape). The hook's typing is out of sync with the response — works at runtime because TS is structurally loose, but `snapshot.perEntity`, `snapshot.lastSyncAt`, `snapshot.lastSyncStatus`, `snapshot.forecastTrend`, `snapshot.billCount`, `snapshot.expenseRecordCount`, `snapshot.profitMargin`, `snapshot.outputTax`, `snapshot.inputTax`, `snapshot.gstLiability`, `snapshot.gstCollected`, `snapshot.totalCollected`, `snapshot.totalPaid`, `snapshot.netCashFlow`, `snapshot.filedReturns`, `snapshot.pendingReturns`, `snapshot.overdueReturns`, `snapshot.riskScore`, `snapshot.collectionRate` (0-1 scale), `snapshot.workingCapital`, `snapshot.runwayDays`, `snapshot.customerCount`, `snapshot.vendorCount` are returned by the API but not declared on the imported type.
+
+3. SNAPSHOT RESPONSE SHAPE (all fields the merged API returns):
+   • Top-line: revenue, expenses, profit, cash, bankBalance (= cash), profitMargin
+   • Invoices block: invoices.{total, count, paid, outstanding, overdue, draftCount}
+   • Collections block: collections.{collectionRate (0–100), totalCollected, totalOutstanding, averageDaysToPay}
+   • Flat receivables, payables
+   • GST block: gst.{outputTax, inputTax, netLiability, itcAvailable}; flat aliases itc, gstLiability, gstCollected, outputTax, inputTax
+   • Entities: customers (= customerCount), vendors (= vendorCount), invoiceCount, billCount, expenseRecordCount
+   • Health & risk: healthScore (0–100), riskScore (0–100), risks.{overallRisk, overdueExposure, complianceRisk, cashFlowRisk, riskLevel}
+   • Forecast: forecast.{nextMonthRevenue, nextMonthExpenses, projectedCash, confidence (0–100)}, forecastTrend ('up'|'down'|'flat')
+   • Runway: runway.{monthsRemaining, monthlyBurnRate, isProfitable}, runwayDays, workingCapital
+   • Compliance: filedReturns, pendingReturns, overdueReturns, notices
+   • Payments: totalCollected, totalPaid, netCashFlow
+   • Per-entity Zoho counts: perEntity.{zohoCustomers, zohoVendors, zohoItems, zohoInvoices, zohoBills, zohoPaymentsReceived, zohoPaymentsMade, zohoCreditNotes, zohoExpenses, zohoTaxes, zohoJournals, zohoBankAccounts, zohoBankTransactions}
+   • Sync metadata: lastSyncAt, lastSyncStatus ('completed'|'partial'|'failed'|'never')
+   • Audit metadata: organizationId, generatedAt, updatedAt, hasLiveData
+   ALL requested fields ARE present: Revenue ✓, Expenses ✓, Profit ✓, GST Liability ✓, ITC ✓, Cash ✓, Customers ✓, Vendors ✓, Outstanding (receivables) ✓, Collection Rate ✓, Health Score ✓, Risk Score ✓.
+
+4. DATA SOURCES — Prisma/PostgreSQL ONLY (no Firestore, no live Zoho API):
+   • Prisma models read by business/snapshot.ts: Invoice, PurchaseBill, Expense, Payment, BankAccount, Client, GSTRFiling, ZohoCustomer, ZohoVendor, ZohoItem, ZohoInvoice, ZohoBill, ZohoPaymentReceived, ZohoPaymentMade, ZohoCreditNote, ZohoExpense, ZohoTax, ZohoJournalEntry, ZohoBankAccount, ZohoBankTransaction, ZohoSyncLog.
+   • Firestore is NOT read by the snapshot. Firestore is only used upstream by OrgContext to resolve the orgId (and the snapshot then queries Prisma with that orgId).
+   • Zoho Books API is NOT called by the snapshot. The snapshot reads ONLY the already-synced Zoho* Prisma tables. The actual Zoho Books live fetch happens in src/lib/integrations/zoho-books/sync-engine.ts (which writes to Zoho* tables and then calls getBusinessSnapshot(orgId, { forceRefresh: true }) at line 857 to bust the cache).
+   • All 21 Zoho* queries are wrapped in safeCount/safeAggregate/safeFindFirst helpers (lines 146–179) so the snapshot never throws if a Zoho model is missing from the generated Prisma client — graceful degradation to 0.
+
+5. LOCAL WORKSPACE HANDLING ("local-" org IDs) — PARTIAL / HAS A LEAK:
+   • The snapshot itself has NO special handling for "local-" org IDs. It just passes the organizationId straight into Prisma where clauses.
+   • For a "local-xxx" org (created by OrgContext when Firestore is unreachable or for demo users — see OrgContext.tsx lines 284 and 433), there is no matching Firm row in Prisma, so every tenant-scoped query (`where: { client: { firmId: organizationId } }`) returns 0 rows → snapshot returns all zeros. GRACEFUL (no errors, no crash).
+   • ⚠️ CROSS-TENANT LEAK: The BankAccount aggregate (snapshot.ts lines 314–318) is NOT tenant-scoped — `where: { status: 'connected' }` with NO org filter. The code comment even admits "BankAccount has no orgId field". This means for ANY org (including "local-"), if any tenant in the entire DB has a connected BankAccount row with balance > 0, that balance leaks into the snapshot's `cash` field. The fallback only triggers when `bankBalance === 0` (it then uses net payment flow instead).
+   • The ZohoBankAccount aggregate IS correctly tenant-scoped (line 362-365 `where: { organizationId }`), so the leak is specifically the native BankAccount table.
+   • The Firestore-backed services (src/lib/gstpilot-data/*) DO have explicit `isLocalOrgId()` checks (src/lib/gstpilot-data/local-workspace.ts) and short-circuit to empty results. The snapshot does NOT use this helper — adding it would prevent the BankAccount leak by skipping the bankBalance query entirely for local- orgs.
+
+6. DUPLICATE CALCULATION ENGINES — YES, MULTIPLE. This is the most serious finding. The same metrics are computed in AT LEAST 5 places, often with different formulas and (critically) different tenant scoping:
+   a) src/lib/business/snapshot.ts + src/lib/business/financial-engine.ts — CANONICAL. Prisma + Zoho merged, tenant-scoped via `client.firmId`. Used by /api/business/snapshot, /api/business-snapshot, /api/finos/{accountant,cfo-insights,oracle}, /api/oracle/{chat,activate,activation-insights}, src/lib/oracle/structured-queries (7 functions), src/lib/integrations/zoho-books/sync-engine.ts.
+   b) src/lib/financial-engine/businessSnapshot.ts + calculate*.ts — LEGACY. Prisma-only (no Zoho tables), tenant-scoped. Used by /api/business/snapshot as the `fin` engine that's merged with rich. The merged route only USES fin for: invoices.draftCount, collections.averageDaysToPay, risks.{overdueExposure, complianceRisk, cashFlowRisk, riskLevel}, forecast.projectedCash, runway.monthlyBurnRate, notices. So headlines come from rich, secondary fields from fin. Two engines running in parallel for every snapshot fetch = 2x Prisma load.
+   c) src/lib/cfo/phase1/orchestrator.ts — `computeFinancialIntelligence()`. ⚠️ Reads ALL Prisma records GLOBALLY — `db.invoice.findMany({ take: 10000 })` with NO where clause (data.ts lines 204-279). NOT tenant-scoped. Has its OWN computeRevenueAnalytics / computeProfitability / computeCashFlow / computeWorkingCapital / computeExpenses / computeCollections / computeForecast / computeGSTPosition / computeRiskEngine / computeHealthScore (cfo/phase1/health-score.ts line 383). Used by:
+      - /api/oracle/chat/route.ts (line 30, 88)
+      - /api/ai-cfo/intelligence/route.ts (line 24, 42)
+      - src/lib/autonomous/self-healing.ts (line 15, 47)
+      - src/lib/ceo/data.ts (line 12, 215)
+      - src/lib/twin/{orchestrator,forecast,anomaly,decision-impact,kpis,live-state}.ts (all call fetchRawCFOData() with no tenant filter)
+      This means Oracle chat and AI CFO intelligence return GLOBAL aggregated numbers across all tenants, NOT the user's own org's numbers. Major data-integrity and privacy concern.
+   d) src/lib/cfo/engine.ts — `generateCFOInsights()` with its OWN `computeHealthScore()` (line 378). Used by 8+ routes: /api/oracle/chat, /api/ai-cfo, /api/rmb/{delegate,orchestrate,command}, /api/execution-cloud/{billing,execute}, oracle-core/{orchestrator,insights,conversation}, network/engine, abos/engine, rmb/engine, graph/engine. Different formula from (a)/(b)/(c).
+   e) src/lib/ai-provider/scoring.ts — `computeRiskScoreFromContext` and `computeBusinessScoreFromContext` (lines 81, 126). Used by /api/ai/score (via useBusinessScore hook) and the AI provider orchestrator. Yet another independent scoring path.
+   f) src/lib/oracle/briefing.ts — `computeHealthScore(signals: RankedSignal[])` (line 33). Signal-weighted, different semantics.
+   g) src/lib/intelligence/data-cloud.ts — `computeHealthScore(input)` (line 496). Independent impl.
+   h) src/lib/gst-utils.ts — `calculateHealthScore` / `calculateRiskScore` (lines 45, 64). Different semantics (GST data quality: missing GSTIN, duplicate invoices, filing delays) but same names — confusing. Likely not a financial duplicate, but a naming collision.
+
+7. DASHBOARD WIRING — WIRED ✓:
+   • DashboardPage.tsx (line 550) calls useBusinessSnapshot(); reads revenue (line 1102, 1195, 1768), customers (line 1193), invoices.count (lines 612, 1194, 1767), healthScore (lines 620, 1082), hasLiveData (lines 164, 167, 619), forecastTrend, etc.
+   • AnalyticsPage.tsx imports useBusinessSnapshot (line 17) + BusinessSnapshot type (line 18).
+   • ZohoFullSyncPanel.tsx imports useBusinessSnapshot (line 35), reads snapshot.lastSyncAt (line 355) and snapshot.perEntity (line 381).
+   • All KPI cards on the home dashboard pull from the snapshot. No independent metric calc on the dashboard itself.
+
+GAPS / RISKS IDENTIFIED:
+1. ⚠️ CROSS-TENANT DATA LEAK in BankAccount aggregate (snapshot.ts lines 314–318) — not tenant-scoped, so `cash` may include other tenants' bank balances. Fix: scope by organizationId once the BankAccount schema adds the column, OR wrap with a local-org check that skips the query for "local-" orgs, OR drop bankBalance from the snapshot and use only net payment flow.
+2. ⚠️ CFO PHASE 1 ENGINE IS NOT TENANT-SCOPED — fetchRawCFOData() in src/lib/cfo/phase1/data.ts reads ALL rows globally. Oracle chat + AI CFO intelligence + Digital Twin + CEO data + Autonomous self-healing all return global aggregates, NOT the user's org's numbers. This is a correctness + privacy bug affecting the Oracle chat experience.
+3. ⚠️ FIN ENGINE IS REDUNDANT — the merged API route calls BOTH rich and fin in parallel (route.ts line 52-61) and only uses fin for ~6 secondary fields (draftCount, averageDaysToPay, risk sub-fields, projectedCash, monthlyBurnRate, notices). These could be computed inside rich engine to eliminate the entire fin engine + its 10 calculators. Cuts snapshot Prisma load ~50%.
+4. ⚠️ DUPLICATE ENDPOINTS — /api/business/snapshot AND /api/business-snapshot both exist. The hook uses the first; the second is dead. Delete or alias it.
+5. ⚠️ HOOK TYPE MISMATCH — useBusinessSnapshot.ts imports BusinessSnapshot from '@/lib/financial-engine' but the API returns the merged shape with ~15 additional fields (perEntity, lastSyncAt, lastSyncStatus, forecastTrend, flat GST/payment aliases, etc.). Should import from a shared merged type.
+6. ⚠️ ~7 INDEPENDENT HEALTH/RISK SCORERS — computeHealthScore exists in business/financial-engine.ts, cfo/phase1/health-score.ts, cfo/engine.ts, oracle/briefing.ts, intelligence/data-cloud.ts (5 impls); computeRiskScore in business/financial-engine.ts, cfo/phase1/risk-engine.ts, ai-provider/scoring.ts, gst-utils.ts (4 impls). Same org can show different health/risk scores on different pages.
+7. minor: overdueReceivables and overduePayables are hardcoded to 0 in the snapshot (lines 478-479) with a TODO comment "computed below if due dates exist" — but never actually computed below.
+8. minor: overdueReturns uses a heuristic `createdAt < now - 20 days` (line 307-313) because GSTRFiling has no dueDate field — comment admits this. Could be misleading if old pending returns are not actually overdue.
+
+NEXT ACTIONS (recommended, in priority order):
+1. Tenant-scope the BankAccount query (or skip for local- orgs) — closes the cross-tenant cash leak.
+2. Add `where: { client: { firmId: organizationId } }` to every query in src/lib/cfo/phase1/data.ts — fixes Oracle/AI-CFO/Twin/CEO/Autonomous showing global numbers.
+3. Consolidate to ONE snapshot engine (rich) and ONE scorer (business/financial-engine.ts); delete or refactor fin engine + cfo/phase1 + cfo/engine + oracle/briefing + intelligence/data-cloud + ai-provider/scoring to delegate to it.
+4. Delete /api/business-snapshot (hyphenated) endpoint.
+5. Move BusinessSnapshot merged type into a shared file and have both the API route and the hook import it.

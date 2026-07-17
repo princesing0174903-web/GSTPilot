@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — useGSTTransactions() Hook
@@ -106,7 +107,7 @@ export function useGSTTransactions(options?: {
 
   // ── Real-time subscription ──
   useEffect(() => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setTransactions([]);
       setLoading(false);
       setError(null);

@@ -25,6 +25,7 @@ import {
   deletePayment as svcDelete,
   searchPayments,
   computePaymentStatsLocal,
+  shouldSkipFirestore,
   type Payment,
   type CreatePaymentInput,
   type UpdatePaymentInput,
@@ -68,8 +69,8 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setPayments([]);
       setLoading(false);
       setError(null);

@@ -22,6 +22,7 @@ import {
   deleteProduct as svcDelete,
   searchProducts,
   computeProductStats,
+  shouldSkipFirestore,
   type Product,
   type CreateProductInput,
   type UpdateProductInput,
@@ -65,8 +66,8 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setProducts([]);
       setLoading(false);
       setError(null);

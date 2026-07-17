@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — useDocuments() Hook
@@ -105,7 +106,7 @@ export function useDocuments(
 
   // ── Real-time subscription to the org's documents ──
   useEffect(() => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       // Genuine sign-out / no-org / preview state — clear synchronously. This mirrors
       // the pattern used in OrgContext for the same auth-driven reset.
       // eslint-disable-next-line react-hooks/set-state-in-effect

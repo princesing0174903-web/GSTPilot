@@ -28,6 +28,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 import {
   COLLECTIONS,
   type FirestoreClient, type FirestoreDocument, type FirestoreInvoice,
@@ -127,9 +128,10 @@ function useFirestoreCollection<T>(
       return;
     }
 
-    // Preview mode (no real org) OR no organization at all → empty data,
-    // no subscription. This is the preview-mode contract.
-    if (!organizationId || isPreviewMode || organizationId === 'preview-org') {
+    // Local workspace, preview mode (no real org), OR no organization at all
+    // → empty data, no subscription. This prevents permission-denied errors
+    // when the user is on a local workspace (Firestore is unreachable).
+    if (!organizationId || isPreviewMode || isLocalOrgId(organizationId)) {
       setData([]);
       setLoading(false);
       setError(null);
@@ -203,8 +205,8 @@ function useFirestoreDoc<T>(
       return;
     }
 
-    // Preview mode (no real org) → no doc, no subscription.
-    if (!user || !organizationId || isPreviewMode || organizationId === 'preview-org') {
+    // Local workspace, preview mode (no real org) → no doc, no subscription.
+    if (!user || !organizationId || isPreviewMode || isLocalOrgId(organizationId)) {
       setData(null);
       setLoading(false);
       setError(null);

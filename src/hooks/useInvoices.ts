@@ -24,6 +24,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 import {
   subscribeToInvoices,
   createInvoice as svcCreate,
@@ -94,7 +95,7 @@ export function useInvoices(
 
   // ── Real-time subscription ──
   useEffect(() => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setInvoices([]);
       setLoading(false);
       setError(null);

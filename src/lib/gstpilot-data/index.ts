@@ -17,3 +17,4 @@ export * from './invoices';
 export * from './vendors';
 export * from './expenses';
 export * from './payments';
+export * from './local-workspace';

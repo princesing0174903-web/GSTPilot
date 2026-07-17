@@ -21,6 +21,7 @@ import {
   updateVendor as svcUpdate,
   deleteVendor as svcDelete,
   searchVendors,
+  shouldSkipFirestore,
   type Vendor,
   type CreateVendorInput,
   type UpdateVendorInput,
@@ -64,8 +65,8 @@ export function useGSTpilotVendors(): UseGSTpilotVendorsResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setVendors([]);
       setLoading(false);
       setError(null);

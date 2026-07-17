@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Billing, Subscriptions & Payments™ — useBilling() Hook
@@ -189,7 +190,7 @@ export function useBilling(): UseBillingResult {
     unsubs.current.forEach((u) => u?.());
     unsubs.current = unsubs.current.map(() => null);
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setSubscription(null);
       setBillingAccount(null);
       setInvoices([]);

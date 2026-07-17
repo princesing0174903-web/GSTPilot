@@ -21,6 +21,7 @@ import {
   updateCustomer as svcUpdate,
   deleteCustomer as svcDelete,
   searchCustomers,
+  shouldSkipFirestore,
   type Customer,
   type CreateCustomerInput,
   type UpdateCustomerInput,
@@ -64,11 +65,11 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
+    // Local workspace, preview mode, or no org → NO Firestore read.
     // The service layer also guards against synthetic ids, but we
     // short-circuit here too so the empty state appears instantly without
     // a doomed round-trip that would log a permission-denied error.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setCustomers([]);
       setLoading(false);
       setError(null);

@@ -22,6 +22,7 @@ import {
   deleteExpense as svcDelete,
   searchExpenses,
   computeExpenseStatsLocal,
+  shouldSkipFirestore,
   type Expense,
   type CreateExpenseInput,
   type UpdateExpenseInput,
@@ -65,8 +66,8 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setExpenses([]);
       setLoading(false);
       setError(null);

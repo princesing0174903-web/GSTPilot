@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot AI Production Pipeline™ — useGenerationJobs() Hook
@@ -370,7 +371,7 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
     setLoading(true);
     setError(null);
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setJobs([]);
       setDrafts([]);
       setVersions([]);
@@ -443,7 +444,7 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
 
   // ─── Subscribe to drafts ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setDrafts([]);
       return;
     }
@@ -466,7 +467,7 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
 
   // ─── Subscribe to versions ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setVersions([]);
       return;
     }

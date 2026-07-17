@@ -25,6 +25,7 @@ import {
   cancelInvoice as svcCancel,
   searchInvoices,
   computeInvoiceStatsLocal,
+  shouldSkipFirestore,
   type Invoice,
   type CreateInvoiceInput,
   type UpdateInvoiceInput,
@@ -70,8 +71,8 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
 
   useEffect(() => {
     const currentOrgId = orgIdRef.current;
-    // Preview mode (synthetic preview-org) or no org → NO Firestore read.
-    if (isPreviewMode || !currentOrgId || currentOrgId === 'preview-org') {
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
       setInvoices([]);
       setLoading(false);
       setError(null);

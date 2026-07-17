@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Real GSTN Integration™ — useGSTConnection() Hook
@@ -140,7 +141,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
     unsubCreditRef.current?.();
     unsubLiabilityRef.current?.();
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setConnection(null);
       setProfile(null);
       setReturns([]);

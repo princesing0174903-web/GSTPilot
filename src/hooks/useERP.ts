@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot ERP & Accounting Integrations™ — useERP() Hook
@@ -148,7 +149,7 @@ export function useERP(): UseERPResult {
     unsubs.current.forEach((u) => u?.());
     unsubs.current = unsubs.current.map(() => null);
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setConnections([]); setSyncJobs([]); setCustomers([]); setVendors([]);
       setInvoices([]); setInventory([]); setLedgers([]); setPayments([]);
       setBankTransactions([]); setTaxes([]);

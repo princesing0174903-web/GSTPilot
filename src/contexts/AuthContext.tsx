@@ -345,11 +345,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // doesn't wipe the demo user when Firebase fires null (demo users have no
   // Firebase Auth session).
   const signInDemo = useCallback(() => {
-    console.log('[Auth] Demo sign-in (preview mode)');
+    console.log('[Auth] Local workspace sign-in (no Firebase account)');
     const demoUser: AuthUser = {
-      id: 'demo-user-' + Date.now(),
-      name: 'Preview User',
-      email: 'preview@gstpilot.app',
+      id: 'local-user-' + Date.now(),
+      name: 'Guest User',
+      email: 'guest@local.workspace',
       picture: undefined,
       provider: 'demo',
       emailVerified: true,
@@ -361,7 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setIsInitializing(false);
     setIsLoading(false);
-    console.log('[Auth] Demo user set — uid:', demoUser.id);
+    console.log('[Auth] Local user set — uid:', demoUser.id);
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(demoUser));
     } catch {

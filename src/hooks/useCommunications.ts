@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Gmail & WhatsApp Business Automation™ — useCommunications() Hook
@@ -176,7 +177,7 @@ export function useCommunications(): UseCommunicationsResult {
     unsubRefs.current.forEach((unsub) => unsub?.());
     unsubRefs.current = [null, null, null, null, null];
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setGmailConnections([]);
       setWhatsappConnections([]);
       setGmailMessages([]);

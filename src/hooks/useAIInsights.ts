@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot AI Oracle™ & AI CFO™ — useAIInsights() Hook
@@ -111,7 +112,7 @@ export function useAIInsights(): UseAIInsightsResult {
   useEffect(() => {
     unsubRef.current?.();
 
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setInsights([]);
       setLoading(false);
       setError(null);

@@ -275,28 +275,82 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Exhausted retries — Firestore is likely unreachable. In production this
-    // path is never hit (Firestore is reachable). We NO LONGER fall back to a
-    // synthetic preview-org demo org — that was a dev/preview crutch that
-    // caused permission-denied errors on every Firestore subscription.
-    // Instead, surface an honest error so the user knows to reconnect.
-    console.warn('[Org] Firestore unreachable after retries — showing honest error (no preview fallback)');
-    setProfile(null);
-    setOrganization(null);
-    setMembership(null);
-    setMembers([]);
-    setOrganizations([]);
+    // Exhausted retries — Firestore is unreachable. Rather than blocking the
+    // user with an error screen, fall back to a LOCAL workspace so the app
+    // remains usable. The dashboard will show empty states (no data yet), and
+    // the user can still navigate, configure settings, and use the UI. When
+    // Firestore becomes reachable again, a reload will pick up real data.
+    console.warn('[Org] Firestore unreachable after retries — falling back to local workspace');
+    const localOrgId = `local-${fbUser.uid}`;
+    const localOrg: OrganizationDoc = {
+      id: localOrgId,
+      name: fbUser.displayName || fbUser.email?.split('@')[0] || 'My Workspace',
+      slug: 'my-workspace',
+      ownerId: fbUser.uid,
+      logoUrl: null,
+      gstin: null,
+      plan: 'free',
+      status: 'active',
+      createdAt: null,
+      updatedAt: null,
+    };
+    const localMember: OrganizationMemberDoc = {
+      id: `${localOrgId}_${fbUser.uid}`,
+      organizationId: localOrgId,
+      userId: fbUser.uid,
+      userEmail: fbUser.email || '',
+      userDisplayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+      userPhotoURL: fbUser.photoURL || null,
+      role: 'owner',
+      status: 'active',
+      invitedBy: null,
+      invitedAt: null,
+      joinedAt: null,
+      createdAt: null,
+      updatedAt: null,
+    };
+    const localProfile: UserProfileDoc = {
+      uid: fbUser.uid,
+      email: fbUser.email || '',
+      displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+      photoURL: fbUser.photoURL || null,
+      phone: null,
+      company: null,
+      gstin: null,
+      role: 'owner',
+      provider: fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+      emailVerified: fbUser.emailVerified,
+      onboardingCompleted: true,
+      currentOrganizationId: localOrgId,
+      createdAt: null,
+      updatedAt: null,
+    };
+    setProfile(localProfile);
+    setOrganization(localOrg);
+    setMembership(localMember);
+    setMembers([localMember]);
+    setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
     setIsPreviewMode(false);
-    setError('Could not connect to the workspace service. Please check your internet connection and try again. If the problem persists, sign out and sign back in.');
+    setError(null);
     setLoading(false);
     loadingForRef.current = null;
+    try {
+      localStorage.setItem('gstpilot_org_id', localOrgId);
+    } catch {
+      /* non-fatal */
+    }
   }, []);
 
   /**
-   * Reload the org context for the current Firebase user.
+   * Reload the org context for the current Firebase user. If there's no
+   * Firebase user (demo/local mode), this is a no-op — the local workspace
+   * is already set and doesn't need reloading.
    */
   const reload = useCallback(async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      // Demo / local mode — nothing to reload from Firestore.
+      return;
+    }
     loadingForRef.current = null; // force re-load
     await resolveOrgContext(auth.currentUser);
   }, [resolveOrgContext]);
@@ -370,17 +424,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // ── Demo user: create a synthetic preview org so the dashboard renders
-    //    without Firestore. Demo users have no Firebase Auth session, so
+    // ── Demo user: create a local workspace so the dashboard renders without
+    //    Firestore. Demo users have no Firebase Auth session, so
     //    resolveOrgContext (which needs a FirebaseUser) can't be called.
     //    Without this, `loading` stays true forever → 8s timeout screen.
     if (user.provider === 'demo') {
-      console.log('[Org] Demo user detected — creating synthetic preview org');
-      const demoOrgId = 'demo-org-preview';
-      const demoOrg: OrganizationDoc = {
-        id: demoOrgId,
-        name: 'Preview Workspace',
-        slug: 'preview-workspace',
+      console.log('[Org] Demo user detected — creating local workspace');
+      const localOrgId = `local-${user.id}`;
+      const localOrg: OrganizationDoc = {
+        id: localOrgId,
+        name: user.name + "'s Workspace",
+        slug: 'my-workspace',
         ownerId: user.id,
         logoUrl: null,
         gstin: null,
@@ -389,9 +443,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         createdAt: null,
         updatedAt: null,
       };
-      const demoMember: OrganizationMemberDoc = {
-        id: `${demoOrgId}_${user.id}`,
-        organizationId: demoOrgId,
+      const localMember: OrganizationMemberDoc = {
+        id: `${localOrgId}_${user.id}`,
+        organizationId: localOrgId,
         userId: user.id,
         userEmail: user.email,
         userDisplayName: user.name,
@@ -404,34 +458,34 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         createdAt: null,
         updatedAt: null,
       };
-      const demoProfile: UserProfileDoc = {
+      const localProfile: UserProfileDoc = {
         uid: user.id,
         email: user.email,
         displayName: user.name,
         photoURL: null,
         phone: null,
-        company: 'Preview Workspace',
+        company: null,
         gstin: null,
         role: 'owner',
         provider: 'email',
         emailVerified: true,
         onboardingCompleted: true,
-        currentOrganizationId: demoOrgId,
+        currentOrganizationId: localOrgId,
         createdAt: null,
         updatedAt: null,
       };
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProfile(demoProfile);
-      setOrganization(demoOrg);
-      setMembership(demoMember);
-      setMembers([demoMember]);
-      setOrganizations([{ organization: demoOrg, member: demoMember, role: 'owner' }]);
-      setIsPreviewMode(true);
+      setProfile(localProfile);
+      setOrganization(localOrg);
+      setMembership(localMember);
+      setMembers([localMember]);
+      setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
+      setIsPreviewMode(false);
       setLoading(false);
       setError(null);
       loadingForRef.current = user.id;
       try {
-        localStorage.setItem('gstpilot_org_id', demoOrgId);
+        localStorage.setItem('gstpilot_org_id', localOrgId);
       } catch {
         /* non-fatal */
       }

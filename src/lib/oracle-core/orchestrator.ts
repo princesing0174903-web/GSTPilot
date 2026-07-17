@@ -576,7 +576,8 @@ export async function routeToModule(
       }
       case 'twin:oracle-context': {
         const m = await import('@/lib/twin/orchestrator');
-        return { ok: true, data: await m.computeTwinOracleContext() };
+        const orgId = (payload?.organizationId as string | undefined) ?? '';
+        return { ok: true, data: await m.computeTwinOracleContext(orgId) };
       }
 
       // ─── Connectivity / Event ──────────────────────────────────────────

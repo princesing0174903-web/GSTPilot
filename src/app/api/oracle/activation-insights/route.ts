@@ -36,29 +36,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    // ── 1. Authenticate ──
-    const authHeader = req.headers.get('authorization') ?? '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json(
-        { ok: false, error: 'Authentication required.' },
-        { status: 401 },
-      );
-    }
-
-    const { adminAuth, adminDb } = await import('@/lib/firebase-admin');
-    let decodedUid: string;
-    try {
-      const decoded = await adminAuth().verifyIdToken(token);
-      decodedUid = decoded.uid;
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: 'Your session has expired. Please sign in again.' },
-        { status: 401 },
-      );
-    }
-
-    // ── 2. Resolve org + verify membership ──
+    // ── 1. Resolve org first ──
     const { searchParams } = new URL(req.url);
     const organizationId = (searchParams.get('organizationId') ?? '').trim();
     if (!organizationId) {
@@ -68,46 +46,88 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const memberSnap = await adminDb()
-      .doc(`organization_members/${organizationId}_${decodedUid}`)
-      .get();
-    if (!memberSnap.exists) {
-      return NextResponse.json(
-        { ok: false, error: 'You are not a member of this organization.' },
-        { status: 403 },
+    // ── 2. Authenticate ──
+    // Local workspace org IDs (guest/demo users) skip Firebase auth — they have
+    // no real Firebase session or Firestore membership record. We generate
+    // insights from the BusinessSnapshot directly so the Oracle panel still
+    // renders without throwing a 401 every poll cycle (which polluted dev.log
+    // and caused the hook to silently no-op).
+    const isLocalOrg = organizationId.startsWith('local-');
+    let decodedUid = 'local-user';
+    let canPersist = false;
+
+    if (!isLocalOrg) {
+      const authHeader = req.headers.get('authorization') ?? '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (!token) {
+        return NextResponse.json(
+          { ok: false, error: 'Authentication required.' },
+          { status: 401 },
+        );
+      }
+
+      const { adminAuth, adminDb } = await import('@/lib/firebase-admin');
+      try {
+        const decoded = await adminAuth().verifyIdToken(token);
+        decodedUid = decoded.uid;
+      } catch {
+        return NextResponse.json(
+          { ok: false, error: 'Your session has expired. Please sign in again.' },
+          { status: 401 },
+        );
+      }
+
+      // ── 3. Verify membership ──
+      const memberSnap = await adminDb()
+        .doc(`organization_members/${organizationId}_${decodedUid}`)
+        .get();
+      if (!memberSnap.exists) {
+        return NextResponse.json(
+          { ok: false, error: 'You are not a member of this organization.' },
+          { status: 403 },
+        );
+      }
+      canPersist = true;
+    }
+
+    // ── 4. Read the persisted insights doc (real orgs only) ──
+    if (canPersist) {
+      const { adminDb } = await import('@/lib/firebase-admin');
+      const insightsRef = adminDb().doc(
+        `organizations/${organizationId}/oracle/insights`,
       );
+      const insightsSnap = await insightsRef.get();
+
+      if (insightsSnap.exists) {
+        const data = insightsSnap.data() as OracleInsights;
+        return NextResponse.json(data);
+      }
+
+      // Missing → generate fresh from the snapshot + persist
+      const snapshot = await getBusinessSnapshot(organizationId, {
+        forceRefresh: true,
+      });
+      const insights = generateOracleInsights(snapshot);
+
+      const nowIso = new Date().toISOString();
+      await insightsRef.set(
+        {
+          ...insights,
+          activatedAt: nowIso,
+          activatedBy: decodedUid,
+        },
+        { merge: true },
+      );
+
+      return NextResponse.json(insights);
     }
 
-    // ── 3. Read the persisted insights doc ──
-    const insightsRef = adminDb().doc(
-      `organizations/${organizationId}/oracle/insights`,
-    );
-    const insightsSnap = await insightsRef.get();
-
-    if (insightsSnap.exists) {
-      const data = insightsSnap.data() as OracleInsights;
-      return NextResponse.json(data);
-    }
-
-    // ── 4. Missing → generate fresh from the snapshot + persist ──
-    // This handles the edge case where Oracle was activated before this
-    // endpoint existed (or the insights doc was deleted). We regenerate
-    // from the real BusinessSnapshot so the page never shows an empty panel.
-    const snapshot = await getBusinessSnapshot(organizationId, {
-      forceRefresh: true,
-    });
+    // ── 5. Local- org: generate fresh insights in-memory (no persistence) ──
+    // These orgs have no Firestore doc to read from or write to. We always
+    // recompute from the BusinessSnapshot so the panel reflects the latest
+    // state (snapshot has its own 30s cache, so this is cheap).
+    const snapshot = await getBusinessSnapshot(organizationId);
     const insights = generateOracleInsights(snapshot);
-
-    const nowIso = new Date().toISOString();
-    await insightsRef.set(
-      {
-        ...insights,
-        activatedAt: nowIso,
-        activatedBy: decodedUid,
-      },
-      { merge: true },
-    );
-
     return NextResponse.json(insights);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

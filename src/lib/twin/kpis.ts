@@ -104,8 +104,8 @@ function customerLifetimeValue(
 
 // ─── Main: compute live KPIs ────────────────────────────────────────────────
 
-export async function computeLiveKPIs(): Promise<LiveKPIs> {
-  const data = await fetchRawCFOData();
+export async function computeLiveKPIs(organizationId?: string): Promise<LiveKPIs> {
+  const data = await fetchRawCFOData(organizationId ?? '');
 
   const revenue = safe(() => computeRevenueAnalytics(data));
   const profitability = safe(() => computeProfitability(data));

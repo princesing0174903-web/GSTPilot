@@ -132,15 +132,15 @@ export async function computeDigitalTwinBundle(): Promise<DigitalTwinBundle> {
 
 // ─── Oracle context (compact — injected into Oracle chat) ────────────────────
 
-export async function computeTwinOracleContext(): Promise<TwinOracleContext> {
+export async function computeTwinOracleContext(organizationId?: string): Promise<TwinOracleContext> {
   const [lite, recentEvents, latestSnapshot, anomalies, data] = await Promise.all([
     safe('live-state-lite', () => computeLiveStateLite(), {
       revenue: 0, profit: 0, cash: 0, healthScore: 0, riskScore: 0, runwayDays: 0, hasLiveData: false,
     }),
     safe('recent-events', () => fetchRecentTimelineEvents(8), []),
     safe('latest-snapshot', () => fetchLatestSnapshot(), undefined),
-    safe('anomalies', () => detectAnomalies(), EMPTY_ANOMALIES),
-    safe('raw-data', () => fetchRawCFOData(), {
+    safe('anomalies', () => detectAnomalies(organizationId), EMPTY_ANOMALIES),
+    safe('raw-data', () => fetchRawCFOData(organizationId ?? ''), {
       invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
       filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
       fetchedAt: new Date().toISOString(), hasLiveData: false, dataSources: [],

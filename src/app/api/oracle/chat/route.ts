@@ -565,10 +565,10 @@ Execution Engine is not available right now. Fall back to general execution/auto
 // like "What changed today?", "Show today's timeline", "Replay yesterday",
 // "Why is my Health Score lower?", "Compare this quarter with last quarter" —
 // all grounded in REAL connected business data, never fabricated.
-async function buildTwinContextBlock(): Promise<string> {
+async function buildTwinContextBlock(organizationId?: string): Promise<string> {
   let ctx: TwinOracleContext;
   try {
-    ctx = await computeTwinOracleContext();
+    ctx = await computeTwinOracleContext(organizationId);
   } catch (err) {
     console.warn('[Oracle] Digital Twin context unavailable:', err);
     return `## GSTPILOT DIGITAL TWIN™ — LIVE BUSINESS STATE
@@ -846,7 +846,7 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
     buildGraphContextBlock(),
     buildInvoiceEngineContextBlock(),
     buildExecutionContextBlock(),
-    buildTwinContextBlock(),
+    buildTwinContextBlock(req.context?.organizationId),
     buildCEOContextBlock(),
     mem.userId ? buildRealDataSnapshot(mem.userId).then(formatRealDataContextBlock) : Promise.resolve(''),
     formatDynamicRecommendationsBlock(mem.userId),

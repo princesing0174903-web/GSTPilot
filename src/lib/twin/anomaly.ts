@@ -362,8 +362,8 @@ function detectComplianceLag(
 
 // ─── Main: detect all anomalies ──────────────────────────────────────────────
 
-export async function detectAnomalies(): Promise<AnomalyReport> {
-  const data = await fetchRawCFOData();
+export async function detectAnomalies(organizationId?: string): Promise<AnomalyReport> {
+  const data = await fetchRawCFOData(organizationId ?? '');
   const mStart = startOfMonth();
   const lmStart = startOfLastMonth();
   const lmEnd = endOfLastMonth();

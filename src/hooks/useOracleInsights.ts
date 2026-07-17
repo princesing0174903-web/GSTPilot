@@ -56,23 +56,28 @@ export function useOracleInsights(): UseOracleInsightsResult {
     }
 
     try {
-      // Get the Firebase ID token for server-side authentication.
-      const { auth } = await import('@/lib/firebase');
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        setInsights(null);
-        setLoading(false);
-        setError(null);
-        return;
+      const isLocalOrg = currentOrgId.startsWith('local-');
+
+      // Real orgs require a Firebase ID token for server-side auth.
+      // Local- orgs (guest/demo) skip auth entirely — the API route handles
+      // them with in-memory insights generation.
+      let idToken: string | null = null;
+      if (!isLocalOrg) {
+        const { auth } = await import('@/lib/firebase');
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          setInsights(null);
+          setLoading(false);
+          setError(null);
+          return;
+        }
+        idToken = await currentUser.getIdToken();
       }
-      const idToken = await currentUser.getIdToken();
 
       const url = `/api/oracle/activation-insights?organizationId=${encodeURIComponent(currentOrgId)}`;
       const res = await fetch(url, {
         cache: 'no-store',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
       });
 
       if (res.status === 401 || res.status === 403) {

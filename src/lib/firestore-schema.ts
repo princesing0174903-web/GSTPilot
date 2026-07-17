@@ -287,6 +287,7 @@ export type ActivityType =
   | 'return_prepared' | 'return_reviewed' | 'return_filed' | 'return_reopened'
   | 'reconciliation_run' | 'mismatch_resolved'
   | 'user_login' | 'user_signup'
+  | 'oracle_activated'
   | 'system';
 
 export interface FirestoreActivity {

@@ -187,6 +187,7 @@ function buildInsightSentence(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function activityIcon(type: string): React.ReactNode {
+  if (type.includes('oracle')) return <Sparkles className="h-3.5 w-3.5 accent-text" />;
   if (type.includes('filed')) return <CheckCircle2 className="h-3.5 w-3.5 accent-text" />;
   if (type.includes('upload') || type.includes('document'))
     return <Upload className="h-3.5 w-3.5 accent-text" />;
@@ -612,7 +613,7 @@ export default function DashboardPage() {
       },
       {
         id: 'oracle',
-        label: 'Activate Oracle',
+        label: oracleActivated ? 'Oracle Online' : 'Activate Oracle',
         icon: Sparkles,
         done: oracleActivated,
         onAction: () => setOracleWizardOpen(true),
@@ -1512,8 +1513,14 @@ export default function DashboardPage() {
           <div className="glass-surface rounded-2xl p-6 hover-lift">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
-                <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
+                <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 relative ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
                   <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'accent-text'}`} />
+                  {oracleActivated && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-background" />
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -1524,11 +1531,11 @@ export default function DashboardPage() {
                       variant="outline"
                       className={`text-[10px] px-1.5 py-0 h-5 ${
                         oracleActivated
-                          ? 'border-emerald-500/30 text-emerald-400'
+                          ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
                           : 'border-amber-500/30 text-amber-400'
                       }`}
                     >
-                      {oracleActivated ? 'Active' : 'Not Activated'}
+                      {oracleActivated ? 'Online' : 'Not Activated'}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">

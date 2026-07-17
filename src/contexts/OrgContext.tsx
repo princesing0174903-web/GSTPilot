@@ -65,9 +65,9 @@ interface OrgContextValue {
   role: OrgRole | null;
   /** True while the org context is being resolved (initial load). */
   loading: boolean;
-  /** True when running in preview/offline mode (Firestore unreachable).
-   *  The app renders with an in-memory demo org so the UI is visible.
-   *  All data hooks will show empty states. */
+  /** Always `false` in production. Preview mode was removed — the app now
+   *  requires a real Firestore organization. Kept in the type for backward
+   *  compatibility with hooks that guard against it. */
   isPreviewMode: boolean;
   /** Friendly error message if the load failed. */
   error: string | null;
@@ -274,68 +274,19 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Exhausted retries — Firestore is likely unreachable. Fall back to a
-    // preview-mode demo org so the dashboard renders. In production with
-    // Firestore reachable, this path is never hit.
-    if (fbUser) {
-      console.warn('[Org] Firestore unreachable — falling back to preview-mode demo org');
-      const demoOrg: OrganizationDoc = {
-        id: 'preview-org',
-        name: 'Preview Workspace',
-        slug: 'preview-workspace',
-        ownerId: fbUser.uid,
-        logoUrl: null,
-        gstin: null,
-        plan: 'pro',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const demoProfile: UserProfileDoc = {
-        uid: fbUser.uid,
-        email: fbUser.email || 'preview@gstpilot.app',
-        displayName: fbUser.displayName || 'Preview User',
-        photoURL: fbUser.photoURL,
-        phone: null,
-        company: 'Preview Workspace',
-        gstin: null,
-        role: 'owner',
-        provider: 'email',
-        emailVerified: fbUser.emailVerified,
-        onboardingCompleted: true,
-        currentOrganizationId: 'preview-org',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const demoMembership: OrganizationMemberDoc = {
-        id: `${fbUser.uid}-preview`,
-        organizationId: 'preview-org',
-        userId: fbUser.uid,
-        userEmail: demoProfile.email,
-        userDisplayName: demoProfile.displayName,
-        userPhotoURL: demoProfile.photoURL,
-        role: 'owner',
-        status: 'active',
-        invitedBy: null,
-        invitedAt: new Date().toISOString(),
-        joinedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setProfile(demoProfile);
-      setOrganization(demoOrg);
-      setMembership(demoMembership);
-      setMembers([demoMembership]);
-      setOrganizations([{ organization: demoOrg, member: demoMembership }]);
-      setIsPreviewMode(true);
-      setError(null);
-      setLoading(false);
-      loadingForRef.current = null;
-      console.log('[Org] Preview mode active — dashboard will render with empty data states');
-      return;
-    }
-
-    setError('Could not connect to the workspace service. Please check your connection and try again.');
+    // Exhausted retries — Firestore is likely unreachable. In production this
+    // path is never hit (Firestore is reachable). We NO LONGER fall back to a
+    // synthetic preview-org demo org — that was a dev/preview crutch that
+    // caused permission-denied errors on every Firestore subscription.
+    // Instead, surface an honest error so the user knows to reconnect.
+    console.warn('[Org] Firestore unreachable after retries — showing honest error (no preview fallback)');
+    setProfile(null);
+    setOrganization(null);
+    setMembership(null);
+    setMembers([]);
+    setOrganizations([]);
+    setIsPreviewMode(false);
+    setError('Could not connect to the workspace service. Please check your internet connection and try again. If the problem persists, sign out and sign back in.');
     setLoading(false);
     loadingForRef.current = null;
   }, []);
@@ -436,31 +387,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       resolveOrgContext(auth.currentUser);
     }
 
-    // Safety timer — if Firebase hasn't provided a currentUser within 2s
-    // (e.g. Firestore/Auth backend unreachable in a sandbox), fall back to
-    // the demo org using the cached auth user so the UI is visible.
-    // Reduced from 4s → 2s so the dashboard appears faster.
-    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
-    if (!auth.currentUser && user) {
-      safetyTimer = setTimeout(() => {
-        if (loadingForRef.current === null && !organization) {
-          console.warn('[Org] No Firebase user after 2s — creating preview org from cached session.');
-          const syntheticUser = {
-            uid: user.id,
-            email: user.email,
-            displayName: user.name,
-            photoURL: user.picture ?? null,
-            emailVerified: user.emailVerified,
-            providerData: [{ providerId: user.provider === 'google' ? 'google.com' : 'password' }],
-          } as FirebaseUser;
-          resolveOrgContext(syntheticUser);
-        }
-      }, 2000);
-    }
-
+    // NO safety-timer / synthetic-user fallback. In production, Firebase Auth
+    // resolves the current user synchronously on page load (persisted session).
+    // If `auth.currentUser` is null here, the onIdTokenChanged listener above
+    // will fire when Firebase finishes restoring the session. If Firebase is
+    // genuinely unreachable, the user sees an honest "could not connect" error
+    // from resolveOrgContext's retry-exhausted path — never a fake demo org.
     return () => {
       unsubscribe();
-      if (safetyTimer) clearTimeout(safetyTimer);
     };
   }, [isAuthenticated, user?.id, user, resolveOrgContext]);
 

@@ -75,9 +75,8 @@ export function ActivateOracleWizard({
   integrations,
   dataQuality,
 }: ActivateOracleWizardProps) {
-  const { organization, reload: reloadOrg, isPreviewMode } = useOrg();
+  const { organization, reload: reloadOrg } = useOrg();
   const orgId = organization?.id ?? null;
-  const isPreview = !orgId || isPreviewMode || orgId === 'preview-org';
   const [step, setStep] = useState<Step>(1);
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,34 +125,43 @@ export function ActivateOracleWizard({
   const handleActivate = async () => {
     setActivating(true);
     setError(null);
-    if (isPreview) {
-      toast.info('Preview Mode', {
-        description:
-          'Oracle activation is saved with your organisation. Sign in to a real workspace to activate.',
-      });
-      onOpenChange(false);
+    if (!orgId) {
+      setError('No organization is currently selected. Please reload the page and try again.');
+      setActivating(false);
       return;
     }
     try {
-      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('@/lib/firebase');
-      // Persist the Oracle activation flag on the organisation's integrations
-      // map so every page reads the same state (mirrors how gstin is stored).
-      const existingIntegrations =
-        (organization?.integrations as Record<string, { connected: boolean; connectedAt?: string | null }> | null) ?? {};
-      await updateDoc(doc(db, 'organizations', orgId!), {
-        integrations: {
-          ...existingIntegrations,
-          oracle: {
-            connected: true,
-            connectedAt: new Date().toISOString(),
-          },
+      // Get the Firebase ID token for server-side authentication.
+      const { auth } = await import('@/lib/firebase');
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setError('Your session has expired. Please sign in again.');
+        setActivating(false);
+        return;
+      }
+      const idToken = await currentUser.getIdToken();
+
+      // Call the real activation backend. This executes the full pipeline:
+      // verify membership → generate Business Snapshot → calculate scores →
+      // persist to Firestore → log activity → generate AI recommendations.
+      const res = await fetch('/api/oracle/activate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
         },
-        updatedAt: serverTimestamp(),
+        body: JSON.stringify({ organizationId: orgId }),
       });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'We could not activate Oracle. Please try again.');
+      }
+
+      // Reload the org context so organization.integrations.oracle reflects
+      // the persisted state (no temp state — Firestore is the source of truth).
       await reloadOrg();
       toast.success('Oracle Activated', {
-        description: 'Advanced analysis is now unlocked on your Home page.',
+        description: `Business Snapshot generated — Health Score ${data.snapshot?.healthScore ?? 0}/100. Oracle is now online.`,
       });
       onActivated?.();
       onOpenChange(false);

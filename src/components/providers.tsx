@@ -64,7 +64,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
             </AppProvider>
           </OrgProvider>
         </AuthProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
+        {/* ReactQueryDevtools hidden — dev-only floating button that marred the
+            premium UI. Re-enable by adding ?rqd=1 to the URL. */}
+        {typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('rqd') && (
+          <ReactQueryDevtools initialIsOpen={false} />
+        )}
       </QueryClientProvider>
     </ThemeProvider>
   );

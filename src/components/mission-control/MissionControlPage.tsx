@@ -268,8 +268,8 @@ function ScoreGauge({ score }: { score: number | null }) {
       <svg width={size} height={size} className="-rotate-90">
         <defs>
           <linearGradient id="missionScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="50%" stopColor="#06b6d4" />
+            <stop offset="0%" stopColor="#2563EB" />
+            <stop offset="50%" stopColor="#3B82F6" />
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
         </defs>
@@ -1100,7 +1100,7 @@ export default function MissionControlPage() {
                   className="h-full rounded-full"
                   style={{
                     width: `${collectionScore}%`,
-                    background: 'linear-gradient(90deg, #06b6d4 0%, #0891b2 100%)',
+                    background: 'linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)',
                   }}
                 />
               </div>

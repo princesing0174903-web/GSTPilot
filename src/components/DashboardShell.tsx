@@ -51,7 +51,7 @@ import CommandPalette from '@/components/command-palette/CommandPalette'
 const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
   loading: () => (
     <div className="flex h-full min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
     </div>
   ),
   ssr: false,
@@ -81,11 +81,11 @@ export function DashboardContent() {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* ═══ V16 Ambient Background — aurora + particles + network lines ═══ */}
+      {/* ═══ Ambient Background — pure flat black (no decorations) ═══ */}
       <AmbientBackground />
 
       {/* ═══ TOP BAR ═══ */}
-      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
+      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[#1F1F1F] bg-[#000000] px-4 md:px-6">
         {/* Brand + subtitle — official GSTPilot winged logo */}
         <button
           onClick={() => setCurrentView('dashboard')}
@@ -124,27 +124,27 @@ export function DashboardContent() {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+            className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
             aria-label="Search"
           >
             <Search className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
+            <kbd className="hidden rounded bg-[#1A1A1A] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
           <button
             onClick={() => setNotificationsOpen(true)}
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
           </button>
           <ThemeToggle />
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-white/[0.05]">
+            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818]">
               <Avatar className="h-7 w-7">
                 <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
-                <AvatarFallback className="accent-gradient-soft accent-text text-[11px] font-semibold">
+                <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-[11px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
@@ -156,7 +156,7 @@ export function DashboardContent() {
               <div className="flex items-center gap-2 p-2">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
-                  <AvatarFallback className="accent-gradient-soft accent-text text-xs font-semibold">
+                  <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-xs font-semibold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
@@ -185,14 +185,14 @@ export function DashboardContent() {
       </header>
 
       {/* ═══ TWO-COLUMN WORKSPACE ═══ */}
-      <div className="relative z-10 flex min-h-0 flex-1 gap-3 p-3">
+      <div className="relative z-10 flex min-h-0 flex-1">
         {/* LEFT NAV */}
         <div className="shrink-0">
           <LeftNav />
         </div>
 
         {/* MAIN WORKSPACE */}
-        <main className="min-w-0 flex-1 overflow-y-auto rounded-3xl pb-24 custom-scrollbar">
+        <main className="min-w-0 flex-1 overflow-y-auto pb-24 custom-scrollbar">
           <DashboardViews view={currentView} />
         </main>
       </div>
@@ -227,7 +227,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
       aria-label="Toggle theme"
     >
       {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -253,11 +253,11 @@ export function EmailVerificationBanner() {
   }
 
   return (
-    <div className="bg-cyan-500/10 border-b border-cyan-500/25 px-4 py-3">
+    <div className="bg-[#2563EB]/10 border-b border-[#2563EB]/25 px-4 py-3">
       <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
         <div className="flex items-center gap-2.5">
-          <MailCheck className="h-5 w-5 text-cyan-300 shrink-0" />
-          <p className="text-sm text-cyan-100">
+          <MailCheck className="h-5 w-5 text-[#3B82F6] shrink-0" />
+          <p className="text-sm text-[#93C5FD]">
             {sent
               ? 'Verification email sent! Check your inbox.'
               : 'Please verify your email address to access all features.'}
@@ -268,14 +268,14 @@ export function EmailVerificationBanner() {
             <button
               onClick={handleResend}
               disabled={sending}
-              className="text-xs font-semibold text-cyan-200 hover:text-cyan-100 underline disabled:opacity-50"
+              className="text-xs font-semibold text-[#3B82F6] hover:text-[#60A5FA] underline disabled:opacity-50"
             >
               {sending ? 'Sending...' : 'Resend email'}
             </button>
           )}
           <button
             onClick={logout}
-            className="text-xs text-cyan-300 hover:text-cyan-100 font-medium"
+            className="text-xs text-[#3B82F6] hover:text-[#60A5FA] font-medium"
           >
             Sign out
           </button>

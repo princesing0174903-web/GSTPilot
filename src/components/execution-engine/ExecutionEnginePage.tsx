@@ -100,8 +100,8 @@ const STAGE_COLORS: Record<TimelineStage, { text: string; bg: string; border: st
   observe: { text: 'text-blue-300', bg: 'bg-blue-500/15', border: 'border-blue-500/30', dot: 'bg-blue-400', hex: '#3B82F6' },
   think: { text: 'text-purple-300', bg: 'bg-purple-500/15', border: 'border-purple-500/30', dot: 'bg-purple-400', hex: '#8B5CF6' },
   decide: { text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/30', dot: 'bg-amber-400', hex: '#F59E0B' },
-  execute: { text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', dot: 'bg-emerald-400', hex: '#10B981' },
-  confirm: { text: 'text-cyan-300', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30', dot: 'bg-cyan-400', hex: '#06B6D4' },
+  execute: { text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', dot: 'bg-emerald-400', hex: '#2563EB' },
+  confirm: { text: 'text-cyan-300', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30', dot: 'bg-cyan-400', hex: '#3B82F6' },
   learn: { text: 'text-pink-300', bg: 'bg-pink-500/15', border: 'border-pink-500/30', dot: 'bg-pink-400', hex: '#EC4899' },
 }
 

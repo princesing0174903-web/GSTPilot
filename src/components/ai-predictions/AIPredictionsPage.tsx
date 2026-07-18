@@ -69,7 +69,7 @@ function getMonthLabel(key: string): string {
 }
 
 // ─── Sparkline SVG ────────────────────────────────────────────────────────
-function Sparkline({ data, color = '#10b981', width = 80, height = 28 }: {
+function Sparkline({ data, color = '#2563EB', width = 80, height = 28 }: {
   data: number[]; color?: string; width?: number; height?: number
 }) {
   if (data.length < 2) return null
@@ -105,7 +105,7 @@ function BarChart({ data, labels, projectedIndex, width = 420, height = 180 }: {
         return (
           <g key={i}>
             <rect x={x} y={chartH - barH} width={barW} height={barH}
-              fill={isProjected ? '#10b981' : '#059669'} opacity={isProjected ? 0.5 : 0.85}
+              fill={isProjected ? '#2563EB' : '#1D4ED8'} opacity={isProjected ? 0.5 : 0.85}
               rx={3} />
             <text x={x + barW / 2} y={height - 4} textAnchor="middle"
               className="text-[10px] fill-slate-500">{labels[i] || ''}</text>
@@ -361,7 +361,7 @@ export default function AIPredictionsPage() {
       sparklineData: revenuePrediction.monthlyValues.length >= 2
         ? revenuePrediction.monthlyValues.slice(-6)
         : [0, 0],
-      color: '#10b981',
+      color: '#2563EB',
     },
     {
       id: 'churn', name: 'Client Churn', icon: <UserX className="h-5 w-5" />,
@@ -393,7 +393,7 @@ export default function AIPredictionsPage() {
       confidence: cashPrediction.confidence,
       trend: cashPrediction.collectionRate > 70 ? 'up' : 'down',
       sparklineData: [Math.max(cashPrediction.collectionRate - 15, 10), Math.max(cashPrediction.collectionRate - 8, 20), Math.max(cashPrediction.collectionRate - 3, 30), cashPrediction.collectionRate],
-      color: '#06b6d4',
+      color: '#3B82F6',
     },
     {
       id: 'compliance_risk', name: 'Compliance Risk', icon: <Scale className="h-5 w-5" />,
@@ -589,10 +589,10 @@ export default function AIPredictionsPage() {
                           <div className="flex items-center gap-3">
                             <div className="w-20">
                               <Progress value={c.churnScore} className="h-1.5"
-                                style={{ '--progress-color': c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981' } as React.CSSProperties} />
+                                style={{ '--progress-color': c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB' } as React.CSSProperties} />
                             </div>
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5"
-                              style={{ borderColor: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981', color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981' }}>
+                              style={{ borderColor: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB', color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB' }}>
                               {c.churnScore}%
                             </Badge>
                             <span className="text-[10px] text-slate-500 w-24 text-right">{c.action}</span>
@@ -630,7 +630,7 @@ export default function AIPredictionsPage() {
                               <p className="text-[10px] text-slate-500">Due: {r.dueDate}</p>
                             </div>
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5"
-                              style={{ borderColor: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#10b981', color: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#10b981' }}>
+                              style={{ borderColor: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#2563EB', color: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#2563EB' }}>
                               {r.lateProbability}%
                             </Badge>
                           </div>
@@ -665,9 +665,9 @@ export default function AIPredictionsPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <Progress value={b.burnoutScore} className="h-1.5 w-16"
-                                style={{ '--progress-color': b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#10b981' } as React.CSSProperties} />
+                                style={{ '--progress-color': b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#2563EB' } as React.CSSProperties} />
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5"
-                                style={{ borderColor: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#10b981', color: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#10b981' }}>
+                                style={{ borderColor: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#2563EB', color: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#2563EB' }}>
                                 {b.level}
                               </Badge>
                             </div>
@@ -794,7 +794,7 @@ export default function AIPredictionsPage() {
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <div className="h-9 w-9 rounded-lg flex items-center justify-center text-sm font-bold"
-                                style={{ backgroundColor: c.churnScore > 70 ? '#fef2f2' : c.churnScore > 40 ? '#fffbeb' : '#f0fdf4', color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981' }}>
+                                style={{ backgroundColor: c.churnScore > 70 ? '#fef2f2' : c.churnScore > 40 ? '#fffbeb' : '#f0fdf4', color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB' }}>
                                 {(c.tradeName || 'U').charAt(0)}
                               </div>
                               <div>
@@ -803,7 +803,7 @@ export default function AIPredictionsPage() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-lg font-bold" style={{ color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981' }}>
+                              <p className="text-lg font-bold" style={{ color: c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB' }}>
                                 {c.churnScore}%
                               </p>
                               <p className="text-[10px] text-slate-500">churn risk</p>
@@ -811,7 +811,7 @@ export default function AIPredictionsPage() {
                           </div>
                           <div className="flex items-center gap-2 mb-2">
                             <Progress value={c.churnScore} className="h-2 flex-1"
-                              style={{ '--progress-color': c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#10b981' } as React.CSSProperties} />
+                              style={{ '--progress-color': c.churnScore > 70 ? '#ef4444' : c.churnScore > 40 ? '#f59e0b' : '#2563EB' } as React.CSSProperties} />
                           </div>
                           <div className="flex flex-wrap gap-1 mb-2">
                             {c.factors.map((f, i) => (
@@ -869,14 +869,14 @@ export default function AIPredictionsPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-lg font-bold" style={{ color: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#10b981' }}>
+                              <p className="text-lg font-bold" style={{ color: r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#2563EB' }}>
                                 {r.lateProbability}%
                               </p>
                               <p className="text-[10px] text-slate-500">late risk</p>
                             </div>
                           </div>
                           <Progress value={r.lateProbability} className="h-2 mb-2"
-                            style={{ '--progress-color': r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#10b981' } as React.CSSProperties} />
+                            style={{ '--progress-color': r.lateProbability > 70 ? '#ef4444' : r.lateProbability > 40 ? '#f59e0b' : '#2563EB' } as React.CSSProperties} />
                           <div className="flex items-center justify-between">
                             <div className="flex gap-1">
                               {r.criticalErrors > 0 && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-red-600 border-red-200">{r.criticalErrors} errors</Badge>}
@@ -919,7 +919,7 @@ export default function AIPredictionsPage() {
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold"
-                                style={{ backgroundColor: b.burnoutScore > 70 ? '#fef2f2' : b.burnoutScore > 40 ? '#fffbeb' : '#f0fdf4', color: b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#10b981' }}>
+                                style={{ backgroundColor: b.burnoutScore > 70 ? '#fef2f2' : b.burnoutScore > 40 ? '#fffbeb' : '#f0fdf4', color: b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#2563EB' }}>
                                 {b.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
@@ -930,17 +930,17 @@ export default function AIPredictionsPage() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-lg font-bold" style={{ color: b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#10b981' }}>
+                              <p className="text-lg font-bold" style={{ color: b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#2563EB' }}>
                                 {b.burnoutScore}
                               </p>
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4"
-                                style={{ borderColor: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#10b981', color: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#10b981' }}>
+                                style={{ borderColor: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#2563EB', color: b.level === 'Critical' ? '#ef4444' : b.level === 'High' ? '#f59e0b' : '#2563EB' }}>
                                 {b.level}
                               </Badge>
                             </div>
                           </div>
                           <Progress value={b.burnoutScore} className="h-2"
-                            style={{ '--progress-color': b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#10b981' } as React.CSSProperties} />
+                            style={{ '--progress-color': b.burnoutScore > 70 ? '#ef4444' : b.burnoutScore > 40 ? '#f59e0b' : '#2563EB' } as React.CSSProperties} />
                         </div>
                       ))}
                     </div>

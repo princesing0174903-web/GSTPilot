@@ -330,7 +330,7 @@ function EventRateChart({ events }: { events: StreamEvent[] }) {
             width={Math.max(barW - 2, 1)}
             height={Math.max(barH, 0.5)}
             rx={1}
-            fill={m.count > 0 ? '#10b981' : '#e2e8f0'}
+            fill={m.count > 0 ? '#2563EB' : '#e2e8f0'}
             opacity={0.7 + (m.count / maxCount) * 0.3}
           />
         )
@@ -433,7 +433,7 @@ function HourlyBarChart({ data }: { data: { hour: string; count: number }[] }) {
               width={Math.max(barW - 4, 2)}
               height={Math.max(barH, 0.5)}
               rx={2}
-              fill="#10b981"
+              fill="#2563EB"
               opacity={0.6 + (d.count / maxCount) * 0.4}
             />
             {i % 3 === 0 && (
@@ -459,7 +459,7 @@ function LatencyDistribution({ events }: { events: StreamEvent[] }) {
   }
 
   const buckets = [
-    { range: '0-10ms', count: 0, color: '#10b981' },
+    { range: '0-10ms', count: 0, color: '#2563EB' },
     { range: '10-50ms', count: 0, color: '#34d399' },
     { range: '50-100ms', count: 0, color: '#6ee7b7' },
     { range: '100-500ms', count: 0, color: '#fbbf24' },
@@ -574,8 +574,8 @@ function RoutingDiagram() {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
       {/* Central hub */}
-      <circle cx={W / 2} cy={H / 2} r={30} fill="#10b981" opacity={0.15} />
-      <circle cx={W / 2} cy={H / 2} r={20} fill="#10b981" opacity={0.3} />
+      <circle cx={W / 2} cy={H / 2} r={30} fill="#2563EB" opacity={0.15} />
+      <circle cx={W / 2} cy={H / 2} r={20} fill="#2563EB" opacity={0.3} />
       <text x={W / 2} y={H / 2 - 2} textAnchor="middle" fontSize="8" fontWeight="600" fill="#0f172a">Event</text>
       <text x={W / 2} y={H / 2 + 8} textAnchor="middle" fontSize="8" fontWeight="600" fill="#0f172a">Bus</text>
 
@@ -604,7 +604,7 @@ function RoutingDiagram() {
       })}
 
       {/* Animated pulse on central hub */}
-      <circle cx={W / 2} cy={H / 2} r={30} fill="none" stroke="#10b981" strokeWidth={1}>
+      <circle cx={W / 2} cy={H / 2} r={30} fill="none" stroke="#2563EB" strokeWidth={1}>
         <animate attributeName="r" from="30" to="50" dur="2s" repeatCount="indefinite" />
         <animate attributeName="opacity" from="0.5" to="0" dur="2s" repeatCount="indefinite" />
       </circle>
@@ -706,7 +706,7 @@ export default function EventEnginePage() {
   }, [events])
 
   const donutData = useMemo(() => [
-    { label: 'Invoice', value: eventCounts['invoice.created'] + 4521, color: '#10b981' },
+    { label: 'Invoice', value: eventCounts['invoice.created'] + 4521, color: '#2563EB' },
     { label: 'Payment', value: eventCounts['payment.collected'] + 3890, color: '#22c55e' },
     { label: 'Return', value: eventCounts['return.filed'] + 2934, color: '#14b8a6' },
     { label: 'Document', value: eventCounts['document.uploaded'] + 2107, color: '#0ea5e9' },

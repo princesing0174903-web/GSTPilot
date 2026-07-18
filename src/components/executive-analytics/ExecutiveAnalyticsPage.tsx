@@ -61,17 +61,17 @@ import { Lightbulb as LightbulbIcon } from 'lucide-react';
 
 // ─── Color Palette ────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
-  tealDark: '#0d9488',
+  tealDark: '#2563EB',
   purple: '#8b5cf6',
   purpleLight: '#ede9fe',
   amber: '#f59e0b',
   red: '#ef4444',
   slate: '#64748b',
-  cyan: '#06b6d4',
+  cyan: '#3B82F6',
   rose: '#f43f5e',
 };
 
@@ -834,7 +834,7 @@ export default function ExecutiveAnalyticsPage() {
                         initial={{ opacity: 0, x: -15 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.3 + index * 0.08, duration: 0.4 }}
-                        whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.03)' }}
+                        whileHover={{ x: 4, backgroundColor: 'rgba(37,99,235, 0.03)' }}
                         className="flex items-start gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
                       >
                         <InsightIcon icon={insight.icon} color={insight.color} />

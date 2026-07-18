@@ -58,8 +58,8 @@ import { formatNumber } from '@/lib/gst-utils';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   teal: '#14b8a6',
   amber: '#f59e0b',
   red: '#ef4444',

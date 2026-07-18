@@ -63,7 +63,7 @@ import { validateFile } from '@/lib/firebase/storage-service';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getHealthColor(score: number) {
-  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#10b981' };
+  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#2563EB' };
   if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', stroke: '#f59e0b' };
   return { bg: 'bg-red-50', text: 'text-red-700', stroke: '#ef4444' };
 }

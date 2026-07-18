@@ -37,8 +37,8 @@ import { useOrg } from '@/contexts/OrgContext';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   teal: '#14b8a6',
   amber: '#f59e0b',
   red: '#ef4444',
@@ -62,7 +62,7 @@ type DomainStatus = 'not_configured' | 'pending' | 'active';
 const DEFAULT_SETTINGS: FirmSettingsData = {
   firmName: 'GSTPilot Firm',
   logoUrl: null,
-  primaryColor: '#059669',
+  primaryColor: '#1D4ED8',
   accentColor: '#7c3aed',
   customDomain: null,
   emailFromName: null,
@@ -651,7 +651,7 @@ export default function WhiteLabelPage() {
                           }));
                         }
                       }}
-                      placeholder="#059669"
+                      placeholder="#1D4ED8"
                       className="flex-1 font-mono text-sm"
                       maxLength={7}
                     />

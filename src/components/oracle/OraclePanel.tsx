@@ -98,8 +98,8 @@ const SIMULATED_ACTIVITIES: { label: string; icon: LucideIcon }[] = [
 // ─── Tone colors (NEVER red/orange/purple per V16 spec) ───────────────────────
 const TONE = {
   amber: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-  cyan: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-  emerald: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  cyan: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+  emerald: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
 } as const;
 
 type Tone = keyof typeof TONE;

@@ -39,8 +39,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Color Palette ──────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -48,7 +48,7 @@ const COLORS = {
   slate: '#64748b',
   purple: '#8b5cf6',
   blue: '#3b82f6',
-  cyan: '#06b6d4',
+  cyan: '#3B82F6',
   orange: '#f97316',
   pink: '#ec4899',
 };
@@ -138,10 +138,10 @@ function KnowledgeGraph() {
 const memoryCategories: MemoryCategory[] = [
   { type: 'client', label: 'Clients', count: 0, icon: Users, color: '#3b82f6', description: 'Client history, interactions, filings' },
   { type: 'notice', label: 'Notices', count: 0, icon: AlertTriangle, color: '#ef4444', description: 'All notices received and responses' },
-  { type: 'filing', label: 'Filings', count: 0, icon: FileCheck, color: '#10b981', description: 'Every return filed historically' },
+  { type: 'filing', label: 'Filings', count: 0, icon: FileCheck, color: '#2563EB', description: 'Every return filed historically' },
   { type: 'conversation', label: 'Conversations', count: 0, icon: MessageSquare, color: '#8b5cf6', description: 'Client and team communications' },
   { type: 'recommendation', label: 'Recommendations', count: 0, icon: Lightbulb, color: '#f59e0b', description: 'AI recommendations and outcomes' },
-  { type: 'deadline', label: 'Deadlines', count: 0, icon: Calendar, color: '#06b6d4', description: 'Historical and upcoming deadlines' },
+  { type: 'deadline', label: 'Deadlines', count: 0, icon: Calendar, color: '#3B82F6', description: 'Historical and upcoming deadlines' },
 ];
 
 const recentMemories: MemoryEntry[] = [];
@@ -163,10 +163,10 @@ const searchDemoResponses: Record<string, SearchQuery> = {};
 const memoryTypeColors: Record<MemoryType, string> = {
   client: '#3b82f6',
   notice: '#ef4444',
-  filing: '#10b981',
+  filing: '#2563EB',
   conversation: '#8b5cf6',
   recommendation: '#f59e0b',
-  deadline: '#06b6d4',
+  deadline: '#3B82F6',
 };
 
 const memoryTypeIcons: Record<MemoryType, React.ElementType> = {

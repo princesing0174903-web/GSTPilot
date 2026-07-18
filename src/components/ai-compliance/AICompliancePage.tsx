@@ -34,8 +34,8 @@ import { formatCurrency } from '@/lib/gst-utils';
 
 // ─── Color Palette (Emerald/Amber/Red — Compliance theme) ────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   amber: '#f59e0b',
   amberDark: '#d97706',
   red: '#ef4444',

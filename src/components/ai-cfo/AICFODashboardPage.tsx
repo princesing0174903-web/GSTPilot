@@ -117,7 +117,7 @@ function useAnimatedNumber(target: number, duration = 1200) {
 
 // ─── Mini Sparkline (SVG) ─────────────────────────────────────────────────────
 
-function Sparkline({ data, color = '#10b981', width = 100, height = 32 }: { data: number[]; color?: string; width?: number; height?: number }) {
+function Sparkline({ data, color = '#2563EB', width = 100, height = 32 }: { data: number[]; color?: string; width?: number; height?: number }) {
   if (data.length < 2) return <div style={{ width, height }} />;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -397,7 +397,7 @@ function HealthGauge({ score, size = 160 }: { score: number; size?: number }) {
   const c = 2 * Math.PI * r;
   const offset = c - (score / 100) * c;
   const tier = score >= 80 ? 'Excellent' : score >= 65 ? 'Healthy' : score >= 50 ? 'Needs Attention' : 'At Risk';
-  const color = score >= 80 ? '#10b981' : score >= 65 ? '#06b6d4' : score >= 50 ? '#f59e0b' : '#ef4444';
+  const color = score >= 80 ? '#2563EB' : score >= 65 ? '#3B82F6' : score >= 50 ? '#f59e0b' : '#ef4444';
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -705,7 +705,7 @@ function MemoryCard({ memory, delay }: { memory: CFOResponse['memory']; delay: n
                 {memory.revenueTrends.map((r, i) => {
                   const max = Math.max(...memory.revenueTrends.map(t => t.value), 1);
                   const h = Math.max(4, (r.value / max) * 100);
-                  const color = r.trend === 'up' ? '#10b981' : r.trend === 'down' ? '#ef4444' : '#06b6d4';
+                  const color = r.trend === 'up' ? '#2563EB' : r.trend === 'down' ? '#ef4444' : '#3B82F6';
                   return (
                     <div key={i} className="flex flex-1 flex-col items-center gap-1">
                       <motion.div
@@ -902,7 +902,7 @@ export default function AICFODashboardPage() {
             secondary="This month"
             trend={{ value: data.dashboard.revenue.growthPct, label: 'vs last month' }}
             sparkData={data.dashboard.revenue.sparkline}
-            sparkColor="#10b981"
+            sparkColor="#2563EB"
             rows={[
               { label: 'Today', value: formatINRFull(data.dashboard.revenue.today) },
               { label: 'Last Month', value: formatINRFull(data.dashboard.revenue.lastMonth) },

@@ -56,7 +56,7 @@ export function FeaturePlaceholder({
               className="absolute inset-0 opacity-60"
               style={{
                 background:
-                  'radial-gradient(ellipse at 30% 50%, rgba(16,185,129,0.15), transparent 60%), radial-gradient(ellipse at 70% 50%, rgba(6,182,212,0.12), transparent 60%)',
+                  'radial-gradient(ellipse at 30% 50%, rgba(37,99,235,0.15), transparent 60%), radial-gradient(ellipse at 70% 50%, rgba(59,130,246,0.12), transparent 60%)',
               }}
             />
             <motion.div

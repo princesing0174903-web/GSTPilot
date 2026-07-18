@@ -676,7 +676,7 @@ function BrandingSection() {
 
   const [form, setForm] = useState({
     logoUrl: '',
-    primaryColor: '#10b981',
+    primaryColor: '#2563EB',
     accentColor: '#0ea5e9',
     customDomain: '',
   });
@@ -687,7 +687,7 @@ function BrandingSection() {
     if (!organization) return;
     setForm({
       logoUrl: organization.logoUrl ?? '',
-      primaryColor: organization.branding?.primaryColor ?? '#10b981',
+      primaryColor: organization.branding?.primaryColor ?? '#2563EB',
       accentColor: organization.branding?.accentColor ?? '#0ea5e9',
       customDomain: organization.branding?.customDomain ?? '',
     });

@@ -49,9 +49,9 @@ const CONTRACT_STATUS: Record<string, { accent: Accent; label: string }> = {
 
 // ─── Revenue mix breakdown (deterministic percentages summing to 100%) ────────
 const REVENUE_MIX = [
-  { label: 'Subscriptions',       pct: 62, accent: 'emerald' as Accent, hex: '#10b981' },
+  { label: 'Subscriptions',       pct: 62, accent: 'emerald' as Accent, hex: '#2563EB' },
   { label: 'Usage-based',         pct: 18, accent: 'teal'    as Accent, hex: '#14b8a6' },
-  { label: 'Marketplace',         pct: 12, accent: 'cyan'    as Accent, hex: '#06b6d4' },
+  { label: 'Marketplace',         pct: 12, accent: 'cyan'    as Accent, hex: '#3B82F6' },
   { label: 'Enterprise Contracts', pct:  8, accent: 'violet'  as Accent, hex: '#8b5cf6' },
 ];
 

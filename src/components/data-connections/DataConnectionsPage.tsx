@@ -757,7 +757,7 @@ function ConnectionCard({ conn, delay, syncing, onSync, onDisconnect, onViewLogs
           {/* Logo */}
           <div
             className="flex h-11 w-11 items-center justify-center rounded-xl text-white"
-            style={{ background: isGstn ? 'linear-gradient(135deg,#10b981,#06b6d4)' : BANK_META[conn.provider]?.color ?? '#334155' }}
+            style={{ background: isGstn ? 'linear-gradient(135deg,#2563EB,#3B82F6)' : BANK_META[conn.provider]?.color ?? '#334155' }}
           >
             {isGstn ? <Building2 className="h-5 w-5" /> : <Landmark className="h-5 w-5" />}
           </div>
@@ -1092,7 +1092,7 @@ function ScheduleCard({
         <div className="flex items-center gap-2">
           <div
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
-            style={{ background: isGstn ? 'linear-gradient(135deg,#10b981,#06b6d4)' : '#334155' }}
+            style={{ background: isGstn ? 'linear-gradient(135deg,#2563EB,#3B82F6)' : '#334155' }}
           >
             {isGstn ? <Building2 className="h-4 w-4" /> : <Landmark className="h-4 w-4" />}
           </div>

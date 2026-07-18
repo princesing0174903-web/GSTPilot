@@ -47,14 +47,14 @@ function QuarterlyBarChart({ data }: { data: { quarter: string; deducted: number
         const hP = (d.deposited / max) * (h - 10)
         return (
           <g key={d.quarter}>
-            <rect x={x} y={h - hD} width={barW} height={hD} rx={4} fill="#10b981" opacity={0.7} />
+            <rect x={x} y={h - hD} width={barW} height={hD} rx={4} fill="#2563EB" opacity={0.7} />
             <rect x={x + barW + 4} y={h - hP} width={barW} height={hP} rx={4} fill="#64748b" opacity={0.5} />
             <text x={x + barW + 2} y={h + 16} textAnchor="middle" className="text-[10px] fill-muted-foreground">{d.quarter}</text>
           </g>
         )
       })}
       <g transform={`translate(${totalW - 120}, 0)`}>
-        <rect x="0" y="0" width="10" height="10" rx="2" fill="#10b981" opacity={0.7} />
+        <rect x="0" y="0" width="10" height="10" rx="2" fill="#2563EB" opacity={0.7} />
         <text x="14" y="9" className="text-[9px] fill-muted-foreground">Deducted</text>
         <rect x="70" y="0" width="10" height="10" rx="2" fill="#64748b" opacity={0.5} />
         <text x="84" y="9" className="text-[9px] fill-muted-foreground">Deposited</text>

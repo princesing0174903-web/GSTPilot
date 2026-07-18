@@ -36,8 +36,8 @@ import { toast } from 'sonner';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -726,7 +726,7 @@ export default function AIDocumentChatPage() {
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + index * 0.05, duration: 0.3 }}
-                          whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.05)' }}
+                          whileHover={{ x: 4, backgroundColor: 'rgba(37,99,235, 0.05)' }}
                           onClick={() => handleLoadSession(session)}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
                             activeSession === session.id

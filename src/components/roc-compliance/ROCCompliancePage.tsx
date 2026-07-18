@@ -53,7 +53,7 @@ const calendarEvents = [
 
 function FilingStatusChart() {
   const data = [
-    { label: 'Filed', value: 0, color: '#10b981' },
+    { label: 'Filed', value: 0, color: '#2563EB' },
     { label: 'Pending', value: 0, color: '#f59e0b' },
     { label: 'Overdue', value: 0, color: '#ef4444' },
   ]
@@ -150,7 +150,7 @@ function ComplianceTimelineChart() {
         const barH = (filed[i] / maxVal) * chartH
         return (
           <g key={m}>
-            <rect x={x} y={padT + chartH - barH} width={barW} height={barH} rx="3" fill="#10b981" opacity="0.8">
+            <rect x={x} y={padT + chartH - barH} width={barW} height={barH} rx="3" fill="#2563EB" opacity="0.8">
               <animate attributeName="height" from="0" to={barH} dur="0.5s" fill="freeze" />
               <animate attributeName="y" from={padT + chartH} to={padT + chartH - barH} dur="0.5s" fill="freeze" />
             </rect>

@@ -49,9 +49,9 @@ const ACCENT_GRADIENT: Record<Accent, string> = {
 };
 
 const ACCENT_GLOW: Record<Accent, string> = {
-  emerald: 'group-hover:shadow-[0_0_40px_-8px_rgba(16,185,129,0.45)]',
+  emerald: 'group-hover:shadow-[0_0_40px_-8px_rgba(37,99,235,0.45)]',
   teal:    'group-hover:shadow-[0_0_40px_-8px_rgba(20,184,166,0.45)]',
-  cyan:    'group-hover:shadow-[0_0_40px_-8px_rgba(6,182,212,0.45)]',
+  cyan:    'group-hover:shadow-[0_0_40px_-8px_rgba(59,130,246,0.45)]',
   violet:  'group-hover:shadow-[0_0_40px_-8px_rgba(139,92,246,0.45)]',
   amber:   'group-hover:shadow-[0_0_40px_-8px_rgba(245,158,11,0.45)]',
   rose:    'group-hover:shadow-[0_0_40px_-8px_rgba(244,63,94,0.45)]',

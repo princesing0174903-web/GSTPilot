@@ -376,8 +376,8 @@ function CashFlowAreaChart({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="cfInflow" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="cfOutflow" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ef4444" stopOpacity="0.22" />
@@ -390,7 +390,7 @@ function CashFlowAreaChart({
       />
       <polyline
         points={inflowPts.join(' ')}
-        fill="none" stroke="#10b981" strokeWidth="2"
+        fill="none" stroke="#2563EB" strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round"
       />
       <polygon
@@ -429,8 +429,8 @@ function ForecastBarChart({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="fcBarIn" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#059669" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#1D4ED8" />
         </linearGradient>
         <linearGradient id="fcBarOut" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#f87171" />

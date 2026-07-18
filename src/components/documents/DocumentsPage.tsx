@@ -581,7 +581,7 @@ function DocumentUploadHub({
                   animate={{ opacity: 1 }}
                   className="absolute inset-0 rounded-xl border-2 border-emerald-400"
                   style={{
-                    background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.1), transparent)',
+                    background: 'linear-gradient(90deg, transparent, rgba(37,99,235,0.1), transparent)',
                     backgroundSize: '200% 100%',
                     animation: 'shimmer 2s infinite',
                   }}

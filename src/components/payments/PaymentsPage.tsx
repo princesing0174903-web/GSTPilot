@@ -81,7 +81,7 @@ function PaymentTrendChart({ data }: { data: { week: string; collected: number; 
         const hP = (d.paid / max) * (h - 8)
         return (
           <g key={d.week}>
-            <rect x={x} y={h - hC} width={barW} height={hC} rx={3} fill="#10b981" opacity={0.7} />
+            <rect x={x} y={h - hC} width={barW} height={hC} rx={3} fill="#2563EB" opacity={0.7} />
             <rect x={x + barW + 2} y={h - hP} width={barW} height={hP} rx={3} fill="#f59e0b" opacity={0.6} />
             <text x={x + barW + 1} y={h + 14} textAnchor="middle" className="text-[9px] fill-muted-foreground">{d.week}</text>
           </g>
@@ -195,7 +195,7 @@ function titleCaseMode(mode: string): string {
 }
 
 const METHOD_COLOR: Record<string, string> = {
-  UPI: '#10b981',
+  UPI: '#2563EB',
   'Net Banking': '#64748b',
   Card: '#f59e0b',
   Cheque: '#8b5cf6',

@@ -88,8 +88,8 @@ export default function GlobalIdentity() {
     });
     const total = Object.values(totals).reduce((a, b) => a + b, 0);
     const order: { label: string; value: number; accent: Accent; hex: string }[] = [
-      { label: 'SAML',  value: totals['SAML']  ?? 0, accent: 'emerald', hex: '#10b981' },
-      { label: 'OIDC',  value: totals['OIDC']  ?? 0, accent: 'cyan',    hex: '#06b6d4' },
+      { label: 'SAML',  value: totals['SAML']  ?? 0, accent: 'emerald', hex: '#2563EB' },
+      { label: 'OIDC',  value: totals['OIDC']  ?? 0, accent: 'cyan',    hex: '#3B82F6' },
       { label: 'LDAP',  value: totals['LDAP']  ?? 0, accent: 'amber',   hex: '#f59e0b' },
       { label: 'OAuth', value: totals['OAuth'] ?? 0, accent: 'violet',  hex: '#8b5cf6' },
     ];

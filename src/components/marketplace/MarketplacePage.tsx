@@ -272,7 +272,7 @@ function RevenueBarChart({ data, height = 200 }: { data: { month: string; revenu
           <g key={i}>
             <defs>
               <linearGradient id={`bar-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#059669" />
+                <stop offset="0%" stopColor="#1D4ED8" />
                 <stop offset="100%" stopColor="#34d399" />
               </linearGradient>
             </defs>
@@ -327,8 +327,8 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: height }}>
       <defs>
         <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#059669" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#059669" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#1D4ED8" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
@@ -336,10 +336,10 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
         return <line key={i} x1={30} y1={y} x2={width - 30} y2={y} stroke="#e2e8f0" strokeDasharray="4,4" />;
       })}
       <path d={areaD} fill="url(#area-grad)" />
-      <path d={pathD} fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={pathD} fill="none" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r={4} fill="#059669" stroke="white" strokeWidth={2} />
+          <circle cx={p.x} cy={p.y} r={4} fill="#1D4ED8" stroke="white" strokeWidth={2} />
           <text x={p.x} y={p.y - 10} textAnchor="middle" className="fill-slate-600" fontSize="9" fontWeight="500">
             {formatINR(p.value * 20000)}
           </text>
@@ -352,7 +352,7 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
   );
 }
 
-function DonutChart({ percentage, size = 120, color = '#059669' }: { percentage: number; size?: number; color?: string }) {
+function DonutChart({ percentage, size = 120, color = '#1D4ED8' }: { percentage: number; size?: number; color?: string }) {
   const radius = (size - 20) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - percentage / 100);
@@ -1274,7 +1274,7 @@ function SellTab({ items, onProductClick, onInstall }: { items: MarketplaceItem[
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row items-center gap-6">
-            <DonutChart percentage={70} size={130} color="#059669" />
+            <DonutChart percentage={70} size={130} color="#1D4ED8" />
             <div className="flex-1 space-y-3">
               <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3 border border-emerald-100">
                 <div className="flex items-center gap-2">

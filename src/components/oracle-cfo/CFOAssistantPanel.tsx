@@ -112,7 +112,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 // ─── Confidence color ───────────────────────────────────────────────────────
 
 function confidenceColor(c: number): string {
-  if (c >= 80) return '#10b981'; // emerald
+  if (c >= 80) return '#2563EB'; // emerald
   if (c >= 60) return '#f59e0b'; // amber
   return '#ef4444'; // rose
 }
@@ -120,7 +120,7 @@ function confidenceColor(c: number): string {
 function riskColor(sev: 'low' | 'medium' | 'high'): string {
   if (sev === 'high') return '#ef4444';
   if (sev === 'medium') return '#f59e0b';
-  return '#10b981';
+  return '#2563EB';
 }
 
 // ─── GST Report Payload type (mirror of gst-report-engine.ts GSTReport) ──────
@@ -301,15 +301,15 @@ function ReportResultCard({
   return (
     <div
       className="rounded-xl border overflow-hidden"
-      style={{ borderColor: 'rgba(16,185,129,0.2)', background: '#0d0d0d' }}
+      style={{ borderColor: 'rgba(37,99,235,0.2)', background: '#0d0d0d' }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <FileBarChart className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+          <FileBarChart className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">
               GST Report — {report.intent.reportType.toUpperCase()} · {report.intent.periodLabel}
@@ -328,7 +328,7 @@ function ReportResultCard({
       <div className="px-4 py-4 space-y-4">
         {/* KPI grid */}
         <section>
-          <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Executive Summary" />
+          <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Executive Summary" />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <KpiCell label="Taxable Turnover" value={inr(calc.totalTaxableTurnover)} />
             <KpiCell label="Total Output Tax" value={inr(calc.totalOutputTax)} />
@@ -373,7 +373,7 @@ function ReportResultCard({
 
         {/* ITC Summary */}
         <section>
-          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="ITC Summary" />
+          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="ITC Summary" />
           <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
             <KeyValueRow label="ITC Available (CGST + SGST + IGST + Cess)" value={inr(calc.itcAvailable)} bold />
             <KeyValueRow label="ITC Reversed (Rule 42/43 — exempt supplies)" value={`−${inr(calc.itcReversed)}`} />
@@ -395,7 +395,7 @@ function ReportResultCard({
             >
               <div className="text-sm text-white/85">
                 Output tax {calc.deltaOutputTax > 0 ? 'increased' : calc.deltaOutputTax < 0 ? 'decreased' : 'stayed flat'} by{' '}
-                <span className="font-semibold" style={{ color: calc.deltaOutputTax > 0 ? '#f59e0b' : '#10b981' }}>
+                <span className="font-semibold" style={{ color: calc.deltaOutputTax > 0 ? '#f59e0b' : '#2563EB' }}>
                   {inr(Math.abs(calc.deltaOutputTax))} ({calc.deltaPercent > 0 ? '+' : ''}{calc.deltaPercent}%)
                 </span>{' '}
                 vs prior period.
@@ -434,7 +434,7 @@ function ReportResultCard({
         {/* Validation report */}
         <section>
           <SectionLabel
-            icon={<AlertTriangle className="h-3.5 w-3.5" style={{ color: val.criticalCount > 0 ? '#ef4444' : '#10b981' }} />}
+            icon={<AlertTriangle className="h-3.5 w-3.5" style={{ color: val.criticalCount > 0 ? '#ef4444' : '#2563EB' }} />}
             label={`Validation Report — ${val.passed}/${val.totalChecked} passed · ${val.criticalCount} critical · ${val.warningCount} warnings`}
           />
           <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
@@ -493,7 +493,7 @@ function ReportResultCard({
 
         {/* Cross-checks */}
         <section>
-          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Cross-Checks" />
+          <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Cross-Checks" />
           <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
             {calc.crossChecks.map((c, i) => (
               <div
@@ -507,8 +507,8 @@ function ReportResultCard({
                   <span
                     className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
                     style={{
-                      background: c.match ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-                      color: c.match ? '#10b981' : '#ef4444',
+                      background: c.match ? 'rgba(37,99,235,0.12)' : 'rgba(239,68,68,0.12)',
+                      color: c.match ? '#2563EB' : '#ef4444',
                     }}
                   >
                     {c.match ? 'Pass' : 'Fail'}
@@ -522,11 +522,11 @@ function ReportResultCard({
         {/* Oracle insights */}
         {insights.length > 0 && (
           <section>
-            <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Oracle Insights" />
+            <SectionLabel icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Oracle Insights" />
             <ul className="space-y-1.5 max-h-80 overflow-y-auto">
               {insights.map((insight, i) => (
                 <li key={i} className="flex gap-2 text-xs text-white/80">
-                  <span style={{ color: '#10b981' }}>•</span>
+                  <span style={{ color: '#2563EB' }}>•</span>
                   <span className="leading-relaxed">{insight}</span>
                 </li>
               ))}
@@ -541,7 +541,7 @@ function ReportResultCard({
             <ul className="space-y-1.5">
               {recommendations.map((rec, i) => (
                 <li key={i} className="flex gap-2 text-xs text-white/80">
-                  <span style={{ color: '#10b981' }}>→</span>
+                  <span style={{ color: '#2563EB' }}>→</span>
                   <span className="leading-relaxed">{rec}</span>
                 </li>
               ))}
@@ -608,12 +608,12 @@ function KpiCell({ label, value, highlight }: { label: string; value: string; hi
     <div
       className="rounded-lg border px-3 py-2"
       style={{
-        borderColor: highlight ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.06)',
-        background: highlight ? 'rgba(16,185,129,0.08)' : '#111111',
+        borderColor: highlight ? 'rgba(37,99,235,0.4)' : 'rgba(255,255,255,0.06)',
+        background: highlight ? 'rgba(37,99,235,0.08)' : '#111111',
       }}
     >
       <div className="text-[10px] font-bold uppercase tracking-wide text-white/50">{label}</div>
-      <div className="text-sm font-bold font-mono" style={{ color: highlight ? '#10b981' : '#ffffff' }}>{value}</div>
+      <div className="text-sm font-bold font-mono" style={{ color: highlight ? '#2563EB' : '#ffffff' }}>{value}</div>
     </div>
   );
 }
@@ -642,7 +642,7 @@ function SlabTable({ rows, itcMode }: { rows: GSTSlabBreakdown[]; itcMode?: bool
           <div className="text-right text-white/70">{r.cgst.toLocaleString('en-IN')}</div>
           <div className="text-right text-white/70">{r.sgst.toLocaleString('en-IN')}</div>
           <div className="text-right text-white/70">{r.igst.toLocaleString('en-IN')}</div>
-          <div className="text-right font-bold" style={{ color: '#10b981' }}>{r.totalTax.toLocaleString('en-IN')}</div>
+          <div className="text-right font-bold" style={{ color: '#2563EB' }}>{r.totalTax.toLocaleString('en-IN')}</div>
         </div>
       ))}
     </div>
@@ -666,7 +666,7 @@ function KeyValueRow({
     <div
       className="flex items-center justify-between px-3 py-1.5 text-sm"
       style={{
-        background: highlight ? '#10b981' : bold ? 'rgba(255,255,255,0.04)' : 'transparent',
+        background: highlight ? '#2563EB' : bold ? 'rgba(255,255,255,0.04)' : 'transparent',
       }}
     >
       <span style={{ color: highlight ? '#ffffff' : 'rgba(255,255,255,0.6)', fontWeight: bold ? 600 : 400 }}>
@@ -703,7 +703,7 @@ function ContributorRow({
       </div>
       <div className="text-right shrink-0">
         <div className="text-white/70 font-mono">{count} inv · ₹{taxable.toLocaleString('en-IN')}</div>
-        <div className="font-mono font-bold" style={{ color: '#10b981' }}>₹{tax.toLocaleString('en-IN')}</div>
+        <div className="font-mono font-bold" style={{ color: '#2563EB' }}>₹{tax.toLocaleString('en-IN')}</div>
       </div>
     </div>
   );
@@ -712,7 +712,7 @@ function ContributorRow({
 function TrendingDelta({ percent }: { percent: number }) {
   const up = percent > 0;
   const flat = percent === 0;
-  const color = flat ? '#10b981' : up ? '#f59e0b' : '#10b981';
+  const color = flat ? '#2563EB' : up ? '#f59e0b' : '#2563EB';
   return (
     <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: `${color}20`, color }}>
       {flat ? '→' : up ? '▲' : '▼'} {Math.abs(percent)}%
@@ -735,7 +735,7 @@ function DownloadButton({
   disabled: boolean;
   onClick: () => void;
 }) {
-  const accent = format === 'pdf' ? '#ef4444' : format === 'excel' ? '#10b981' : '#f59e0b';
+  const accent = format === 'pdf' ? '#ef4444' : format === 'excel' ? '#2563EB' : '#f59e0b';
   return (
     <button
       type="button"
@@ -847,21 +847,21 @@ function ApprovalCard({
       <div
         className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer"
         onClick={() => setExpanded((e) => !e)}
-        style={{ background: 'rgba(16,185,129,0.04)' }}
+        style={{ background: 'rgba(37,99,235,0.04)' }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.2) 100%)' }}
+            style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.2) 0%, rgba(5,150,105,0.2) 100%)' }}
           >
-            <ToolIcon className="h-4 w-4" style={{ color: '#10b981' }} />
+            <ToolIcon className="h-4 w-4" style={{ color: '#2563EB' }} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-white">{approval.toolName}</span>
               <span
                 className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}
+                style={{ background: 'rgba(37,99,235,0.12)', color: '#2563EB' }}
               >
                 Oracle CFO
               </span>
@@ -873,7 +873,7 @@ function ApprovalCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {status === 'executed' && (
-            <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: '#10b981' }}>
+            <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: '#2563EB' }}>
               <CheckCircle2 className="h-3.5 w-3.5" /> Done
             </span>
           )}
@@ -914,7 +914,7 @@ function ApprovalCard({
               {/* WHY */}
               <section>
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />
+                  <Sparkles className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />
                   <h4 className="text-xs font-bold uppercase tracking-wide text-white/60">Why this action</h4>
                 </div>
                 <p className="text-sm text-white/85 leading-relaxed">{card.why}</p>
@@ -1047,7 +1047,7 @@ function ApprovalCard({
                           {a.recommended && (
                             <span
                               className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
-                              style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}
+                              style={{ background: 'rgba(37,99,235,0.12)', color: '#2563EB' }}
                             >
                               Recommended
                             </span>
@@ -1083,13 +1083,13 @@ function ApprovalCard({
                 <div
                   className="rounded-lg border px-3 py-3"
                   style={{
-                    borderColor: result.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
-                    background: result.success ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)',
+                    borderColor: result.success ? 'rgba(37,99,235,0.3)' : 'rgba(239,68,68,0.3)',
+                    background: result.success ? 'rgba(37,99,235,0.05)' : 'rgba(239,68,68,0.05)',
                   }}
                 >
                   <div className="flex items-center gap-2 mb-1.5">
                     {result.success ? (
-                      <CheckCircle2 className="h-4 w-4" style={{ color: '#10b981' }} />
+                      <CheckCircle2 className="h-4 w-4" style={{ color: '#2563EB' }} />
                     ) : (
                       <AlertTriangle className="h-4 w-4" style={{ color: '#ef4444' }} />
                     )}
@@ -1107,7 +1107,7 @@ function ApprovalCard({
                           className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono"
                           style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
                         >
-                          <span style={{ color: r.action === 'created' ? '#10b981' : r.action === 'updated' ? '#f59e0b' : '#ef4444' }}>
+                          <span style={{ color: r.action === 'created' ? '#2563EB' : r.action === 'updated' ? '#f59e0b' : '#ef4444' }}>
                             {r.action}
                           </span>
                           {r.collection}/{r.id.slice(-8)}
@@ -1151,7 +1151,7 @@ function ApprovalCard({
                     onClick={handleExecute}
                     disabled={status !== 'pending'}
                     className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                    style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
                   >
                     <Check className="h-4 w-4" />
                     Approve & Execute

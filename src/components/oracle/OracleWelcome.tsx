@@ -33,7 +33,7 @@ const CAPABILITIES = [
     icon: TrendingUp,
     label: 'AI CFO',
     desc: 'Cash flow, P&L, ratios, forecasts, runway',
-    color: '#06B6D4',
+    color: '#3B82F6',
   },
   {
     icon: Calculator,

@@ -747,7 +747,7 @@ function EmptyState({ onConnect, pending }: EmptyStateProps) {
         className="pointer-events-none absolute -bottom-20 -left-16 size-60 rounded-full opacity-20 blur-3xl"
         style={{
           background:
-            'radial-gradient(circle, rgba(6,182,212,0.30) 0%, transparent 70%)',
+            'radial-gradient(circle, rgba(59,130,246,0.30) 0%, transparent 70%)',
         }}
       />
 

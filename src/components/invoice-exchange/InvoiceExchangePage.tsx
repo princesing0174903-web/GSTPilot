@@ -262,8 +262,8 @@ function VolumeLineChart() {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0, 0.25, 0.5, 0.75, 1].map((frac) => (
@@ -302,7 +302,7 @@ function VolumeLineChart() {
       <motion.path
         d={linePath}
         fill="none"
-        stroke="#10b981"
+        stroke="#2563EB"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -317,7 +317,7 @@ function VolumeLineChart() {
           cy={yScale(d) + padding.top}
           r="2.5"
           fill="white"
-          stroke="#10b981"
+          stroke="#2563EB"
           strokeWidth="1.5"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -623,8 +623,8 @@ function StateHeatmap() {
     );
   }
   const colorFor = (vol: number) => {
-    if (vol >= 75) return '#059669';
-    if (vol >= 50) return '#10b981';
+    if (vol >= 75) return '#1D4ED8';
+    if (vol >= 50) return '#2563EB';
     if (vol >= 30) return '#34d399';
     if (vol >= 15) return '#86efac';
     if (vol >= 5) return '#bbf7d0';

@@ -319,7 +319,7 @@ function ChartView({
         : 'text-white/60';
   const barColor =
     trendDirection === 'up'
-      ? 'linear-gradient(180deg, #10b981 0%, #059669 100%)'
+      ? 'linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%)'
       : trendDirection === 'down'
         ? 'linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)'
         : 'linear-gradient(180deg, #6b7280 0%, #4b5563 100%)';
@@ -377,8 +377,8 @@ export function StructuredQueryCard({ result }: StructuredQueryCardProps) {
       <div
         className="overflow-hidden rounded-xl border"
         style={{
-          background: 'linear-gradient(180deg, rgba(16,185,129,0.04) 0%, #0c0c0c 60%)',
-          borderColor: 'rgba(16,185,129,0.25)',
+          background: 'linear-gradient(180deg, rgba(37,99,235,0.04) 0%, #0c0c0c 60%)',
+          borderColor: 'rgba(37,99,235,0.25)',
         }}
       >
         {/* Header */}
@@ -389,7 +389,7 @@ export function StructuredQueryCard({ result }: StructuredQueryCardProps) {
           <div className="flex items-center gap-2">
             <div
               className="flex h-6 w-6 items-center justify-center rounded-md"
-              style={{ background: 'rgba(16,185,129,0.15)' }}
+              style={{ background: 'rgba(37,99,235,0.15)' }}
             >
               <Icon className="h-3.5 w-3.5 text-emerald-400" />
             </div>

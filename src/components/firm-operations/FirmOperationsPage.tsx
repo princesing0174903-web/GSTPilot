@@ -57,11 +57,11 @@ import { useApp } from '@/contexts/AppContext';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
-  tealDark: '#0d9488',
+  tealDark: '#2563EB',
   tealLight: '#ccfbf1',
   amber: '#f59e0b',
   amberLight: '#fef3c7',

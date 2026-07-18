@@ -125,7 +125,7 @@ function CompanyChip({
       onClick={onClick}
       className={`group inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
         active
-          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 shadow-[0_0_20px_-4px_rgba(16,185,129,0.4)]'
+          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 shadow-[0_0_20px_-4px_rgba(37,99,235,0.4)]'
           : 'border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:border-white/[0.18] hover:text-zinc-200'
       }`}
     >
@@ -166,7 +166,7 @@ function OrgTreeNode({
           transition={{ duration: 0.3 }}
           className={`relative cursor-pointer rounded-lg border p-3 transition-all ${
             isSelected
-              ? 'border-emerald-500/40 bg-emerald-500/[0.06] shadow-[0_0_24px_-8px_rgba(16,185,129,0.5)]'
+              ? 'border-emerald-500/40 bg-emerald-500/[0.06] shadow-[0_0_24px_-8px_rgba(37,99,235,0.5)]'
               : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]'
           }`}
           onClick={() => onSelect(c)}

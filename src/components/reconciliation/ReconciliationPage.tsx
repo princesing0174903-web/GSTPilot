@@ -391,7 +391,7 @@ function MatchRateRing({
         </defs>
         {matchPercent > 0 && (
           <motion.circle
-            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981"
+            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#2563EB"
             strokeWidth={strokeWidth} strokeLinecap="round"
             strokeDasharray={`${matchLen} ${circumference - matchLen}`} strokeDashoffset={0}
             initial={{ strokeDasharray: `0 ${circumference}` }}

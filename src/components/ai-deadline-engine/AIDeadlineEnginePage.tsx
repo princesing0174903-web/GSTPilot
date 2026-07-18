@@ -106,7 +106,7 @@ const filingStatusBadge = (s: string) => {
 const riskProbabilityColor = (p: number) => {
   if (p >= 70) return '#ef4444'
   if (p >= 40) return '#f59e0b'
-  return '#10b981'
+  return '#2563EB'
 }
 
 // ─── Calendar SVG Grid ────────────────────────────────────────────────────
@@ -147,8 +147,8 @@ function DeadlineCalendar({ deadlines }: { deadlines: DeadlineEntry[] }) {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.01, duration: 0.2 }}
               x={x} y={y} width={cellSize} height={cellSize} rx={6}
-              fill={isToday ? '#10b981' : isPast ? '#f8fafc' : dl.length > 0 ? '#f0fdf4' : '#ffffff'}
-              stroke={isToday ? '#10b981' : dl.length > 0 ? '#bbf7d0' : '#e2e8f0'}
+              fill={isToday ? '#2563EB' : isPast ? '#f8fafc' : dl.length > 0 ? '#f0fdf4' : '#ffffff'}
+              stroke={isToday ? '#2563EB' : dl.length > 0 ? '#bbf7d0' : '#e2e8f0'}
               strokeWidth={isToday ? 2 : 1}
             />
             <text
@@ -168,7 +168,7 @@ function DeadlineCalendar({ deadlines }: { deadlines: DeadlineEntry[] }) {
                     cx={x + 10 + j * 8}
                     cy={y + cellSize - 7}
                     r={3}
-                    fill={d.status === 'due-soon' ? '#ef4444' : d.status === 'pending' ? '#f59e0b' : '#10b981'}
+                    fill={d.status === 'due-soon' ? '#ef4444' : d.status === 'pending' ? '#f59e0b' : '#2563EB'}
                   />
                 ))}
                 {dl.length > 3 && (
@@ -204,7 +204,7 @@ function WorkloadChart({ weeklyWorkload }: { weeklyWorkload: WorkloadEntry[] }) 
               animate={{ height: barH, y: h - barH }}
               transition={{ delay: i * 0.08, duration: 0.5 }}
               x={x} width={barW} rx={5}
-              fill={isHigh ? '#f59e0b' : '#10b981'}
+              fill={isHigh ? '#f59e0b' : '#2563EB'}
               opacity={0.8}
             />
             <text x={x + barW / 2} y={h + 18} textAnchor="middle" className="text-[10px] fill-slate-400">{d.day}</text>

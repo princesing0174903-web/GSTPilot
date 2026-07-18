@@ -578,7 +578,7 @@ export default function AITaskGeneratorPage() {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.04, duration: 0.4 }}
-                        whileHover={{ x: 2, backgroundColor: 'rgba(16, 185, 129, 0.02)' }}
+                        whileHover={{ x: 2, backgroundColor: 'rgba(37,99,235, 0.02)' }}
                         className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all group"
                       >
                         {/* Left: Source type badge */}

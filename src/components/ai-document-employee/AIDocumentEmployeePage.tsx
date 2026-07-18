@@ -44,8 +44,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Color Palette ──────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -55,7 +55,7 @@ const COLORS = {
   purple: '#8b5cf6',
   orange: '#f97316',
   pink: '#ec4899',
-  cyan: '#06b6d4',
+  cyan: '#3B82F6',
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -124,12 +124,12 @@ function formatINR(n: number): string {
 
 // ─── Document Type Helpers ──────────────────────────────────────────────────
 const docTypeColors: Record<DocType, string> = {
-  Invoice: '#10b981',
+  Invoice: '#2563EB',
   'Purchase Register': '#3b82f6',
   'Sales Register': '#8b5cf6',
   Notice: '#ef4444',
   'Bank Statement': '#f97316',
-  'GST Return': '#06b6d4',
+  'GST Return': '#3B82F6',
   'Credit Note': '#ec4899',
   'Debit Note': '#f59e0b',
   'Delivery Challan': '#14b8a6',
@@ -596,11 +596,11 @@ export default function AIDocumentEmployeePage() {
                     ) : autoActions.map((action, i) => {
                       const ActionIcon = getActionIcon(action.type);
                       const colorMap: Record<AutoAction['type'], string> = {
-                        invoice_created: '#10b981',
+                        invoice_created: '#2563EB',
                         return_updated: '#3b82f6',
                         client_updated: '#8b5cf6',
                         activity_created: '#f59e0b',
-                        folder_created: '#06b6d4',
+                        folder_created: '#3B82F6',
                       };
                       return (
                         <motion.div
@@ -728,8 +728,8 @@ export default function AIDocumentEmployeePage() {
                         <svg width="100%" height="80" viewBox="0 0 300 80" className="overflow-visible">
                           <defs>
                             <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
                             </linearGradient>
                           </defs>
                           {trendData.map((v, i, arr) => {
@@ -740,9 +740,9 @@ export default function AIDocumentEmployeePage() {
                             return (
                               <React.Fragment key={i}>
                                 {i > 0 && (
-                                  <line x1={prevX} y1={prevY} x2={x} y2={y} stroke="#10b981" strokeWidth="2" />
+                                  <line x1={prevX} y1={prevY} x2={x} y2={y} stroke="#2563EB" strokeWidth="2" />
                                 )}
-                                <circle cx={x} cy={y} r="3" fill="#10b981" />
+                                <circle cx={x} cy={y} r="3" fill="#2563EB" />
                                 <text x={x} y={78} textAnchor="middle" className="fill-slate-400 text-[8px]">
                                   {days[i]}
                                 </text>

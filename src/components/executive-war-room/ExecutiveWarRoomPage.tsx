@@ -84,9 +84,9 @@ const staggerChild = {
 const glowPulse = {
   animate: {
     boxShadow: [
-      '0 0 0px rgba(16, 185, 129, 0)',
-      '0 0 20px rgba(16, 185, 129, 0.15)',
-      '0 0 0px rgba(16, 185, 129, 0)',
+      '0 0 0px rgba(37,99,235, 0)',
+      '0 0 20px rgba(37,99,235, 0.15)',
+      '0 0 0px rgba(37,99,235, 0)',
     ],
   },
   transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
@@ -132,7 +132,7 @@ function useCountUp(target: number, duration = 1500) {
 // SVG CHART COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 100, h = 28 }: {
+function Sparkline({ data, color = '#2563EB', w = 100, h = 28 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -168,7 +168,7 @@ function Sparkline({ data, color = '#10b981', w = 100, h = 28 }: {
   )
 }
 
-function AreaChart({ data, labels, color = '#10b981', h = 180 }: {
+function AreaChart({ data, labels, color = '#2563EB', h = 180 }: {
   data: number[]; labels?: string[]; color?: string; h?: number
 }) {
   const w = 340
@@ -275,17 +275,17 @@ function PredictionChart({ actual, predicted, upper, lower, h = 120 }: {
     <svg width={w} height={h} className="overflow-visible">
       <defs>
         <linearGradient id="pred-band" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Confidence band */}
       <path d={bandPath} fill="url(#pred-band)" />
       {/* Actual */}
-      <motion.path d={actualLine} fill="none" stroke="#10b981" strokeWidth="2"
+      <motion.path d={actualLine} fill="none" stroke="#2563EB" strokeWidth="2"
         strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }} />
       {/* Predicted */}
-      <motion.path d={predLine} fill="none" stroke="#10b981" strokeWidth="2"
+      <motion.path d={predLine} fill="none" stroke="#2563EB" strokeWidth="2"
         strokeDasharray="6,4" strokeLinecap="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, delay: 0.5 }} />
       {/* Divide line */}
@@ -339,13 +339,13 @@ function RadarChart({ values, labels, size = 180 }: {
           const p = getPoint(i, v / 100)
           return `${p.x},${p.y}`
         }).join(' ')}
-        fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" strokeWidth="2"
+        fill="rgba(37,99,235, 0.15)" stroke="#2563EB" strokeWidth="2"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}
       />
       {/* Data dots */}
       {values.map((v, i) => {
         const p = getPoint(i, v / 100)
-        return <motion.circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#10b981" stroke="#0f172a" strokeWidth="2"
+        return <motion.circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#2563EB" stroke="#0f172a" strokeWidth="2"
           initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5 + i * 0.08 }} />
       })}
       {/* Labels */}
@@ -439,7 +439,7 @@ function HorizontalBars({ items }: {
 
 function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: number; invoices: number; returns: number } }) {
   const nodes = [
-    { x: 170, y: 60, r: 22, label: 'Firm', color: '#10b981', count: nodeCount.orgs },
+    { x: 170, y: 60, r: 22, label: 'Firm', color: '#2563EB', count: nodeCount.orgs },
     { x: 70, y: 140, r: 16, label: 'Clients', color: '#3b82f6', count: nodeCount.clients },
     { x: 270, y: 130, r: 14, label: 'Invoices', color: '#f59e0b', count: nodeCount.invoices },
     { x: 120, y: 220, r: 12, label: 'Returns', color: '#8b5cf6', count: nodeCount.returns },
@@ -472,7 +472,7 @@ function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: n
             transition={{ delay: i * 0.15, duration: 0.6 }}
           />
           {/* Pulse dot */}
-          <motion.circle r="2.5" fill="#10b981" filter="url(#glow)"
+          <motion.circle r="2.5" fill="#2563EB" filter="url(#glow)"
             initial={false}
             animate={{
               cx: [nodes[from].x, nodes[to].x],
@@ -861,7 +861,7 @@ export default function ExecutiveWarRoomPage() {
     // No demo fallback — return only real revenue. Empty array renders
     // nothing inside the HorizontalBars component.
     return [
-      { label: 'GST Filing', value: gstRevenue, color: '#10b981' },
+      { label: 'GST Filing', value: gstRevenue, color: '#2563EB' },
       { label: 'TDS', value: tdsRevenue, color: '#3b82f6' },
     ]
   }, [invoices])
@@ -1015,7 +1015,7 @@ export default function ExecutiveWarRoomPage() {
         <div className="flex items-center gap-3">
           <motion.div
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/20"
-            animate={{ boxShadow: ['0 0 0px rgba(16,185,129,0)', '0 0 20px rgba(16,185,129,0.3)', '0 0 0px rgba(16,185,129,0)'] }}
+            animate={{ boxShadow: ['0 0 0px rgba(37,99,235,0)', '0 0 20px rgba(37,99,235,0.3)', '0 0 0px rgba(37,99,235,0)'] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
             <Shield className="h-5 w-5 text-white" />
@@ -1051,7 +1051,7 @@ export default function ExecutiveWarRoomPage() {
           <KPICard
             title="Revenue" value={kpis.revenue} formatted={fmtINR(kpis.revenue)}
             trend="up" trendLabel="+12.3%" sparkData={generateSparkline()}
-            icon={IndianRupee} color="#10b981" index={0}
+            icon={IndianRupee} color="#2563EB" index={0}
           />
           <KPICard
             title="Cash Flow" value={kpis.cashFlow} formatted={fmtINR(kpis.cashFlow)}
@@ -1076,7 +1076,7 @@ export default function ExecutiveWarRoomPage() {
           <KPICard
             title="Collection Rate" value={Math.round(kpis.collectionRate * 10)} formatted={pct(kpis.collectionRate)}
             trend="up" trendLabel="↑ 4.2%" sparkData={generateSparkline()}
-            icon={Target} color="#06b6d4" index={5}
+            icon={Target} color="#3B82F6" index={5}
           />
           <KPICard
             title="Risk Score" value={kpis.riskScore} formatted={`${kpis.riskScore}/100`}
@@ -1108,7 +1108,7 @@ export default function ExecutiveWarRoomPage() {
             {/* Revenue Chart */}
             <div>
               <p className="text-[11px] text-slate-500 mb-2">Revenue Trend (12 months)</p>
-              <AreaChart data={revenueChartData.data} labels={revenueChartData.labels} color="#10b981" h={160} />
+              <AreaChart data={revenueChartData.data} labels={revenueChartData.labels} color="#2563EB" h={160} />
             </div>
 
             {/* Cash Flow Prediction */}
@@ -1507,7 +1507,7 @@ export default function ExecutiveWarRoomPage() {
                     key={i}
                     className="flex-1 rounded-sm"
                     style={{
-                      backgroundColor: v >= 90 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444',
+                      backgroundColor: v >= 90 ? '#2563EB' : v >= 80 ? '#f59e0b' : '#ef4444',
                       opacity: 0.7 + (v / 100) * 0.3,
                     }}
                     initial={{ height: 0 }}

@@ -559,7 +559,7 @@ function HealthGauge({ value, size = 56 }: { value: number; size?: number }) {
   const c = 2 * Math.PI * r
   const pct = Math.max(0, Math.min(100, value))
   const offset = c - (pct / 100) * c
-  const color = pct >= 75 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'
+  const color = pct >= 75 ? '#2563EB' : pct >= 50 ? '#f59e0b' : '#ef4444'
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -654,7 +654,7 @@ function LiveEconomicGraph() {
             <svg width="100%" height="100%">
               <defs>
                 <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <circle cx="20" cy="20" r="1" fill="#10b981" opacity="0.4" />
+                  <circle cx="20" cy="20" r="1" fill="#2563EB" opacity="0.4" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#hero-grid)" />
@@ -746,8 +746,8 @@ function LiveEconomicGraph() {
                 >
                   <defs>
                     <radialGradient id="cluster-glow" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                      <stop offset="0%" stopColor="#2563EB" stopOpacity="0.18" />
+                      <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
                     </radialGradient>
                     <filter id="node-shadow" x="-50%" y="-50%" width="200%" height="200%">
                       <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#0f172a" floodOpacity="0.25" />
@@ -1171,7 +1171,7 @@ function SupplyChainExplorer() {
                     <stop offset="100%" stopColor="#ffffff" />
                   </linearGradient>
                   <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-                    <path d="M0,0 L8,4 L0,8 Z" fill="#10b981" opacity="0.6" />
+                    <path d="M0,0 L8,4 L0,8 Z" fill="#2563EB" opacity="0.6" />
                   </marker>
                 </defs>
 
@@ -1188,7 +1188,7 @@ function SupplyChainExplorer() {
                     />
                     {/* Stage header */}
                     <g>
-                      <rect x={STAGE_X[si] - STAGE_W / 2 + 8} y={STAGE_Y - STAGE_H / 2 - 22} width={STAGE_W - 16} height={26} rx={4} fill="#10b981" />
+                      <rect x={STAGE_X[si] - STAGE_W / 2 + 8} y={STAGE_Y - STAGE_H / 2 - 22} width={STAGE_W - 16} height={26} rx={4} fill="#2563EB" />
                       <text x={STAGE_X[si]} y={STAGE_Y - STAGE_H / 2 - 5} textAnchor="middle" className="fill-white font-semibold" style={{ fontSize: 10 }}>
                         {stage.label}
                       </text>
@@ -1198,7 +1198,7 @@ function SupplyChainExplorer() {
                       <motion.line
                         x1={STAGE_X[si] + STAGE_W / 2} y1={STAGE_Y}
                         x2={STAGE_X[si + 1] - STAGE_W / 2} y2={STAGE_Y}
-                        stroke="#10b981"
+                        stroke="#2563EB"
                         strokeWidth={2}
                         strokeOpacity={0.5}
                         markerEnd="url(#flow-arrow)"
@@ -1213,7 +1213,7 @@ function SupplyChainExplorer() {
                       const isRisk = node.health > 0 && node.health < 50
                       const isWatch = node.health >= 50 && node.health < 75
                       const fill = isRisk ? '#fef2f2' : isWatch ? '#fffbeb' : '#ffffff'
-                      const stroke = isRisk ? '#ef4444' : isWatch ? '#f59e0b' : '#10b981'
+                      const stroke = isRisk ? '#ef4444' : isWatch ? '#f59e0b' : '#2563EB'
                       return (
                         <g key={node.id}>
                           <rect
@@ -1262,7 +1262,7 @@ function SupplyChainExplorer() {
                         key={`flow-${si}-${li}`}
                         d={`M ${from.x + STAGE_W / 2 - 8} ${from.y} Q ${midX} ${(from.y + to.y) / 2 + (li - 1) * 8} ${to.x - STAGE_W / 2 + 8} ${to.y}`}
                         fill="none"
-                        stroke="#10b981"
+                        stroke="#2563EB"
                         strokeWidth={1}
                         strokeOpacity={0.3}
                         strokeDasharray="3,5"
@@ -1451,7 +1451,7 @@ function IndustryNetworkIntelligence() {
                           const val = INDUSTRY_MATRIX[rowId]?.[colId] ?? 0
                           const opacity = val / 100
                           const isDiagonal = rowId === colId
-                          const color = isDiagonal ? '#64748b' : '#10b981'
+                          const color = isDiagonal ? '#64748b' : '#2563EB'
                           return (
                             <g key={`cell-${rowId}-${colId}`}>
                               <motion.rect
@@ -1480,7 +1480,7 @@ function IndustryNetworkIntelligence() {
                   <g transform="translate(120, 432)">
                     <text x={0} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Weak</text>
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <rect key={i} x={32 + i * 14} y={-10} width={14} height={10} fill="#10b981" opacity={0.15 + (i / 10) * 0.85} />
+                      <rect key={i} x={32 + i * 14} y={-10} width={14} height={10} fill="#2563EB" opacity={0.15 + (i / 10) * 0.85} />
                     ))}
                     <text x={184} y={0} className="fill-slate-500" style={{ fontSize: 9 }}>Strong</text>
                   </g>
@@ -1567,8 +1567,8 @@ function CompaniesAddedLineChart() {
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="companies-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Grid */}
@@ -1598,7 +1598,7 @@ function CompaniesAddedLineChart() {
       <motion.path
         d={linePath}
         fill="none"
-        stroke="#10b981"
+        stroke="#2563EB"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -1613,7 +1613,7 @@ function CompaniesAddedLineChart() {
           cx={p.x}
           cy={p.y}
           r={i === pts.length - 1 ? 4 : 2}
-          fill="#10b981"
+          fill="#2563EB"
           stroke="white"
           strokeWidth={1}
           initial={{ opacity: 0, scale: 0 }}
@@ -1687,8 +1687,8 @@ function NetworkDensityChart() {
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="density-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0d9488" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#0d9488" stopOpacity="0" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
         </linearGradient>
       </defs>
       {/* Grid */}
@@ -1709,7 +1709,7 @@ function NetworkDensityChart() {
       <motion.path
         d={linePath}
         fill="none"
-        stroke="#0d9488"
+        stroke="#2563EB"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -1722,7 +1722,7 @@ function NetworkDensityChart() {
         <g key={i}>
           <motion.circle
             cx={p.x} cy={p.y} r={3}
-            fill="#0d9488" stroke="white" strokeWidth={1}
+            fill="#2563EB" stroke="white" strokeWidth={1}
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.6 + i * 0.05 }}
@@ -1738,10 +1738,10 @@ function NetworkDensityChart() {
 
 function GraphAnalytics() {
   const metrics = [
-    { label: 'Avg Degree', value: '12.4', sub: 'Connections per node', icon: Link2, color: '#10b981' },
+    { label: 'Avg Degree', value: '12.4', sub: 'Connections per node', icon: Link2, color: '#2563EB' },
     { label: 'Clustering Coefficient', value: '0.34', sub: 'Triangle density', icon: Network, color: '#14b8a6' },
-    { label: 'Graph Diameter', value: '6 hops', sub: 'Max shortest path', icon: Waypoints, color: '#0d9488' },
-    { label: 'Components', value: '1', sub: 'Fully connected', icon: GitBranch, color: '#059669' },
+    { label: 'Graph Diameter', value: '6 hops', sub: 'Max shortest path', icon: Waypoints, color: '#2563EB' },
+    { label: 'Components', value: '1', sub: 'Fully connected', icon: GitBranch, color: '#1D4ED8' },
   ]
 
   return (

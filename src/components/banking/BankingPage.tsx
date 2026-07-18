@@ -72,12 +72,12 @@ function BalanceTrendChart({ data }: { data: { day: string; balance: number }[] 
     <svg width={w} height={h + 16} className="overflow-visible">
       <defs>
         <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <polygon points={`0,${h} ${pts.join(' ')} ${w},${h}`} fill="url(#balGrad)" />
-      <polyline points={pts.join(' ')} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={pts.join(' ')} fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {data.filter((_, i) => i % 2 === 0).map((d, i) => {
         const x = (data.indexOf(d) / (data.length - 1)) * w
         return <text key={i} x={x} y={h + 12} textAnchor="middle" className="text-[8px] fill-muted-foreground">{d.day}</text>
@@ -95,7 +95,7 @@ function ReconcileDonut({ reconciled, unreconciled }: { reconciled: number; unre
   return (
     <svg width="90" height="90" className="overflow-visible">
       <circle cx="45" cy="45" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />
-      <circle cx="45" cy="45" r={r} fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={dashOffset} transform="rotate(-90 45 45)" />
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#2563EB" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={dashOffset} transform="rotate(-90 45 45)" />
       <text x="45" y="42" textAnchor="middle" className="text-sm font-bold fill-emerald-600 dark:fill-emerald-400">{reconcilePct.toFixed(0)}%</text>
       <text x="45" y="54" textAnchor="middle" className="text-[7px] fill-muted-foreground">Reconciled</text>
     </svg>

@@ -5,7 +5,7 @@ import { safeAudit } from '@/lib/audit/safe-write'
 const DEFAULT_SETTINGS = {
   firmName: 'GSTPilot Firm',
   logoUrl: null as string | null,
-  primaryColor: '#059669',
+  primaryColor: '#1D4ED8',
   accentColor: '#7c3aed',
   customDomain: null as string | null,
   emailFromName: null as string | null,

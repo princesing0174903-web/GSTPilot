@@ -54,7 +54,7 @@ import type {
   TableArtifactData,
 } from '@/lib/oracle-ai/types';
 
-const CHART_COLORS = ['#10b981', '#14b8a6', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const CHART_COLORS = ['#2563EB', '#14b8a6', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 const KIND_ICON: Record<ArtifactKind, React.ElementType> = {
   table: TableIcon,

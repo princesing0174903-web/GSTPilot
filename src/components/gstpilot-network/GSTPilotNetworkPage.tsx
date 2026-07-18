@@ -37,22 +37,22 @@ const fmtNum = (n: number): string => {
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 const NETWORK_TARGETS = [
-  { label: 'CA Firms', icon: Building2, current: 12347, target: 100000, color: '#10b981' },
-  { label: 'Businesses', icon: Users, current: 567890, target: 5000000, color: '#059669' },
+  { label: 'CA Firms', icon: Building2, current: 12347, target: 100000, color: '#2563EB' },
+  { label: 'Businesses', icon: Users, current: 567890, target: 5000000, color: '#1D4ED8' },
   { label: 'Invoices', icon: BarChart3, current: 123456789, target: 500000000, color: '#047857' },
   { label: 'Monthly Transactions', icon: Activity, current: 34567890, target: 50000000, color: '#065f46' },
 ]
 
 const GROWTH_LOOP = [
-  { step: 1, from: 'CA', to: 'Business', label: 'CA invites clients', avg: 15, conversion: 0.72, time: '2.3 days', color: '#10b981' },
-  { step: 2, from: 'Business', to: 'Vendor', label: 'Clients invite vendors', avg: 8, conversion: 0.65, time: '3.1 days', color: '#059669' },
+  { step: 1, from: 'CA', to: 'Business', label: 'CA invites clients', avg: 15, conversion: 0.72, time: '2.3 days', color: '#2563EB' },
+  { step: 2, from: 'Business', to: 'Vendor', label: 'Clients invite vendors', avg: 8, conversion: 0.65, time: '3.1 days', color: '#1D4ED8' },
   { step: 3, from: 'Vendor', to: 'Accountant', label: 'Vendors invite accountants', avg: 3, conversion: 0.58, time: '4.7 days', color: '#047857' },
   { step: 4, from: 'Accountant', to: 'CA', label: 'Accountants invite CAs', avg: 2, conversion: 0.45, time: '5.2 days', color: '#065f46' },
 ]
 
 const NETWORK_DEPTH = [
-  { degree: '1st', count: 156, label: 'Direct connections', color: '#10b981' },
-  { degree: '2nd', count: 2340, label: 'Friends of friends', color: '#059669' },
+  { degree: '1st', count: 156, label: 'Direct connections', color: '#2563EB' },
+  { degree: '2nd', count: 2340, label: 'Friends of friends', color: '#1D4ED8' },
   { degree: '3rd', count: 35100, label: 'Extended network', color: '#047857' },
   { degree: '4th', count: 526500, label: 'Viral reach', color: '#065f46' },
 ]
@@ -82,8 +82,8 @@ const LEADERBOARD = [
 
 const ACHIEVEMENTS = [
   { name: 'Early Adopter', icon: Zap, desc: 'Joined in the first year', earned: true, color: '#f59e0b' },
-  { name: 'Network Builder', icon: Share2, desc: '50+ referrals', earned: true, color: '#10b981' },
-  { name: 'Growth Champion', icon: TrendingUp, desc: '100+ referrals', earned: true, color: '#059669' },
+  { name: 'Network Builder', icon: Share2, desc: '50+ referrals', earned: true, color: '#2563EB' },
+  { name: 'Growth Champion', icon: TrendingUp, desc: '100+ referrals', earned: true, color: '#1D4ED8' },
   { name: 'Top 1%', icon: Crown, desc: 'Top 1% of referrers', earned: false, color: '#8b5cf6' },
   { name: 'Century Club', icon: Star, desc: '100 businesses invited', earned: true, color: '#ec4899' },
   { name: 'Viral Velocity', icon: Rocket, desc: '5 network loops completed', earned: false, color: '#f97316' },
@@ -163,8 +163,8 @@ function NetworkMapSVG() {
   }, [])
 
   const nodes = [
-    { id: 'CA', cx: 300, cy: 80, label: 'CA Firm', color: '#10b981', icon: '⚖️' },
-    { id: 'Business', cx: 520, cy: 200, label: 'Business', color: '#059669', icon: '🏢' },
+    { id: 'CA', cx: 300, cy: 80, label: 'CA Firm', color: '#2563EB', icon: '⚖️' },
+    { id: 'Business', cx: 520, cy: 200, label: 'Business', color: '#1D4ED8', icon: '🏢' },
     { id: 'Vendor', cx: 440, cy: 370, label: 'Vendor', color: '#047857', icon: '🤝' },
     { id: 'Accountant', cx: 160, cy: 370, label: 'Accountant', color: '#065f46', icon: '📊' },
   ]
@@ -186,8 +186,8 @@ function NetworkMapSVG() {
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
         <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
         </radialGradient>
       </defs>
 
@@ -208,12 +208,12 @@ function NetworkMapSVG() {
             <line
               x1={edge.from.cx} y1={edge.from.cy}
               x2={edge.to.cx} y2={edge.to.cy}
-              stroke="#10b981" strokeWidth="2" opacity="0.25"
+              stroke="#2563EB" strokeWidth="2" opacity="0.25"
             />
             <line
               x1={edge.from.cx} y1={edge.from.cy}
               x2={edge.to.cx} y2={edge.to.cy}
-              stroke="#10b981" strokeWidth="2" opacity="0.15"
+              stroke="#2563EB" strokeWidth="2" opacity="0.15"
               strokeDasharray="8 6"
             >
               <animate attributeName="stroke-dashoffset" from="0" to="-28" dur="2s" repeatCount="indefinite" />
@@ -227,7 +227,7 @@ function NetworkMapSVG() {
                 <circle
                   key={`p-${ei}-${pi}`}
                   cx={px} cy={py} r={2.5}
-                  fill="#10b981" opacity={0.8 * (1 - Math.abs(t - 0.5) * 2)}
+                  fill="#2563EB" opacity={0.8 * (1 - Math.abs(t - 0.5) * 2)}
                   filter="url(#glow)"
                 />
               )
@@ -258,7 +258,7 @@ function NetworkMapSVG() {
         const labels = ['15 clients', '8 vendors', '3 accountants', '2 CAs']
         return (
           <g key={`el-${ei}`}>
-            <rect x={mx - 30} y={my - 8} width={60} height={16} rx={8} fill="white" stroke="#10b981" strokeWidth="1" opacity="0.9" />
+            <rect x={mx - 30} y={my - 8} width={60} height={16} rx={8} fill="white" stroke="#2563EB" strokeWidth="1" opacity="0.9" />
             <text x={mx} y={my + 3} textAnchor="middle" fontSize="8" fontWeight="600" fill="#047857">
               {labels[ei]}
             </text>
@@ -290,18 +290,18 @@ function MetcalfeChart() {
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxHeight: 140 }}>
       <defs>
         <linearGradient id="metcGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <polygon points={areaPoints} fill="url(#metcGrad)" />
-      <polyline points={points} fill="none" stroke="#10b981" strokeWidth="2" />
+      <polyline points={points} fill="none" stroke="#2563EB" strokeWidth="2" />
       {data.map((v, i) => {
         const x = padX + (i / (data.length - 1)) * (w - padX * 2)
         const y = h - padY - (v / maxVal) * (h - padY * 2)
         return i % 2 === 0 ? (
           <g key={`m${i}`}>
-            <circle cx={x} cy={y} r={3} fill="#10b981" />
+            <circle cx={x} cy={y} r={3} fill="#2563EB" />
             <text x={x} y={h - padY + 10} textAnchor="middle" fontSize="7" fill="#64748b">{i * 10}K</text>
           </g>
         ) : null

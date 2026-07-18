@@ -124,7 +124,7 @@ function RevenueChart() {
                 animate={{ height: actualH, y: h - actualH }}
                 transition={{ delay: i * 0.08, duration: 0.5 }}
                 x={x} width={barW} rx={4}
-                fill="#10b981" opacity={0.85}
+                fill="#2563EB" opacity={0.85}
               />
             )}
             {predictedH > 0 && (
@@ -133,7 +133,7 @@ function RevenueChart() {
                 animate={{ height: predictedH, y: h - predictedH }}
                 transition={{ delay: i * 0.08, duration: 0.5 }}
                 x={x} width={barW} rx={4}
-                fill="#10b981" opacity={0.35} stroke="#10b981" strokeWidth={1} strokeDasharray="4 2"
+                fill="#2563EB" opacity={0.35} stroke="#2563EB" strokeWidth={1} strokeDasharray="4 2"
               />
             )}
             <text x={x + barW / 2} y={h + 18} textAnchor="middle" className="text-[10px] fill-slate-400">{d.month}</text>

@@ -97,8 +97,8 @@ const apiCallTrendData = (() => {
 
 // --- Usage by API Type ---
 const usageByType = [
-  { name: 'GST', calls: 45230, pct: 32, color: '#10b981' },
-  { name: 'Accounting', calls: 22150, pct: 16, color: '#059669' },
+  { name: 'GST', calls: 45230, pct: 32, color: '#2563EB' },
+  { name: 'Accounting', calls: 22150, pct: 16, color: '#1D4ED8' },
   { name: 'Invoice', calls: 19870, pct: 14, color: '#047857' },
   { name: 'Payment', calls: 16420, pct: 12, color: '#065f46' },
   { name: 'Reconciliation', calls: 14200, pct: 10, color: '#6ee7b7' },
@@ -353,13 +353,13 @@ function ApiCallTrendChart() {
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-40" preserveAspectRatio="none">
       <defs>
         <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={areaPath} fill="url(#trendGrad)" />
-      <path d={linePath} fill="none" stroke="#10b981" strokeWidth="2" />
-      <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="4" fill="#10b981" />
+      <path d={linePath} fill="none" stroke="#2563EB" strokeWidth="2" />
+      <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="4" fill="#2563EB" />
     </svg>
   );
 }
@@ -456,7 +456,7 @@ function UsageBarChart() {
                 animate={{ height: '100%' }}
                 transition={{ duration: 0.6, ease: 'easeOut' as const }}
                 className="absolute bottom-0 w-full rounded-t-sm"
-                style={{ backgroundColor: item.cost > 0 ? '#10b981' : '#d1d5db' }}
+                style={{ backgroundColor: item.cost > 0 ? '#2563EB' : '#d1d5db' }}
               />
             </div>
             <span className="text-[10px] text-slate-400">{item.month}</span>
@@ -488,7 +488,7 @@ function AnalyticsCharts() {
           <div className="text-2xl font-bold text-slate-800">1.4M</div>
           <div className="text-[10px] text-slate-400 mb-2">last 30 days</div>
           <svg viewBox="0 0 200 50" className="w-full h-12">
-            <path d={volPoints} fill="none" stroke="#10b981" strokeWidth="2" />
+            <path d={volPoints} fill="none" stroke="#2563EB" strokeWidth="2" />
           </svg>
         </CardContent>
       </Card>

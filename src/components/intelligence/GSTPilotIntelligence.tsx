@@ -983,7 +983,7 @@ export default function GSTPilotIntelligence() {
       {/* ── Header (minimal) ── */}
       <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="h-2 w-2 shrink-0 rounded-full accent-gradient shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+          <span className="h-2 w-2 shrink-0 rounded-full accent-gradient shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-foreground">
               GSTPilot Oracle<span className="align-super text-[8px]">™</span>
@@ -1381,9 +1381,9 @@ export default function GSTPilotIntelligence() {
                 animate={{
                   scale: [1, 1.04, 1],
                   boxShadow: [
-                    '0 0 24px 4px rgba(16,185,129,0.25)',
-                    '0 0 36px 6px rgba(6,182,212,0.35)',
-                    '0 0 24px 4px rgba(16,185,129,0.25)',
+                    '0 0 24px 4px rgba(37,99,235,0.25)',
+                    '0 0 36px 6px rgba(59,130,246,0.35)',
+                    '0 0 24px 4px rgba(37,99,235,0.25)',
                   ],
                 }}
                 transition={{

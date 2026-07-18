@@ -129,8 +129,8 @@ function nodeColor(n: GraphNode, riskOverlay: boolean): string {
 
 // Edge color map (by relationship type)
 const EDGE_COLORS: Record<RelationshipType, string> = {
-  OWNS: '#10b981',
-  PAYS: '#06b6d4',
+  OWNS: '#2563EB',
+  PAYS: '#3B82F6',
   OWES: '#f97316',
   FILES: '#34d399',
   GENERATES: '#a78bfa',

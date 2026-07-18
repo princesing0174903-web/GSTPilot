@@ -290,7 +290,7 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.2)]">
+      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5 min-w-0 flex-1">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -984,7 +984,7 @@ export default function DashboardPage() {
       {/* ── Ambient radial glow ── */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
       />
 
       <div className="relative space-y-8">
@@ -1770,8 +1770,8 @@ function BusinessHealthGauge({
           <svg width={size} height={size} className="-rotate-90">
             <defs>
               <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10b981" />
-                <stop offset="60%" stopColor="#06b6d4" />
+                <stop offset="0%" stopColor="#2563EB" />
+                <stop offset="60%" stopColor="#3B82F6" />
                 <stop offset="100%" stopColor="#f59e0b" />
               </linearGradient>
             </defs>

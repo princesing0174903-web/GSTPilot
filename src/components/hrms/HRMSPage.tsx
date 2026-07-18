@@ -109,7 +109,7 @@ function AttendanceChart() {
         const aH = (absent[i] / maxVal) * chartH
         return (
           <g key={day}>
-            <rect x={x} y={padT + chartH - pH} width={barW} height={pH} rx="2" fill="#10b981" opacity="0.85">
+            <rect x={x} y={padT + chartH - pH} width={barW} height={pH} rx="2" fill="#2563EB" opacity="0.85">
               <animate attributeName="height" from="0" to={pH} dur="0.5s" fill="freeze" />
               <animate attributeName="y" from={padT + chartH} to={padT + chartH - pH} dur="0.5s" fill="freeze" />
             </rect>
@@ -130,7 +130,7 @@ function AttendanceChart() {
 
 function DepartmentDonut() {
   const data = [
-    { label: 'Accounts', value: 10, color: '#10b981' },
+    { label: 'Accounts', value: 10, color: '#2563EB' },
     { label: 'Tax', value: 8, color: '#34d399' },
     { label: 'Audit', value: 9, color: '#6ee7b7' },
     { label: 'IT', value: 6, color: '#f59e0b' },

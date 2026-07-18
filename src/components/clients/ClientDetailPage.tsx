@@ -133,7 +133,7 @@ function CircularProgress({ value, size = 80, strokeWidth = 6 }: { value: number
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (value / 100) * circumference;
-  const color = value >= 80 ? '#10b981' : value >= 50 ? '#f59e0b' : '#ef4444';
+  const color = value >= 80 ? '#2563EB' : value >= 50 ? '#f59e0b' : '#ef4444';
   const textColor = value >= 80 ? 'text-emerald-600' : value >= 50 ? 'text-amber-600' : 'text-red-600';
 
   return (

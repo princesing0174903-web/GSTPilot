@@ -870,7 +870,7 @@ export function OracleWorkspace({
                         className="absolute left-0 top-1/2 hidden h-7 w-[3px] -translate-y-1/2 rounded-full lg:block"
                         style={{
                           background:
-                            'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+                            'linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%)',
                         }}
                       />
                     )}
@@ -1163,7 +1163,7 @@ export function OracleWorkspace({
                       disabled={!input.trim()}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
                       style={{
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
                       }}
                       aria-label="Send"
                     >
@@ -1432,7 +1432,7 @@ function MessageBubble({
                 type="button"
                 onClick={() => a.view && onNavigate(a.view)}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 <ArrowRight className="h-3 w-3" />
                 {a.label}
@@ -1465,7 +1465,7 @@ function MessageBubble({
             answer into a real, audited business action. */}
         {!message.streaming && cfoAnalyzing && (
           <div className="mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-white/50"
-            style={{ borderColor: 'rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.03)' }}>
+            style={{ borderColor: 'rgba(37,99,235,0.2)', background: 'rgba(37,99,235,0.03)' }}>
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />

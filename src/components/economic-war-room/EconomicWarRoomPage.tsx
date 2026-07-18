@@ -45,7 +45,7 @@ const fmtNumber = (n: number) => n.toLocaleString('en-IN')
 const fmtPct = (n: number, decimals = 1) => n.toFixed(decimals) + '%'
 
 const riskColor = (v: number) => {
-  if (v <= 1.2) return '#10b981' // emerald-500
+  if (v <= 1.2) return '#2563EB' // emerald-500
   if (v <= 2.0) return '#84cc16' // lime-500
   if (v <= 2.8) return '#eab308' // yellow-500
   if (v <= 3.5) return '#f59e0b' // amber-500
@@ -54,7 +54,7 @@ const riskColor = (v: number) => {
 }
 
 const healthColor = (v: number) => {
-  if (v >= 80) return '#10b981' // emerald — healthy
+  if (v >= 80) return '#2563EB' // emerald — healthy
   if (v >= 65) return '#84cc16' // lime — moderate
   if (v >= 50) return '#f59e0b' // amber — watch
   return '#ef4444' // red — at risk
@@ -88,9 +88,9 @@ const staggerChild = {
 const glowPulse = {
   animate: {
     boxShadow: [
-      '0 0 0px rgba(16, 185, 129, 0)',
-      '0 0 18px rgba(16, 185, 129, 0.18)',
-      '0 0 0px rgba(16, 185, 129, 0)',
+      '0 0 0px rgba(37,99,235, 0)',
+      '0 0 18px rgba(37,99,235, 0.18)',
+      '0 0 0px rgba(37,99,235, 0)',
     ],
   },
   transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
@@ -220,7 +220,7 @@ const HERO_KPIS: HeroKpi[] = [
     trendGood: true,
     sparkData: [4.1, 6.2, 4.5, 6.1, 7.8, 8.3, 7.6, 7.0, 6.7, 8.4, 7.2],
     icon: TrendingUp,
-    color: '#10b981',
+    color: '#2563EB',
     sublabel: 'FY25 Q1 Estimate',
   },
   {
@@ -232,7 +232,7 @@ const HERO_KPIS: HeroKpi[] = [
     trendGood: true,
     sparkData: [148000, 156000, 162000, 168000, 171000, 175000, 178000, 182000, 187234],
     icon: IndianRupee,
-    color: '#10b981',
+    color: '#2563EB',
     sublabel: 'Sep 2025 (live)',
   },
   {
@@ -244,7 +244,7 @@ const HERO_KPIS: HeroKpi[] = [
     trendGood: true,
     sparkData: [82000, 91000, 98000, 105000, 112000, 118000, 124500],
     icon: Building2,
-    color: '#10b981',
+    color: '#2563EB',
     sublabel: 'New registrations (MTD)',
   },
   {
@@ -268,7 +268,7 @@ const HERO_KPIS: HeroKpi[] = [
     trendGood: true,
     sparkData: [4.5, 4.1, 3.8, 3.5, 3.3, 3.1, 3.0, 2.9, 2.8],
     icon: Shield,
-    color: '#10b981',
+    color: '#2563EB',
     sublabel: 'Banking system',
   },
   {
@@ -280,7 +280,7 @@ const HERO_KPIS: HeroKpi[] = [
     trendGood: true,
     sparkData: [52.1, 53.4, 54.2, 55.1, 55.8, 56.4],
     icon: Factory,
-    color: '#10b981',
+    color: '#2563EB',
     sublabel: 'Sep 2025 reading',
   },
 ]
@@ -398,10 +398,10 @@ const CREDIT_SECTORS: { name: string; value: number; growth: number }[] = [
 
 // AI brief bullets
 const AI_BRIEF: { icon: React.ElementType; color: string; text: string }[] = [
-  { icon: Factory, color: '#10b981', text: 'Manufacturing sector shows robust 8.4% growth, driven by capital goods and electronics — highest in 6 quarters.' },
-  { icon: IndianRupee, color: '#10b981', text: 'GST collection momentum (₹1.87L Cr, +12% YoY) suggests strong Q3 GDP print and consumption recovery.' },
+  { icon: Factory, color: '#2563EB', text: 'Manufacturing sector shows robust 8.4% growth, driven by capital goods and electronics — highest in 6 quarters.' },
+  { icon: IndianRupee, color: '#2563EB', text: 'GST collection momentum (₹1.87L Cr, +12% YoY) suggests strong Q3 GDP print and consumption recovery.' },
   { icon: AlertTriangle, color: '#f59e0b', text: 'Pharma supply chain risk elevated due to API imports from China — recommend accelerating PLI scheme for 23 critical molecules.' },
-  { icon: Building2, color: '#10b981', text: 'Credit growth to MSMEs up 14% YoY, indicating healthy small business sentiment and improved bank appetite.' },
+  { icon: Building2, color: '#2563EB', text: 'Credit growth to MSMEs up 14% YoY, indicating healthy small business sentiment and improved bank appetite.' },
   { icon: Landmark, color: '#84cc16', text: 'RBI may consider rate pause at October policy given easing inflation (4.8%) and stable growth outlook.' },
 ]
 
@@ -501,7 +501,7 @@ const categoryColor = (cat: string) => {
 // SVG CHART COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 100, h = 28 }: {
+function Sparkline({ data, color = '#2563EB', w = 100, h = 28 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -568,8 +568,8 @@ function GdpLineChart({ data }: { data: { label: string; value: number; current?
     <svg width={w} height={h} className="w-full overflow-visible" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id="gdp-area" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Grid */}
@@ -585,7 +585,7 @@ function GdpLineChart({ data }: { data: { label: string; value: number; current?
       <path d={areaPath} fill="url(#gdp-area)" />
       {/* Line */}
       <motion.path
-        d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
+        d={linePath} fill="none" stroke="#2563EB" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
         transition={{ duration: 1.5, ease: 'easeOut' as const }}
@@ -596,8 +596,8 @@ function GdpLineChart({ data }: { data: { label: string; value: number; current?
           key={i}
           cx={p.x} cy={p.y}
           r={p.current ? 5 : 3}
-          fill={p.current ? '#10b981' : '#0f172a'}
-          stroke={p.current ? '#34d399' : '#10b981'}
+          fill={p.current ? '#2563EB' : '#0f172a'}
+          stroke={p.current ? '#34d399' : '#2563EB'}
           strokeWidth={p.current ? 3 : 2}
           initial={{ opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -644,7 +644,7 @@ function GstBarChart({ data }: { data: { label: string; value: number; yoy: numb
       <defs>
         <linearGradient id="gst-bar" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#34d399" />
-          <stop offset="100%" stopColor="#059669" />
+          <stop offset="100%" stopColor="#1D4ED8" />
         </linearGradient>
         <linearGradient id="gst-bar-current" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#fbbf24" />
@@ -716,8 +716,8 @@ function BusinessHealthAreaChart({ data }: { data: number[] }) {
     <svg width={w} height={h} className="w-full overflow-visible" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id="bh-area" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Grid */}
@@ -733,7 +733,7 @@ function BusinessHealthAreaChart({ data }: { data: number[] }) {
       <path d={areaPath} fill="url(#bh-area)" />
       {/* Line */}
       <motion.path
-        d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
+        d={linePath} fill="none" stroke="#2563EB" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
         transition={{ duration: 1.8, ease: 'easeOut' as const }}
@@ -741,7 +741,7 @@ function BusinessHealthAreaChart({ data }: { data: number[] }) {
       {/* End dot */}
       <motion.circle
         cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y}
-        r="4" fill="#10b981" stroke="#34d399" strokeWidth="2"
+        r="4" fill="#2563EB" stroke="#34d399" strokeWidth="2"
         initial={{ scale: 0 }} animate={{ scale: 1 }}
         transition={{ delay: 1.6, type: 'spring' }}
       />
@@ -765,7 +765,7 @@ function CreditDeploymentBarChart({ data }: { data: { name: string; value: numbe
     <svg width={w} height={h} className="w-full overflow-visible" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id="cd-bar" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#10b981" />
+          <stop offset="0%" stopColor="#2563EB" />
           <stop offset="100%" stopColor="#34d399" />
         </linearGradient>
       </defs>
@@ -839,7 +839,7 @@ function IndiaEconomicMapSVG({ states, hoveredState, onHover }: {
       <motion.path
         d={indiaPath}
         fill="none"
-        stroke="#10b981"
+        stroke="#2563EB"
         strokeWidth="1"
         opacity="0.4"
         filter="url(#india-glow)"
@@ -851,7 +851,7 @@ function IndiaEconomicMapSVG({ states, hoveredState, onHover }: {
       <path
         d={indiaPath}
         fill="url(#india-fill)"
-        stroke="#10b981"
+        stroke="#2563EB"
         strokeWidth="1.5"
         strokeOpacity="0.6"
       />
@@ -862,10 +862,10 @@ function IndiaEconomicMapSVG({ states, hoveredState, onHover }: {
         transition={{ delay: 1.5, duration: 1 }}
       >
         {Array.from({ length: 12 }).map((_, i) => (
-          <line key={`h${i}`} x1="100" y1={70 + i * 32} x2="350" y2={70 + i * 32} stroke="#10b981" strokeWidth="0.3" />
+          <line key={`h${i}`} x1="100" y1={70 + i * 32} x2="350" y2={70 + i * 32} stroke="#2563EB" strokeWidth="0.3" />
         ))}
         {Array.from({ length: 9 }).map((_, i) => (
-          <line key={`v${i}`} x1={100 + i * 28} y1="55" x2={100 + i * 28} y2="445" stroke="#10b981" strokeWidth="0.3" />
+          <line key={`v${i}`} x1={100 + i * 28} y1="55" x2={100 + i * 28} y2="445" stroke="#2563EB" strokeWidth="0.3" />
         ))}
       </motion.g>
       {/* State markers */}
@@ -1917,7 +1917,7 @@ function AiEconomicBrief() {
       <Card className="relative overflow-hidden border-slate-700/50 h-full">
         {/* Gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/60 via-slate-950 to-emerald-950/30" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(16,185,129,0.15),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(37,99,235,0.15),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(245,158,11,0.08),transparent_50%)]" />
 
         <CardHeader className="relative pb-3 border-b border-slate-800/60">
@@ -2116,9 +2116,9 @@ export default function EconomicWarRoomPage() {
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15,23,42,0.4); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.3); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.5); }
-        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(16,185,129,0.3) rgba(15,23,42,0.4); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(37,99,235,0.3); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(37,99,235,0.5); }
+        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(37,99,235,0.3) rgba(15,23,42,0.4); }
       `}</style>
 
       {/* Top scrolling ticker */}

@@ -324,7 +324,7 @@ const PARTNER_USAGE = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Sparkline SVG
-function Sparkline({ data, width = 80, height = 28, color = '#10b981' }: { data: number[]; width?: number; height?: number; color?: string }) {
+function Sparkline({ data, width = 80, height = 28, color = '#2563EB' }: { data: number[]; width?: number; height?: number; color?: string }) {
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -382,12 +382,12 @@ function GrowthAreaChart() {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#059669" />
-          <stop offset="100%" stopColor="#0d9488" />
+          <stop offset="0%" stopColor="#1D4ED8" />
+          <stop offset="100%" stopColor="#2563EB" />
         </linearGradient>
       </defs>
       {/* Grid lines */}
@@ -425,7 +425,7 @@ function GrowthAreaChart() {
       {/* Data points */}
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r="3.5" fill="white" stroke="#059669" strokeWidth="2" />
+          <circle cx={p.x} cy={p.y} r="3.5" fill="white" stroke="#1D4ED8" strokeWidth="2" />
         </g>
       ))}
       {/* X axis labels */}
@@ -461,10 +461,10 @@ function DataLineageFlow() {
   const totalH = 180;
 
   const nodes = [
-    { label: 'Data Sources', sub: 'GSTN, Banks, e-Invoice', x: 0, y: 66, color: '#059669' },
-    { label: 'Processing', sub: 'ETL, AI Extraction', x: nodeW + gapX, y: 66, color: '#0d9488' },
-    { label: 'Storage', sub: 'Firestore + Data Lake', x: 2 * (nodeW + gapX), y: 66, color: '#0891b2' },
-    { label: 'Insights', sub: 'APIs, Reports, AI', x: 3 * (nodeW + gapX), y: 66, color: '#059669' },
+    { label: 'Data Sources', sub: 'GSTN, Banks, e-Invoice', x: 0, y: 66, color: '#1D4ED8' },
+    { label: 'Processing', sub: 'ETL, AI Extraction', x: nodeW + gapX, y: 66, color: '#2563EB' },
+    { label: 'Storage', sub: 'Firestore + Data Lake', x: 2 * (nodeW + gapX), y: 66, color: '#2563EB' },
+    { label: 'Insights', sub: 'APIs, Reports, AI', x: 3 * (nodeW + gapX), y: 66, color: '#1D4ED8' },
   ];
 
   return (
@@ -740,7 +740,7 @@ function DataIntelligenceTab() {
                   </div>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Sparkline data={insight.trend} width={90} height={30} color={insight.impact === 'high' ? '#059669' : '#0d9488'} />
+                  <Sparkline data={insight.trend} width={90} height={30} color={insight.impact === 'high' ? '#1D4ED8' : '#2563EB'} />
                 </div>
               </motion.div>
             ))}
@@ -788,7 +788,7 @@ function DataIntelligenceTab() {
                         {sec.dataVolume} data points
                       </div>
                     </div>
-                    <Sparkline data={sec.trend} width={80} height={26} color="#059669" />
+                    <Sparkline data={sec.trend} width={80} height={26} color="#1D4ED8" />
                     <div className="text-right shrink-0 w-16">
                       <div className="text-lg font-bold text-emerald-700">{sec.healthScore}</div>
                       <div className="text-[10px] text-muted-foreground">Health</div>

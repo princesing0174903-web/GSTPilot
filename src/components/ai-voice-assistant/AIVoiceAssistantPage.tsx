@@ -46,8 +46,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Color Palette ──────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -164,14 +164,14 @@ function WaveformVisualizer({ isActive }: { isActive: boolean }) {
 const commandHistory: VoiceCommand[] = [];
 
 const quickCommands: QuickCommand[] = [
-  { id: 'q1', label: 'Pending GSTR-1', voiceCommand: 'Show pending GSTR-1', icon: FileText, color: '#10b981', action: 'Navigate Returns' },
+  { id: 'q1', label: 'Pending GSTR-1', voiceCommand: 'Show pending GSTR-1', icon: FileText, color: '#2563EB', action: 'Navigate Returns' },
   { id: 'q2', label: 'File Return', voiceCommand: 'File a return', icon: FileCheck, color: '#3b82f6', action: 'Start Filing' },
   { id: 'q3', label: 'At-Risk Clients', voiceCommand: 'Which clients are at risk?', icon: AlertTriangle, color: '#f59e0b', action: 'Show Risks' },
   { id: 'q4', label: 'Monthly Report', voiceCommand: 'Generate monthly report', icon: BarChart3, color: '#8b5cf6', action: 'Create Report' },
-  { id: 'q5', label: 'Reconcile', voiceCommand: 'Run reconciliation', icon: RefreshCw, color: '#06b6d4', action: 'Reconcile' },
+  { id: 'q5', label: 'Reconcile', voiceCommand: 'Run reconciliation', icon: RefreshCw, color: '#3B82F6', action: 'Reconcile' },
   { id: 'q6', label: 'Prepare Returns', voiceCommand: 'Prepare all returns', icon: Play, color: '#ec4899', action: 'Batch Prep' },
   { id: 'q7', label: 'Overdue Notices', voiceCommand: 'Show overdue notices', icon: FileWarning, color: '#ef4444', action: 'Show Notices' },
-  { id: 'q8', label: 'Revenue', voiceCommand: "What's my revenue?", icon: DollarSign, color: '#10b981', action: 'Show Revenue' },
+  { id: 'q8', label: 'Revenue', voiceCommand: "What's my revenue?", icon: DollarSign, color: '#2563EB', action: 'Show Revenue' },
   { id: 'q9', label: 'Run Payroll', voiceCommand: 'Run payroll', icon: Users, color: '#f97316', action: 'Payroll' },
   { id: 'q10', label: 'Compliance', voiceCommand: 'Check compliance', icon: Shield, color: '#14b8a6', action: 'Compliance' },
 ];

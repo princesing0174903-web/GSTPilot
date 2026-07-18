@@ -768,7 +768,7 @@ export default function RunIndiaBusinessPage() {
                     width: `${overallProgress}%`,
                     background: isPaused
                       ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                      : 'linear-gradient(90deg, #10b981, #34d399, #6ee7b7)',
+                      : 'linear-gradient(90deg, #2563EB, #34d399, #6ee7b7)',
                     boxShadow: '0 0 10px rgba(52,211,153,0.5)',
                   }}
                   transition={{ duration: 0.3 }}

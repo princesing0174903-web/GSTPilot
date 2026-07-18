@@ -121,7 +121,7 @@ interface StatCard {
 // SVG CHARTS (kept from original — purely cosmetic from computed arrays)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SparklineChart({ data, color = '#10b981', height = 40 }: { data: number[]; color?: string; height?: number }) {
+function SparklineChart({ data, color = '#2563EB', height = 40 }: { data: number[]; color?: string; height?: number }) {
   if (!data.length) return null;
   const max = Math.max(...data, 1);
   const min = Math.min(...data, 0);
@@ -142,7 +142,7 @@ function SparklineChart({ data, color = '#10b981', height = 40 }: { data: number
   );
 }
 
-function BarChartMini({ data, labels, color = '#10b981' }: { data: number[]; labels: string[]; color?: string }) {
+function BarChartMini({ data, labels, color = '#2563EB' }: { data: number[]; labels: string[]; color?: string }) {
   if (!data.length) return null;
   const max = Math.max(...data, 1);
   const barW = 28;
@@ -1068,13 +1068,13 @@ export default function AccountingPage() {
                             <div className="flex justify-between text-sm font-bold"><span className="text-white">Net Profit</span><span className={accounts.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmtINR(accounts.netProfit)}</span></div>
                           </div>
                           <div className="hidden sm:block">
-                            <SparklineChart data={monthly.revenue.slice(-6)} color="#10b981" height={60} />
+                            <SparklineChart data={monthly.revenue.slice(-6)} color="#2563EB" height={60} />
                           </div>
                         </div>
                         <div className="mt-4 pt-3 border-t border-white/[0.06]">
                           <p className="text-[10px] text-zinc-400 mb-2">Monthly Trend (last 12 months)</p>
                           <div className="flex gap-1 items-end overflow-x-auto">
-                            <BarChartMini data={monthly.revenue} labels={monthly.labels} color="#10b981" />
+                            <BarChartMini data={monthly.revenue} labels={monthly.labels} color="#2563EB" />
                           </div>
                         </div>
                       </>

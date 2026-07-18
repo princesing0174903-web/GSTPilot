@@ -77,9 +77,9 @@ interface BusinessGraph {
 // ─── Node visual config ────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<GraphNodeType, string> = {
-  business: '#10B981', // emerald
+  business: '#2563EB', // emerald
   client: '#3B82F6',   // blue
-  invoice: '#06B6D4',  // cyan
+  invoice: '#3B82F6',  // cyan
   payment: '#22C55E',  // green
   employee: '#A855F7', // purple
   task: '#F97316',     // orange

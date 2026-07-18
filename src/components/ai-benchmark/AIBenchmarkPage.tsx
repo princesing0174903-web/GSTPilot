@@ -57,8 +57,8 @@ import { useClients } from '@/hooks/useClients';
 
 // ─── Color Palette ─────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   teal: '#14b8a6',
   purple: '#8b5cf6',
   amber: '#f59e0b',

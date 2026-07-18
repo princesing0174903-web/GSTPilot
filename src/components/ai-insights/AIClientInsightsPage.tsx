@@ -30,11 +30,11 @@ import { formatNumber } from '@/lib/gst-utils';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
-  tealDark: '#0d9488',
+  tealDark: '#2563EB',
   tealLight: '#ccfbf1',
   amber: '#f59e0b',
   amberLight: '#fef3c7',
@@ -113,7 +113,7 @@ function MiniHealthGauge({ score }: { score: number }) {
   const center = size / 2;
 
   const getColor = (s: number) => {
-    if (s >= 80) return '#10b981';
+    if (s >= 80) return '#2563EB';
     if (s >= 60) return '#f59e0b';
     return '#ef4444';
   };

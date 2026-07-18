@@ -141,8 +141,8 @@ function OrbParticles({ active }: { active: boolean }) {
           style={{
             width: p.size,
             height: p.size,
-            background: 'linear-gradient(135deg, #10b981, #06b6d4)',
-            boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)',
+            background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
+            boxShadow: '0 0 8px rgba(37,99,235, 0.8)',
             left: '50%',
             top: '50%',
           }}
@@ -245,7 +245,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           className="absolute inset-0 rounded-full"
           style={{
             background:
-              'radial-gradient(circle, rgba(16,185,129,0.4) 0%, rgba(6,182,212,0.2) 50%, transparent 70%)',
+              'radial-gradient(circle, rgba(37,99,235,0.4) 0%, rgba(59,130,246,0.2) 50%, transparent 70%)',
           }}
           animate={{
             scale: [1, 1.4, 1],
@@ -262,7 +262,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
         <motion.div
           className="absolute -inset-2 rounded-full blur-md"
           style={{
-            background: 'linear-gradient(135deg, #10b981, #06b6d4, #3b82f6)',
+            background: 'linear-gradient(135deg, #2563EB, #3B82F6, #3b82f6)',
             opacity: 0.5,
           }}
           animate={{
@@ -284,9 +284,9 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           className="relative h-16 w-16 rounded-full overflow-hidden"
           style={{
             background:
-              'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #06b6d4, #10b981)',
+              'conic-gradient(from 0deg, #2563EB, #3B82F6, #3b82f6, #3B82F6, #2563EB)',
             boxShadow:
-              '0 8px 32px rgba(16, 185, 129, 0.5), 0 0 0 2px rgba(255,255,255,0.2) inset, 0 0 20px rgba(6, 182, 212, 0.4) inset',
+              '0 8px 32px rgba(37,99,235, 0.5), 0 0 0 2px rgba(255,255,255,0.2) inset, 0 0 20px rgba(59,130,246, 0.4) inset',
           }}
           animate={{
             rotate: isOpen ? 0 : 360,
@@ -1030,14 +1030,14 @@ function CommandCenter({
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
               border: '1px solid rgba(255,255,255,0.4)',
               boxShadow:
-                '0 24px 64px -12px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.08)',
+                '0 24px 64px -12px rgba(37,99,235, 0.25), 0 0 0 1px rgba(37,99,235, 0.08)',
             }}
           >
             {/* Decorative gradient header bar */}
             <div
               className="absolute top-0 left-0 right-0 h-1"
               style={{
-                background: 'linear-gradient(90deg, #10b981, #06b6d4, #3b82f6)',
+                background: 'linear-gradient(90deg, #2563EB, #3B82F6, #3b82f6)',
               }}
             />
 
@@ -1048,8 +1048,8 @@ function CommandCenter({
                   <motion.div
                     className="absolute inset-0 rounded-full"
                     style={{
-                      background: 'conic-gradient(from 0deg, #10b981, #06b6d4, #3b82f6, #10b981)',
-                      boxShadow: '0 4px 12px rgba(16,185,129,0.4)',
+                      background: 'conic-gradient(from 0deg, #2563EB, #3B82F6, #3b82f6, #2563EB)',
+                      boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
                     }}
                     animate={{ rotate: 360 }}
                     transition={{ duration: 6, repeat: Infinity, ease: 'linear' as const }}

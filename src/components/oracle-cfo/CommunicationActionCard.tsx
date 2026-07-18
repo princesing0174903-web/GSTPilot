@@ -295,18 +295,18 @@ export function CommunicationActionCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="mt-3 rounded-xl border overflow-hidden"
-      style={{ borderColor: 'rgba(16,185,129,0.2)', background: '#0a0a0a' }}
+      style={{ borderColor: 'rgba(37,99,235,0.2)', background: '#0a0a0a' }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
           {createResponse?.intent.channel === 'whatsapp' ? (
-            <MessageCircle className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+            <MessageCircle className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
           ) : (
-            <Mail className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+            <Mail className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
           )}
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">Send Communication</div>
@@ -332,7 +332,7 @@ export function CommunicationActionCard({
         {/* ── ANALYZING ── */}
         {phase === 'analyzing' && (
           <div className="flex items-center gap-3 py-4">
-            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
             <div className="text-sm text-white/70">
               Resolving recipient, detecting delivery provider, and generating the message preview…
             </div>
@@ -393,7 +393,7 @@ export function CommunicationActionCard({
         {phase === 'review' && createResponse && createResponse.approval.message && (
           <div className="space-y-4">
             {/* Recipient */}
-            <Section title="Recipient" icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />}>
+            <Section title="Recipient" icon={<Sparkles className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />}>
               {createResponse.approval.recipient ? (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <Field label="Name" value={createResponse.approval.recipient.name} />
@@ -414,7 +414,7 @@ export function CommunicationActionCard({
             </Section>
 
             {/* Message */}
-            <Section title="Message Preview" icon={<FileText className="h-3.5 w-3.5" style={{ color: '#10b981' }} />}>
+            <Section title="Message Preview" icon={<FileText className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />}>
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <Field label="Channel" value={channelLabel(createResponse.intent.channel)} />
@@ -429,7 +429,7 @@ export function CommunicationActionCard({
                         value={editedSubject}
                         onChange={(e) => setEditedSubject(e.target.value)}
                         className="w-full mt-0.5 rounded-md border bg-black/40 px-2 py-1.5 text-xs text-white"
-                        style={{ borderColor: 'rgba(16,185,129,0.3)' }}
+                        style={{ borderColor: 'rgba(37,99,235,0.3)' }}
                       />
                     </div>
                     <div>
@@ -439,7 +439,7 @@ export function CommunicationActionCard({
                         onChange={(e) => setEditedBody(e.target.value)}
                         rows={6}
                         className="w-full mt-0.5 rounded-md border bg-black/40 px-2 py-1.5 text-xs text-white font-mono"
-                        style={{ borderColor: 'rgba(16,185,129,0.3)' }}
+                        style={{ borderColor: 'rgba(37,99,235,0.3)' }}
                       />
                     </div>
                   </div>
@@ -474,12 +474,12 @@ export function CommunicationActionCard({
 
             {/* Attachments */}
             {createResponse.approval.attachments.length > 0 && (
-              <Section title="Attachments" icon={<FileText className="h-3.5 w-3.5" style={{ color: '#10b981' }} />}>
+              <Section title="Attachments" icon={<FileText className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />}>
                 <div className="space-y-1.5">
                   {createResponse.approval.attachments.map((a, i) => (
                     <div key={i} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
                       style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-                      <FileText className="h-3 w-3 shrink-0" style={{ color: '#10b981' }} />
+                      <FileText className="h-3 w-3 shrink-0" style={{ color: '#2563EB' }} />
                       <span className="text-white/80">{a.filename}</span>
                       <span className="text-white/40 text-[10px]">· {attachmentLabel(a.kind)}</span>
                     </div>
@@ -489,7 +489,7 @@ export function CommunicationActionCard({
             )}
 
             {/* Delivery Provider */}
-            <Section title="Delivery Provider" icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />}>
+            <Section title="Delivery Provider" icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />}>
               <div className="space-y-2">
                 {createResponse.approval.deliveryChannels.email && (
                   <DeliveryRow
@@ -535,7 +535,7 @@ export function CommunicationActionCard({
                 type="button"
                 onClick={handleApprove}
                 className="rounded-lg px-4 py-2 text-sm font-semibold text-white flex items-center gap-1.5"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 <Send className="h-3.5 w-3.5" />
                 Approve & Send
@@ -548,22 +548,22 @@ export function CommunicationActionCard({
         {phase === 'executing' && (
           <div className="space-y-3 py-2">
             <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
               <div className="text-sm text-white/70">
                 Sending via the connected provider…
               </div>
             </div>
             <div className="space-y-1.5 text-xs text-white/50">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3 w-3" style={{ color: '#10b981' }} />
+                <CheckCircle2 className="h-3 w-3" style={{ color: '#2563EB' }} />
                 <span>Re-validating recipient</span>
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3 w-3" style={{ color: '#10b981' }} />
+                <CheckCircle2 className="h-3 w-3" style={{ color: '#2563EB' }} />
                 <span>Generating attachments</span>
               </div>
               <div className="flex items-center gap-2">
-                <Loader2 className="h-3 w-3 animate-spin" style={{ color: '#10b981' }} />
+                <Loader2 className="h-3 w-3 animate-spin" style={{ color: '#2563EB' }} />
                 <span>Dispatching message via provider API</span>
               </div>
             </div>
@@ -575,9 +575,9 @@ export function CommunicationActionCard({
           <div className="space-y-3">
             <div
               className="rounded-lg border px-3 py-2.5 flex items-start gap-2"
-              style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.05)' }}
+              style={{ borderColor: 'rgba(37,99,235,0.3)', background: 'rgba(37,99,235,0.05)' }}
             >
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#2563EB' }} />
               <div className="text-sm">
                 <div className="font-semibold text-white">
                   {executeResult.success ? 'Communication delivered' : 'Partially delivered'}
@@ -678,7 +678,7 @@ export function CommunicationActionCard({
                   setError(null);
                 }}
                 className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 Retry
               </button>
@@ -736,19 +736,19 @@ function DeliveryRow({
     <div
       className="rounded-md border px-2.5 py-2 flex items-start gap-2"
       style={{
-        borderColor: connected ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)',
-        background: connected ? 'rgba(16,185,129,0.03)' : 'rgba(245,158,11,0.03)',
+        borderColor: connected ? 'rgba(37,99,235,0.3)' : 'rgba(245,158,11,0.3)',
+        background: connected ? 'rgba(37,99,235,0.03)' : 'rgba(245,158,11,0.03)',
       }}
     >
-      <div style={{ color: connected ? '#10b981' : '#f59e0b' }}>{icon}</div>
+      <div style={{ color: connected ? '#2563EB' : '#f59e0b' }}>{icon}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-white">{label}</span>
           <span
             className="text-[9px] px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider"
             style={{
-              background: connected ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-              color: connected ? '#10b981' : '#f59e0b',
+              background: connected ? 'rgba(37,99,235,0.15)' : 'rgba(245,158,11,0.15)',
+              color: connected ? '#2563EB' : '#f59e0b',
             }}
           >
             {connected ? 'Connected' : 'Not connected'}
@@ -771,7 +771,7 @@ function DeliveryResultCard({
 }) {
   const isSent = delivery.sent || delivery.status === 'preview-mode';
   const isFailed = delivery.status === 'failed' || delivery.status === 'not-connected';
-  const color = isSent ? '#10b981' : isFailed ? '#ef4444' : '#f59e0b';
+  const color = isSent ? '#2563EB' : isFailed ? '#ef4444' : '#f59e0b';
   return (
     <div
       className="rounded-md border px-2.5 py-2"

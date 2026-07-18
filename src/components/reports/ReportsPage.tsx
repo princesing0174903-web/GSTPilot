@@ -231,10 +231,10 @@ function buildPdfHtml(opts: {
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 32px; }
-    .header { border-bottom: 3px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; }
+    .header { border-bottom: 3px solid #2563EB; padding-bottom: 16px; margin-bottom: 24px; }
     .brand { display: flex; align-items: center; gap: 10px; }
-    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #10b981, #14b8a6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
-    .brand-name { font-size: 18px; font-weight: 700; color: #10b981; letter-spacing: -0.01em; }
+    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #2563EB, #14b8a6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
+    .brand-name { font-size: 18px; font-weight: 700; color: #2563EB; letter-spacing: -0.01em; }
     .brand-tag { font-size: 11px; color: #64748b; margin-top: 2px; }
     h1 { font-size: 22px; margin: 14px 0 4px; color: #0f172a; }
     .subtitle { font-size: 13px; color: #64748b; margin: 0 0 6px; }

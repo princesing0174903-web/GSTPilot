@@ -247,14 +247,14 @@ function RadarChart({ dimensions, size = 280 }: { dimensions: RadarDimension[]; 
         <polygon key={ring} points={Array.from({ length: n }, (_, i) => { const p = getPoint(i, ring); return `${p.x},${p.y}` }).join(' ')} fill="none" stroke="rgba(148,163,184,0.15)" strokeWidth={1} />
       ))}
       {dimensions.map((_, i) => { const p = getPoint(i, 100); return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(148,163,184,0.12)" strokeWidth={1} /> })}
-      <polygon points={dimensions.map((d, i) => { const p = getPoint(i, d.score); return `${p.x},${p.y}` }).join(' ')} fill="rgba(16, 185, 129, 0.12)" stroke="rgba(16, 185, 129, 0.6)" strokeWidth={2} className="drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-      <polygon points={dimensions.map((d, i) => { const p = getPoint(i, d.score); return `${p.x},${p.y}` }).join(' ')} fill="rgba(16, 185, 129, 0.08)" stroke="#10b981" strokeWidth={2} />
+      <polygon points={dimensions.map((d, i) => { const p = getPoint(i, d.score); return `${p.x},${p.y}` }).join(' ')} fill="rgba(37,99,235, 0.12)" stroke="rgba(37,99,235, 0.6)" strokeWidth={2} className="drop-shadow-[0_0_8px_rgba(37,99,235,0.4)]" />
+      <polygon points={dimensions.map((d, i) => { const p = getPoint(i, d.score); return `${p.x},${p.y}` }).join(' ')} fill="rgba(37,99,235, 0.08)" stroke="#2563EB" strokeWidth={2} />
       {dimensions.map((d, i) => {
         const p = getPoint(i, d.score)
-        const color = d.inverted ? (d.score >= 60 ? '#10b981' : d.score >= 40 ? '#f59e0b' : '#ef4444') : (d.score >= 80 ? '#10b981' : d.score >= 60 ? '#f59e0b' : '#ef4444')
+        const color = d.inverted ? (d.score >= 60 ? '#2563EB' : d.score >= 40 ? '#f59e0b' : '#ef4444') : (d.score >= 80 ? '#2563EB' : d.score >= 60 ? '#f59e0b' : '#ef4444')
         return (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r={5} fill={color} className="drop-shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+            <circle cx={p.x} cy={p.y} r={5} fill={color} className="drop-shadow-[0_0_6px_rgba(37,99,235,0.5)]" />
             <circle cx={p.x} cy={p.y} r={8} fill={color} opacity={0.2}>
               <animate attributeName="r" values="6;12;6" dur="2s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.3;0.05;0.3" dur="2s" repeatCount="indefinite" />
@@ -278,13 +278,13 @@ function AnimatedGauge({ score, size = 160 }: { score: number; size?: number }) 
   const r = size / 2 - 12
   const circumference = Math.PI * r
   const offset = circumference - (animatedScore / 100) * circumference
-  const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
+  const color = score >= 80 ? '#2563EB' : score >= 60 ? '#f59e0b' : '#ef4444'
   const label = score >= 80 ? 'Healthy' : score >= 60 ? 'Caution' : 'At Risk'
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size / 2 + 20} className="overflow-visible">
         <path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke="rgba(148,163,184,0.12)" strokeWidth={10} strokeLinecap="round" />
-        <motion.path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 2, ease: 'easeOut' as const }} className="drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
+        <motion.path d={`M ${12} ${cy} A ${r} ${r} 0 0 1 ${size - 12} ${cy}`} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 2, ease: 'easeOut' as const }} className="drop-shadow-[0_0_10px_rgba(37,99,235,0.4)]" />
         <text x={cx} y={cy - 8} textAnchor="middle" className="fill-white text-3xl font-bold" style={{ fontSize: '28px' }}>{animatedScore}</text>
         <text x={cx} y={cy + 12} textAnchor="middle" className="fill-slate-400 text-xs" style={{ fontSize: '11px' }}>{label}</text>
       </svg>
@@ -333,7 +333,7 @@ function BeforeAfterBar({ label, before, after, format = 'number' }: { label: st
 // SPARKLINE (mini trend chart)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 120, h = 32 }: { data: number[]; color?: string; w?: number; h?: number }) {
+function Sparkline({ data, color = '#2563EB', w = 120, h = 32 }: { data: number[]; color?: string; w?: number; h?: number }) {
   if (data.length === 0) return <div className="text-[9px] text-slate-600">No data</div>
   const max = Math.max(...data, 1)
   const min = Math.min(...data, 0)
@@ -641,7 +641,7 @@ function BusinessMirrorTab({ state, timeline, kpis, snapshots }: {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <SnapshotTrendCard label="Revenue" snapshots={snapshots.monthly.slice(-6)} field="revenue" color="#10b981" />
+              <SnapshotTrendCard label="Revenue" snapshots={snapshots.monthly.slice(-6)} field="revenue" color="#2563EB" />
               <SnapshotTrendCard label="Profit" snapshots={snapshots.monthly.slice(-6)} field="profit" color="#22d3ee" />
               <SnapshotTrendCard label="Collections" snapshots={snapshots.monthly.slice(-6)} field="collections" color="#a78bfa" />
               <SnapshotTrendCard label="Expenses" snapshots={snapshots.monthly.slice(-6)} field="expenses" color="#f59e0b" />

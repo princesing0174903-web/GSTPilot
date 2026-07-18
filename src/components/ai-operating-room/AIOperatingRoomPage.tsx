@@ -68,7 +68,7 @@ function ExecutiveGauge({ value, label, icon: Icon, size = 140 }: {
   const pctVal = Math.max(0, Math.min(100, value))
   const fill = (pctVal / 100) * circumference
 
-  const color = pctVal > 70 ? '#10b981' : pctVal > 40 ? '#f59e0b' : '#ef4444'
+  const color = pctVal > 70 ? '#2563EB' : pctVal > 40 ? '#f59e0b' : '#ef4444'
   const bgColor = pctVal > 70 ? '#d1fae5' : pctVal > 40 ? '#fef3c7' : '#fee2e2'
 
   const statusLabel = pctVal > 70 ? 'Healthy' : pctVal > 40 ? 'Warning' : 'Critical'
@@ -112,7 +112,7 @@ function MiniGauge({ value, size = 48 }: { value: number; size?: number }) {
   const c = Math.PI * 2 * r
   const pctVal = Math.max(0, Math.min(100, value))
   const fill = (pctVal / 100) * c
-  const color = pctVal > 70 ? '#10b981' : pctVal > 40 ? '#f59e0b' : '#ef4444'
+  const color = pctVal > 70 ? '#2563EB' : pctVal > 40 ? '#f59e0b' : '#ef4444'
   return (
     <svg width={size} height={size} className="-rotate-90">
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="4" />
@@ -441,7 +441,7 @@ export default function AIOperatingRoomPage() {
                     <circle cx={40} cy={40} r={32} fill="none" stroke="#e2e8f0" strokeWidth="8" />
                     <motion.circle
                       cx={40} cy={40} r={32} fill="none"
-                      stroke={overallScore > 70 ? '#10b981' : overallScore > 40 ? '#f59e0b' : '#ef4444'}
+                      stroke={overallScore > 70 ? '#2563EB' : overallScore > 40 ? '#f59e0b' : '#ef4444'}
                       strokeWidth="8" strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 32}
                       strokeDashoffset={2 * Math.PI * 32}

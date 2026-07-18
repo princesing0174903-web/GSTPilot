@@ -118,7 +118,7 @@ function NoticeCategoryChart({ notices }: { notices: Notice[] }) {
   const catCounts: Record<string, number> = {}
   for (const n of notices) catCounts[n.category] = (catCounts[n.category] ?? 0) + 1
   const palette: Record<string, string> = {
-    GST: '#10b981', 'Income Tax': '#f59e0b', ROC: '#6ee7b7', Labour: '#94a3b8', Custom: '#a7f3d0',
+    GST: '#2563EB', 'Income Tax': '#f59e0b', ROC: '#6ee7b7', Labour: '#94a3b8', Custom: '#a7f3d0',
   }
   const data = Object.entries(catCounts).map(([label, value]) => ({ label, value, color: palette[label] ?? '#94a3b8' }))
   const cx = 75
@@ -199,10 +199,10 @@ function ResponseTimeChart() {
         return <line key={i} x1={padL} y1={y} x2={w - 10} y2={y} stroke="#e2e8f0" strokeWidth="0.5" />
       })}
       <path d={areaD} fill="url(#responseGrad)" opacity="0.3" />
-      <path d={pathD} fill="none" stroke="#10b981" strokeWidth="2" />
+      <path d={pathD} fill="none" stroke="#2563EB" strokeWidth="2" />
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r="3.5" fill="#10b981" stroke="white" strokeWidth="1.5" />
+          <circle cx={p.x} cy={p.y} r="3.5" fill="#2563EB" stroke="white" strokeWidth="1.5" />
           <text x={p.x} y={p.y - 8} className="text-[8px] fill-slate-500" textAnchor="middle">{p.v}d</text>
         </g>
       ))}
@@ -213,8 +213,8 @@ function ResponseTimeChart() {
       <text x={padL - 5} y={padT + chartH + 4} className="text-[8px] fill-slate-400" textAnchor="end">5d</text>
       <defs>
         <linearGradient id="responseGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
         </linearGradient>
       </defs>
     </svg>

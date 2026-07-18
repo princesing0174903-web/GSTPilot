@@ -91,7 +91,7 @@ export function FloatingDock({
                   whileTap={{ scale: 0.94 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    'relative flex h-10 w-10 items-center justify-center rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400/60',
+                    'relative flex h-10 w-10 items-center justify-center rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB]/60',
                     item.active
                       ? 'bg-white/[0.12] text-foreground'
                       : 'text-muted-foreground hover:bg-white/[0.08] hover:text-foreground',

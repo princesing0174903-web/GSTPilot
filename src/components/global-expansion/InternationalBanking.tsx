@@ -316,7 +316,7 @@ function LiveCashPositionDashboard() {
 
   const maxBankTotal = byBank.length > 0 ? byBank[0].total : 1;
   const totalForDonut = byCurrency.reduce((s, c) => s + c.total, 0);
-  const DONUT_COLORS = ['#10b981', '#14b8a6', '#06b6d4', '#a78bfa', '#f59e0b', '#fb7185', '#84cc16', '#f97316'];
+  const DONUT_COLORS = ['#2563EB', '#14b8a6', '#3B82F6', '#a78bfa', '#f59e0b', '#fb7185', '#84cc16', '#f97316'];
 
   return (
     <Card className="border-white/[0.06] bg-white/[0.02]">

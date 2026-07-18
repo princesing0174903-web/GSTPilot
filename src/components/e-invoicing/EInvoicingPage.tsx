@@ -39,7 +39,7 @@ function ValidationGauge({ percent }: { percent: number }) {
   return (
     <svg width="100" height="100" className="overflow-visible">
       <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />
-      <circle cx="50" cy="50" r={r} fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} transform="rotate(-90 50 50)" />
+      <circle cx="50" cy="50" r={r} fill="none" stroke="#2563EB" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} transform="rotate(-90 50 50)" />
       <text x="50" y="46" textAnchor="middle" className="text-lg font-bold fill-emerald-600 dark:fill-emerald-400">{percent}%</text>
       <text x="50" y="60" textAnchor="middle" className="text-[8px] fill-muted-foreground">Pass Rate</text>
     </svg>
@@ -57,7 +57,7 @@ function DailyIRNChart({ data }: { data: { day: string; count: number }[] }) {
         const barH = (d.count / max) * (h - 10)
         return (
           <g key={d.day}>
-            <rect x={i * (barW + gap)} y={h - barH} width={barW} height={barH} rx={3} fill="#10b981" opacity={0.6 + (d.count / max) * 0.4} />
+            <rect x={i * (barW + gap)} y={h - barH} width={barW} height={barH} rx={3} fill="#2563EB" opacity={0.6 + (d.count / max) * 0.4} />
             <text x={i * (barW + gap) + barW / 2} y={h + 14} textAnchor="middle" className="text-[9px] fill-muted-foreground">{d.day}</text>
           </g>
         )

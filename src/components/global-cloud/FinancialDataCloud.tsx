@@ -413,7 +413,7 @@ export default function FinancialDataCloud() {
                       initial={{ scale: 0.92, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ duration: 0.5, delay: 0.3 }}
-                      className="relative flex w-44 flex-col items-center rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-emerald-500/[0.06] to-transparent p-4 shadow-[0_0_50px_-10px_rgba(16,185,129,0.5)]"
+                      className="relative flex w-44 flex-col items-center rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-emerald-500/[0.06] to-transparent p-4 shadow-[0_0_50px_-10px_rgba(37,99,235,0.5)]"
                     >
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-500/15">
                         <Cloud className="h-6 w-6 text-emerald-300" />

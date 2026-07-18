@@ -67,7 +67,7 @@ const AVATAR_COLORS: Record<string, string> = {
   'Karthik Nair': '#f97316',
   'Deepika Rao': '#a855f7',
   'Rajesh Kumar': '#f59e0b',
-  'Legal Bot': '#06b6d4',
+  'Legal Bot': '#3B82F6',
 }
 
 function initials(name: string) {
@@ -317,7 +317,7 @@ export default function EnterpriseDocuments() {
           label="Total Documents"
           value={stats.total}
           icon={FileText}
-          accent="#10b981"
+          accent="#2563EB"
           sub="across all companies"
         />
         <StatCard
@@ -331,7 +331,7 @@ export default function EnterpriseDocuments() {
           label="Shared with me"
           value={stats.shared}
           icon={Users}
-          accent="#06b6d4"
+          accent="#3B82F6"
           sub="cross-team access"
         />
         <StatCard
@@ -634,7 +634,7 @@ export default function EnterpriseDocuments() {
                     <AvatarFallback
                       className="text-[8px] font-semibold text-white"
                       style={{
-                        background: ['#8b5cf6', '#06b6d4', '#14b8a6', '#ec4899', '#f97316'][i % 5],
+                        background: ['#8b5cf6', '#3B82F6', '#14b8a6', '#ec4899', '#f97316'][i % 5],
                       }}
                     >
                       {a}

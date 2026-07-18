@@ -496,7 +496,7 @@ function SupplyChainMap() {
               const y2 = (destinations.indexOf(r.destination) + 0.5) * (100 / destinations.length);
               const intensity = r.volume / maxVolume;
               const isHigh = r.status === 'delivered';
-              const color = isHigh ? '#10b981' : r.status === 'in-transit' ? '#f59e0b' : r.status === 'customs' ? '#f43f5e' : '#71717a';
+              const color = isHigh ? '#2563EB' : r.status === 'in-transit' ? '#f59e0b' : r.status === 'customs' ? '#f43f5e' : '#71717a';
               return (
                 <motion.path
                   key={r.key}

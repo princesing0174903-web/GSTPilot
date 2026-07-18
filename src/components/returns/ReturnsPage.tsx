@@ -1366,7 +1366,7 @@ export default function ReturnsPage() {
   // ═════════════════════════════════════════════════════════════════════
 
   const healthScore = healthMetrics.overallHealth;
-  const healthColor = healthScore > 80 ? '#10b981' : healthScore > 50 ? '#f59e0b' : '#ef4444';
+  const healthColor = healthScore > 80 ? '#2563EB' : healthScore > 50 ? '#f59e0b' : '#ef4444';
 
   // ── Empty state when no returns exist ──────────────────────────────
   if (returns.length === 0 && !returnsLoading && !clientsLoading) {

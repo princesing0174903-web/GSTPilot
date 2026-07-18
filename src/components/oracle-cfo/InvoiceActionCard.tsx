@@ -293,26 +293,26 @@ export function InvoiceActionCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className="mt-3 overflow-hidden rounded-xl border"
-      style={{ borderColor: 'rgba(16,185,129,0.2)', background: '#0a0a0a' }}
+      style={{ borderColor: 'rgba(37,99,235,0.2)', background: '#0a0a0a' }}
     >
       {/* ─── Header ─── */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(5,150,105,0.04) 100%)' }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(5,150,105,0.25) 100%)' }}
+            style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.25) 0%, rgba(5,150,105,0.25) 100%)' }}
           >
-            <FileText className="h-5 w-5" style={{ color: '#10b981' }} />
+            <FileText className="h-5 w-5" style={{ color: '#2563EB' }} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-white">Create Invoice</span>
               <span
                 className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}
+                style={{ background: 'rgba(37,99,235,0.15)', color: '#2563EB' }}
               >
                 Production
               </span>
@@ -331,8 +331,8 @@ export function InvoiceActionCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {phase === 'analyzing' && <Loader2 className="h-4 w-4 animate-spin text-white/40" />}
-          {phase === 'executing' && <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#10b981' }} />}
-          {phase === 'executed' && <CheckCircle2 className="h-4 w-4" style={{ color: '#10b981' }} />}
+          {phase === 'executing' && <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#2563EB' }} />}
+          {phase === 'executed' && <CheckCircle2 className="h-4 w-4" style={{ color: '#2563EB' }} />}
           {phase === 'failed' && <AlertTriangle className="h-4 w-4" style={{ color: '#ef4444' }} />}
           {phase === 'cancelled' && <X className="h-4 w-4 text-white/40" />}
         </div>
@@ -343,7 +343,7 @@ export function InvoiceActionCard({
         {/* ANALYZING */}
         {phase === 'analyzing' && (
           <div className="flex items-center gap-3 py-4">
-            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
             <div className="text-sm text-white/60">
               <div>Extracting invoice details from your message…</div>
               <div className="text-xs text-white/40 mt-0.5">Customer, amount, GST rate, dates, payment terms</div>
@@ -431,7 +431,7 @@ export function InvoiceActionCard({
         {phase === 'executing' && (
           <div className="space-y-3 py-2">
             <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
               <div className="text-sm text-white/80">
                 <div className="font-medium">Creating invoice…</div>
                 <div className="text-xs text-white/50 mt-0.5">Writing to database · Generating PDF · Sending notifications</div>
@@ -471,7 +471,7 @@ export function InvoiceActionCard({
               <button
                 onClick={handleRetry}
                 className="mt-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 <ArrowRight className="h-3.5 w-3.5" /> Retry
               </button>
@@ -505,7 +505,7 @@ export function InvoiceActionCard({
               type="button"
               onClick={handleApprove}
               className="flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
-              style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
             >
               <Check className="h-4 w-4" />
               Approve Invoice
@@ -529,7 +529,7 @@ export function InvoiceActionCard({
               Cancel
             </button>
             <div className="ml-auto flex items-center gap-1 text-xs text-white/40">
-              <ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />
+              <ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />
               Audit logged
             </div>
           </div>
@@ -561,7 +561,7 @@ function CustomerPicker({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4" style={{ color: '#10b981' }} />
+        <Building2 className="h-4 w-4" style={{ color: '#2563EB' }} />
         <h4 className="text-xs font-bold uppercase tracking-wide text-white/60">
           {alternatives.length > 0 ? 'Select Customer' : 'No Match Found'}
         </h4>
@@ -595,9 +595,9 @@ function CustomerPicker({
         <button
           onClick={onCreateNew}
           className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium text-white/70 transition-all hover:text-white hover:bg-white/5"
-          style={{ borderColor: 'rgba(16,185,129,0.3)' }}
+          style={{ borderColor: 'rgba(37,99,235,0.3)' }}
         >
-          <Plus className="h-4 w-4" style={{ color: '#10b981' }} />
+          <Plus className="h-4 w-4" style={{ color: '#2563EB' }} />
           Create new customer
         </button>
       )}
@@ -663,7 +663,7 @@ function ApprovalSummaryView({
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#0d0d0d' }}
         >
           <div className="flex items-center gap-1.5 mb-2">
-            <Building2 className="h-3.5 w-3.5" style={{ color: '#10b981' }} />
+            <Building2 className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />
             <span className="text-[10px] font-bold uppercase tracking-wide text-white/50">Customer</span>
           </div>
           {isEditing ? (
@@ -697,7 +697,7 @@ function ApprovalSummaryView({
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#0d0d0d' }}
         >
           <div className="flex items-center gap-1.5 mb-2">
-            <FileText className="h-3.5 w-3.5" style={{ color: '#10b981' }} />
+            <FileText className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />
             <span className="text-[10px] font-bold uppercase tracking-wide text-white/50">Invoice</span>
           </div>
           <div className="text-sm font-mono font-semibold text-white">
@@ -717,7 +717,7 @@ function ApprovalSummaryView({
         className="rounded-lg border overflow-hidden"
         style={{ borderColor: 'rgba(255,255,255,0.06)' }}
       >
-        <div className="px-3 py-2 flex items-center gap-1.5" style={{ background: 'rgba(16,185,129,0.04)' }}>
+        <div className="px-3 py-2 flex items-center gap-1.5" style={{ background: 'rgba(37,99,235,0.04)' }}>
           <Zap className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
           <span className="text-[10px] font-bold uppercase tracking-wide text-white/60">
             GST Calculation · {summary.gst.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST (Intra-state)'}
@@ -735,7 +735,7 @@ function ApprovalSummaryView({
           )}
           <div
             className="flex items-center justify-between px-3 py-2"
-            style={{ background: 'rgba(16,185,129,0.06)' }}
+            style={{ background: 'rgba(37,99,235,0.06)' }}
           >
             <span className="text-sm font-bold text-white">Grand Total</span>
             {isEditing ? (
@@ -746,7 +746,7 @@ function ApprovalSummaryView({
                 className="w-32 bg-transparent text-right text-sm font-mono font-bold text-white border-b border-white/10 focus:border-emerald-500/50 focus:outline-none"
               />
             ) : (
-              <span className="text-sm font-mono font-bold" style={{ color: '#10b981' }}>
+              <span className="text-sm font-mono font-bold" style={{ color: '#2563EB' }}>
                 ₹{summary.amounts.grandTotal.toLocaleString('en-IN')}
               </span>
             )}
@@ -826,14 +826,14 @@ function IntegrationChip({
     <div
       className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5"
       style={{
-        borderColor: connected ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)',
-        background: connected ? 'rgba(16,185,129,0.04)' : '#0d0d0d',
+        borderColor: connected ? 'rgba(37,99,235,0.2)' : 'rgba(255,255,255,0.06)',
+        background: connected ? 'rgba(37,99,235,0.04)' : '#0d0d0d',
       }}
     >
-      <Icon className="h-3.5 w-3.5" style={{ color: connected ? '#10b981' : 'rgba(255,255,255,0.3)' }} />
+      <Icon className="h-3.5 w-3.5" style={{ color: connected ? '#2563EB' : 'rgba(255,255,255,0.3)' }} />
       <div className="flex flex-col">
         <span className="text-[10px] font-bold uppercase tracking-wide text-white/60">{label}</span>
-        <span className="text-[10px]" style={{ color: connected ? '#10b981' : 'rgba(255,255,255,0.4)' }}>
+        <span className="text-[10px]" style={{ color: connected ? '#2563EB' : 'rgba(255,255,255,0.4)' }}>
           {detail}
         </span>
       </div>
@@ -855,9 +855,9 @@ function ExecutionResultView({
       {/* Success header */}
       <div
         className="rounded-lg border px-3 py-3 flex items-start gap-3"
-        style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.05)' }}
+        style={{ borderColor: 'rgba(37,99,235,0.3)', background: 'rgba(37,99,235,0.05)' }}
       >
-        <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+        <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#2563EB' }} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-white">Invoice created successfully</div>
           <div className="text-xs text-white/60 mt-1">
@@ -879,7 +879,7 @@ function ExecutionResultView({
               <span
                 key={i}
                 className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono"
-                style={{ background: 'rgba(16,185,129,0.08)', color: 'rgba(16,185,129,0.8)' }}
+                style={{ background: 'rgba(37,99,235,0.08)', color: 'rgba(37,99,235,0.8)' }}
               >
                 <Check className="h-2.5 w-2.5" />
                 {r.collection}/{r.id.slice(-8)}
@@ -894,7 +894,7 @@ function ExecutionResultView({
         <button
           onClick={onDownloadPDF}
           className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-all hover:brightness-110"
-          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
         >
           <Download className="h-4 w-4" />
           Download Invoice PDF
@@ -919,7 +919,7 @@ function ExecutionResultView({
 
       {/* Audit confirmation */}
       <div className="flex items-center gap-1.5 text-xs text-white/40 pt-1">
-        <ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />
+        <ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />
         <span>Full audit trail recorded · Dashboard will refresh automatically</span>
       </div>
     </div>
@@ -939,9 +939,9 @@ function DeliveryStatusRow({
 }) {
   const isSuccess = status === 'sent';
   const isNotConnected = status === 'not-connected';
-  const color = isSuccess ? '#10b981' : isNotConnected ? '#f59e0b' : '#ef4444';
-  const bgColor = isSuccess ? 'rgba(16,185,129,0.04)' : isNotConnected ? 'rgba(245,158,11,0.04)' : 'rgba(239,68,68,0.04)';
-  const borderColor = isSuccess ? 'rgba(16,185,129,0.15)' : isNotConnected ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
+  const color = isSuccess ? '#2563EB' : isNotConnected ? '#f59e0b' : '#ef4444';
+  const bgColor = isSuccess ? 'rgba(37,99,235,0.04)' : isNotConnected ? 'rgba(245,158,11,0.04)' : 'rgba(239,68,68,0.04)';
+  const borderColor = isSuccess ? 'rgba(37,99,235,0.15)' : isNotConnected ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
 
   return (
     <div

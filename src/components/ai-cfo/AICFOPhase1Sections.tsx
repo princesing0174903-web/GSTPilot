@@ -150,7 +150,7 @@ function HealthGauge({ score, size = 160 }: { score: number; size?: number }) {
   const c = 2 * Math.PI * r;
   const offset = c - (score / 100) * c;
   const tier = score >= 80 ? 'Excellent' : score >= 65 ? 'Healthy' : score >= 50 ? 'Needs Attention' : score >= 35 ? 'At Risk' : 'Critical';
-  const color = score >= 80 ? '#10b981' : score >= 65 ? '#06b6d4' : score >= 50 ? '#f59e0b' : score >= 35 ? '#f97316' : '#ef4444';
+  const color = score >= 80 ? '#2563EB' : score >= 65 ? '#3B82F6' : score >= 50 ? '#f59e0b' : score >= 35 ? '#f97316' : '#ef4444';
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -421,7 +421,7 @@ export default function AICFOPhase1Sections() {
               {revenue.sparkline.length > 1 && (
                 <div className="mb-5">
                   <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">12-Month Revenue Trend</p>
-                  <BarChart data={revenue.sparkline} labels={revenue.periods.monthly.map((m) => m.month)} color="#10b981" />
+                  <BarChart data={revenue.sparkline} labels={revenue.periods.monthly.map((m) => m.month)} color="#2563EB" />
                 </div>
               )}
               {/* Top Clients */}
@@ -967,7 +967,7 @@ function MetricBox({ label, value, sub, trend, icon: Icon }: { label: string; va
 }
 
 function FactorCard({ factor, delay }: { factor: HealthScoreFactor; delay: number }) {
-  const color = factor.score >= 70 ? '#10b981' : factor.score >= 50 ? '#f59e0b' : '#ef4444';
+  const color = factor.score >= 70 ? '#2563EB' : factor.score >= 50 ? '#f59e0b' : '#ef4444';
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -1002,7 +1002,7 @@ function FactorCard({ factor, delay }: { factor: HealthScoreFactor; delay: numbe
   );
 }
 
-function BarChart({ data, labels, color = '#10b981', height = 60 }: { data: number[]; labels?: string[]; color?: string; height?: number }) {
+function BarChart({ data, labels, color = '#2563EB', height = 60 }: { data: number[]; labels?: string[]; color?: string; height?: number }) {
   if (data.length < 2) return null;
   const max = Math.max(...data, 1);
   return (
@@ -1045,7 +1045,7 @@ function ProjectionCard({ proj }: { proj: CashFlowProjection }) {
 }
 
 function CategoryBar({ cat }: { cat: ExpenseCategoryBreakdown }) {
-  const color = cat.trend === 'up' ? '#f59e0b' : cat.trend === 'down' ? '#10b981' : '#06b6d4';
+  const color = cat.trend === 'up' ? '#f59e0b' : cat.trend === 'down' ? '#2563EB' : '#3B82F6';
   return (
     <div className="rounded-md border border-white/[0.04] bg-white/[0.02] p-2.5">
       <div className="mb-1.5 flex items-center justify-between">
@@ -1095,7 +1095,7 @@ function CollectionRowCard({ row }: { row: CollectionRow }) {
           <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/[0.05]">
             <div
               className="h-full rounded-full"
-              style={{ width: `${row.collectionProbabilityPct}%`, background: row.collectionProbabilityPct >= 70 ? '#10b981' : row.collectionProbabilityPct >= 45 ? '#f59e0b' : '#ef4444' }}
+              style={{ width: `${row.collectionProbabilityPct}%`, background: row.collectionProbabilityPct >= 70 ? '#2563EB' : row.collectionProbabilityPct >= 45 ? '#f59e0b' : '#ef4444' }}
             />
           </div>
           <span className="text-[10px] font-medium text-foreground">{row.collectionProbabilityPct}%</span>

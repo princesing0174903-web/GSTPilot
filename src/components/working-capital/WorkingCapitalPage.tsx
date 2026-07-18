@@ -189,7 +189,7 @@ function ScoreGauge({ score, label, icon: Icon, size = 140 }: {
   const strokeDashoffset = circumference * (1 - score / 100);
 
   const getColor = (s: number) => {
-    if (s >= 70) return { stroke: '#10b981', fill: '#ecfdf5', text: 'text-emerald-600', bg: 'bg-emerald-50' };
+    if (s >= 70) return { stroke: '#2563EB', fill: '#ecfdf5', text: 'text-emerald-600', bg: 'bg-emerald-50' };
     if (s >= 40) return { stroke: '#f59e0b', fill: '#fffbeb', text: 'text-amber-600', bg: 'bg-amber-50' };
     return { stroke: '#ef4444', fill: '#fef2f2', text: 'text-red-600', bg: 'bg-red-50' };
   };
@@ -236,7 +236,7 @@ function ScoreGauge({ score, label, icon: Icon, size = 140 }: {
 // SPARKLINE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', width = 120, height = 32 }: {
+function Sparkline({ data, color = '#2563EB', width = 120, height = 32 }: {
   data: number[]; color?: string; width?: number; height?: number;
 }) {
   const max = Math.max(...data);
@@ -314,8 +314,8 @@ function RevenueAreaChart({ data }: { data: typeof monthlyRevenue }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
-          <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity={0.02} />
         </linearGradient>
       </defs>
       {/* Grid lines */}
@@ -348,7 +348,7 @@ function RevenueAreaChart({ data }: { data: typeof monthlyRevenue }) {
       <motion.path
         d={linePath}
         fill="none"
-        stroke="#10b981"
+        stroke="#2563EB"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -360,7 +360,7 @@ function RevenueAreaChart({ data }: { data: typeof monthlyRevenue }) {
         <motion.circle
           key={i}
           cx={p.x} cy={p.y} r="3.5"
-          fill="white" stroke="#10b981" strokeWidth="2"
+          fill="white" stroke="#2563EB" strokeWidth="2"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ duration: 0.3, delay: 0.5 + i * 0.08 }}
@@ -396,7 +396,7 @@ function EMIChart({ principal, rate, tenure }: { principal: number; rate: number
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="16" />
         <motion.circle
           cx={cx} cy={cy} r={r} fill="none"
-          stroke="#10b981" strokeWidth="16"
+          stroke="#2563EB" strokeWidth="16"
           strokeDasharray={`${principalDash} ${circumference}`}
           strokeLinecap="round"
           transform={`rotate(-90 ${cx} ${cy})`}
@@ -503,7 +503,7 @@ function BusinessHealthTab({ scores, invoices }: { scores: ReturnType<typeof com
                     <span className="text-[10px] text-slate-400 font-medium">6M Trend</span>
                     <Sparkline
                       data={item.history}
-                      color={item.score >= 70 ? '#10b981' : item.score >= 40 ? '#f59e0b' : '#ef4444'}
+                      color={item.score >= 70 ? '#2563EB' : item.score >= 40 ? '#f59e0b' : '#ef4444'}
                       width={80}
                       height={28}
                     />

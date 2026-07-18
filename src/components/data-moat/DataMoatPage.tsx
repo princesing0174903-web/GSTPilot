@@ -166,7 +166,7 @@ const DEMO_CLIENTS: DemoClientProfile[] = [];
 // SVG SPARKLINE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', width = 120, height = 36 }: {
+function Sparkline({ data, color = '#2563EB', width = 120, height = 36 }: {
   data: number[];
   color?: string;
   width?: number;
@@ -208,7 +208,7 @@ function Sparkline({ data, color = '#10b981', width = 120, height = 36 }: {
 // SVG BAR CHART COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function BarChart({ data, labels, color = '#10b981', width = 300, height = 140 }: {
+function BarChart({ data, labels, color = '#2563EB', width = 300, height = 140 }: {
   data: number[];
   labels: string[];
   color?: string;
@@ -291,7 +291,7 @@ function GaugeChart({ value, maxValue = 100, size = 180 }: {
   const largeArcFlag = pct > 0.5 ? 1 : 0;
 
   const bgColor = '#e2e8f0';
-  const fillColor = value >= 80 ? '#10b981' : value >= 60 ? '#f59e0b' : '#ef4444';
+  const fillColor = value >= 80 ? '#2563EB' : value >= 60 ? '#f59e0b' : '#ef4444';
 
   return (
     <svg width={size} height={size / 2 + 30}>
@@ -359,13 +359,13 @@ function DataFlowVisualization() {
               y1={s.y + 15}
               x2="280"
               y2="180"
-              stroke="#10b981"
+              stroke="#2563EB"
               strokeWidth="1.5"
               strokeDasharray="6,4"
               opacity="0.3"
             />
             {/* Animated dot */}
-            <circle r="3" fill="#10b981" opacity="0.8">
+            <circle r="3" fill="#2563EB" opacity="0.8">
               <animateMotion
                 dur={`${2 + i * 0.3}s`}
                 repeatCount="indefinite"
@@ -375,25 +375,25 @@ function DataFlowVisualization() {
           </g>
         ))}
         {/* Center hub */}
-        <circle cx="280" cy="180" r="45" fill="#10b981" opacity="0.1" />
-        <circle cx="280" cy="180" r="35" fill="#10b981" opacity="0.15" />
-        <circle cx="280" cy="180" r="25" fill="#10b981" opacity="0.2" />
+        <circle cx="280" cy="180" r="45" fill="#2563EB" opacity="0.1" />
+        <circle cx="280" cy="180" r="35" fill="#2563EB" opacity="0.15" />
+        <circle cx="280" cy="180" r="25" fill="#2563EB" opacity="0.2" />
         {/* Outgoing lines to insights */}
-        <line x1="325" y1="155" x2="460" y2="60" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
-        <line x1="325" y1="180" x2="460" y2="140" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
-        <line x1="325" y1="205" x2="460" y2="220" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
-        <line x1="325" y1="180" x2="460" y2="300" stroke="#059669" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+        <line x1="325" y1="155" x2="460" y2="60" stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+        <line x1="325" y1="180" x2="460" y2="140" stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+        <line x1="325" y1="205" x2="460" y2="220" stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
+        <line x1="325" y1="180" x2="460" y2="300" stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.3" />
         {/* Animated outgoing dots */}
-        <circle r="3" fill="#059669" opacity="0.8">
+        <circle r="3" fill="#1D4ED8" opacity="0.8">
           <animateMotion dur="3s" repeatCount="indefinite" path="M325,155 L460,60" />
         </circle>
-        <circle r="3" fill="#059669" opacity="0.8">
+        <circle r="3" fill="#1D4ED8" opacity="0.8">
           <animateMotion dur="2.5s" repeatCount="indefinite" path="M325,180 L460,140" />
         </circle>
-        <circle r="3" fill="#059669" opacity="0.8">
+        <circle r="3" fill="#1D4ED8" opacity="0.8">
           <animateMotion dur="3.5s" repeatCount="indefinite" path="M325,205 L460,220" />
         </circle>
-        <circle r="3" fill="#059669" opacity="0.8">
+        <circle r="3" fill="#1D4ED8" opacity="0.8">
           <animateMotion dur="2.8s" repeatCount="indefinite" path="M325,180 L460,300" />
         </circle>
       </svg>
@@ -615,7 +615,7 @@ function BusinessProfileTab({ selectedClient }: { selectedClient: DemoClientProf
               ))}
               <div className="flex justify-between items-center pt-1">
                 <span className="text-[11px] text-slate-500">Revenue Trend</span>
-                <Sparkline data={c.revenueTrend} color="#10b981" width={100} height={28} />
+                <Sparkline data={c.revenueTrend} color="#2563EB" width={100} height={28} />
               </div>
             </CardContent>
           </Card>
@@ -706,7 +706,7 @@ function BusinessProfileTab({ selectedClient }: { selectedClient: DemoClientProf
             <CardContent className="px-4 pb-4 space-y-2.5">
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-500">Revenue Trend</span>
-                <Sparkline data={c.revenueTrend} color="#10b981" />
+                <Sparkline data={c.revenueTrend} color="#2563EB" />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-500">Client Count Trend</span>
@@ -760,7 +760,7 @@ function BusinessProfileTab({ selectedClient }: { selectedClient: DemoClientProf
               ))}
               <div className="flex justify-between items-center pt-1">
                 <span className="text-[11px] text-slate-500">Health Trend</span>
-                <Sparkline data={c.scoreHistory} color="#10b981" width={90} height={24} />
+                <Sparkline data={c.scoreHistory} color="#2563EB" width={90} height={24} />
               </div>
             </CardContent>
           </Card>
@@ -841,7 +841,7 @@ function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) 
       key: 'invoices',
       title: 'Invoices Memory',
       icon: FileText,
-      color: '#10b981',
+      color: '#2563EB',
       insights: [
         { label: 'Total invoices processed', value: c.invoicesCount.toLocaleString('en-IN') },
         { label: 'Average invoice value', value: formatINR(c.avgInvoiceValue) },
@@ -901,7 +901,7 @@ function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) 
       key: 'growth',
       title: 'Growth Trends',
       icon: TrendingUp,
-      color: '#06b6d4',
+      color: '#3B82F6',
       insights: [
         { label: 'Revenue growth rate', value: `${c.revenueGrowthRate}%` },
         { label: 'Client acquisition', value: c.clientAcquisition },
@@ -962,7 +962,7 @@ function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) 
       {/* Memory Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Insights', value: memorySections.reduce((s, sec) => s + sec.insights.length, 0).toString(), icon: Brain, color: '#10b981' },
+          { label: 'Total Insights', value: memorySections.reduce((s, sec) => s + sec.insights.length, 0).toString(), icon: Brain, color: '#2563EB' },
           { label: 'Memory Categories', value: memorySections.length.toString(), icon: Layers, color: '#14b8a6' },
           { label: 'Data Points', value: (c.invoicesCount + c.gstReturnsCount + c.documentsCount).toLocaleString('en-IN'), icon: Database, color: '#f59e0b' },
           { label: 'Last Computed', value: formatDate(c.lastActivity), icon: Clock, color: '#64748b' },
@@ -1023,7 +1023,7 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
   const freshnessLabel = c.dataFreshness === 'fresh' ? 'Fresh (<7 days)' : c.dataFreshness === 'stale' ? 'Stale (7-30 days)' : 'Outdated (>30 days)';
 
   const qualityMetrics = [
-    { label: 'Completeness', value: c.profileCompleteness, color: '#10b981' },
+    { label: 'Completeness', value: c.profileCompleteness, color: '#2563EB' },
     { label: 'Accuracy', value: c.dataQualityScore, color: '#14b8a6' },
     { label: 'Timeliness', value: c.dataFreshness === 'fresh' ? 95 : c.dataFreshness === 'stale' ? 65 : 35, color: '#f59e0b' },
     { label: 'Consistency', value: Math.max(70, c.dataQualityScore - 5), color: '#64748b' },
@@ -1038,9 +1038,9 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
       {/* Header Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Data Points', value: `${(totalDataPoints).toLocaleString('en-IN')} data points across 156 businesses`, icon: Database, color: '#10b981' },
+          { label: 'Total Data Points', value: `${(totalDataPoints).toLocaleString('en-IN')} data points across 156 businesses`, icon: Database, color: '#2563EB' },
           { label: 'Data Quality', value: `${c.dataQualityScore}%`, icon: Shield, color: '#14b8a6' },
-          { label: 'Data Freshness', value: freshnessLabel, isFreshness: true, icon: RefreshCw, color: c.dataFreshness === 'fresh' ? '#10b981' : c.dataFreshness === 'stale' ? '#f59e0b' : '#ef4444' },
+          { label: 'Data Freshness', value: freshnessLabel, isFreshness: true, icon: RefreshCw, color: c.dataFreshness === 'fresh' ? '#2563EB' : c.dataFreshness === 'stale' ? '#f59e0b' : '#ef4444' },
           { label: 'Data Types', value: `${dataInventory.length} categories`, icon: Layers2, color: '#64748b' },
         ].map((stat, i) => (
           <Card key={i} className="border-slate-200">
@@ -1141,7 +1141,7 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
             <BarChart
               data={[28000, 34000, 42000, 51000, 63000, 78000]}
               labels={['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']}
-              color="#10b981"
+              color="#2563EB"
               width={280}
               height={140}
             />
@@ -1220,9 +1220,9 @@ function CompetitiveMoatTab({ selectedClient }: { selectedClient: DemoClientProf
   );
 
   const defensibilityScores = [
-    { category: 'Transaction Data', score: 92, color: '#10b981' },
+    { category: 'Transaction Data', score: 92, color: '#2563EB' },
     { category: 'Compliance History', score: 88, color: '#14b8a6' },
-    { category: 'Filing Patterns', score: 85, color: '#06b6d4' },
+    { category: 'Filing Patterns', score: 85, color: '#3B82F6' },
     { category: 'Client Relationships', score: 78, color: '#f59e0b' },
     { category: 'Notice Resolution', score: 72, color: '#8b5cf6' },
     { category: 'Banking Intelligence', score: 68, color: '#64748b' },
@@ -1283,9 +1283,9 @@ function CompetitiveMoatTab({ selectedClient }: { selectedClient: DemoClientProf
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
             {[
-              { degree: '1st degree', count: '156 clients', desc: 'Direct relationships', color: '#10b981' },
+              { degree: '1st degree', count: '156 clients', desc: 'Direct relationships', color: '#2563EB' },
               { degree: '2nd degree', count: '2,340 businesses', desc: 'Connected through clients', color: '#14b8a6' },
-              { degree: '3rd degree', count: '35,100 entities', desc: 'Extended network reach', color: '#06b6d4' },
+              { degree: '3rd degree', count: '35,100 entities', desc: 'Extended network reach', color: '#3B82F6' },
             ].map((level, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: level.color + '15' }}>

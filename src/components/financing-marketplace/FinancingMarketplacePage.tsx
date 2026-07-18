@@ -342,8 +342,8 @@ function VolumeBarChart() {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#059669" stopOpacity="0.4" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0.4" />
         </linearGradient>
       </defs>
       {/* Grid */}
@@ -398,7 +398,7 @@ function VolumeBarChart() {
 // SVG LINE CHART — Monthly Disbursement Trend
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MonthlyLineChart({ data, color = '#10b981', ySuffix = 'Cr', yPrefix = '₹' }: {
+function MonthlyLineChart({ data, color = '#2563EB', ySuffix = 'Cr', yPrefix = '₹' }: {
   data: { month: string; value: number }[];
   color?: string; ySuffix?: string; yPrefix?: string;
 }) {
@@ -564,8 +564,8 @@ function IndustryHeatmap() {
     // value 0-100 → emerald intensity
     if (val >= 80) return '#065f46';
     if (val >= 65) return '#047857';
-    if (val >= 50) return '#059669';
-    if (val >= 35) return '#10b981';
+    if (val >= 50) return '#1D4ED8';
+    if (val >= 35) return '#2563EB';
     if (val >= 20) return '#6ee7b7';
     return '#d1fae5';
   };
@@ -641,8 +641,8 @@ function InterestRateTrendChart() {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="rateArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0891b2" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#0891b2" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -659,13 +659,13 @@ function InterestRateTrendChart() {
       })}
       <motion.path d={areaPath} fill="url(#rateArea)"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} />
-      <motion.path d={linePath} fill="none" stroke="#0891b2" strokeWidth="2.5"
+      <motion.path d={linePath} fill="none" stroke="#2563EB" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
         transition={{ duration: 1.4, ease: 'easeInOut' as const }} />
       {points.map((p, i) => (
         <g key={i}>
-          <motion.circle cx={p.x} cy={p.y} r="3" fill="white" stroke="#0891b2" strokeWidth="2"
+          <motion.circle cx={p.x} cy={p.y} r="3" fill="white" stroke="#2563EB" strokeWidth="2"
             initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4 + i * 0.05 }} />
           <text x={p.x} y={height - 12} textAnchor="middle"
             className="fill-slate-500" fontSize="10">{p.month}</text>
@@ -2127,7 +2127,7 @@ function CapitalAnalyticsTab() {
             <CardDescription className="text-xs">Total capital disbursed per month over last 12 months (₹ Crores)</CardDescription>
           </CardHeader>
           <CardContent>
-            <MonthlyLineChart data={MONTHLY_DISBURSEMENT} color="#10b981" ySuffix="Cr" yPrefix="₹" />
+            <MonthlyLineChart data={MONTHLY_DISBURSEMENT} color="#2563EB" ySuffix="Cr" yPrefix="₹" />
           </CardContent>
         </Card>
       </div>

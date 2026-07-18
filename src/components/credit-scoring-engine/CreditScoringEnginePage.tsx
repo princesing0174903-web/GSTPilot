@@ -58,8 +58,8 @@ const COLORS = {
   emerald100: '#d1fae5',
   emerald200: '#a7f3d0',
   emerald400: '#34d399',
-  emerald500: '#10b981',
-  emerald600: '#059669',
+  emerald500: '#2563EB',
+  emerald600: '#1D4ED8',
   emerald700: '#047857',
   emerald800: '#065f46',
   slate100: '#f1f5f9',
@@ -81,7 +81,7 @@ const COLORS = {
   orange500: '#f97316',
   teal400: '#2dd4bf',
   teal500: '#14b8a6',
-  teal600: '#0d9488',
+  teal600: '#2563EB',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -46,7 +46,7 @@ const fmtDate = (d: string) => {
 
 // Score → color (emerald / amber / red)
 const scoreColor = (s: number) => {
-  if (s >= 75) return { hex: '#10b981', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200', label: 'Excellent' }
+  if (s >= 75) return { hex: '#2563EB', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200', label: 'Excellent' }
   if (s >= 50) return { hex: '#f59e0b', text: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-200', label: 'Moderate' }
   return { hex: '#ef4444', text: 'text-rose-600', bg: 'bg-rose-50', ring: 'ring-rose-200', label: 'High Risk' }
 }
@@ -158,13 +158,13 @@ interface NetNode {
 }
 
 const RELATION_COLORS: Record<NetNode['type'], { hex: string; label: string }> = {
-  vendor:     { hex: '#10b981', label: 'Vendor' },
-  customer:   { hex: '#059669', label: 'Customer' },
-  bank:       { hex: '#0d9488', label: 'Bank' },
+  vendor:     { hex: '#2563EB', label: 'Vendor' },
+  customer:   { hex: '#1D4ED8', label: 'Customer' },
+  bank:       { hex: '#2563EB', label: 'Bank' },
   nbfc:       { hex: '#0f766e', label: 'NBFC' },
   ca:         { hex: '#65a30d', label: 'CA Firm' },
   gov:        { hex: '#475569', label: 'Govt Body' },
-  insurance:  { hex: '#0891b2', label: 'Insurance' },
+  insurance:  { hex: '#2563EB', label: 'Insurance' },
   logistics:  { hex: '#7c3aed', label: 'Logistics' },
 }
 
@@ -316,9 +316,9 @@ function QrPattern({ size = 88, seed = 17 }: { size?: number; seed?: number }) {
         })
       )}
       {/* Center accent dot */}
-      <circle cx={size / 2} cy={size / 2} r={cellSize * 1.1} fill="#10b981" opacity={0.85} />
+      <circle cx={size / 2} cy={size / 2} r={cellSize * 1.1} fill="#2563EB" opacity={0.85} />
       <circle cx={size / 2} cy={size / 2} r={cellSize * 0.55} fill="#ffffff" />
-      <circle cx={size / 2} cy={size / 2} r={cellSize * 0.3} fill="#10b981" />
+      <circle cx={size / 2} cy={size / 2} r={cellSize * 0.3} fill="#2563EB" />
     </svg>
   )
 }
@@ -383,7 +383,7 @@ function ScoreGauge({ value, label, size = 130, icon: Icon }: {
 // SPARKLINE — 12-month score history mini chart
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 280, h = 56 }: {
+function Sparkline({ data, color = '#2563EB', w = 280, h = 56 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -474,11 +474,11 @@ function TrustNetworkGraph({ business }: { business: Business }) {
       <svg width="600" height="480" viewBox="0 0 600 480" className="mx-auto" style={{ maxWidth: 600 }}>
         <defs>
           <radialGradient id="net-center-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            <stop offset="0%" stopColor="#2563EB" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
           </radialGradient>
           <linearGradient id="net-center-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#059669" />
+            <stop offset="0%" stopColor="#1D4ED8" />
             <stop offset="100%" stopColor="#047857" />
           </linearGradient>
         </defs>
@@ -526,7 +526,7 @@ function TrustNetworkGraph({ business }: { business: Business }) {
         {/* Center node */}
         <g>
           <circle cx={center.x} cy={center.y} r="38" fill="url(#net-center-fill)" />
-          <circle cx={center.x} cy={center.y} r="38" fill="none" stroke="#10b981" strokeWidth="2" opacity="0.5">
+          <circle cx={center.x} cy={center.y} r="38" fill="none" stroke="#2563EB" strokeWidth="2" opacity="0.5">
             <animate attributeName="r" values="38;46;38" dur="2.5s" repeatCount="indefinite" />
             <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite" />
           </circle>
@@ -640,8 +640,8 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
       <defs>
         <linearGradient id="bell-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
@@ -661,7 +661,7 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}
       />
       <motion.path
-        d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
+        d={linePath} fill="none" stroke="#2563EB" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
         transition={{ duration: 1.5, ease: 'easeOut' as const }}
@@ -671,7 +671,7 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
       <line
         x1={padL + (BELL_MEAN / 100) * chartW} y1={padT}
         x2={padL + (BELL_MEAN / 100) * chartW} y2={padT + chartH}
-        stroke="#059669" strokeWidth="1.5" strokeDasharray="4,4"
+        stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="4,4"
       />
       <text
         x={padL + (BELL_MEAN / 100) * chartW}
@@ -789,7 +789,7 @@ function HeroBanner() {
     <motion.div {...fadeUp}>
       <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
         <div className="absolute inset-0 opacity-[0.04]" style={{
-          backgroundImage: 'radial-gradient(circle at 1px 1px, #10b981 1px, transparent 0)',
+          backgroundImage: 'radial-gradient(circle at 1px 1px, #2563EB 1px, transparent 0)',
           backgroundSize: '24px 24px',
         }} />
         <CardContent className="relative p-6 md:p-8">
@@ -856,10 +856,10 @@ function HeroBanner() {
 
 function StatsRow() {
   const stats = [
-    { label: 'Verified Businesses', value: 500000, suffix: '+', icon: Building2, color: '#10b981' },
-    { label: 'GSTIN Linked', value: 480000, suffix: '+', icon: FileCheck, color: '#059669' },
-    { label: 'Trust Score Avg', value: 99.2, suffix: '%', decimals: 1, icon: ShieldCheck, color: '#0d9488' },
-    { label: 'Transaction Volume', value: 50000, suffix: '+ Cr', icon: IndianRupee, color: '#0891b2' },
+    { label: 'Verified Businesses', value: 500000, suffix: '+', icon: Building2, color: '#2563EB' },
+    { label: 'GSTIN Linked', value: 480000, suffix: '+', icon: FileCheck, color: '#1D4ED8' },
+    { label: 'Trust Score Avg', value: 99.2, suffix: '%', decimals: 1, icon: ShieldCheck, color: '#2563EB' },
+    { label: 'Transaction Volume', value: 50000, suffix: '+ Cr', icon: IndianRupee, color: '#2563EB' },
   ]
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1276,8 +1276,8 @@ function TrustPathExplorer({ business }: { business: Business }) {
 
   // Fake path: business → partner bank → target
   const hops = [
-    { label: business.name, role: 'Source', score: business.trustScore, color: '#10b981' },
-    { label: 'HDFC Bank', role: 'Common Banking Partner', score: 97, color: '#0d9488' },
+    { label: business.name, role: 'Source', score: business.trustScore, color: '#2563EB' },
+    { label: 'HDFC Bank', role: 'Common Banking Partner', score: 97, color: '#2563EB' },
     { label: 'GSTN Network', role: 'Government Verification', score: 99, color: '#475569' },
     { label: targetB.name, role: 'Target', score: targetB.trustScore, color: scoreColor(targetB.trustScore).hex },
   ]
@@ -1376,10 +1376,10 @@ function TrustPathExplorer({ business }: { business: Business }) {
 
 function TrustNetworkTab({ business }: { business: Business }) {
   const stats = [
-    { label: 'Network Trust Score', value: business.trustScore + 1, suffix: '', icon: ShieldCheck, color: '#10b981' },
-    { label: 'Avg Partner Score', value: 87.4, suffix: '', decimals: 1, icon: Users, color: '#059669' },
+    { label: 'Network Trust Score', value: business.trustScore + 1, suffix: '', icon: ShieldCheck, color: '#2563EB' },
+    { label: 'Avg Partner Score', value: 87.4, suffix: '', decimals: 1, icon: Users, color: '#1D4ED8' },
     { label: 'High-Risk Connections', value: 1, suffix: '', icon: AlertTriangle, color: '#f59e0b' },
-    { label: 'Verified Connections', value: 9, suffix: '/10', icon: BadgeCheck, color: '#0d9488' },
+    { label: 'Verified Connections', value: 9, suffix: '/10', icon: BadgeCheck, color: '#2563EB' },
   ]
   return (
     <div className="space-y-4">
@@ -1711,7 +1711,7 @@ function DistributionTab() {
                 <span>Low (60)</span>
                 <div className="flex gap-0.5">
                   {[0.3, 0.45, 0.6, 0.75, 0.9].map((o) => (
-                    <div key={o} className="w-6 h-3 rounded-sm" style={{ backgroundColor: '#10b981', opacity: o }} />
+                    <div key={o} className="w-6 h-3 rounded-sm" style={{ backgroundColor: '#2563EB', opacity: o }} />
                   ))}
                 </div>
                 <span>High (90)</span>
@@ -1823,12 +1823,12 @@ export default function UniversalBusinessIDPage() {
         input[type='range']::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
           width: 16px; height: 16px; border-radius: 50%;
-          background: #10b981; cursor: pointer;
-          border: 2px solid #ffffff; box-shadow: 0 0 0 1px #10b981;
+          background: #2563EB; cursor: pointer;
+          border: 2px solid #ffffff; box-shadow: 0 0 0 1px #2563EB;
         }
         input[type='range']::-moz-range-thumb {
           width: 16px; height: 16px; border-radius: 50%;
-          background: #10b981; cursor: pointer; border: 2px solid #ffffff;
+          background: #2563EB; cursor: pointer; border: 2px solid #ffffff;
         }
       `}</style>
 

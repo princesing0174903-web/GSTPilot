@@ -148,11 +148,11 @@ function Aurora({ className = '' }: { className?: string }) {
       <div className="aurora-blob absolute -left-32 top-0 h-[34rem] w-[34rem] rounded-full accent-gradient-soft blur-[120px] opacity-60" />
       <div
         className="aurora-blob absolute -right-24 top-40 h-[30rem] w-[30rem] rounded-full blur-[110px] opacity-50"
-        style={{ backgroundImage: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(59,130,246,0.14))' }}
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(59,130,246,0.14))' }}
       />
       <div
         className="aurora-blob absolute left-1/3 bottom-0 h-[26rem] w-[26rem] rounded-full blur-[120px] opacity-40"
-        style={{ backgroundImage: 'linear-gradient(135deg, rgba(16,185,129,0.16), rgba(6,182,212,0.10))' }}
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(37,99,235,0.16), rgba(59,130,246,0.10))' }}
       />
     </div>
   );
@@ -1017,8 +1017,8 @@ function DashboardShowcaseSection() {
                               <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
                             </linearGradient>
                             <linearGradient id="showcaseLine" x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#10b981" />
-                              <stop offset="50%" stopColor="#06b6d4" />
+                              <stop offset="0%" stopColor="#2563EB" />
+                              <stop offset="50%" stopColor="#3B82F6" />
                               <stop offset="100%" stopColor="#3b82f6" />
                             </linearGradient>
                           </defs>

@@ -55,8 +55,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',

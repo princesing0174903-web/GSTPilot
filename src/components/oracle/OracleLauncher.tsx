@@ -83,7 +83,7 @@ export function OracleLauncher() {
           aria-label="Open GSTPilot Oracle"
           className={cn(
             'accent-gradient fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full shadow-lg',
-            navigating && 'ring-2 ring-emerald-400/50',
+            navigating && 'ring-2 ring-[#2563EB]/50',
           )}
         >
           {/* Slow 8s breathing glow (the ONLY continuous animation) */}
@@ -92,9 +92,9 @@ export function OracleLauncher() {
             animate={{
               scale: [1, 1.04, 1],
               boxShadow: [
-                '0 0 24px 4px rgba(16,185,129,0.25)',
-                '0 0 36px 6px rgba(6,182,212,0.35)',
-                '0 0 24px 4px rgba(16,185,129,0.25)',
+                '0 0 24px 4px rgba(37,99,235,0.30)',
+                '0 0 36px 6px rgba(59,130,246,0.40)',
+                '0 0 24px 4px rgba(37,99,235,0.30)',
               ],
             }}
             transition={{

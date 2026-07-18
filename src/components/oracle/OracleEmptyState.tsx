@@ -43,7 +43,7 @@ export function OracleEmptyState({ onPick, userName }: OracleEmptyStateProps) {
       >
         <div
           className="flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg shadow-emerald-500/20"
-          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
         >
           <InfinitySymbol size={34} />
         </div>

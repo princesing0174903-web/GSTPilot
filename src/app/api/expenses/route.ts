@@ -2,6 +2,43 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { autoCategorize } from '@/lib/invoices/expenses'
 import { graphEvents } from '@/lib/graph/live-update'
+import { emitTimelineEvent } from '@/lib/timeline/emit'
+
+/** Resolve orgId for an expense from header, body, or Client.firmId lookup. */
+async function resolveOrgForExpense(
+  req: NextRequest,
+  body: { organizationId?: string; firmId?: string; clientId?: string },
+): Promise<string | null> {
+  const headerOrg = req.headers.get('x-gstpilot-orgid')
+  if (headerOrg && headerOrg.trim()) return headerOrg.trim()
+  const bodyOrg = body.organizationId || body.firmId
+  if (bodyOrg && typeof bodyOrg === 'string' && bodyOrg.trim()) return bodyOrg.trim()
+  if (body.clientId) {
+    try {
+      const client = await db.client.findUnique({
+        where: { id: body.clientId },
+        select: { firmId: true },
+      })
+      if (client?.firmId) return client.firmId
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+  return null
+}
+
+/** Parse the `x-gstpilot-actor` request header (JSON { uid, email }). */
+function parseActorHeader(req: NextRequest): { userId?: string; userName?: string } | undefined {
+  const raw = req.headers.get('x-gstpilot-actor')
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as { uid?: string; email?: string; displayName?: string }
+    if (!parsed.uid && !parsed.email) return undefined
+    return { userId: parsed.uid, userName: parsed.displayName ?? parsed.email }
+  } catch {
+    return undefined
+  }
+}
 
 // GET /api/expenses — Fetch expenses, scoped by clientId (multi-tenant isolation).
 // Previously this returned ALL expenses platform-wide with no `where` clause
@@ -94,6 +131,29 @@ export async function POST(request: NextRequest) {
 
     // ── Real Business Graph Engine™ — auto-create expense node + live event ──
     graphEvents.expenseRecorded(expense.id, vendor ?? 'unknown', expense.amount, finalCategory)
+
+    // ── Business Timeline — emit expense.created (fire-and-forget) ──
+    const orgId = await resolveOrgForExpense(request, body ?? {})
+    if (orgId) {
+      await emitTimelineEvent({
+        organizationId: orgId,
+        type: 'expense.created',
+        title: `Expense ₹${expense.amount.toLocaleString('en-IN')} recorded`,
+        description: `${finalCategory}${vendor ? ` — ${vendor}` : ''}${description ? `: ${description}` : ''}.`,
+        actor: parseActorHeader(request),
+        metadata: {
+          expenseId: expense.id,
+          amount: expense.amount,
+          gst: expense.gst,
+          category: finalCategory,
+          vendor: vendor ?? null,
+          date,
+          paymentMode: paymentMode ?? null,
+          clientId: clientId ?? null,
+        },
+        severity: 'info',
+      });
+    }
 
     return NextResponse.json({ expense }, { status: 201 })
   } catch (error) {

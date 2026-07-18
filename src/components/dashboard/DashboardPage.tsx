@@ -63,11 +63,11 @@ import {
   useLiveDashboardMetrics,
   useFireClients,
   useFireReturns,
-  useFireRecentActivities,
   useFirmExecutiveScores,
   useFireMemberships,
   useFirePriorities,
 } from '@/hooks/use-firestore';
+import { useTimelineEvents } from '@/hooks/useTimelineEvents';
 import { useInvoices } from '@/hooks/useInvoices';
 // NOTE: useInvoices (Firestore) is imported for legacy compatibility but the
 // Dashboard no longer reads invoice DATA from it — all financial figures come
@@ -88,7 +88,7 @@ import { InviteTeamModal } from '@/components/dashboard/home/InviteTeamModal';
 import { ActivateOracleWizard } from '@/components/dashboard/home/ActivateOracleWizard';
 import { ConnectedServicesCard, type ServiceRow } from '@/components/dashboard/home/ConnectedServicesCard';
 import { EmptyState } from '@/components/dashboard/home/EmptyState';
-import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
+import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
 import type {
   FirestoreClient,
   LiveDashboardMetrics,
@@ -824,62 +824,36 @@ export default function DashboardPage() {
     }
   };
 
-  // ── AI recommendation action mapping ──
+  // ── AI recommendation icon mapping ──
+  // Maps each recommendation type to an icon. The new engine emits one of:
+  //   cash | receivables | compliance | growth | risk | customer
   const iconForAIRec = (type: AIRecommendation['type']): React.ReactNode => {
     switch (type) {
-      case 'file_gstr3b':
-      case 'file_gstr1':
-      case 'pay_gst':
-        return <FileText className="h-3.5 w-3.5 accent-text" />;
-      case 'follow_up_customer':
-      case 'send_invoice_reminder':
-        return <Users className="h-3.5 w-3.5 accent-text" />;
-      case 'connect_bank':
+      case 'cash':
         return <IndianRupee className="h-3.5 w-3.5 accent-text" />;
-      case 'connect_gstn':
-        return <ShieldCheck className="h-3.5 w-3.5 accent-text" />;
-      case 'reconcile_bank':
-      case 'review_overdue':
-        return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
-      case 'reduce_expenses':
+      case 'receivables':
+        return <Clock className="h-3.5 w-3.5 accent-text" />;
+      case 'compliance':
+        return <FileText className="h-3.5 w-3.5 accent-text" />;
+      case 'growth':
         return <TrendingUp className="h-3.5 w-3.5 accent-text" />;
-      case 'improve_cash_flow':
-        return <Activity className="h-3.5 w-3.5 accent-text" />;
+      case 'risk':
+        return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
+      case 'customer':
+        return <Users className="h-3.5 w-3.5 accent-text" />;
       default:
         return <Sparkles className="h-3.5 w-3.5 accent-text" />;
     }
   };
 
   const handleAIRecAction = (rec: AIRecommendation) => {
-    switch (rec.actionType) {
-      case 'client-workspace':
-        if (rec.relatedEntityId) handleOpenClient(rec.relatedEntityId);
-        else setCurrentView('clients');
-        break;
-      case 'return-prep':
-        setCurrentView('return-prep');
-        break;
-      case 'invoices':
-        setCurrentView('invoices');
-        break;
-      case 'reconcile':
-        setCurrentView('reconcile');
-        break;
-      case 'banking':
-      case 'gstn':
-        // These integrations are not shipped — route to dashboard instead
-        // of surfacing an incomplete feature.
-        setCurrentView('dashboard');
-        break;
-      case 'reports':
-        setCurrentView('reports');
-        break;
-      case 'tasks':
-        setCurrentView('tasks');
-        break;
-      default:
-        setCurrentView('dashboard');
+    // The new recommendations engine exposes `actionView` (an AppView name)
+    // for direct navigation. Fall back to the dashboard if absent.
+    if (rec.actionView) {
+      setCurrentView(rec.actionView as AppView);
+      return;
     }
+    setCurrentView('dashboard');
   };
 
   const mappedAIRecommendations = useMemo<Recommendation[]>(() => {
@@ -887,7 +861,9 @@ export default function DashboardPage() {
       id: rec.id,
       icon: iconForAIRec(rec.type),
       title: rec.title,
-      actionLabel: rec.actionLabel,
+      // Engine always sets actionLabel, but the type marks it optional — fall
+      // back to a sensible default to satisfy the local Recommendation type.
+      actionLabel: rec.actionLabel ?? 'Review',
       onAction: () => handleAIRecAction(rec),
     }));
   }, [aiRecommendations]);

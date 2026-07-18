@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitClientNode } from '@/lib/graph/auto-emit'
+import { emitTimelineEvent } from '@/lib/timeline/emit'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma `Client` model is scoped by `firmId` (nullable
@@ -183,6 +184,22 @@ export async function POST(request: Request) {
 
     // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
     try { await emitClientNode(client.id) } catch (e) { console.error('[graph] emitClientNode failed', e) }
+
+    // ── Business Timeline — emit customer.created (fire-and-forget, never breaks the flow) ──
+    await emitTimelineEvent({
+      organizationId: tenantId,
+      type: 'customer.created',
+      title: `Customer “${tradeName}” created`,
+      description: `New customer added with GSTIN ${gstin}.`,
+      metadata: {
+        clientId: client.id,
+        gstin,
+        tradeName,
+        legalName: legalName ?? null,
+        entityType: entityType ?? 'regular',
+      },
+      severity: 'success',
+    })
 
     return NextResponse.json({ client }, { status: 201 })
   } catch (error) {

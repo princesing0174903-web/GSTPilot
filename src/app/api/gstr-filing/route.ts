@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { isOverdue } from '@/lib/gst-utils';
 import { emitGstReturnNode } from '@/lib/graph/auto-emit';
 import { logActivity, getOptionalUserId } from '@/lib/activity-logger';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
 
 export async function GET() {
   try {
@@ -162,6 +163,28 @@ export async function POST(request: Request) {
           totalTax: taxSum,
           status: 'draft',
         },
+      });
+
+      // ── Business Timeline — emit return.created (fire-and-forget) ──
+      await emitTimelineEvent({
+        organizationId: resolvedOrgId,
+        type: 'return.created',
+        title: `GST Return ${returnType} created`,
+        description: `${returnType} for period ${period} created for ${clientName} — ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}, ₹${taxSum.toLocaleString('en-IN')} tax.`,
+        actor: userId ? { userId } : undefined,
+        metadata: {
+          filingId: filing.id,
+          returnType,
+          period,
+          financialYear: financialYear ?? null,
+          clientId,
+          clientName,
+          invoiceCount,
+          totalTaxableValue: Number(totalTaxable._sum.taxableValue ?? 0),
+          totalTax: taxSum,
+          status: 'draft',
+        },
+        severity: 'info',
       });
     }
 

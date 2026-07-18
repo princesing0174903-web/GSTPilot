@@ -37,6 +37,7 @@ import {
   decodeState,
   resolveRedirectUri,
 } from '@/lib/google-workspace';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
 
 /**
  * Derive the public origin (scheme://host) from a redirect URI by stripping
@@ -175,6 +176,27 @@ export async function GET(req: Request) {
       'googleUser=',
       userInfo.email,
     );
+
+    // ── Business Timeline — emit google.connected (fire-and-forget) ──
+    // Best-effort: never break the OAuth callback if the timeline emit fails
+    // (the user has already been authenticated — the redirect MUST proceed).
+    if (decoded.orgId) {
+      await emitTimelineEvent({
+        organizationId: decoded.orgId,
+        type: 'google.connected',
+        title: 'Google Workspace connected',
+        description: `Workspace successfully linked${userInfo.email ? ` — ${userInfo.email}` : ''}. Calendar, Drive, Gmail, and Sheets integrations are now available.`,
+        actor: decoded.userId
+          ? { userId: decoded.userId, userName: decoded.userEmail ?? userInfo.email ?? undefined }
+          : undefined,
+        metadata: {
+          googleUserId: userInfo.sub ?? null,
+          email: userInfo.email ?? null,
+          connectedAt: new Date().toISOString(),
+        },
+        severity: 'success',
+      });
+    }
 
     // SUCCESS — redirect to the ROOT route "/" (always exists) with
     // ?google_connected=1&view=google-workspace. The app shell (AppContext)

@@ -39,6 +39,7 @@ import {
   computeGstLiability,
   type FinancialEngineResult,
 } from './financial-engine';
+import { emitTimelineEvent, isLocalOrgId } from '@/lib/timeline/emit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -520,12 +521,175 @@ export async function getBusinessSnapshot(
     lastSyncStatus: (lastSyncLog?.status as BusinessSnapshot['lastSyncStatus']) ?? 'never',
   };
 
+  // ── Overdue invoice detection (auto-emit invoice.overdue events) ──
+  // Query invoices for this org where dueDate < now AND status != 'paid'.
+  // For each overdue invoice, emit a timeline event — deduplicated by
+  // invoiceId (skip if an invoice.overdue event was already emitted for the
+  // same invoice within the last 24h). This makes overdue invoices appear on
+  // the Business Timeline automatically, without the user having to navigate
+  // to the Receivables page.
+  //
+  // Fire-and-forget: this is best-effort observability — never breaks the
+  // snapshot. Local- (guest/demo) org IDs are skipped because they have no
+  // Prisma backing. The whole block runs in the background; the snapshot
+  // is returned immediately without waiting for the emits to complete.
+  const snapshotRef = snapshot;
+  void detectAndEmitOverdueInvoices(organizationId, snapshotRef).catch(() => {
+    /* swallow — see emitTimelineEvent's own try/catch for the warning log */
+  });
+
   // Cache and return
   cache.set(organizationId, {
-    snapshot,
+    snapshot: snapshotRef,
     expiresAt: Date.now() + CACHE_TTL_MS,
   });
-  return snapshot;
+  return snapshotRef;
+}
+
+/**
+ * Background helper that finds overdue invoices for an org and emits
+ * `invoice.overdue` timeline events for each (deduplicated by invoiceId
+ * within the last 24h). Also fills in `snapshot.overdueReceivables`.
+ *
+ * This is called fire-and-forget from `getBusinessSnapshot` — it never throws
+ * to the caller. The snapshot is returned immediately; this work runs in the
+ * background so the dashboard's snapshot polling stays fast.
+ */
+async function detectAndEmitOverdueInvoices(
+  organizationId: string,
+  snapshot: BusinessSnapshot,
+): Promise<void> {
+  // Skip local- org IDs — they have no Prisma backing.
+  if (isLocalOrgId(organizationId)) return;
+
+  // Type for a single overdue invoice row (selected fields only).
+  type OverdueInvoiceRow = {
+    id: string;
+    invoiceNumber: string;
+    buyerName: string | null;
+    totalAmount: number;
+    balanceAmount: number;
+    dueDate: string | null;
+    clientId: string;
+  };
+
+  let overdueInvoices: OverdueInvoiceRow[] = [];
+  try {
+    const nowIso = new Date().toISOString();
+
+    // Find overdue invoices: dueDate is a non-null ISO string earlier than
+    // now, and the invoice is not fully paid (status != 'paid' AND
+    // paymentStatus != 'paid'). Tenant-scoped via client.firmId.
+    overdueInvoices = await db.invoice.findMany({
+      where: {
+        client: { firmId: organizationId },
+        dueDate: { not: null, lt: nowIso },
+        status: { not: 'paid' },
+        paymentStatus: { not: 'paid' },
+      },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        buyerName: true,
+        totalAmount: true,
+        balanceAmount: true,
+        dueDate: true,
+        clientId: true,
+      },
+      take: 100, // cap per snapshot run to bound the work
+    });
+  } catch (err) {
+    // Defensive — never break the snapshot. The query failure should be silent.
+    console.warn(
+      '[snapshot] detectAndEmitOverdueInvoices: invoice query failed (org=%s):',
+      organizationId,
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+
+  if (overdueInvoices.length === 0) return;
+
+  // Fill in the overdueReceivables field on the snapshot (in-place) so the
+  // dashboard shows the real overdue exposure instead of the placeholder 0.
+  const overdueReceivables = overdueInvoices.reduce(
+    (sum, inv) => sum + (inv.balanceAmount > 0 ? inv.balanceAmount : inv.totalAmount),
+    0,
+  );
+  snapshot.overdueReceivables = overdueReceivables;
+
+  // Deduplication: pull all invoice.overdue events emitted for this org in
+  // the last 24h, then parse their payload to extract the invoiceId. Skip
+  // any invoice that already has a recent overdue event.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  let recentOverdueEvents: Array<{ payload: string | null }> = [];
+  try {
+    recentOverdueEvents = await db.businessEvent.findMany({
+      where: {
+        businessId: organizationId,
+        type: 'invoice.overdue',
+        createdAt: { gte: since },
+      },
+      select: { payload: true },
+    });
+  } catch (err) {
+    // If we can't read existing events, skip dedup and just emit for all
+    // overdue invoices (worst case: a duplicate event per day, which the
+    // UI collapses sensibly because it groups by type within a session).
+    console.warn(
+      '[snapshot] detectAndEmitOverdueInvoices: dedup query failed (org=%s):',
+      organizationId,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  const recentlyEmittedInvoiceIds = new Set<string>();
+  for (const ev of recentOverdueEvents) {
+    if (!ev.payload) continue;
+    try {
+      const parsed = JSON.parse(ev.payload) as { metadata?: { invoiceId?: string } };
+      const invId = parsed.metadata?.invoiceId;
+      if (invId) recentlyEmittedInvoiceIds.add(invId);
+    } catch {
+      /* ignore malformed payload */
+    }
+  }
+
+  // Emit one invoice.overdue event per newly-overdue invoice.
+  // Each emit is fire-and-forget safe (swallows its own errors).
+  await Promise.all(
+    overdueInvoices
+      .filter((inv) => !recentlyEmittedInvoiceIds.has(inv.id))
+      .map((inv) => {
+        const amount = inv.balanceAmount > 0 ? inv.balanceAmount : inv.totalAmount;
+        const daysOverdue = inv.dueDate
+          ? Math.max(
+              0,
+              Math.floor(
+                (Date.now() - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24),
+              ),
+            )
+          : 0;
+        return emitTimelineEvent({
+          organizationId,
+          type: 'invoice.overdue',
+          title: `Invoice ${inv.invoiceNumber} overdue`,
+          description: `${inv.buyerName ? `${inv.buyerName} — ` : ''}₹${amount.toLocaleString('en-IN')} unpaid${daysOverdue > 0 ? `, ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past due.` : '.'}`,
+          metadata: {
+            invoiceId: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            customerId: inv.clientId,
+            customerName: inv.buyerName,
+            amount,
+            totalAmount: inv.totalAmount,
+            balanceAmount: inv.balanceAmount,
+            dueDate: inv.dueDate,
+            daysOverdue,
+          },
+          severity: daysOverdue > 7 ? 'critical' : 'warning',
+        });
+      }),
+  );
 }
 
 // ─── Convenience: empty snapshot (for loading states) ─────────────────────────

@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integrations/zoho-books/sync-engine';
 import { resolveOrgUserFromHeaders } from '@/lib/integrations/zoho-books/oauth';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — sync can take a while for large orgs
@@ -56,6 +57,40 @@ export async function POST(request: NextRequest) {
       userId,
       mode,
     });
+
+    // ── Business Timeline — emit zoho.sync.completed (fire-and-forget) ──
+    // Only emit when the sync actually imported or updated at least one record
+    // (skips the "Zoho not connected" / "no data" cases — those return ok:false
+    // with totals of 0 and would only spam the timeline).
+    if (result.ok && (result.totalImported > 0 || result.totalUpdated > 0)) {
+      const recordsSynced = result.totalImported + result.totalUpdated;
+      const entityTypes = result.modules
+        .filter((m) => m.status !== 'skipped' && (m.imported > 0 || m.updated > 0))
+        .map((m) => m.module);
+      await emitTimelineEvent({
+        organizationId: orgId,
+        type: 'zoho.sync.completed',
+        title: `Zoho Books sync complete — ${recordsSynced} record${recordsSynced === 1 ? '' : 's'}`,
+        description:
+          result.status === 'partial'
+            ? `Partial sync: ${result.totalImported} imported, ${result.totalUpdated} updated, ${result.totalFailed} failed across ${entityTypes.length} module${entityTypes.length === 1 ? '' : 's'} in ${(result.durationMs / 1000).toFixed(1)}s.`
+            : `Synced ${result.totalImported} imported, ${result.totalUpdated} updated across ${entityTypes.length} module${entityTypes.length === 1 ? '' : 's'} in ${(result.durationMs / 1000).toFixed(1)}s.`,
+        actor: userId ? { userId } : undefined,
+        metadata: {
+          recordsSynced,
+          imported: result.totalImported,
+          updated: result.totalUpdated,
+          failed: result.totalFailed,
+          entityTypes,
+          mode: result.mode,
+          durationMs: result.durationMs,
+          status: result.status,
+          syncLogId: result.syncLogId,
+          zohoOrgId: result.zohoOrgId,
+        },
+        severity: result.status === 'partial' ? 'warning' : 'success',
+      });
+    }
 
     return NextResponse.json(result, {
       status: result.ok ? 200 : 502,

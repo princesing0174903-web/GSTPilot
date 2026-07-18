@@ -5190,3 +5190,67 @@ Stage Summary:
   3. BankAccount cross-tenant leak audit: already mitigated in prior work (returns null intentionally, falls back to org-scoped ZohoBankAccount). No change needed.
 - All OAuth functions verified working end-to-end: connect, callback, token exchange, status, refresh, disconnect, activation-insights.
 - 7 files changed, 0 new lint errors, dev server clean, browser-verified interactivity.
+
+---
+Task ID: AUDIT-DUP-1
+Agent: Duplicate Engines Auditor
+Task: Audit all duplicate financial calculation engines across the project
+
+Work Log:
+- Read /home/z/my-project/worklog.md tail (lines 4869–5192) to absorb prior audit work. Confirmed AUDIT-1 (Business Snapshot Auditor), AUDIT-2 (Settings Auditor), and AUDIT-4 (Oracle Data Flow Auditor) already mapped the high-level duplicate-engine landscape. This task is the FOCUSED follow-up: enumerate exact callers + field-level dependencies so a future migration task can act without re-investigation. No code changed.
+- Mapped fin-vs-rich field usage in /api/business/snapshot/route.ts (lines 89–208): rich provides 39 fields, fin provides only 10. Documented the exact 10 fin-only fields that need to migrate into rich engine to eliminate the legacy fin engine entirely.
+- Confirmed src/lib/cfo/phase1/orchestrator.ts:221 `computeFinancialIntelligence(organizationId: string)` REQUIRES orgId, but ALL 4 callers pass NO orgId (ceo/data.ts:215, autonomous/self-healing.ts:47, api/ai-cfo/intelligence/route.ts:42, api/oracle/chat/route.ts:88). Post-AUDIT-1 fix to fetchRawCFOData's tenant gate means these callers silently receive EMPTY data — functionally broken. Flagged.
+- Discovered a SECOND, SEPARATE `computeFinancialIntelligence` (sync pure function) at src/lib/autonomous-finance/financial-intelligence.ts:93 with different signature (takes IntelligenceInput, returns FinancialIntelligenceReport). Called by 2 client components (FinancialIntelligencePage.tsx:94, AutonomousFinanceDashboard.tsx:86) which feed it data from useFireInvoices/useFireReturns/useFireBankTransactions/useFireClients Firestore hooks. ANOTHER duplicate engine that bypasses the canonical snapshot.
+- Enumerated ALL 21 call sites of generateCFOInsights() across 18 files (cfo/insights, cfo/simulator, cfo/reports, rmb/engine, oracle-core/{orchestrator,conversation,insights,context}, graph/engine, abos/engine, network/engine, api/oracle/chat, api/rmb/{command,orchestrate,delegate}, api/ai-cfo, api/execution-cloud/{execute,billing}). AUDIT-1 said "8+" — actual count is 21. Confirmed cfo/engine.ts:1129–1164 queries Prisma GLOBALLY (no where filter on invoice/client/gSTRFiling/notice tables).
+- Enumerated callers of computeBusinessScoreFromContext + computeRiskScoreFromContext (scoring.ts): consumed by MockAIProvider (mock-provider.ts:74,78), re-exported from ai-provider/index.ts:57,58, called by ai-provider/server/orchestrator.ts:430,437 (computeBusinessScore/computeRiskScore org wrappers), which are called by /api/ai/score/route.ts:31,32 and scaling/ai-scaling.ts:619,621. Mapped the gatherBusinessContext pipeline (orchestrator.ts:88–207) which builds BusinessContext from Firestore/connector reads, NOT from getBusinessSnapshot().
+- Confirmed oracle/briefing.ts:33 `computeHealthScore(signals: RankedSignal[])` is private (not exported). Called only by assembleBriefing (briefing.ts:194). assembleBriefing called by oracle-engine.ts:174 → generateOracleBriefing (oracle-engine.ts:159) → /api/oracle/briefing/route.ts:30. Single chain.
+- Confirmed intelligence/data-cloud.ts:496 `computeHealthScore(input)` is private. Called only by extractOrgMetrics (line 258) → submitOrgContribution (line 322) → intelligence/orchestrator.ts:54 → getIntelligenceDashboard (orchestrator.ts:44) → /api/intelligence/dashboard/route.ts:13. Privacy-safe global benchmark pipeline (separate scope from dashboard).
+- Confirmed gst-utils.ts calculateHealthScore (line 45) and calculateRiskScore (line 64) are GST-DATA-QUALITY + RECONCILIATION-RISK scorers (inputs: missingGstin, invalidGstin, duplicateInvoices, filingDelays / matchStatus, taxDifference, gstinValid, isDuplicate) — DIFFERENT SEMANTICS from financial health. NOT duplicates of business/financial-engine.ts. Callers: /api/health-score/route.ts:70 (calculateHealthScore) and /api/reconciliation/route.ts:173,199 (calculateRiskScore). VERDICT: keep but rename to disambiguate (calculateGSTDataQualityScore / calculateReconciliationRiskScore).
+- Confirmed exact line numbers and tables for buildInvoiceEngineContextBlock() (chat/route.ts:296–460) and buildExecutionContextBlock() (chat/route.ts:467+). Invoice block reads 7 Prisma tables with NO org filter: invoice, purchaseBill, expense, payment, tDSRecord, employee, payroll (lines 300–306). Execution block reads 7 Prisma tables with NO org filter: businessEvent, decision, executionTask, approval, workflow, userBehaviour, executionTimeline (lines 470–476). Cross-tenant leak confirmed.
+- Confirmed buildRealDataSnapshot(userId) (oracle/real-data.ts:91) queries Prisma directly via DataConnection.findMany (line 93, user-scoped), SyncedRecord.findMany (line 99, user-scoped), DataQualityAlert.findMany (line 105, user-scoped). Does NOT call getBusinessSnapshot(). Computes cashPosition.totalBalance, todayCollections, weekCollections, accountingSync.totalSales/totalPurchases from synced connector data — DUPLICATES snapshot's cash/revenue/expenses when connectors are connected. ALSO confirmed generateDynamicRecommendations (real-data.ts:294) reads invoice/expense/payment/gSTRFiling/notice/issue/executiveReport GLOBALLY (no where filter) at lines 303–311, 470.
+- Confirmed buildGSTpilotContextBlock(orgId) (oracle-cfo/gstpilot-context.ts:355) → loadGSTpilotSnapshot(orgId) (line 89) → 6 Firestore subcollection reads via getCustomersOnce/getProductsOnce/getInvoicesOnce/getVendorsOnce/getExpensesOnce/getPaymentsOnce (lines 115–120). These read Firestore `organizations/{orgId}/{customers,products,invoices,vendors,expenses,payments}` (confirmed by gstpilot-data/customers.ts:162 etc.). Computes invoiceStats, expenseStats, paymentStats, totalCustomerOutstanding, totalPayable — DUPLICATES snapshot's revenue, outstanding, payables, customer/vendor counts.
+- Ran grep sweeps for db.*.findMany / db.*.aggregate / compute*/calculate*/get* function patterns. Compiled raw file:line results grouped by pattern. Identified ~100+ direct Prisma reads across the codebase outside the snapshot — most are legitimate record-detail queries (e.g. /api/invoices/route.ts listing invoices for a table), but ~30+ are financial-aggregate reads that duplicate snapshot fields.
+
+Stage Summary:
+
+**Field-level migration map (fin → rich) — 10 fields only:**
+The merged API route /api/business/snapshot/route.ts uses from `fin`:
+1. `fin.hasLiveData` (line 84)
+2. `fin.invoices.draftCount` (line 119)
+3. `fin.collections.averageDaysToPay` (line 125)
+4. `fin.risks.overdueExposure` (line 147)
+5. `fin.risks.complianceRisk` (line 148)
+6. `fin.risks.cashFlowRisk` (line 149)
+7. `fin.risks.riskLevel` (line 150)
+8. `fin.forecast.projectedCash` (line 157)
+9. `fin.runway.monthlyBurnRate` (line 166)
+10. `fin.notices` (line 171)
+
+All other 39 fields come from `rich`. Migrating these 10 fields into rich engine eliminates the entire fin engine + its 10 calculators (calculateRevenue/Expenses/Profit/Cash/GST/Collections/Health/Risk/Runway/Forecast) + businessSnapshot.ts orchestrator + types.ts.
+
+**Prioritized files to change (highest impact first):**
+
+1. **src/app/api/oracle/chat/route.ts** — L — Refactor buildInvoiceEngineContextBlock (lines 296–460) and buildExecutionContextBlock (lines 467+) to (a) org-scope every Prisma read with `where: { client: { firmId: organizationId } }`, (b) source headline numbers from getBusinessSnapshot(orgId), (c) only emit record-level detail (invoice numbers, vendor names) from raw Prisma. Currently leaks cross-tenant data.
+
+2. **src/lib/cfo/engine.ts** — L — Refactor generateCFOInsights to accept organizationId, call getBusinessSnapshot(orgId) for revenue/cash/profit/GST/health/risk, and drop its own computeRevenue/computeReceivables/computeGST/computePayables/computeCash/computeProfit/computeHealthScore (line 378) functions. Currently queries Prisma GLOBALLY (lines 1129–1163). 21 downstream callers in 18 files inherit the global-read behavior.
+
+3. **src/lib/cfo/phase1/{orchestrator,data,*}.ts** — M — Either delete entirely (its compute* functions duplicate snapshot's) OR refactor computeFinancialIntelligence(organizationId) to delegate to getBusinessSnapshot(orgId). The 4 callers (ceo/data.ts:215, autonomous/self-healing.ts:47, api/ai-cfo/intelligence/route.ts:42, api/oracle/chat/route.ts:88) currently pass NO orgId → silently return empty data. Callers must be updated to pass orgId.
+
+4. **src/lib/autonomous-finance/financial-intelligence.ts** — M — Refactor computeFinancialIntelligence to either (a) accept a BusinessSnapshot and derive insights from it, OR (b) be deleted in favor of /api/ai-cfo/intelligence. Currently runs entirely client-side on Firestore-hook data, bypassing the canonical snapshot. 2 callers: FinancialIntelligencePage.tsx, AutonomousFinanceDashboard.tsx.
+
+5. **src/lib/ai-provider/server/{orchestrator,scoring}.ts** — M — Refactor gatherBusinessContext (orchestrator.ts:88–207) to call getBusinessSnapshot(orgId) for finance numbers instead of listInvoices/listGstTransactions/getBankConnections/readClients/readReturns. computeBusinessScoreFromContext + computeRiskScoreFromContext (scoring.ts:30,126) can remain as pure transformers BUT must consume snapshot-sourced inputs. Affects /api/ai/score + scaling/ai-scaling.
+
+6. **src/lib/oracle/real-data.ts** — M — Split into two concerns: (a) keep buildRealDataSnapshot(userId) for CONNECTION-STATE only (bank/email/WhatsApp/GSTN sync status) — NOT financial aggregates; (b) refactor generateDynamicRecommendations to read from getBusinessSnapshot(orgId) instead of global db.invoice.findMany({}) (line 303). Currently leaks cross-tenant financial data.
+
+7. **src/lib/oracle-cfo/gstpilot-context.ts** — M — Decide whether Firestore subcollection data (organizations/{orgId}/{customers,products,invoices,vendors,expenses,payments}) belongs inside the Business Snapshot. If yes: extend getBusinessSnapshot to read Firestore subcollections. If no: keep gstpilot-context block but add guardrail "RULE: snapshot is canonical for finance; this block is registry detail only" to prevent LLM conflating them. Currently computes invoiceStats/expenseStats/paymentStats/totalCustomerOutstanding/totalPayable that duplicate snapshot fields.
+
+8. **src/lib/intelligence/data-cloud.ts** — S — Refactor extractOrgMetrics(firmId) to call getBusinessSnapshot(firmId) and source revenue/expenses/gstLiability/healthScore from the snapshot, dropping its own computeHealthScore (line 496) and 8 Prisma findMany calls (lines 177–205). Used only for privacy-safe global benchmark contribution (different scope).
+
+9. **src/lib/oracle/briefing.ts** — S — Replace private computeHealthScore(signals: RankedSignal[]) (line 33) with snapshot.healthScore. Single caller chain (assembleBriefing → oracle-engine → /api/oracle/briefing).
+
+10. **src/lib/financial-engine/** (entire directory) — S — Once the 10 fin-only fields migrate into rich engine (business/snapshot.ts), delete the entire financial-engine/ directory (businessSnapshot.ts + 9 calculate*.ts + types.ts + index.ts) and the duplicate /api/business-snapshot (hyphenated) endpoint. Cuts snapshot Prisma load ~50% by removing the parallel fin fetch.
+
+11. **src/lib/gst-utils.ts** — S — Rename calculateHealthScore → calculateGSTDataQualityScore and calculateRiskScore → calculateReconciliationRiskScore to disambiguate from financial-health scorers. NOT a duplicate (different semantics — GST data quality + per-invoice reconciliation risk). Update 3 callers: /api/health-score/route.ts:70, /api/reconciliation/route.ts:173,199.
+
+**Critical finding:** ALL 4 callers of computeFinancialIntelligence (cfo/phase1) pass NO organizationId — the function signature requires it (post-AUDIT-1 fix), so these calls either TypeScript-error or silently receive empty data. Either way, Oracle chat's CFO context block, /api/ai-cfo/intelligence, ceo/data.ts, and autonomous/self-healing.ts are ALL returning empty CFO data today. This is a regression introduced by the AUDIT-1 tenant-gate fix that was never propagated to call sites.
+

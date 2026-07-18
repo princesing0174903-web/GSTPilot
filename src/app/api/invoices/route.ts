@@ -7,6 +7,7 @@ import {
 } from '@/lib/invoices/invoices';
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { emitInvoiceNode } from '@/lib/graph/auto-emit';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma `Invoice` model has NO `firmId` field — it reaches
@@ -16,6 +17,54 @@ import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 // query param and treat the value as the tenant id (the orgId IS the firmId in
 // this app's current state). When neither is provided, we return an empty list
 // instead of leaking ALL invoices platform-wide.
+
+/**
+ * Resolve the organizationId for a newly-created invoice. Checks (in order):
+ *   1. The `x-gstpilot-orgid` request header (set by the dashboard shell)
+ *   2. `organizationId` / `firmId` in the request body
+ *   3. `Client.firmId` via a one-row Prisma lookup on `clientId`
+ * Returns null if no org scope can be determined (the timeline emit is skipped
+ * — the parent create still succeeds).
+ */
+async function resolveOrgForInvoice(
+  req: Request,
+  body: { organizationId?: string; firmId?: string; clientId?: string },
+  clientId?: string,
+): Promise<string | null> {
+  const headerOrg = req.headers.get('x-gstpilot-orgid');
+  if (headerOrg && headerOrg.trim()) return headerOrg.trim();
+  const bodyOrg = body.organizationId || body.firmId;
+  if (bodyOrg && typeof bodyOrg === 'string' && bodyOrg.trim()) return bodyOrg.trim();
+  const cid = clientId ?? body.clientId;
+  if (cid) {
+    try {
+      const client = await db.client.findUnique({
+        where: { id: cid },
+        select: { firmId: true },
+      });
+      if (client?.firmId) return client.firmId;
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+  return null;
+}
+
+/** Parse the `x-gstpilot-actor` request header (JSON { uid, email }). */
+function parseActorHeader(req: Request): { userId?: string; userName?: string } | undefined {
+  const raw = req.headers.get('x-gstpilot-actor');
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as { uid?: string; email?: string; displayName?: string };
+    if (!parsed.uid && !parsed.email) return undefined;
+    return {
+      userId: parsed.uid,
+      userName: parsed.displayName ?? parsed.email,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -219,6 +268,29 @@ export async function POST(request: Request) {
       // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
       try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
 
+      // ── Business Timeline — emit invoice.created (fire-and-forget) ──
+      const cloudOrgId = await resolveOrgForInvoice(request, body, resolvedClientId);
+      if (cloudOrgId) {
+        await emitTimelineEvent({
+          organizationId: cloudOrgId,
+          type: 'invoice.created',
+          title: `Invoice ${invoiceNumber} created`,
+          description: `₹${totals.totalAmount.toLocaleString('en-IN')} invoice issued for ${customerName}.`,
+          actor: parseActorHeader(request),
+          metadata: {
+            invoiceId: invoice.id,
+            invoiceNumber,
+            customerId: resolvedClientId,
+            customerName,
+            amount: totals.totalAmount,
+            taxableValue: totals.taxableValue,
+            gstAmount: totals.gstAmount,
+            dueDate: dueDate ?? null,
+          },
+          severity: 'info',
+        });
+      }
+
       return NextResponse.json({ invoice }, { status: 201 });
     }
 
@@ -298,6 +370,28 @@ export async function POST(request: Request) {
 
     // PT-2-b: canonical graph node emit (verifies entity + pushes live event + invalidates cache)
     try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
+
+    // ── Business Timeline — emit invoice.created (fire-and-forget) ──
+    const nativeOrgId = await resolveOrgForInvoice(request, body, clientId);
+    if (nativeOrgId) {
+      await emitTimelineEvent({
+        organizationId: nativeOrgId,
+        type: 'invoice.created',
+        title: `Invoice ${invoiceNumber} created`,
+        description: `₹${Number(totalAmount ?? 0).toLocaleString('en-IN')} invoice issued${buyerName ? ` for ${buyerName}` : ''}.`,
+        actor: parseActorHeader(request),
+        metadata: {
+          invoiceId: invoice.id,
+          invoiceNumber,
+          customerId: clientId,
+          customerName: buyerName ?? null,
+          amount: Number(totalAmount ?? 0),
+          taxableValue: Number(taxableValue ?? 0),
+          period: period ?? null,
+        },
+        severity: 'info',
+      });
+    }
 
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (error) {

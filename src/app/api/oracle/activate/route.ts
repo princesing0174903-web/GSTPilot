@@ -35,6 +35,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -812,6 +813,30 @@ export async function POST(req: NextRequest) {
     });
 
     // ── 7. Return the activation result ──
+    // ── Business Timeline — emit oracle.activated (fire-and-forget) ──
+    // Emitted AFTER all Firestore writes succeed but BEFORE the response so a
+    // timeline emit failure cannot falsely report activation failure. The
+    // emit call swallows its own errors internally.
+    await emitTimelineEvent({
+      organizationId,
+      type: 'oracle.activated',
+      title: 'Oracle activated',
+      description: `Business Snapshot generated — Health Score ${scores.healthScore}/100, Revenue ₹${Math.round(scores.revenue).toLocaleString('en-IN')}, ${scores.customerCount} customers, ${scores.invoiceCount} invoices.`,
+      actor: decodedUid ? { userId: decodedUid, userName: memberData.userDisplayName ?? memberData.userEmail ?? undefined } : undefined,
+      metadata: {
+        healthScore: scores.healthScore,
+        riskScore: scores.riskScore,
+        revenue: scores.revenue,
+        customerCount: scores.customerCount,
+        invoiceCount: scores.invoiceCount,
+        receivables: scores.receivables,
+        gstLiability: scores.gstLiability,
+        activatedAt: nowIso,
+        activatedBy: decodedUid,
+      },
+      severity: 'success',
+    });
+
     return NextResponse.json({
       ok: true,
       activation: {

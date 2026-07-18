@@ -2,6 +2,43 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
+import { emitTimelineEvent } from '@/lib/timeline/emit'
+
+/** Resolve orgId for a payment from header, body, or Client.firmId lookup. */
+async function resolveOrgForPayment(
+  req: NextRequest,
+  body: { organizationId?: string; firmId?: string; clientId?: string },
+): Promise<string | null> {
+  const headerOrg = req.headers.get('x-gstpilot-orgid')
+  if (headerOrg && headerOrg.trim()) return headerOrg.trim()
+  const bodyOrg = body.organizationId || body.firmId
+  if (bodyOrg && typeof bodyOrg === 'string' && bodyOrg.trim()) return bodyOrg.trim()
+  if (body.clientId) {
+    try {
+      const client = await db.client.findUnique({
+        where: { id: body.clientId },
+        select: { firmId: true },
+      })
+      if (client?.firmId) return client.firmId
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+  return null
+}
+
+/** Parse the `x-gstpilot-actor` request header (JSON { uid, email }). */
+function parseActorHeader(req: NextRequest): { userId?: string; userName?: string } | undefined {
+  const raw = req.headers.get('x-gstpilot-actor')
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as { uid?: string; email?: string; displayName?: string }
+    if (!parsed.uid && !parsed.email) return undefined
+    return { userId: parsed.uid, userName: parsed.displayName ?? parsed.email }
+  } catch {
+    return undefined
+  }
+}
 
 // GET /api/payments — Fetch payments, scoped by clientId (multi-tenant isolation).
 // Previously this returned ALL payments platform-wide with no `where` clause
@@ -77,6 +114,9 @@ export async function POST(request: NextRequest) {
     })
 
     // If invoiceId provided — recompute Invoice paidAmount + balanceAmount + paymentStatus
+    let invoiceNowPaid = false
+    let paidInvoiceNumber: string | null = null
+    let paidInvoiceTotal = 0
     if (invoiceId) {
       const invoice = await db.invoice.findUnique({ where: { id: invoiceId } })
       if (invoice) {
@@ -99,6 +139,9 @@ export async function POST(request: NextRequest) {
         // ── Real Business Graph Engine™ — invoice cleared event ──
         if (paymentStatus === 'paid') {
           graphEvents.invoicePaid(invoiceId, invoice.invoiceNumber, paymentAmount)
+          invoiceNowPaid = true
+          paidInvoiceNumber = invoice.invoiceNumber
+          paidInvoiceTotal = total
         }
       }
     }
@@ -151,6 +194,60 @@ export async function POST(request: NextRequest) {
 
     // PT-2-b: canonical graph node emit — collection/payment node + Client→Collection edge
     try { await emitCollectionNode(payment.id) } catch (e) { console.error('[graph] emitCollectionNode failed', e) }
+
+    // ── Business Timeline events (fire-and-forget — never break the payment) ──
+    const orgId = await resolveOrgForPayment(request, body)
+    if (orgId) {
+      const actor = parseActorHeader(request)
+      const isCustomerPayment = partyType !== 'vendor'
+
+      // Always emit payment.received (for customer payments) — captures every
+      // inbound payment on the timeline.
+      if (isCustomerPayment) {
+        await emitTimelineEvent({
+          organizationId: orgId,
+          type: 'payment.received',
+          title: `Payment ₹${paymentAmount.toLocaleString('en-IN')} received`,
+          description: `${partyName} paid via ${paymentMode}${invoiceId ? ` — against invoice${paidInvoiceNumber ? ` ${paidInvoiceNumber}` : ''}` : ''}.${referenceNo ? ` Ref: ${referenceNo}.` : ''}`,
+          actor,
+          metadata: {
+            paymentId: payment.id,
+            amount: paymentAmount,
+            partyName,
+            partyType,
+            paymentMode,
+            paymentDate,
+            referenceNo: referenceNo ?? null,
+            invoiceId: invoiceId ?? null,
+            invoiceNumber: paidInvoiceNumber,
+            clientId: clientId ?? null,
+          },
+          severity: 'success',
+        })
+      }
+
+      // When the referenced invoice just transitioned to fully-paid, emit a
+      // separate invoice.paid event so the timeline surfaces the milestone.
+      if (invoiceNowPaid && paidInvoiceNumber) {
+        await emitTimelineEvent({
+          organizationId: orgId,
+          type: 'invoice.paid',
+          title: `Invoice ${paidInvoiceNumber} paid`,
+          description: `Invoice ${paidInvoiceNumber} (${paidInvoiceTotal > 0 ? `₹${paidInvoiceTotal.toLocaleString('en-IN')}` : 'fully settled'}) cleared by ${partyName}.`,
+          actor,
+          metadata: {
+            invoiceId: invoiceId!,
+            invoiceNumber: paidInvoiceNumber,
+            amount: paidInvoiceTotal,
+            paymentId: payment.id,
+            partyName,
+            paymentMode,
+            paymentDate,
+          },
+          severity: 'success',
+        })
+      }
+    }
 
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {

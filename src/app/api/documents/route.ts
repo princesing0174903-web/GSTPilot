@@ -1,22 +1,30 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
-// GET /api/documents — List all Documents where isLatest=true
+// GET /api/documents — List documents, tenant-scoped.
+// Accepts organizationId (preferred) or clientId. If NEITHER is provided,
+// returns empty (prevents cross-tenant data leak).
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const folder = searchParams.get('folder')
     const clientId = searchParams.get('clientId')
     const search = searchParams.get('search')
+    const organizationId = searchParams.get('organizationId') ?? searchParams.get('firmId')
 
     const where: Record<string, unknown> = { isLatest: true }
 
-    if (folder) {
-      where.folder = folder
-    }
-
     if (clientId) {
       where.clientId = clientId
+    } else if (organizationId) {
+      where.client = { organizationId }
+    } else {
+      // No tenant scope — return empty rather than leak cross-tenant data
+      return NextResponse.json({ documents: [] })
+    }
+
+    if (folder) {
+      where.folder = folder
     }
 
     if (search) {
@@ -30,9 +38,7 @@ export async function GET(request: Request) {
     const documents = await db.document.findMany({
       where,
       include: {
-        client: clientId
-          ? { select: { id: true, tradeName: true } }
-          : false,
+        client: { select: { id: true, tradeName: true } },
       },
       orderBy: { createdAt: 'desc' },
     })

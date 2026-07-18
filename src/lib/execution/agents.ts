@@ -69,9 +69,8 @@ export const AGENT_CAPABILITIES: Record<AgentName, string[]> = {
 };
 
 // ─── AI_AGENTS — the 5 agent definitions (4 spec agents + Reporting Agent) ────
-// Seed `tasksExecuted` and `successRate` reflect lifetime totals across the
-// Phase 8 pilot. At runtime, getAgentRoster() overrides tasksExecuted with live
-// counts from the current task stream (where tasks exist for that agent).
+// tasksExecuted and successRate start at 0 and are computed at runtime from
+// real db.executionTask rows by getAgentRoster(). NEVER seed fabricated stats.
 export const AI_AGENTS: AIAgent[] = [
   {
     id: 'gst_agent',
@@ -83,8 +82,8 @@ export const AI_AGENTS: AIAgent[] = [
       'in CGST/SGST/IGST framework compliance and Rule 36(4) reconciliation.',
     capabilities: AGENT_CAPABILITIES.gst_agent,
     status: 'active',
-    tasksExecuted: 142,
-    successRate: 97.2,
+    tasksExecuted: 0,
+    successRate: 0,
     color: '#3B82F6', // blue
     icon: 'FileCheck',
   },
@@ -98,8 +97,8 @@ export const AI_AGENTS: AIAgent[] = [
       'working-capital actions to the CFO. Specialises in Indian MSME cash-flow management.',
     capabilities: AGENT_CAPABILITIES.cfo_agent,
     status: 'active',
-    tasksExecuted: 89,
-    successRate: 94.6,
+    tasksExecuted: 0,
+    successRate: 0,
     color: '#10B981', // emerald
     icon: 'TrendingUp',
   },
@@ -113,8 +112,8 @@ export const AI_AGENTS: AIAgent[] = [
       'Specialises in DSO reduction and Indian MSME recovery procedures.',
     capabilities: AGENT_CAPABILITIES.collection_agent,
     status: 'active',
-    tasksExecuted: 247,
-    successRate: 91.4,
+    tasksExecuted: 0,
+    successRate: 0,
     color: '#F59E0B', // amber
     icon: 'MessageSquare',
   },
@@ -128,8 +127,8 @@ export const AI_AGENTS: AIAgent[] = [
       'returns (26Q/24Q/GSTR-1/3B) on time. Specialises in Indian statutory compliance.',
     capabilities: AGENT_CAPABILITIES.compliance_agent,
     status: 'busy',
-    tasksExecuted: 178,
-    successRate: 96.1,
+    tasksExecuted: 0,
+    successRate: 0,
     color: '#8B5CF6', // violet
     icon: 'ShieldCheck',
   },
@@ -143,8 +142,8 @@ export const AI_AGENTS: AIAgent[] = [
       'CA firms and SME finance teams.',
     capabilities: AGENT_CAPABILITIES.reporting_agent,
     status: 'idle',
-    tasksExecuted: 64,
-    successRate: 98.4,
+    tasksExecuted: 0,
+    successRate: 0,
     color: '#EF4444', // red
     icon: 'BarChart3',
   },

@@ -27,6 +27,7 @@ import { fetchLatestSnapshot } from './snapshots';
 import { fetchRecentTimelineEvents } from './timeline';
 import { computeLiveStateLite } from './live-state';
 import { fetchRawCFOData } from '@/lib/cfo/phase1/data';
+import { getBusinessSnapshot } from '@/lib/business/snapshot';
 import { TWIN_TAGLINE } from './types';
 import type { DigitalTwinBundle, TwinOracleContext } from './types';
 
@@ -131,19 +132,32 @@ export async function computeDigitalTwinBundle(): Promise<DigitalTwinBundle> {
 }
 
 // ─── Oracle context (compact — injected into Oracle chat) ────────────────────
+//
+// Headline financials (healthScore, riskScore, revenue, profit, cash,
+// runwayDays) are sourced from the canonical Business Snapshot — the single
+// source of truth — so Oracle chat sees EXACTLY the same numbers as the Home
+// Dashboard, AI CFO, and Run Business pages. Twin-specific fields (today's
+// event count, recent events, latest snapshot, anomaly counts, data sources)
+// remain local to the twin engine.
 
 export async function computeTwinOracleContext(organizationId?: string): Promise<TwinOracleContext> {
-  const [lite, recentEvents, latestSnapshot, anomalies, data] = await Promise.all([
-    safe('live-state-lite', () => computeLiveStateLite(), {
-      revenue: 0, profit: 0, cash: 0, healthScore: 0, riskScore: 0, runwayDays: 0, hasLiveData: false,
-    }),
+  const orgId = organizationId ?? '';
+
+  // Fetch the canonical snapshot in parallel with twin-specific data.
+  // The snapshot provides healthScore, riskScore, revenue, profit, cash, runwayDays.
+  const [snapshot, recentEvents, latestSnapshot, anomalies, data, lite] = await Promise.all([
+    safe('business-snapshot', () => orgId ? getBusinessSnapshot(orgId) : Promise.resolve(null), null),
     safe('recent-events', () => fetchRecentTimelineEvents(8), []),
     safe('latest-snapshot', () => fetchLatestSnapshot(), undefined),
     safe('anomalies', () => detectAnomalies(organizationId), EMPTY_ANOMALIES),
-    safe('raw-data', () => fetchRawCFOData(organizationId ?? ''), {
+    safe('raw-data', () => fetchRawCFOData(orgId), {
       invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
       filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
       fetchedAt: new Date().toISOString(), hasLiveData: false, dataSources: [],
+    }),
+    // Lite state is now only a fallback for the case where the snapshot is unavailable.
+    safe('live-state-lite', () => computeLiveStateLite(), {
+      revenue: 0, profit: 0, cash: 0, healthScore: 0, riskScore: 0, runwayDays: 0, hasLiveData: false,
     }),
   ]);
 
@@ -154,20 +168,32 @@ export async function computeTwinOracleContext(organizationId?: string): Promise
     (e) => new Date(e.timestamp) >= todayStart,
   ).length;
 
+  // ── Headline values: prefer canonical snapshot, fall back to twin lite state ──
+  // This guarantees Oracle chat sees the same healthScore / riskScore / revenue
+  // / profit / cash / runwayDays as every other page that reads the snapshot.
+  const healthScore = snapshot?.healthScore ?? lite.healthScore;
+  const riskScore = snapshot?.riskScore ?? lite.riskScore;
+  // snapshot.revenueThisMonth preserves the MTD semantic the twin expects.
+  const revenue = snapshot?.revenueThisMonth ?? lite.revenue;
+  const profit = snapshot?.profit ?? lite.profit;
+  const cash = snapshot?.cash ?? lite.cash;
+  const runwayDays = snapshot?.runwayDays ?? lite.runwayDays;
+  const hasLiveData = snapshot ? (snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.invoiceCount > 0) : lite.hasLiveData;
+
   return {
-    healthScore: lite.healthScore,
-    riskScore: lite.riskScore,
-    revenue: lite.revenue,
-    profit: lite.profit,
-    cash: lite.cash,
-    runwayDays: lite.runwayDays,
+    healthScore,
+    riskScore,
+    revenue,
+    profit,
+    cash,
+    runwayDays,
     todayEventCount,
     recentEvents,
     latestSnapshot,
     activeAnomalies: anomalies.totalCount,
     criticalAnomalies: anomalies.criticalCount,
     dataSources: data.dataSources,
-    hasLiveData: lite.hasLiveData,
+    hasLiveData,
   };
 }
 

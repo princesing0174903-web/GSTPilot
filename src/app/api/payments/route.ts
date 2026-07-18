@@ -40,17 +40,25 @@ function parseActorHeader(req: NextRequest): { userId?: string; userName?: strin
   }
 }
 
-// GET /api/payments — Fetch payments, scoped by clientId (multi-tenant isolation).
-// Previously this returned ALL payments platform-wide with no `where` clause
-// (multi-tenant data leak). Now filters by clientId query param.
+// GET /api/payments — Fetch payments, tenant-scoped.
+// Accepts organizationId (preferred) or clientId. If NEITHER is provided,
+// returns empty (prevents cross-tenant data leak).
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const partyType = searchParams.get('partyType')
+    const organizationId = searchParams.get('organizationId') ?? searchParams.get('firmId')
 
-    const where: { clientId?: string; partyType?: string } = {}
-    if (clientId) where.clientId = clientId
+    const where: Record<string, unknown> = {}
+    if (clientId) {
+      where.clientId = clientId
+    } else if (organizationId) {
+      where.client = { organizationId }
+    } else {
+      // No tenant scope — return empty rather than leak cross-tenant data
+      return NextResponse.json({ payments: [] })
+    }
     if (partyType) where.partyType = partyType
 
     const payments = await db.payment.findMany({

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { isOverdue, getFilingDueDate } from '@/lib/gst-utils'
+import { getBusinessSnapshot } from '@/lib/business/snapshot'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma models here (Client / Invoice / GSTRFiling / Issue /
@@ -15,6 +16,15 @@ import { isOverdue, getFilingDueDate } from '@/lib/gst-utils'
 // Invoices / GSTRFilings / Issues / AuditLogs do NOT carry `firmId` directly —
 // they all relate through `clientId`. So scoping by tenant means filtering on
 // `client: { firmId: <tenantId> }`.
+//
+// HEADLINE COUNT METRICS (totalClients / totalInvoices / filedReturns /
+// pendingReturns / overdueReturns) are sourced from the canonical Business
+// Snapshot — the single source of truth — so every page that displays these
+// numbers shows the SAME value. Local Prisma reads remain for the unique
+// metrics this endpoint exposes (criticalIssues, warnings, matchPercentage,
+// riskPercentage, recentAuditLogs, filingCalendar, monthlyFilingStatus, and
+// the per-client averageHealthScore — which is the AVERAGE of per-client GST
+// data-quality scores, NOT the canonical org-level Health Score).
 
 function emptyDashboard() {
   return {
@@ -47,18 +57,35 @@ export async function GET(request: Request) {
       return NextResponse.json(emptyDashboard())
     }
 
+    // ── 1. Fetch the canonical Business Snapshot ──
+    // Provides totalClients (customerCount), totalInvoices (invoiceCount),
+    // filedReturns, pendingReturns, overdueReturns — sourced from native AND
+    // Zoho-synced tables. The snapshot has a 30-second in-memory cache, so
+    // reads are cheap.
+    const snapshot = await getBusinessSnapshot(tenantId).catch((err) => {
+      console.error('[/api/dashboard] getBusinessSnapshot failed:', err)
+      return null
+    })
+
+    // ── 2. Headline count metrics from snapshot (fall back to 0 on failure) ──
+    const totalClients = snapshot?.customerCount ?? 0
+    const totalInvoices = snapshot?.invoiceCount ?? 0
+    const filedReturns = snapshot?.filedReturns ?? 0
+    const pendingReturns = snapshot?.pendingReturns ?? 0
+    const overdueReturns = snapshot?.overdueReturns ?? 0
+
     // Prisma where-clause scoping by tenant. Client has firmId directly; the
     // other models reach it through the client relation.
     const clientWhere = { firmId: tenantId }
     const viaClient = { client: clientWhere }
 
-    // ── Core counts (all scoped by tenant) ────────────────────────────────
+    // ── 3. Unique-to-this-endpoint metrics (NOT in the snapshot) ─────────
+    // - averageHealthScore: AVERAGE of per-client GST data-quality scores
+    //   (different concept from the canonical org-level Health Score).
+    // - criticalIssues / warnings: open Issue counts by severity.
+    // - matchPercentage / riskPercentage: invoice reconciliation + risk.
+    // - recentAuditLogs / filingCalendar / monthlyFilingStatus: detail rows.
     const [
-      totalClients,
-      totalInvoices,
-      filedReturns,
-      pendingReturns,
-      allFilings,
       allClients,
       criticalIssues,
       warnings,
@@ -66,14 +93,6 @@ export async function GET(request: Request) {
       perfectMatchInvoices,
       highRiskInvoices,
     ] = await Promise.all([
-      db.client.count({ where: clientWhere }),
-      db.invoice.count({ where: viaClient }),
-      db.gSTRFiling.count({ where: { ...viaClient, status: 'filed' } }),
-      db.gSTRFiling.count({ where: { ...viaClient, status: { not: 'filed' } } }),
-      db.gSTRFiling.findMany({
-        where: { ...viaClient, status: { not: 'filed' } },
-        select: { id: true, period: true, returnType: true, clientId: true },
-      }),
       db.client.findMany({
         where: clientWhere,
         select: { id: true, healthScore: true },
@@ -90,9 +109,14 @@ export async function GET(request: Request) {
       db.invoice.count({
         where: { ...viaClient, riskLevel: { in: ['high', 'critical'] } },
       }),
-    ])
+    ]);
 
     // ── Derived metrics ────────────────────────────────────────────────────
+    // NOTE: `averageHealthScore` here is the AVERAGE of per-client GST
+    // data-quality scores (set by /api/health-score). It is NOT the canonical
+    // org-level Health Score (snapshot.healthScore) — different concept,
+    // different scale. Kept as-is for backward compatibility with consumers
+    // that display this number alongside the per-client list.
     const averageHealthScore =
       allClients.length > 0
         ? Math.round(
@@ -109,9 +133,6 @@ export async function GET(request: Request) {
       totalInvoices > 0
         ? Math.round((highRiskInvoices / totalInvoices) * 100)
         : 0
-
-    // Overdue returns
-    const overdueReturns = allFilings.filter((f) => isOverdue(f.period)).length
 
     // ── Recent audit logs (last 10, tenant-scoped) ───────────────────────
     const recentAuditLogs = await db.auditLog.findMany({

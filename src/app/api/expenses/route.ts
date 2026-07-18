@@ -40,20 +40,25 @@ function parseActorHeader(req: NextRequest): { userId?: string; userName?: strin
   }
 }
 
-// GET /api/expenses — Fetch expenses, scoped by clientId (multi-tenant isolation).
-// Previously this returned ALL expenses platform-wide with no `where` clause
-// (multi-tenant data leak). Now requires `clientId` query param, or returns
-// an empty array to prevent cross-tenant reads.
+// GET /api/expenses — Fetch expenses, tenant-scoped.
+// Accepts organizationId (preferred) or clientId. If NEITHER is provided,
+// returns empty (prevents cross-tenant data leak).
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const category = searchParams.get('category')
+    const organizationId = searchParams.get('organizationId') ?? searchParams.get('firmId')
 
-    // Build the where clause — always require clientId for tenant isolation.
-    // If no clientId is provided, return empty (do NOT dump all rows).
-    const where: { clientId?: string; category?: string } = {}
-    if (clientId) where.clientId = clientId
+    const where: Record<string, unknown> = {}
+    if (clientId) {
+      where.clientId = clientId
+    } else if (organizationId) {
+      where.client = { organizationId }
+    } else {
+      // No tenant scope — return empty rather than leak cross-tenant data
+      return NextResponse.json({ expenses: [] })
+    }
     if (category) where.category = category
 
     const expenses = await db.expense.findMany({

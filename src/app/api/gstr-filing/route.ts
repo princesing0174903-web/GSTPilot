@@ -5,9 +5,30 @@ import { emitGstReturnNode } from '@/lib/graph/auto-emit';
 import { logActivity, getOptionalUserId } from '@/lib/activity-logger';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const organizationId =
+      searchParams.get('organizationId') ?? searchParams.get('firmId') ?? undefined;
+    const clientId = searchParams.get('clientId') ?? undefined;
+
+    // Build tenant-scoped where clause. organizationId is the primary tenant
+    // filter — without it the query would return every filing platform-wide
+    // (cross-tenant data leak). clientId optionally narrows further.
+    const where: Record<string, unknown> = {};
+    if (organizationId) {
+      where.client = { organizationId };
+    } else if (clientId) {
+      // Fallback: if only clientId is provided, scope to that client (still
+      // tenant-safe because clientId is globally unique). If NEITHER is
+      // provided, return empty rather than leaking all filings.
+      where.clientId = clientId;
+    } else {
+      return NextResponse.json({ filings: [] });
+    }
+
     const filings = await db.gSTRFiling.findMany({
+      where,
       include: {
         client: true,
         events: {

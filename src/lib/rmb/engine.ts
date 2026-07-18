@@ -688,35 +688,11 @@ export function buildTaskQueue(cfo: CFOResponse, commandCenter: CommandCenter): 
     dueAt: new Date(nowDate().getFullYear(), nowDate().getMonth() + 1, 1).toISOString(),
   });
 
-  // 6. Cash forecast → Finance Agent (mark as completed to show recent activity)
-  tasks.push({
-    id: uid('task'),
-    title: 'Cash flow forecast — next 30 days',
-    description: `Project month-end position ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}.`,
-    category: 'finance',
-    status: 'completed',
-    priority: 'medium',
-    assignedAgent: 'finance-agent',
-    createdAt: daysAgo(0),
-    completedAt: nowISO(),
-    progressPct: 100,
-    output: `Forecast complete — month-end position ₹${inrFmt(cfo.predictions.cashFlow.monthlyPosition)}, runway ${cfo.dashboard.cash.runwayDays || '∞'} days.`,
-  });
-
-  // 7. ITC reconciliation — completed
-  tasks.push({
-    id: uid('task'),
-    title: 'ITC reconciliation with GSTR-2B',
-    description: 'Matched purchase register against 2B. No mismatches.',
-    category: 'gst',
-    status: 'completed',
-    priority: 'medium',
-    assignedAgent: 'gst-agent',
-    createdAt: daysAgo(0),
-    completedAt: nowISO(),
-    progressPct: 100,
-    output: 'Reconciliation complete — ITC available matched to books.',
-  });
+  // NOTE: Previously this function fabricated two `status: 'completed'` tasks
+  // ("Cash flow forecast" and "ITC reconciliation") with `completedAt: nowISO()`
+  // "to show recent activity". That was dishonest — they were not real completed
+  // tasks. Removed. Real completed tasks come from db.aITask.findMany in the
+  // API layer; if none exist, the UI shows an honest empty state.
 
   // Sort: running → pending → scheduled → completed, then priority
   const order: Record<TaskStatus, number> = { running: 0, pending: 1, scheduled: 2, failed: 3, completed: 4 };
@@ -740,72 +716,72 @@ const COMMAND_RULES: Rule[] = [
   {
     intent: 'run_my_business_today',
     phrases: ['run my business', 'run my business today', 'run the business', 'start my day', "today's plan", 'run today'],
-    ack: "I've generated today's priorities and dispatched them to your agents.",
+    ack: "I'll generate today's priorities and dispatch them to your agents. Watch the task queue for live progress.",
   },
   {
     intent: 'recover_collections',
     phrases: ['recover collection', 'recover dues', 'collect overdue', 'recover payment', 'follow up on payment', 'recover receivable'],
-    ack: "I've queued collection follow-ups. The Collections Agent is dispatching reminders now.",
+    ack: "I'll queue collection follow-ups and dispatch the Collections Agent to send reminders. You'll see real delivery confirmations in the task queue.",
   },
   {
     intent: 'file_returns',
     phrases: ['file gst', 'file return', 'file my gst', 'file gstr', 'submit return'],
-    ack: "I've prepared your returns. The GST Agent is finalising the JSON for filing.",
+    ack: "I'll route this to the GST Agent to prepare your returns and finalise the filing JSON. The task will appear in the queue shortly.",
   },
   {
     intent: 'prepare_gstr1',
     phrases: ['prepare gstr-1', 'prepare gstr1', 'gstr-1'],
-    ack: "I've prepared the GSTR-1 draft for the current period.",
+    ack: "I'll ask the GST Agent to prepare the GSTR-1 draft for the current period. It'll appear in the task queue.",
   },
   {
     intent: 'prepare_gstr3b',
     phrases: ['prepare gstr-3b', 'prepare gstr3b', 'gstr-3b'],
-    ack: "I've prepared the GSTR-3B draft for the current period.",
+    ack: "I'll ask the GST Agent to prepare the GSTR-3B draft for the current period. It'll appear in the task queue.",
   },
   {
     intent: 'generate_report',
     phrases: ['generate report', 'generate monthly report', 'create report', 'monthly report'],
-    ack: "I've scheduled the report. The Reporting Agent will have it ready shortly.",
+    ack: "I'll schedule the report with the Reporting Agent. It'll be ready shortly and appear in the task queue.",
   },
   {
     intent: 'prepare_compliance_report',
     phrases: ['compliance report', 'monthly compliance', 'statutory report'],
-    ack: "I've prepared the monthly compliance report draft.",
+    ack: "I'll ask the Reporting Agent to prepare the monthly compliance report draft. It'll appear in the task queue.",
   },
   {
     intent: 'generate_pnl',
     phrases: ['generate p&l', 'pnl', 'profit and loss', 'generate pnl', 'p&l statement'],
-    ack: "I've generated the P&L statement for the current period.",
+    ack: "I'll ask the Finance Agent to generate the P&L statement for the current period. It'll appear in the task queue.",
   },
   {
     intent: 'create_reminders',
     phrases: ['create reminder', 'send reminder', 'remind', 'set reminder'],
-    ack: "I've created reminders for the upcoming due dates.",
+    ack: "I'll create reminders for the upcoming due dates. They'll be persisted as tasks you can track.",
   },
   {
     intent: 'send_whatsapp',
     phrases: ['whatsapp', 'send whatsapp', 'send wa', 'message client'],
-    ack: "I've drafted WhatsApp messages and queued them for dispatch.",
+    ack: "I'll dispatch the Collections Agent to send WhatsApp messages. Real delivery confirmations will appear in the task queue once the WhatsApp API responds.",
   },
   {
     intent: 'show_risky_clients',
     phrases: ['risky client', 'show risky', 'which client', 'late payer', 'chronic late'],
-    ack: "I've pulled up the risky-client list with payment behaviour.",
+    ack: "I'll pull up the risky-client list with real payment behaviour from your invoice data.",
   },
   {
     intent: 'prepare_forecast',
     phrases: ['forecast', 'next month forecast', 'cash forecast', 'revenue forecast', 'prepare forecast'],
-    ack: "I've generated the forecast for the next 30 days.",
+    ack: "I'll ask the Finance Agent to generate the 30-day forecast. It'll appear in the task queue with real projections from your data.",
   },
   {
     intent: 'reconcile',
     phrases: ['reconcile', 'reconciliation', 'match 2b', 'match purchase'],
-    ack: "I've kicked off reconciliation against GSTR-2B.",
+    ack: "I'll kick off reconciliation against GSTR-2B. Real match results will appear in the task queue.",
   },
   {
     intent: 'escalate_clients',
     phrases: ['escalate', 'escalate client', 'escalate risky'],
-    ack: "I've escalated the chronic late-payers to tier-2 follow-up.",
+    ack: "I'll escalate the chronic late-payers to tier-2 follow-up via the Collections Agent. Real actions will be logged in the task queue.",
   },
 ];
 
@@ -830,7 +806,7 @@ export function parseCommand(text: string, cfo: CFOResponse): CommandIntent {
       matchedPhrases: [],
       generatedTaskPlan: [],
       spokenAck:
-        "I'll handle that. I've logged the request and routed it to the right agent — give me a moment and I'll report back.",
+        "I'll handle that. I've logged the request and will route it to the right agent — watch the task queue for live progress.",
     };
   }
 

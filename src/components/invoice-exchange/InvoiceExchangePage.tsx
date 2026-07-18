@@ -44,6 +44,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/shared';
 import {
   IndianRupee,
   TrendingUp,
@@ -107,18 +108,6 @@ function formatNumber(num: number): string {
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-}
-
-function daysAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
-}
-
-function daysFromNow(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
 }
 
 function trustBadge(score: number): { label: string; color: string; bg: string } {
@@ -196,31 +185,19 @@ interface TickerEntry {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// DATA (empty placeholders — populated by real APIs when available)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// TICKER_ENTRIES — previously 12 hardcoded mock ticker entries (TCS, Reliance,
-// Infosys, Tata Steel, L&T, Wipro, HCL Tech, Bharti Airtel, Mahindra, Adani
-// Power, Bajaj Auto, Maruti Suzuki) with fabricated amounts and buyers.
-// Removed during mock-data audit (Task 7). Empty until a real invoice-exchange
-// ticker API is wired.
+// TICKER_ENTRIES — empty until a real invoice-exchange ticker API is wired.
 const TICKER_ENTRIES: TickerEntry[] = [];
 
-// TOP_BUYERS — previously 8 hardcoded mock buyer entries (Bajaj Finance, HDFC
-// Bank, ICICI Bank, Kotak Mahindra, Aditya Birla Finance, Tata Capital, Axis
-// Finance, SBI Factors) with fabricated volumes and trade counts. Removed
-// during mock-data audit (Task 7). Empty until a real invoice-exchange
-// top-buyers API is wired.
+// TOP_BUYERS — empty until a real invoice-exchange top-buyers API is wired.
 const TOP_BUYERS: { name: string; initials: string; color: string; volume: number; trades: number; type: string }[] = [];
 
-const TOP_SELLERS: { name: string; initials: string; color: string; sold: number; count: number }[] = [
-  // TODO: wire to real API
-];
+const TOP_SELLERS: { name: string; initials: string; color: string; sold: number; count: number }[] = [];
 
-// 30-day daily volume (in crores)
-const VOLUME_30D: number[] = [
-  // TODO: wire to real API
-];
+// 30-day daily volume (in crores) — empty until real API is wired
+const VOLUME_30D: number[] = [];
 
 const INDUSTRIES = [
   'All Industries',
@@ -237,45 +214,14 @@ const INDUSTRIES = [
   'Energy',
 ];
 
-const MARKETPLACE_INVOICES: MarketInvoice[] = [
-  // TODO: wire to real API
-];
-
-const MY_INVOICES: MyInvoice[] = [
-  // TODO: wire to real API
-];
-
-const SAMPLE_BIDS: Bid[] = [
-  // TODO: wire to real API
-];
-
-const INDUSTRY_VOLUME: { name: string; volume: number; color: string }[] = [
-  // TODO: wire to real API
-];
-
-const BUYER_TYPE_DIST: { label: string; value: number; color: string }[] = [
-  // TODO: wire to real API
-];
-
-const DISCOUNT_TREND_12M: { month: string; rate: number }[] = [
-  // TODO: wire to real API
-];
-
-const STATE_HEATMAP: { name: string; code: string; volume: number }[] = [
-  // TODO: wire to real API
-];
-
-// TOP_PERFORMING_INVOICES — previously 6 hardcoded mock invoice entries
-// (TCS-Reliance Retail, Infosys-HDFC, Tata Steel-L&T, L&T-Adani Power,
-// HUL-Big Bazaar, Adani Power-Tata Power) with fabricated amounts and
-// discount savings. Removed during mock-data audit (Task 7). Empty until a
-// real invoice-exchange top-performing API is wired.
+const MARKETPLACE_INVOICES: MarketInvoice[] = [];
+const MY_INVOICES: MyInvoice[] = [];
+const SAMPLE_BIDS: Bid[] = [];
+const INDUSTRY_VOLUME: { name: string; volume: number; color: string }[] = [];
+const BUYER_TYPE_DIST: { label: string; value: number; color: string }[] = [];
+const DISCOUNT_TREND_12M: { month: string; rate: number }[] = [];
+const STATE_HEATMAP: { name: string; code: string; volume: number }[] = [];
 const TOP_PERFORMING_INVOICES: { invoiceNo: string; seller: string; buyer: string; amount: number; discountSaved: number; discountPct: number }[] = [];
-
-// RISK_DISTRIBUTION — previously 4 hardcoded mock credit-rating distribution
-// entries (AAA/AA/A/BBB with fabricated counts and volumes). Removed during
-// mock-data audit (Task 7). Empty until a real invoice-exchange risk-distribution
-// API is wired.
 const RISK_DISTRIBUTION: { rating: string; count: number; volume: number; color: string; bg: string; text: string }[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -283,12 +229,14 @@ const RISK_DISTRIBUTION: { rating: string; count: number; volume: number; color:
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function VolumeLineChart() {
-  // Empty-state guard — VOLUME_30D may be [] (real API pending).
   if (VOLUME_30D.length === 0) {
     return (
-      <div className="flex h-[220px] w-full items-center justify-center text-sm text-slate-400">
-        No volume data yet
-      </div>
+      <EmptyState
+        icon={BarChart3}
+        title="No marketplace data yet"
+        description="Daily exchange volume will appear here once invoices are listed."
+        compact
+      />
     );
   }
   const width = 760;
@@ -392,12 +340,14 @@ function VolumeLineChart() {
 }
 
 function IndustryVolumeBarChart() {
-  // Empty-state guard — INDUSTRY_VOLUME may be [] (real API pending).
   if (INDUSTRY_VOLUME.length === 0) {
     return (
-      <div className="flex h-[280px] w-full items-center justify-center text-sm text-slate-400">
-        No industry volume data yet
-      </div>
+      <EmptyState
+        icon={BarChart3}
+        title="No industry data yet"
+        description="Industry volume breakdown will appear here once invoices are listed."
+        compact
+      />
     );
   }
   const width = 760;
@@ -478,12 +428,14 @@ function IndustryVolumeBarChart() {
 }
 
 function BuyerTypeDonut() {
-  // Empty-state guard — BUYER_TYPE_DIST may be [] (real API pending).
   if (BUYER_TYPE_DIST.length === 0) {
     return (
-      <div className="flex h-[180px] w-full items-center justify-center text-sm text-slate-400">
-        No buyer-type distribution yet
-      </div>
+      <EmptyState
+        icon={Users}
+        title="No buyer data yet"
+        description="Buyer type distribution will appear here once trades occur."
+        compact
+      />
     );
   }
   const cx = 90;
@@ -555,12 +507,14 @@ function BuyerTypeDonut() {
 }
 
 function DiscountTrendChart() {
-  // Empty-state guard — DISCOUNT_TREND_12M may be [] (real API pending).
   if (DISCOUNT_TREND_12M.length === 0) {
     return (
-      <div className="flex h-[220px] w-full items-center justify-center text-sm text-slate-400">
-        No discount trend data yet
-      </div>
+      <EmptyState
+        icon={TrendingUp}
+        title="No trend data yet"
+        description="Average discount rate trend will appear here once trades occur."
+        compact
+      />
     );
   }
   const width = 760;
@@ -658,6 +612,16 @@ function DiscountTrendChart() {
 }
 
 function StateHeatmap() {
+  if (STATE_HEATMAP.length === 0) {
+    return (
+      <EmptyState
+        icon={MapPin}
+        title="No state data yet"
+        description="State-wise invoice volume will appear here once invoices are listed."
+        compact
+      />
+    );
+  }
   const colorFor = (vol: number) => {
     if (vol >= 75) return '#059669';
     if (vol >= 50) return '#10b981';
@@ -694,6 +658,22 @@ function StateHeatmap() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function LiveTicker() {
+  if (TICKER_ENTRIES.length === 0) {
+    return (
+      <div className="overflow-hidden bg-slate-900 dark:bg-slate-950 border-y border-emerald-500/20 py-2.5">
+        <div className="flex items-center gap-3 px-4">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Live</span>
+          </div>
+          <p className="text-xs text-slate-400">No live trades yet. The ticker will show real-time trades as they occur.</p>
+        </div>
+      </div>
+    );
+  }
   const entries = [...TICKER_ENTRIES, ...TICKER_ENTRIES];
   return (
     <div className="overflow-hidden bg-slate-900 dark:bg-slate-950 border-y border-emerald-500/20 py-2.5">
@@ -1081,34 +1061,43 @@ function ViewBidsDialog({
             </div>
           </div>
           <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {SAMPLE_BIDS.map((bid, i) => (
-              <motion.div
-                key={bid.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className={`flex items-center gap-3 p-3 rounded-lg border ${i === 0 ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}
-              >
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full ${bid.bidderColor} text-white text-[10px] font-bold shrink-0`}>
-                  {bid.bidderInitials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{bid.bidder}</p>
-                    {i === 0 && (
-                      <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[9px] px-1.5 py-0">
-                        <Award className="h-2.5 w-2.5 mr-0.5" />Best
-                      </Badge>
-                    )}
+            {SAMPLE_BIDS.length === 0 ? (
+              <EmptyState
+                icon={Gavel}
+                title="No bids yet"
+                description="Bids from NBFCs, banks and investors will appear here once your invoice is listed."
+                compact
+              />
+            ) : (
+              SAMPLE_BIDS.map((bid, i) => (
+                <motion.div
+                  key={bid.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${i === 0 ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}
+                >
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-full ${bid.bidderColor} text-white text-[10px] font-bold shrink-0`}>
+                    {bid.bidderInitials}
                   </div>
-                  <p className="text-[10px] text-slate-500">{bid.type} · {bid.time}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-slate-900">{formatINR(bid.amount)}</p>
-                  <p className="text-[10px] text-amber-600">@ {bid.discountRate}%</p>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{bid.bidder}</p>
+                      {i === 0 && (
+                        <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[9px] px-1.5 py-0">
+                          <Award className="h-2.5 w-2.5 mr-0.5" />Best
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500">{bid.type} · {bid.time}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-slate-900">{formatINR(bid.amount)}</p>
+                    <p className="text-[10px] text-amber-600">@ {bid.discountRate}%</p>
+                  </div>
+                </motion.div>
+              ))
+            )}
           </div>
         </div>
         <DialogFooter>
@@ -1406,10 +1395,10 @@ function DashboardTab() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={IndianRupee} label="Today's Volume" value="₹1,250 Cr" sub="vs ₹1,180 Cr yesterday" trend="up" delay={0.05} />
-        <StatCard icon={FileText} label="Invoices Listed" value="12,450" sub="348 new today" trend="up" delay={0.1} />
-        <StatCard icon={Users} label="Active Investors" value="847" sub="62 NBFCs · 38 banks" delay={0.15} />
-        <StatCard icon={Percent} label="Avg Discount" value="4.2%" sub="down from 4.6%" trend="down" delay={0.2} />
+        <StatCard icon={IndianRupee} label="Today's Volume" value="₹0" sub="No trades yet today" delay={0.05} />
+        <StatCard icon={FileText} label="Invoices Listed" value="0" sub="No invoices listed yet" delay={0.1} />
+        <StatCard icon={Users} label="Active Investors" value="0" sub="No investors active yet" delay={0.15} />
+        <StatCard icon={Percent} label="Avg Discount" value="—" sub="No trades yet" delay={0.2} />
       </div>
 
       {/* Volume chart */}
@@ -1440,19 +1429,28 @@ function DashboardTab() {
           <CardContent className="p-2">
             <ScrollArea className="max-h-96 overflow-y-auto pr-2">
               <div className="space-y-1">
-                {TOP_BUYERS.map((b, i) => (
-                  <LeaderboardRow
-                    key={b.name}
-                    rank={i + 1}
-                    name={b.name}
-                    initials={b.initials}
-                    color={b.color}
-                    primary={formatINRShort(b.volume)}
-                    secondary={`${b.trades} trades today`}
-                    type={b.type}
-                    delay={i * 0.04}
+                {TOP_BUYERS.length === 0 ? (
+                  <EmptyState
+                    icon={Landmark}
+                    title="No buyer activity yet"
+                    description="Top buyers will appear here once trades occur on the exchange."
+                    compact
                   />
-                ))}
+                ) : (
+                  TOP_BUYERS.map((b, i) => (
+                    <LeaderboardRow
+                      key={b.name}
+                      rank={i + 1}
+                      name={b.name}
+                      initials={b.initials}
+                      color={b.color}
+                      primary={formatINRShort(b.volume)}
+                      secondary={`${b.trades} trades today`}
+                      type={b.type}
+                      delay={i * 0.04}
+                    />
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -1468,18 +1466,27 @@ function DashboardTab() {
           <CardContent className="p-2">
             <ScrollArea className="max-h-96 overflow-y-auto pr-2">
               <div className="space-y-1">
-                {TOP_SELLERS.map((s, i) => (
-                  <LeaderboardRow
-                    key={s.name}
-                    rank={i + 1}
-                    name={s.name}
-                    initials={s.initials}
-                    color={s.color}
-                    primary={formatINRShort(s.sold)}
-                    secondary={`${s.count} invoices sold`}
-                    delay={i * 0.04}
+                {TOP_SELLERS.length === 0 ? (
+                  <EmptyState
+                    icon={Building2}
+                    title="No seller activity yet"
+                    description="Top sellers will appear here once invoices are traded on the exchange."
+                    compact
                   />
-                ))}
+                ) : (
+                  TOP_SELLERS.map((s, i) => (
+                    <LeaderboardRow
+                      key={s.name}
+                      rank={i + 1}
+                      name={s.name}
+                      initials={s.initials}
+                      color={s.color}
+                      primary={formatINRShort(s.sold)}
+                      secondary={`${s.count} invoices sold`}
+                      delay={i * 0.04}
+                    />
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -1687,7 +1694,9 @@ function MyInvoicesTab() {
     const sold = MY_INVOICES.filter(i => i.status === 'sold');
     const totalListed = listed.reduce((s, i) => s + i.amount, 0);
     const totalSold = sold.reduce((s, i) => s + i.amount, 0);
-    const avgDiscount = MY_INVOICES.reduce((s, i) => s + i.discount, 0) / MY_INVOICES.length;
+    const avgDiscount = MY_INVOICES.length > 0
+      ? MY_INVOICES.reduce((s, i) => s + i.discount, 0) / MY_INVOICES.length
+      : 0;
     const totalFees = Math.round(totalSold * 0.0015);
     return { totalListed, totalSold, avgDiscount, totalFees };
   }, []);
@@ -1732,7 +1741,19 @@ function MyInvoicesTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {MY_INVOICES.map((inv, i) => {
+                {MY_INVOICES.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-10">
+                      <EmptyState
+                        icon={FileText}
+                        title="No invoices listed yet"
+                        description="Click 'List New Invoice' to put your first invoice on the exchange."
+                        compact
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  MY_INVOICES.map((inv, i) => {
                   const sb = statusBadge(inv.status);
                   return (
                     <motion.tr
@@ -1782,7 +1803,8 @@ function MyInvoicesTab() {
                       </TableCell>
                     </motion.tr>
                   );
-                })}
+                })
+                )}
               </TableBody>
             </Table>
           </ScrollArea>
@@ -1884,53 +1906,64 @@ function AnalyticsTab() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {RISK_DISTRIBUTION.map((r, i) => {
-              const volPct = (r.volume / totalRiskVol) * 100;
-              const countPct = (r.count / totalRiskCount) * 100;
-              return (
-                <motion.div
-                  key={r.rating}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.08 }}
-                  className="space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-12 items-center justify-center rounded font-bold text-xs text-white" style={{ backgroundColor: r.color }}>
-                        {r.rating}
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700">{formatNumber(r.count)} invoices</p>
-                        <p className="text-[10px] text-slate-500">{formatINRShort(r.volume)} volume</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-slate-800">{volPct.toFixed(1)}%</p>
-                      <p className="text-[10px] text-slate-500">{countPct.toFixed(1)}% count</p>
-                    </div>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            {RISK_DISTRIBUTION.length === 0 ? (
+              <EmptyState
+                icon={Scale}
+                title="No risk data yet"
+                description="Risk distribution will appear here once invoices are traded on the exchange."
+                compact
+              />
+            ) : (
+              <>
+                {RISK_DISTRIBUTION.map((r, i) => {
+                  const volPct = (r.volume / totalRiskVol) * 100;
+                  const countPct = (r.count / totalRiskCount) * 100;
+                  return (
                     <motion.div
-                      className="h-full rounded-full"
-                      style={{ backgroundColor: r.color }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${volPct}%` }}
-                      transition={{ delay: 0.3 + i * 0.08, duration: 0.6 }}
-                    />
-                  </div>
-                </motion.div>
-              );
-            })}
-            <Separator />
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Total invoices</span>
-              <span className="font-semibold text-slate-800">{formatNumber(totalRiskCount)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Total volume</span>
-              <span className="font-semibold text-slate-800">{formatINRShort(totalRiskVol)}</span>
-            </div>
+                      key={r.rating}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      className="space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-12 items-center justify-center rounded font-bold text-xs text-white" style={{ backgroundColor: r.color }}>
+                            {r.rating}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700">{formatNumber(r.count)} invoices</p>
+                            <p className="text-[10px] text-slate-500">{formatINRShort(r.volume)} volume</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-slate-800">{volPct.toFixed(1)}%</p>
+                          <p className="text-[10px] text-slate-500">{countPct.toFixed(1)}% count</p>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ backgroundColor: r.color }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${volPct}%` }}
+                          transition={{ delay: 0.3 + i * 0.08, duration: 0.6 }}
+                        />
+                      </div>
+                    </motion.div>
+                  );
+                })}
+                <Separator />
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Total invoices</span>
+                  <span className="font-semibold text-slate-800">{formatNumber(totalRiskCount)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Total volume</span>
+                  <span className="font-semibold text-slate-800">{formatINRShort(totalRiskVol)}</span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -1953,25 +1986,38 @@ function AnalyticsTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {TOP_PERFORMING_INVOICES.map((inv, i) => (
-                    <motion.tr
-                      key={inv.invoiceNo}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.05 }}
-                    >
-                      <TableCell className="font-mono text-[10px] text-slate-700 py-2.5">{inv.invoiceNo}</TableCell>
-                      <TableCell className="py-2.5">
-                        <p className="text-xs font-medium text-slate-800">{inv.seller}</p>
-                        <p className="text-[10px] text-slate-500">{inv.buyer}</p>
+                  {TOP_PERFORMING_INVOICES.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-10">
+                        <EmptyState
+                          icon={Award}
+                          title="No performing invoices yet"
+                          description="Top performing invoices will appear here once trades are settled."
+                          compact
+                        />
                       </TableCell>
-                      <TableCell className="text-xs font-semibold text-slate-900 text-right py-2.5">{formatINRShort(inv.amount)}</TableCell>
-                      <TableCell className="text-right py-2.5">
-                        <p className="text-xs font-bold text-emerald-700">{formatINRShort(inv.discountSaved)}</p>
-                        <p className="text-[10px] text-slate-500">{inv.discountPct}%</p>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
+                    </TableRow>
+                  ) : (
+                    TOP_PERFORMING_INVOICES.map((inv, i) => (
+                      <motion.tr
+                        key={inv.invoiceNo}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <TableCell className="font-mono text-[10px] text-slate-700 py-2.5">{inv.invoiceNo}</TableCell>
+                        <TableCell className="py-2.5">
+                          <p className="text-xs font-medium text-slate-800">{inv.seller}</p>
+                          <p className="text-[10px] text-slate-500">{inv.buyer}</p>
+                        </TableCell>
+                        <TableCell className="text-xs font-semibold text-slate-900 text-right py-2.5">{formatINRShort(inv.amount)}</TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <p className="text-xs font-bold text-emerald-700">{formatINRShort(inv.discountSaved)}</p>
+                          <p className="text-[10px] text-slate-500">{inv.discountPct}%</p>
+                        </TableCell>
+                      </motion.tr>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </ScrollArea>

@@ -495,7 +495,6 @@ export async function syncConnection(
 
     // 2. Re-fetch (regenerate) the dataset
     let recordsImported = 0;
-    let partialErrors: string[] = [];
 
     if (conn.type === 'gstn') {
       // REAL GSTN API PENDING — generator returns null, nothing to import.
@@ -544,63 +543,14 @@ export async function syncConnection(
       throw new Error(`Unknown connection type: ${conn.type}`);
     }
 
-    // 3. Simulate rare partial / failed outcomes (5% partial, 2% failed)
-    const r = Math.random();
-    if (r < 0.02) {
-      // Failed
-      const errMsg = 'Sync failed — upstream API timeout (simulated)';
-      log = await db.syncLog.update({
-        where: { id: log.id },
-        data: {
-          status: 'failed',
-          errorsCount: 1,
-          message: errMsg,
-          errorDetail: JSON.stringify([errMsg]),
-          completedAt: new Date(),
-        },
-      });
-      connection = await db.businessConnection.update({
-        where: { id: conn.id },
-        data: {
-          syncStatus: 'failed',
-          lastSyncedAt: new Date(),
-          lastSyncRecords: recordsImported,
-          lastSyncErrors: 1,
-          lastSyncMessage: errMsg,
-        },
-      });
-      return { log, connection };
-    }
-
-    if (r < 0.05) {
-      // Partial — 1–2 errors
-      partialErrors = [
-        'Row 23: counterparty name truncated',
-        ...(Math.random() > 0.5 ? ['Row 67: amount sign normalised'] : []),
-      ];
-      log = await db.syncLog.update({
-        where: { id: log.id },
-        data: {
-          status: 'partial',
-          recordsImported,
-          errorsCount: partialErrors.length,
-          message: `Partial sync — ${recordsImported} records imported, ${partialErrors.length} errors`,
-          errorDetail: JSON.stringify(partialErrors),
-          completedAt: new Date(),
-        },
-      });
-      connection = await db.businessConnection.update({
-        where: { id: conn.id },
-        data: {
-          syncStatus: 'partial',
-          lastSyncedAt: new Date(),
-          lastSyncRecords: recordsImported,
-          lastSyncErrors: partialErrors.length,
-          lastSyncMessage: `Partial sync — ${recordsImported} records imported`,
-        },
-      });
-      return { log, connection };
-    }
+    // 3. Sync outcome — only real errors are recorded. The previous
+    //    implementation simulated 2% failed + 3% partial syncs with
+    //    Math.random() and fabricated error messages ('Row 23: counterparty
+    //    name truncated', 'Row 67: amount sign normalised'). That wrote
+    //    fake failures to the SyncLog and BusinessConnection tables.
+    //    Removed because sync failures must reflect real upstream errors,
+    //    not random noise. Real errors thrown above are caught by the
+    //    surrounding try/catch and recorded as 'failed' below.
 
     // 4. Success
     const okMsg = `Synced ${recordsImported} records`;

@@ -6,6 +6,13 @@
 //   Customer Lifetime Value, Average Collection Time, Average Payment Time,
 //   Vendor Reliability, Client Reliability, Business Growth %.
 //
+// HEADLINE FINANCIALS (revenue, profit, cash, runwayDays, burnRate,
+// workingCapital) are sourced from the canonical Business Snapshot
+// (`getBusinessSnapshot`) — the single source of truth across the entire app.
+// Twin-specific KPIs (ebitda, CLV, collection/payment times, reliability
+// scores, growth %) fall back to raw CFO data because the snapshot does not
+// expose them.
+//
 // Refreshes automatically whenever business data changes.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -13,8 +20,9 @@ import { fetchRawCFOData } from '@/lib/cfo/phase1/data';
 import { computeRevenueAnalytics } from '@/lib/cfo/phase1/revenue-analytics';
 import { computeProfitability } from '@/lib/cfo/phase1/profitability';
 import { computeCashFlow } from '@/lib/cfo/phase1/cash-flow';
-import { computeWorkingCapital } from '@/lib/cfo/phase1/working-capital';
+import { computeWorkingCapital as computeWorkingCapitalCFO } from '@/lib/cfo/phase1/working-capital';
 import { computeCollections } from '@/lib/cfo/phase1/collection-engine';
+import { getBusinessSnapshot } from '@/lib/business/snapshot';
 import type { LiveKPIs } from './types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -105,25 +113,59 @@ function customerLifetimeValue(
 // ─── Main: compute live KPIs ────────────────────────────────────────────────
 
 export async function computeLiveKPIs(organizationId?: string): Promise<LiveKPIs> {
-  const data = await fetchRawCFOData(organizationId ?? '');
+  // ── 1. Call the canonical Business Snapshot FIRST ──
+  // Headline financials (revenue, profit, cash, runwayDays, burnRate,
+  // workingCapital) come from the snapshot — the single source of truth.
+  // Twin-specific KPIs (ebitda, CLV, reliability, growth %) fall back to raw
+  // CFO data because the snapshot does not expose them.
+  const orgId = organizationId ?? '';
+  const snapshot = orgId
+    ? await safe(() => getBusinessSnapshot(orgId))
+    : null;
+
+  // ── 2. Fetch raw data ONLY for twin-specific fields ──
+  // ebitda, customerLifetimeValue, averageCollectionTime, averagePaymentTime,
+  // vendorReliability, clientReliability, businessGrowthPct — none are in the
+  // snapshot.
+  const data = await fetchRawCFOData(orgId);
 
   const revenue = safe(() => computeRevenueAnalytics(data));
   const profitability = safe(() => computeProfitability(data));
-  const cashFlow = safe(() => computeCashFlow(data));
-  const workingCapital = safe(() => computeWorkingCapital(data));
 
   const avgCollectionDays = averageCollectionTime(data.invoices);
   const avgPaymentDays = averagePaymentTime(data.purchaseBills, data.payments);
-  const clv = customerLifetimeValue({ thisMonth: revenue.thisMonth || 0 }, data.clients, avgCollectionDays);
+
+  // ── 3. Headline financials from snapshot, with raw fallback ──
+  // snapshot.revenueThisMonth preserves the MTD semantic the UI expects
+  // (label "Revenue (MTD)"). snapshot.profit is the FY-total net profit.
+  const snapshotRevenue = snapshot?.revenueThisMonth ?? revenue.thisMonth ?? 0;
+  const snapshotProfit = snapshot?.profit ?? profitability.netProfit ?? 0;
+  const snapshotCash = snapshot?.cash ?? safe(() => computeCashFlow(data)).currentCash ?? 0;
+  const snapshotRunwayDays = snapshot?.runwayDays ?? safe(() => computeCashFlow(data)).runwayDays ?? 0;
+  // burnRate: monthly operating burn — derived from snapshot.expenses (FY total / 12).
+  // Falls back to the CFO cashFlow engine's burnRatePerMonth when no snapshot.
+  const snapshotExpenses = snapshot?.expenses ?? 0;
+  const snapshotBurnRate = snapshotExpenses > 0
+    ? snapshotExpenses / 12
+    : safe(() => computeCashFlow(data)).burnRatePerMonth ?? 0;
+  const snapshotWorkingCapital = snapshot?.workingCapital
+    ?? safe(() => computeWorkingCapitalCFO(data)).workingCapital ?? 0;
+
+  // CLV uses MTD revenue per active client (twin-specific computation).
+  const clv = customerLifetimeValue(
+    { thisMonth: snapshotRevenue || revenue.thisMonth || 0 },
+    data.clients,
+    avgCollectionDays,
+  );
 
   return {
-    revenue: Math.round(revenue.thisMonth || 0),
-    profit: Math.round(profitability.netProfit || 0),
-    cash: Math.round(cashFlow.currentCash || 0),
+    revenue: Math.round(snapshotRevenue),
+    profit: Math.round(snapshotProfit),
+    cash: Math.round(snapshotCash),
     ebitda: Math.round(profitability.ebitda || 0),
-    runwayDays: Math.round(cashFlow.runwayDays || 0),
-    burnRate: Math.round(cashFlow.burnRatePerMonth || 0),
-    workingCapital: Math.round(workingCapital.workingCapital || 0),
+    runwayDays: Math.round(snapshotRunwayDays),
+    burnRate: Math.round(snapshotBurnRate),
+    workingCapital: Math.round(snapshotWorkingCapital),
     customerLifetimeValue: clv,
     averageCollectionTime: avgCollectionDays,
     averagePaymentTime: avgPaymentDays,

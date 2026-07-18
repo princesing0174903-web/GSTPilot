@@ -1,31 +1,29 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Financial Engine (ONE CALCULATION ENGINE)
+// GSTPilot Infinity™ — Financial Engine (helper calculators for the Snapshot)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Every financial calculation in GSTPilot MUST go through this engine. No page,
-// no API, no hook is allowed to compute Revenue, Expenses, Profit, Cash, GST,
-// ITC, Outstanding, Receivables, Payables, Health Score, Forecast, Risk Score,
-// Collection Rate, Working Capital, or Runway independently.
+// This file exposes the small pure-function calculators that the canonical
+// Business Snapshot (`./snapshot.ts`) uses to derive Collection Rate, Working
+// Capital, Runway, GST Liability, and Forecast from the raw aggregate values.
 //
-// If two pages show revenue, they MUST show the exact same value — because they
-// both call this engine.
+// The canonical Health Score (8 weighted factors) and Risk Score (5 additive
+// triggers) LIVE in `./snapshot.ts` — see `computeHealthScore` and
+// `computeRiskScore` there. The duplicate `computeHealthScore` /
+// `computeRiskScore` functions that USED to live in this file (different
+// formula: 5-factor weighted + 4-factor additive) were DEAD CODE — zero
+// imports across the codebase (verified via grep) — and have been removed to
+// prevent future drift. See task FIX-DUP-1 in worklog.md.
 //
-// DUPLICATE CALCULATIONS REMOVED:
-//   • Dashboard KPIs → now reads from BusinessSnapshot (which uses this engine)
-//   • Oracle context → now reads from BusinessSnapshot
-//   • AI CFO insights → now reads from BusinessSnapshot
-//   • Run My Business → now reads from BusinessSnapshot
-//   • Autonomous → now reads from BusinessSnapshot
-//   • Digital Twin snapshots → now reads from BusinessSnapshot
-//
-// All formulas are documented inline so there is exactly one definition of each.
+// If you need a Health Score or Risk Score, call `getBusinessSnapshot(orgId)`
+// and read `.healthScore` / `.riskScore` / `.healthScoreFactors` /
+// `.riskScoreFactors` — NEVER re-implement the formula here.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface FinancialEngineResult {
-  healthScore: number;       // 0-100 composite business health
-  riskScore: number;         // 0-100 (higher = riskier)
+  healthScore: number;       // 0-100 composite business health (sourced from snapshot.ts)
+  riskScore: number;         // 0-100 (higher = riskier) (sourced from snapshot.ts)
   collectionRate: number;    // 0-1 (collected / invoiced)
   workingCapital: number;    // receivables - payables
   runwayDays: number;        // cash / monthly burn
@@ -36,122 +34,6 @@ export interface FinancialEngineResult {
     trend: 'up' | 'down' | 'flat';
     confidence: number;      // 0-1
   };
-}
-
-// ─── Health Score (0-100 composite) ──────────────────────────────────────────
-//
-// Weighted average of 5 sub-scores:
-//   1. Profitability (30%)  — profit margin
-//   2. Liquidity (25%)      — cash vs payables
-//   3. Compliance (20%)     — filed vs pending returns
-//   4. Collection (15%)     — collected vs invoiced
-//   5. Growth (10%)         — revenue level (scaled)
-//
-// Returns 0 when there is no data (honest empty state).
-
-export function computeHealthScore(input: {
-  revenue: number;
-  expenses: number;
-  profit: number;
-  receivables: number;
-  payables: number;
-  cash: number;
-  filedReturns: number;
-  pendingReturns: number;
-  overdueReturns: number;
-}): number {
-  // No data → 0
-  if (input.revenue === 0 && input.expenses === 0 && input.cash === 0) {
-    return 0;
-  }
-
-  // 1. Profitability sub-score (0-100)
-  const profitMargin = input.revenue > 0 ? input.profit / input.revenue : 0;
-  const profitabilityScore = Math.max(0, Math.min(100, profitMargin * 100 * 2.5)); // 40% margin → 100
-
-  // 2. Liquidity sub-score (0-100)
-  const liquidityRatio = input.payables > 0 ? input.cash / input.payables : (input.cash > 0 ? 1 : 0);
-  const liquidityScore = Math.max(0, Math.min(100, liquidityRatio * 100));
-
-  // 3. Compliance sub-score (0-100)
-  const totalReturns = input.filedReturns + input.pendingReturns;
-  const complianceRate = totalReturns > 0 ? input.filedReturns / totalReturns : 1;
-  const overduePenalty = totalReturns > 0 ? (input.overdueReturns / totalReturns) * 50 : 0;
-  const complianceScore = Math.max(0, Math.min(100, complianceRate * 100 - overduePenalty));
-
-  // 4. Collection sub-score (0-100)
-  const collectionRate = input.revenue > 0
-    ? Math.max(0, Math.min(1, (input.revenue - input.receivables) / input.revenue))
-    : 0;
-  const collectionScore = collectionRate * 100;
-
-  // 5. Growth sub-score (0-100) — scaled revenue level
-  const growthScore = input.revenue > 0
-    ? Math.max(0, Math.min(100, Math.log10(input.revenue + 1) * 12.5)) // 1Cr → ~100
-    : 0;
-
-  const weighted =
-    profitabilityScore * 0.30 +
-    liquidityScore * 0.25 +
-    complianceScore * 0.20 +
-    collectionScore * 0.15 +
-    growthScore * 0.10;
-
-  return Math.round(Math.max(0, Math.min(100, weighted)));
-}
-
-// ─── Risk Score (0-100, higher = riskier) ────────────────────────────────────
-//
-// Inverse of health, weighted toward cash flow risk and overdue compliance.
-
-export function computeRiskScore(input: {
-  profit: number;
-  revenue: number;
-  cash: number;
-  payables: number;
-  receivables: number;
-  overdueReturns: number;
-  pendingReturns: number;
-}): number {
-  if (input.revenue === 0 && input.payables === 0 && input.cash === 0) {
-    return 0;
-  }
-
-  let risk = 0;
-
-  // Profitability risk (0-35)
-  if (input.revenue > 0) {
-    const margin = input.profit / input.revenue;
-    if (margin < 0) risk += 35;
-    else if (margin < 0.05) risk += 25;
-    else if (margin < 0.10) risk += 15;
-    else if (margin < 0.20) risk += 5;
-  }
-
-  // Liquidity risk (0-30)
-  if (input.payables > 0) {
-    const coverage = input.cash / input.payables;
-    if (coverage < 0.5) risk += 30;
-    else if (coverage < 1) risk += 20;
-    else if (coverage < 1.5) risk += 10;
-  } else if (input.cash < 0) {
-    risk += 30;
-  }
-
-  // Compliance risk (0-25)
-  const totalReturns = input.pendingReturns + input.overdueReturns;
-  if (totalReturns > 0) {
-    risk += Math.min(25, (input.overdueReturns / totalReturns) * 25 + (input.pendingReturns / totalReturns) * 10);
-  }
-
-  // Receivables concentration risk (0-10)
-  if (input.receivables > 0 && input.revenue > 0) {
-    const receivableRatio = input.receivables / input.revenue;
-    if (receivableRatio > 0.5) risk += 10;
-    else if (receivableRatio > 0.3) risk += 5;
-  }
-
-  return Math.round(Math.max(0, Math.min(100, risk)));
 }
 
 // ─── Collection Rate (0-1) ───────────────────────────────────────────────────
@@ -238,3 +120,4 @@ export function computeForecast(
 export function computeOutstanding(receivables: number, payables: number): number {
   return receivables + payables;
 }
+

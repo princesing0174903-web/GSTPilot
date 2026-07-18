@@ -58,6 +58,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showNewTabPrompt, setShowNewTabPrompt] = useState(false);
 
   const combinedLoading = isLoading || localLoading;
   const displayError = localError || error;
@@ -133,12 +134,20 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   };
 
   // ── Google Sign In (popup with redirect fallback) ──
+  // Inside an iframe (sandbox preview), Google OAuth cannot run — Google
+  // blocks cross-origin iframes. We detect this and show an "Open in new tab"
+  // prompt instead of failing silently.
   const handleGoogleSignIn = async () => {
     setLocalError(null);
     setLocalLoading(true);
+    setShowNewTabPrompt(false);
     try {
-      const { error: googleError } = await ctxSignInWithGoogle();
-      if (googleError) {
+      const { error: googleError, needsNewTab } = await ctxSignInWithGoogle();
+      if (needsNewTab) {
+        // Iframe detected — show the "Open in new tab" prompt.
+        setShowNewTabPrompt(true);
+        setLocalLoading(false);
+      } else if (googleError) {
         setLocalError(googleError);
         setLocalLoading(false);
       } else {
@@ -149,6 +158,15 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
       setLocalLoading(false);
     }
+  };
+
+  // ── Open Google sign-in in a new top-level tab ──
+  // The new tab opens at the same origin with ?googleSignIn=1, which
+  // triggers signInWithPopup automatically (top-level windows can do OAuth).
+  const handleOpenInNewTab = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = `${origin}/?googleSignIn=1`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   // ── Forgot Password ──
@@ -420,6 +438,37 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 )}
                 Continue with Google
               </Button>
+
+              {/* Open in new tab prompt — shown when iframe is detected */}
+              <AnimatePresence>
+                {showNewTabPrompt && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-4 rounded-xl bg-amber-500/10 border border-amber-500/20 p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-amber-200 mb-1">
+                          Google sign-in needs a new tab
+                        </p>
+                        <p className="text-xs text-amber-100/70 mb-3 leading-relaxed">
+                          The preview panel blocks Google's pop-up. Open the app in a new tab to complete sign-in securely.
+                        </p>
+                        <button
+                          onClick={handleOpenInNewTab}
+                          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 text-xs font-semibold transition-colors press-scale"
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                          Open in new tab
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Divider */}
               <div className="relative my-6">

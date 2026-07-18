@@ -105,8 +105,16 @@ function AnimatedScore({ value, decimals = 0, prefix = '', suffix = '' }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA — 12 Indian Businesses
+// BUSINESS DIRECTORY DATA
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped a hardcoded array of 12 REAL Indian listed
+// companies (TCS, Infosys, HDFC, Reliance, SBI, Bharti Airtel, Maruti Suzuki,
+// Asian Paints, Bajaj Finance, Wipro, Mahindra & Mahindra, Adani Power) with
+// fabricated trust / compliance / payment / growth scores, fabricated turnover,
+// employee counts, and loan counts. Publishing fabricated financial scores for
+// real, named companies is defamatory and presents fake data as real.
+// The array is now empty until the user connects real partners.
+// TODO: Replace with real data from /api/business-network when available.
 
 interface Business {
   ubid: string
@@ -133,116 +141,7 @@ interface Business {
   scoreHistory: number[]
 }
 
-const BUSINESSES: Business[] = [
-  {
-    ubid: 'UBID-27-TCS1-0017', name: 'Tata Consultancy Services', gstin: '27AAACT2727Q1ZU',
-    pan: 'AAACT2727Q', cin: 'L28920MH1995PLC085715', incorporated: '1995-03-15',
-    industry: 'IT Services', industryKey: 'it', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 96, complianceScore: 98, paymentScore: 95, growthScore: 92,
-    verified: true, verificationTier: 'Platinum',
-    employees: 603500, annualTurnover: 195000000000, bankAccounts: 18, activeLoans: 4, tradePartners: 1240,
-    scoreHistory: [89, 90, 91, 92, 91, 93, 94, 93, 94, 95, 96, 96],
-  },
-  {
-    ubid: 'UBID-29-INF1-0089', name: 'Infosys Limited', gstin: '29AAACI4798L1Z3',
-    pan: 'AAACI4798L', cin: 'L28920KA1981PLC013115', incorporated: '1981-07-02',
-    industry: 'IT Services', industryKey: 'it', hq: 'Bengaluru', state: 'Karnataka',
-    trustScore: 95, complianceScore: 97, paymentScore: 94, growthScore: 89,
-    verified: true, verificationTier: 'Platinum',
-    employees: 317200, annualTurnover: 158000000000, bankAccounts: 14, activeLoans: 3, tradePartners: 980,
-    scoreHistory: [88, 89, 90, 91, 92, 92, 93, 93, 94, 94, 95, 95],
-  },
-  {
-    ubid: 'UBID-27-HDF1-0234', name: 'HDFC Bank', gstin: '27AAACH2702H1Z3',
-    pan: 'AAACH2702H', cin: 'L65920MH1994PLC072735', incorporated: '1994-10-17',
-    industry: 'Banking', industryKey: 'banking', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 97, complianceScore: 99, paymentScore: 96, growthScore: 88,
-    verified: true, verificationTier: 'Platinum',
-    employees: 218000, annualTurnover: 835000000000, bankAccounts: 1, activeLoans: 0, tradePartners: 2150,
-    scoreHistory: [92, 93, 93, 94, 95, 95, 96, 96, 96, 97, 97, 97],
-  },
-  {
-    ubid: 'UBID-28-RIL2-0042', name: 'Reliance Industries', gstin: '27AAACR5055K1Z5',
-    pan: 'AAACR5055K', cin: 'L17110MH1973PLC019781', incorporated: '1973-08-08',
-    industry: 'Conglomerate', industryKey: 'conglomerate', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 94, complianceScore: 93, paymentScore: 92, growthScore: 90,
-    verified: true, verificationTier: 'Platinum',
-    employees: 342700, annualTurnover: 1000000000000, bankAccounts: 22, activeLoans: 9, tradePartners: 3480,
-    scoreHistory: [86, 87, 88, 89, 90, 91, 91, 92, 92, 93, 94, 94],
-  },
-  {
-    ubid: 'UBID-27-SBI0-1001', name: 'State Bank of India', gstin: '27AAACS8577G1Z1',
-    pan: 'AAACS8577G', cin: 'L65110MH1955PLC011448', incorporated: '1955-07-01',
-    industry: 'Banking', industryKey: 'banking', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 96, complianceScore: 98, paymentScore: 93, growthScore: 82,
-    verified: true, verificationTier: 'Platinum',
-    employees: 235000, annualTurnover: 532000000000, bankAccounts: 1, activeLoans: 0, tradePartners: 4280,
-    scoreHistory: [90, 91, 91, 92, 93, 93, 94, 94, 95, 95, 96, 96],
-  },
-  {
-    ubid: 'UBID-06-BRT4-0156', name: 'Bharti Airtel', gstin: '06AABCB3728G1ZJ',
-    pan: 'AABCB3728G', cin: 'L74810DL1995PLC070494', incorporated: '1995-07-07',
-    industry: 'Telecom', industryKey: 'telecom', hq: 'New Delhi', state: 'Delhi',
-    trustScore: 87, complianceScore: 88, paymentScore: 84, growthScore: 80,
-    verified: true, verificationTier: 'Gold',
-    employees: 17800, annualTurnover: 149000000000, bankAccounts: 16, activeLoans: 6, tradePartners: 2150,
-    scoreHistory: [80, 81, 82, 83, 83, 84, 85, 85, 86, 86, 87, 87],
-  },
-  {
-    ubid: 'UBID-06-MSU2-0411', name: 'Maruti Suzuki India', gstin: '06AAACM4933F1ZP',
-    pan: 'AAACM4933F', cin: 'L34103HR1981PLC011635', incorporated: '1981-02-24',
-    industry: 'Automobile', industryKey: 'auto', hq: 'Gurugram', state: 'Haryana',
-    trustScore: 89, complianceScore: 91, paymentScore: 88, growthScore: 78,
-    verified: true, verificationTier: 'Gold',
-    employees: 18500, annualTurnover: 132000000000, bankAccounts: 12, activeLoans: 5, tradePartners: 1620,
-    scoreHistory: [82, 83, 84, 85, 86, 86, 87, 87, 88, 88, 89, 89],
-  },
-  {
-    ubid: 'UBID-27-ASN1-0528', name: 'Asian Paints', gstin: '27AAACA9514P1Z2',
-    pan: 'AAACA9514P', cin: 'L24220MH1945PLC005077', incorporated: '1945-01-01',
-    industry: 'Manufacturing', industryKey: 'mfg', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 90, complianceScore: 92, paymentScore: 89, growthScore: 81,
-    verified: true, verificationTier: 'Gold',
-    employees: 8200, annualTurnover: 35400000000, bankAccounts: 9, activeLoans: 3, tradePartners: 890,
-    scoreHistory: [83, 84, 85, 86, 87, 87, 88, 88, 89, 89, 90, 90],
-  },
-  {
-    ubid: 'UBID-23-BJF1-0673', name: 'Bajaj Finance', gstin: '23AABCB5594J1Z6',
-    pan: 'AABCB5594J', cin: 'L65910MH1987PLC042612', incorporated: '1987-03-25',
-    industry: 'NBFC', industryKey: 'nbfc', hq: 'Pune', state: 'Maharashtra',
-    trustScore: 86, complianceScore: 89, paymentScore: 82, growthScore: 85,
-    verified: true, verificationTier: 'Gold',
-    employees: 28400, annualTurnover: 41000000000, bankAccounts: 11, activeLoans: 7, tradePartners: 1340,
-    scoreHistory: [79, 80, 81, 82, 83, 83, 84, 84, 85, 85, 86, 86],
-  },
-  {
-    ubid: 'UBID-29-WIP1-0791', name: 'Wipro Limited', gstin: '29AAACW5674N1Z9',
-    pan: 'AAACW5674N', cin: 'L32102KA1945PLC020035', incorporated: '1945-12-29',
-    industry: 'IT Services', industryKey: 'it', hq: 'Bengaluru', state: 'Karnataka',
-    trustScore: 88, complianceScore: 90, paymentScore: 87, growthScore: 76,
-    verified: true, verificationTier: 'Gold',
-    employees: 234000, annualTurnover: 89000000000, bankAccounts: 13, activeLoans: 4, tradePartners: 1180,
-    scoreHistory: [81, 82, 83, 84, 84, 85, 85, 86, 86, 87, 88, 88],
-  },
-  {
-    ubid: 'UBID-27-MAH2-0845', name: 'Mahindra & Mahindra', gstin: '27AAACM7785P1Z4',
-    pan: 'AAACM7785P', cin: 'L28100MH1945PLC004558', incorporated: '1945-10-02',
-    industry: 'Automobile', industryKey: 'auto', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 84, complianceScore: 86, paymentScore: 83, growthScore: 79,
-    verified: true, verificationTier: 'Gold',
-    employees: 79000, annualTurnover: 99000000000, bankAccounts: 14, activeLoans: 6, tradePartners: 1450,
-    scoreHistory: [77, 78, 79, 80, 81, 81, 82, 82, 83, 83, 84, 84],
-  },
-  {
-    ubid: 'UBID-24-ADN1-0928', name: 'Adani Power', gstin: '24AAACA4492P1Z8',
-    pan: 'AAACA4492P', cin: 'L40100GJ2005PLC046728', incorporated: '2005-08-22',
-    industry: 'Energy', industryKey: 'energy', hq: 'Ahmedabad', state: 'Gujarat',
-    trustScore: 71, complianceScore: 74, paymentScore: 68, growthScore: 73,
-    verified: true, verificationTier: 'Silver',
-    employees: 4200, annualTurnover: 31800000000, bankAccounts: 8, activeLoans: 11, tradePartners: 540,
-    scoreHistory: [62, 63, 64, 65, 66, 67, 68, 69, 70, 70, 71, 71],
-  },
-]
+const BUSINESSES: Business[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRUST NETWORK DATA (pre-computed positions)
@@ -1864,7 +1763,7 @@ function ProfileDialog({ business, open, onClose }: {
 
 export default function UniversalBusinessIDPage() {
   const [tab, setTab] = useState('directory')
-  const [selected, setSelected] = useState<Business>(BUSINESSES[0])
+  const [selected, setSelected] = useState<Business | null>(BUSINESSES[0] ?? null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogBusiness, setDialogBusiness] = useState<Business | null>(null)
 
@@ -1876,6 +1775,42 @@ export default function UniversalBusinessIDPage() {
   const selectAndViewFull = (b: Business) => {
     setSelected(b)
     setTab('credit')
+  }
+
+  // Empty state — no businesses in the user's network yet. The previous
+  // implementation hardcoded 12 REAL Indian listed companies with fabricated
+  // trust / compliance / payment / growth scores. We now show an honest empty
+  // state until the user connects real partners.
+  // TODO: Replace with real data from /api/business-network when available.
+  if (BUSINESSES.length === 0) {
+    return (
+      <div className="space-y-6">
+        <HeroBanner />
+        <Card className="border-dashed border-slate-200 bg-slate-50/50">
+          <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+              <Network className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-800">
+              No businesses in your network yet
+            </h2>
+            <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+              Connect with partners to see their trust scores, compliance history,
+              and credit profiles. Verified GSTIN / PAN / CIN data appears here once
+              you add a business to your network.
+            </p>
+            <div className="mt-5 flex flex-col sm:flex-row gap-2">
+              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Link2 className="w-4 h-4 mr-1.5" /> Connect a partner
+              </Button>
+              <Button variant="outline" className="border-slate-300">
+                <Search className="w-4 h-4 mr-1.5" /> Search by GSTIN
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -1955,7 +1890,8 @@ export default function UniversalBusinessIDPage() {
                 size="sm"
                 variant="outline"
                 className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                onClick={() => selectAndViewFull(selected)}
+                disabled={!selected}
+                onClick={() => selected && selectAndViewFull(selected)}
               >
                 Open Featured Profile <ArrowRight className="w-3.5 h-3.5 ml-1" />
               </Button>
@@ -1974,7 +1910,7 @@ export default function UniversalBusinessIDPage() {
                   Featured Business:
                 </div>
                 <select
-                  value={selected.ubid}
+                  value={selected?.ubid ?? ''}
                   onChange={(e) => {
                     const b = BUSINESSES.find((x) => x.ubid === e.target.value)
                     if (b) setSelected(b)
@@ -1990,7 +1926,7 @@ export default function UniversalBusinessIDPage() {
               </div>
             </CardContent>
           </Card>
-          <BusinessProfileCard business={selected} />
+          {selected && <BusinessProfileCard business={selected} />}
         </TabsContent>
 
         {/* TAB 3 — Trust Network */}
@@ -2003,7 +1939,7 @@ export default function UniversalBusinessIDPage() {
                   Center Business:
                 </div>
                 <select
-                  value={selected.ubid}
+                  value={selected?.ubid ?? ''}
                   onChange={(e) => {
                     const b = BUSINESSES.find((x) => x.ubid === e.target.value)
                     if (b) setSelected(b)
@@ -2019,7 +1955,7 @@ export default function UniversalBusinessIDPage() {
               </div>
             </CardContent>
           </Card>
-          <TrustNetworkTab business={selected} />
+          {selected && <TrustNetworkTab business={selected} />}
         </TabsContent>
 
         {/* TAB 4 — Score Analytics */}

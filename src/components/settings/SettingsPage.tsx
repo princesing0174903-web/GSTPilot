@@ -265,6 +265,8 @@ interface Session {
   current?: boolean
 }
 
+const MOCK_SESSIONS: Session[] = []
+
 // ─── Integration Catalog ─────────────────────────────────────────────────
 // Static descriptor for each provider surfaced on the Integrations tab. Live
 // status (Connected / Disconnected) is read from /api/integrations/installed
@@ -340,6 +342,10 @@ const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
   },
 ]
+
+// API connection status is now sourced from /api/integrations/installed +
+// per-provider status endpoints at render time. No static mock data.
+const MOCK_API_CONNECTIONS: IntegrationCatalogItem[] = []
 
 // ─── AI Preferences defaults ─────────────────────────────────────────────
 const AI_LANGUAGES = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Gujarati', 'Bengali'] as const

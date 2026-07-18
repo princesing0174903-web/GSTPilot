@@ -1033,3 +1033,86 @@ export async function PUT(request: Request) {
     )
   }
 }
+
+// PATCH /api/reconciliation?id=... — Update a reconciliation run (e.g. rename, change status)
+export async function PATCH(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const body = await request.json()
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Reconciliation run id is required (use ?id=)' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.reconciliationRun.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Reconciliation run not found' },
+        { status: 404 }
+      )
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.notes !== undefined) updateData.notes = body.notes
+    if (body.totalRecords !== undefined) updateData.totalRecords = body.totalRecords
+    if (body.matchedRecords !== undefined) updateData.matchedRecords = body.matchedRecords
+    if (body.mismatchedRecords !== undefined) updateData.mismatchedRecords = body.mismatchedRecords
+
+    const run = await db.reconciliationRun.update({
+      where: { id },
+      data: updateData,
+    })
+
+    invalidateGraph()
+
+    return NextResponse.json({ run })
+  } catch (error) {
+    console.error('PATCH /api/reconciliation error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update reconciliation' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/reconciliation?id=... — Delete a reconciliation run and its results
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Reconciliation run id is required (use ?id=)' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.reconciliationRun.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Reconciliation run not found' },
+        { status: 404 }
+      )
+    }
+
+    // Delete results first (FK), then the run
+    await db.reconciliationResult.deleteMany({ where: { runId: id } })
+    await db.reconciliationRun.delete({ where: { id } })
+
+    invalidateGraph()
+
+    return NextResponse.json({ ok: true, id })
+  } catch (error) {
+    console.error('DELETE /api/reconciliation error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete reconciliation' },
+      { status: 500 }
+    )
+  }
+}

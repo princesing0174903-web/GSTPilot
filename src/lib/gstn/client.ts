@@ -259,19 +259,25 @@ function seededPick<T>(arr: T[], seed: number): T {
   return arr[seed % arr.length];
 }
 
-function genAckNo(): string {
-  return `ACK${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`;
+// ─── Government identifier generators ─────────────────────────────────────────
+// IRN / ACK / EWB numbers are official government identifiers issued ONLY by the
+// GSTN portal / IRP. Generating them locally with Math.random() would fabricate
+// legal documents. These functions throw until a real GSTN API integration is
+// configured (GSTN_API_KEY + connected GST portal).
+
+// TODO: Replace with real IRP/NIC API integration when available.
+export function genAckNo(): string {
+  throw new Error('GSTN API not configured. Set GSTN_API_KEY and connect GST portal.');
 }
 
-function genIRN(): string {
-  const chars = '0123456789abcdef';
-  let irn = '';
-  for (let i = 0; i < 64; i++) irn += chars[Math.floor(Math.random() * 16)];
-  return irn;
+// TODO: Replace with real IRP/NIC API integration when available.
+export function genIRN(): string {
+  throw new Error('GSTN API not configured. Set GSTN_API_KEY and connect GST portal.');
 }
 
-function genEWBNo(): string {
-  return `${Date.now().toString().slice(-12)}${Math.floor(Math.random() * 90 + 10)}`;
+// TODO: Replace with real IRP/NIC API integration when available.
+export function genEWBNo(): string {
+  throw new Error('GSTN API not configured. Set GSTN_API_KEY and connect GST portal.');
 }
 
 // ─── GSTIN → Business (deterministic) ─────────────────────────────────────────
@@ -395,8 +401,8 @@ export function generateGstr1Data(gstin: string, period: string) {
 }
 
 // ─── Ack generators ───────────────────────────────────────────────────────────
-
-export { genAckNo, genIRN, genEWBNo };
+// genAckNo / genIRN / genEWBNo are exported above (they throw until real GSTN
+// API integration is wired up).
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 

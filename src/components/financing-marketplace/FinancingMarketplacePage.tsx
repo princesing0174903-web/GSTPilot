@@ -191,329 +191,83 @@ const PRODUCT_TYPES: {
   },
 ];
 
-const HERO_STATS = [
-  { label: 'Capital Deployed', value: 5000, suffix: ' Cr', icon: IndianRupee, prefix: '₹' },
-  { label: 'Lenders Onboarded', value: 50, suffix: '+', icon: Landmark },
-  { label: 'Loans Disbursed', value: 250000, suffix: '+', icon: Banknote },
-  { label: 'Avg Interest Rate', value: 8.4, suffix: '%', icon: Percent, decimals: 1 },
-];
+// HERO_STATS — previously fabricated platform-scale stats ("₹5000 Cr capital
+// deployed", "50+ lenders onboarded", "250,000+ loans disbursed", "8.4% avg
+// interest rate"). Removed because these are fabricated. Empty until real
+// platform metrics are available.
+// TODO: Replace with real data from /api/financing/stats when available.
+const HERO_STATS: { label: string; value: number; suffix?: string; prefix?: string; icon: React.ElementType; decimals?: number }[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DEMO DATA — LENDER OFFERS
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped 15 fabricated loan offers attributed to REAL
+// Indian banks / NBFCs / fintechs (Bajaj Finance, HDFC Bank, ICICI Bank,
+// Kotak Mahindra, Axis Bank, Tata Capital, Aditya Birla Finance, L&T Finance,
+// Fullerton India, Cholamandalam, U Gro Capital, Vivriti Capital, FlexiLoans,
+// Indifi Technologies, IDFC First Bank) with fabricated interest rates,
+// processing fees, credit-score cutoffs, and ratings. Publishing fabricated
+// loan terms attributed to real, named financial institutions is legally
+// risky (and presents fake financial product terms as real). The array is
+// now empty until the user connects a real lender integration.
+// TODO: Replace with real data from /api/financing/offers when available.
 
-const LENDER_OFFERS: LenderOffer[] = [
-  {
-    id: 'OFF-001', lenderName: 'Bajaj Finance', lenderType: 'NBFC', productType: 'Business Loan',
-    amountMin: 5, amountMax: 500, interestRate: 12.5, tenureMonths: '12 - 60',
-    processingFeePct: 2.5, minCreditScore: 700, disbursementDays: 3, rating: 4.6,
-    logoColor: 'bg-emerald-600', logoInitials: 'BF',
-    eligibilityTags: ['GST Registered', '2+ Years Business', '₹10L+ Turnover'],
-  },
-  {
-    id: 'OFF-002', lenderName: 'HDFC Bank', lenderType: 'Bank', productType: 'Working Capital Loan',
-    amountMin: 10, amountMax: 1000, interestRate: 10.2, tenureMonths: '12 - 36',
-    processingFeePct: 1.5, minCreditScore: 720, disbursementDays: 5, rating: 4.8,
-    logoColor: 'bg-teal-700', logoInitials: 'HD',
-    eligibilityTags: ['GST Registered', '3+ Years Business', '₹50L+ Turnover'],
-  },
-  {
-    id: 'OFF-003', lenderName: 'ICICI Bank', lenderType: 'Bank', productType: 'Credit Line',
-    amountMin: 10, amountMax: 750, interestRate: 9.8, tenureMonths: 'Revolving',
-    processingFeePct: 1.0, minCreditScore: 730, disbursementDays: 4, rating: 4.7,
-    logoColor: 'bg-emerald-700', logoInitials: 'IC',
-    eligibilityTags: ['GST Registered', 'Profitable', 'Banking Customer'],
-  },
-  {
-    id: 'OFF-004', lenderName: 'Kotak Mahindra', lenderType: 'Bank', productType: 'Invoice Financing',
-    amountMin: 5, amountMax: 250, interestRate: 11.5, tenureMonths: '30 - 90 days',
-    processingFeePct: 0.75, minCreditScore: 680, disbursementDays: 2, rating: 4.5,
-    logoColor: 'bg-green-700', logoInitials: 'KO',
-    eligibilityTags: ['B2B Invoices', 'GST Registered', 'Debtor Rating A+'],
-  },
-  {
-    id: 'OFF-005', lenderName: 'Axis Bank', lenderType: 'Bank', productType: 'Business Loan',
-    amountMin: 5, amountMax: 400, interestRate: 11.9, tenureMonths: '12 - 60',
-    processingFeePct: 1.75, minCreditScore: 700, disbursementDays: 4, rating: 4.4,
-    logoColor: 'bg-teal-800', logoInitials: 'AX',
-    eligibilityTags: ['GST Registered', '2+ Years Business', '₹25L+ Turnover'],
-  },
-  {
-    id: 'OFF-006', lenderName: 'Tata Capital', lenderType: 'NBFC', productType: 'Working Capital Loan',
-    amountMin: 5, amountMax: 600, interestRate: 12.8, tenureMonths: '12 - 48',
-    processingFeePct: 2.0, minCreditScore: 690, disbursementDays: 3, rating: 4.5,
-    logoColor: 'bg-emerald-800', logoInitials: 'TC',
-    eligibilityTags: ['GST Registered', '2+ Years Business', '₹20L+ Turnover'],
-  },
-  {
-    id: 'OFF-007', lenderName: 'Aditya Birla Finance', lenderType: 'NBFC', productType: 'Invoice Financing',
-    amountMin: 5, amountMax: 200, interestRate: 13.2, tenureMonths: '30 - 90 days',
-    processingFeePct: 0.85, minCreditScore: 675, disbursementDays: 2, rating: 4.3,
-    logoColor: 'bg-green-800', logoInitials: 'AB',
-    eligibilityTags: ['B2B Invoices', 'GST Registered', 'Blue-chip Debtors'],
-  },
-  {
-    id: 'OFF-008', lenderName: 'L&T Finance', lenderType: 'NBFC', productType: 'Business Loan',
-    amountMin: 5, amountMax: 350, interestRate: 13.5, tenureMonths: '12 - 60',
-    processingFeePct: 2.25, minCreditScore: 685, disbursementDays: 3, rating: 4.2,
-    logoColor: 'bg-teal-600', logoInitials: 'LT',
-    eligibilityTags: ['GST Registered', '2+ Years Business', 'Manufacturing'],
-  },
-  {
-    id: 'OFF-009', lenderName: 'Fullerton India', lenderType: 'NBFC', productType: 'Working Capital Loan',
-    amountMin: 3, amountMax: 250, interestRate: 14.0, tenureMonths: '12 - 36',
-    processingFeePct: 2.5, minCreditScore: 660, disbursementDays: 4, rating: 4.1,
-    logoColor: 'bg-emerald-500', logoInitials: 'FI',
-    eligibilityTags: ['GST Registered', '1+ Years Business', '₹10L+ Turnover'],
-  },
-  {
-    id: 'OFF-010', lenderName: 'Cholamandalam', lenderType: 'NBFC', productType: 'Credit Line',
-    amountMin: 5, amountMax: 300, interestRate: 13.8, tenureMonths: 'Revolving',
-    processingFeePct: 1.5, minCreditScore: 680, disbursementDays: 5, rating: 4.0,
-    logoColor: 'bg-green-600', logoInitials: 'CH',
-    eligibilityTags: ['GST Registered', '2+ Years Business', '₹15L+ Turnover'],
-  },
-  {
-    id: 'OFF-011', lenderName: 'U Gro Capital', lenderType: 'Fintech', productType: 'Invoice Financing',
-    amountMin: 5, amountMax: 150, interestRate: 12.0, tenureMonths: '30 - 90 days',
-    processingFeePct: 0.5, minCreditScore: 670, disbursementDays: 1, rating: 4.7,
-    logoColor: 'bg-cyan-700', logoInitials: 'UG',
-    eligibilityTags: ['B2B Invoices', 'GST Registered', 'e-Invoice Enabled'],
-  },
-  {
-    id: 'OFF-012', lenderName: 'Vivriti Capital', lenderType: 'Fintech', productType: 'Business Loan',
-    amountMin: 10, amountMax: 500, interestRate: 12.4, tenureMonths: '12 - 48',
-    processingFeePct: 1.5, minCreditScore: 690, disbursementDays: 3, rating: 4.4,
-    logoColor: 'bg-emerald-600', logoInitials: 'VI',
-    eligibilityTags: ['GST Registered', '3+ Years Business', 'Mid-market'],
-  },
-  {
-    id: 'OFF-013', lenderName: 'FlexiLoans', lenderType: 'Fintech', productType: 'Working Capital Loan',
-    amountMin: 2, amountMax: 100, interestRate: 14.5, tenureMonths: '12 - 36',
-    processingFeePct: 2.0, minCreditScore: 650, disbursementDays: 2, rating: 4.3,
-    logoColor: 'bg-teal-600', logoInitials: 'FL',
-    eligibilityTags: ['GST Registered', '1+ Years Business', 'Digital-first'],
-  },
-  {
-    id: 'OFF-014', lenderName: 'Indifi Technologies', lenderType: 'Fintech', productType: 'Credit Line',
-    amountMin: 5, amountMax: 200, interestRate: 13.5, tenureMonths: 'Revolving',
-    processingFeePct: 1.75, minCreditScore: 670, disbursementDays: 3, rating: 4.2,
-    logoColor: 'bg-green-700', logoInitials: 'IN',
-    eligibilityTags: ['GST Registered', '2+ Years Business', 'Digital Statement'],
-  },
-  {
-    id: 'OFF-015', lenderName: 'IDFC First Bank', lenderType: 'Bank', productType: 'Business Loan',
-    amountMin: 5, amountMax: 450, interestRate: 11.5, tenureMonths: '12 - 60',
-    processingFeePct: 1.5, minCreditScore: 710, disbursementDays: 4, rating: 4.5,
-    logoColor: 'bg-emerald-700', logoInitials: 'IF',
-    eligibilityTags: ['GST Registered', '2+ Years Business', '₹20L+ Turnover'],
-  },
-];
+const LENDER_OFFERS: LenderOffer[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DEMO DATA — MY APPLICATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped 7 fabricated loan applications attributed to
+// REAL Indian banks / NBFCs (HDFC Bank, Bajaj Finance, Kotak Mahindra, ICICI
+// Bank, Tata Capital, Axis Bank, U Gro Capital) with fabricated amounts up to
+// ₹75,00,000, fabricated timelines, and fabricated approval statuses.
+// Removed because fabricating loan-application records attributed to real,
+// named financial institutions is legally risky. Empty until the user submits
+// real applications through the marketplace.
+// TODO: Replace with real data from /api/financing/applications when available.
 
-const MY_APPLICATIONS: LoanApplication[] = [
-  {
-    id: 'APP-2025-0142', lenderName: 'HDFC Bank', productType: 'Working Capital Loan',
-    amount: 5000000, appliedDate: '2025-03-12', status: 'Disbursed',
-    interestRate: 10.2, sanctionedAmount: 5000000, emi: 168400,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-12 10:25', note: 'Application submitted via GSTPilot' },
-      { stage: 'Document Verification', status: 'completed', timestamp: '2025-03-13 14:10', note: 'KYC + GST returns verified' },
-      { stage: 'Underwriting', status: 'completed', timestamp: '2025-03-15 16:45', note: 'Risk assessment complete' },
-      { stage: 'Approval', status: 'completed', timestamp: '2025-03-17 11:20', note: 'Sanctioned at 10.2% p.a.' },
-      { stage: 'Disbursement', status: 'completed', timestamp: '2025-03-19 09:30', note: '₹50,00,000 credited to account' },
-    ],
-  },
-  {
-    id: 'APP-2025-0156', lenderName: 'Bajaj Finance', productType: 'Business Loan',
-    amount: 2500000, appliedDate: '2025-03-20', status: 'Approved',
-    interestRate: 12.5, sanctionedAmount: 2500000, emi: 83500,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-20 11:00', note: 'Application submitted' },
-      { stage: 'Document Verification', status: 'completed', timestamp: '2025-03-21 15:30', note: 'All docs verified' },
-      { stage: 'Underwriting', status: 'completed', timestamp: '2025-03-22 17:10', note: 'Risk score: 780' },
-      { stage: 'Approval', status: 'current', timestamp: '2025-03-23 10:00', note: 'Offer letter generated' },
-      { stage: 'Disbursement', status: 'pending', timestamp: '—', note: 'Awaiting acceptance' },
-    ],
-  },
-  {
-    id: 'APP-2025-0173', lenderName: 'Kotak Mahindra', productType: 'Invoice Financing',
-    amount: 1800000, appliedDate: '2025-03-25', status: 'Under Review',
-    interestRate: 11.5, sanctionedAmount: 0, emi: 0,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-25 09:15', note: 'Application + 3 invoices uploaded' },
-      { stage: 'Document Verification', status: 'current', timestamp: '2025-03-26 11:00', note: 'Invoice authenticity check in progress' },
-      { stage: 'Underwriting', status: 'pending', timestamp: '—', note: 'Queued' },
-      { stage: 'Approval', status: 'pending', timestamp: '—', note: 'Pending' },
-      { stage: 'Disbursement', status: 'pending', timestamp: '—', note: 'Pending' },
-    ],
-  },
-  {
-    id: 'APP-2025-0188', lenderName: 'ICICI Bank', productType: 'Credit Line',
-    amount: 7500000, appliedDate: '2025-03-28', status: 'Pending',
-    interestRate: 9.8, sanctionedAmount: 0, emi: 0,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-28 14:20', note: 'Application submitted' },
-      { stage: 'Document Verification', status: 'pending', timestamp: '—', note: 'Awaiting bank statement upload' },
-      { stage: 'Underwriting', status: 'pending', timestamp: '—', note: 'Pending' },
-      { stage: 'Approval', status: 'pending', timestamp: '—', note: 'Pending' },
-      { stage: 'Disbursement', status: 'pending', timestamp: '—', note: 'Pending' },
-    ],
-  },
-  {
-    id: 'APP-2025-0195', lenderName: 'Tata Capital', productType: 'Working Capital Loan',
-    amount: 3500000, appliedDate: '2025-03-29', status: 'Under Review',
-    interestRate: 12.8, sanctionedAmount: 0, emi: 0,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-29 10:30', note: 'Application submitted' },
-      { stage: 'Document Verification', status: 'current', timestamp: '2025-03-30 09:00', note: 'ITR + GST returns review' },
-      { stage: 'Underwriting', status: 'pending', timestamp: '—', note: 'Pending' },
-      { stage: 'Approval', status: 'pending', timestamp: '—', note: 'Pending' },
-      { stage: 'Disbursement', status: 'pending', timestamp: '—', note: 'Pending' },
-    ],
-  },
-  {
-    id: 'APP-2025-0201', lenderName: 'Axis Bank', productType: 'Business Loan',
-    amount: 4000000, appliedDate: '2025-03-30', status: 'Rejected',
-    interestRate: 11.9, sanctionedAmount: 0, emi: 0,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-03-30 11:00', note: 'Application submitted' },
-      { stage: 'Document Verification', status: 'completed', timestamp: '2025-03-31 13:45', note: 'Docs verified' },
-      { stage: 'Underwriting', status: 'completed', timestamp: '2025-04-01 15:30', note: 'Risk score below threshold' },
-      { stage: 'Approval', status: 'completed', timestamp: '2025-04-01 17:00', note: 'Rejected — DSCR < 1.2' },
-      { stage: 'Disbursement', status: 'pending', timestamp: '—', note: 'N/A' },
-    ],
-  },
-  {
-    id: 'APP-2025-0210', lenderName: 'U Gro Capital', productType: 'Invoice Financing',
-    amount: 950000, appliedDate: '2025-04-02', status: 'Disbursed',
-    interestRate: 12.0, sanctionedAmount: 950000, emi: 0,
-    timeline: [
-      { stage: 'Submitted', status: 'completed', timestamp: '2025-04-02 09:00', note: 'Application submitted' },
-      { stage: 'Document Verification', status: 'completed', timestamp: '2025-04-02 11:30', note: 'e-Invoice API verified' },
-      { stage: 'Underwriting', status: 'completed', timestamp: '2025-04-02 14:00', note: 'Automated underwriting' },
-      { stage: 'Approval', status: 'completed', timestamp: '2025-04-02 15:00', note: 'Approved at 12% p.a.' },
-      { stage: 'Disbursement', status: 'completed', timestamp: '2025-04-02 16:45', note: '₹9,50,000 disbursed' },
-    ],
-  },
-];
+const MY_APPLICATIONS: LoanApplication[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DEMO DATA — LENDER DIRECTORY
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped a directory of 15 fabricated lender records
+// attributed to REAL Indian banks / NBFCs / fintechs with fabricated
+// totalDisbursedCr and activeBorrowers figures. Removed because fabricating
+// loan-volume metrics attributed to real, named financial institutions is
+// legally risky. Empty until a real lender integration is wired up.
+// TODO: Replace with real data from /api/financing/lenders when available.
 
-const LENDERS: Lender[] = [
-  { id: 'L1', name: 'Bajaj Finance', type: 'NBFC', products: ['Business Loan', 'Working Capital Loan', 'Credit Line'],
-    totalDisbursedCr: 12500, interestRateMin: 11, interestRateMax: 18, minCreditScore: 680, processingDays: 3,
-    rating: 4.6, logoColor: 'bg-emerald-600', logoInitials: 'BF', headquarters: 'Pune', activeBorrowers: 580000 },
-  { id: 'L2', name: 'HDFC Bank', type: 'Bank', products: ['Working Capital Loan', 'Business Loan', 'Credit Line', 'Invoice Financing'],
-    totalDisbursedCr: 28400, interestRateMin: 9.5, interestRateMax: 16, minCreditScore: 720, processingDays: 5,
-    rating: 4.8, logoColor: 'bg-teal-700', logoInitials: 'HD', headquarters: 'Mumbai', activeBorrowers: 980000 },
-  { id: 'L3', name: 'ICICI Bank', type: 'Bank', products: ['Credit Line', 'Working Capital Loan', 'Business Loan'],
-    totalDisbursedCr: 24800, interestRateMin: 9.8, interestRateMax: 15.5, minCreditScore: 730, processingDays: 4,
-    rating: 4.7, logoColor: 'bg-emerald-700', logoInitials: 'IC', headquarters: 'Mumbai', activeBorrowers: 920000 },
-  { id: 'L4', name: 'Kotak Mahindra', type: 'Bank', products: ['Invoice Financing', 'Business Loan', 'Credit Line'],
-    totalDisbursedCr: 18200, interestRateMin: 10.5, interestRateMax: 16, minCreditScore: 700, processingDays: 4,
-    rating: 4.5, logoColor: 'bg-green-700', logoInitials: 'KO', headquarters: 'Mumbai', activeBorrowers: 640000 },
-  { id: 'L5', name: 'Axis Bank', type: 'Bank', products: ['Business Loan', 'Working Capital Loan', 'Credit Line'],
-    totalDisbursedCr: 16800, interestRateMin: 10, interestRateMax: 16.5, minCreditScore: 700, processingDays: 4,
-    rating: 4.4, logoColor: 'bg-teal-800', logoInitials: 'AX', headquarters: 'Mumbai', activeBorrowers: 690000 },
-  { id: 'L6', name: 'Tata Capital', type: 'NBFC', products: ['Business Loan', 'Working Capital Loan', 'Credit Line'],
-    totalDisbursedCr: 14200, interestRateMin: 11, interestRateMax: 17, minCreditScore: 690, processingDays: 3,
-    rating: 4.5, logoColor: 'bg-emerald-800', logoInitials: 'TC', headquarters: 'Mumbai', activeBorrowers: 480000 },
-  { id: 'L7', name: 'Aditya Birla Finance', type: 'NBFC', products: ['Invoice Financing', 'Business Loan'],
-    totalDisbursedCr: 9800, interestRateMin: 11.5, interestRateMax: 17, minCreditScore: 675, processingDays: 2,
-    rating: 4.3, logoColor: 'bg-green-800', logoInitials: 'AB', headquarters: 'Mumbai', activeBorrowers: 320000 },
-  { id: 'L8', name: 'L&T Finance', type: 'NBFC', products: ['Business Loan', 'Working Capital Loan'],
-    totalDisbursedCr: 8600, interestRateMin: 12, interestRateMax: 18, minCreditScore: 685, processingDays: 3,
-    rating: 4.2, logoColor: 'bg-teal-600', logoInitials: 'LT', headquarters: 'Mumbai', activeBorrowers: 280000 },
-  { id: 'L9', name: 'Fullerton India', type: 'NBFC', products: ['Working Capital Loan', 'Business Loan'],
-    totalDisbursedCr: 7400, interestRateMin: 12, interestRateMax: 18, minCreditScore: 660, processingDays: 4,
-    rating: 4.1, logoColor: 'bg-emerald-500', logoInitials: 'FI', headquarters: 'Mumbai', activeBorrowers: 240000 },
-  { id: 'L10', name: 'Cholamandalam', type: 'NBFC', products: ['Credit Line', 'Working Capital Loan'],
-    totalDisbursedCr: 6200, interestRateMin: 12, interestRateMax: 17, minCreditScore: 680, processingDays: 5,
-    rating: 4.0, logoColor: 'bg-green-600', logoInitials: 'CH', headquarters: 'Chennai', activeBorrowers: 210000 },
-  { id: 'L11', name: 'U Gro Capital', type: 'Fintech', products: ['Invoice Financing', 'Working Capital Loan'],
-    totalDisbursedCr: 3200, interestRateMin: 11, interestRateMax: 16, minCreditScore: 670, processingDays: 1,
-    rating: 4.7, logoColor: 'bg-cyan-700', logoInitials: 'UG', headquarters: 'Mumbai', activeBorrowers: 95000 },
-  { id: 'L12', name: 'Vivriti Capital', type: 'Fintech', products: ['Business Loan', 'Working Capital Loan'],
-    totalDisbursedCr: 4800, interestRateMin: 11.5, interestRateMax: 16, minCreditScore: 690, processingDays: 3,
-    rating: 4.4, logoColor: 'bg-emerald-600', logoInitials: 'VI', headquarters: 'Chennai', activeBorrowers: 110000 },
-  { id: 'L13', name: 'FlexiLoans', type: 'Fintech', products: ['Working Capital Loan'],
-    totalDisbursedCr: 1800, interestRateMin: 13, interestRateMax: 18, minCreditScore: 650, processingDays: 2,
-    rating: 4.3, logoColor: 'bg-teal-600', logoInitials: 'FL', headquarters: 'Mumbai', activeBorrowers: 75000 },
-  { id: 'L14', name: 'Indifi Technologies', type: 'Fintech', products: ['Credit Line', 'Business Loan'],
-    totalDisbursedCr: 2400, interestRateMin: 12, interestRateMax: 17, minCreditScore: 670, processingDays: 3,
-    rating: 4.2, logoColor: 'bg-green-700', logoInitials: 'IN', headquarters: 'Gurgaon', activeBorrowers: 82000 },
-  { id: 'L15', name: 'IDFC First Bank', type: 'Bank', products: ['Business Loan', 'Working Capital Loan', 'Credit Line'],
-    totalDisbursedCr: 11200, interestRateMin: 10.5, interestRateMax: 16, minCreditScore: 710, processingDays: 4,
-    rating: 4.5, logoColor: 'bg-emerald-700', logoInitials: 'IF', headquarters: 'Mumbai', activeBorrowers: 410000 },
-];
+const LENDERS: Lender[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DEMO DATA — ANALYTICS
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped fabricated platform-scale analytics
+// (LOAN_VOLUME_BY_PRODUCT, MONTHLY_DISBURSEMENT, LENDER_MARKET_SHARE,
+// INDUSTRY_HEATMAP via deterministic pseudo-random, INTEREST_RATE_TREND,
+// APPROVAL_BY_SCORE, CAPITAL_GAP). Removed because these present fabricated
+// market statistics as real. Empty until real platform metrics are available.
+// TODO: Replace with real data from /api/financing/analytics when available.
 
-const LOAN_VOLUME_BY_PRODUCT = [
-  { product: 'Invoice Financing', value: 980, color: '#10b981' },
-  { product: 'Working Capital', value: 1820, color: '#0d9488' },
-  { product: 'Business Loan', value: 1450, color: '#059669' },
-  { product: 'Credit Line', value: 750, color: '#0891b2' },
-];
+const LOAN_VOLUME_BY_PRODUCT: { product: string; value: number; color: string }[] = [];
 
-const MONTHLY_DISBURSEMENT = [
-  { month: 'Apr', value: 280 }, { month: 'May', value: 320 }, { month: 'Jun', value: 295 },
-  { month: 'Jul', value: 360 }, { month: 'Aug', value: 410 }, { month: 'Sep', value: 385 },
-  { month: 'Oct', value: 450 }, { month: 'Nov', value: 480 }, { month: 'Dec', value: 520 },
-  { month: 'Jan', value: 510 }, { month: 'Feb', value: 540 }, { month: 'Mar', value: 580 },
-];
+const MONTHLY_DISBURSEMENT: { month: string; value: number }[] = [];
 
-const LENDER_MARKET_SHARE = [
-  { label: 'NBFC', value: 42, color: '#10b981' },
-  { label: 'Bank', value: 38, color: '#0d9488' },
-  { label: 'Fintech', value: 15, color: '#0891b2' },
-  { label: 'Investor', value: 5, color: '#059669' },
-];
+const LENDER_MARKET_SHARE: { label: string; value: number; color: string }[] = [];
 
-const INDUSTRIES = ['Manufacturing', 'Textiles', 'Engineering', 'Pharma', 'Electronics',
-  'Auto Components', 'Food & Bev', 'Chemicals', 'Construction', 'Retail'];
+const INDUSTRIES: string[] = [];
 
 const INDUSTRY_HEATMAP: { industry: string; product: ProductType; value: number }[] = [];
-(function genHeatmap() {
-  const products: ProductType[] = ['Invoice Financing', 'Working Capital Loan', 'Business Loan', 'Credit Line'];
-  INDUSTRIES.forEach((ind) => {
-    products.forEach((prod) => {
-      // deterministic pseudo-random based on hash
-      const seed = (ind.length * 7 + prod.length * 13) % 100;
-      const base = 30 + (seed % 60);
-      INDUSTRY_HEATMAP.push({ industry: ind, product: prod, value: base });
-    });
-  });
-})();
 
-const INTEREST_RATE_TREND = [
-  { month: 'Apr', rate: 9.2 }, { month: 'May', rate: 9.3 }, { month: 'Jun', rate: 9.4 },
-  { month: 'Jul', rate: 9.5 }, { month: 'Aug', rate: 9.5 }, { month: 'Sep', rate: 9.4 },
-  { month: 'Oct', rate: 9.3 }, { month: 'Nov', rate: 9.2 }, { month: 'Dec', rate: 9.1 },
-  { month: 'Jan', rate: 9.0 }, { month: 'Feb', rate: 8.9 }, { month: 'Mar', rate: 8.8 },
-];
+const INTEREST_RATE_TREND: { month: string; rate: number }[] = [];
 
-const APPROVAL_BY_SCORE: { bucket: string; applicants: number; approved: number; rate: number }[] = [
-  { bucket: 'Below 600', applicants: 4200, approved: 380, rate: 9 },
-  { bucket: '600 - 650', applicants: 8600, approved: 2580, rate: 30 },
-  { bucket: '650 - 700', applicants: 12400, approved: 6200, rate: 50 },
-  { bucket: '700 - 750', applicants: 15800, approved: 12640, rate: 80 },
-  { bucket: '750 - 800', applicants: 9200, approved: 8590, rate: 93 },
-  { bucket: 'Above 800', applicants: 3400, approved: 3366, rate: 99 },
-];
+const APPROVAL_BY_SCORE: { bucket: string; applicants: number; approved: number; rate: number }[] = [];
 
 const CAPITAL_GAP = {
-  demandCr: 18500,
-  supplyCr: 14800,
-  fundedCr: 5000,
+  demandCr: 0,
+  supplyCr: 0,
+  fundedCr: 0,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1426,7 +1180,7 @@ function ApplicationFormDialog({ offer, open, onOpenChange }: {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 inline-block">
               <p className="text-xs text-slate-500">Application Reference</p>
               <p className="text-sm font-mono font-semibold text-emerald-700">
-                APP-2025-{String(Math.floor(Math.random() * 9000) + 1000)}
+                Pending — lender confirmation required
               </p>
             </div>
             <div className="pt-2">
@@ -1883,7 +1637,9 @@ function CapitalMarketplaceTab() {
 
       {filtered.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center">
-          <p className="text-sm text-slate-500">No offers match your filters. Try widening your search.</p>
+          <p className="text-sm text-slate-500">
+            No financing offers available. Connect your bank to see eligible loan offers.
+          </p>
         </div>
       )}
 
@@ -1903,11 +1659,36 @@ function MyApplicationsTab() {
   const stats = useMemo(() => {
     const total = MY_APPLICATIONS.reduce((s, a) => s + a.amount, 0);
     const approved = MY_APPLICATIONS.filter(a => a.status === 'Approved' || a.status === 'Disbursed').reduce((s, a) => s + a.sanctionedAmount, 0);
-    const approvalRate = (MY_APPLICATIONS.filter(a => a.status === 'Approved' || a.status === 'Disbursed').length / MY_APPLICATIONS.length) * 100;
+    const approvalRate = (MY_APPLICATIONS.filter(a => a.status === 'Approved' || a.status === 'Disbursed').length / Math.max(1, MY_APPLICATIONS.length)) * 100;
     const avgRate = MY_APPLICATIONS.filter(a => a.status === 'Approved' || a.status === 'Disbursed').reduce((s, a) => s + a.interestRate, 0) / Math.max(1, MY_APPLICATIONS.filter(a => a.status === 'Approved' || a.status === 'Disbursed').length);
     const totalEmi = MY_APPLICATIONS.filter(a => a.status === 'Disbursed').reduce((s, a) => s + a.emi, 0);
     return { total, approved, approvalRate, avgRate, totalEmi };
   }, []);
+
+  // Empty state — no applications yet. The previous implementation shipped 7
+  // fabricated loan applications attributed to REAL Indian banks / NBFCs with
+  // fabricated amounts and timelines. Show an honest empty state until the
+  // user submits real applications through the marketplace.
+  // TODO: Replace with real data from /api/financing/applications when available.
+  if (MY_APPLICATIONS.length === 0) {
+    return (
+      <Card className="border-dashed border-slate-200 bg-slate-50/50">
+        <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <FileText className="w-7 h-7 text-emerald-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800">
+            No loan applications yet
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Apply for invoice financing, working capital, business loans, or
+            revolving credit lines through the marketplace. Your active and past
+            applications will appear here with full timeline tracking.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const handleView = (a: LoanApplication) => {
     setViewApp(a);
@@ -2045,6 +1826,31 @@ function LenderDirectoryTab() {
   };
 
   const compareLenders = selectedLenders.map(id => LENDERS.find(l => l.id === id)).filter(Boolean) as Lender[];
+
+  // Empty state — no lenders yet. The previous implementation shipped a
+  // directory of 15 fabricated lender records attributed to REAL Indian
+  // banks / NBFCs / fintechs with fabricated disbursed volumes. Show an
+  // honest empty state until a real lender integration is wired up.
+  // TODO: Replace with real data from /api/financing/lenders when available.
+  if (LENDERS.length === 0) {
+    return (
+      <Card className="border-dashed border-slate-200 bg-slate-50/50">
+        <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <Landmark className="w-7 h-7 text-emerald-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800">
+            No lenders in your network yet
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Connect with banks, NBFCs, and fintech lenders to browse their
+            products, compare terms, and apply for financing directly through
+            the marketplace.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -2226,6 +2032,39 @@ function LenderDirectoryTab() {
 function CapitalAnalyticsTab() {
   const totalLoans = LOAN_VOLUME_BY_PRODUCT.reduce((s, d) => s + d.value, 0);
   const totalDisbursed12M = MONTHLY_DISBURSEMENT.reduce((s, d) => s + d.value, 0);
+
+  // Empty state — no analytics yet. The previous implementation shipped
+  // fabricated platform-scale analytics (loan volume, monthly disbursement,
+  // lender market share, industry heatmap, interest-rate trend, approval
+  // rates, capital gap) presenting fake market statistics as real. Show an
+  // honest empty state until real platform metrics are available.
+  // TODO: Replace with real data from /api/financing/analytics when available.
+  const hasAnalytics =
+    LOAN_VOLUME_BY_PRODUCT.length > 0 ||
+    MONTHLY_DISBURSEMENT.length > 0 ||
+    LENDER_MARKET_SHARE.length > 0 ||
+    INTEREST_RATE_TREND.length > 0 ||
+    APPROVAL_BY_SCORE.length > 0 ||
+    INDUSTRY_HEATMAP.length > 0;
+  if (!hasAnalytics) {
+    return (
+      <Card className="border-dashed border-slate-200 bg-slate-50/50">
+        <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <BarChart3 className="w-7 h-7 text-emerald-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800">
+            No capital analytics available yet
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Once real loan applications flow through the marketplace, aggregate
+            analytics (loan volume, disbursement trends, lender market share,
+            approval rates, capital gap) will appear here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -2427,7 +2266,7 @@ export default function FinancingMarketplacePage() {
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" /> Live
             </Badge>
             <Badge variant="outline" className="border-slate-200 text-slate-600">
-              50+ Lenders
+              Connect a lender
             </Badge>
           </div>
         </motion.div>

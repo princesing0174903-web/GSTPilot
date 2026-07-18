@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
-import { isValidGstinFormat, genAckNo, nowISO, getOrCreateGstProfile } from './client';
+import { isValidGstinFormat, nowISO, getOrCreateGstProfile } from './client';
 import type { GSTR3BDraft, FilingResult } from './client';
 import { getStoredGstr2b } from './gstr2b';
 import { getGstr1Draft } from './gstr1';

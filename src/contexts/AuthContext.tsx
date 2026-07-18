@@ -66,8 +66,9 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
   /** Email/password sign-up. */
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
-  /** Google OAuth sign-in. */
-  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null }>;
+  /** Google OAuth sign-in. Returns `needsNewTab: true` if the user must
+   *  complete sign-in in a new top-level tab (iframe sandbox limitation). */
+  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; needsNewTab?: boolean }>;
   /** Send a password-reset email. */
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   /** Clear the `isLoading` flag (called by OrgContext when the org resolves). */

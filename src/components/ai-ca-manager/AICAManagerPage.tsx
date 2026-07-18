@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/shared'
 import {
   MonitorSmartphone,
   AlertTriangle,
@@ -45,78 +46,16 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 }
 
-// ─── Sample Data ───────────────────────────────────────────────────────────
-const priorities = [
-  { id: 1, action: 'File GSTR-3B for ABC Traders', priority: 'urgent' as const, due: '05/03/2026', client: 'ABC Traders' },
-  { id: 2, action: 'Follow up pending docs from Sharma Enterprises', priority: 'urgent' as const, due: '05/03/2026', client: 'Sharma Enterprises' },
-  { id: 3, action: 'Review GST notice for Patel & Sons', priority: 'high' as const, due: '06/03/2026', client: 'Patel & Sons' },
-  { id: 4, action: 'Reconcile 2B for Kumar Associates', priority: 'high' as const, due: '07/03/2026', client: 'Kumar Associates' },
-  { id: 5, action: 'Prepare TDS return for Singh Trading', priority: 'normal' as const, due: '10/03/2026', client: 'Singh Trading' },
-]
+// ─── Sample Data (empty — populated by real APIs when available) ──────────
+const priorities: { id: number; action: string; priority: 'urgent' | 'high' | 'normal'; due: string; client: string }[] = []
+const urgentFilings: { client: string; type: string; due: string; status: 'in-progress' | 'pending' | 'data-ready' }[] = []
+const atRiskClients: { name: string; health: number; factors: string[] }[] = []
+const pendingDocs: { client: string; doc: string; followUps: number; days: number }[] = []
+const teamMembers: { name: string; role: string; completed: number; inProgress: number; overdue: number; utilization: number }[] = []
+const revenueData: { month: string; actual: number; predicted: number }[] = []
+const aiActions: { time: string; action: string; type: string }[] = []
+const autoRules: { rule: string; active: boolean; triggers: number }[] = []
 
-const urgentFilings = [
-  { client: 'ABC Traders', type: 'GSTR-3B', due: '05/03/2026', status: 'in-progress' },
-  { client: 'XYZ Industries', type: 'GSTR-1', due: '05/03/2026', status: 'pending' },
-  { client: 'Sharma Enterprises', type: 'GSTR-3B', due: '06/03/2026', status: 'pending' },
-  { client: 'Patel & Sons', type: 'GSTR-1', due: '06/03/2026', status: 'data-ready' },
-  { client: 'Kumar Associates', type: 'TDS Return Q4', due: '07/03/2026', status: 'pending' },
-  { client: 'Singh Trading', type: 'GSTR-3B', due: '07/03/2026', status: 'in-progress' },
-]
-
-const atRiskClients = [
-  { name: 'ABC Traders', health: 42, factors: ['2 overdue returns', 'No response 14 days'] },
-  { name: 'Patel & Sons', health: 55, factors: ['GST notice pending', 'Low engagement'] },
-  { name: 'Singh Trading', health: 38, factors: ['3 missing docs', 'Fee payment overdue'] },
-  { name: 'Kumar Associates', health: 51, factors: ['Reconciliation gaps', 'Late filings history'] },
-]
-
-const pendingDocs = [
-  { client: 'Sharma Enterprises', doc: 'Purchase Register Feb 2026', followUps: 3, days: 12 },
-  { client: 'ABC Traders', doc: 'Bank Statement Q4', followUps: 2, days: 8 },
-  { client: 'Singh Trading', doc: 'GST Notice Copy', followUps: 4, days: 18 },
-  { client: 'Kumar Associates', doc: 'Sales Register Jan 2026', followUps: 2, days: 6 },
-  { client: 'Patel & Sons', doc: 'TDS Certificates', followUps: 1, days: 4 },
-]
-
-const teamMembers = [
-  { name: 'Rahul Mehta', role: 'Senior CA', completed: 28, inProgress: 5, overdue: 1, utilization: 87 },
-  { name: 'Priya Sharma', role: 'Tax Manager', completed: 22, inProgress: 7, overdue: 2, utilization: 78 },
-  { name: 'Amit Patel', role: 'Accounts Lead', completed: 19, inProgress: 4, overdue: 0, utilization: 72 },
-  { name: 'Sneha Joshi', role: 'Compliance Exec', completed: 31, inProgress: 3, overdue: 1, utilization: 91 },
-  { name: 'Vikram Singh', role: 'Junior CA', completed: 15, inProgress: 6, overdue: 3, utilization: 64 },
-]
-
-const revenueData = [
-  { month: 'Oct', actual: 4_50_000, predicted: 0 },
-  { month: 'Nov', actual: 5_20_000, predicted: 0 },
-  { month: 'Dec', actual: 4_80_000, predicted: 0 },
-  { month: 'Jan', actual: 5_60_000, predicted: 0 },
-  { month: 'Feb', actual: 5_10_000, predicted: 5_10_000 },
-  { month: 'Mar', actual: 0, predicted: 6_20_000 },
-]
-
-const aiActions = [
-  { time: '10:42 AM', action: 'Assigned GSTR-3B filing for ABC Traders to Rahul Mehta', type: 'assign' },
-  { time: '10:15 AM', action: 'Sent reminder to Sharma Enterprises for Purchase Register', type: 'reminder' },
-  { time: '09:58 AM', action: 'Escalated Singh Trading — 3 overdue documents', type: 'escalate' },
-  { time: '09:30 AM', action: 'Auto-filed GSTR-1 for XYZ Industries (data complete)', type: 'file' },
-  { time: '09:12 AM', action: 'Generated compliance report for Patel & Sons GST notice', type: 'report' },
-  { time: '08:45 AM', action: 'Reassigned Kumar Associates task from Vikram to Priya', type: 'assign' },
-  { time: '08:30 AM', action: 'Triggered 2B reconciliation for 4 clients', type: 'automate' },
-  { time: '08:15 AM', action: 'Flagged 2 returns at risk of missing deadline', type: 'alert' },
-  { time: '07:50 AM', action: 'Scheduled team standup review for urgent filings', type: 'schedule' },
-  { time: '07:30 AM', action: 'Updated client health scores for all 24 clients', type: 'update' },
-]
-
-const autoRules = [
-  { rule: 'GSTR-3B filings auto-assigned to Senior CA with < 3 active filings', active: true, triggers: 47 },
-  { rule: 'Clients with health < 50% get daily reminders until response', active: true, triggers: 23 },
-  { rule: 'Overdue docs > 10 days escalated to firm owner', active: true, triggers: 8 },
-  { rule: 'Data-complete returns auto-queued for filing within 24 hrs', active: true, triggers: 62 },
-  { rule: 'Team members > 90% utilization excluded from new assignments', active: true, triggers: 15 },
-  { rule: 'GST notices auto-categorized by response deadline urgency', active: true, triggers: 11 },
-  { rule: 'Monthly revenue forecast updated every Monday 8 AM', active: true, triggers: 4 },
-]
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const fmtINR = (n: number) =>
@@ -155,6 +94,16 @@ const actionIcon = (t: string) => {
 
 // ─── Revenue SVG Bar Chart ─────────────────────────────────────────────────
 function RevenueChart() {
+  if (revenueData.length === 0) {
+    return (
+      <EmptyState
+        icon={TrendingUp}
+        title="No revenue data yet"
+        description="Predicted revenue trend will appear here once invoice data is available."
+        compact
+      />
+    )
+  }
   const maxVal = Math.max(...revenueData.map(d => Math.max(d.actual, d.predicted)))
   const h = 140
   const barW = 32
@@ -280,12 +229,12 @@ export default function AICAManagerPage() {
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
               {/* Metrics Row */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MetricCard icon={Users} label="Active Clients" value="24" sub="+2 this month" color="bg-emerald-500" />
-                <MetricCard icon={AlertTriangle} label="Urgent Filings" value="6" sub="Due in 48 hrs" color="bg-red-500" />
-                <MetricCard icon={AlertCircle} label="At-Risk" value="4" sub="Health &lt; 60%" color="bg-amber-500" />
-                <MetricCard icon={FileText} label="Pending Docs" value="5" sub="From clients" color="bg-blue-500" />
-                <MetricCard icon={Target} label="Utilization" value="78%" sub="Team avg" color="bg-emerald-600" />
-                <MetricCard icon={TrendingUp} label="Revenue Forecast" value={fmtINR(6_20_000)} sub="Mar 2026" color="bg-emerald-500" />
+                <MetricCard icon={Users} label="Active Clients" value="0" sub="No clients yet" color="bg-emerald-500" />
+                <MetricCard icon={AlertTriangle} label="Urgent Filings" value="0" sub="None pending" color="bg-red-500" />
+                <MetricCard icon={AlertCircle} label="At-Risk" value="0" sub="None tracked" color="bg-amber-500" />
+                <MetricCard icon={FileText} label="Pending Docs" value="0" sub="None pending" color="bg-blue-500" />
+                <MetricCard icon={Target} label="Utilization" value="—" sub="No team data" color="bg-emerald-600" />
+                <MetricCard icon={TrendingUp} label="Revenue Forecast" value="₹0" sub="No data yet" color="bg-emerald-500" />
               </div>
 
               {/* Two Column Layout */}
@@ -305,26 +254,35 @@ export default function AICAManagerPage() {
                     <CardContent className="pt-0">
                       <ScrollArea className="max-h-64">
                         <div className="space-y-2.5">
-                          {priorities.map((p, i) => (
-                            <motion.div
-                              key={p.id}
-                              initial={{ opacity: 0, x: -8 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: i * 0.05 }}
-                              className="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
-                            >
-                              <div className="flex items-start gap-2 min-w-0">
-                                <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
-                                  <span className="text-[10px] font-bold text-emerald-700">{i + 1}</span>
+                          {priorities.length === 0 ? (
+                            <EmptyState
+                              icon={CircleDot}
+                              title="No priorities yet"
+                              description="Today's priorities will appear here once the AI engine has processed your workload."
+                              compact
+                            />
+                          ) : (
+                            priorities.map((p, i) => (
+                              <motion.div
+                                key={p.id}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
+                              >
+                                <div className="flex items-start gap-2 min-w-0">
+                                  <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+                                    <span className="text-[10px] font-bold text-emerald-700">{i + 1}</span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-slate-700 truncate">{p.action}</p>
+                                    <p className="text-[10px] text-slate-400">Due: {p.due}</p>
+                                  </div>
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-medium text-slate-700 truncate">{p.action}</p>
-                                  <p className="text-[10px] text-slate-400">Due: {p.due}</p>
-                                </div>
-                              </div>
-                              {priorityBadge(p.priority)}
-                            </motion.div>
-                          ))}
+                                {priorityBadge(p.priority)}
+                              </motion.div>
+                            ))
+                          )}
                         </div>
                       </ScrollArea>
                     </CardContent>
@@ -346,21 +304,30 @@ export default function AICAManagerPage() {
                     <CardContent className="pt-0">
                       <ScrollArea className="max-h-64">
                         <div className="space-y-2">
-                          {urgentFilings.map((f, i) => (
-                            <motion.div
-                              key={i}
-                              initial={{ opacity: 0, x: -8 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: i * 0.05 }}
-                              className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-slate-700">{f.client}</p>
-                                <p className="text-[10px] text-slate-400">{f.type} · Due {f.due}</p>
-                              </div>
-                              {filingStatusBadge(f.status)}
-                            </motion.div>
-                          ))}
+                          {urgentFilings.length === 0 ? (
+                            <EmptyState
+                              icon={Clock}
+                              title="No urgent filings yet"
+                              description="Filings due within 48 hours will appear here once returns are tracked."
+                              compact
+                            />
+                          ) : (
+                            urgentFilings.map((f, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-slate-700">{f.client}</p>
+                                  <p className="text-[10px] text-slate-400">{f.type} · Due {f.due}</p>
+                                </div>
+                                {filingStatusBadge(f.status)}
+                              </motion.div>
+                            ))
+                          )}
                         </div>
                       </ScrollArea>
                     </CardContent>
@@ -381,37 +348,46 @@ export default function AICAManagerPage() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-3">
-                        {atRiskClients.map((c, i) => (
-                          <motion.div
-                            key={c.name}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.06 }}
-                            className="p-3 rounded-lg border border-slate-200/60 hover:border-amber-200 transition-colors"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-semibold text-slate-700">{c.name}</span>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-red-600 font-bold">{c.health}%</span>
-                                <div className="h-2 w-16 rounded-full bg-slate-200 overflow-hidden">
-                                  <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${c.health}%` }}
-                                    transition={{ delay: 0.3 + i * 0.1, duration: 0.6 }}
-                                    className="h-full rounded-full bg-gradient-to-r from-red-400 to-amber-400"
-                                  />
+                        {atRiskClients.length === 0 ? (
+                          <EmptyState
+                            icon={AlertTriangle}
+                            title="No at-risk clients yet"
+                            description="Clients with low health scores will appear here once compliance data is synced."
+                            compact
+                          />
+                        ) : (
+                          atRiskClients.map((c, i) => (
+                            <motion.div
+                              key={c.name}
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: i * 0.06 }}
+                              className="p-3 rounded-lg border border-slate-200/60 hover:border-amber-200 transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-slate-700">{c.name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-red-600 font-bold">{c.health}%</span>
+                                  <div className="h-2 w-16 rounded-full bg-slate-200 overflow-hidden">
+                                    <motion.div
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${c.health}%` }}
+                                      transition={{ delay: 0.3 + i * 0.1, duration: 0.6 }}
+                                      className="h-full rounded-full bg-gradient-to-r from-red-400 to-amber-400"
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {c.factors.map((f, j) => (
-                                <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
-                                  {f}
-                                </span>
-                              ))}
-                            </div>
-                          </motion.div>
-                        ))}
+                              <div className="flex flex-wrap gap-1">
+                                {c.factors.map((f, j) => (
+                                  <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                                    {f}
+                                  </span>
+                                ))}
+                              </div>
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -431,24 +407,33 @@ export default function AICAManagerPage() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-2.5">
-                        {pendingDocs.map((d, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-slate-700 truncate">{d.doc}</p>
-                              <p className="text-[10px] text-slate-400">{d.client} · {d.days} days waiting</p>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-slate-400">{d.followUps}x</span>
-                              <TimerReset className="h-3 w-3 text-amber-500" />
-                            </div>
-                          </motion.div>
-                        ))}
+                        {pendingDocs.length === 0 ? (
+                          <EmptyState
+                            icon={FileText}
+                            title="No pending documents yet"
+                            description="Documents awaiting client submission will appear here."
+                            compact
+                          />
+                        ) : (
+                          pendingDocs.map((d, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.05 }}
+                              className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-slate-700 truncate">{d.doc}</p>
+                                <p className="text-[10px] text-slate-400">{d.client} · {d.days} days waiting</p>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-slate-400">{d.followUps}x</span>
+                                <TimerReset className="h-3 w-3 text-amber-500" />
+                              </div>
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -497,42 +482,51 @@ export default function AICAManagerPage() {
                     <CardContent className="pt-0">
                       <ScrollArea className="max-h-64">
                         <div className="space-y-3">
-                          {teamMembers.map((m, i) => (
-                            <motion.div
-                              key={m.name}
-                              initial={{ opacity: 0, y: 6 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.06 }}
-                              className="p-3 rounded-lg border border-slate-200/60 hover:border-emerald-200 transition-colors"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <div>
-                                  <p className="text-xs font-semibold text-slate-700">{m.name}</p>
-                                  <p className="text-[10px] text-slate-400">{m.role}</p>
+                          {teamMembers.length === 0 ? (
+                            <EmptyState
+                              icon={Users}
+                              title="No team members yet"
+                              description="Team productivity will appear here once members are added to the firm."
+                              compact
+                            />
+                          ) : (
+                            teamMembers.map((m, i) => (
+                              <motion.div
+                                key={m.name}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.06 }}
+                                className="p-3 rounded-lg border border-slate-200/60 hover:border-emerald-200 transition-colors"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-700">{m.name}</p>
+                                    <p className="text-[10px] text-slate-400">{m.role}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-[10px] font-bold ${m.utilization >= 85 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                      {m.utilization}%
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <span className={`text-[10px] font-bold ${m.utilization >= 85 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                    {m.utilization}%
-                                  </span>
+                                <div className="h-1.5 w-full rounded-full bg-slate-100 mb-2 overflow-hidden">
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${m.utilization}%` }}
+                                    transition={{ delay: 0.3 + i * 0.1, duration: 0.6 }}
+                                    className={`h-full rounded-full ${m.utilization >= 85 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                  />
                                 </div>
-                              </div>
-                              <div className="h-1.5 w-full rounded-full bg-slate-100 mb-2 overflow-hidden">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${m.utilization}%` }}
-                                  transition={{ delay: 0.3 + i * 0.1, duration: 0.6 }}
-                                  className={`h-full rounded-full ${m.utilization >= 85 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                                />
-                              </div>
-                              <div className="flex items-center gap-3 text-[10px]">
-                                <span className="text-emerald-600 flex items-center gap-0.5"><CheckCircle className="h-3 w-3" />{m.completed}</span>
-                                <span className="text-blue-600 flex items-center gap-0.5"><Clock className="h-3 w-3" />{m.inProgress}</span>
-                                {m.overdue > 0 && (
-                                  <span className="text-red-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" />{m.overdue}</span>
-                                )}
-                              </div>
-                            </motion.div>
-                          ))}
+                                <div className="flex items-center gap-3 text-[10px]">
+                                  <span className="text-emerald-600 flex items-center gap-0.5"><CheckCircle className="h-3 w-3" />{m.completed}</span>
+                                  <span className="text-blue-600 flex items-center gap-0.5"><Clock className="h-3 w-3" />{m.inProgress}</span>
+                                  {m.overdue > 0 && (
+                                    <span className="text-red-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" />{m.overdue}</span>
+                                  )}
+                                </div>
+                              </motion.div>
+                            ))
+                          )}
                         </div>
                       </ScrollArea>
                     </CardContent>
@@ -555,21 +549,30 @@ export default function AICAManagerPage() {
                   <CardContent className="pt-0">
                     <ScrollArea className="max-h-56">
                       <div className="space-y-1.5">
-                        {aiActions.map((a, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -6 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.03 }}
-                            className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-slate-50 transition-colors"
-                          >
-                            {actionIcon(a.type)}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-slate-600">{a.action}</p>
-                            </div>
-                            <span className="text-[10px] text-slate-400 whitespace-nowrap">{a.time}</span>
-                          </motion.div>
-                        ))}
+                        {aiActions.length === 0 ? (
+                          <EmptyState
+                            icon={Zap}
+                            title="No AI actions yet"
+                            description="Automated actions taken by the AI CA Manager will appear here."
+                            compact
+                          />
+                        ) : (
+                          aiActions.map((a, i) => (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.03 }}
+                              className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-slate-50 transition-colors"
+                            >
+                              {actionIcon(a.type)}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-600">{a.action}</p>
+                              </div>
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap">{a.time}</span>
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </ScrollArea>
                   </CardContent>
@@ -581,151 +584,201 @@ export default function AICAManagerPage() {
           {/* ── Priorities Tab ── */}
           <TabsContent value="priorities">
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
-              <div className="grid gap-3">
-                {priorities.map((p, i) => (
-                  <motion.div key={p.id} variants={fadeUp}>
-                    <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
-                      <CardContent className="p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                            <span className="text-sm font-bold text-emerald-700">{i + 1}</span>
+              {priorities.length === 0 ? (
+                <Card className="border-slate-200/60">
+                  <CardContent className="p-6">
+                    <EmptyState
+                      icon={CircleDot}
+                      title="No priorities yet"
+                      description="Priorities will appear here once the AI engine has processed your workload."
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {priorities.map((p, i) => (
+                    <motion.div key={p.id} variants={fadeUp}>
+                      <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
+                        <CardContent className="p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                              <span className="text-sm font-bold text-emerald-700">{i + 1}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-700">{p.action}</p>
+                              <p className="text-xs text-slate-400">Client: {p.client} · Due: {p.due}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-700">{p.action}</p>
-                            <p className="text-xs text-slate-400">Client: {p.client} · Due: {p.due}</p>
+                          <div className="flex items-center gap-2">
+                            {priorityBadge(p.priority)}
+                            <Button size="sm" variant="outline" className="h-7 text-[11px]">
+                              <ArrowRight className="h-3 w-3 mr-1" />Action
+                            </Button>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {priorityBadge(p.priority)}
-                          <Button size="sm" variant="outline" className="h-7 text-[11px]">
-                            <ArrowRight className="h-3 w-3 mr-1" />Action
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           </TabsContent>
 
           {/* ── At-Risk Tab ── */}
           <TabsContent value="at-risk">
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
-              {atRiskClients.map((c, i) => (
-                <motion.div key={c.name} variants={fadeUp}>
-                  <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-red-100 flex items-center justify-center">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
+              {atRiskClients.length === 0 ? (
+                <Card className="border-slate-200/60">
+                  <CardContent className="p-6">
+                    <EmptyState
+                      icon={AlertTriangle}
+                      title="No at-risk clients yet"
+                      description="Clients with low health scores will appear here once compliance data is synced."
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                atRiskClients.map((c, i) => (
+                  <motion.div key={c.name} variants={fadeUp}>
+                    <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-red-100 flex items-center justify-center">
+                              <AlertTriangle className="h-4 w-4 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">{c.name}</p>
+                              <p className="text-xs text-red-500 font-medium">Health Score: {c.health}%</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-700">{c.name}</p>
-                            <p className="text-xs text-red-500 font-medium">Health Score: {c.health}%</p>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px]">
+                            <Shield className="h-3 w-3 mr-1" />Intervene
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500">Health Progress</span>
+                            <span className="text-red-600 font-bold">{c.health}/100</span>
+                          </div>
+                          <Progress value={c.health} className="h-2" />
+                          <Separator className="my-2" />
+                          <p className="text-[11px] text-slate-500 font-medium">Risk Factors:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {c.factors.map((f, j) => (
+                              <span key={j} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                                {f}
+                              </span>
+                            ))}
                           </div>
                         </div>
-                        <Button size="sm" variant="outline" className="h-7 text-[11px]">
-                          <Shield className="h-3 w-3 mr-1" />Intervene
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Health Progress</span>
-                          <span className="text-red-600 font-bold">{c.health}/100</span>
-                        </div>
-                        <Progress value={c.health} className="h-2" />
-                        <Separator className="my-2" />
-                        <p className="text-[11px] text-slate-500 font-medium">Risk Factors:</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {c.factors.map((f, j) => (
-                            <span key={j} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
-                              {f}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
             </motion.div>
           </TabsContent>
 
           {/* ── Team Tab ── */}
           <TabsContent value="team">
             <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {teamMembers.map((m, i) => (
-                <motion.div key={m.name} variants={fadeUp}>
-                  <Card className="border-slate-200/60 hover:shadow-md transition-shadow h-full">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                          <span className="text-sm font-bold text-emerald-700">
-                            {m.name.split(' ').map(w => w[0]).join('')}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">{m.name}</p>
-                          <p className="text-[11px] text-slate-400">{m.role}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between text-[11px] mb-1">
-                            <span className="text-slate-500">Utilization</span>
-                            <span className={`font-bold ${m.utilization >= 85 ? 'text-amber-600' : 'text-emerald-600'}`}>{m.utilization}%</span>
-                          </div>
-                          <Progress value={m.utilization} className="h-2" />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="text-center p-2 rounded-lg bg-emerald-50">
-                            <p className="text-lg font-bold text-emerald-700">{m.completed}</p>
-                            <p className="text-[10px] text-emerald-600">Done</p>
-                          </div>
-                          <div className="text-center p-2 rounded-lg bg-blue-50">
-                            <p className="text-lg font-bold text-blue-700">{m.inProgress}</p>
-                            <p className="text-[10px] text-blue-600">Active</p>
-                          </div>
-                          <div className="text-center p-2 rounded-lg bg-red-50">
-                            <p className="text-lg font-bold text-red-700">{m.overdue}</p>
-                            <p className="text-[10px] text-red-600">Overdue</p>
-                          </div>
-                        </div>
-                      </div>
+              {teamMembers.length === 0 ? (
+                <div className="col-span-full">
+                  <Card className="border-slate-200/60">
+                    <CardContent className="p-6">
+                      <EmptyState
+                        icon={Users}
+                        title="No team members yet"
+                        description="Team members will appear here once they are added to the firm."
+                      />
                     </CardContent>
                   </Card>
-                </motion.div>
-              ))}
+                </div>
+              ) : (
+                teamMembers.map((m, i) => (
+                  <motion.div key={m.name} variants={fadeUp}>
+                    <Card className="border-slate-200/60 hover:shadow-md transition-shadow h-full">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <span className="text-sm font-bold text-emerald-700">
+                              {m.name.split(' ').map(w => w[0]).join('')}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">{m.name}</p>
+                            <p className="text-[11px] text-slate-400">{m.role}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex justify-between text-[11px] mb-1">
+                              <span className="text-slate-500">Utilization</span>
+                              <span className={`font-bold ${m.utilization >= 85 ? 'text-amber-600' : 'text-emerald-600'}`}>{m.utilization}%</span>
+                            </div>
+                            <Progress value={m.utilization} className="h-2" />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center p-2 rounded-lg bg-emerald-50">
+                              <p className="text-lg font-bold text-emerald-700">{m.completed}</p>
+                              <p className="text-[10px] text-emerald-600">Done</p>
+                            </div>
+                            <div className="text-center p-2 rounded-lg bg-blue-50">
+                              <p className="text-lg font-bold text-blue-700">{m.inProgress}</p>
+                              <p className="text-[10px] text-blue-600">Active</p>
+                            </div>
+                            <div className="text-center p-2 rounded-lg bg-red-50">
+                              <p className="text-lg font-bold text-red-700">{m.overdue}</p>
+                              <p className="text-[10px] text-red-600">Overdue</p>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
             </motion.div>
           </TabsContent>
 
           {/* ── Rules Tab ── */}
           <TabsContent value="rules">
             <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-3">
-              {autoRules.map((r, i) => (
-                <motion.div key={i} variants={fadeUp}>
-                  <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
-                    <CardContent className="p-4 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${r.active ? 'bg-emerald-100' : 'bg-slate-100'}`}>
-                          <Zap className={`h-4 w-4 ${r.active ? 'text-emerald-600' : 'text-slate-400'}`} />
+              {autoRules.length === 0 ? (
+                <Card className="border-slate-200/60">
+                  <CardContent className="p-6">
+                    <EmptyState
+                      icon={Zap}
+                      title="No automation rules yet"
+                      description="Automation rules configured for the AI CA Manager will appear here."
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                autoRules.map((r, i) => (
+                  <motion.div key={i} variants={fadeUp}>
+                    <Card className="border-slate-200/60 hover:shadow-md transition-shadow">
+                      <CardContent className="p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${r.active ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+                            <Zap className={`h-4 w-4 ${r.active ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-700">{r.rule}</p>
+                            <p className="text-[10px] text-slate-400">Triggered {r.triggers} times</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-700">{r.rule}</p>
-                          <p className="text-[10px] text-slate-400">Triggered {r.triggers} times</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge className={`text-[10px] ${r.active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                            {r.active ? 'Active' : 'Paused'}
+                          </Badge>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge className={`text-[10px] ${r.active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                          {r.active ? 'Active' : 'Paused'}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
             </motion.div>
           </TabsContent>
         </Tabs>

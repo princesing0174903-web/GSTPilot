@@ -166,29 +166,34 @@ function formatNumberIN(num: number): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// BUSINESS DATA
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped a FEATURED_BUSINESS object for "Reliance
+// Industries Ltd." (a REAL Indian listed company) with fabricated
+// gstCredit / collection / compliance / growth / risk scores, fabricated
+// ₹8,76,543 Cr revenue, fabricated 342,982 employee count, fabricated ₹2.50 Cr
+// credit limit, fabricated 794 overall score, and fabricated 87th percentile.
+// Publishing fabricated financial scores for a real, named company is
+// defamatory. The object is now null until the user selects a real business
+// from their books.
+// TODO: Replace with real data from /api/credit-score?businessId=... when available.
 
-const FEATURED_BUSINESS = {
-  name: 'Reliance Industries Ltd.',
-  gstin: '27AAACR5055K1Z5',
-  industry: 'Petroleum & Refineries',
-  location: 'Mumbai, Maharashtra',
-  annualRevenue: 876543000000, // ₹8,76,543 Cr
-  employees: 342982,
-  scores: {
-    gstCredit: 88,
-    collection: 76,
-    compliance: 95,
-    growth: 82,
-    risk: 71,
-  } as Record<ScoreKey, number>,
-  rating: 'AAA',
-  creditLimit: 25000000, // ₹2.50 Cr
-  monthsScored: 23,
-  overallScore: 794, // 300-900 scale
-  percentile: 87,
-};
+interface FeaturedBusiness {
+  name: string;
+  gstin: string;
+  industry: string;
+  location: string;
+  annualRevenue: number;
+  employees: number;
+  scores: Record<ScoreKey, number>;
+  rating: string;
+  creditLimit: number;
+  monthsScored: number;
+  overallScore: number;
+  percentile: number;
+}
+
+const FEATURED_BUSINESS: FeaturedBusiness | null = null;
 
 const SCORE_LABELS: Record<ScoreKey, { label: string; short: string; icon: React.ElementType; color: string }> = {
   gstCredit: { label: 'GST Credit Score', short: 'GST Credit', icon: Shield, color: COLORS.emerald500 },
@@ -198,86 +203,35 @@ const SCORE_LABELS: Record<ScoreKey, { label: string; short: string; icon: React
   risk: { label: 'Risk Grade', short: 'Risk', icon: AlertTriangle, color: COLORS.amber500 },
 };
 
+// Previously fabricated per-factor rationales tied to the Reliance Industries
+// demo business. Empty until a real featured business is wired up.
+// TODO: Replace with real per-business rationales from /api/credit-score.
 const SCORE_RATIONALES: Record<ScoreKey, string> = {
-  gstCredit: 'GST filed on time for 23 consecutive months',
-  collection: 'Average collection period improved to 42 days',
-  compliance: 'Zero late filings and clean audit history',
-  growth: 'Revenue grew 18.4% YoY with diversified segments',
-  risk: 'Moderate leverage with stable debt-service coverage',
+  gstCredit: '',
+  collection: '',
+  compliance: '',
+  growth: '',
+  risk: '',
 };
 
+// Previously hardcoded fabricated sub-factor scores (weights, scores,
+// contributions) for the Reliance Industries demo business across 5 score
+// categories. Empty until a real featured business is wired up.
+// TODO: Replace with real per-factor breakdowns from /api/credit-score.
 const SCORE_FACTORS: Record<ScoreKey, ScoreFactor[]> = {
-  gstCredit: [
-    { name: 'Filing History', weight: 25, score: 92, contribution: 23.0 },
-    { name: 'Filing Timeliness', weight: 20, score: 88, contribution: 17.6 },
-    { name: 'Tax Liability Consistency', weight: 15, score: 85, contribution: 12.75 },
-    { name: 'Input Tax Credit Utilization', weight: 10, score: 90, contribution: 9.0 },
-    { name: 'GSTR-1 vs GSTR-3B Match', weight: 10, score: 95, contribution: 9.5 },
-    { name: 'Return Revisions Count', weight: 8, score: 80, contribution: 6.4 },
-    { name: 'E-Way Bill Compliance', weight: 7, score: 86, contribution: 6.02 },
-    { name: 'HSN Code Accuracy', weight: 5, score: 82, contribution: 4.1 },
-  ],
-  collection: [
-    { name: 'On-Time Collection Rate', weight: 25, score: 80, contribution: 20.0 },
-    { name: 'Days Sales Outstanding', weight: 20, score: 72, contribution: 14.4 },
-    { name: 'Overdue Amount Ratio', weight: 15, score: 78, contribution: 11.7 },
-    { name: 'Receivables Aging Profile', weight: 12, score: 74, contribution: 8.88 },
-    { name: 'Collection Cycle Consistency', weight: 10, score: 76, contribution: 7.6 },
-    { name: 'Bad Debt Write-off Rate', weight: 8, score: 82, contribution: 6.56 },
-    { name: 'Customer Payment Behavior', weight: 6, score: 70, contribution: 4.2 },
-    { name: 'Credit Term Adherence', weight: 4, score: 68, contribution: 2.72 },
-  ],
-  compliance: [
-    { name: 'On-Time Filing Rate', weight: 22, score: 98, contribution: 21.56 },
-    { name: 'Late Fee History', weight: 18, score: 96, contribution: 17.28 },
-    { name: 'Audit Observation Count', weight: 15, score: 92, contribution: 13.8 },
-    { name: 'Notice Response Time', weight: 12, score: 90, contribution: 10.8 },
-    { name: 'ITC Reconciliation Accuracy', weight: 10, score: 94, contribution: 9.4 },
-    { name: 'Statutory Dues Payment', weight: 8, score: 96, contribution: 7.68 },
-    { name: 'Annual Return Filing', weight: 7, score: 100, contribution: 7.0 },
-    { name: 'E-Invoice Adoption', weight: 5, score: 88, contribution: 4.4 },
-    { name: 'GST Audit Compliance', weight: 3, score: 95, contribution: 2.85 },
-  ],
-  growth: [
-    { name: 'Revenue Growth YoY', weight: 25, score: 84, contribution: 21.0 },
-    { name: 'Net Profit Margin Trend', weight: 18, score: 80, contribution: 14.4 },
-    { name: 'Customer Acquisition Rate', weight: 12, score: 78, contribution: 9.36 },
-    { name: 'Market Share Expansion', weight: 10, score: 82, contribution: 8.2 },
-    { name: 'Product Diversification', weight: 10, score: 88, contribution: 8.8 },
-    { name: 'Geographic Expansion', weight: 8, score: 85, contribution: 6.8 },
-    { name: 'Employee Growth', weight: 7, score: 76, contribution: 5.32 },
-    { name: 'Digital Adoption', weight: 5, score: 90, contribution: 4.5 },
-    { name: 'R&D Investment', weight: 5, score: 72, contribution: 3.6 },
-  ],
-  risk: [
-    { name: 'Debt-to-Equity Ratio', weight: 20, score: 68, contribution: 13.6 },
-    { name: 'Interest Coverage Ratio', weight: 15, score: 72, contribution: 10.8 },
-    { name: 'Cash Flow Volatility', weight: 12, score: 65, contribution: 7.8 },
-    { name: 'Concentration Risk', weight: 12, score: 74, contribution: 8.88 },
-    { name: 'Currency Exposure', weight: 8, score: 70, contribution: 5.6 },
-    { name: 'Working Capital Stress', weight: 8, score: 76, contribution: 6.08 },
-    { name: 'Litigation Exposure', weight: 7, score: 62, contribution: 4.34 },
-    { name: 'Sector Volatility', weight: 7, score: 80, contribution: 5.6 },
-    { name: 'Regulatory Risk', weight: 6, score: 78, contribution: 4.68 },
-    { name: 'Supplier Dependency', weight: 5, score: 66, contribution: 3.3 },
-  ],
+  gstCredit: [],
+  collection: [],
+  compliance: [],
+  growth: [],
+  risk: [],
 };
 
-const IMPROVED_FACTORS: TrendItem[] = [
-  { factor: 'On-Time Filing Rate', change: 8.4, reason: 'Automated GSTR-1 reminders cut late filings to zero' },
-  { factor: 'Days Sales Outstanding', change: 6.2, reason: 'Tighter credit terms reduced average DSO from 48 to 42 days' },
-  { factor: 'ITC Reconciliation', change: 5.1, reason: 'Auto-match engine improved reconciliation accuracy to 94%' },
-  { factor: 'Revenue Growth YoY', change: 4.8, reason: 'New refinery segment added 12% to top-line' },
-  { factor: 'Annual Return Filing', change: 3.6, reason: 'Filed GSTR-9C 18 days before deadline' },
-];
+// Previously fabricated "what improved / what declined" trends for the Reliance
+// Industries demo business. Empty until real trend data is available.
+// TODO: Replace with real trend deltas from /api/credit-score/trends.
+const IMPROVED_FACTORS: TrendItem[] = [];
 
-const DECLINED_FACTORS: TrendItem[] = [
-  { factor: 'Cash Flow Volatility', change: -4.2, reason: 'Crude price swings raised quarterly variance' },
-  { factor: 'Litigation Exposure', change: -3.8, reason: 'Two new tax disputes added ₹8.4 Cr contingent liability' },
-  { factor: 'Supplier Dependency', change: -2.9, reason: 'Top-3 supplier share rose to 41% from 36%' },
-  { factor: 'Currency Exposure', change: -2.1, reason: 'USD-INR unhedged exposure up due to capex imports' },
-  { factor: 'Receivables Aging', change: -1.4, reason: 'Two large B2B clients slipped to 60+ days bucket' },
-];
+const DECLINED_FACTORS: TrendItem[] = [];
 
 // INDUSTRY_COMPARISON — previously 10 hardcoded mock industries with
 // fabricated gstCredit/collection/compliance/growth/risk/businesses scores.
@@ -1078,6 +1032,34 @@ function buildRecommendation(sliders: SimSliders, scores: Record<ScoreKey, numbe
 // TAB 1: SCORE DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 function ScoreDashboardTab() {
+  // Empty state — no featured business selected. The previous implementation
+  // shipped hardcoded fabricated credit scores for "Reliance Industries Ltd."
+  // (a REAL Indian listed company). We now show an honest empty state until
+  // the user selects a real business from their books.
+  // TODO: Replace with real data from /api/credit-score?businessId=... when available.
+  if (!FEATURED_BUSINESS) {
+    return (
+      <Card className="border-dashed border-slate-200 bg-slate-50/50">
+        <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <Shield className="w-7 h-7 text-emerald-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800">
+            No business selected
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Select a business from your books to view its 5 composite credit
+            scores (GST Credit, Collection, Compliance, Growth, Risk), overall
+            rating, and recommended credit limit. Real scores are computed from
+            your live GST returns, collections, and compliance history.
+          </p>
+          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Building2 className="w-4 h-4 mr-1.5" /> Select a business
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
   const scores = FEATURED_BUSINESS.scores;
   const scoreKeys: ScoreKey[] = ['gstCredit', 'collection', 'compliance', 'growth', 'risk'];
 
@@ -1322,14 +1304,41 @@ function ScoreDashboardTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function ScoreBreakdownTab() {
   const [selected, setSelected] = useState<ScoreKey>('gstCredit');
+  const industryAvg = useMemo(() => {
+    const ind = INDUSTRY_COMPARISON.find(i => i.industry === FEATURED_BUSINESS?.industry);
+    return ind ? ind[selected] : 75;
+  }, [selected]);
+
+  // Empty state — no featured business selected. The previous implementation
+  // showed fabricated per-factor score breakdowns for "Reliance Industries Ltd."
+  // (a REAL Indian listed company). Show an honest empty state until a real
+  // business is selected.
+  // TODO: Replace with real data from /api/credit-score?businessId=... when available.
+  if (!FEATURED_BUSINESS) {
+    return (
+      <Card className="border-dashed border-slate-200 bg-slate-50/50">
+        <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <BarChart3 className="w-7 h-7 text-emerald-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-800">
+            No score breakdown available
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Select a business from your books to drill into the per-factor
+            breakdowns for each of its 5 composite credit scores — including
+            factor weights, weighted contributions, and industry comparisons.
+          </p>
+          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Building2 className="w-4 h-4 mr-1.5" /> Select a business
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
   const factors = SCORE_FACTORS[selected];
   const scoreVal = FEATURED_BUSINESS.scores[selected];
   const meta = SCORE_LABELS[selected];
-
-  const industryAvg = useMemo(() => {
-    const ind = INDUSTRY_COMPARISON.find(i => i.industry === FEATURED_BUSINESS.industry);
-    return ind ? ind[selected] : 75;
-  }, [selected]);
 
   return (
     <div className="space-y-6">
@@ -1926,7 +1935,7 @@ function ScoreDistributionTab() {
                 </thead>
                 <tbody>
                   {INDUSTRY_COMPARISON.map((ind, i) => {
-                    const isYour = ind.industry === FEATURED_BUSINESS.industry;
+                    const isYour = !!FEATURED_BUSINESS && ind.industry === FEATURED_BUSINESS.industry;
                     const indAvg = Math.round((ind.gstCredit + ind.collection + ind.compliance + ind.growth + ind.risk) / 5);
                     return (
                       <tr
@@ -2187,7 +2196,7 @@ export default function CreditScoringEnginePage() {
           </div>
           <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">
             <Star className="h-3 w-3 mr-1" />
-            5,00,000+ businesses scored
+            Credit engine — connect a business to score it
           </Badge>
         </div>
 

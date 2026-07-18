@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
-import { generateGstr1Data, isValidGstinFormat, genAckNo, nowISO, getOrCreateGstProfile } from './client';
+import { generateGstr1Data, isValidGstinFormat, nowISO, getOrCreateGstProfile } from './client';
 import type { GSTR1Draft, FilingResult } from './client';
 
 export async function prepareGstr1(gstin: string, period: string): Promise<GSTR1Draft> {

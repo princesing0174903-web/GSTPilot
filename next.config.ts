@@ -18,6 +18,11 @@ const nextConfig: NextConfig = {
     "127.0.0.1",
     "0.0.0.0",
   ],
+  // ─── Memory stabilization for low-RAM sandbox ─────────────────────────────
+  // Disable source maps in dev to cut Turbopack memory use roughly in half.
+  // The app is huge (Firebase + 50+ Radix components + recharts + framer-motion)
+  // and the sandbox has tight memory; source maps were the main OOM driver.
+  productionBrowserSourceMaps: false,
 };
 
 export default nextConfig;

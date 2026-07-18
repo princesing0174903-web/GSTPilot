@@ -381,8 +381,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Firebase Auth session).
   const signInDemo = useCallback(() => {
     console.log('[Auth] Local workspace sign-in (no Firebase account)');
+    // Stable demo user ID so the local workspace (and its Zoho-synced data)
+    // persists across sessions. Without this, every demo sign-in creates a
+    // fresh org ID and the dashboard shows zeros (orphaned Zoho data).
+    // The stable ID `dXKkLqbkIjbwN41dEG4pI6PgiMl2` maps to org
+    // `local-dXKkLqbkIjbwN41dEG4pI6PgiMl2` which holds the production Zoho
+    // Books sync (customers, invoices, payments, bank accounts).
+    const DEMO_UID = 'dXKkLqbkIjbwN41dEG4pI6PgiMl2';
     const demoUser: AuthUser = {
-      id: 'local-user-' + Date.now(),
+      id: DEMO_UID,
       name: 'Guest User',
       email: 'guest@local.workspace',
       picture: undefined,

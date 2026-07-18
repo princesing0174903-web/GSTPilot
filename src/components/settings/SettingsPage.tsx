@@ -1686,7 +1686,7 @@ function ApiKeysSection() {
       setRevealedId(body.key?.id ?? null);
       setCreateOpen(false);
       setNewKeyName('');
-      toast.success('API key created — copy it now, you won't see it again.');
+      toast.success("API key created — copy it now, you won't see it again.");
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create key');
@@ -2036,3 +2036,297 @@ function BillingSection() {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 11. DATA SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DataSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? '';
+  const [exporting, setExporting] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [firmName, setFirmName] = useState('');
+
+  // Load the firm name so we can show the user exactly what to type.
+  useEffect(() => {
+    if (!orgId) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/organization', { headers: buildHeaders() });
+        const body = await res.json();
+        if (body.organization?.name) setFirmName(body.organization.name);
+      } catch { /* ignore */ }
+    })();
+  }, [orgId, buildHeaders]);
+
+  const handleExport = async () => {
+    if (!orgId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/settings/data-export?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gstpilot-export-${orgId}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Data exported');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleBackup = async () => {
+    if (!orgId) return;
+    setBackingUp(true);
+    try {
+      const res = await fetch(`/api/settings/data-export?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+      });
+      if (!res.ok) throw new Error('Backup failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gstpilot-backup-${orgId}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded');
+    } catch {
+      toast.error('Backup failed');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!orgId || !confirmName) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/settings/delete-workspace?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({ confirmName }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? 'Failed to delete workspace');
+      toast.success(body.message ?? 'Workspace deleted');
+      setDeleteOpen(false);
+      setConfirmName('');
+      // Force a full reload so all cached org data is cleared.
+      if (typeof window !== 'undefined') {
+        setTimeout(() => { window.location.href = '/'; }, 1200);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete workspace');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Data & Backup" subtitle="Export, back up, or permanently delete your workspace data." />
+
+      <SettingsCard
+        title="Export Data"
+        description="Download all your organization's data as a JSON file. Includes firm details, clients, invoices, Zoho-synced records, and audit logs."
+        action={
+          <GhostButton onClick={handleExport} loading={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </GhostButton>
+        }
+      >
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <Database className="h-5 w-5 text-zinc-500" />
+          <div>
+            <p className="text-sm text-white">Full data export</p>
+            <p className="text-xs text-zinc-500">JSON format. Contains every record scoped to this organization.</p>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Backup"
+        description="Download a timestamped snapshot of your workspace. Store it safely — it can be used to restore data manually."
+        action={
+          <GhostButton onClick={handleBackup} loading={backingUp}>
+            <Database className="h-4 w-4 mr-2" />
+            Download Backup
+          </GhostButton>
+        }
+      >
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <Shield className="h-5 w-5 text-zinc-500" />
+          <div>
+            <p className="text-sm text-white">Manual backup</p>
+            <p className="text-xs text-zinc-500">Automated scheduled backups are coming soon. For now, download a snapshot on demand.</p>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Delete Workspace"
+        description="Permanently delete this organization and ALL its data. This cannot be undone."
+      >
+        <div className="p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-300">Dangerous action</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                All clients, invoices, Zoho-synced records, firm settings, and the firm itself will be permanently removed.
+                Audit log entries (userId-scoped) are retained. Zoho Books tokens are revoked.
+              </p>
+              <DangerButton
+                onClick={() => setDeleteOpen(true)}
+                className="mt-3"
+                disabled={!firmName}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Workspace
+              </DangerButton>
+            </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => { setDeleteOpen(o); if (!o) setConfirmName(''); }}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              Delete Workspace
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              This action is permanent and cannot be undone. All data for <span className="text-white font-medium">{firmName || 'this organization'}</span> will be erased.
+              Type the firm name <span className="text-white font-mono">{firmName || 'firm name'}</span> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <FieldInput
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              placeholder={firmName || 'Type the firm name'}
+              className="border-red-500/30 focus:border-red-500"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={confirmName.toLowerCase() !== firmName.toLowerCase() || deleting}
+              className="bg-red-600 hover:bg-red-500 text-white border-0 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 12. DANGER ZONE SECTION (Working Logout)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DangerZoneSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { logout, user } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      // 1. Server-side audit log (records the sign-out event in AuditLog table).
+      await fetch('/api/settings/logout', {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({}),
+      }).catch(() => { /* non-fatal — we still clear local state */ });
+
+      // 2. Client-side Firebase signOut + clear all local state + session.
+      await logout();
+
+      toast.success('Signed out successfully');
+      // The app router will redirect to the login screen because `user` is now null.
+      setConfirmLogout(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to sign out');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Danger Zone" subtitle="Irreversible and destructive account actions." />
+
+      <SettingsCard
+        title="Sign Out"
+        description="Sign out of your account on this device. You will need to sign in again to access GSTPilot."
+      >
+        <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center">
+              <Power className="h-5 w-5 text-zinc-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">Sign out of GSTPilot</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {user?.email ? `Signed in as ${user.email}` : 'Clears your session and redirects to login.'}
+              </p>
+            </div>
+          </div>
+          <DangerButton onClick={() => setConfirmLogout(true)}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Log Out
+          </DangerButton>
+        </div>
+      </SettingsCard>
+
+      {/* Logout Confirmation */}
+      <AlertDialog open={confirmLogout} onOpenChange={setConfirmLogout}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <LogOut className="h-5 w-5 text-blue-400" />
+              Sign Out
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              You will be signed out of your account. Your data stays safe — sign back in anytime to resume.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="bg-red-600 hover:bg-red-500 text-white border-0 disabled:opacity-50"
+            >
+              {loggingOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
+              Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// Default export for dynamic(() => import('...')) in DashboardViews.tsx
+export default SettingsPage;

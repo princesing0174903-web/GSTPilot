@@ -66,6 +66,7 @@ import {
   useFirmExecutiveScores,
   useFireMemberships,
   useFirePriorities,
+  useFireRecentActivities,
 } from '@/hooks/use-firestore';
 import { useTimelineEvents } from '@/hooks/useTimelineEvents';
 import { useInvoices } from '@/hooks/useInvoices';

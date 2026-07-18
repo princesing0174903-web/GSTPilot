@@ -683,9 +683,9 @@ export async function getBusinessSnapshot(
       by: ['vendorName'],
       where: { client: { firmId: organizationId } },
     }).then((r) => r.length),
-    // Invoice count (all-time)
+    // Invoice count (all-time, native only — Zoho count is added below to avoid double-counting mirror rows)
     db.invoice.count({ where: { client: { firmId: organizationId } } }),
-    // Bill count (all-time)
+    // Bill count (all-time, native only — Zoho count is added below)
     db.purchaseBill.count({ where: { client: { firmId: organizationId } } }),
     // Expense count (all-time)
     db.expense.count({ where: { client: { firmId: organizationId } } }),
@@ -831,6 +831,27 @@ export async function getBusinessSnapshot(
 
   const nativeOperatingExpenses = expenseAgg._sum.amount ?? 0;
   const expenseGst = expenseAgg._sum.gst ?? 0;
+
+  // ── Merge native + Zoho entity counts ──
+  // The native `invoiceCount`/`billCount`/`clientCount`/`vendorCount` above only
+  // count native Prisma tables. The Zoho sync mirrors customers into the Client
+  // table (so clientCount already reflects Zoho customers), but it does NOT
+  // mirror invoices/bills into native Invoice/PurchaseBill tables. So we must
+  // ADD the ZohoInvoice / ZohoBill counts here to get the true total count
+  // displayed on the dashboard.
+  const mergedInvoiceCount = (invoiceCount ?? 0) + ((zohoInvoicesCount ?? 0) as number);
+  const mergedBillCount = (billCount ?? 0) + ((zohoBillsCount ?? 0) as number);
+  // Customer count: native Client rows already include the Zoho mirror rows
+  // (sync-engine.ts upserts a Client for every ZohoCustomer). To avoid
+  // double-counting, we take the MAX of (native client count, zoho customer
+  // count) — this is correct because every Zoho customer has exactly one
+  // mirrored Client row with the same organizationId.
+  const mergedCustomerCount = Math.max((clientCount ?? 0) as number, ((zohoCustomersCount ?? 0) as number));
+  // Vendor count: same logic — ZohoVendor is NOT mirrored to a native table, so
+  // we ADD them.
+  const mergedVendorCount = (vendorCount ?? 0) + ((zohoVendorsCount ?? 0) as number);
+  // Expense record count: native + Zoho
+  const mergedExpenseRecordCount = (expenseCount ?? 0) + ((zohoExpensesCount ?? 0) as number);
 
   // Zoho-synced data (real Zoho Books records — merged so the snapshot reflects
   // the connected ERP even when native tables are empty)
@@ -983,11 +1004,11 @@ export async function getBusinessSnapshot(
     cash,
     profitMargin,
 
-    customerCount: clientCount,
-    vendorCount,
-    invoiceCount,
-    billCount,
-    expenseRecordCount: expenseCount,
+    customerCount: mergedCustomerCount,
+    vendorCount: mergedVendorCount,
+    invoiceCount: mergedInvoiceCount,
+    billCount: mergedBillCount,
+    expenseRecordCount: mergedExpenseRecordCount,
 
     receivables,
     payables,

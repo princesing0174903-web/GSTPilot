@@ -11,9 +11,13 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
+  // AUDIT-DUP-1 fix: pass organizationId through so buildRealDataSnapshot can
+  // attach the canonical Business Snapshot (cash/revenue/expenses/ITC) and
+  // avoid duplicating those aggregates from connector data.
+  const organizationId = request.nextUrl.searchParams.get('organizationId') ?? undefined;
 
   try {
-    const snapshot = await buildRealDataSnapshot(userId);
+    const snapshot = await buildRealDataSnapshot(userId, organizationId);
     const contextBlock = formatRealDataContextBlock(snapshot);
     return NextResponse.json({ snapshot, contextBlock });
   } catch (err) {

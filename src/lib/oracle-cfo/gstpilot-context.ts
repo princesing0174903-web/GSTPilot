@@ -85,6 +85,19 @@ export interface GSTpilotSnapshot {
  *
  * ORG-SCOPED: pass the real `organizationId` from the request context. If null/
  * empty, no Firestore read is attempted — returns an unloaded snapshot.
+ *
+ * CANONICAL DELEGATION: The canonical Business Snapshot
+ * (`getBusinessSnapshot(orgId)`) is fetched in parallel with the Firestore
+ * reads. When the snapshot has real data, the headline aggregate fields
+ * (`invoiceStats.totalInvoiced/totalPaid/totalOutstanding/totalTaxCollected`,
+ * `totalCustomerOutstanding`, `totalPayable`, `customerCount`, `vendorCount`,
+ * `paymentStats.totalReceived/totalPaidOut`) are OVERRIDDEN with snapshot
+ * values so the Oracle LLM cites the exact same numbers as the Home Dashboard
+ * / Oracle chat / AI CFO. The Firestore reads are kept because they expose
+ * record-level detail (individual customer / vendor / product / invoice /
+ * expense / payment names) that the snapshot doesn't surface.
+ *
+ * See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
  */
 export async function loadGSTpilotSnapshot(
   organizationId: string | null | undefined,
@@ -111,15 +124,37 @@ export async function loadGSTpilotSnapshot(
     };
   }
   try {
-    const [customers, products, invoices, vendors, expenses, payments] = await Promise.all([
+    // Fetch the canonical Business Snapshot in parallel with the 6 Firestore
+    // reads. The snapshot provides the headline aggregates; the Firestore
+    // reads provide the record-level detail. Both are org-scoped.
+    const snapshotPromise: Promise<{
+      revenue: number; expenses: number; cash: number; receivables: number;
+      payables: number; outputTax: number; gstCollected: number;
+      totalCollected: number; totalPaid: number; itcAvailable: number;
+      inputTax: number; customerCount: number; vendorCount: number;
+      invoiceCount: number; billCount: number; expenseRecordCount: number;
+      overdueReceivables: number;
+    } | null> = import('@/lib/business/snapshot')
+      .then(({ getBusinessSnapshot }) => getBusinessSnapshot(organizationId))
+      .catch((err) => {
+        console.warn('[oracle-cfo/gstpilot-context] getBusinessSnapshot failed:', err);
+        return null;
+      });
+
+    const [customers, products, invoices, vendors, expenses, payments, businessSnapshot] = await Promise.all([
       getCustomersOnce(organizationId),
       getProductsOnce(organizationId),
       getInvoicesOnce(organizationId),
       getVendorsOnce(organizationId),
       getExpensesOnce(organizationId),
       getPaymentsOnce(organizationId),
+      snapshotPromise,
     ]);
 
+    // Local aggregate computations (from Firestore records — used as the
+    // source of truth when the canonical snapshot is unavailable, AND kept
+    // for sub-fields that the snapshot doesn't expose, e.g. byStatus counts,
+    // totalGst / claimableGst breakdowns, productStats, vendorStats.withGstin).
     const invoiceStats = computeInvoiceStatsLocal(invoices);
     const productStats = computeProductStats(products);
     const expenseStats = computeExpenseStatsLocal(expenses);
@@ -134,6 +169,53 @@ export async function loadGSTpilotSnapshot(
       vendors.reduce((s, v) => s + (v.balance || 0), 0) * 100,
     ) / 100;
 
+    // ── Override headline aggregates with the canonical Business Snapshot ──
+    // Only override when the snapshot has real data — otherwise we'd clobber
+    // the local Firestore-derived aggregates with zeros (which would be wrong
+    // when the user has Firestore records but no Prisma records yet).
+    const hasSnapshot = !!businessSnapshot && (
+      businessSnapshot.revenue > 0 ||
+      businessSnapshot.cash > 0 ||
+      businessSnapshot.receivables > 0 ||
+      businessSnapshot.payables > 0 ||
+      businessSnapshot.customerCount > 0
+    );
+    if (hasSnapshot && businessSnapshot) {
+      if (businessSnapshot.revenue > 0) {
+        invoiceStats.totalInvoiced = Math.round(businessSnapshot.revenue);
+      }
+      if (businessSnapshot.totalCollected > 0) {
+        invoiceStats.totalPaid = Math.round(businessSnapshot.totalCollected);
+      }
+      if (businessSnapshot.receivables > 0) {
+        invoiceStats.totalOutstanding = Math.round(businessSnapshot.receivables);
+      }
+      if (businessSnapshot.outputTax > 0) {
+        invoiceStats.totalTaxCollected = Math.round(businessSnapshot.outputTax);
+      }
+      if (businessSnapshot.invoiceCount > 0) {
+        invoiceStats.count = businessSnapshot.invoiceCount;
+      }
+      if (businessSnapshot.expenseRecordCount > 0) {
+        expenseStats.count = businessSnapshot.expenseRecordCount;
+      }
+      if (businessSnapshot.expenses > 0) {
+        expenseStats.totalAmount = Math.round(businessSnapshot.expenses);
+      }
+      if (businessSnapshot.itcAvailable > 0) {
+        expenseStats.claimableGst = Math.round(businessSnapshot.itcAvailable);
+      }
+      if (businessSnapshot.inputTax > 0) {
+        expenseStats.totalGst = Math.round(businessSnapshot.inputTax);
+      }
+      if (businessSnapshot.totalCollected > 0) {
+        paymentStats.totalReceived = Math.round(businessSnapshot.totalCollected);
+      }
+      if (businessSnapshot.totalPaid > 0) {
+        paymentStats.totalPaidOut = Math.round(businessSnapshot.totalPaid);
+      }
+    }
+
     return {
       customers,
       products,
@@ -146,15 +228,27 @@ export async function loadGSTpilotSnapshot(
       expenseStats,
       paymentStats,
       vendorStats: {
-        count: vendorCount,
-        totalPayable,
+        count: hasSnapshot && businessSnapshot && businessSnapshot.vendorCount > 0
+          ? businessSnapshot.vendorCount
+          : vendorCount,
+        totalPayable: hasSnapshot && businessSnapshot && businessSnapshot.payables > 0
+          ? Math.round(businessSnapshot.payables)
+          : totalPayable,
         withGstin: vendorWithGstin,
       },
-      customerCount: customers.length,
+      customerCount: hasSnapshot && businessSnapshot && businessSnapshot.customerCount > 0
+        ? businessSnapshot.customerCount
+        : customers.length,
       withGstin,
-      totalCustomerOutstanding,
-      vendorCount,
-      totalPayable,
+      totalCustomerOutstanding: hasSnapshot && businessSnapshot && businessSnapshot.receivables > 0
+        ? Math.round(businessSnapshot.receivables)
+        : totalCustomerOutstanding,
+      vendorCount: hasSnapshot && businessSnapshot && businessSnapshot.vendorCount > 0
+        ? businessSnapshot.vendorCount
+        : vendorCount,
+      totalPayable: hasSnapshot && businessSnapshot && businessSnapshot.payables > 0
+        ? Math.round(businessSnapshot.payables)
+        : totalPayable,
       loaded: true,
     };
   } catch {

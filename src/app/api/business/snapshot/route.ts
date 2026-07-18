@@ -140,8 +140,15 @@ export async function GET(request: Request) {
       customers,
       vendors,
 
-      // ── Health & risk (from fin calculators — they use the merged data) ──
+      // ── Health & risk (CANONICAL — from rich engine, with per-factor breakdown) ──
+      // rich.healthScore / rich.riskScore are the canonical scores (see task
+      // HEALTH-ENGINE). The legacy fin.risks.* fields are kept for backward
+      // compatibility with the existing `risks` nested shape.
       healthScore: rich.healthScore,
+      healthScoreLabel: rich.healthScoreLabel,
+      healthScoreFactors: rich.healthScoreFactors,
+      riskScore: rich.riskScore,
+      riskScoreFactors: rich.riskScoreFactors,
       risks: {
         overallRisk: rich.riskScore,
         overdueExposure: fin.risks.overdueExposure,
@@ -149,6 +156,14 @@ export async function GET(request: Request) {
         cashFlowRisk: fin.risks.cashFlowRisk,
         riskLevel: fin.risks.riskLevel,
       },
+
+      // ── Health Score engine inputs (NEW — exposed for transparency) ──
+      overdueInvoiceCount: rich.overdueInvoiceCount,
+      avgDaysToPay: rich.avgDaysToPay,
+      revenueThisMonth: rich.revenueThisMonth,
+      revenueLastMonth: rich.revenueLastMonth,
+      topCustomerShare: rich.topCustomerShare,
+      overdueReceivables: rich.overdueReceivables,
 
       // ── Forecast & runway (from rich engine) ──
       forecast: {

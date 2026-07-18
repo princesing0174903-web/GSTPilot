@@ -42,7 +42,24 @@ export function calculateTax(taxableValue: number, cgstRate: number, sgstRate: n
   };
 }
 
-export function calculateHealthScore(params: {
+/**
+ * Calculate the GST DATA-QUALITY score (0-100) for a single client.
+ *
+ * This measures GST-filing data quality — NOT business financial health.
+ * Inputs are GST-specific quality issues: missing GSTINs, invalid GSTINs,
+ * duplicate invoices, filing delays, validation errors.
+ *
+ * RENAMED from `calculateHealthScore` (see AUDIT-DUP-1 + task HEALTH-ENGINE)
+ * to disambiguate from the CANONICAL business Health Score in
+ * `src/lib/business/snapshot.ts` → `computeHealthScore()`. The two functions
+ * have completely different semantics: this one is per-client GST data
+ * quality, the canonical one is per-org financial health.
+ *
+ * A deprecated `calculateHealthScore` alias is re-exported below for any
+ * legacy consumers that haven't been migrated yet — new code MUST use the
+ * new name.
+ */
+export function calculateGSTDataQualityScore(params: {
   totalInvoices: number;
   missingGstin: number;
   invalidGstin: number;
@@ -61,7 +78,31 @@ export function calculateHealthScore(params: {
   return Math.max(0, Math.min(100, 100 - deductions));
 }
 
-export function calculateRiskScore(params: {
+/**
+ * @deprecated Use {@link calculateGSTDataQualityScore} instead. The CANONICAL
+ * business Health Score lives in `src/lib/business/snapshot.ts`. This alias
+ * is kept only for legacy consumers; it computes GST data quality (NOT
+ * business financial health).
+ */
+export const calculateHealthScore = calculateGSTDataQualityScore;
+
+/**
+ * Calculate the GST RECONCILIATION risk score (0-100) for a single invoice.
+ *
+ * This measures the risk that a single invoice's books-vs-GSTR-2B match is
+ * incorrect — NOT the overall business risk.
+ *
+ * RENAMED from `calculateRiskScore` (see AUDIT-DUP-1 + task HEALTH-ENGINE)
+ * to disambiguate from the CANONICAL business Risk Score in
+ * `src/lib/business/snapshot.ts` → `computeRiskScore()`. The two functions
+ * have completely different semantics: this one is per-invoice GST
+ * reconciliation risk, the canonical one is per-org business risk.
+ *
+ * A deprecated `calculateRiskScore` alias is re-exported below for any
+ * legacy consumers that haven't been migrated yet — new code MUST use the
+ * new name.
+ */
+export function calculateReconciliationRiskScore(params: {
   matchStatus: string;
   taxDifference: number;
   dateDifference: number;
@@ -78,6 +119,14 @@ export function calculateRiskScore(params: {
   if (params.isDuplicate) score += 20;
   return Math.min(100, score);
 }
+
+/**
+ * @deprecated Use {@link calculateReconciliationRiskScore} instead. The
+ * CANONICAL business Risk Score lives in `src/lib/business/snapshot.ts`.
+ * This alias is kept only for legacy consumers; it computes per-invoice
+ * GST reconciliation risk (NOT business financial risk).
+ */
+export const calculateRiskScore = calculateReconciliationRiskScore;
 
 export function getRiskLevel(score: number): 'low' | 'medium' | 'high' | 'critical' {
   if (score >= 75) return 'critical';

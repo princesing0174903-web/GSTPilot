@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { validateGSTIN, getRiskLevel, calculateRiskScore } from '@/lib/gst-utils'
+import { validateGSTIN, getRiskLevel, calculateReconciliationRiskScore } from '@/lib/gst-utils'
 import { invalidateGraph } from '@/lib/graph/live-update'
 
 type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched' | 'duplicate'
@@ -170,7 +170,7 @@ function detectMismatches(sourceA: InvoiceLike, sourceB: InvoiceLike | null): {
   } else if (matchScore >= 70) {
     matchStatus = 'partial_match'
     confidenceScore = Math.max(50, 90 - scoreDeduction)
-    riskLevel = getRiskLevel(calculateRiskScore({
+    riskLevel = getRiskLevel(calculateReconciliationRiskScore({
       matchStatus: 'partial_match',
       taxDifference: taxDiff,
       dateDifference: dateDiffDays,
@@ -196,7 +196,7 @@ function detectMismatches(sourceA: InvoiceLike, sourceB: InvoiceLike | null): {
   } else {
     matchStatus = 'mismatch'
     confidenceScore = Math.max(30, 80 - scoreDeduction)
-    riskLevel = getRiskLevel(calculateRiskScore({
+    riskLevel = getRiskLevel(calculateReconciliationRiskScore({
       matchStatus: 'mismatch',
       taxDifference: taxDiff,
       dateDifference: dateDiffDays,

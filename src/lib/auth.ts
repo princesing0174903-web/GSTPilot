@@ -36,8 +36,29 @@ export { onAuthStateChanged, auth };
 export type { User };
 
 /**
- * Google Sign-In. Tries a popup first, falls back to a redirect if the popup
- * is blocked. The `rememberMe` flag controls persistence:
+ * Detects whether the current window is running inside an iframe (e.g. a
+ * sandbox preview panel). Popups launched from inside a cross-origin iframe
+ * are frequently blocked by browsers, so we prefer `signInWithRedirect` in
+ * that case. The redirect result is picked up by `handleRedirectResult()`
+ * (called on AuthProvider mount).
+ */
+function isInsideIframe(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.self !== window.top;
+  } catch {
+    // cross-origin access to window.top throws → we're in a cross-origin iframe
+    return true;
+  }
+}
+
+/**
+ * Google Sign-In. Strategy:
+ *   1. If we're inside an iframe → use `signInWithRedirect` directly (popups
+ *      are blocked in cross-origin iframes).
+ *   2. Otherwise → try `signInWithPopup`; on popup-blocked/cancelled, fall
+ *      back to `signInWithRedirect`.
+ *
+ * The `rememberMe` flag controls persistence:
  *   - `true`  → `browserLocalPersistence` (survives browser restart)
  *   - `false` → `browserSessionPersistence` (cleared when tab closes)
  */
@@ -49,13 +70,25 @@ export async function signInWithGoogle(
       auth,
       rememberMe ? browserLocalPersistence : browserSessionPersistence
     );
+
+    // Iframe / sandbox preview → redirect is the only reliable path.
+    if (isInsideIframe()) {
+      console.log('[Auth] Inside iframe — using signInWithRedirect');
+      await signInWithRedirect(auth, googleProvider);
+      return { user: null, error: null };
+    }
+
     const result = await signInWithPopup(auth, googleProvider);
     return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
 
     // Popup blocked → fall back to redirect.
-    if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/cancelled-popup-request' ||
+      code === 'auth/popup-closed-by-user'
+    ) {
       try {
         await signInWithRedirect(auth, googleProvider);
         return { user: null, error: null };

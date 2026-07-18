@@ -3,7 +3,46 @@
 // Pure TypeScript: computes insights, risks, recommendations, confidence, and
 // an overall health score from raw Firestore invoice/transaction/return data.
 // No fake data — works on whatever real data exists; degrades gracefully.
+//
+// CANONICAL DELEGATION: When the caller passes a `BusinessSnapshot` (from the
+// server-side `getBusinessSnapshot(orgId)`), the headline aggregates — revenue,
+// expenses, working capital, tax exposure, profit margin, and the overall
+// health score — are sourced from the snapshot so this client-side engine
+// shows the EXACT same numbers as the Home Dashboard, Oracle, and AI CFO.
+// The raw Firestore records (invoices, returns, bank transactions) are still
+// used for record-level detail (top customers, top vendors, monthly trend
+// sparkline) that the snapshot does not expose.
+//
+// See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Structural subset of `BusinessSnapshot` (from `@/lib/business/snapshot`)
+ * that this engine actually consumes. Declared locally (rather than importing
+ * the full type) so this pure-function module works equally well when called
+ * from a server component (which can import the full BusinessSnapshot type)
+ * OR from a client component whose `useBusinessSnapshot` hook returns a
+ * backward-compatible shape that includes these flat fields via the unified
+ * `/api/business/snapshot` endpoint.
+ */
+export interface FinancialIntelligenceSnapshot {
+  revenue: number;
+  revenueThisMonth?: number;
+  revenueLastMonth?: number;
+  expenses: number;
+  profit: number;
+  profitMargin: number; // 0-1
+  cash: number;
+  receivables: number;
+  payables: number;
+  overdueReceivables?: number;
+  overdueInvoiceCount?: number;
+  topCustomerShare?: number; // 0-1
+  collectionRate?: number; // 0-1
+  gstLiability?: number;
+  healthScore: number; // 0-100 (canonical)
+  riskScore?: number; // 0-100 (canonical)
+}
 
 export type InsightType =
   | 'revenue' | 'expense' | 'cashflow' | 'working_capital' | 'tax_exposure'
@@ -51,6 +90,16 @@ interface IntelligenceInput {
   vendors?: Array<Record<string, unknown>>;
   payments?: Array<Record<string, unknown>>;
   creditNotes?: Array<Record<string, unknown>>;
+  /**
+   * Optional canonical Business Snapshot from `getBusinessSnapshot(orgId)`.
+   * When provided, the headline aggregates (revenue, expenses, cash flow,
+   * working capital, tax exposure, profit margin, overall health score) are
+   * OVERRIDDEN with snapshot values so this client-side engine shows the
+   * EXACT same numbers as the Home Dashboard / Oracle / AI CFO. The raw
+   * Firestore records are still used for record-level detail (top customers,
+   * top vendors, monthly sparkline) that the snapshot does not expose.
+   */
+  snapshot?: FinancialIntelligenceSnapshot;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -91,9 +140,16 @@ function trendOf(curr: number, prev: number): { trend: 'up' | 'down' | 'flat'; p
 // ─── Main engine ─────────────────────────────────────────────────────────────
 
 export function computeFinancialIntelligence(input: IntelligenceInput): FinancialIntelligenceReport {
-  const { invoices, bankTransactions, returns, clients, vendors = [], payments = [], creditNotes = [] } = input;
+  const { invoices, bankTransactions, returns, clients, vendors = [], payments = [], creditNotes = [], snapshot } = input;
   const now = new Date();
   const insights: FinancialInsight[] = [];
+
+  // Whether the canonical Business Snapshot is the source of truth for the
+  // headline aggregates. When true, the local heuristic computations for
+  // revenue / expense / cash flow / working capital / tax / health score are
+  // OVERRIDDEN with snapshot values. The raw records still drive the
+  // record-level detail (top customers, top vendors, sparkline, etc.).
+  const hasSnapshot = !!snapshot && (snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.receivables > 0);
 
   // ── Revenue trend (sum invoice totalAmount by month, last 3 months) ──
   const byMonth: Record<string, number> = {};
@@ -103,8 +159,15 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
   }
   const sortedMonths = Object.keys(byMonth).sort();
   const last3 = sortedMonths.slice(-3);
-  const revenueThisMonth = last3[last3.length - 1] ? byMonth[last3[last3.length - 1]] : 0;
-  const revenuePrevMonth = last3.length >= 2 ? byMonth[last3[last3.length - 2]] : 0;
+  // When the snapshot is available, use its revenueThisMonth/revenueLastMonth
+  // (sourced from the canonical Prisma aggregates) as the headline numbers.
+  // Fall back to the local byMonth computation when no snapshot is provided.
+  const revenueThisMonth = hasSnapshot && snapshot && snapshot.revenueThisMonth > 0
+    ? snapshot.revenueThisMonth
+    : last3[last3.length - 1] ? byMonth[last3[last3.length - 1]] : 0;
+  const revenuePrevMonth = hasSnapshot && snapshot && snapshot.revenueLastMonth > 0
+    ? snapshot.revenueLastMonth
+    : last3.length >= 2 ? byMonth[last3[last3.length - 2]] : 0;
   const revenueTrend = trendOf(revenueThisMonth, revenuePrevMonth);
 
   insights.push({
@@ -133,7 +196,15 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
     }
   }
   const expMonths = Object.keys(expByMonth).sort();
-  const expThis = expMonths.length ? expByMonth[expMonths[expMonths.length - 1]] : 0;
+  // Snapshot's `expenses` field is the FY total (purchases + operating). We
+  // derive the monthly expense as the FY total / 12 if no bank-tx data exists.
+  // When bank-tx data IS available, we still use it because it's more granular
+  // (month-by-month) than the snapshot's FY total. The snapshot is used to
+  // backfill the empty case so the dashboard shows a non-zero value when the
+  // bank connector isn't connected but invoices/expenses are.
+  const expThis = hasSnapshot && snapshot && expMonths.length === 0
+    ? Math.round(snapshot.expenses / 12)
+    : expMonths.length ? expByMonth[expMonths[expMonths.length - 1]] : 0;
   const expPrev = expMonths.length >= 2 ? expByMonth[expMonths[expMonths.length - 2]] : 0;
   const expTrend = trendOf(expThis, expPrev);
 
@@ -171,6 +242,12 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
       gstLiability += Number(ret.totalTax ?? 0);
     }
   }
+  // When the snapshot is available, its gstLiability (output tax - ITC) is the
+  // canonical GST payable — use it when the local returns-based computation
+  // returns 0 (i.e. the GSTN connector isn't connected but Prisma invoices are).
+  if (hasSnapshot && snapshot && gstLiability === 0 && snapshot.gstLiability > 0) {
+    gstLiability = snapshot.gstLiability;
+  }
   const cashflowForecast = inflow - gstLiability;
   insights.push({
     id: 'ins_cashflow',
@@ -186,11 +263,18 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
   });
 
   // ── Working capital (receivables - payables approx) ──
-  const receivables = sumBy(invoices, (i) => {
-    const s = String(i.status ?? '');
-    return (s === 'unpaid' || s === 'overdue') ? Number(i.totalAmount ?? 0) : 0;
-  });
-  const payables = sumBy(vendors, (v) => Number(v.outstandingAmount ?? v.amount ?? 0));
+  // Snapshot's receivables/payables are the canonical values from Prisma
+  // (sum of balanceAmount). Use them when available; fall back to local
+  // invoice/vendor computation otherwise.
+  const receivables = hasSnapshot && snapshot && snapshot.receivables > 0
+    ? snapshot.receivables
+    : sumBy(invoices, (i) => {
+        const s = String(i.status ?? '');
+        return (s === 'unpaid' || s === 'overdue') ? Number(i.totalAmount ?? 0) : 0;
+      });
+  const payables = hasSnapshot && snapshot && snapshot.payables > 0
+    ? snapshot.payables
+    : sumBy(vendors, (v) => Number(v.outstandingAmount ?? v.amount ?? 0));
   const workingCapital = receivables - payables;
   insights.push({
     id: 'ins_working_capital',
@@ -253,9 +337,14 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
     custRev[c] = (custRev[c] || 0) + Number(inv.totalAmount ?? 0);
   }
   const totalCustRev = sumBy(Object.values(custRev), (x) => x);
-  const topCustPct = totalCustRev > 0
-    ? (Math.max(...Object.values(custRev), 0) / totalCustRev) * 100
-    : 0;
+  // When the snapshot is available, its topCustomerShare is the canonical
+  // top-customer concentration (sourced from Prisma groupBy). Use it when
+  // the local computation returns 0 (no raw invoice records).
+  const topCustPct = hasSnapshot && snapshot && totalCustRev === 0 && snapshot.topCustomerShare > 0
+    ? snapshot.topCustomerShare * 100
+    : totalCustRev > 0
+      ? (Math.max(...Object.values(custRev), 0) / totalCustRev) * 100
+      : 0;
   if (Object.keys(custRev).length > 0) {
     const topCust = Object.entries(custRev).sort((a, b) => b[1] - a[1])[0];
     insights.push({
@@ -273,7 +362,11 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
   }
 
   // ── Profitability ((revenue - expenses) / revenue) ──
-  const profitMargin = revenueThisMonth > 0 ? ((revenueThisMonth - expThis) / revenueThisMonth) * 100 : 0;
+  // Snapshot's profitMargin is the canonical margin (profit / revenue). Use
+  // it when available; fall back to the local revenue-vs-expense computation.
+  const profitMargin = hasSnapshot && snapshot
+    ? snapshot.profitMargin * 100
+    : revenueThisMonth > 0 ? ((revenueThisMonth - expThis) / revenueThisMonth) * 100 : 0;
   insights.push({
     id: 'ins_profit',
     type: 'profitability',
@@ -315,17 +408,26 @@ export function computeFinancialIntelligence(input: IntelligenceInput): Financia
     recommendation: 'Use this forecast to plan working capital and hiring.',
   });
 
-  // ── Overall health score (weighted blend) ──
-  const profitScore = Math.max(0, Math.min(100, profitMargin * 2.5)); // 40% margin = 100
-  const growthScore = Math.max(0, Math.min(100, 50 + revenueTrend.pct * 1.5));
-  const cashflowScore = cashflowForecast > 0 ? 100 : Math.max(0, 100 + cashflowForecast / 10000);
-  const concentrationRisk = Math.max(topCustPct, topVendorPct);
-  const concentrationScore = Math.max(0, 100 - (concentrationRisk - 20) * 1.5);
-  const taxScore = taxExposure === 0 ? 100 : Math.max(0, 100 - taxExposure / 10000);
-  const overallHealthScore = Math.round(
-    profitScore * 0.25 + growthScore * 0.20 + cashflowScore * 0.20 +
-    concentrationScore * 0.15 + taxScore * 0.20,
-  );
+  // ── Overall health score ──
+  // When the snapshot is available, its healthScore is the CANONICAL value
+  // (computed by `computeHealthScore` in `src/lib/business/snapshot.ts` with
+  // 8 weighted factors). Use it directly instead of the legacy 5-factor
+  // heuristic below. Falls back to the local computation when no snapshot.
+  let overallHealthScore: number;
+  if (hasSnapshot && snapshot && snapshot.healthScore > 0) {
+    overallHealthScore = snapshot.healthScore;
+  } else {
+    const profitScore = Math.max(0, Math.min(100, profitMargin * 2.5)); // 40% margin = 100
+    const growthScore = Math.max(0, Math.min(100, 50 + revenueTrend.pct * 1.5));
+    const cashflowScore = cashflowForecast > 0 ? 100 : Math.max(0, 100 + cashflowForecast / 10000);
+    const concentrationRisk = Math.max(topCustPct, topVendorPct);
+    const concentrationScore = Math.max(0, 100 - (concentrationRisk - 20) * 1.5);
+    const taxScore = taxExposure === 0 ? 100 : Math.max(0, 100 - taxExposure / 10000);
+    overallHealthScore = Math.round(
+      profitScore * 0.25 + growthScore * 0.20 + cashflowScore * 0.20 +
+      concentrationScore * 0.15 + taxScore * 0.20,
+    );
+  }
 
   const risks = insights.filter((i) => i.severity === 'warning' || i.severity === 'critical');
   const recommendations = insights.filter((i) => i.severity !== 'info' || i.recommendation.length > 60);

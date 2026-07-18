@@ -170,6 +170,26 @@ export async function generateOracleBriefing(userId: string): Promise<OracleBrie
   // 4. Rank by importance.
   const ranked = rankSignals(signals);
 
+  // 4a. Fetch the canonical Health Score from the centralized Business
+  // Snapshot. The Oracle briefing is the same score shown on the Home
+  // Dashboard / AI CFO / Run Business (see AUDIT-DUP-1 + task HEALTH-ENGINE).
+  // Falls back to the signal-based score if the snapshot is unavailable.
+  let canonicalHealthScore: number | undefined;
+  if (organizationId) {
+    try {
+      const { getBusinessSnapshot } = await import('@/lib/business/snapshot');
+      const snapshot = await getBusinessSnapshot(organizationId);
+      // Only override if the snapshot has real data — a snapshot that returns
+      // 0 with no revenue/cash means the org has no Prisma data, so the
+      // signal-based fallback is more meaningful.
+      if (snapshot.healthScore > 0 || snapshot.revenue > 0 || snapshot.cash > 0) {
+        canonicalHealthScore = snapshot.healthScore;
+      }
+    } catch {
+      // Swallow — fall back to the signal-based score.
+    }
+  }
+
   // 5. Assemble the final briefing.
   const briefing = assembleBriefing({
     userId,
@@ -177,6 +197,7 @@ export async function generateOracleBriefing(userId: string): Promise<OracleBrie
     signals: ranked,
     analyzerMetrics,
     collectorLabels: collectorLabels(),
+    canonicalHealthScore,
   });
 
   return briefing;

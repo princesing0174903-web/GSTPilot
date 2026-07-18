@@ -18,7 +18,15 @@ import type { SelfHealingEvent, SystemHealthCheck } from './types';
 
 // ─── Live health checks against real subsystems ──────────────────────────────
 
-export async function runHealthChecks(): Promise<SystemHealthCheck[]> {
+/**
+ * Live health checks against real subsystems.
+ *
+ * @param organizationId Optional org/firm id. When provided, the CFO + CEO
+ *   fetchers are tenant-scoped AND delegate to the canonical Business Snapshot.
+ *   When omitted (legacy callers), each engine returns an empty bundle — never
+ *   leaks cross-tenant data. See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
+ */
+export async function runHealthChecks(organizationId?: string): Promise<SystemHealthCheck[]> {
   const checks: SystemHealthCheck[] = [];
 
   // 1. Database (Prisma)
@@ -41,10 +49,10 @@ export async function runHealthChecks(): Promise<SystemHealthCheck[]> {
     });
   }
 
-  // 2. AI CFO engine
+  // 2. AI CFO engine (org-scoped when organizationId is provided)
   const cfoStart = Date.now();
   try {
-    await computeFinancialIntelligence();
+    await computeFinancialIntelligence(organizationId);
     checks.push({
       component: 'AI CFO Phase 1 Engine',
       status: 'healthy',
@@ -81,10 +89,10 @@ export async function runHealthChecks(): Promise<SystemHealthCheck[]> {
     });
   }
 
-  // 4. AI CEO data fetcher
+  // 4. AI CEO data fetcher (org-scoped when organizationId is provided)
   const ceoStart = Date.now();
   try {
-    await fetchCEOData();
+    await fetchCEOData(organizationId);
     checks.push({
       component: 'AI CEO Data Fetcher',
       status: 'healthy',

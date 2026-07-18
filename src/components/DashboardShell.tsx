@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
 import { getViewMeta } from '@/lib/navigation-registry'
 import { ChevronRight } from 'lucide-react'
+import { sendVerificationEmail } from '@/lib/auth'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -242,7 +243,6 @@ export function EmailVerificationBanner() {
   const handleResend = async () => {
     setSending(true)
     try {
-      const { sendVerificationEmail } = await import('@/lib/auth')
       const { error } = await sendVerificationEmail()
       if (!error) setSent(true)
     } catch {

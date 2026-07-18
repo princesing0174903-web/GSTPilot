@@ -210,11 +210,23 @@ function buildLiveState(
 
 // ─── Main fetcher ────────────────────────────────────────────────────────────
 
-export async function fetchCEOData(): Promise<CEODataView> {
+/**
+ * Fetch the CEO data view (CFO Phase 1 + Digital Twin + RawCFOData + live state).
+ *
+ * @param organizationId The org/firm id from OrgContext. When provided, every
+ *   downstream engine (CFO Phase 1, Digital Twin, RawCFOData) is tenant-scoped
+ *   AND the canonical Business Snapshot is fetched in parallel so the headline
+ *   aggregates (revenue / cash / profit / GST / healthScore / riskScore) come
+ *   from the single source of truth. When omitted (legacy callers), each
+ *   engine returns an empty bundle — never leaks cross-tenant data.
+ *
+ *   See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
+ */
+export async function fetchCEOData(organizationId?: string): Promise<CEODataView> {
   const [cfo, twin, raw] = await Promise.all([
-    safe('cfo-phase1', () => computeFinancialIntelligence(), EMPTY_CFO),
+    safe('cfo-phase1', () => computeFinancialIntelligence(organizationId), EMPTY_CFO),
     safe('digital-twin', () => computeDigitalTwinBundle(), EMPTY_TWIN),
-    safe('raw-cfo-data', () => fetchRawCFOData(), EMPTY_RAW),
+    safe('raw-cfo-data', () => fetchRawCFOData(organizationId ?? ''), EMPTY_RAW),
   ]);
 
   const hasLiveData = cfo.hasLiveData || twin.hasLiveData || raw.hasLiveData;

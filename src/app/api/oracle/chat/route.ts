@@ -80,12 +80,15 @@ function inrShort(n: number): string {
 
 // ─── CFO context block (Module 5 — Ask CFO + live data injection) ─────────────
 
-async function buildCFOContextBlock(): Promise<string> {
+async function buildCFOContextBlock(organizationId?: string): Promise<string> {
   try {
-    // Fetch Phase 3 CFO insights + Phase 1 Financial Intelligence in parallel
+    // Fetch Phase 3 CFO insights + Phase 1 Financial Intelligence in parallel.
+    // Both are now org-scoped (when organizationId is provided) AND delegate
+    // to the canonical Business Snapshot for headline aggregates. See
+    // AUDIT-DUP-1 + task DUP-CLEANUP.
     const [cfo, phase1] = await Promise.all([
-      generateCFOInsights(null),
-      computeFinancialIntelligence().catch(() => null),
+      generateCFOInsights(null, organizationId ? { organizationId } : {}),
+      computeFinancialIntelligence(organizationId).catch(() => null),
     ]);
 
     if (!cfo.hasLiveData && cfo.clientCount === 0) {
@@ -293,17 +296,37 @@ Business Graph engine is not available right now. Fall back to general guidance 
 // "I've identified ₹18.2 lakh pending receivables", "I've generated payroll
 // for 18 employees") grounded in the user's actual data.
 
-async function buildInvoiceEngineContextBlock(): Promise<string> {
+async function buildInvoiceEngineContextBlock(organizationId?: string): Promise<string> {
   try {
-    // ── Fetch all eight entity sets in parallel — real DB data only (no seed fallback) ──
+    // ── 1. Fetch the canonical Business Snapshot for HEADLINE numbers ──
+    // The snapshot is the SINGLE source of truth for revenue, expenses, cash,
+    // GST, receivables, payables, customer/vendor/invoice counts, health/risk
+    // scores, collection rate, runway, forecast. We never recompute these from
+    // raw Prisma rows — the snapshot already aggregates native + Zoho-synced
+    // data with correct tenant scoping.
+    const snapshot = organizationId
+      ? await getBusinessSnapshot(organizationId).catch(() => null)
+      : null;
+
+    // ── 2. Org-scoped RECORD-LEVEL detail (specific invoice numbers, vendor
+    //    names, TDS sections, payroll periods, expense categories, next invoice
+    //    number) — ONLY for detail the snapshot does NOT provide. NEVER for
+    //    headline aggregates. Every read is tenant-scoped via
+    //    `client.firmId = organizationId` to prevent cross-tenant leaks. ──
+    //    For local- (guest/demo) orgs, Prisma returns 0 rows for every read
+    //    because no Firm row matches → honest empty state, no leak.
+    const orgFilter = organizationId
+      ? { client: { firmId: organizationId } }
+      : {};
+
     const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
-      db.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.purchaseBill.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.expense.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.payment.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.tDSRecord.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.employee.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.payroll.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.invoice.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.purchaseBill.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.expense.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.payment.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.tDSRecord.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.employee.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.payroll.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
     ]);
 
     const invoices: InvoiceCloudInvoice[] = (invRows ?? []).map((r) => ({
@@ -372,7 +395,13 @@ async function buildInvoiceEngineContextBlock(): Promise<string> {
       createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
     }));
 
-    // ── Compute summaries via the pure-TS engine libs ──
+    // ── 3. Compute RECORD-LEVEL detail via the pure-TS engine libs ──
+    // We still use these libs for breakdowns (by-section, by-category, draft
+    // counts, overdue per-invoice, DSO) which the snapshot does NOT provide.
+    // The org-scoped Prisma reads above guarantee these computations are
+    // tenant-correct. Headline aggregates (revenue, expenses, cash, GST,
+    // receivables, payables, collection rate, health/risk) come from the
+    // snapshot — see the "BUSINESS SNAPSHOT (canonical)" section below.
     const invStats = getInvoiceStats(invoices);
     const purStats = getPurchaseStats(bills);
     const expStats = getExpenseStats(expenses);
@@ -382,10 +411,7 @@ async function buildInvoiceEngineContextBlock(): Promise<string> {
     const recSummary = getReceivablesSummary(invoices);
     const paySummary = getPayablesSummary(bills);
 
-    // Input GST across all purchase bills (sum of gstAmount)
-    const totalInputGst = bills.reduce((s, b) => s + b.gstAmount, 0);
-
-    // Top defaulters (outstanding, descending) — for Oracle to name them
+    // Top defaulters (outstanding, descending) — for Oracle to name them by invoice number
     const topDefaulters = [...invoices]
       .filter((i) => i.balanceAmount > 0 && i.status !== 'cancelled' && i.status !== 'draft')
       .sort((a, b) => b.balanceAmount - a.balanceAmount)
@@ -393,7 +419,7 @@ async function buildInvoiceEngineContextBlock(): Promise<string> {
       .map((i) => `${i.buyerName ?? 'Customer'} (${i.invoiceNumber}, ${inrShort(i.balanceAmount)})`)
       .join('; ');
 
-    // Next invoice number Oracle would create
+    // Next invoice number Oracle would create (derived from this org's existing invoice numbers)
     const year = new Date().getFullYear();
     const fyPrefix = `INV-${year}-`;
     let maxSeq = 0;
@@ -408,44 +434,83 @@ async function buildInvoiceEngineContextBlock(): Promise<string> {
     const now = new Date();
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    return `## LIVE INVOICE ENGINE STATE (Phase 8 Step 3 — Real Invoice Engine™)
-You have real-time access to the user's full financial operations stack. Treat these numbers as authoritative when the user asks about invoices, receivables, payables, expenses, payments, TDS, or payroll.
+    // ── 4. Headline numbers — PREFER snapshot, fall back to local stats only
+    //    when snapshot is unavailable (e.g. local- orgs or snapshot failure).
+    //    This fallback is acceptable because the local stats are now computed
+    //    from org-scoped Prisma reads (tenant-correct), not global reads. ──
+    const headlineRevenue = snapshot?.revenue ?? invStats.total;
+    const headlineCollected = snapshot?.totalCollected ?? invStats.paid;
+    const headlineOutstanding = snapshot?.receivables ?? invStats.outstanding;
+    const headlineOverdue = snapshot?.overdueReceivables || invStats.overdue;
+    const headlineInvoiceCount = snapshot?.invoiceCount ?? invoices.length;
+    const headlineBillCount = snapshot?.billCount ?? bills.length;
+    const headlineExpenseCount = snapshot?.expenseRecordCount ?? expenses.length;
+    const headlineExpenses = snapshot?.expenses ?? expStats.total;
+    const headlineInputGst = snapshot?.inputTax ?? bills.reduce((s, b) => s + b.gstAmount, 0);
+    const headlinePayables = snapshot?.payables ?? purStats.outstanding;
+    const headlineCollectionRatePct = snapshot
+      ? (snapshot.collectionRate * 100).toFixed(1)
+      : recSummary.collectionRate.toString();
+    const headlineCashCollected = snapshot?.totalCollected ?? payStats.totalInflow;
+    const headlineCashPaid = snapshot?.totalPaid ?? payStats.totalOutflow;
 
-### Sales Invoice Cloud™
-- Total sales invoices: ${invoices.length} (drafts: ${invStats.draftCount})
-- Total billed: ${inrShort(invStats.total)} · Collected: ${inrShort(invStats.paid)}
-- Outstanding: ${inrShort(invStats.outstanding)} · Overdue: ${inrShort(invStats.overdue)}
+    // Snapshot block — prepended so the LLM sees canonical numbers FIRST.
+    const snapshotBlock = snapshot
+      ? `### 📊 BUSINESS SNAPSHOT (canonical — from getBusinessSnapshot)
+These are THE authoritative numbers for this org. Cite them verbatim when the user asks about revenue, cash, profit, receivables, payables, GST, ITC, or health/risk. Never recompute these from the record-level detail below.
+- Revenue (FY): ${inrShort(snapshot.revenue)} from ${snapshot.invoiceCount} sales invoices
+- Expenses (FY): ${inrShort(snapshot.expenses)} (purchases + operating expenses)
+- Profit: ${inrShort(snapshot.profit)} (margin ${(snapshot.profitMargin * 100).toFixed(1)}%)
+- Cash Position: ${inrShort(snapshot.cash)} · Runway: ${snapshot.runwayDays === Infinity ? '∞ (no burn)' : snapshot.runwayDays + ' days'}
+- Customers: ${snapshot.customerCount} · Vendors: ${snapshot.vendorCount}
+- Receivables (unpaid): ${inrShort(snapshot.receivables)} · Overdue: ${inrShort(snapshot.overdueReceivables)}
+- Payables (unpaid): ${inrShort(snapshot.payables)} · Working Capital: ${inrShort(snapshot.workingCapital)}
+- Output Tax: ${inrShort(snapshot.outputTax)} · ITC Available: ${inrShort(snapshot.itcAvailable)} · Net GST Payable: ${inrShort(snapshot.gstLiability)}
+- Health Score: ${snapshot.healthScore}/100 · Risk Score: ${snapshot.riskScore}/100 · Collection Rate: ${(snapshot.collectionRate * 100).toFixed(1)}%
+- Filed/Pending/Overdue GST Returns: ${snapshot.filedReturns} / ${snapshot.pendingReturns} / ${snapshot.overdueReturns}
+- Forecast: next month revenue ~${inrShort(snapshot.forecast.nextMonthRevenue)} (${snapshot.forecast.trend}, ${(snapshot.forecast.confidence * 100).toFixed(0)}% confidence)
+
+`
+      : '';
+
+    return `## LIVE INVOICE ENGINE STATE (Phase 8 Step 3 — Real Invoice Engine™)
+You have real-time access to the user's full financial operations stack. The headline financial numbers come from the canonical Business Snapshot (below) — record-level detail (specific invoice numbers, vendor names, TDS sections, payroll periods) is sourced from org-scoped Prisma reads.
+
+${snapshotBlock}### Sales Invoice Cloud™
+- Total sales invoices: ${headlineInvoiceCount} (drafts: ${invStats.draftCount})
+- Total billed: ${inrShort(headlineRevenue)} · Collected: ${inrShort(headlineCollected)}
+- Outstanding: ${inrShort(headlineOutstanding)} · Overdue: ${inrShort(headlineOverdue)}
 - Next invoice number to be created: ${nextInvoiceNo}
 
 ### Purchase Bill Engine™
-- Total purchase bills: ${bills.length}
-- Total purchases: ${inrShort(purStats.total)} · Input GST detected: ${inrShort(totalInputGst)}
-- Unpaid to vendors: ${inrShort(purStats.outstanding)}
+- Total purchase bills: ${headlineBillCount}
+- Input GST detected (ITC): ${inrShort(headlineInputGst)}
+- Unpaid to vendors: ${inrShort(headlinePayables)}
 
 ### Expense Cloud™
-- Total expenses recorded: ${expenses.length}
-- Total spend: ${inrShort(expStats.total)} · GST claimable: ${inrShort(expStats.claimableGst)}
-- Top categories: ${Object.entries(expStats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ')}
+- Total expense records: ${headlineExpenseCount}
+- Total spend (snapshot expenses): ${inrShort(headlineExpenses)} · GST claimable (snapshot ITC): ${inrShort(headlineInputGst)}
+- Top categories: ${Object.entries(expStats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ') || 'none'}
 
 ### Receivables Engine™
-- Total outstanding: ${inrShort(recSummary.totalOutstanding)} · Overdue: ${inrShort(recSummary.totalOverdue)}
-- Collection rate: ${recSummary.collectionRate}% · Avg days to pay (DSO): ${recSummary.avgDaysToPay}
+- Total outstanding (snapshot): ${inrShort(headlineOutstanding)} · Overdue: ${inrShort(headlineOverdue)}
+- Collection rate: ${headlineCollectionRatePct}% · Avg days to pay (DSO): ${recSummary.avgDaysToPay}
 - Forecasted collections (30d): ${inrShort(recSummary.forecast)}
 - Top defaulters: ${topDefaulters || 'none — all clear'}
 
 ### Payables Engine™
-- Total payable: ${inrShort(paySummary.totalPayable)} · Overdue: ${inrShort(paySummary.totalOverdue)}
+- Total payable (snapshot): ${inrShort(headlinePayables)} · Overdue: ${inrShort(paySummary.totalOverdue)}
 - Due this week: ${inrShort(paySummary.dueThisWeek)} · Due next week: ${inrShort(paySummary.dueNextWeek)}
 
 ### Payment Engine™
-- Total payments recorded: ${payments.length}
-- Collected from customers: ${inrShort(payStats.totalInflow)} · Paid to vendors: ${inrShort(payStats.totalOutflow)}
+- Total payment records: ${payments.length}
+- Collected from customers (snapshot): ${inrShort(headlineCashCollected)} · Paid to vendors (snapshot): ${inrShort(headlineCashPaid)}
 
-### TDS Cloud™
+### TDS Cloud™ (record-level detail — snapshot does not cover TDS)
 - Total TDS liability: ${inrShort(tdsStats.totalLiability)} · Paid: ${inrShort(tdsStats.totalPaid)} · Pending: ${inrShort(tdsStats.totalPending)}
 - By section: ${Object.entries(tdsStats.bySection).map(([k, v]) => `${k} (${inrShort(v)})`).join(', ') || 'none'}
 
-### Payroll Cloud™
+### Payroll Cloud™ (record-level detail — snapshot does not cover payroll)
 - Active employees: ${prStats.totalEmployees}
 - Current period: ${currentPeriod}
 - Monthly gross: ${inrShort(prStats.totalGross)} · Net payable: ${inrShort(prStats.totalNet)}
@@ -464,16 +529,55 @@ Invoice Engine is not available right now. Fall back to general invoice/receivab
 // Learn) so Oracle can speak in proactive execution statements:
 // "I've downloaded your GSTR-2B", "I've sent reminders to 12 clients",
 // "I've reconciled ₹18.4 lakh transactions", "I've prepared your GSTR-3B".
-async function buildExecutionContextBlock(): Promise<string> {
+async function buildExecutionContextBlock(organizationId?: string): Promise<string> {
   try {
+    // ── ORG SCOPING (AUDIT-DUP-1 fix) ──────────────────────────────────────
+    // Every read below is tenant-scoped via the org's firmId. The execution
+    // engine tables link to the org via one of two paths:
+    //   (a) Direct:   BusinessEvent.businessId === organizationId
+    //                 UserBehaviour.userId === currentUserId (passed separately)
+    //   (b) Relation: Decision → BusinessEvent (eventId)
+    //                 ExecutionTask → Decision (decisionId)
+    //                 Approval → ExecutionTask (taskId)
+    //                 ExecutionTimeline → ExecutionTask (taskId)
+    //   (c) JSON:     Workflow.context (JSON string containing clientId)
+    //                 — filtered with `contains: organizationId` as a best-effort
+    //                   tenant filter (the Workflow table has no FK to firmId).
+    //
+    // For local- (guest/demo) orgs, Prisma returns 0 rows for every read
+    // because no BusinessEvent.businessId matches → honest empty state.
+    const eventWhere = organizationId ? { businessId: organizationId } : {};
+    const decisionWhere = organizationId
+      ? { event: { businessId: organizationId } }
+      : {};
+    const taskWhere = organizationId
+      ? { decision: { event: { businessId: organizationId } } }
+      : {};
+    const approvalWhere = organizationId
+      ? { task: { decision: { event: { businessId: organizationId } } } }
+      : {};
+    const workflowWhere = organizationId
+      ? { context: { contains: organizationId } }
+      : {};
+    const behaviourWhere = organizationId
+      ? // UserBehaviour has no firmId link — fall back to userId from org context
+        // is not possible here; we cannot safely tenant-scope this table without a
+        // userId. We accept an empty result for tenant isolation (better than
+        // leaking other tenants' learned preferences).
+        { userId: organizationId }
+      : {};
+    const timelineWhere = organizationId
+      ? { task: { decision: { event: { businessId: organizationId } } } }
+      : {};
+
     const [eventRows, decisionRows, taskRows, approvalRows, workflowRows, behaviourRows, timelineRows] = await Promise.all([
-      db.businessEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
-      db.decision.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
-      db.executionTask.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
-      db.approval.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
-      db.workflow.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
-      db.userBehaviour.findMany({ orderBy: { updatedAt: 'desc' }, take: 50 }).catch(() => []),
-      db.executionTimeline.findMany({ orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
+      db.businessEvent.findMany({ where: eventWhere, orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.decision.findMany({ where: decisionWhere, orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.executionTask.findMany({ where: taskWhere, orderBy: { createdAt: 'desc' }, take: 100 }).catch(() => []),
+      db.approval.findMany({ where: approvalWhere, orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+      db.workflow.findMany({ where: workflowWhere, orderBy: { createdAt: 'desc' }, take: 50 }).catch(() => []),
+      db.userBehaviour.findMany({ where: behaviourWhere, orderBy: { updatedAt: 'desc' }, take: 50 }).catch(() => []),
+      db.executionTimeline.findMany({ where: timelineWhere, orderBy: { timestamp: 'desc' }, take: 100 }).catch(() => []),
     ]);
 
     // Resolve entities (DB → engine type, real empty state when DB is empty — no seed fallback)
@@ -841,15 +945,15 @@ async function buildSystemPrompt(req: OracleChatRequest): Promise<string> {
     twinResult, ceoResult, realDataResult, recsResult, gstpilotResult,
     snapshotResult,
   ] = await Promise.allSettled([
-    buildCFOContextBlock(),
+    buildCFOContextBlock(req.context?.organizationId),
     buildRmbContextBlock(),
     buildGraphContextBlock(),
-    buildInvoiceEngineContextBlock(),
-    buildExecutionContextBlock(),
+    buildInvoiceEngineContextBlock(req.context?.organizationId),
+    buildExecutionContextBlock(req.context?.organizationId),
     buildTwinContextBlock(req.context?.organizationId),
     buildCEOContextBlock(),
-    mem.userId ? buildRealDataSnapshot(mem.userId).then(formatRealDataContextBlock) : Promise.resolve(''),
-    formatDynamicRecommendationsBlock(mem.userId),
+    mem.userId ? buildRealDataSnapshot(mem.userId, req.context?.organizationId).then(formatRealDataContextBlock) : Promise.resolve(''),
+    formatDynamicRecommendationsBlock(req.context?.organizationId, mem.userId),
     buildGSTpilotContextBlock(req.context?.organizationId),
     buildBusinessSnapshotContextBlock(req.context?.organizationId),
   ]);
@@ -1476,7 +1580,7 @@ numbers, let them know the live data engine is reconnecting and to try again.`;
   if (wantsRecs) {
     try {
       const { formatDynamicRecommendationsBlock } = await import('@/lib/oracle/real-data');
-      recsPreamble = await formatDynamicRecommendationsBlock(body.memory?.userId);
+      recsPreamble = await formatDynamicRecommendationsBlock(body.context?.organizationId, body.memory?.userId);
     } catch {
       recsPreamble = '';
     }

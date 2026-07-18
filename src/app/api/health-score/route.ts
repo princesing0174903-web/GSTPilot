@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { calculateHealthScore, validateGSTIN } from '@/lib/gst-utils'
+import { calculateGSTDataQualityScore, validateGSTIN } from '@/lib/gst-utils'
 
 // GET /api/health-score?clientId=X — Calculate and return health score for a client
 // Query param: clientId (required)
@@ -66,8 +66,12 @@ export async function GET(request: Request) {
       },
     })
 
-    // Calculate score using the utility function
-    const score = calculateHealthScore({
+    // Calculate score using the GST data-quality utility (renamed from
+    // calculateHealthScore — see AUDIT-DUP-1 + task HEALTH-ENGINE). The
+    // CANONICAL business Health Score lives in src/lib/business/snapshot.ts;
+    // this route computes a per-client GST data quality score, which is a
+    // DIFFERENT concept.
+    const score = calculateGSTDataQualityScore({
       totalInvoices: invoices.length,
       missingGstin,
       invalidGstin,

@@ -16,9 +16,13 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get('userId') ?? undefined;
+  // AUDIT-DUP-1 fix: pass organizationId through so generateDynamicRecommendations
+  // can (a) org-scope every Prisma read, (b) source headline cash/revenue/
+  // expenses from the Business Snapshot instead of global Prisma aggregates.
+  const organizationId = request.nextUrl.searchParams.get('organizationId') ?? undefined;
 
   try {
-    const recommendations = await generateDynamicRecommendations(userId);
+    const recommendations = await generateDynamicRecommendations(organizationId, userId);
     return NextResponse.json(
       {
         success: true,
@@ -26,6 +30,7 @@ export async function GET(request: NextRequest) {
         recommendations,
         generatedAt: new Date().toISOString(),
         userId: userId ?? null,
+        organizationId: organizationId ?? null,
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     );

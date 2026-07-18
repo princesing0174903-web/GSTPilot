@@ -15,7 +15,11 @@ import {
 } from 'lucide-react';
 import { useFireInvoices, useFireReturns, useFireBankTransactions,
   useFireClients, useFireTasks, useFireRecentActivities } from '@/hooks/use-firestore';
-import { computeFinancialIntelligence, formatCurrency } from '@/lib/autonomous-finance/financial-intelligence';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
+import {
+  computeFinancialIntelligence, formatCurrency,
+  type FinancialIntelligenceSnapshot,
+} from '@/lib/autonomous-finance/financial-intelligence';
 import { computePredictiveCompliance } from '@/lib/autonomous-finance/predictive-compliance';
 import { computeIntelligentCollections } from '@/lib/autonomous-finance/intelligent-collections';
 import { TrustBar } from '@/components/shared/TrustBar';
@@ -82,13 +86,24 @@ export function AutonomousFinanceDashboard() {
   const { data: clients } = useFireClients();
   const { data: tasks } = useFireTasks();
   const { data: activities } = useFireRecentActivities(20);
+  // Canonical Business Snapshot — the single source of truth for revenue /
+  // cash / receivables / payables / GST / health score. The Firestore-hook
+  // records are still used for record-level detail (top customers, sparkline)
+  // that the snapshot doesn't expose. See AUDIT-DUP-1 + task DUP-CLEANUP.
+  const { snapshot: businessSnapshot } = useBusinessSnapshot();
 
   const intel = useMemo(() => computeFinancialIntelligence({
     invoices: invoices as unknown as Array<Record<string, unknown>>,
     bankTransactions: bankTx as unknown as Array<Record<string, unknown>>,
     returns: returns as unknown as Array<Record<string, unknown>>,
     clients: clients as unknown as Array<Record<string, unknown>>,
-  }), [invoices, bankTx, returns, clients]);
+    // Cast through `unknown` because useBusinessSnapshot's TS type is the
+    // legacy `BusinessSnapshot` from `@/lib/financial-engine` (nested shape)
+    // while the actual API response from `/api/business/snapshot` is the
+    // unified shape that ALSO includes the flat fields this engine consumes.
+    // The runtime values are correct; the TS type just hasn't been migrated.
+    snapshot: businessSnapshot as unknown as FinancialIntelligenceSnapshot,
+  }), [invoices, bankTx, returns, clients, businessSnapshot]);
 
   const compliance = useMemo(() => computePredictiveCompliance({
     returns: returns as unknown as Array<Record<string, unknown>>,

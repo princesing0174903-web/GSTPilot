@@ -28,6 +28,15 @@ import {
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { friendlyAuthError, isSessionError } from '@/lib/auth/errors';
+// Static imports — avoids Turbopack ChunkLoadError on dynamic import('@/lib/auth')
+import {
+  signInWithGoogle as firebaseSignInWithGoogle,
+  signInWithEmail as firebaseSignInWithEmail,
+  signUpWithEmail as firebaseSignUpWithEmail,
+  resetPassword as firebaseResetPassword,
+  logOut as firebaseLogOut,
+  handleRedirectResult as firebaseHandleRedirectResult,
+} from '@/lib/auth';
 
 export interface AuthUser {
   id: string;
@@ -59,6 +68,8 @@ interface AuthContextType {
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
   /** Google OAuth sign-in. */
   signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null }>;
+  /** Send a password-reset email. */
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
   /** Clear the `isLoading` flag (called by OrgContext when the org resolves). */
   clearIsLoading: () => void;
 }
@@ -128,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(stored) as AuthUser;
         if (parsed.id) {
           console.log('[Auth] Restored session from cache for user:', parsed.id);
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setUser(parsed);
           cachedUserIdRef.current = parsed.id;
           restoredFromCache = true;
@@ -216,10 +228,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // ── Handle Google sign-in redirect result (runs once on mount) ──
+  // If signInWithPopup fails (blocked/iframe) and we fall back to
+  // signInWithRedirect, the result is delivered here when the page reloads.
+  useEffect(() => {
+    let active = true;
+    firebaseHandleRedirectResult()
+      .then((result) => {
+        if (!active) return;
+        if (result.error) {
+          console.warn('[Auth] Redirect result error:', result.error);
+          setError(result.error);
+          setIsLoading(false);
+        } else if (result.user) {
+          console.log('[Auth] Redirect sign-in completed for:', result.user.uid);
+          // onAuthStateChanged will pick this up and set the user.
+        }
+      })
+      .catch((err) => {
+        console.warn('[Auth] handleRedirectResult exception:', friendlyAuthError(err));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // ── Logout ──
   const logout = useCallback(async () => {
     try {
-      const { logOut: firebaseLogOut } = await import('@/lib/auth');
       await firebaseLogOut();
     } catch (err) {
       // Even if Firebase signOut fails, clear local state so the user is
@@ -265,15 +301,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Sign in with email/password ──
   // Wraps the underlying Firebase call so we can drive `isLoading` (which
-  // gates the "Redirecting…" card on the login page). Previously `isLoading`
-  // was declared but never set to true, causing the success card to flash
-  // while OrgContext spent 1–5s resolving.
+  // gates the "Redirecting…" card on the login page).
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     console.log('[Auth] Login Started — email:', email);
     setIsLoading(true);
     try {
-      const { signInWithEmail: firebaseSignIn } = await import('@/lib/auth');
-      const result = await firebaseSignIn(email, password);
+      const result = await firebaseSignInWithEmail(email, password);
       if (result.error) {
         console.warn('[Auth] Login failed:', result.error);
         setError(result.error);
@@ -295,8 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Sign Up Started — email:', email);
     setIsLoading(true);
     try {
-      const { signUpWithEmail: firebaseSignUp } = await import('@/lib/auth');
-      const result = await firebaseSignUp(name, email, password);
+      const result = await firebaseSignUpWithEmail(name, email, password);
       if (result.error) {
         console.warn('[Auth] Sign up failed:', result.error);
         setError(result.error);
@@ -314,12 +346,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Sign in with Google ──
+  // Detects if we're inside an iframe (e.g. sandbox preview panel) and
+  // uses signInWithRedirect instead of signInWithPopup, because popups are
+  // frequently blocked inside iframes.
   const signInWithGoogle = useCallback(async () => {
     console.log('[Auth] Google Sign-In Started');
     setIsLoading(true);
     try {
-      const { signInWithGoogle: googleSignIn } = await import('@/lib/auth');
-      const result = await googleSignIn();
+      const result = await firebaseSignInWithGoogle();
       if (result.error) {
         console.warn('[Auth] Google sign-in failed:', result.error);
         setError(result.error);
@@ -369,6 +403,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ── Reset password (send email) ──
+  const resetPassword = useCallback(async (email: string) => {
+    console.log('[Auth] Password reset requested for:', email);
+    try {
+      const result = await firebaseResetPassword(email);
+      if (result.error) {
+        setError(result.error);
+      }
+      return result;
+    } catch (err) {
+      console.error('[Auth] resetPassword exception:', err);
+      setError(friendlyAuthError(err));
+      return { error: friendlyAuthError(err) };
+    }
+  }, []);
+
   // ── Derived flags ──
   // `needsOnboarding` is now driven by OrgContext's `needsOrganization` flag,
   // but to avoid a circular dependency we expose a setter that page.tsx calls
@@ -412,6 +462,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
+        resetPassword,
         clearIsLoading,
       }}
     >

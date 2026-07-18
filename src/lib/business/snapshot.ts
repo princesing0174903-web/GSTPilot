@@ -30,8 +30,6 @@
 
 import { db } from '@/lib/db';
 import {
-  computeHealthScore,
-  computeRiskScore,
   computeCollectionRate,
   computeWorkingCapital,
   computeRunway,
@@ -42,6 +40,75 @@ import {
 import { emitTimelineEvent, isLocalOrgId } from '@/lib/timeline/emit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+// ─── Health Score Engine (CANONICAL) ──────────────────────────────────────────
+//
+// This is THE single source of truth for the business Health Score + Risk Score.
+// Every other module (cfo/engine, oracle/briefing, intelligence/data-cloud,
+// ai-provider/scoring, financial-engine/businessSnapshot) MUST delegate to
+// getBusinessSnapshot().healthScore / .riskScore — never re-implement.
+//
+// Replaces the previous 6+ duplicate computeHealthScore/calculateHealthScore
+// implementations across the codebase (see AUDIT-DUP-1 in worklog.md).
+
+export type HealthScoreLabel = 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical';
+
+/** A single weighted factor contributing to the composite Health Score. */
+export interface HealthScoreFactor {
+  key: string;
+  label: string;
+  weight: number;          // 0-1 (e.g. 0.20 = 20% weight)
+  score: number;           // 0-100 (raw sub-score for this factor)
+  contribution: number;    // 0-100 (score * weight — actual contribution to composite)
+  detail: string;          // human-readable explanation
+}
+
+/** A single risk factor (only contributes if triggered). */
+export interface RiskScoreFactor {
+  key: string;
+  label: string;
+  impact: number;          // points added to risk score when triggered
+  detail: string;
+  triggered: boolean;
+}
+
+export interface HealthScoreResult {
+  score: number;           // 0-100
+  label: HealthScoreLabel;
+  factors: HealthScoreFactor[];
+}
+
+export interface RiskScoreResult {
+  score: number;           // 0-100 (higher = riskier)
+  factors: RiskScoreFactor[];
+}
+
+/**
+ * The input contract for the canonical Health Score engine.
+ *
+ * `getBusinessSnapshot()` gathers every field below from tenant-scoped Prisma
+ * queries and passes the assembled object to `computeHealthScore()` and
+ * `computeRiskScore()`. Other modules that want to recompute a Health Score
+ * without doing a full snapshot fetch should assemble the same shape.
+ */
+export interface BusinessSnapshotInput {
+  revenue: number;             // total invoiced this FY
+  expenses: number;            // purchases + operating expenses this FY
+  cash: number;                // current cash position
+  receivables: number;         // unpaid invoice balances
+  payables: number;            // unpaid purchase bill balances
+  overdueReceivables: number;  // receivables past due date (₹)
+  overdueInvoiceCount: number; // count of overdue invoices
+  totalCollected: number;      // payments received from customers
+  filedReturns: number;        // GSTRFilings with status='filed'
+  pendingReturns: number;      // GSTRFilings with status != 'filed'
+  overdueReturns: number;      // GSTRFilings past due date
+  revenueThisMonth: number;    // invoiced sales in the current month
+  revenueLastMonth: number;    // invoiced sales in the previous month
+  topCustomerShare: number;    // 0-1 (top customer's revenue / total revenue)
+  avgDaysToPay: number;        // avg days between invoice date and payment date
+  runwayMonths: number;        // cash / monthly burn (Infinity if no burn)
+}
 
 /** The canonical business snapshot. Every metric the app shows comes from here. */
 export interface BusinessSnapshot {
@@ -67,6 +134,7 @@ export interface BusinessSnapshot {
   payables: number;         // sum of PurchaseBill.balanceAmount (unpaid)
   overdueReceivables: number;  // receivables past due date
   overduePayables: number;     // payables past due date
+  overdueInvoiceCount: number; // count of overdue invoices (NEW)
 
   // ── GST ──
   outputTax: number;        // GST collected on sales (cgst+sgst+igst+cess on invoices)
@@ -79,15 +147,24 @@ export interface BusinessSnapshot {
   totalCollected: number;   // sum of customer payments received
   totalPaid: number;        // sum of vendor payments made
   netCashFlow: number;      // totalCollected - totalPaid
+  avgDaysToPay: number;     // average days between invoice date and payment date (NEW)
 
   // ── Compliance ──
   filedReturns: number;     // GSTRFiling count with status='filed'
   pendingReturns: number;   // GSTRFiling count with status != 'filed'
   overdueReturns: number;   // GSTRFiling past due date, not filed
 
-  // ── Derived metrics (from the Financial Engine) ──
-  healthScore: number;       // 0-100 composite
-  riskScore: number;         // 0-100 (higher = riskier)
+  // ── Revenue trend (NEW) ──
+  revenueThisMonth: number;   // invoiced sales in the current month
+  revenueLastMonth: number;   // invoiced sales in the previous month
+  topCustomerShare: number;   // 0-1 (top customer's revenue / total revenue)
+
+  // ── Derived metrics (from the Health Score Engine) ──
+  healthScore: number;                 // 0-100 composite (canonical)
+  healthScoreLabel: HealthScoreLabel;  // 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical' (NEW)
+  healthScoreFactors: HealthScoreFactor[]; // per-factor breakdown (NEW)
+  riskScore: number;                   // 0-100 (higher = riskier) (canonical)
+  riskScoreFactors: RiskScoreFactor[]; // per-factor breakdown (NEW)
   collectionRate: number;    // 0-1 (collected / invoiced)
   workingCapital: number;    // receivables - payables
   runwayDays: number;        // cash / monthly burn (Infinity if no burn)
@@ -143,7 +220,6 @@ function sum(rows: Array<{ _sum?: { value?: number | null } | number | null }>):
  * client yet (e.g. ZohoVendor before Phase 5 schema push). Returns 0 if the
  * model accessor is undefined or the query fails — never throws.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function safeCount(model: any, where: Record<string, unknown>): Promise<number> {
   try {
     if (!model || typeof model.count !== 'function') return 0;
@@ -154,7 +230,6 @@ async function safeCount(model: any, where: Record<string, unknown>): Promise<nu
 }
 
 /** Safely findFirst on a model that may not exist in the generated client. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function safeFindFirst(model: any, args: Record<string, unknown>): Promise<any> {
   try {
     if (!model || typeof model.findFirst !== 'function') return null;
@@ -168,7 +243,6 @@ async function safeFindFirst(model: any, args: Record<string, unknown>): Promise
  * Safely aggregate on a model that may not exist in the generated client.
  * Returns a default empty aggregate result if the model is missing.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function safeAggregate(model: any, args: Record<string, unknown>): Promise<any> {
   const empty = { _sum: {}, _count: 0 };
   try {
@@ -177,6 +251,310 @@ async function safeAggregate(model: any, args: Record<string, unknown>): Promise
   } catch {
     return empty;
   }
+}
+
+/** Format an INR amount with thousand separators (no decimals). */
+function inr(n: number): string {
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n));
+}
+
+/** Clamp a number to [min, max]. */
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+// ─── CANONICAL Health Score Engine ────────────────────────────────────────────
+//
+// Replaces the previous 6+ duplicate computeHealthScore implementations:
+//   1. financial-engine/businessSnapshot.ts → calculateHealth (now delegates)
+//   2. cfo/engine.ts:378                     → computeHealthScore (now delegates)
+//   3. ai-provider/scoring.ts:30             → computeBusinessScoreFromContext (pure
+//                                              transformer; orchestrator overrides
+//                                              with snapshot-sourced score)
+//   4. oracle/briefing.ts:33                 → computeHealthScore(signals) (now
+//                                              delegates via assembleBriefing input)
+//   5. intelligence/data-cloud.ts:496        → computeHealthScore(input) (now delegates)
+//   6. gst-utils.ts:45                       → calculateHealthScore (renamed to
+//                                              calculateGSTDataQualityScore —
+//                                              DIFFERENT semantics, kept separate)
+//
+// Factors (weighted, sum to 100%):
+//   • Revenue trend           (20%)  current vs previous month
+//   • Outstanding percentage  (15%)  receivables / revenue (lower is better)
+//   • Cash balance / runway   (15%)  months of cash vs monthly burn
+//   • Compliance status       (15%)  GST filings up to date
+//   • Overdue invoices        (10%)  count + value past due
+//   • Customer concentration  (10%)  top customer's share of revenue
+//   • Payment delays          (10%)  avg days to pay vs 45-day target
+//   • Collection rate         (5%)   collected / invoiced
+
+export function computeHealthScore(input: BusinessSnapshotInput): HealthScoreResult {
+  // Honest empty state — if there is literally no business activity, return 0.
+  const hasAnyData =
+    input.revenue > 0 ||
+    input.cash > 0 ||
+    input.receivables > 0 ||
+    input.filedReturns > 0 ||
+    input.pendingReturns > 0 ||
+    input.revenueThisMonth > 0 ||
+    input.revenueLastMonth > 0;
+  if (!hasAnyData) {
+    return { score: 0, label: 'Critical', factors: [] };
+  }
+
+  const factors: HealthScoreFactor[] = [];
+
+  // ── 1. Revenue trend (20%) — current month vs previous month ──
+  const revTrendPct = input.revenueLastMonth > 0
+    ? ((input.revenueThisMonth - input.revenueLastMonth) / input.revenueLastMonth) * 100
+    : input.revenueThisMonth > 0 ? 100 : 0;
+  let revTrendScore: number;
+  if (input.revenueThisMonth === 0 && input.revenueLastMonth === 0) {
+    revTrendScore = 50; // neutral — no recent activity
+  } else if (revTrendPct > 20) {
+    revTrendScore = 100;
+  } else if (revTrendPct > 5) {
+    revTrendScore = 80;
+  } else if (revTrendPct > 0) {
+    revTrendScore = 65;
+  } else if (revTrendPct > -10) {
+    revTrendScore = 40;
+  } else if (revTrendPct > -25) {
+    revTrendScore = 25;
+  } else {
+    revTrendScore = 10;
+  }
+  factors.push({
+    key: 'revenue_trend',
+    label: 'Revenue Trend',
+    weight: 0.20,
+    score: revTrendScore,
+    contribution: revTrendScore * 0.20,
+    detail: `${revTrendPct >= 0 ? '+' : ''}${revTrendPct.toFixed(1)}% MoM (₹${inr(input.revenueThisMonth)} vs ₹${inr(input.revenueLastMonth)})`,
+  });
+
+  // ── 2. Outstanding percentage (15%) — receivables / revenue ──
+  const outstandingPct = input.revenue > 0
+    ? input.receivables / input.revenue
+    : input.receivables > 0 ? 1 : 0;
+  let outstandingScore: number;
+  if (outstandingPct > 0.75) outstandingScore = 15;
+  else if (outstandingPct > 0.50) outstandingScore = 30;
+  else if (outstandingPct > 0.30) outstandingScore = 55;
+  else if (outstandingPct > 0.15) outstandingScore = 75;
+  else if (outstandingPct > 0) outstandingScore = 90;
+  else outstandingScore = 100;
+  factors.push({
+    key: 'outstanding_percentage',
+    label: 'Outstanding Percentage',
+    weight: 0.15,
+    score: outstandingScore,
+    contribution: outstandingScore * 0.15,
+    detail: `${(outstandingPct * 100).toFixed(1)}% of revenue outstanding (₹${inr(input.receivables)})`,
+  });
+
+  // ── 3. Cash balance / runway (15%) ──
+  // >3 months runway = healthy, <1 month = critical.
+  const runwayMonths = Number.isFinite(input.runwayMonths) ? input.runwayMonths : 999;
+  let cashScore: number;
+  if (input.cash > 0 && input.expenses === 0) {
+    cashScore = 90; // has cash, no burn — healthy but unknown horizon
+  } else if (runwayMonths >= 6) {
+    cashScore = 100;
+  } else if (runwayMonths >= 3) {
+    cashScore = 85;
+  } else if (runwayMonths >= 2) {
+    cashScore = 70;
+  } else if (runwayMonths >= 1) {
+    cashScore = 50;
+  } else if (input.cash > 0) {
+    cashScore = 30;
+  } else {
+    cashScore = 10;
+  }
+  factors.push({
+    key: 'cash_balance',
+    label: 'Cash Balance & Runway',
+    weight: 0.15,
+    score: cashScore,
+    contribution: cashScore * 0.15,
+    detail: Number.isFinite(input.runwayMonths)
+      ? `${input.runwayMonths.toFixed(1)} months runway (₹${inr(input.cash)} cash)`
+      : `unbounded runway (₹${inr(input.cash)} cash, no burn)`,
+  });
+
+  // ── 4. Compliance status (15%) — GST filings ──
+  const totalReturns = input.filedReturns + input.pendingReturns;
+  let complianceScore: number;
+  if (totalReturns > 0) {
+    const filedRate = input.filedReturns / totalReturns;
+    complianceScore = filedRate * 100;
+    if (input.overdueReturns > 0) {
+      complianceScore -= (input.overdueReturns / totalReturns) * 50;
+    }
+    complianceScore = clamp(complianceScore, 0, 100);
+  } else if (input.revenue > 0) {
+    complianceScore = 30; // has revenue but no filings — compliance risk
+  } else {
+    complianceScore = 100; // no filings AND no revenue — neutral
+  }
+  factors.push({
+    key: 'compliance_status',
+    label: 'Compliance Status',
+    weight: 0.15,
+    score: complianceScore,
+    contribution: complianceScore * 0.15,
+    detail: `${input.filedReturns} filed, ${input.pendingReturns} pending, ${input.overdueReturns} overdue`,
+  });
+
+  // ── 5. Overdue invoices (10%) — count and value ──
+  let overdueScore: number;
+  if (input.receivables > 0 && input.overdueReceivables > 0) {
+    const overdueRatio = input.overdueReceivables / input.receivables;
+    if (overdueRatio > 0.5) overdueScore = 15;
+    else if (overdueRatio > 0.25) overdueScore = 35;
+    else if (overdueRatio > 0.10) overdueScore = 60;
+    else if (overdueRatio > 0.05) overdueScore = 80;
+    else overdueScore = 90;
+  } else if (input.overdueInvoiceCount > 0) {
+    overdueScore = 70;
+  } else {
+    overdueScore = 100;
+  }
+  factors.push({
+    key: 'overdue_invoices',
+    label: 'Overdue Invoices',
+    weight: 0.10,
+    score: overdueScore,
+    contribution: overdueScore * 0.10,
+    detail: `${input.overdueInvoiceCount} overdue invoice(s), ₹${inr(input.overdueReceivables)} exposure`,
+  });
+
+  // ── 6. Customer concentration (10%) — top customer's share of revenue ──
+  const topShare = clamp(input.topCustomerShare, 0, 1);
+  let concentrationScore: number;
+  if (topShare > 0.70) concentrationScore = 15;
+  else if (topShare > 0.50) concentrationScore = 35;
+  else if (topShare > 0.40) concentrationScore = 55;
+  else if (topShare > 0.25) concentrationScore = 75;
+  else if (topShare > 0) concentrationScore = 90;
+  else concentrationScore = 100;
+  factors.push({
+    key: 'customer_concentration',
+    label: 'Customer Concentration',
+    weight: 0.10,
+    score: concentrationScore,
+    contribution: concentrationScore * 0.10,
+    detail: `Top customer = ${(topShare * 100).toFixed(1)}% of revenue`,
+  });
+
+  // ── 7. Payment delays (10%) — avg days to pay vs 45-day target ──
+  const adp = input.avgDaysToPay;
+  let paymentDelayScore: number;
+  if (adp <= 0) {
+    // No payment history — neutral, not punitive.
+    paymentDelayScore = 70;
+  } else if (adp > 90) {
+    paymentDelayScore = 10;
+  } else if (adp > 60) {
+    paymentDelayScore = 35;
+  } else if (adp > 45) {
+    paymentDelayScore = 55;
+  } else if (adp > 30) {
+    paymentDelayScore = 75;
+  } else {
+    paymentDelayScore = 90;
+  }
+  factors.push({
+    key: 'payment_delays',
+    label: 'Payment Delays',
+    weight: 0.10,
+    score: paymentDelayScore,
+    contribution: paymentDelayScore * 0.10,
+    detail: adp > 0 ? `Avg ${adp.toFixed(0)} days to pay (target ≤ 45)` : 'No payment history yet',
+  });
+
+  // ── 8. Collection rate (5%) — collected / invoiced ──
+  const collectionRate = input.revenue > 0
+    ? clamp(input.totalCollected / input.revenue, 0, 1)
+    : 0;
+  const collectionScore = collectionRate * 100;
+  factors.push({
+    key: 'collection_rate',
+    label: 'Collection Rate',
+    weight: 0.05,
+    score: collectionScore,
+    contribution: collectionScore * 0.05,
+    detail: `${(collectionRate * 100).toFixed(1)}% of invoiced revenue collected`,
+  });
+
+  const composite = factors.reduce((s, f) => s + f.contribution, 0);
+  const score = Math.round(clamp(composite, 0, 100));
+
+  const label: HealthScoreLabel =
+    score >= 80 ? 'Excellent' :
+    score >= 65 ? 'Good' :
+    score >= 45 ? 'Fair' :
+    score >= 25 ? 'Poor' :
+    'Critical';
+
+  return { score, label, factors };
+}
+
+// ─── CANONICAL Risk Score Engine (0-100, higher = riskier) ───────────────────
+//
+// Additive model — each triggered factor contributes its impact to the total,
+// capped at 100. This is intentionally additive (not weighted-average) so the
+// "why" of every point is auditable: each risk point traces to a specific
+// triggered condition.
+
+export function computeRiskScore(input: BusinessSnapshotInput): RiskScoreResult {
+  const runwayMonths = Number.isFinite(input.runwayMonths) ? input.runwayMonths : 999;
+  const outstandingPct = input.revenue > 0 ? input.receivables / input.revenue : 0;
+  const overdueRatio = input.receivables > 0 ? input.overdueReceivables / input.receivables : 0;
+
+  const factors: RiskScoreFactor[] = [
+    {
+      key: 'cash_runway',
+      label: 'Cash runway < 2 months',
+      impact: 30,
+      detail: `Runway = ${Number.isFinite(input.runwayMonths) ? input.runwayMonths.toFixed(1) + ' months' : 'unbounded'}, cash = ₹${inr(input.cash)}`,
+      triggered: input.cash < 0 || (runwayMonths < 2 && input.expenses > 0),
+    },
+    {
+      key: 'high_outstanding',
+      label: 'Outstanding > 60% of revenue',
+      impact: 25,
+      detail: `${(outstandingPct * 100).toFixed(1)}% of revenue is outstanding (₹${inr(input.receivables)})`,
+      triggered: outstandingPct > 0.60,
+    },
+    {
+      key: 'high_overdue',
+      label: 'Overdue invoices > 20% of total receivables',
+      impact: 20,
+      detail: `${input.overdueInvoiceCount} overdue invoice(s), ₹${inr(input.overdueReceivables)} (${(overdueRatio * 100).toFixed(1)}% of receivables)`,
+      triggered: overdueRatio > 0.20,
+    },
+    {
+      key: 'overdue_filings',
+      label: 'Overdue GST filings',
+      impact: 15,
+      detail: `${input.overdueReturns} overdue return(s)`,
+      triggered: input.overdueReturns > 0,
+    },
+    {
+      key: 'high_concentration',
+      label: 'Customer concentration > 50%',
+      impact: 10,
+      detail: `Top customer = ${(input.topCustomerShare * 100).toFixed(1)}% of revenue`,
+      triggered: input.topCustomerShare > 0.50,
+    },
+  ];
+
+  const raw = factors.filter((f) => f.triggered).reduce((s, f) => s + f.impact, 0);
+  const score = Math.round(clamp(raw, 0, 100));
+
+  return { score, factors };
 }
 
 // ─── In-memory cache (30s TTL — prevents redundant Prisma queries within a request burst) ──
@@ -214,6 +592,13 @@ export async function getBusinessSnapshot(
 
   const fyStart = financialYearStart();
   const fyStartStr = fyStart.toISOString();
+
+  // Month boundaries for the revenue trend (current month vs previous month).
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  const nowIso = now.toISOString();
 
   // ── Run all independent Prisma queries in parallel ──
   // Every query is tenant-scoped by firmId = organizationId.
@@ -256,6 +641,12 @@ export async function getBusinessSnapshot(
     zohoPaymentMadeAgg,
     zohoExpenseAgg,
     zohoBankAccountAgg,
+    // ── Health Score Engine inputs (NEW) ──
+    revenueThisMonthAgg,        // totalAmount where createdAt ∈ [thisMonthStart, now]
+    revenueLastMonthAgg,        // totalAmount where createdAt ∈ [lastMonthStart, lastMonthEnd]
+    topCustomerGroup,           // groupBy buyerName with sum(totalAmount), take top 1
+    overdueInvoiceStats,        // count + sum(balanceAmount) where dueDate < now AND status != 'paid'
+    paidPaymentsForAdp,         // recent customer payments with invoiceId, paymentDate (for avgDaysToPay)
   ] = await Promise.all([
     // Invoices (sales) — this FY
     db.invoice.aggregate({
@@ -365,6 +756,62 @@ export async function getBusinessSnapshot(
       where: { organizationId },
       _sum: { balance: true, availableBalance: true },
     }),
+    // ── NEW: Revenue trend (current month) ──
+    db.invoice.aggregate({
+      where: {
+        client: { firmId: organizationId },
+        createdAt: { gte: thisMonthStart, lte: now },
+      },
+      _sum: { totalAmount: true },
+    }).catch(() => ({ _sum: { totalAmount: 0 } })),
+    // ── NEW: Revenue trend (previous month) ──
+    db.invoice.aggregate({
+      where: {
+        client: { firmId: organizationId },
+        createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
+      },
+      _sum: { totalAmount: true },
+    }).catch(() => ({ _sum: { totalAmount: 0 } })),
+    // ── NEW: Top customer concentration (groupBy buyerName, top 1 by revenue) ──
+    db.invoice.groupBy({
+      by: ['buyerName'],
+      where: {
+        client: { firmId: organizationId },
+        createdAt: { gte: fyStart },
+        buyerName: { not: null },
+      },
+      _sum: { totalAmount: true },
+      orderBy: { _sum: { totalAmount: 'desc' } },
+      take: 1,
+    }).catch(() => [] as Array<{ buyerName: string | null; _sum: { totalAmount: number | null } }>),
+    // ── NEW: Overdue invoice stats (count + sum of balanceAmount past due) ──
+    // Synchronous so the Health Score has accurate overdue data without waiting
+    // for the background `detectAndEmitOverdueInvoices` task.
+    db.invoice.aggregate({
+      where: {
+        client: { firmId: organizationId },
+        dueDate: { not: null, lt: nowIso },
+        status: { not: 'paid' },
+        paymentStatus: { not: 'paid' },
+      },
+      _sum: { balanceAmount: true, totalAmount: true },
+      _count: true,
+    }).catch(() => ({ _sum: { balanceAmount: 0, totalAmount: 0 }, _count: 0 })),
+    // ── NEW: Recent paid customer payments (for avgDaysToPay) ──
+    // We fetch the last 200 completed customer payments that are linked to an
+    // invoice. Their linked invoice dates are fetched in a follow-up query
+    // (Payment has no relation to Invoice — see prisma/schema.prisma).
+    db.payment.findMany({
+      where: {
+        client: { firmId: organizationId },
+        partyType: 'customer',
+        status: 'completed',
+        invoiceId: { not: null },
+      },
+      select: { invoiceId: true, paymentDate: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    }).catch(() => [] as Array<{ invoiceId: string | null; paymentDate: string }>),
   ]);
 
   // ── Extract values (all default to 0 if null — honest empty state) ──
@@ -431,28 +878,95 @@ export async function getBusinessSnapshot(
   const gstLiability = computeGstLiability(outputTax, inputTax + expenseGst);
   const netCashFlow = totalCollectedPayments - totalPaidPayments;
 
-  // ── Derived metrics via the Financial Engine ──
-  const healthScore = computeHealthScore({
+  // ── Health Score Engine inputs (NEW) ──
+  const revenueThisMonth = (revenueThisMonthAgg?._sum?.totalAmount ?? 0) as number;
+  const revenueLastMonth = (revenueLastMonthAgg?._sum?.totalAmount ?? 0) as number;
+
+  // Top customer's share of total revenue (0-1). Defensive: topCustomerGroup
+  // is an array of 0 or 1 row from the groupBy query.
+  const topCustomerRevenue =
+    topCustomerGroup && topCustomerGroup.length > 0
+      ? (topCustomerGroup[0]._sum?.totalAmount ?? 0)
+      : 0;
+  const topCustomerShare = revenue > 0 ? clamp(topCustomerRevenue / revenue, 0, 1) : 0;
+
+  // Overdue invoice stats — populated synchronously so the Health Score engine
+  // has accurate data on the first call (background detectAndEmitOverdueInvoices
+  // still runs for timeline event emission, but the snapshot values come from
+  // this aggregate).
+  const overdueReceivables =
+    overdueInvoiceStats && overdueInvoiceStats._sum
+      ? (overdueInvoiceStats._sum.balanceAmount ?? 0) > 0
+        ? (overdueInvoiceStats._sum.balanceAmount as number)
+        : (overdueInvoiceStats._sum.totalAmount ?? 0) as number
+      : 0;
+  const overdueInvoiceCount = overdueInvoiceStats?._count ?? 0;
+
+  // Average days to pay — computed from the linked Payment rows + Invoice
+  // invoiceDate lookup. We need to fetch the linked invoice dates in a follow-up
+  // query because Payment has no Prisma relation to Invoice.
+  const invoiceIdsForAdp = paidPaymentsForAdp
+    .map((p) => p.invoiceId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const distinctInvoiceIds = [...new Set(invoiceIdsForAdp)];
+
+  let avgDaysToPay = 0;
+  if (distinctInvoiceIds.length > 0) {
+    try {
+      const linkedInvoices = await db.invoice.findMany({
+        where: { id: { in: distinctInvoiceIds } },
+        select: { id: true, invoiceDate: true },
+      });
+      const invoiceDateById = new Map<string, string>();
+      for (const inv of linkedInvoices) {
+        if (inv.invoiceDate) invoiceDateById.set(inv.id, inv.invoiceDate);
+      }
+      const dayDiffs: number[] = [];
+      for (const p of paidPaymentsForAdp) {
+        if (!p.invoiceId || !p.paymentDate) continue;
+        const invDateStr = invoiceDateById.get(p.invoiceId);
+        if (!invDateStr) continue;
+        const invDate = new Date(invDateStr);
+        const payDate = new Date(p.paymentDate);
+        if (Number.isNaN(invDate.getTime()) || Number.isNaN(payDate.getTime())) continue;
+        const diff = Math.max(0, (payDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24));
+        dayDiffs.push(diff);
+      }
+      if (dayDiffs.length > 0) {
+        avgDaysToPay = dayDiffs.reduce((a, b) => a + b, 0) / dayDiffs.length;
+      }
+    } catch {
+      avgDaysToPay = 0;
+    }
+  }
+
+  // Runway (in months) — used by both the Health Score and Risk Score engines.
+  // Infinity if there's no burn (operatingExpenses === 0).
+  const runwayMonths =
+    operatingExpenses > 0 ? cash / (operatingExpenses / 12) : (cash > 0 ? Infinity : 0);
+
+  // ── CANONICAL Health Score + Risk Score (NEW) ──
+  const healthScoreInput: BusinessSnapshotInput = {
     revenue,
     expenses,
-    profit,
+    cash,
     receivables,
     payables,
-    cash,
+    overdueReceivables,
+    overdueInvoiceCount,
+    totalCollected,
     filedReturns: filedReturnsCount,
     pendingReturns: pendingReturnsCount,
     overdueReturns: overdueReturnsCount,
-  });
+    revenueThisMonth,
+    revenueLastMonth,
+    topCustomerShare,
+    avgDaysToPay,
+    runwayMonths,
+  };
 
-  const riskScore = computeRiskScore({
-    profit,
-    revenue,
-    cash,
-    payables,
-    receivables,
-    overdueReturns: overdueReturnsCount,
-    pendingReturns: pendingReturnsCount,
-  });
+  const healthScoreResult = computeHealthScore(healthScoreInput);
+  const riskScoreResult = computeRiskScore(healthScoreInput);
 
   const collectionRate = computeCollectionRate(revenue, totalCollected);
   const workingCapital = computeWorkingCapital(receivables, payables);
@@ -477,8 +991,9 @@ export async function getBusinessSnapshot(
 
     receivables,
     payables,
-    overdueReceivables: 0, // computed below if due dates exist
+    overdueReceivables,
     overduePayables: 0,
+    overdueInvoiceCount,
 
     outputTax,
     inputTax,
@@ -489,13 +1004,21 @@ export async function getBusinessSnapshot(
     totalCollected: totalCollectedPayments,
     totalPaid: totalPaidPayments,
     netCashFlow,
+    avgDaysToPay,
 
     filedReturns: filedReturnsCount,
     pendingReturns: pendingReturnsCount,
     overdueReturns: overdueReturnsCount,
 
-    healthScore,
-    riskScore,
+    revenueThisMonth,
+    revenueLastMonth,
+    topCustomerShare,
+
+    healthScore: healthScoreResult.score,
+    healthScoreLabel: healthScoreResult.label,
+    healthScoreFactors: healthScoreResult.factors,
+    riskScore: riskScoreResult.score,
+    riskScoreFactors: riskScoreResult.factors,
     collectionRate,
     workingCapital,
     runwayDays,
@@ -712,6 +1235,7 @@ export function emptySnapshot(organizationId: string): BusinessSnapshot {
     payables: 0,
     overdueReceivables: 0,
     overduePayables: 0,
+    overdueInvoiceCount: 0,
     outputTax: 0,
     inputTax: 0,
     itcAvailable: 0,
@@ -720,11 +1244,18 @@ export function emptySnapshot(organizationId: string): BusinessSnapshot {
     totalCollected: 0,
     totalPaid: 0,
     netCashFlow: 0,
+    avgDaysToPay: 0,
     filedReturns: 0,
     pendingReturns: 0,
     overdueReturns: 0,
+    revenueThisMonth: 0,
+    revenueLastMonth: 0,
+    topCustomerShare: 0,
     healthScore: 0,
+    healthScoreLabel: 'Critical',
+    healthScoreFactors: [],
     riskScore: 0,
+    riskScoreFactors: [],
     collectionRate: 0,
     workingCapital: 0,
     runwayDays: 0,

@@ -36,7 +36,17 @@ interface LoginPageProps {
 type AuthMode = 'login' | 'signup' | 'forgot';
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isLoading, isInitializing, error, setError, signInDemo } = useAuth();
+  const {
+    isLoading,
+    isInitializing,
+    error,
+    setError,
+    signInDemo,
+    signInWithEmail: ctxSignInWithEmail,
+    signUpWithEmail: ctxSignUpWithEmail,
+    signInWithGoogle: ctxSignInWithGoogle,
+    resetPassword: ctxResetPassword,
+  } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -66,32 +76,27 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   }
 
   // ── Email/Password Sign In ──
-  // We use `localLoading` for the Firebase Auth call itself. On success we
-  // clear `localLoading` immediately — AppRouter switches to the 'app' screen
-  // as soon as `isAuthenticated` becomes true (typically <100ms after
-  // onAuthStateChanged fires). The AuthContext.isLoading flag is cleared by
-  // OrgContext or a 5s safety timeout.
+  // Uses the AuthContext's wrapped method so `isLoading` is driven correctly
+  // (gating the "Redirecting…" card) and OrgContext clears it when the org
+  // resolves. No dynamic import — avoids Turbopack ChunkLoadError.
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
     setLocalLoading(true);
 
     try {
-      const { signInWithEmail } = await import('@/lib/auth');
-      const { user: authUser, error: authError } = await signInWithEmail(email, password, rememberMe);
+      const { error: authError } = await ctxSignInWithEmail(email, password);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (authUser) {
-        console.log('[LoginPage] Login successful — Redirecting to Dashboard');
-        setSuccessMessage('Login successful! Redirecting...');
-        setShowSuccess(true);
-        // Clear localLoading — AppRouter will switch to 'app' immediately
-        // when isAuthenticated becomes true.
-        setLocalLoading(false);
-      }
+      console.log('[LoginPage] Login successful — Redirecting to Dashboard');
+      setSuccessMessage('Login successful! Redirecting...');
+      setShowSuccess(true);
+      // Clear localLoading — AppRouter will switch to 'app' immediately
+      // when isAuthenticated becomes true.
+      setLocalLoading(false);
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
       setLocalLoading(false);
@@ -111,19 +116,16 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     }
 
     try {
-      const { signUpWithEmail } = await import('@/lib/auth');
-      const { user: authUser, error: authError } = await signUpWithEmail(email, password, name);
+      const { error: authError } = await ctxSignUpWithEmail(name, email, password);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (authUser) {
-        console.log('[LoginPage] Sign up successful — Redirecting to Dashboard');
-        setSuccessMessage('Account created! Please check your email to verify your account.');
-        setShowSuccess(true);
-        setLocalLoading(false);
-      }
+      console.log('[LoginPage] Sign up successful — Redirecting to Dashboard');
+      setSuccessMessage('Account created! Please check your email to verify your account.');
+      setShowSuccess(true);
+      setLocalLoading(false);
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
       setLocalLoading(false);
@@ -135,15 +137,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setLocalError(null);
     setLocalLoading(true);
     try {
-      const { signInWithGoogle } = await import('@/lib/auth');
-      const { error: googleError } = await signInWithGoogle(rememberMe);
+      const { error: googleError } = await ctxSignInWithGoogle();
       if (googleError) {
         setLocalError(googleError);
         setLocalLoading(false);
       } else {
         console.log('[LoginPage] Google sign-in initiated — waiting for onAuthStateChanged');
-        // Don't clear localLoading — the popup/redirect will trigger
-        // onAuthStateChanged which switches to the dashboard.
         setLocalLoading(false);
       }
     } catch {
@@ -159,8 +158,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setLocalLoading(true);
 
     try {
-      const { resetPassword } = await import('@/lib/auth');
-      const { error: resetError } = await resetPassword(email);
+      const { error: resetError } = await ctxResetPassword(email);
       if (resetError) {
         setLocalError(resetError);
         return;

@@ -27,6 +27,14 @@ const ENGINE_VERSION = '1.0.0';
 /**
  * Compute an overall business health score (0–100) from the ranked signals.
  *
+ * FALLBACK ONLY — used when no canonical Business Snapshot is available.
+ *
+ * The CANONICAL Health Score lives in `src/lib/business/snapshot.ts` →
+ * `computeHealthScore()` and is exposed via `getBusinessSnapshot(orgId).healthScore`.
+ * `assembleBriefing` accepts an optional `canonicalHealthScore` input that, when
+ * provided, OVERRIDES this signal-based fallback so the Oracle briefing always
+ * shows the same Health Score as the Home Dashboard / AI CFO / Run Business.
+ *
  * Starts at 100 and subtracts based on problem severity; adds a small bonus
  * for opportunities (capped). The score is bounded to [0, 100].
  */
@@ -181,17 +189,27 @@ export interface AssembleInput {
   signals: RankedSignal[];
   analyzerMetrics: Record<string, Record<string, number>>;
   collectorLabels: Record<string, string>;
+  /**
+   * Optional canonical Health Score from the centralized Business Snapshot
+   * (`getBusinessSnapshot(orgId).healthScore`). When provided, this OVERRIDES
+   * the signal-based fallback so every surface shows the same score.
+   */
+  canonicalHealthScore?: number;
 }
 
 export function assembleBriefing(input: AssembleInput): OracleBriefing {
-  const { userId, dataset, signals, analyzerMetrics, collectorLabels } = input;
+  const { userId, dataset, signals, analyzerMetrics, collectorLabels, canonicalHealthScore } = input;
 
   const sourceStatuses = buildSources(dataset, collectorLabels);
   const connected = sourceStatuses.filter((s) => s.connected).length;
   const total = sourceStatuses.length;
   const coverage = { connected, disconnected: total - connected, total };
 
-  const healthScore = computeHealthScore(signals);
+  const fallbackScore = computeHealthScore(signals);
+  const healthScore =
+    typeof canonicalHealthScore === 'number'
+      ? Math.max(0, Math.min(100, Math.round(canonicalHealthScore)))
+      : fallbackScore;
   const headline = buildHeadline(signals);
   const summary = buildSummary(signals, coverage);
   const metrics = buildMetrics(analyzerMetrics);

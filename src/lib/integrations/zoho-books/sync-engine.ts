@@ -143,7 +143,7 @@ async function upsertVendor(orgId: string, zohoOrgId: string, v: any) {
     };
     if (existing) { await db.zohoVendor.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoVendor.create({ data: { organizationId: orgId, zohoOrgId, zohoContactId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] vendor upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -181,7 +181,7 @@ async function upsertInvoice(orgId: string, zohoOrgId: string, inv: any) {
     };
     if (existing) { await db.zohoInvoice.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoInvoice.create({ data: { organizationId: orgId, zohoOrgId, zohoInvoiceId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertInvoice upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -219,7 +219,7 @@ async function upsertBill(orgId: string, zohoOrgId: string, bill: any) {
     };
     if (existing) { await db.zohoBill.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoBill.create({ data: { organizationId: orgId, zohoOrgId, zohoBillId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertBill upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -251,7 +251,7 @@ async function upsertPaymentReceived(orgId: string, zohoOrgId: string, p: any) {
     };
     if (existing) { await db.zohoPaymentReceived.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoPaymentReceived.create({ data: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertPaymentReceived upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -283,7 +283,7 @@ async function upsertPaymentMade(orgId: string, zohoOrgId: string, p: any) {
     };
     if (existing) { await db.zohoPaymentMade.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoPaymentMade.create({ data: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertPaymentMade upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -319,7 +319,7 @@ async function upsertCreditNote(orgId: string, zohoOrgId: string, cn: any) {
     };
     if (existing) { await db.zohoCreditNote.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoCreditNote.create({ data: { organizationId: orgId, zohoOrgId, zohoCreditNoteId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertCreditNote upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -352,7 +352,7 @@ async function upsertExpense(orgId: string, zohoOrgId: string, e: any) {
     };
     if (existing) { await db.zohoExpense.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoExpense.create({ data: { organizationId: orgId, zohoOrgId, zohoExpenseId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertExpense upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -379,7 +379,7 @@ async function upsertTax(orgId: string, zohoOrgId: string, t: any) {
     };
     if (existing) { await db.zohoTax.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoTax.create({ data: { organizationId: orgId, zohoOrgId, zohoTaxId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertTax upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -415,7 +415,7 @@ async function upsertJournal(orgId: string, zohoOrgId: string, j: any) {
     };
     if (existing) { await db.zohoJournalEntry.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoJournalEntry.create({ data: { organizationId: orgId, zohoOrgId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertJournal upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -445,7 +445,7 @@ async function upsertBankAccount(orgId: string, zohoOrgId: string, ba: any) {
     };
     if (existing) { await db.zohoBankAccount.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoBankAccount.create({ data: { organizationId: orgId, zohoOrgId, zohoAccountId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertBankAccount upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -476,7 +476,7 @@ async function upsertBankTransaction(orgId: string, zohoOrgId: string, bt: any) 
     };
     if (existing) { await db.zohoBankTransaction.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoBankTransaction.create({ data: { organizationId: orgId, zohoOrgId, zohoTransactionId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertBankTransaction upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -509,7 +509,7 @@ async function upsertItem(orgId: string, zohoOrgId: string, item: any) {
     };
     if (existing) { await db.zohoItem.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoItem.create({ data: { organizationId: orgId, zohoOrgId, zohoItemId, ...data } }); imported++; }
-  } catch { failed++; }
+  } catch (err) { failed++; console.error('[zoho-sync] upsertItem upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
@@ -562,15 +562,31 @@ async function fetchModule(
   let hasMore = true;
   const perPage = 200;
 
+  // Track whether this endpoint supports the last_modified_time_start filter.
+  // Some Zoho endpoints (journals, banktransactions) don't support it and
+  // return HTTP 400 "Invalid value passed for last_modified_time_start". When
+  // that happens, we retry the page without the filter (full fetch for that
+  // module — safe because upsert is idempotent).
+  let skipModifiedTimeFilter = false;
+
   while (hasMore) {
     const sep = def.endpoint.includes('?') ? '&' : '?';
     let url = `${def.endpoint}${sep}page=${page}&per_page=${perPage}`;
 
-    // Incremental: only fetch records modified since last sync
-    if (mode === 'incremental' && lastSyncAt) {
-      const since = lastSyncAt.toISOString().slice(0, 19);
+    // Incremental: only fetch records modified since last sync.
+    // Zoho Books expects date filters in 'yyyy-MM-dd HH:mm:ss' format (SPACE
+    // separator, NOT ISO 'T'). The old code used .toISOString().slice(0,19)
+    // which produces '2026-07-15T13:13:30' → Zoho rejects with:
+    //   "Invalid value passed for last_modified_time" (HTTP 400, code 2)
+    // Fix: replace the 'T' with a space and URL-encode the result.
+    // Also: not all endpoints support this param — if we get a 400 about
+    // last_modified_time, we retry without it (skipModifiedTimeFilter flag).
+    if (mode === 'incremental' && lastSyncAt && !skipModifiedTimeFilter) {
+      const since = lastSyncAt.toISOString().slice(0, 19).replace('T', ' ');
       url += `&last_modified_time_start=${encodeURIComponent(since)}`;
     }
+
+    console.log(`[zoho-sync] ${def.key} · page ${page} · GET ${url}`);
 
     const res = await zohoGet<{ code?: number; message?: string; page_context?: { has_more_page?: boolean; page?: number } } & Record<string, unknown>>(
       url,
@@ -578,15 +594,32 @@ async function fetchModule(
       { organizationId: zohoOrgId },
     );
 
+    // If incremental filter caused a 400, retry this page without it.
+    // The error message could be in res.error (string) or res.data.message (object).
+    // Check both — the Zoho client returns res.data=null on non-OK responses
+    // with the raw body text in res.error.
+    if (res.status === 400 && mode === 'incremental' && !skipModifiedTimeFilter) {
+      const errMsg = res.error ?? '';
+      const errBody = res.data as { message?: string } | null;
+      const bodyMsg = errBody?.message ?? '';
+      if (errMsg.includes('last_modified_time') || bodyMsg.includes('last_modified_time')) {
+        console.warn(`[zoho-sync] ${def.key} · endpoint doesn't support last_modified_time_start — retrying without filter (full fetch for this module)`);
+        skipModifiedTimeFilter = true;
+        continue; // retry same page without filter
+      }
+    }
+
     if (res.error || res.status >= 400) {
       result.status = 'error';
       result.httpStatus = res.status;
       result.error = describeError(res.status, res.error, res.data);
+      console.error(`[zoho-sync] ${def.key} · ERROR · HTTP ${res.status} · ${result.error}`);
       return result;
     }
 
     const records = (res.data?.[def.responseKey] as unknown[]) ?? [];
     result.fetched += records.length;
+    console.log(`[zoho-sync] ${def.key} · page ${page} · fetched ${records.length} records (cumulative: ${result.fetched})`);
 
     // Upsert each record
     for (const record of records) {
@@ -595,8 +628,9 @@ async function fetchModule(
         result.imported += r.imported;
         result.updated += r.updated;
         result.failed += r.failed;
-      } catch {
+      } catch (err) {
         result.failed++;
+        console.error(`[zoho-sync] ${def.key} · upsert failed for record:`, err instanceof Error ? err.message : err);
       }
     }
 
@@ -606,9 +640,13 @@ async function fetchModule(
     page = (ctx?.page ?? page) + 1;
 
     // Safety cap: 500 pages = 100,000 records per module
-    if (page > 500) break;
+    if (page > 500) {
+      console.warn(`[zoho-sync] ${def.key} · safety cap reached (500 pages)`);
+      break;
+    }
   }
 
+  console.log(`[zoho-sync] ${def.key} · DONE · fetched=${result.fetched} imported=${result.imported} updated=${result.updated} failed=${result.failed}`);
   return result;
 }
 
@@ -621,6 +659,8 @@ export async function runZohoFullSync(opts: {
 }): Promise<SyncEngineResult> {
   const startedAt = new Date();
   const startTime = Date.now();
+
+  console.log(`[zoho-sync] ═══ SYNC START ═══ org="${opts.organizationId}" user="${opts.userId ?? '(system)'}" mode="${opts.mode}"`);
 
   // 1. Resolve the Zoho connection: find the token row for this org to get
   //    the zohoOrgId + userId (the sync may be triggered by a system user, so
@@ -635,8 +675,10 @@ export async function runZohoFullSync(opts: {
     });
     resolvedUserId = tokenRow?.userId ?? null;
     zohoOrgId = tokenRow?.zohoOrgId ?? '';
+    console.log(`[zoho-sync] resolved userId from token row: ${resolvedUserId ?? 'NONE'} · zohoOrgId: ${zohoOrgId || 'NONE'}`);
   }
   if (!resolvedUserId) {
+    console.error(`[zoho-sync] FAILED — no active Zoho token found for org "${opts.organizationId}"`);
     return {
       ok: false,
       status: 'failed',
@@ -655,6 +697,7 @@ export async function runZohoFullSync(opts: {
   // Load tokens to get zohoOrgId (getValidAccessToken doesn't return it)
   const { stored } = await loadTokens(opts.organizationId, resolvedUserId);
   if (!stored) {
+    console.error(`[zoho-sync] FAILED — loadTokens returned null for org="${opts.organizationId}" user="${resolvedUserId}". Token row missing, revoked, or access token decryption failed (check ZOHO_CLIENT_SECRET env var).`);
     return {
       ok: false,
       status: 'failed',
@@ -671,6 +714,7 @@ export async function runZohoFullSync(opts: {
   }
   zohoOrgId = stored.zohoOrgId ?? '';
   if (!zohoOrgId) {
+    console.error(`[zoho-sync] FAILED — no zohoOrgId on token row. Reconnect to select a Zoho organization.`);
     return {
       ok: false,
       status: 'failed',
@@ -687,8 +731,10 @@ export async function runZohoFullSync(opts: {
   }
 
   // Get a valid access token (auto-refreshes if expired)
+  console.log(`[zoho-sync] acquiring access token (auto-refresh if expired)…`);
   const tokenResult = await getValidAccessToken(opts.organizationId, resolvedUserId);
   if (!tokenResult.accessToken) {
+    console.error(`[zoho-sync] FAILED — getValidAccessToken returned null: ${tokenResult.error}`);
     return {
       ok: false,
       status: 'failed',
@@ -838,6 +884,8 @@ export async function runZohoFullSync(opts: {
     const status: SyncStatus = hadError ? (totalImported + totalUpdated > 0 ? 'partial' : 'failed') : 'completed';
     const completedAt = new Date();
     const durationMs = Date.now() - startTime;
+
+    console.log(`[zoho-sync] ═══ SYNC ${status.toUpperCase()} ═══ fetched=${totalFetched} imported=${totalImported} updated=${totalUpdated} failed=${totalFailed} duration=${durationMs}ms`);
 
     await db.zohoSyncLog.update({
       where: { id: syncLog.id },

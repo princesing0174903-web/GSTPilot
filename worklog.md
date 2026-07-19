@@ -6953,3 +6953,36 @@ Files Modified/Created (summary):
 - 19 component files (green leak fixes — see UI-POLISH-AUDIT worklog entry for full list)
 - 4 button-offender files (raw Tailwind → shadcn Button)
 - 3 chart component files (palette upgrade)
+
+---
+Task ID: oracle-brain-build
+Agent: main
+Task: Fix invoices/returns UI (text invisible on white bg) + build Oracle AI Brain (real chat + tools + memory)
+
+Work Log:
+- Fixed build error: created src/lib/gstpilot-data/local-workspace.ts with isLocalOrgId() and shouldSkipFirestore() exports
+- Built Oracle Brain backend:
+  - src/lib/oracle/brain/tools.ts — 12 tools (getBusinessSnapshot, queryInvoices, queryCustomers, queryExpenses, queryPayments, getGSTStatus, getOverdueCustomers, getCashflowAnalysis, createInvoice, sendReminder, recallMemory, saveMemory) with fenced JSON tool-call protocol
+  - src/lib/oracle/brain/memory.ts — persistent workspace memory (save/recall/list/delete + auto-extract facts via LLM)
+  - src/app/api/oracle/brain/route.ts — streaming SSE chat API with tool-calling loop (max 4 iterations), injects live business snapshot + memory into system prompt
+  - src/app/api/oracle/brain/sessions/route.ts — list/create sessions (OracleAISession model)
+  - src/app/api/oracle/brain/sessions/[id]/route.ts — get messages / delete session
+  - src/app/api/oracle/brain/memory/route.ts — list/add/delete memory facts
+- Built Oracle Brain frontend:
+  - src/components/oracle/OracleBrain.tsx — ChatGPT Enterprise-style UI: sidebar (sessions + memory panel), streaming chat with tool-call cards, welcome screen with 6 suggested prompts, skill chips, markdown rendering
+  - Wired into DashboardViews.tsx replacing legacy OracleBrainDashboard
+- Fixed invoices page UI (src/components/invoices/InvoiceWorkspacePage.tsx):
+  - Replaced white bg gradient → bg-background, bg-white → bg-zinc-900
+  - Replaced all light text (text-slate-900/700/600/500/300 → text-zinc-100/200/300/400/500)
+  - Replaced text-emerald/amber/sky/blue/red/orange-700/600/500 → 400, -800 → 300, -50 → 100
+  - Replaced bg-*-50 → bg-*-500/10, border-*-200 → border-*-500/30
+  - Used sed with \b word boundaries to avoid bg-emerald-50 matching inside bg-emerald-500
+- Fixed returns page UI (src/components/returns/ReturnsPage.tsx):
+  - Same comprehensive dark-theme conversion including green→emerald mapping, bg-*-100→500/15, bg-*-200→500/20
+  - Replaced emerald gradient header, all bg-white (9), text-green-800, text-red-800
+
+Stage Summary:
+- Build error FIXED (local-workspace.ts created, server returns 200)
+- Oracle Brain: real AI chat with streaming, 12 tools reading live Prisma data, persistent memory, tool-call cards in UI
+- Invoices + Returns pages: converted from light (white bg, dark text = invisible) to dark theme matching rest of app
+- Pending: Agent Browser verification of all 3 (invoices, returns, oracle)

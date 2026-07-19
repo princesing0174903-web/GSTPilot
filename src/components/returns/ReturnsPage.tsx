@@ -190,29 +190,29 @@ const KANBAN_COLUMNS: {
     key: 'draft',
     label: 'Draft',
     borderTopColor: 'border-t-slate-400',
-    bgColor: 'bg-slate-50',
-    headerBg: 'bg-slate-100/80',
-    countBadgeClass: 'bg-slate-200 text-slate-700',
-    icon: <FileText className="size-4 text-slate-500" />,
+    bgColor: 'bg-zinc-900',
+    headerBg: 'bg-zinc-900/80',
+    countBadgeClass: 'bg-zinc-800 text-zinc-200',
+    icon: <FileText className="size-4 text-zinc-400" />,
     emptyText: 'No draft returns',
   },
   {
     key: 'ready',
     label: 'Ready to File',
     borderTopColor: 'border-t-emerald-500',
-    bgColor: 'bg-emerald-50',
-    headerBg: 'bg-emerald-100/80',
-    countBadgeClass: 'bg-emerald-200 text-emerald-800',
-    icon: <Zap className="size-4 text-emerald-600" />,
+    bgColor: 'bg-emerald-500/10',
+    headerBg: 'bg-emerald-500/15/80',
+    countBadgeClass: 'bg-emerald-500/20 text-emerald-300',
+    icon: <Zap className="size-4 text-emerald-400" />,
     emptyText: 'No returns ready to file',
   },
   {
     key: 'filed',
     label: 'Filed',
     borderTopColor: 'border-t-green-600',
-    bgColor: 'bg-green-50',
-    headerBg: 'bg-green-100/80',
-    countBadgeClass: 'bg-green-200 text-green-800',
+    bgColor: 'bg-emerald-500/10',
+    headerBg: 'bg-emerald-500/15/80',
+    countBadgeClass: 'bg-emerald-500/20 text-emerald-300',
     icon: <CheckCircle2 className="size-4 text-green-600" />,
     emptyText: 'No filed returns yet',
   },
@@ -220,9 +220,9 @@ const KANBAN_COLUMNS: {
     key: 'attention',
     label: 'Requires Attention',
     borderTopColor: 'border-t-red-500',
-    bgColor: 'bg-red-50',
-    headerBg: 'bg-red-100/80',
-    countBadgeClass: 'bg-red-200 text-red-800',
+    bgColor: 'bg-red-500/10',
+    headerBg: 'bg-red-500/15/80',
+    countBadgeClass: 'bg-red-500/20 text-red-300',
     icon: <AlertTriangle className="size-4 text-red-500" />,
     emptyText: 'No issues found',
   },
@@ -277,7 +277,7 @@ function getAttentionSummary(ret: ReturnItem): string {
 
 function getReturnTypeBadgeClass(returnType: string): string {
   if (returnType === 'GSTR-1') return 'border-teal-200 bg-teal-50 text-teal-700';
-  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
 }
 
 function getClientName(clientId: string, clients: ClientItem[]): string {
@@ -779,7 +779,7 @@ export default function ReturnsPage() {
         className="cursor-pointer"
         onClick={() => handleCardClick(ret)}
       >
-        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+        <Card className="border shadow-sm bg-zinc-900 transition-shadow hover:shadow-md">
           <CardContent className="p-3.5 space-y-2.5">
             <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
             <div className="flex items-center gap-1.5">
@@ -794,7 +794,7 @@ export default function ReturnsPage() {
             </div>
             {ret.issuesFound > 0 && (
               <div className="flex items-center gap-1">
-                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 font-medium">
+                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/15 font-medium">
                   <AlertCircle className="size-2.5 mr-0.5" />
                   {ret.issuesFound} issues
                 </Badge>
@@ -803,7 +803,7 @@ export default function ReturnsPage() {
             <Button
               size="sm"
               variant="outline"
-              className="w-full h-7 text-xs gap-1.5 border-slate-300 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50"
+              className="w-full h-7 text-xs gap-1.5 border-zinc-700 hover:border-emerald-400 hover:text-emerald-400 hover:bg-emerald-500/10"
               onClick={(e) => { e.stopPropagation(); handlePrepare(ret); }}
             >
               <ArrowRight className="size-3" />
@@ -828,7 +828,7 @@ export default function ReturnsPage() {
         className="cursor-pointer"
         onClick={() => handleCardClick(ret)}
       >
-        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+        <Card className="border shadow-sm bg-zinc-900 transition-shadow hover:shadow-md">
           <CardContent className="p-3.5 space-y-2.5">
             <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
             <div className="flex items-center gap-1.5">
@@ -838,7 +838,7 @@ export default function ReturnsPage() {
               <span className="text-[11px] text-muted-foreground">{periodLabel}</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-bold text-emerald-700">{formatCurrency(ret.totalTax)}</span>
+              <span className="text-lg font-bold text-emerald-400">{formatCurrency(ret.totalTax)}</span>
               <span className="text-[10px] text-muted-foreground">total tax</span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -871,7 +871,7 @@ export default function ReturnsPage() {
         className="cursor-pointer"
         onClick={() => handleCardClick(ret)}
       >
-        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md">
+        <Card className="border shadow-sm bg-zinc-900 transition-shadow hover:shadow-md">
           <CardContent className="p-3.5 space-y-2.5">
             <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
             <div className="flex items-center gap-1.5">
@@ -880,9 +880,9 @@ export default function ReturnsPage() {
               </Badge>
             </div>
             {ret.acknowledgmentNumber && (
-              <div className="rounded-md bg-green-50 border border-green-100 px-2.5 py-1.5">
+              <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5">
                 <p className="text-[10px] text-green-600 font-medium">ARN</p>
-                <p className="text-xs font-mono font-semibold text-green-800">{ret.acknowledgmentNumber}</p>
+                <p className="text-xs font-mono font-semibold text-emerald-300">{ret.acknowledgmentNumber}</p>
               </div>
             )}
             {ret.filedDate && (
@@ -898,7 +898,7 @@ export default function ReturnsPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+              className="h-6 px-2 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
               onClick={(e) => { e.stopPropagation(); handleDownloadJSON(ret); }}
             >
               <Download className="size-3" />
@@ -922,7 +922,7 @@ export default function ReturnsPage() {
         className="cursor-pointer"
         onClick={() => handleCardClick(ret)}
       >
-        <Card className="border shadow-sm bg-white transition-shadow hover:shadow-md border-l-4 border-l-red-400">
+        <Card className="border shadow-sm bg-zinc-900 transition-shadow hover:shadow-md border-l-4 border-l-red-400">
           <CardContent className="p-3.5 space-y-2.5">
             <p className="text-sm font-semibold truncate leading-tight">{clientName}</p>
             <div className="flex items-center gap-1.5">
@@ -930,8 +930,8 @@ export default function ReturnsPage() {
                 {ret.returnType}
               </Badge>
             </div>
-            <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700">
+            <div className="rounded-md bg-red-500/10 border border-red-500/20 px-2.5 py-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400">
                 <AlertTriangle className="size-3 shrink-0" />
                 <span>{issueSummary}</span>
               </div>
@@ -939,7 +939,7 @@ export default function ReturnsPage() {
             <Button
               size="sm"
               variant="outline"
-              className="w-full h-7 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+              className="w-full h-7 text-xs gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/40"
               onClick={(e) => {
                 e.stopPropagation();
                 toast.info('Navigate to Reconciliation to fix issues');
@@ -951,7 +951,7 @@ export default function ReturnsPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              className="h-6 px-2 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               onClick={(e) => { e.stopPropagation(); handleCardClick(ret); }}
             >
               <Eye className="size-3" />
@@ -983,7 +983,7 @@ export default function ReturnsPage() {
         variants={columnEnter}
         initial="hidden"
         animate="show"
-        className={`flex flex-col rounded-xl border-t-4 ${colConfig.borderTopColor} ${colConfig.bgColor} border border-slate-200/60 min-h-0`}
+        className={`flex flex-col rounded-xl border-t-4 ${colConfig.borderTopColor} ${colConfig.bgColor} border border-zinc-800/60 min-h-0`}
       >
         <div className={`flex items-center justify-between px-3.5 py-3 ${colConfig.headerBg} rounded-t-[8px] shrink-0`}>
           <div className="flex items-center gap-2">
@@ -1000,7 +1000,7 @@ export default function ReturnsPage() {
           <div className="p-2.5 space-y-2.5">
             {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="size-12 rounded-full bg-white/60 flex items-center justify-center mb-2">
+                <div className="size-12 rounded-full bg-zinc-900/60 flex items-center justify-center mb-2">
                   {React.cloneElement(colConfig.icon as React.ReactElement, { className: 'size-5 opacity-25' })}
                 </div>
                 <p className="text-xs text-muted-foreground/70">{colConfig.emptyText}</p>
@@ -1029,7 +1029,7 @@ export default function ReturnsPage() {
     return (
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
-          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-50/60 to-transparent">
+          <SheetHeader className="p-6 pb-4 border-b bg-gradient-to-b from-emerald-500/10 to-transparent">
             <SheetTitle className="text-lg font-bold">{clientName}</SheetTitle>
             <SheetDescription className="text-sm font-mono">{clientGstin}</SheetDescription>
             <div className="flex items-center gap-2 mt-1">
@@ -1038,7 +1038,7 @@ export default function ReturnsPage() {
               </Badge>
               <Badge
                 variant="outline"
-                className={`text-xs ${FILING_STATUS_CONFIG[ret.status]?.bgColor ?? 'bg-slate-100'} ${FILING_STATUS_CONFIG[ret.status]?.color ?? 'text-slate-700'}`}
+                className={`text-xs ${FILING_STATUS_CONFIG[ret.status]?.bgColor ?? 'bg-zinc-900'} ${FILING_STATUS_CONFIG[ret.status]?.color ?? 'text-zinc-200'}`}
               >
                 {FILING_STATUS_CONFIG[ret.status]?.label ?? ret.status}
               </Badge>
@@ -1063,7 +1063,7 @@ export default function ReturnsPage() {
                       {i > 0 && (
                         <div
                           className={`flex-1 h-0.5 mx-1 rounded-full ${
-                            isCompleted && !isReopened ? 'bg-emerald-400' : 'bg-slate-200'
+                            isCompleted && !isReopened ? 'bg-emerald-400' : 'bg-zinc-800'
                           }`}
                         />
                       )}
@@ -1071,12 +1071,12 @@ export default function ReturnsPage() {
                         <div
                           className={`flex size-7 items-center justify-center rounded-full shrink-0 ${
                             isReopened
-                              ? 'bg-red-100 text-red-500 ring-2 ring-red-200'
+                              ? 'bg-red-500/15 text-red-500 ring-2 ring-red-200'
                               : isCompleted
                               ? 'bg-emerald-600 text-white'
                               : isCurrent
-                              ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300'
-                              : 'bg-slate-100 text-slate-400'
+                              ? 'bg-emerald-500/15 text-emerald-400 ring-2 ring-emerald-300'
+                              : 'bg-zinc-900 text-slate-400'
                           }`}
                         >
                           {isCompleted && !isReopened ? (
@@ -1090,7 +1090,7 @@ export default function ReturnsPage() {
                         <span
                           className={`text-[10px] font-medium whitespace-nowrap ${
                             isCompleted && !isReopened
-                              ? 'text-emerald-700'
+                              ? 'text-emerald-400'
                               : isReopened
                               ? 'text-red-600'
                               : 'text-muted-foreground'
@@ -1109,13 +1109,13 @@ export default function ReturnsPage() {
 
             {/* ── Key Metrics ──────────────────────────────────────── */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-slate-50 p-3 text-center">
+              <div className="rounded-lg bg-zinc-900 p-3 text-center">
                 <p className="text-[10px] text-muted-foreground">Invoices</p>
                 <p className="text-lg font-bold">{ret.totalInvoices}</p>
               </div>
-              <div className="rounded-lg bg-emerald-50 p-3 text-center">
+              <div className="rounded-lg bg-emerald-500/10 p-3 text-center">
                 <p className="text-[10px] text-muted-foreground">Taxable Value</p>
-                <p className="text-sm font-bold text-emerald-700">{formatCurrency(ret.totalTaxableValue)}</p>
+                <p className="text-sm font-bold text-emerald-400">{formatCurrency(ret.totalTaxableValue)}</p>
               </div>
               <div className="rounded-lg bg-teal-50 p-3 text-center">
                 <p className="text-[10px] text-muted-foreground">Total Tax</p>
@@ -1131,29 +1131,29 @@ export default function ReturnsPage() {
                 <AlertTriangle className="size-3" />
                 Issues
               </h4>
-              <div className="rounded-lg border bg-white p-3.5 space-y-2">
+              <div className="rounded-lg border bg-zinc-900 p-3.5 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Critical Errors</span>
-                  <span className={`font-medium ${ret.criticalErrors > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  <span className={`font-medium ${ret.criticalErrors > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {ret.criticalErrors}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Warnings</span>
-                  <span className={`font-medium ${ret.warnings > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  <span className={`font-medium ${ret.warnings > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
                     {ret.warnings}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Total Issues</span>
-                  <span className={`font-medium ${ret.issuesFound > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  <span className={`font-medium ${ret.issuesFound > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
                     {ret.issuesFound}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Ready for Filing</span>
-                  <span className="font-medium text-emerald-700">{ret.readyForFiling}</span>
+                  <span className="font-medium text-emerald-400">{ret.readyForFiling}</span>
                 </div>
               </div>
             </div>
@@ -1166,7 +1166,7 @@ export default function ReturnsPage() {
                 <Info className="size-3" />
                 Tax Breakdown
               </h4>
-              <div className="rounded-lg border bg-white p-3.5 space-y-2.5">
+              <div className="rounded-lg border bg-zinc-900 p-3.5 space-y-2.5">
                 {(() => {
                   const total = ret.totalTax;
                   const cgst = Math.round(total * 0.4);
@@ -1189,7 +1189,7 @@ export default function ReturnsPage() {
                       <Separator />
                       <div className="flex items-center justify-between text-sm font-bold">
                         <span>Total Tax</span>
-                        <span className="text-emerald-700">{formatCurrency(total)}</span>
+                        <span className="text-emerald-400">{formatCurrency(total)}</span>
                       </div>
                     </>
                   );
@@ -1207,11 +1207,11 @@ export default function ReturnsPage() {
                     <ShieldCheck className="size-3" />
                     Filing Details
                   </h4>
-                  <div className="rounded-lg border bg-green-50 p-3.5 space-y-2">
+                  <div className="rounded-lg border bg-emerald-500/10 p-3.5 space-y-2">
                     {ret.acknowledgmentNumber && (
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">ARN</span>
-                        <span className="font-mono font-semibold text-green-800">{ret.acknowledgmentNumber}</span>
+                        <span className="font-mono font-semibold text-emerald-300">{ret.acknowledgmentNumber}</span>
                       </div>
                     )}
                     {ret.filedDate && (
@@ -1252,7 +1252,7 @@ export default function ReturnsPage() {
               {column === 'filed' && (
                 <Button
                   variant="outline"
-                  className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  className="w-full gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                   onClick={() => handleDownloadJSON(ret)}
                 >
                   <Download className="size-4" />
@@ -1263,7 +1263,7 @@ export default function ReturnsPage() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50"
+                    className="flex-1 gap-2 border-red-500/30 text-red-400 hover:bg-red-500/10"
                     onClick={() => toast.info('Navigate to Reconciliation to fix issues')}
                   >
                     <Wrench className="size-4" />
@@ -1380,7 +1380,7 @@ export default function ReturnsPage() {
           variants={fadeInUp}
           initial="hidden"
           animate="show"
-          className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0"
+          className="flex items-center justify-between px-4 md:px-6 py-4 border-b bg-zinc-900 shrink-0"
         >
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
@@ -1425,11 +1425,11 @@ export default function ReturnsPage() {
         variants={fadeInUp}
         initial="hidden"
         animate="show"
-        className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-4 border-b bg-white shrink-0 gap-3"
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-4 border-b bg-zinc-900 shrink-0 gap-3"
       >
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-semibold hover:bg-emerald-100">
+          <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-xs font-semibold hover:bg-emerald-500/15">
             {returns.length} return{returns.length !== 1 ? 's' : ''}
           </Badge>
         </div>
@@ -1516,11 +1516,11 @@ export default function ReturnsPage() {
                   <div key={metric.label} className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-medium text-muted-foreground">{metric.label}</span>
-                      <span className={`text-[11px] font-bold ${metric.value > 80 ? 'text-emerald-700' : metric.value > 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                      <span className={`text-[11px] font-bold ${metric.value > 80 ? 'text-emerald-400' : metric.value > 50 ? 'text-amber-400' : 'text-red-400'}`}>
                         {metric.value}%
                       </span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-1.5 rounded-full bg-zinc-900 overflow-hidden">
                       <motion.div
                         className={`h-full rounded-full ${metric.value > 80 ? 'bg-emerald-500' : metric.value > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
                         initial={{ width: 0 }}
@@ -1549,12 +1549,12 @@ export default function ReturnsPage() {
           transition={{ duration: 0.3, delay: 0.2 }}
           className="px-4 md:px-6 pt-3"
         >
-          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5">
+          <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/10/60 px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center size-7 rounded-full bg-emerald-100">
-                <Send className="size-3.5 text-emerald-700" />
+              <div className="flex items-center justify-center size-7 rounded-full bg-emerald-500/15">
+                <Send className="size-3.5 text-emerald-400" />
               </div>
-              <span className="text-sm font-medium text-emerald-800">
+              <span className="text-sm font-medium text-emerald-300">
                 {kanbanData.ready.length} return{kanbanData.ready.length !== 1 ? 's' : ''} ready to file
               </span>
             </div>
@@ -1562,7 +1562,7 @@ export default function ReturnsPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                className="h-8 text-xs gap-1.5 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
                 onClick={() => kanbanData.ready.forEach((r) => handleDownloadJSON(r))}
               >
                 <FileOutput className="size-3.5" />

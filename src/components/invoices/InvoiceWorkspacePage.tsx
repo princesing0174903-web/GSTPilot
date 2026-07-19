@@ -117,10 +117,10 @@ const staggerItem = {
 // ─── Status Badge Configs ─────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  filed: { label: 'Filed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+  draft: { label: 'Draft', className: 'bg-zinc-900 text-zinc-200 border-zinc-800' },
+  approved: { label: 'Approved', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+  filed: { label: 'Filed', className: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+  cancelled: { label: 'Cancelled', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
 };
 
 // The Prisma `Invoice.status` column is a free-form String and the Invoice
@@ -128,17 +128,17 @@ const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> 
 // so the table doesn't render a blank status pill.
 const STATUS_BADGE_EXTENDED: Record<string, { label: string; className: string }> = {
   ...STATUS_BADGE,
-  issued: { label: 'Issued', className: 'bg-sky-50 text-sky-700 border-sky-200' },
-  paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  partially_paid: { label: 'Partial', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-  overdue: { label: 'Overdue', className: 'bg-red-50 text-red-700 border-red-200' },
+  issued: { label: 'Issued', className: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
+  paid: { label: 'Paid', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+  partially_paid: { label: 'Partial', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  overdue: { label: 'Overdue', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
 };
 
 const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
-  low: { label: 'Low', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  medium: { label: 'Medium', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-  high: { label: 'High', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-  critical: { label: 'Critical', className: 'bg-red-50 text-red-700 border-red-200' },
+  low: { label: 'Low', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+  medium: { label: 'Medium', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  high: { label: 'High', className: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
+  critical: { label: 'Critical', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
 };
 
 // ─── Create Invoice dialog helpers ────────────────────────────────────────────
@@ -424,7 +424,7 @@ export default function InvoiceWorkspacePage() {
   // ── Empty state when no invoices exist ──
   if (invoices.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+      <div className="min-h-screen bg-background">
         <div className="space-y-6 p-4 md:p-6 lg:p-8">
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -433,7 +433,7 @@ export default function InvoiceWorkspacePage() {
             className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
                 Invoice Workspace
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -499,22 +499,22 @@ export default function InvoiceWorkspacePage() {
       title: 'Total Invoices',
       value: formatNumber(summary.total),
       icon: FileText,
-      color: 'text-slate-600',
-      bgColor: 'bg-slate-50',
+      color: 'text-zinc-300',
+      bgColor: 'bg-zinc-900',
     },
     {
       title: 'Approved',
       value: formatNumber(summary.approved),
       icon: CheckCircle2,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50',
+      color: 'text-emerald-400',
+      bgColor: 'bg-emerald-500/10',
     },
     {
       title: 'Pending',
       value: formatNumber(summary.pending),
       icon: Clock,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/10',
     },
     {
       title: 'Tax Volume',
@@ -527,13 +527,13 @@ export default function InvoiceWorkspacePage() {
       title: 'Risk Items',
       value: formatNumber(summary.riskItems),
       icon: ShieldAlert,
-      color: summary.riskItems > 0 ? 'text-red-600' : 'text-slate-600',
-      bgColor: summary.riskItems > 0 ? 'bg-red-50' : 'bg-slate-50',
+      color: summary.riskItems > 0 ? 'text-red-600' : 'text-zinc-300',
+      bgColor: summary.riskItems > 0 ? 'bg-red-500/10' : 'bg-zinc-900',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
+    <div className="min-h-screen bg-background">
       <div className="space-y-6 p-4 md:p-6 lg:p-8">
         {/* ── Header ── */}
         <motion.div
@@ -543,7 +543,7 @@ export default function InvoiceWorkspacePage() {
           className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
               Invoice Workspace
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -587,20 +587,20 @@ export default function InvoiceWorkspacePage() {
 
         {/* ── Create Invoice CTA (replaces Firebase Storage upload area) ── */}
         <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-          <Card className="border-2 border-dashed border-slate-200 bg-white">
+          <Card className="border-2 border-dashed border-zinc-800 bg-zinc-900">
             <CardContent className="p-6">
               <button
                 type="button"
                 onClick={openCreateDialog}
                 className="flex w-full flex-col items-center gap-3 text-center focus:outline-none"
               >
-                <div className="flex items-center justify-center size-12 rounded-xl bg-emerald-50">
-                  <CalendarPlus className="size-6 text-emerald-600" />
+                <div className="flex items-center justify-center size-12 rounded-xl bg-emerald-500/10">
+                  <CalendarPlus className="size-6 text-emerald-400" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     Create a new invoice, or{' '}
-                    <span className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2">
+                    <span className="text-emerald-400 hover:text-emerald-400 font-semibold underline underline-offset-2">
                       get started
                     </span>
                   </p>
@@ -626,11 +626,11 @@ export default function InvoiceWorkspacePage() {
               placeholder="Search by invoice # or buyer name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-white"
+              className="pl-9 bg-zinc-900"
             />
           </div>
           <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger className="w-full sm:w-[180px] bg-white">
+            <SelectTrigger className="w-full sm:w-[180px] bg-zinc-900">
               <SelectValue placeholder="All Clients" />
             </SelectTrigger>
             <SelectContent>
@@ -643,7 +643,7 @@ export default function InvoiceWorkspacePage() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+            <SelectTrigger className="w-full sm:w-[150px] bg-zinc-900">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent>
@@ -656,7 +656,7 @@ export default function InvoiceWorkspacePage() {
             </SelectContent>
           </Select>
           <Select value={riskFilter} onValueChange={setRiskFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+            <SelectTrigger className="w-full sm:w-[150px] bg-zinc-900">
               <SelectValue placeholder="All Risk" />
             </SelectTrigger>
             <SelectContent>
@@ -668,7 +668,7 @@ export default function InvoiceWorkspacePage() {
             </SelectContent>
           </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
+            <SelectTrigger className="w-full sm:w-[150px] bg-zinc-900">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
@@ -686,7 +686,7 @@ export default function InvoiceWorkspacePage() {
             <CardContent className="p-0">
               {filteredInvoices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Inbox className="size-10 text-slate-300 mb-3" />
+                  <Inbox className="size-10 text-zinc-500 mb-3" />
                   <p className="text-sm font-medium text-foreground">No invoices match your filters</p>
                   <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filter criteria</p>
                 </div>
@@ -694,7 +694,7 @@ export default function InvoiceWorkspacePage() {
                 <ScrollArea className="max-h-[600px]">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-slate-50/50">
+                      <TableRow className="bg-zinc-900/50">
                         <TableHead className="text-xs font-semibold">Invoice #</TableHead>
                         <TableHead className="text-xs font-semibold">Date</TableHead>
                         <TableHead className="text-xs font-semibold">Client</TableHead>
@@ -734,7 +734,7 @@ export default function InvoiceWorkspacePage() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, x: -20 }}
                               transition={{ duration: 0.2 }}
-                              className="hover:bg-slate-50/50 border-b transition-colors"
+                              className="hover:bg-zinc-900/50 border-b transition-colors"
                             >
                               <TableCell>
                                 <div className="flex flex-col">
@@ -758,7 +758,7 @@ export default function InvoiceWorkspacePage() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge variant="outline" className="text-[10px] font-medium bg-slate-50">
+                                <Badge variant="outline" className="text-[10px] font-medium bg-zinc-900">
                                   {inv.invoiceType}
                                 </Badge>
                               </TableCell>
@@ -787,7 +787,7 @@ export default function InvoiceWorkspacePage() {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                      className="h-7 px-2 text-emerald-400 hover:text-emerald-400 hover:bg-emerald-500/10"
                                       onClick={() => handleApprove(inv.id, inv.invoiceNumber)}
                                       disabled={isActionLoading}
                                     >
@@ -802,7 +802,7 @@ export default function InvoiceWorkspacePage() {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                      className="h-7 px-2 text-red-400 hover:text-red-600 hover:bg-red-500/10"
                                       onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
                                       disabled={isActionLoading}
                                     >
@@ -939,7 +939,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
             <div className="space-y-2">
               <Label htmlFor="inv-client">Client *</Label>
               <Select value={formClient} onValueChange={setFormClient}>
-                <SelectTrigger id="inv-client" className="bg-white">
+                <SelectTrigger id="inv-client" className="bg-zinc-900">
                   <SelectValue placeholder={
                     clientsLoading ? 'Loading clients…' : 'Select a client'
                   } />
@@ -958,7 +958,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                 </SelectContent>
               </Select>
               {clients.length === 0 && !clientsLoading && (
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-amber-400">
                   You need at least one client before you can create an invoice.
                 </p>
               )}
@@ -970,7 +970,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                 value={sellerGstin ?? ''}
                 readOnly
                 placeholder="No seller GSTIN set on your organization"
-                className="bg-slate-50 text-muted-foreground"
+                className="bg-zinc-900 text-muted-foreground"
               />
               <p className="text-xs text-muted-foreground">
                 Pulled from your organization profile.
@@ -983,7 +983,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                 type="date"
                 value={formInvoiceDate}
                 onChange={(e) => setFormInvoiceDate(e.target.value)}
-                className="bg-white"
+                className="bg-zinc-900"
               />
             </div>
             <div className="space-y-2">
@@ -993,7 +993,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                 type="date"
                 value={formDueDate}
                 onChange={(e) => setFormDueDate(e.target.value)}
-                className="bg-white"
+                className="bg-zinc-900"
               />
             </div>
           </div>
@@ -1014,8 +1014,8 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
               </Button>
             </div>
 
-            <div className="rounded-lg border border-slate-200 overflow-hidden">
-              <div className="grid grid-cols-12 gap-2 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="rounded-lg border border-zinc-800 overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 bg-zinc-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <div className="col-span-5">Description</div>
                 <div className="col-span-2">HSN</div>
                 <div className="col-span-1 text-right">Qty</div>
@@ -1035,7 +1035,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         value={item.description}
                         onChange={(e) => updateLineItem(idx, 'description', e.target.value)}
                         placeholder="Item or service description"
-                        className="h-8 bg-white text-sm"
+                        className="h-8 bg-zinc-900 text-sm"
                       />
                     </div>
                     <div className="col-span-2">
@@ -1043,7 +1043,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         value={item.hsnCode}
                         onChange={(e) => updateLineItem(idx, 'hsnCode', e.target.value)}
                         placeholder="HSN"
-                        className="h-8 bg-white text-sm"
+                        className="h-8 bg-zinc-900 text-sm"
                       />
                     </div>
                     <div className="col-span-1">
@@ -1053,7 +1053,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         step="1"
                         value={item.quantity}
                         onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
-                        className="h-8 bg-white text-sm text-right"
+                        className="h-8 bg-zinc-900 text-sm text-right"
                       />
                     </div>
                     <div className="col-span-2">
@@ -1063,7 +1063,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         step="0.01"
                         value={item.unitPrice}
                         onChange={(e) => updateLineItem(idx, 'unitPrice', e.target.value)}
-                        className="h-8 bg-white text-sm text-right"
+                        className="h-8 bg-zinc-900 text-sm text-right"
                       />
                     </div>
                     <div className="col-span-1">
@@ -1071,7 +1071,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         value={item.gstRate}
                         onValueChange={(v) => updateLineItem(idx, 'gstRate', v)}
                       >
-                        <SelectTrigger className="h-8 bg-white text-sm px-2">
+                        <SelectTrigger className="h-8 bg-zinc-900 text-sm px-2">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1086,7 +1086,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-500/10"
                         onClick={() => removeLineItem(idx)}
                         disabled={lineItems.length === 1}
                         aria-label="Remove line item"
@@ -1099,7 +1099,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
               </div>
 
               {/* ── Preview totals ── */}
-              <div className="bg-slate-50 px-3 py-2 border-t border-slate-200">
+              <div className="bg-zinc-900 px-3 py-2 border-t border-zinc-800">
                 <div className="flex justify-end gap-6 text-xs">
                   <div>
                     <span className="text-muted-foreground">Taxable: </span>
@@ -1111,7 +1111,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Total: </span>
-                    <span className="font-semibold text-emerald-700">{formatCurrency(previewTotals.total)}</span>
+                    <span className="font-semibold text-emerald-400">{formatCurrency(previewTotals.total)}</span>
                   </div>
                 </div>
               </div>
@@ -1127,7 +1127,7 @@ function CreateInvoiceDialog(props: CreateInvoiceDialogProps) {
               onChange={(e) => setFormNotes(e.target.value)}
               placeholder="Optional notes for this invoice (visible internally)"
               rows={3}
-              className="bg-white"
+              className="bg-zinc-900"
             />
           </div>
         </div>
@@ -1167,9 +1167,9 @@ function formatFileSize(bytes: number): string {
 
 function getFileIcon(fileName: string) {
   const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
-  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
-  return <FileText className="size-4 text-slate-500" />;
+  if (ext === 'json') return <FileJson className="size-4 text-amber-400" />;
+  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-400" />;
+  return <FileText className="size-4 text-zinc-400" />;
 }
 
 // Re-export so callers that imported the helper previously still compile.

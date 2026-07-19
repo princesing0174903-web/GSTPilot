@@ -175,7 +175,9 @@ const SmartReconciliationPage = dynamic(() => import('@/components/autonomous-fi
 const PredictiveCompliancePage = dynamic(() => import('@/components/autonomous-finance/PredictiveCompliancePage').then(m => ({ default: m.PredictiveCompliancePage })), { loading: PageLoader, ssr: false })
 const IntelligentCollectionsPage = dynamic(() => import('@/components/autonomous-finance/IntelligentCollectionsPage').then(m => ({ default: m.IntelligentCollectionsPage })), { loading: PageLoader, ssr: false })
 const OracleAIWorkspacePage = dynamic(() => import('@/components/oracle-ai/OracleAIWorkspacePage'), { loading: PageLoader, ssr: false })
-const OracleBrainDashboard = dynamic(() => import('@/components/oracle-brain/OracleBrainDashboard'), { loading: PageLoader, ssr: false })
+// OracleBrain — the real AI brain (streaming chat + tools + memory). Replaces the
+// legacy OracleBrainDashboard which was a static UI.
+const OracleBrainPage = dynamic(() => import('@/components/oracle/OracleBrain'), { loading: PageLoader, ssr: false })
 const GoogleWorkspacePage = dynamic(() => import('@/components/google-workspace/GoogleWorkspacePage'), { loading: PageLoader, ssr: false })
 const ZohoBooksPage = dynamic(() => import('@/components/zoho-books/ZohoBooksPage'), { loading: PageLoader, ssr: false })
 const EnterpriseDocumentsPage = dynamic(() => import('@/components/enterprise-network/EnterpriseDocuments'), { loading: PageLoader, ssr: false })
@@ -387,8 +389,8 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   'intelligent-collections': IntelligentCollectionsPage,
   // Phase Oracle-AI — Enterprise AI Intelligence Layer
   'oracle-intelligence': OracleAIWorkspacePage,
-  // Oracle Intelligence — The Financial Brain (Memory + Graph + Reasoning + Timeline + Command Center + Executive Dashboard)
-  'oracle-brain': OracleBrainDashboard,
+  // Oracle Intelligence — The real AI Brain (streaming chat, tools, memory, reasoning)
+  'oracle-brain': OracleBrainPage,
   // Phase Google Workspace — Enterprise Integration
   'google-workspace': GoogleWorkspacePage,
   // Phase Zoho Books — Accounting Integration (OAuth)

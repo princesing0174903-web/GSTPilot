@@ -41,6 +41,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CHART_COLORS as THEME_COLORS } from '@/lib/chart-theme';
 import type {
   ArtifactData,
   ArtifactKind,
@@ -54,7 +55,20 @@ import type {
   TableArtifactData,
 } from '@/lib/oracle-ai/types';
 
-const CHART_COLORS = ['#2563EB', '#14b8a6', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+// Chart series palette — sourced from @/lib/chart-theme so every Oracle
+// artifact chart stays aligned with the GSTPilot Infinity™ brand system
+// (blue primary, violet secondary, amber for warning, red for danger).
+// Index 0..6 keeps parity with the previous 7-color array so the modulo
+// cycling behaviour is unchanged.
+const CHART_COLORS = [
+  THEME_COLORS.primary,      // blue-600   (was #2563EB)
+  THEME_COLORS.primarySoft,  // blue-400   (was #14b8a6 teal)
+  THEME_COLORS.secondary,    // violet-500 (was #0ea5e9 sky)
+  THEME_COLORS.warning,      // amber-500  (was #f59e0b)
+  THEME_COLORS.danger,       // red-500    (was #ef4444)
+  THEME_COLORS.secondary,    // violet-500 (was #8b5cf6 violet — kept)
+  THEME_COLORS.neutral,      // slate-500  (was #ec4899 pink)
+];
 
 const KIND_ICON: Record<ArtifactKind, React.ElementType> = {
   table: TableIcon,

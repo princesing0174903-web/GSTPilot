@@ -63,7 +63,7 @@ function StockByCategoryChart() {
     acc[p.category] = (acc[p.category] ?? 0) + p.stock
     return acc
   }, {})
-  const palette = ['#2563EB', '#34d399', '#f59e0b', '#6ee7b7', '#a7f3d0', '#fbbf24', '#94a3b8', '#d1d5db']
+  const palette = ['#2563EB', '#3B82F6', '#f59e0b', '#60A5FA', '#93C5FD', '#fbbf24', '#94a3b8', '#d1d5db']
   const data = Object.entries(categoryMap).map(([label, value], i) => ({ label, value, color: palette[i % palette.length] }))
   const maxVal = Math.max(1, ...data.map(d => d.value))
   const barH = 26

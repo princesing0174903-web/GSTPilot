@@ -108,13 +108,13 @@ function StatTile({ stat }: { stat: StructuredStatRow }) {
   const tone = stat.tone ?? 'default';
   const toneClasses: Record<string, string> = {
     default: 'text-white',
-    success: 'text-emerald-400',
+    success: 'text-blue-400',
     warning: 'text-amber-400',
     danger: 'text-red-400',
   };
   const ringClasses: Record<string, string> = {
     default: 'border-white/10',
-    success: 'border-emerald-500/30',
+    success: 'border-blue-500/30',
     warning: 'border-amber-500/30',
     danger: 'border-red-500/30',
   };
@@ -160,7 +160,7 @@ function ListView({ items }: { items: StructuredListRow[] }) {
         const tone = item.tone ?? 'default';
         const valueClasses: Record<string, string> = {
           default: 'text-white',
-          success: 'text-emerald-400',
+          success: 'text-blue-400',
           warning: 'text-amber-400',
           danger: 'text-red-400',
         };
@@ -271,7 +271,7 @@ function TableView({
                       : tone === 'warning'
                         ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                         : tone === 'success'
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
                           : 'bg-white/5 text-white/60 border-white/10';
                     return (
                       <TableCell key={c.key} className={`${align} text-xs`}>
@@ -313,7 +313,7 @@ function ChartView({
   const TrendIcon = trendDirection === 'up' ? TrendingUp : trendDirection === 'down' ? TrendingDown : Minus;
   const trendColor =
     trendDirection === 'up'
-      ? 'text-emerald-400'
+      ? 'text-blue-400'
       : trendDirection === 'down'
         ? 'text-red-400'
         : 'text-white/60';
@@ -391,7 +391,7 @@ export function StructuredQueryCard({ result }: StructuredQueryCardProps) {
               className="flex h-6 w-6 items-center justify-center rounded-md"
               style={{ background: 'rgba(37,99,235,0.15)' }}
             >
-              <Icon className="h-3.5 w-3.5 text-emerald-400" />
+              <Icon className="h-3.5 w-3.5 text-blue-400" />
             </div>
             <div>
               <div className="text-xs font-semibold text-white">{result.title}</div>
@@ -404,7 +404,7 @@ export function StructuredQueryCard({ result }: StructuredQueryCardProps) {
           </div>
           <Badge
             variant="outline"
-            className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-400"
+            className="border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-400"
           >
             Structured
           </Badge>

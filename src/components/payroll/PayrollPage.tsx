@@ -78,9 +78,9 @@ const payslipStatus = [
 function PayrollBreakdownChart() {
   const data = [
     { label: 'Basic', value: 1240000, color: '#2563EB' },
-    { label: 'HRA', value: 496000, color: '#34d399' },
-    { label: 'DA', value: 248000, color: '#6ee7b7' },
-    { label: 'Allowances', value: 312780, color: '#a7f3d0' },
+    { label: 'HRA', value: 496000, color: '#3B82F6' },
+    { label: 'DA', value: 248000, color: '#60A5FA' },
+    { label: 'Allowances', value: 312780, color: '#93C5FD' },
     { label: 'PF', value: 163980, color: '#f59e0b' },
     { label: 'ESI', value: 44220, color: '#fbbf24' },
     { label: 'TDS', value: 412340, color: '#ef4444' },

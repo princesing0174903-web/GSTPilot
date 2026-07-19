@@ -3,6 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 
 /**
@@ -13,6 +14,12 @@ import type { LucideIcon } from 'lucide-react';
  * Every empty state on the Home page uses this component. Per the stabilization
  * directive (STEP 12): Illustration + Explanation + Primary Button + optional
  * Secondary Button. Never blank, never misleading.
+ *
+ * Visual styling is delegated to the `.premium-empty` CSS class in
+ * globals.css ("PREMIUM EMPTY STATES" section) — 56px icon chip, 18px title,
+ * 13px muted description, centered column, calm 220ms fade-in. The `tone`
+ * prop tints the icon chip so color cues (e.g. amber for warnings) still
+ * work without breaking the shared layout.
  *
  * Used by:
  *   - KPI cards (Revenue / Cash / Compliance) when no underlying data exists
@@ -42,15 +49,20 @@ export interface EmptyStateProps {
   tone?: 'default' | 'emerald' | 'amber' | 'cyan';
 }
 
-const toneClasses: Record<NonNullable<EmptyStateProps['tone']>, string> = {
-  default: 'accent-gradient-soft',
-  emerald: 'bg-emerald-500/10 border border-emerald-500/20',
-  amber: 'bg-amber-500/10 border border-amber-500/20',
-  cyan: 'bg-cyan-500/10 border border-cyan-500/20',
+/**
+ * Tone-specific overrides layered on top of the base `.empty-icon` chip.
+ * `default` keeps the neutral chip from globals.css; the others tint the
+ * background and icon color while preserving the shared premium layout.
+ */
+const toneIconChip: Record<NonNullable<EmptyStateProps['tone']>, string> = {
+  default: '',
+  emerald: 'bg-emerald-500/10 border-emerald-500/20',
+  amber: 'bg-amber-500/10 border-amber-500/20',
+  cyan: 'bg-cyan-500/10 border-cyan-500/20',
 };
 
-const toneIcon: Record<NonNullable<EmptyStateProps['tone']>, string> = {
-  default: 'accent-text',
+const toneIconColor: Record<NonNullable<EmptyStateProps['tone']>, string> = {
+  default: '',
   emerald: 'text-emerald-400',
   amber: 'text-amber-400',
   cyan: 'text-cyan-400',
@@ -72,50 +84,25 @@ export function EmptyState({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' as const }}
-      className={`flex flex-col items-center justify-center text-center ${
-        compact ? 'py-6 px-4' : 'py-10 px-4'
-      }`}
+      className={cn('premium-empty', compact && 'min-h-[160px] py-8')}
     >
-      <div
-        className={`flex items-center justify-center rounded-2xl ${toneClasses[tone]} ${
-          compact ? 'h-10 w-10' : 'h-14 w-14'
-        } mb-3`}
-      >
-        <Icon className={`${compact ? 'h-5 w-5' : 'h-6 w-6'} ${toneIcon[tone]}`} />
+      <div className={cn('empty-icon', toneIconChip[tone])}>
+        <Icon className={cn('h-6 w-6', toneIconColor[tone])} />
       </div>
-      <h4
-        className={`font-semibold text-foreground tracking-tight ${
-          compact ? 'text-sm' : 'text-base'
-        }`}
-      >
-        {title}
-      </h4>
-      <p
-        className={`text-muted-foreground mt-1.5 leading-relaxed max-w-[280px] ${
-          compact ? 'text-[11px]' : 'text-xs'
-        }`}
-      >
-        {description}
-      </p>
+      <div className="flex flex-col items-center space-y-2">
+        <h3 className="empty-title">{title}</h3>
+        <p className="empty-desc">{description}</p>
+      </div>
       {(primaryLabel || secondaryLabel) && (
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-          {primaryLabel && onPrimary && (
-            <Button
-              size="sm"
-              onClick={onPrimary}
-              className="accent-gradient text-white hover:opacity-90 gap-1.5 h-8"
-            >
-              {primaryLabel}
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+          {secondaryLabel && onSecondary && (
+            <Button size="sm" variant="outline" onClick={onSecondary}>
+              {secondaryLabel}
             </Button>
           )}
-          {secondaryLabel && onSecondary && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onSecondary}
-              className="border-border gap-1.5 h-8"
-            >
-              {secondaryLabel}
+          {primaryLabel && onPrimary && (
+            <Button size="sm" onClick={onPrimary}>
+              {primaryLabel}
             </Button>
           )}
         </div>

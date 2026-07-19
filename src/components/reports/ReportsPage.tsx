@@ -233,7 +233,7 @@ function buildPdfHtml(opts: {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 32px; }
     .header { border-bottom: 3px solid #2563EB; padding-bottom: 16px; margin-bottom: 24px; }
     .brand { display: flex; align-items: center; gap: 10px; }
-    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #2563EB, #14b8a6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
+    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #2563EB, #3B82F6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
     .brand-name { font-size: 18px; font-weight: 700; color: #2563EB; letter-spacing: -0.01em; }
     .brand-tag { font-size: 11px; color: #64748b; margin-top: 2px; }
     h1 { font-size: 22px; margin: 14px 0 4px; color: #0f172a; }
@@ -244,7 +244,7 @@ function buildPdfHtml(opts: {
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     table.kv th { text-align: left; width: 45%; padding: 7px 10px; color: #475569; font-weight: 500; background: #f8fafc; border: 1px solid #e2e8f0; }
     table.kv td { padding: 7px 10px; color: #0f172a; font-weight: 600; border: 1px solid #e2e8f0; }
-    table.grid th { text-align: left; padding: 8px 10px; background: #ecfdf5; color: #047857; font-weight: 600; border: 1px solid #a7f3d0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+    table.grid th { text-align: left; padding: 8px 10px; background: #eff6ff; color: #1D4ED8; font-weight: 600; border: 1px solid #bfdbfe; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
     table.grid td { padding: 7px 10px; color: #0f172a; border: 1px solid #e2e8f0; }
     table.grid tr:nth-child(even) td { background: #f8fafc; }
     .empty { text-align: center; color: #94a3b8; font-style: italic; }

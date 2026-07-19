@@ -132,7 +132,7 @@ export function OracleEvolutionPanel({ open, onClose }: Props) {
             {/* Header */}
             <header className="flex shrink-0 items-center justify-between border-b px-5 py-4" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.15), rgba(20,184,166,0.15))' }}>
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.15), rgba(59,130,246,0.15))' }}>
                   <Sparkles className="h-5 w-5 text-emerald-400" />
                 </div>
                 <div>

@@ -237,7 +237,7 @@ export function PaymentLinkActionCard({
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
           <CreditCard className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
@@ -393,7 +393,7 @@ export function PaymentLinkActionCard({
 
             {/* Delivery */}
             <section>
-              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Delivery Channels" />
+              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Delivery Channels" />
               <div className="space-y-1.5">
                 <DeliveryRow
                   icon={<Mail className="h-3.5 w-3.5" />}
@@ -518,7 +518,7 @@ export function PaymentLinkActionCard({
 
             {/* Delivery status */}
             <section>
-              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Delivery Status" />
+              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Delivery Status" />
               <div className="space-y-1.5">
                 <DeliveryStatusRow
                   icon={<Mail className="h-3.5 w-3.5" />}

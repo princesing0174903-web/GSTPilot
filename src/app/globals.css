@@ -444,7 +444,297 @@
 .dark linearGradient stop[stop-color="#10B981"],
 .dark linearGradient stop[stop-color="#059669"],
 .dark linearGradient stop[stop-color="#0d9488"],
-.dark linearGradient stop[stop-color="#06b6d4"] {
+.dark linearGradient stop[stop-color="#06b6d4"],
+.dark linearGradient stop[stop-color="#22c55e"],
+.dark linearGradient stop[stop-color="#22C55E"],
+.dark linearGradient stop[stop-color="#34d399"],
+.dark linearGradient stop[stop-color="#6ee7b7"],
+.dark linearGradient stop[stop-color="#a7f3d0"],
+.dark linearGradient stop[stop-color="#14b8a6"],
+.dark linearGradient stop[stop-color="#2dd4bf"],
+.dark linearGradient stop[stop-color="#22d3ee"],
+.dark linearGradient stop[stop-color="#00F5D4"],
+.dark linearGradient stop[stop-color="#00f5d4"] {
+  stop-color: #2563EB !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   EXTENDED GREEN NEUTRALIZATION (UI-POLISH-AUDIT)
+   Catches lighter emerald/teal/cyan/green shades + dark: variants + cyan utilities
+   + arbitrary hex classes + inline-style hex / rgba leaks the base cascade missed.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* Cyan utility classes (base cascade only covered focus:ring-cyan-*) → blue/neutral */
+.bg-cyan-50, .bg-cyan-100, .bg-cyan-200, .bg-cyan-300,
+.bg-cyan-400, .bg-cyan-500, .bg-cyan-600, .bg-cyan-700,
+.bg-cyan-800, .bg-cyan-900, .bg-cyan-950 {
+  background-color: #181818 !important;
+}
+[class*="bg-cyan-500/"], [class*="bg-cyan-400/"], [class*="bg-cyan-600/"],
+[class*="bg-cyan-100/"], [class*="bg-cyan-200/"], [class*="bg-cyan-300/"],
+[class*="bg-cyan-700/"], [class*="bg-cyan-800/"], [class*="bg-cyan-900/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+.text-cyan-400, .text-cyan-500, .text-cyan-600 {
+  color: #3B82F6 !important;
+}
+.text-cyan-300 { color: #60A5FA !important; }
+.text-cyan-700, .text-cyan-800, .text-cyan-900 { color: #FFFFFF !important; }
+[class*="text-cyan-400/"], [class*="text-cyan-500/"], [class*="text-cyan-600/"] {
+  color: #60A5FA !important;
+}
+.border-cyan-200, .border-cyan-300, .border-cyan-400, .border-cyan-500,
+.border-cyan-600, .border-cyan-700 { border-color: #222222 !important; }
+[class*="border-cyan-500/"], [class*="border-cyan-400/"],
+[class*="border-cyan-300/"], [class*="border-cyan-600/"] {
+  border-color: rgba(37, 99, 235, 0.3) !important;
+}
+.ring-cyan-400, .ring-cyan-500, [class*="ring-cyan-"] {
+  --tw-ring-color: #2563EB !important;
+}
+.shadow-cyan-200, .shadow-cyan-300, .shadow-cyan-400, .shadow-cyan-500,
+.shadow-cyan-600, .shadow-cyan-700, .shadow-cyan-800, .shadow-cyan-900,
+[class*="shadow-cyan-"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.3) !important;
+  --tw-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+.from-cyan-400, .from-cyan-500, .from-cyan-600 {
+  --tw-gradient-from: #2563EB !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.to-cyan-400, .to-cyan-500, .to-cyan-600 {
+  --tw-gradient-to: #3B82F6 !important;
+}
+.via-cyan-400, .via-cyan-500 {
+  --tw-gradient-via: #1D4ED8 !important;
+}
+
+/* All remaining emerald/green/teal opacity variants (base only had 400/500/600) */
+[class*="bg-emerald-100/"], [class*="bg-emerald-200/"], [class*="bg-emerald-300/"],
+[class*="bg-emerald-700/"], [class*="bg-emerald-800/"], [class*="bg-emerald-900/"],
+[class*="bg-green-100/"], [class*="bg-green-200/"], [class*="bg-green-300/"],
+[class*="bg-green-700/"], [class*="bg-green-800/"], [class*="bg-green-900/"],
+[class*="bg-teal-100/"], [class*="bg-teal-200/"], [class*="bg-teal-300/"],
+[class*="bg-teal-700/"], [class*="bg-teal-800/"], [class*="bg-teal-900/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+/* Light emerald/green/teal text shades (base only had 300-900) */
+.text-emerald-100, .text-emerald-200, .text-emerald-50,
+.text-green-100, .text-green-200, .text-green-50,
+.text-teal-100, .text-teal-200, .text-teal-50 {
+  color: #93C5FD !important;
+}
+.text-emerald-950, .text-green-950, .text-teal-950,
+.text-cyan-100, .text-cyan-200, .text-cyan-50, .text-cyan-950 {
+  color: #FFFFFF !important;
+}
+[class*="text-emerald-100/"], [class*="text-emerald-200/"], [class*="text-emerald-300/"],
+[class*="text-emerald-700/"], [class*="text-emerald-800/"], [class*="text-emerald-900/"],
+[class*="text-green-100/"], [class*="text-green-200/"], [class*="text-green-300/"],
+[class*="text-green-700/"], [class*="text-green-800/"], [class*="text-green-900/"],
+[class*="text-teal-100/"], [class*="text-teal-200/"], [class*="text-teal-300/"],
+[class*="text-teal-700/"], [class*="text-teal-800/"], [class*="text-teal-900/"] {
+  color: #60A5FA !important;
+}
+
+/* Remaining emerald/green/teal border shades (base only had 200-700) */
+.border-emerald-100, .border-emerald-50, .border-emerald-800, .border-emerald-900, .border-emerald-950,
+.border-green-100, .border-green-50, .border-green-800, .border-green-900, .border-green-950,
+.border-teal-100, .border-teal-50, .border-teal-800, .border-teal-900, .border-teal-950,
+.border-cyan-100, .border-cyan-50, .border-cyan-800, .border-cyan-900, .border-cyan-950 {
+  border-color: #222222 !important;
+}
+
+/* dark: prefixed variants — these generate distinct class tokens (dark\:bg-emerald-*)
+   that the base .bg-emerald-* selectors do not match. Re-apply same neutralization. */
+.dark .dark\:bg-emerald-50, .dark .dark\:bg-emerald-100, .dark .dark\:bg-emerald-200,
+.dark .dark\:bg-emerald-300, .dark .dark\:bg-emerald-400, .dark .dark\:bg-emerald-500,
+.dark .dark\:bg-emerald-600, .dark .dark\:bg-emerald-700, .dark .dark\:bg-emerald-800,
+.dark .dark\:bg-emerald-900, .dark .dark\:bg-emerald-950,
+.dark .dark\:bg-green-50, .dark .dark\:bg-green-100, .dark .dark\:bg-green-200,
+.dark .dark\:bg-green-300, .dark .dark\:bg-green-400, .dark .dark\:bg-green-500,
+.dark .dark\:bg-green-600, .dark .dark\:bg-green-700, .dark .dark\:bg-green-800,
+.dark .dark\:bg-green-900, .dark .dark\:bg-green-950,
+.dark .dark\:bg-teal-50, .dark .dark\:bg-teal-100, .dark .dark\:bg-teal-200,
+.dark .dark\:bg-teal-300, .dark .dark\:bg-teal-400, .dark .dark\:bg-teal-500,
+.dark .dark\:bg-teal-600, .dark .dark\:bg-teal-700, .dark .dark\:bg-teal-800,
+.dark .dark\:bg-teal-900, .dark .dark\:bg-teal-950,
+.dark .dark\:bg-cyan-50, .dark .dark\:bg-cyan-100, .dark .dark\:bg-cyan-200,
+.dark .dark\:bg-cyan-300, .dark .dark\:bg-cyan-400, .dark .dark\:bg-cyan-500,
+.dark .dark\:bg-cyan-600, .dark .dark\:bg-cyan-700, .dark .dark\:bg-cyan-800,
+.dark .dark\:bg-cyan-900, .dark .dark\:bg-cyan-950 {
+  background-color: #181818 !important;
+}
+.dark .dark\:text-emerald-100, .dark .dark\:text-emerald-200, .dark .dark\:text-emerald-300,
+.dark .dark\:text-emerald-400, .dark .dark\:text-emerald-500, .dark .dark\:text-emerald-600,
+.dark .dark\:text-emerald-700, .dark .dark\:text-emerald-800, .dark .dark\:text-emerald-900,
+.dark .dark\:text-green-100, .dark .dark\:text-green-200, .dark .dark\:text-green-300,
+.dark .dark\:text-green-400, .dark .dark\:text-green-500, .dark .dark\:text-green-600,
+.dark .dark\:text-green-700, .dark .dark\:text-green-800, .dark .dark\:text-green-900,
+.dark .dark\:text-teal-100, .dark .dark\:text-teal-200, .dark .dark\:text-teal-300,
+.dark .dark\:text-teal-400, .dark .dark\:text-teal-500, .dark .dark\:text-teal-600,
+.dark .dark\:text-teal-700, .dark .dark\:text-teal-800, .dark .dark\:text-teal-900,
+.dark .dark\:text-cyan-100, .dark .dark\:text-cyan-200, .dark .dark\:text-cyan-300,
+.dark .dark\:text-cyan-400, .dark .dark\:text-cyan-500, .dark .dark\:text-cyan-600,
+.dark .dark\:text-cyan-700, .dark .dark\:text-cyan-800, .dark .dark\:text-cyan-900 {
+  color: #3B82F6 !important;
+}
+.dark .dark\:border-emerald-100, .dark .dark\:border-emerald-200, .dark .dark\:border-emerald-300,
+.dark .dark\:border-emerald-400, .dark .dark\:border-emerald-500, .dark .dark\:border-emerald-600,
+.dark .dark\:border-emerald-700, .dark .dark\:border-emerald-800, .dark .dark\:border-emerald-900,
+.dark .dark\:border-green-100, .dark .dark\:border-green-200, .dark .dark\:border-green-300,
+.dark .dark\:border-green-400, .dark .dark\:border-green-500, .dark .dark\:border-green-600,
+.dark .dark\:border-green-700, .dark .dark\:border-green-800, .dark .dark\:border-green-900,
+.dark .dark\:border-teal-100, .dark .dark\:border-teal-200, .dark .dark\:border-teal-300,
+.dark .dark\:border-teal-400, .dark .dark\:border-teal-500, .dark .dark\:border-teal-600,
+.dark .dark\:border-teal-700, .dark .dark\:border-teal-800, .dark .dark\:border-teal-900,
+.dark .dark\:border-cyan-100, .dark .dark\:border-cyan-200, .dark .dark\:border-cyan-300,
+.dark .dark\:border-cyan-400, .dark .dark\:border-cyan-500, .dark .dark\:border-cyan-600,
+.dark .dark\:border-cyan-700, .dark .dark\:border-cyan-800, .dark .dark\:border-cyan-900 {
+  border-color: #222222 !important;
+}
+.dark .dark\:ring-emerald-400, .dark .dark\:ring-emerald-500,
+.dark .dark\:ring-green-400, .dark .dark\:ring-green-500,
+.dark .dark\:ring-teal-400, .dark .dark\:ring-teal-500,
+.dark .dark\:ring-cyan-400, .dark .dark\:ring-cyan-500 {
+  --tw-ring-color: #2563EB !important;
+}
+
+/* Catch-all for dark: opacity variants (e.g. dark:bg-emerald-900/30,
+   dark:text-emerald-400/80) — broadest possible neutralization */
+.dark [class*="dark\:bg-emerald-"], .dark [class*="dark\:bg-green-"],
+.dark [class*="dark\:bg-teal-"], .dark [class*="dark\:bg-cyan-"] {
+  background-color: #181818 !important;
+}
+.dark [class*="dark\:bg-emerald-"][class*="/"],
+.dark [class*="dark\:bg-green-"][class*="/"],
+.dark [class*="dark\:bg-teal-"][class*="/"],
+.dark [class*="dark\:bg-cyan-"][class*="/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+.dark [class*="dark\:text-emerald-"], .dark [class*="dark\:text-green-"],
+.dark [class*="dark\:text-teal-"], .dark [class*="dark\:text-cyan-"] {
+  color: #3B82F6 !important;
+}
+.dark [class*="dark\:text-emerald-"][class*="/"],
+.dark [class*="dark\:text-green-"][class*="/"],
+.dark [class*="dark\:text-teal-"][class*="/"],
+.dark [class*="dark\:text-cyan-"][class*="/"] {
+  color: #60A5FA !important;
+}
+.dark [class*="dark\:border-emerald-"], .dark [class*="dark\:border-green-"],
+.dark [class*="dark\:border-teal-"], .dark [class*="dark\:border-cyan-"] {
+  border-color: #222222 !important;
+}
+.dark [class*="dark\:border-emerald-"][class*="/"],
+.dark [class*="dark\:border-green-"][class*="/"],
+.dark [class*="dark\:border-teal-"][class*="/"],
+.dark [class*="dark\:border-cyan-"][class*="/"] {
+  border-color: rgba(37, 99, 235, 0.3) !important;
+}
+.dark [class*="dark\:ring-emerald-"], .dark [class*="dark\:ring-green-"],
+.dark [class*="dark\:ring-teal-"], .dark [class*="dark\:ring-cyan-"] {
+  --tw-ring-color: #2563EB !important;
+}
+
+/* Arbitrary Tailwind hex classes for lighter greens/teals/cyans NOT in base cascade */
+.dark .bg-\[\#22c55e\], .dark .bg-\[\#22C55E\], .dark .bg-\[\#34d399\],
+.dark .bg-\[\#6ee7b7\], .dark .bg-\[\#a7f3d0\], .dark .bg-\[\#d1fae5\],
+.dark .bg-\[\#2dd4bf\], .dark .bg-\[\#14b8a6\], .dark .bg-\[\#22d3ee\],
+.dark .bg-\[\#67e8f9\], .dark .bg-\[\#86efac\], .dark .bg-\[\#16a34a\],
+.dark .bg-\[\#15803d\], .dark .bg-\[\#00F5D4\], .dark .bg-\[\#00f5d4\],
+.dark .bg-\[\#0d9488\], .dark .bg-\[\#0891b2\], .dark .bg-\[\#047857\],
+.dark .bg-\[\#065f46\] {
+  background-color: #181818 !important;
+}
+.dark .text-\[\#22c55e\], .dark .text-\[\#22C55E\], .dark .text-\[\#34d399\],
+.dark .text-\[\#6ee7b7\], .dark .text-\[\#a7f3d0\], .dark .text-\[\#d1fae5\],
+.dark .text-\[\#2dd4bf\], .dark .text-\[\#14b8a6\], .dark .text-\[\#22d3ee\],
+.dark .text-\[\#67e8f9\], .dark .text-\[\#86efac\], .dark .text-\[\#16a34a\],
+.dark .text-\[\#15803d\], .dark .text-\[\#00F5D4\], .dark .text-\[\#00f5d4\],
+.dark .text-\[\#0d9488\], .dark .text-\[\#0891b2\], .dark .text-\[\#047857\],
+.dark .text-\[\#065f46\] {
+  color: #3B82F6 !important;
+}
+.dark .border-\[\#22c55e\], .dark .border-\[\#22C55E\], .dark .border-\[\#34d399\],
+.dark .border-\[\#14b8a6\], .dark .border-\[\#22d3ee\], .dark .border-\[\#00F5D4\],
+.dark .border-\[\#0d9488\], .dark .border-\[\#047857\], .dark .border-\[\#065f46\],
+.dark .border-\[\#86efac\] {
+  border-color: #222222 !important;
+}
+
+/* Inline style with lighter green/teal/cyan hex → neutral background (covers React
+   style objects whose hex codes the base cascade didn't catch) */
+.dark [style*="#22c55e"], .dark [style*="#22C55E"],
+.dark [style*="#34d399"], .dark [style*="#6ee7b7"],
+.dark [style*="#a7f3d0"], .dark [style*="#d1fae5"],
+.dark [style*="#2dd4bf"], .dark [style*="#14b8a6"],
+.dark [style*="#22d3ee"], .dark [style*="#67e8f9"],
+.dark [style*="#86efac"], .dark [style*="#16a34a"],
+.dark [style*="#15803d"], .dark [style*="#0d9488"],
+.dark [style*="#0891b2"], .dark [style*="#00F5D4"],
+.dark [style*="#00f5d4"], .dark [style*="#047857"],
+.dark [style*="#065f46"] {
+  background-color: #111111 !important;
+  background-image: none !important;
+}
+
+/* Inline style rgba() with green/teal/cyan RGB triples → blue rgba (gradient stops) */
+.dark [style*="rgba(22, 163, 74"], .dark [style*="rgba(22,163,74"],
+.dark [style*="rgba(34, 197, 94"], .dark [style*="rgba(34,197,94"],
+.dark [style*="rgba(52, 211, 153"], .dark [style*="rgba(52,211,153"],
+.dark [style*="rgba(110, 231, 183"], .dark [style*="rgba(110,231,183"],
+.dark [style*="rgba(167, 243, 208"], .dark [style*="rgba(167,243,208"],
+.dark [style*="rgba(20, 184, 166"], .dark [style*="rgba(20,184,166"],
+.dark [style*="rgba(45, 212, 191"], .dark [style*="rgba(45,212,191"],
+.dark [style*="rgba(34, 211, 238"], .dark [style*="rgba(34,211,238"],
+.dark [style*="rgba(103, 232, 249"], .dark [style*="rgba(103,232,249"],
+.dark [style*="rgba(13, 148, 136"], .dark [style*="rgba(13,148,136"],
+.dark [style*="rgba(8, 145, 178"], .dark [style*="rgba(8,145,178"],
+.dark [style*="rgba(4, 120, 87"], .dark [style*="rgba(4,120,87"],
+.dark [style*="rgba(6, 95, 70"], .dark [style*="rgba(6,95,70"],
+.dark [style*="rgba(0, 245, 212"], .dark [style*="rgba(0,245,212"] {
+  background-color: rgba(37, 99, 235, 0.1) !important;
+  background-image: none !important;
+}
+
+/* SVG fill/stroke with lighter green/teal/cyan hex → blue */
+.dark [fill="#22c55e"], .dark [fill="#22C55E"], .dark [fill="#34d399"],
+.dark [fill="#6ee7b7"], .dark [fill="#a7f3d0"], .dark [fill="#d1fae5"],
+.dark [fill="#2dd4bf"], .dark [fill="#14b8a6"], .dark [fill="#22d3ee"],
+.dark [fill="#67e8f9"], .dark [fill="#86efac"], .dark [fill="#16a34a"],
+.dark [fill="#15803d"], .dark [fill="#00F5D4"], .dark [fill="#00f5d4"],
+.dark [fill="#0d9488"], .dark [fill="#0891b2"], .dark [fill="#047857"],
+.dark [fill="#065f46"] {
+  fill: #2563EB !important;
+}
+.dark [stroke="#22c55e"], .dark [stroke="#22C55E"], .dark [stroke="#34d399"],
+.dark [stroke="#6ee7b7"], .dark [stroke="#a7f3d0"], .dark [stroke="#2dd4bf"],
+.dark [stroke="#14b8a6"], .dark [stroke="#22d3ee"], .dark [stroke="#67e8f9"],
+.dark [stroke="#86efac"], .dark [stroke="#16a34a"], .dark [stroke="#15803d"],
+.dark [stroke="#00F5D4"], .dark [stroke="#00f5d4"], .dark [stroke="#0d9488"],
+.dark [stroke="#0891b2"], .dark [stroke="#047857"], .dark [stroke="#065f46"] {
+  stroke: #2563EB !important;
+}
+
+/* SVG linearGradient stops with lighter green/teal/cyan → blue (base only covered dark shades) */
+.dark linearGradient stop[stop-color="#22c55e"],
+.dark linearGradient stop[stop-color="#22C55E"],
+.dark linearGradient stop[stop-color="#34d399"],
+.dark linearGradient stop[stop-color="#6ee7b7"],
+.dark linearGradient stop[stop-color="#a7f3d0"],
+.dark linearGradient stop[stop-color="#d1fae5"],
+.dark linearGradient stop[stop-color="#2dd4bf"],
+.dark linearGradient stop[stop-color="#14b8a6"],
+.dark linearGradient stop[stop-color="#22d3ee"],
+.dark linearGradient stop[stop-color="#67e8f9"],
+.dark linearGradient stop[stop-color="#86efac"],
+.dark linearGradient stop[stop-color="#16a34a"],
+.dark linearGradient stop[stop-color="#15803d"],
+.dark linearGradient stop[stop-color="#00F5D4"],
+.dark linearGradient stop[stop-color="#00f5d4"] {
   stop-color: #2563EB !important;
 }
 
@@ -1294,4 +1584,70 @@
 
 .dark a.text-primary:hover {
   color: #93C5FD !important;
+}
+
+/* ── FORM VALIDATION STATES ────────────────────────────────────────────────── */
+.dark input[data-error="true"],
+.dark textarea[data-error="true"],
+.dark select[data-error="true"],
+.dark .input-error {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.dark input[data-error="true"]:focus,
+.dark textarea[data-error="true"]:focus,
+.dark select[data-error="true"]:focus {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
+}
+
+.dark input[data-success="true"],
+.dark textarea[data-success="true"],
+.dark select[data-success="true"],
+.dark .input-success {
+  border-color: #22C55E !important;
+}
+
+.dark input[data-success="true"]:focus,
+.dark textarea[data-success="true"]:focus,
+.dark select[data-success="true"]:focus {
+  border-color: #22C55E !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15) !important;
+}
+
+/* ── PROFESSIONAL CHART COLORS ─────────────────────────────────────────────── */
+/* Recharts default colors mapped to brand palette */
+.dark .recharts-line-curve path[stroke="#10b981"],
+.dark .recharts-line-curve path[stroke="#22c55e"] {
+  stroke: #2563EB !important;
+}
+
+.dark .recharts-area-area path[fill="#10b981"],
+.dark .recharts-area-area path[fill="#22c55e"],
+.dark .recharts-area-area path[fill*="emerald"] {
+  fill: rgba(37, 99, 235, 0.15) !important;
+}
+
+.dark .recharts-bar-rectangle path[fill="#10b981"],
+.dark .recharts-bar-rectangle path[fill="#22c55e"] {
+  fill: #2563EB !important;
+}
+
+/* Chart legend dot polish */
+.dark .recharts-legend-item {
+  margin-right: 16px !important;
+}
+
+/* Chart cursor (hover line) subtle */
+.dark .recharts-cursor {
+  stroke: #2A2A2A !important;
+  stroke-dasharray: 3 3 !important;
+}
+
+/* Chart active dot */
+.dark .recharts-active-dot circle {
+  fill: #2563EB !important;
+  stroke: #FFFFFF !important;
+  stroke-width: 2 !important;
 }

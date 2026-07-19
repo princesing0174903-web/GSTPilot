@@ -27,7 +27,7 @@ const CAPABILITIES = [
     icon: Receipt,
     label: 'GST Expert',
     desc: 'GSTR-1/3B, ITC, e-invoicing, e-way bill, late fees',
-    color: '#00F5D4',
+    color: '#3B82F6',
   },
   {
     icon: TrendingUp,
@@ -163,7 +163,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
         className="mt-8 w-full max-w-3xl"
       >
         <div className="mb-3 flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-[#00F5D4]" />
+          <Sparkles className="h-3.5 w-3.5 text-[#3B82F6]" />
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Try asking
           </span>
@@ -181,7 +181,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
                   {s.prompt}
                 </p>
               </div>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#00F5D4]" />
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#3B82F6]" />
             </button>
           ))}
         </div>

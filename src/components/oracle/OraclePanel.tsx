@@ -95,7 +95,7 @@ const SIMULATED_ACTIVITIES: { label: string; icon: LucideIcon }[] = [
   { label: 'Oracle checking payment status…', icon: CreditCard },
 ];
 
-// ─── Tone colors (NEVER red/orange/purple per V16 spec) ───────────────────────
+// ─── Tone colors (blue accent · amber for recover · NO green/cyan) ────────────
 const TONE = {
   amber: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
   cyan: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
@@ -171,10 +171,10 @@ function LiveActivityItem({ icon: Icon, label, sublabel }: { icon: LucideIcon; l
         <div className="flex h-8 w-8 items-center justify-center rounded-xl accent-gradient-soft">
           <Icon className="h-3.5 w-3.5 accent-text" />
         </div>
-        {/* Pulsing emerald dot to show "live" */}
+        {/* Pulsing blue dot to show "live" */}
         <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3B82F6]" />
         </span>
       </div>
       <span className="min-w-0 flex-1">
@@ -358,8 +358,8 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
           </div>
           <div className="flex items-center gap-1">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
             </span>
             <span className="text-[10px] text-muted-foreground">Live · Tap to chat</span>
           </div>
@@ -419,8 +419,8 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
                     </div>
                     {/* Pulsing dot to show "live" */}
                     <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3B82F6]" />
                     </span>
                   </div>
                   <span className="text-xs text-zinc-200">{simLabel}</span>
@@ -433,9 +433,9 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
           <button
             type="button"
             onClick={() => setWorkspaceOpen(true)}
-            className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-emerald-500/30 hover:bg-emerald-500/[0.04]"
+            className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-[#2563EB]/30 hover:bg-[#2563EB]/[0.04]"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-emerald-500/20">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-[#2563EB]/20">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0 flex-1">

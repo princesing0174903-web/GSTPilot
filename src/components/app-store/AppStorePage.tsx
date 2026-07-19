@@ -1857,12 +1857,12 @@ function DeveloperPortalTab() {
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1.5 block">Pricing</label>
               <div className="grid grid-cols-2 gap-2">
-                <button className="h-9 rounded-md border border-emerald-300 bg-emerald-50 text-sm font-medium text-emerald-700">
+                <Button variant="secondary" size="sm" className="h-9 border-emerald-300 bg-emerald-50 text-emerald-700">
                   Free
-                </button>
-                <button className="h-9 rounded-md border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">
+                </Button>
+                <Button variant="outline" size="sm" className="h-9 border-slate-200 text-slate-600 hover:bg-slate-50">
                   Paid (₹/mo)
-                </button>
+                </Button>
               </div>
             </div>
             <div>

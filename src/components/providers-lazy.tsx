@@ -27,10 +27,10 @@ function ProvidersLoader() {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: 700 }}>
-        <Zap size={18} style={{ color: '#22d3ee' }} />
+        <Zap size={18} style={{ color: '#3B82F6' }} />
         <span>GSTPilot™</span>
       </div>
-      <div style={{ width: '24px', height: '24px', border: '2px solid rgba(34,211,238,0.2)', borderTopColor: '#22d3ee', borderRadius: '50%', animation: 'gstpilot-providers-spin 0.7s linear infinite' }} />
+      <div style={{ width: '24px', height: '24px', border: '2px solid rgba(59,130,246,0.2)', borderTopColor: '#3B82F6', borderRadius: '50%', animation: 'gstpilot-providers-spin 0.7s linear infinite' }} />
       <style>{`@keyframes gstpilot-providers-spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )

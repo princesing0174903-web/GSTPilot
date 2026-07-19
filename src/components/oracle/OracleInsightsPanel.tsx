@@ -37,11 +37,11 @@ const TONE_STYLE: Record<
   { dot: string; chipBg: string; chipText: string; border: string; iconColor: string }
 > = {
   positive: {
-    dot: 'bg-emerald-400',
-    chipBg: 'bg-emerald-500/[0.08]',
-    chipText: 'text-emerald-600 dark:text-emerald-400',
-    border: 'border-emerald-500/20',
-    iconColor: 'text-emerald-500',
+    dot: 'bg-blue-400',
+    chipBg: 'bg-blue-500/[0.08]',
+    chipText: 'text-blue-600 dark:text-blue-400',
+    border: 'border-blue-500/20',
+    iconColor: 'text-blue-500',
   },
   negative: {
     dot: 'bg-red-400',

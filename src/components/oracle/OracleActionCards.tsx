@@ -82,9 +82,9 @@ function ActionCard({
 }) {
   const meta = ACTION_LIBRARY[card.kind];
   const Icon = meta?.icon ?? Sparkles;
-  const colorClass = meta?.colorClass ?? 'text-emerald-500';
-  const tintClass = meta?.tintClass ?? 'bg-emerald-500/[0.10]';
-  const borderClass = meta?.borderClass ?? 'border-emerald-500/25';
+  const colorClass = meta?.colorClass ?? 'text-blue-500';
+  const tintClass = meta?.tintClass ?? 'bg-blue-500/[0.10]';
+  const borderClass = meta?.borderClass ?? 'border-blue-500/25';
 
   return (
     <motion.button
@@ -103,7 +103,7 @@ function ActionCard({
         borderClass,
         disabled
           ? 'cursor-not-allowed opacity-60'
-          : 'cursor-pointer hover:bg-card/[0.6] hover:shadow-[0_8px_32px_-12px_rgba(0,229,255,0.18)]',
+          : 'cursor-pointer hover:bg-card/[0.6] hover:shadow-[0_8px_32px_-12px_rgba(37, 99, 235,0.18)]',
       )}
     >
       {/* Glow accent on hover */}

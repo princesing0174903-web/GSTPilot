@@ -67,6 +67,7 @@ import {
   ProButton, ProBadge, ProStatusDot, ProSkeleton, ProSpinner,
   springModalTransition, modalEnterVariants, backdropVariants,
 } from '@/components/ui-pro'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -1078,8 +1079,8 @@ function SalesTab({
                   <td><StatusPill status={inv.paymentStatus} /></td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-[#60A5FA] hover:bg-white/10" title="Send"><Send className="h-3.5 w-3.5" /></button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-[#60A5FA] hover:bg-white/10" title="Send"><Send className="h-3.5 w-3.5" /></Button>
                     </div>
                   </td>
                 </tr>
@@ -1401,7 +1402,7 @@ function PurchaseTab({
                   <td><StatusPill status={b.status === 'matched' ? 'matched' : 'unmatched'} /></td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                     </div>
                   </td>
                 </tr>
@@ -2506,7 +2507,7 @@ function PayrollTab({
                   <td className="text-right tabular-nums text-emerald-400">{formatInvoiceCurrency(e.netSalary)}</td>
                   <td><StatusPill status={e.status} /></td>
                   <td>
-                    <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
+                    <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                   </td>
                 </tr>
               ))}

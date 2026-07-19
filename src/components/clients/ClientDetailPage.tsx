@@ -495,9 +495,14 @@ export default function ClientDetailPage() {
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
         {/* Breadcrumb + Back */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <button onClick={() => setCurrentView('clients')} className="hover:text-foreground transition-colors flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentView('clients')}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-3.5 w-3.5" /> Clients
-          </button>
+          </Button>
           <ChevronRight className="h-3 w-3" />
           <span className="text-foreground font-medium">{client.tradeName}</span>
         </div>

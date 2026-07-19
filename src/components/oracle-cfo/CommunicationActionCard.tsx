@@ -300,7 +300,7 @@ export function CommunicationActionCard({
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
           {createResponse?.intent.channel === 'whatsapp' ? (

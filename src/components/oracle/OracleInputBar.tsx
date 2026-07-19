@@ -1,16 +1,13 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Premium Input Bar (Phase 2 — Human Intelligence™)
+// GSTPilot Oracle — Premium Input Bar (ChatGPT-Enterprise redesign)
 //
-// Glass surface · 24px rounded corners · soft shadow · accent glow on focus.
-// Inline buttons: 📎 Attach · 🎤 Voice (push-to-talk) · 🌐 Web Search · ➤ Send
+// Rounded-2xl · #161616 bg · #2A2A2A border · blue focus ring · circular blue
+// send button. Inline buttons: 📎 Attach · 🎤 Voice · 🌐 Web Search · ➤ Send
 //
-// Phase 2 additions:
-//   • Voice mode toggle (AudioLines icon) — opens the full-screen voice overlay
-//   • Multilingual placeholder that rotates through supported languages
-//
-// Auto-resizing textarea (1 line → 6 lines). Enter to send, Shift+Enter for
+// Multilingual placeholder that rotates through supported languages. Auto-
+// resizing textarea (1 line → 6 lines). Enter to send, Shift+Enter for
 // newline. Disabled state while Oracle is responding.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -36,7 +33,7 @@ export interface OracleInputBarProps {
   isStreaming?: boolean;
   onStop?: () => void;
   placeholder?: string;
-  /** Phase 2 — open the full-screen voice conversation overlay. */
+  /** Open the full-screen voice conversation overlay. */
   onOpenVoice?: () => void;
 }
 
@@ -91,11 +88,13 @@ export function OracleInputBar({
     <div className="mx-auto w-full max-w-3xl">
       <motion.div
         layout
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         className={cn(
-          'search-glow group relative flex items-end gap-1.5 rounded-3xl border bg-card/60 p-2 backdrop-blur-2xl transition-all',
+          'group relative flex items-end gap-1.5 rounded-2xl border bg-[#161616] p-2 transition-colors',
           isFocused
-            ? 'border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] shadow-[0_8px_40px_-8px_rgba(0,229,255,0.18)]'
-            : 'border-border shadow-[0_4px_24px_-8px_rgba(0,0,0,0.18)]',
+            ? 'border-[#2A2A2A] ring-2 ring-[#2563EB]/20 shadow-[0_0_0_3px_rgba(37,99,235,0.15)]'
+            : 'border-[#2A2A2A] hover:border-[#3A3A3A]',
           disabled && 'opacity-60',
         )}
       >
@@ -110,16 +109,15 @@ export function OracleInputBar({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
           disabled={disabled}
           rows={1}
           placeholder={currentPlaceholder}
           aria-label="Ask Oracle"
-          className="flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed custom-scrollbar"
+          className="flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-[14px] text-white placeholder:text-white/40 focus:outline-none disabled:cursor-not-allowed custom-scrollbar"
+          style={{ fontFamily: 'var(--font-body, inherit)' }}
         />
 
-        {/* Phase 2 — Voice mode toggle (opens full-screen voice overlay) */}
+        {/* Voice mode toggle (opens full-screen voice overlay) */}
         {onOpenVoice && (
           <IconButton label="Voice mode" onClick={onOpenVoice}>
             <AudioLines className="h-4 w-4" />
@@ -136,7 +134,7 @@ export function OracleInputBar({
           <Globe className="h-4 w-4" />
         </IconButton>
 
-        {/* Send / Stop button */}
+        {/* Send / Stop button — circular, blue */}
         {isStreaming ? (
           <motion.button
             initial={{ scale: 0.9 }}
@@ -144,7 +142,7 @@ export function OracleInputBar({
             whileTap={{ scale: 0.95 }}
             onClick={onStop}
             aria-label="Stop generating"
-            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/90 text-white shadow-lg shadow-red-500/30 transition-colors hover:bg-red-500"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.10] text-white transition-colors hover:bg-white/[0.16]"
           >
             <Square className="h-3.5 w-3.5 fill-current" />
           </motion.button>
@@ -155,25 +153,25 @@ export function OracleInputBar({
             disabled={!value.trim() || disabled}
             aria-label="Send message"
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-2xl transition-all',
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
               value.trim() && !disabled
-                ? 'accent-gradient text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40'
-                : 'bg-card/[0.4] text-muted-foreground',
+                ? 'bg-[#2563EB] text-white hover:bg-[#1D4ED8] hover:shadow-[0_4px_14px_-2px_rgba(37,99,235,0.45)]'
+                : 'cursor-not-allowed bg-white/[0.05] text-white/35',
             )}
           >
-            <ArrowUp className="h-4 w-4" />
+            <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
           </motion.button>
         )}
       </motion.div>
 
       {/* Helper text */}
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground/70">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-white/40">
         <span>
-          <kbd className="rounded bg-card/[0.06] px-1 py-0.5 font-mono text-[9px]">Enter</kbd> send
+          <kbd className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[9px]">Enter</kbd> send
         </span>
         <span>·</span>
         <span>
-          <kbd className="rounded bg-card/[0.06] px-1 py-0.5 font-mono text-[9px]">Shift+Enter</kbd> newline
+          <kbd className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[9px]">Shift+Enter</kbd> newline
         </span>
         <span>·</span>
         <span>Oracle speaks 12 languages · remembers everything</span>
@@ -202,8 +200,8 @@ function IconButton({
       title={label}
       onClick={onClick}
       className={cn(
-        'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-muted-foreground transition-all hover:bg-card/[0.5] hover:text-foreground',
-        active && 'accent-text bg-card/[0.4]',
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-all hover:bg-white/[0.06] hover:text-white',
+        active && 'bg-[#2563EB]/10 text-[#3B82F6]',
       )}
     >
       {children}

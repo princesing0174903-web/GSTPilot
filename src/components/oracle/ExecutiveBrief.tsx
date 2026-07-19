@@ -20,8 +20,8 @@
 // If a section has no underlying data, an inline CTA is shown — NEVER invented.
 //
 // Design tokens (dark theme — same as Oracle workspace):
-//   bg #050505 · cards #111111 · border rgba(255,255,255,0.08)
-//   accent emerald / teal / cyan / violet / amber / rose (NEVER indigo / blue)
+//   bg #000000 · cards #111111 · border #1F1F1F
+//   accent blue #2563EB / #3B82F6 · amber for warnings · rose for risk
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useMemo, type ReactNode } from 'react';
@@ -144,45 +144,45 @@ function dueLabel(due: Date | null): { text: string; tone: Tone } {
   return { text: `Due ${dueDay.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`, tone: 'neutral' };
 }
 
-// ─── Tone → color mapping (NEVER indigo / blue) ───────────────────────────────
+// ─── Tone → color mapping (blue accent · amber for warnings · rose for risk) ──
 
 type Tone = 'emerald' | 'teal' | 'cyan' | 'violet' | 'amber' | 'rose' | 'neutral';
 
 const TONE_TEXT: Record<Tone, string> = {
-  emerald: 'text-emerald-400',
-  teal: 'text-teal-400',
-  cyan: 'text-cyan-400',
-  violet: 'text-violet-400',
+  emerald: 'text-[#3B82F6]',
+  teal: 'text-[#3B82F6]',
+  cyan: 'text-[#3B82F6]',
+  violet: 'text-[#3B82F6]',
   amber: 'text-amber-400',
   rose: 'text-rose-400',
   neutral: 'text-white/60',
 };
 
 const TONE_BG: Record<Tone, string> = {
-  emerald: 'bg-emerald-500/10',
-  teal: 'bg-teal-500/10',
-  cyan: 'bg-cyan-500/10',
-  violet: 'bg-violet-500/10',
+  emerald: 'bg-[#2563EB]/10',
+  teal: 'bg-[#2563EB]/10',
+  cyan: 'bg-[#2563EB]/10',
+  violet: 'bg-[#2563EB]/10',
   amber: 'bg-amber-500/10',
   rose: 'bg-rose-500/10',
   neutral: 'bg-white/[0.05]',
 };
 
 const TONE_BORDER: Record<Tone, string> = {
-  emerald: 'border-emerald-500/20',
-  teal: 'border-teal-500/20',
-  cyan: 'border-cyan-500/20',
-  violet: 'border-violet-500/20',
+  emerald: 'border-[#2563EB]/25',
+  teal: 'border-[#2563EB]/25',
+  cyan: 'border-[#2563EB]/25',
+  violet: 'border-[#2563EB]/25',
   amber: 'border-amber-500/20',
   rose: 'border-rose-500/20',
   neutral: 'border-white/[0.08]',
 };
 
 const TONE_DOT: Record<Tone, string> = {
-  emerald: 'bg-emerald-400',
-  teal: 'bg-teal-400',
-  cyan: 'bg-cyan-400',
-  violet: 'bg-violet-400',
+  emerald: 'bg-[#3B82F6]',
+  teal: 'bg-[#3B82F6]',
+  cyan: 'bg-[#3B82F6]',
+  violet: 'bg-[#3B82F6]',
   amber: 'bg-amber-400',
   rose: 'bg-rose-400',
   neutral: 'bg-white/40',
@@ -208,7 +208,7 @@ function BriefCard({ icon: Icon, title, tone, meta, children, delay = 0 }: Brief
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: EASE, delay }}
       className={cn(
-        'flex flex-col rounded-2xl border bg-white/[0.025] p-4 backdrop-blur-sm',
+        'flex flex-col rounded-xl border bg-[#111111] p-4 transition-colors hover:border-[#2A2A2A]',
         TONE_BORDER[tone],
       )}
     >
@@ -235,7 +235,7 @@ function BriefCard({ icon: Icon, title, tone, meta, children, delay = 0 }: Brief
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+    <div className="rounded-xl border border-white/[0.08] bg-[#111111] p-4">
       <div className="mb-3 flex items-center gap-2.5">
         <Skeleton className="h-7 w-7 rounded-lg" />
         <Skeleton className="h-3 w-24" />
@@ -266,7 +266,7 @@ function EmptyCta({ message, ctaLabel, ctaIcon: Icon = Plus, view, onNavigate }:
       <button
         type="button"
         onClick={() => onNavigate(view)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[#2563EB]/30 bg-[#2563EB]/10 px-3 py-1.5 text-xs font-medium text-[#3B82F6] transition-colors hover:bg-[#2563EB]/15"
       >
         <Icon className="h-3.5 w-3.5" />
         {ctaLabel}
@@ -336,10 +336,7 @@ function Sparkline({ values, tone = 'emerald' }: { values: number[]; tone?: Tone
     .join(' ');
   const colorClass = TONE_TEXT[tone];
   const stroke =
-    tone === 'emerald' ? '#34d399'
-    : tone === 'teal' ? '#2dd4bf'
-    : tone === 'cyan' ? '#22d3ee'
-    : tone === 'violet' ? '#a78bfa'
+    tone === 'emerald' || tone === 'teal' || tone === 'cyan' || tone === 'violet' ? '#3B82F6'
     : tone === 'amber' ? '#fbbf24'
     : tone === 'rose' ? '#fb7185'
     : '#9ca3af';
@@ -812,7 +809,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
         className="mb-5"
       >
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-emerald-400" />
+          <Sparkles className="h-4 w-4 text-[#3B82F6]" />
           <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
             Executive Brief
           </span>
@@ -855,8 +852,8 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
                     <Skeleton className="h-9 w-full" />
                   </div>
                 ) : priorities.length === 0 ? (
-                  <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 p-3">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <div className="flex items-center gap-2 rounded-lg bg-[#2563EB]/[0.06] p-3">
+                    <CheckCircle2 className="h-4 w-4 text-[#3B82F6]" />
                     <p className="text-xs text-white/60">
                       Nothing overdue today. Use the breathing room to plan the week ahead.
                     </p>
@@ -895,7 +892,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-baseline gap-1">
-                        <IndianRupee className="h-4 w-4 text-emerald-400" />
+                        <IndianRupee className="h-4 w-4 text-[#3B82F6]" />
                         <span className="text-2xl font-semibold tabular-nums text-white">
                           {cash.totalBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </span>
@@ -906,7 +903,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
                       {cash.delta !== 0 && (
                         <div className={cn(
                           'mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                          cash.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400',
+                          cash.delta > 0 ? 'bg-[#2563EB]/10 text-[#3B82F6]' : 'bg-rose-500/10 text-rose-400',
                         )}>
                           {cash.delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                           {cash.delta > 0 ? '+' : ''}{fmtINR(cash.delta)}
@@ -1093,13 +1090,13 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: EASE, delay: 0.35 }}
             className={cn(
-              'mt-3 rounded-2xl border bg-white/[0.025] p-4',
-              actions.length === 0 ? 'border-emerald-500/20' : 'border-violet-500/20',
+              'mt-3 rounded-xl border bg-[#111111] p-4',
+              actions.length === 0 ? 'border-[#2563EB]/25' : 'border-[#2563EB]/25',
             )}
           >
             <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/10">
-                <Lightbulb className="h-3.5 w-3.5 text-violet-400" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2563EB]/10">
+                <Lightbulb className="h-3.5 w-3.5 text-[#3B82F6]" />
               </div>
               <h3 className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-white/70">
                 Recommended Actions
@@ -1109,8 +1106,8 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
               )}
             </div>
             {actions.length === 0 ? (
-              <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 p-3">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <div className="flex items-center gap-2 rounded-lg bg-[#2563EB]/[0.06] p-3">
+                <CheckCircle2 className="h-4 w-4 text-[#3B82F6]" />
                 <p className="text-xs text-white/60">
                   No immediate actions needed — your business is in good shape. Ask Oracle for strategic guidance.
                 </p>
@@ -1148,8 +1145,8 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
               meta={deadlines.length > 0 ? `Next 7 days · ${deadlines.length}` : 'Next 7 days'}
             >
               {deadlines.length === 0 ? (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 p-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <div className="flex items-center gap-2 rounded-lg bg-[#2563EB]/[0.06] p-3">
+                  <CheckCircle2 className="h-4 w-4 text-[#3B82F6]" />
                   <p className="text-xs text-white/60">
                     No deadlines in the next 7 days. You're ahead of schedule.
                   </p>
@@ -1178,7 +1175,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
               <button
                 type="button"
                 onClick={() => onAskOracle('Give me a one-paragraph executive summary of my business based on the brief above.')}
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#2563EB]/30 bg-[#2563EB]/10 px-3 py-1.5 text-[11px] font-medium text-[#3B82F6] transition-colors hover:bg-[#2563EB]/15"
               >
                 <Sparkles className="h-3 w-3" />
                 Ask Oracle to summarize

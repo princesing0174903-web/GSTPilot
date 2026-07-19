@@ -240,7 +240,7 @@ const GRAPH_EDGES: GraphEdge[] = [
 ]
 
 const EDGE_COLORS: Record<EdgeType, { stroke: string; label: string; desc: string }> = {
-  payment: { stroke: '#22c55e', label: 'Payment Flow', desc: 'Money movement' },
+  payment: { stroke: '#3B82F6', label: 'Payment Flow', desc: 'Money movement' },
   invoice: { stroke: '#f59e0b', label: 'Invoice / Trade', desc: 'B2B invoicing' },
   risk: { stroke: '#ef4444', label: 'Risk Linkage', desc: 'Distress propagation' },
   ownership: { stroke: '#64748b', label: 'Ownership / Equity', desc: 'Holding structure' },
@@ -1739,7 +1739,7 @@ function NetworkDensityChart() {
 function GraphAnalytics() {
   const metrics = [
     { label: 'Avg Degree', value: '12.4', sub: 'Connections per node', icon: Link2, color: '#2563EB' },
-    { label: 'Clustering Coefficient', value: '0.34', sub: 'Triangle density', icon: Network, color: '#14b8a6' },
+    { label: 'Clustering Coefficient', value: '0.34', sub: 'Triangle density', icon: Network, color: '#3B82F6' },
     { label: 'Graph Diameter', value: '6 hops', sub: 'Max shortest path', icon: Waypoints, color: '#2563EB' },
     { label: 'Components', value: '1', sub: 'Fully connected', icon: GitBranch, color: '#1D4ED8' },
   ]

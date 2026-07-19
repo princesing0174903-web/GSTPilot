@@ -58,21 +58,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Lightbulb as LightbulbIcon } from 'lucide-react';
+import { CHART_COLORS } from '@/lib/chart-theme';
 
 // ─── Color Palette ────────────────────────────────────────────────────────
+// Sourced from @/lib/chart-theme so every chart in this module stays aligned
+// with the GSTPilot Infinity™ brand system (blue primary, violet secondary,
+// amber for warning, red for danger, green reserved for success only).
+// The COLORS keys are kept (legacy compatibility) but every value now points
+// at a chart-theme constant — no raw hexes here.
 const COLORS = {
-  emerald: '#2563EB',
-  emeraldDark: '#1D4ED8',
-  emeraldLight: '#d1fae5',
-  teal: '#14b8a6',
-  tealDark: '#2563EB',
-  purple: '#8b5cf6',
-  purpleLight: '#ede9fe',
-  amber: '#f59e0b',
-  red: '#ef4444',
-  slate: '#64748b',
-  cyan: '#3B82F6',
-  rose: '#f43f5e',
+  emerald: CHART_COLORS.primary,        // blue-600   (was '#2563EB' — already blue)
+  emeraldDark: CHART_COLORS.primary,    // blue-600   (was '#1D4ED8')
+  emeraldLight: 'rgba(37, 99, 235, 0.15)', // blue tint (was '#d1fae5' light-green)
+  teal: CHART_COLORS.primarySoft,       // blue-400   (was '#14b8a6' teal)
+  tealDark: CHART_COLORS.primary,       // blue-600   (was '#2563EB' — already blue)
+  purple: CHART_COLORS.secondary,       // violet-500 (was '#8b5cf6' — kept)
+  purpleLight: 'rgba(139, 92, 246, 0.15)', // violet tint (was '#ede9fe')
+  amber: CHART_COLORS.warning,          // amber-500  (was '#f59e0b')
+  red: CHART_COLORS.danger,             // red-500    (was '#ef4444')
+  slate: CHART_COLORS.neutral,          // slate-500  (was '#64748b')
+  cyan: CHART_COLORS.primarySoft,       // blue-400   (was '#3B82F6')
+  rose: CHART_COLORS.danger,            // red-500    (was '#f43f5e')
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────

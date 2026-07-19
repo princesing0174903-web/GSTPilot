@@ -710,7 +710,7 @@ function BusinessProfileTab({ selectedClient }: { selectedClient: DemoClientProf
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-500">Client Count Trend</span>
-                <Sparkline data={c.clientCountTrend} color="#14b8a6" />
+                <Sparkline data={c.clientCountTrend} color="#3B82F6" />
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-500">Tax Growth</span>
@@ -853,7 +853,7 @@ function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) 
       key: 'returns',
       title: 'Returns Memory',
       icon: FileCheck,
-      color: '#14b8a6',
+      color: '#3B82F6',
       insights: [
         { label: 'Filing history', value: c.filingHistory },
         { label: 'Compliance patterns', value: c.compliancePatterns },
@@ -963,7 +963,7 @@ function AIMemoryTab({ selectedClient }: { selectedClient: DemoClientProfile }) 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total Insights', value: memorySections.reduce((s, sec) => s + sec.insights.length, 0).toString(), icon: Brain, color: '#2563EB' },
-          { label: 'Memory Categories', value: memorySections.length.toString(), icon: Layers, color: '#14b8a6' },
+          { label: 'Memory Categories', value: memorySections.length.toString(), icon: Layers, color: '#3B82F6' },
           { label: 'Data Points', value: (c.invoicesCount + c.gstReturnsCount + c.documentsCount).toLocaleString('en-IN'), icon: Database, color: '#f59e0b' },
           { label: 'Last Computed', value: formatDate(c.lastActivity), icon: Clock, color: '#64748b' },
         ].map((stat, i) => (
@@ -1024,7 +1024,7 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
 
   const qualityMetrics = [
     { label: 'Completeness', value: c.profileCompleteness, color: '#2563EB' },
-    { label: 'Accuracy', value: c.dataQualityScore, color: '#14b8a6' },
+    { label: 'Accuracy', value: c.dataQualityScore, color: '#3B82F6' },
     { label: 'Timeliness', value: c.dataFreshness === 'fresh' ? 95 : c.dataFreshness === 'stale' ? 65 : 35, color: '#f59e0b' },
     { label: 'Consistency', value: Math.max(70, c.dataQualityScore - 5), color: '#64748b' },
   ];
@@ -1039,7 +1039,7 @@ function DataVaultTab({ selectedClient }: { selectedClient: DemoClientProfile })
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total Data Points', value: `${(totalDataPoints).toLocaleString('en-IN')} data points across 156 businesses`, icon: Database, color: '#2563EB' },
-          { label: 'Data Quality', value: `${c.dataQualityScore}%`, icon: Shield, color: '#14b8a6' },
+          { label: 'Data Quality', value: `${c.dataQualityScore}%`, icon: Shield, color: '#3B82F6' },
           { label: 'Data Freshness', value: freshnessLabel, isFreshness: true, icon: RefreshCw, color: c.dataFreshness === 'fresh' ? '#2563EB' : c.dataFreshness === 'stale' ? '#f59e0b' : '#ef4444' },
           { label: 'Data Types', value: `${dataInventory.length} categories`, icon: Layers2, color: '#64748b' },
         ].map((stat, i) => (
@@ -1221,7 +1221,7 @@ function CompetitiveMoatTab({ selectedClient }: { selectedClient: DemoClientProf
 
   const defensibilityScores = [
     { category: 'Transaction Data', score: 92, color: '#2563EB' },
-    { category: 'Compliance History', score: 88, color: '#14b8a6' },
+    { category: 'Compliance History', score: 88, color: '#3B82F6' },
     { category: 'Filing Patterns', score: 85, color: '#3B82F6' },
     { category: 'Client Relationships', score: 78, color: '#f59e0b' },
     { category: 'Notice Resolution', score: 72, color: '#8b5cf6' },
@@ -1284,7 +1284,7 @@ function CompetitiveMoatTab({ selectedClient }: { selectedClient: DemoClientProf
           <CardContent className="px-4 pb-4 space-y-3">
             {[
               { degree: '1st degree', count: '156 clients', desc: 'Direct relationships', color: '#2563EB' },
-              { degree: '2nd degree', count: '2,340 businesses', desc: 'Connected through clients', color: '#14b8a6' },
+              { degree: '2nd degree', count: '2,340 businesses', desc: 'Connected through clients', color: '#3B82F6' },
               { degree: '3rd degree', count: '35,100 entities', desc: 'Extended network reach', color: '#3B82F6' },
             ].map((level, i) => (
               <div key={i} className="flex items-center gap-3">

@@ -179,7 +179,7 @@ export function OracleCommandCenter({
               'transition-all duration-200 hover:border-[rgba(0,245,212,0.25)] hover:bg-white/[0.06] hover:text-foreground',
             )}
           >
-            <span className="h-1 w-1 rounded-full bg-[#00F5D4] opacity-60 transition-opacity group-hover:opacity-100" />
+            <span className="h-1 w-1 rounded-full bg-[#3B82F6] opacity-60 transition-opacity group-hover:opacity-100" />
             {chip}
           </motion.button>
         ))}

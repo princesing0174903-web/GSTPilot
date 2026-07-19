@@ -80,7 +80,7 @@ export function OracleHistory({ collapsed, onToggle }: OracleHistoryProps) {
         <div className="my-1 h-px w-6 bg-white/[0.06]" />
         <button
           onClick={() => createConversation()}
-          className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft text-[#00F5D4] transition-all hover:scale-105 hover:text-[#00F5D4]"
+          className="flex h-9 w-9 items-center justify-center rounded-lg accent-gradient-soft text-[#3B82F6] transition-all hover:scale-105 hover:text-[#3B82F6]"
           aria-label="New conversation"
           title="New conversation"
         >
@@ -102,8 +102,8 @@ export function OracleHistory({ collapsed, onToggle }: OracleHistoryProps) {
           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/[0.04]"
           title="GSTPilot Oracle™"
         >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md accent-gradient-soft border border-[#00F5D4]/20">
-            <Sparkles className="h-3.5 w-3.5 text-[#00F5D4]" />
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md accent-gradient-soft border border-[#3B82F6]/20">
+            <Sparkles className="h-3.5 w-3.5 text-[#3B82F6]" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold text-foreground">
@@ -128,9 +128,9 @@ export function OracleHistory({ collapsed, onToggle }: OracleHistoryProps) {
       <div className="px-3 pb-2">
         <button
           onClick={() => createConversation()}
-          className="flex w-full items-center gap-2 rounded-lg border border-[#00F5D4]/25 bg-[#00F5D4]/[0.06] px-3 py-2 text-sm font-medium text-foreground transition-all hover:border-[#00F5D4]/40 hover:bg-[#00F5D4]/[0.1]"
+          className="flex w-full items-center gap-2 rounded-lg border border-[#3B82F6]/25 bg-[#3B82F6]/[0.06] px-3 py-2 text-sm font-medium text-foreground transition-all hover:border-[#3B82F6]/40 hover:bg-[#3B82F6]/[0.1]"
         >
-          <Plus className="h-4 w-4 text-[#00F5D4]" />
+          <Plus className="h-4 w-4 text-[#3B82F6]" />
           New conversation
         </button>
       </div>
@@ -145,7 +145,7 @@ export function OracleHistory({ collapsed, onToggle }: OracleHistoryProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search threads…"
-              className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5 pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-[#00F5D4]/30 focus:outline-none focus:ring-1 focus:ring-[#00F5D4]/20"
+              className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5 pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-[#3B82F6]/30 focus:outline-none focus:ring-1 focus:ring-[#3B82F6]/20"
             />
           </div>
         </div>
@@ -176,13 +176,13 @@ export function OracleHistory({ collapsed, onToggle }: OracleHistoryProps) {
                     data-active={isActive}
                     className={cn(
                       'oracle-history-item group relative flex cursor-pointer items-start gap-2 rounded-lg border border-transparent px-2.5 py-2',
-                      isActive && 'border-[#00F5D4]/20'
+                      isActive && 'border-[#3B82F6]/20'
                     )}
                     onClick={() => setActive(conv.id)}
                   >
                     <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
                       {isActive ? (
-                        <div className="h-1.5 w-1.5 rounded-full bg-[#00F5D4]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
                       ) : (
                         <MessageSquare className="h-3.5 w-3.5 text-muted-foreground/60" />
                       )}

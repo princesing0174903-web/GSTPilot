@@ -895,13 +895,15 @@ export default function ReturnsPage() {
                 </span>
               </div>
             )}
-            <button
-              className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
               onClick={(e) => { e.stopPropagation(); handleDownloadJSON(ret); }}
             >
               <Download className="size-3" />
               Download JSON
-            </button>
+            </Button>
           </CardContent>
         </Card>
       </motion.div>
@@ -946,13 +948,15 @@ export default function ReturnsPage() {
               <Wrench className="size-3" />
               Fix Issues
             </Button>
-            <button
-              className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100"
               onClick={(e) => { e.stopPropagation(); handleCardClick(ret); }}
             >
               <Eye className="size-3" />
               View Details
-            </button>
+            </Button>
           </CardContent>
         </Card>
       </motion.div>

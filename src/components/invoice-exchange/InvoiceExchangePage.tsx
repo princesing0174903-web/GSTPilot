@@ -625,9 +625,9 @@ function StateHeatmap() {
   const colorFor = (vol: number) => {
     if (vol >= 75) return '#1D4ED8';
     if (vol >= 50) return '#2563EB';
-    if (vol >= 30) return '#34d399';
-    if (vol >= 15) return '#86efac';
-    if (vol >= 5) return '#bbf7d0';
+    if (vol >= 30) return '#3B82F6';
+    if (vol >= 15) return '#60A5FA';
+    if (vol >= 5) return '#93C5FD';
     return '#f1f5f9';
   };
   const textFor = (vol: number) => (vol >= 30 ? 'text-white' : 'text-slate-700');

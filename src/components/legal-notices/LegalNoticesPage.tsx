@@ -118,7 +118,7 @@ function NoticeCategoryChart({ notices }: { notices: Notice[] }) {
   const catCounts: Record<string, number> = {}
   for (const n of notices) catCounts[n.category] = (catCounts[n.category] ?? 0) + 1
   const palette: Record<string, string> = {
-    GST: '#2563EB', 'Income Tax': '#f59e0b', ROC: '#6ee7b7', Labour: '#94a3b8', Custom: '#a7f3d0',
+    GST: '#2563EB', 'Income Tax': '#f59e0b', ROC: '#60A5FA', Labour: '#94a3b8', Custom: '#93C5FD',
   }
   const data = Object.entries(catCounts).map(([label, value]) => ({ label, value, color: palette[label] ?? '#94a3b8' }))
   const cx = 75

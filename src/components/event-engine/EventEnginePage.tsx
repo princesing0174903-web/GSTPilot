@@ -460,8 +460,8 @@ function LatencyDistribution({ events }: { events: StreamEvent[] }) {
 
   const buckets = [
     { range: '0-10ms', count: 0, color: '#2563EB' },
-    { range: '10-50ms', count: 0, color: '#34d399' },
-    { range: '50-100ms', count: 0, color: '#6ee7b7' },
+    { range: '10-50ms', count: 0, color: '#3B82F6' },
+    { range: '50-100ms', count: 0, color: '#60A5FA' },
     { range: '100-500ms', count: 0, color: '#fbbf24' },
     { range: '500ms-1s', count: 0, color: '#f59e0b' },
     { range: '1s+', count: 0, color: '#ef4444' },
@@ -596,9 +596,9 @@ function RoutingDiagram() {
         const y = subSpacing * (i + 1)
         return (
           <g key={i}>
-            <rect x={subX - 80} y={y - 12} width={80} height={24} rx={4} fill="#ecfdf5" stroke="#a7f3d0" strokeWidth={0.5} />
-            <text x={subX - 40} y={y + 4} textAnchor="middle" fontSize="8" fill="#065f46">{s}</text>
-            <line x1={W / 2 + 30} y1={H / 2} x2={subX - 80} y2={y} stroke="#34d399" strokeWidth={0.8} strokeDasharray="3,2" />
+            <rect x={subX - 80} y={y - 12} width={80} height={24} rx={4} fill="#eff6ff" stroke="#bfdbfe" strokeWidth={0.5} />
+            <text x={subX - 40} y={y + 4} textAnchor="middle" fontSize="8" fill="#1D4ED8">{s}</text>
+            <line x1={W / 2 + 30} y1={H / 2} x2={subX - 80} y2={y} stroke="#3B82F6" strokeWidth={0.8} strokeDasharray="3,2" />
           </g>
         )
       })}
@@ -707,8 +707,8 @@ export default function EventEnginePage() {
 
   const donutData = useMemo(() => [
     { label: 'Invoice', value: eventCounts['invoice.created'] + 4521, color: '#2563EB' },
-    { label: 'Payment', value: eventCounts['payment.collected'] + 3890, color: '#22c55e' },
-    { label: 'Return', value: eventCounts['return.filed'] + 2934, color: '#14b8a6' },
+    { label: 'Payment', value: eventCounts['payment.collected'] + 3890, color: '#3B82F6' },
+    { label: 'Return', value: eventCounts['return.filed'] + 2934, color: '#2563EB' },
     { label: 'Document', value: eventCounts['document.uploaded'] + 2107, color: '#0ea5e9' },
     { label: 'Task', value: eventCounts['task.assigned'] + 1845, color: '#f59e0b' },
     { label: 'Notice', value: eventCounts['notice.received'] + 892, color: '#ef4444' },

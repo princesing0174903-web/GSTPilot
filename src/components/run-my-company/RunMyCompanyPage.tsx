@@ -925,8 +925,8 @@ export default function RunMyCompanyPage() {
                     width: `${overallProgress}%`,
                     background: isPaused
                       ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                      : 'linear-gradient(90deg, #2563EB, #34d399, #fbbf24, #6ee7b7)',
-                    boxShadow: '0 0 10px rgba(52,211,153,0.5)',
+                      : 'linear-gradient(90deg, #2563EB, #3B82F6, #fbbf24, #60A5FA)',
+                    boxShadow: '0 0 10px rgba(59,130,246,0.5)',
                   }}
                   transition={{ duration: 0.3 }}
                 />

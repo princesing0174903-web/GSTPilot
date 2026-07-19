@@ -62,17 +62,17 @@ const TONE_META: Record<
   },
   info: {
     icon: Info,
-    iconClass: 'text-cyan-500',
-    border: 'border-cyan-500/30',
-    bg: 'bg-cyan-500/[0.06]',
-    accent: 'bg-cyan-500',
+    iconClass: 'text-blue-500',
+    border: 'border-blue-500/30',
+    bg: 'bg-blue-500/[0.06]',
+    accent: 'bg-blue-500',
   },
   positive: {
     icon: CheckCircle2,
-    iconClass: 'text-emerald-500',
-    border: 'border-emerald-500/30',
-    bg: 'bg-emerald-500/[0.06]',
-    accent: 'bg-emerald-500',
+    iconClass: 'text-blue-500',
+    border: 'border-blue-500/30',
+    bg: 'bg-blue-500/[0.06]',
+    accent: 'bg-blue-500',
   },
 };
 

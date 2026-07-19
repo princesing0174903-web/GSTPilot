@@ -306,7 +306,7 @@ function ReportResultCard({
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
           <FileBarChart className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
@@ -341,14 +341,14 @@ function ReportResultCard({
 
         {/* Sales by Slab */}
         <section>
-          <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Sales Summary (by GST Slab)" />
+          <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Sales Summary (by GST Slab)" />
           <SlabTable rows={calc.salesBySlab} />
         </section>
 
         {/* Purchases by Slab */}
         {calc.purchasesBySlab.some((s) => s.invoiceCount > 0) && (
           <section>
-            <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Purchase Summary (ITC by Slab)" />
+            <SectionLabel icon={<ArrowRight className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Purchase Summary (ITC by Slab)" />
             <SlabTable rows={calc.purchasesBySlab} itcMode />
           </section>
         )}
@@ -410,7 +410,7 @@ function ReportResultCard({
         {/* Top customers */}
         {report.topCustomers.length > 0 && (
           <section>
-            <SectionLabel icon={<Database className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Top Customers (by tax contribution)" />
+            <SectionLabel icon={<Database className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Top Customers (by tax contribution)" />
             <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {report.topCustomers.slice(0, 10).map((c, i) => (
                 <ContributorRow key={i} name={c.name} gstin={c.gstin} count={c.invoiceCount} taxable={c.taxableValue} tax={c.taxAmount} />
@@ -551,7 +551,7 @@ function ReportResultCard({
 
         {/* Download buttons */}
         <section>
-          <SectionLabel icon={<Download className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Download Report" />
+          <SectionLabel icon={<Download className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Download Report" />
           <div className="flex flex-wrap gap-2">
             <DownloadButton
               format="pdf"
@@ -924,7 +924,7 @@ function ApprovalCard({
               {card.records.length > 0 && (
                 <section>
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <Database className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />
+                    <Database className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />
                     <h4 className="text-xs font-bold uppercase tracking-wide text-white/60">Supporting records</h4>
                   </div>
                   <div className="space-y-1.5">

@@ -1,11 +1,12 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Input Box
+// GSTPilot Oracle — Input Box (ChatGPT-Enterprise redesign)
 //
-// Signature Oracle input: large rounded capsule (24px radius), idle breathing
-// glow that intensifies on focus. Attachment + voice + send icons. Auto-resizing
-// textarea. Enter to send, Shift+Enter for newline.
+// Fixed-bottom chat input. Rounded-2xl capsule, #161616 bg, #2A2A2A border,
+// blue focus ring. Attachment + voice icons on the left, circular blue send
+// button on the right. Auto-resizing textarea (1 line → 6 lines max).
+// Enter to send, Shift+Enter for newline.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import {
@@ -46,6 +47,7 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
     ref
   ) {
     const [value, setValue] = useState('');
+    const [isFocused, setIsFocused] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // ── Auto-resize the textarea up to a max height ──
@@ -100,8 +102,13 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
 
     return (
       <div
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         className={cn(
-          'oracle-input-glow oracle-input-idle relative flex items-end gap-2 rounded-3xl border border-white/[0.08] bg-[#0a0a0e]/80 p-2.5 backdrop-blur-xl',
+          'relative flex items-end gap-2 rounded-2xl border bg-[#161616] p-2 transition-colors',
+          isFocused
+            ? 'border-[#2A2A2A] ring-2 ring-[#2563EB]/20 shadow-[0_0_0_3px_rgba(37,99,235,0.15)]'
+            : 'border-[#2A2A2A] hover:border-[#3A3A3A]',
           className
         )}
       >
@@ -111,7 +118,7 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
           onClick={() => {
             // Attachments not yet supported — visual only
           }}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
           aria-label="Attach file"
           title="Attach file (coming soon)"
         >
@@ -128,10 +135,10 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
           placeholder={placeholder}
           disabled={isStreaming}
           className={cn(
-            'max-h-[200px] min-h-[24px] flex-1 resize-none border-0 bg-transparent py-1.5 text-[0.95rem] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0 disabled:opacity-60',
+            'max-h-[200px] min-h-[24px] flex-1 resize-none border-0 bg-transparent py-1.5 text-[14px] leading-relaxed text-white placeholder:text-white/40 focus:outline-none focus:ring-0 disabled:opacity-60',
             'scrollbar-thin'
           )}
-          style={{ scrollbarWidth: 'thin' }}
+          style={{ scrollbarWidth: 'thin', fontFamily: 'var(--font-body, inherit)' }}
           aria-label="Message Oracle"
         />
 
@@ -141,19 +148,19 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
           onClick={() => {
             // Voice input not yet supported — visual only
           }}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
           aria-label="Voice input"
           title="Voice input (coming soon)"
         >
           <Mic className="h-4 w-4" />
         </button>
 
-        {/* Send / Stop button */}
+        {/* Send / Stop button — circular, blue */}
         {isStreaming ? (
           <button
             type="button"
             onClick={stop}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-foreground transition-all hover:bg-white/[0.14]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.10] text-white transition-all hover:bg-white/[0.16]"
             aria-label="Stop streaming"
             title="Stop"
           >
@@ -167,13 +174,13 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
             className={cn(
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
               canSend
-                ? 'accent-gradient text-[#050505] hover:scale-105 hover:shadow-[0_0_20px_-2px_rgba(0,245,212,0.5)]'
-                : 'cursor-not-allowed bg-white/[0.05] text-muted-foreground/50'
+                ? 'bg-[#2563EB] text-white hover:bg-[#1D4ED8] hover:shadow-[0_4px_14px_-2px_rgba(37,99,235,0.45)]'
+                : 'cursor-not-allowed bg-white/[0.05] text-white/35'
             )}
             aria-label="Send message"
             title="Send (Enter)"
           >
-            <ArrowUp className="h-4.5 w-4.5" strokeWidth={2.5} />
+            <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
           </button>
         )}
       </div>

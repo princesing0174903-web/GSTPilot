@@ -48,7 +48,6 @@ import {
   RefreshCw,
   LifeBuoy,
   ChevronRight,
-  Building2,
   Cloud,
   BookOpen,
   type LucideIcon,
@@ -290,13 +289,13 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+      <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5 min-w-0 flex-1">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               {label}
             </p>
-            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
+            <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
               {numericValue !== undefined ? (
                 <AnimatedNumber value={numericValue} format={numericFormat} />
               ) : (
@@ -420,7 +419,7 @@ function BusinessHealthUnavailable({ onConnect }: { onConnect: () => void }) {
       transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
+      <div className="glass-surface p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
         <div className="relative shrink-0 flex items-center justify-center h-[180px] w-[180px]">
           <svg width={180} height={180} className="-rotate-90">
             <circle
@@ -987,7 +986,7 @@ export default function DashboardPage() {
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
       />
 
-      <div className="relative space-y-8">
+      <div className="relative page-rhythm space-y-12">
         {/* ═══ GREETING + QUICK ACTIONS ═══ */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -996,7 +995,7 @@ export default function DashboardPage() {
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div className="space-y-2 min-w-0">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
+            <h1 className="text-display text-foreground">
               {getGreeting()}, {firstName}
             </h1>
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -1040,26 +1039,8 @@ export default function DashboardPage() {
           <BusinessSetupProgress tasks={setupTasks} />
         )}
 
-        {/* ═══ Business Health Score — Unavailable state (no fake number) ═══ */}
-        {canComputeHealthScore ? (
-          <BusinessHealthGauge
-            score={businessSnapshot.healthScore}
-            insight={insight}
-          />
-        ) : (
-          <BusinessHealthUnavailable
-            onConnect={() => {
-              // Prefer the already-connected integration; otherwise open Google.
-              if (zohoConnected) setCurrentView('zoho-books');
-              else setCurrentView('google-workspace');
-            }}
-          />
-        )}
-
-        {/* ═══ KPI CARDS — Revenue / Compliance / Cash ═══ */}
-        {/* Every card shows the REAL value (₹0 when empty) — never "—" and never
-            a fake number. An honest subtitle + optional CTA explain the state. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* ═══ 3. KPI CARDS — Revenue / Customers / Invoices / Pending Compliance ═══ */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard
             index={0}
             label="Revenue"
@@ -1072,8 +1053,87 @@ export default function DashboardPage() {
               onClick: () => setCurrentView('zoho-books'),
             } : undefined}
           />
+
+          {/* Customers — inline KPI matching KpiCard visual style */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' as const }}
+            className="h-full"
+          >
+            <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Customers
+                  </p>
+                  <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
+                    <AnimatedNumber value={businessSnapshot.customers} format="integer" />
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {businessSnapshot.customers === 0
+                      ? 'No customers yet · add your first client to begin'
+                      : `${businessSnapshot.customers} active client${businessSnapshot.customers === 1 ? '' : 's'}`}
+                  </p>
+                  {businessSnapshot.customers === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentView('clients')}
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
+                    >
+                      Add Client
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+                  <Users className="h-4 w-4 accent-text" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Invoices — inline KPI matching KpiCard visual style */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' as const }}
+            className="h-full"
+          >
+            <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Invoices
+                  </p>
+                  <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
+                    <AnimatedNumber value={businessSnapshot.invoices.count} format="integer" />
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {businessSnapshot.invoices.count === 0
+                      ? 'No invoices yet · create one to track revenue'
+                      : `${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'} issued`}
+                  </p>
+                  {businessSnapshot.invoices.count === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentView('invoices')}
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
+                    >
+                      Create Invoice
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
+                  <FileText className="h-4 w-4 accent-text" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
           <KpiCard
-            index={1}
+            index={3}
             label="Pending Compliance"
             numericValue={pendingComplianceCount}
             numericFormat="integer"
@@ -1084,116 +1144,211 @@ export default function DashboardPage() {
               onClick: () => setCurrentView('returns'),
             } : undefined}
           />
-          <KpiCard
-            index={2}
-            label="Cash Position"
-            numericValue={businessSnapshot.bankBalance}
-            numericFormat="currency"
-            subtitle={cashSubtitle}
-            icon={<IndianRupee className="h-4 w-4 accent-text" />}
-            cta={cashEmpty ? {
-              label: 'View Integrations',
-              onClick: () => setCurrentView('google-workspace'),
-            } : undefined}
-          />
-        </div>
+        </section>
 
-        {/* ═══ Score Cards — Unavailable when no real data ═══ */}
-        {/* Scores are computed only from real financial data. Until then we show
-            "Unavailable" (never an invented number like 75 or 80). Each card has
-            a specific, honest reason explaining exactly what data is missing. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <UnavailableMetricCard
-            index={0}
-            label="Compliance Score"
-            icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-            phase="Awaiting Data"
-            reason="Connect Zoho Books or create GST returns to calculate your filing compliance score from real return data."
-            unlocks={['Filing timeliness tracking', 'GST return status monitor', 'Late fee risk alerts']}
-            ctaLabel="Create Return"
-            onCta={() => setCurrentView('returns')}
-          />
-          <UnavailableMetricCard
-            index={1}
-            label="Collection Score"
-            icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-            phase="Awaiting Data"
-            reason="Connect Zoho Books or create invoices to measure how fast you collect payments from real invoice + payment data."
-            unlocks={['Collection rate tracking', 'Average days-to-pay', 'Overdue receivable alerts']}
-            ctaLabel="Connect Zoho Books"
-            onCta={() => setCurrentView('zoho-books')}
-          />
-          <UnavailableMetricCard
-            index={2}
-            label="Risk Score"
-            icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />}
-            phase="Awaiting Data"
-            reason="Connect Zoho Books to evaluate overdue exposure, cash-flow risk, and customer concentration from real financials."
-            unlocks={['Overdue exposure analysis', 'Cash-flow risk scoring', 'Customer concentration alerts']}
-            ctaLabel="Connect Zoho Books"
-            onCta={() => setCurrentView('zoho-books')}
-          />
-        </div>
-
-        {/* ═══ LIVE BUSINESS REGISTRY — real counts only ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.36, ease: 'easeOut' as const }}
-        >
-          <div className="glass-surface rounded-2xl p-5 md:p-6">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
-                  <Building2 className="h-4 w-4 accent-text" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground tracking-tight">
-                  Live Business Registry
-                </h3>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Customers', value: businessSnapshot.customers, icon: Users, view: 'clients' as AppView, emptyHint: 'No customers yet. Add your first client to begin.' },
-                { label: 'Invoices', value: businessSnapshot.invoices.count, icon: FileText, view: 'invoices' as AppView, emptyHint: 'No invoices created. Create one to track revenue.' },
-                { label: 'Revenue', value: businessSnapshot.revenue, icon: IndianRupee, view: 'invoices' as AppView, isCurrency: true, emptyHint: 'No revenue recorded. Create invoices to populate.' },
-                { label: 'Vendors', value: businessSnapshot.vendors, icon: Building2, view: 'vendors' as AppView, emptyHint: 'No vendors tracked. Connect Zoho Books to sync.' },
-              ].map((metric) => {
-                const Icon = metric.icon;
-                const isEmpty = metric.value === 0;
-                return (
-                  <button
-                    key={metric.label}
-                    type="button"
-                    onClick={() => setCurrentView(metric.view)}
-                    className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center h-7 w-7 rounded-lg accent-gradient-soft">
-                        <Icon className="h-3.5 w-3.5 accent-text" />
-                      </div>
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                        {metric.label}
-                      </span>
-                    </div>
-                    <span className={`text-2xl font-bold tracking-tight ${isEmpty ? 'text-muted-foreground/50' : 'text-foreground'}`}>
-                      {metric.isCurrency ? (
-                        <AnimatedNumber value={metric.value} format="currency" />
-                      ) : (
-                        <AnimatedNumber value={metric.value} format="integer" />
-                      )}
+        {/* ═══ 4. ORACLE AI — Live Panel (left) + Ask Oracle (right) ═══ */}
+        <div className={`grid grid-cols-1 gap-6 ${oracleActivated ? 'lg:grid-cols-2' : ''}`}>
+          {oracleActivated && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.04, ease: 'easeOut' as const }}
+              className="h-full"
+            >
+              <div className="glass-surface p-5 border-[#1F1F1F] h-full">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-2.5 w-2.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-[#3B82F6] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#2563EB]" />
                     </span>
-                    {isEmpty && (
-                      <span className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
-                        {metric.emptyHint}
+                    <h3 className="text-sm font-semibold text-foreground tracking-tight">
+                      Oracle is live
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-5 border-[#2563EB]/40 text-[#3B82F6] bg-[#2563EB]/10"
+                    >
+                      Insights active
+                    </Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px] gap-1.5 border-border"
+                    onClick={() => setCurrentView('ai-business-copilot')}
+                  >
+                    View Oracle Insights
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                {oracleInsightsLoading && !oracleInsights ? (
+                  <OracleInsightsSkeleton />
+                ) : oracleInsights ? (
+                  <OracleLivePanel
+                    insights={oracleInsights}
+                    onPriorityClick={(view) => setCurrentView(view as AppView)}
+                    onAskOracle={() => setCurrentView('ai-business-copilot')}
+                  />
+                ) : (
+                  <div className="text-[12px] text-muted-foreground leading-relaxed">
+                    Oracle was activated but insights are not yet available. Refresh in a moment.
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Ask Oracle — full-width when not activated, right column when activated */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
+            className="h-full"
+          >
+            <div className="glass-surface p-6 hover-lift h-full">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 relative ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
+                    <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'accent-text'}`} />
+                    {oracleActivated && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3B82F6] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[#2563EB] border border-background" />
                       </span>
                     )}
-                  </button>
-                );
-              })}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground tracking-tight">
+                        Ask Oracle
+                      </h3>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 h-5 ${
+                          oracleActivated
+                            ? 'border-[#2563EB]/40 text-[#3B82F6] bg-[#2563EB]/10'
+                            : 'border-amber-500/30 text-amber-400'
+                        }`}
+                      >
+                        {oracleActivated ? 'Online' : 'Not Activated'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      {oracleActivated
+                        ? 'Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.'
+                        : 'Connect your business data to unlock Oracle. Activate to enable advanced analysis, predictions, and automated actions.'}
+                    </p>
+                    {oracleActivated && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                        {[
+                          'What should I prioritize today?',
+                          'Show overdue returns',
+                          'Which clients are at risk?',
+                        ].map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => setCurrentView('ai-business-copilot')}
+                            className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-[#2563EB]/30 hover:text-foreground transition-colors"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {oracleActivated ? (
+                  <Button
+                    size="sm"
+                    className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+                    onClick={() => setCurrentView('ai-business-copilot')}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Ask Oracle
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
+                    onClick={() => setOracleWizardOpen(true)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Activate Oracle
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </div>
+          </motion.div>
+        </div>
+
+        {/* ═══ 5. BUSINESS HEALTH — Gauge + Cash Position (left) + Score Cards (right) ═══ */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 gap-6">
+            {canComputeHealthScore ? (
+              <BusinessHealthGauge
+                score={businessSnapshot.healthScore}
+                insight={insight}
+              />
+            ) : (
+              <BusinessHealthUnavailable
+                onConnect={() => {
+                  // Prefer the already-connected integration; otherwise open Google.
+                  if (zohoConnected) setCurrentView('zoho-books');
+                  else setCurrentView('google-workspace');
+                }}
+              />
+            )}
+            <KpiCard
+              index={0}
+              label="Cash Position"
+              numericValue={businessSnapshot.bankBalance}
+              numericFormat="currency"
+              subtitle={cashSubtitle}
+              icon={<IndianRupee className="h-4 w-4 accent-text" />}
+              cta={cashEmpty ? {
+                label: 'View Integrations',
+                onClick: () => setCurrentView('google-workspace'),
+              } : undefined}
+            />
           </div>
-        </motion.div>
+          <div className="grid grid-cols-1 gap-6">
+            <UnavailableMetricCard
+              index={0}
+              label="Compliance Score"
+              icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
+              phase="Awaiting Data"
+              reason="Connect Zoho Books or create GST returns to calculate your filing compliance score from real return data."
+              unlocks={['Filing timeliness tracking', 'GST return status monitor', 'Late fee risk alerts']}
+              ctaLabel="Create Return"
+              onCta={() => setCurrentView('returns')}
+            />
+            <UnavailableMetricCard
+              index={1}
+              label="Collection Score"
+              icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
+              phase="Awaiting Data"
+              reason="Connect Zoho Books or create invoices to measure how fast you collect payments from real invoice + payment data."
+              unlocks={['Collection rate tracking', 'Average days-to-pay', 'Overdue receivable alerts']}
+              ctaLabel="Connect Zoho Books"
+              onCta={() => setCurrentView('zoho-books')}
+            />
+            <UnavailableMetricCard
+              index={2}
+              label="Risk Score"
+              icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />}
+              phase="Awaiting Data"
+              reason="Connect Zoho Books to evaluate overdue exposure, cash-flow risk, and customer concentration from real financials."
+              unlocks={['Overdue exposure analysis', 'Cash-flow risk scoring', 'Customer concentration alerts']}
+              ctaLabel="Connect Zoho Books"
+              onCta={() => setCurrentView('zoho-books')}
+            />
+          </div>
+        </section>
 
         {/* ═══ AI Recommendations + Today's Priorities + Tasks ═══ */}
         <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1414,7 +1569,7 @@ export default function DashboardPage() {
                               aria-hidden
                             />
                           )}
-                          <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-1">
+                          <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[#232323] bg-[#0A0A0A] shrink-0 mt-1">
                             <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
                           </span>
                           <div className="min-w-0 flex-1 pt-0.5">
@@ -1490,7 +1645,7 @@ export default function DashboardPage() {
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span
                                 className={`h-1.5 w-1.5 rounded-full ${
-                                  isActive ? 'bg-emerald-400' : 'bg-amber-400'
+                                  isActive ? 'bg-[#22C55E]' : 'bg-amber-400'
                                 }`}
                               />
                               <span
@@ -1521,143 +1676,6 @@ export default function DashboardPage() {
           </SectionCard>
         </div>
 
-        {/* ═══ Oracle is Live Panel (only after activation) ═══ */}
-        {oracleActivated && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.04, ease: 'easeOut' as const }}
-          >
-            <div className="glass-surface rounded-2xl p-5 border-emerald-500/15">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="flex h-2.5 w-2.5 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                  </span>
-                  <h3 className="text-sm font-semibold text-foreground tracking-tight">
-                    Oracle is live
-                  </h3>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-                  >
-                    Insights active
-                  </Badge>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[11px] gap-1.5 border-border"
-                  onClick={() => setCurrentView('ai-business-copilot')}
-                >
-                  View Oracle Insights
-                  <ArrowRight className="h-3 w-3" />
-                </Button>
-              </div>
-
-              {oracleInsightsLoading && !oracleInsights ? (
-                <OracleInsightsSkeleton />
-              ) : oracleInsights ? (
-                <OracleLivePanel
-                  insights={oracleInsights}
-                  onPriorityClick={(view) => setCurrentView(view as AppView)}
-                  onAskOracle={() => setCurrentView('ai-business-copilot')}
-                />
-              ) : (
-                <div className="text-[12px] text-muted-foreground leading-relaxed">
-                  Oracle was activated but insights are not yet available. Refresh in a moment.
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ═══ Ask Oracle (gated) ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
-          className="h-full"
-        >
-          <div className="glass-surface rounded-2xl p-6 hover-lift">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 relative ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
-                  <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'accent-text'}`} />
-                  {oracleActivated && (
-                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-background" />
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-foreground tracking-tight">
-                      Ask Oracle
-                    </h3>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] px-1.5 py-0 h-5 ${
-                        oracleActivated
-                          ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
-                          : 'border-amber-500/30 text-amber-400'
-                      }`}
-                    >
-                      {oracleActivated ? 'Online' : 'Not Activated'}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    {oracleActivated
-                      ? 'Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.'
-                      : 'Connect your business data to unlock Oracle. Activate to enable advanced analysis, predictions, and automated actions.'}
-                  </p>
-                  {oracleActivated && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                      {[
-                        'What should I prioritize today?',
-                        'Show overdue returns',
-                        'Which clients are at risk?',
-                      ].map((q) => (
-                        <button
-                          key={q}
-                          type="button"
-                          onClick={() => setCurrentView('ai-business-copilot')}
-                          className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {oracleActivated ? (
-                <Button
-                  size="sm"
-                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                  onClick={() => setCurrentView('ai-business-copilot')}
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Ask Oracle
-                  <ArrowRight className="h-3 w-3" />
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                  onClick={() => setOracleWizardOpen(true)}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Activate Oracle
-                  <ChevronRight className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        </motion.div>
-
         {/* ── Ready-to-file footer ── */}
         {(() => {
           const ready = returns.filter((r) =>
@@ -1673,7 +1691,7 @@ export default function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
             >
-              <div className="glass-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="glass-surface p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
                     <CheckCircle2 className="h-4 w-4 accent-text" />
@@ -1765,7 +1783,7 @@ function BusinessHealthGauge({
       transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
+      <div className="glass-surface p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
         <div className="relative shrink-0" style={{ width: size, height: size }}>
           <svg width={size} height={size} className="-rotate-90">
             <defs>

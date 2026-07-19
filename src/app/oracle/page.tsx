@@ -1,37 +1,32 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Dedicated Full-Screen Workspace (/oracle)
+// GSTPilot Oracle — Dedicated Full-Screen Workspace (/oracle)
 // ═══════════════════════════════════════════════════════════════════════════════
-// This is the Oracle Workspace — a completely separate, full-page AI CFO chat
-// experience, isolated from the rest of the app. Behaviour:
+// The Oracle Workspace — a full-page ChatGPT-Enterprise-style AI CFO chat
+// experience, isolated from the rest of the app.
 //
 //   • Opened ONLY when the user clicks "Oracle" in the left navigation.
-//   • The dashboard (/) NEVER auto-opens Oracle.
-//   • Full-screen 3-column layout: Conversation Sidebar | Chat | Insights.
-//   • Conversations are persisted to the real database (OracleAISession,
-//     OracleAIMessage, OracleAIToolCall) — refreshing the page keeps history.
+//   • Two-column layout: conversation thread (max-width 768px, centered) +
+//     Executive Brief insights sidebar (collapsible, hidden on mobile).
+//   • Conversations persist to localStorage via the `useOracleConversations`
+//     Zustand store; the streaming API is `/api/oracle/chat` (SSE).
 //   • Closing Oracle returns the user to the dashboard.
 //
 // NOTE: This route does NOT wrap in <Providers> because OracleChat is
-// self-contained — it uses a Zustand store (useOracleChat) for state, not
-// AuthContext/OrgContext/AppContext. The Oracle Chat API endpoints are
-// single-tenant (userId: null) so no auth provider is required. This keeps
-// the /oracle compile graph small and memory-light.
-//
-// The OracleLauncher floating button has been REMOVED from the global
-// providers — Oracle is reachable ONLY from the left navigation.
+// self-contained — it reads the (optional) session user from localStorage
+// for header display only; the chat API is single-tenant (userEmail optional).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import dynamic from 'next/dynamic';
 
 // Lazy-load the Oracle Chat component (DB-persisted, streaming, structured).
 const OracleChat = dynamic(
-  () => import('@/components/oracle-chat/OracleChat').then((m) => m.OracleChat),
+  () => import('@/components/oracle/OracleChat').then((m) => m.OracleChat),
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+      <div className="flex min-h-screen items-center justify-center bg-[#000000]">
         <div className="flex flex-col items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2563EB]/10 ring-1 ring-[#2563EB]/30 motion-pulse">
             <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#3B82F6]" fill="none" stroke="currentColor" strokeWidth="2">
@@ -40,9 +35,9 @@ const OracleChat = dynamic(
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-base font-semibold text-white tracking-tight">
-              Oracle<span className="text-[#3B82F6]"> CFO</span>
+              Oracle
             </span>
-            <span className="text-xs text-white/45 font-medium">Waking up the financial brain…</span>
+            <span className="text-xs text-white/45 font-medium">Waking up the brain…</span>
           </div>
         </div>
       </div>
@@ -51,5 +46,11 @@ const OracleChat = dynamic(
 );
 
 export default function OraclePage() {
-  return <OracleChat />;
+  // `page-rhythm` applies the staggered premium fade-in defined in globals.css
+  // (premium-fade-in keyframe with nth-child delays up to 6 children).
+  return (
+    <div className="page-rhythm min-h-screen bg-[#000000]">
+      <OracleChat />
+    </div>
+  );
 }

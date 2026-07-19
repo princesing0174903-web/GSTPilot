@@ -55,7 +55,161 @@ import type {
 import { OracleActionCards } from './OracleActionCards';
 import { OracleAvatar } from './OracleAvatar';
 import { deriveAvatarState } from './oracle-human';
+import type { OracleTurn } from '@/lib/oracle-conversations';
 import { cn } from '@/lib/utils';
+
+// ─── OracleMessage (simple renderer for OracleTurn-shaped messages) ───────────
+// This is the renderer used by the /oracle route's `oracle/OracleChat.tsx`.
+// It accepts the simpler `OracleTurn` shape from the `useOracleConversations`
+// store (id / role / content / followUps / streaming / error / createdAt).
+//
+// Design — ChatGPT-Enterprise:
+//   • User messages: right-aligned, subtle #181818 bg, no avatar.
+//   • Oracle messages: left-aligned, OracleAvatar (40px), NO bubble — just
+//     text on a transparent background, like ChatGPT.
+//   • Streaming: "Oracle is responding…" with a small pulsing blue dot +
+//     blinking cursor.
+//   • Follow-ups: clickable chips beneath the answer.
+
+export interface OracleMessageProps {
+  turn: OracleTurn;
+  onPickFollowUp?: (question: string) => void;
+  onRetry?: () => void;
+}
+
+export function OracleMessage({ turn, onPickFollowUp, onRetry }: OracleMessageProps) {
+  if (turn.role === 'user') {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
+        className="flex justify-end"
+      >
+        <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-[#181818] px-4 py-2.5 text-[14px] leading-relaxed text-white whitespace-pre-wrap break-words">
+          {turn.content}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Oracle message — left-aligned, avatar + transparent text
+  const isStreaming = !!turn.streaming;
+  const isError = !!turn.error;
+  const followUps = turn.followUps ?? [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+      className="flex gap-3"
+    >
+      <div className="shrink-0">
+        <OracleAvatar
+          state={deriveAvatarState(isError ? 'error' : isStreaming ? 'thinking' : 'done', 'neutral')}
+          size={36}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1 space-y-3">
+        {/* Streaming indicator */}
+        {isStreaming && !turn.content && (
+          <div className="flex items-center gap-2 py-1">
+            <span className="relative flex h-2 w-2">
+              <motion.span
+                className="absolute inline-flex h-full w-full rounded-full bg-[#3B82F6]"
+                animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const }}
+              />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2563EB]" />
+            </span>
+            <span className="text-[13px] font-medium text-white/60">
+              Oracle is responding
+            </span>
+            <motion.span
+              className="inline-block h-3.5 w-[2px] rounded-full bg-[#2563EB]"
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
+              aria-hidden
+            />
+          </div>
+        )}
+
+        {/* Error state */}
+        {isError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/[0.06] p-3 text-[13px] text-red-400">
+            <p className="font-medium">Oracle hit a snag.</p>
+            <p className="mt-1 text-xs opacity-80">
+              {turn.content || 'Something went wrong while streaming the response.'}
+            </p>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-[#3B82F6] hover:text-[#60A5FA]"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Try again
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Body — text on transparent bg (no bubble, ChatGPT-style) */}
+        {!isError && turn.content && (
+          <div
+            className={cn(
+              'text-[14px] leading-relaxed text-white/90 whitespace-pre-wrap break-words',
+              isStreaming && 'typing-cursor',
+            )}
+            style={{ fontFamily: 'var(--font-body, inherit)' }}
+          >
+            {turn.content}
+            {isStreaming && (
+              <motion.span
+                className="ml-0.5 inline-block h-3.5 w-[2px] rounded-full bg-[#2563EB] align-middle"
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
+                aria-hidden
+              />
+            )}
+          </div>
+        )}
+
+        {/* Follow-up chips */}
+        {!isStreaming && !isError && followUps.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {followUps.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => onPickFollowUp?.(q)}
+                className="rounded-full border border-[#1F1F1F] bg-[#111111] px-3 py-1.5 text-[12px] font-medium text-white/75 transition-colors hover:border-[#2A2A2A] hover:bg-[#161616] hover:text-white"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Done timestamp + retry */}
+        {!isStreaming && !isError && turn.content && (
+          <div className="flex items-center gap-3 pt-1 text-[10px] text-white/35">
+            <span>Oracle · {new Date(turn.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center gap-1 text-white/40 transition-colors hover:text-[#3B82F6]"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Regenerate
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 // ─── Source Card ─────────────────────────────────────────────────────────────
 
@@ -122,14 +276,14 @@ function PhaseIndicator({ phase }: { phase: OraclePhase }) {
       transition={{ duration: 0.2 }}
       className="flex items-center gap-2 py-1"
     >
-      {/* Small pulsing dot — emerald, like Claude/ChatGPT */}
+      {/* Small pulsing dot — blue, like Claude/ChatGPT */}
       <span className="relative flex h-2 w-2">
         <motion.span
-          className="absolute inline-flex h-full w-full rounded-full bg-emerald-400"
+          className="absolute inline-flex h-full w-full rounded-full bg-[#3B82F6]"
           animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
           transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const }}
         />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2563EB]" />
       </span>
       <span className="text-sm font-medium text-muted-foreground">
         Oracle is responding
@@ -307,7 +461,7 @@ function AnalysisBody({ text, isStreaming }: { text: string; isStreaming: boolea
 
 // ─── Oracle Message (the strategic brief) ────────────────────────────────────
 
-export interface OracleMessageProps {
+export interface OracleMessageViewProps {
   message: OracleMessage;
   onFollowUp?: (question: string) => void;
   onAction?: (kind: string, label: string) => void;
@@ -335,7 +489,7 @@ export function OracleMessageView({
   onRegenerate,
   onSpeak,
   isSpeaking,
-}: OracleMessageProps) {
+}: OracleMessageViewProps) {
   if (message.role === 'user') {
     return (
       <UserMessage
@@ -412,8 +566,8 @@ export function OracleMessageView({
           {isStreaming && (
             <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
               </span>
               Oracle is responding
             </span>
@@ -513,9 +667,9 @@ export function OracleMessageView({
                       onAction?.('create-report', parts.nextBestStep);
                     }
                   }}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] bg-gradient-to-r from-[color-mix(in_srgb,var(--accent-start)_12%,transparent)] to-[color-mix(in_srgb,var(--accent-end)_8%,transparent)] px-4 py-3 text-left transition-all hover:border-[color-mix(in_srgb,var(--accent-start)_60%,transparent)] hover:shadow-[0_4px_24px_-8px_rgba(0,229,255,0.2)]"
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-[#2563EB]/30 bg-[#2563EB]/[0.08] px-4 py-3 text-left transition-all hover:border-[#2563EB]/50 hover:shadow-[0_4px_24px_-8px_rgba(37,99,235,0.25)]"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl accent-gradient text-white shadow-lg shadow-emerald-500/20">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/25">
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </div>
                   <span className="flex-1 text-sm font-semibold text-foreground">
@@ -625,7 +779,7 @@ export function OracleMessageView({
             className="flex flex-wrap items-center gap-1.5"
           >
             <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              <CheckCircle2 className="h-3 w-3 text-[#3B82F6]" />
               <span>Oracle · {new Date(message.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
             </span>
 

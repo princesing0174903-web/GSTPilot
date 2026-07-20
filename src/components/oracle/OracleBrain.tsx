@@ -24,6 +24,7 @@ import {
   Receipt, Users, AlertTriangle, FileText, Database, Zap, Clock,
   ChevronRight, Loader2, BrainCircuit, Wrench, CheckCircle2, XCircle,
   Menu, X, Lightbulb, IndianRupee, ShieldCheck, BarChart3,
+  Copy, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -151,6 +152,11 @@ const TOOL_ICONS: Record<string, any> = {
   getGSTStatus: Receipt,
   getOverdueCustomers: AlertTriangle,
   getCashflowAnalysis: TrendingUp,
+  getTopCustomer: Users,
+  getNewestInvoice: Receipt,
+  getInvoiceMetrics: BarChart3,
+  getRecentActivity: Clock,
+  getConnectedIntegrations: ShieldCheck,
   createInvoice: FileText,
   sendReminder: Send,
   recallMemory: Brain,
@@ -166,6 +172,11 @@ const TOOL_LABELS: Record<string, string> = {
   getGSTStatus: 'GST Status',
   getOverdueCustomers: 'Overdue Customers',
   getCashflowAnalysis: 'Cashflow Analysis',
+  getTopCustomer: 'Top Customer',
+  getNewestInvoice: 'Newest Invoice',
+  getInvoiceMetrics: 'Invoice Metrics',
+  getRecentActivity: 'Recent Activity',
+  getConnectedIntegrations: 'Integrations',
   createInvoice: 'Create Invoice',
   sendReminder: 'Send Reminder',
   recallMemory: 'Recall Memory',
@@ -441,6 +452,24 @@ export function OracleBrain() {
     setIsStreaming(false);
   }, []);
 
+  // Regenerate the last assistant response: remove it, find the last user message, re-send it
+  const handleRegenerate = useCallback(() => {
+    if (isStreaming) return;
+    setMessages(prev => {
+      // Remove trailing assistant message
+      const withoutLast = prev.slice(0, -1);
+      // Find the last user message
+      const lastUserIdx = withoutLast.map(m => m.role).lastIndexOf('user');
+      if (lastUserIdx === -1) return prev;
+      const lastUserMsg = withoutLast[lastUserIdx];
+      const remaining = withoutLast.slice(0, lastUserIdx);
+      // Re-send the user message (async, fire-and-forget — sendMessage adds messages back)
+      // Use a microtask so setMessages completes first
+      queueMicrotask(() => sendMessage(lastUserMsg.content));
+      return remaining;
+    });
+  }, [isStreaming, sendMessage]);
+
   const deleteSession = useCallback(async (sessionId: string) => {
     if (!orgId) return;
     try {
@@ -633,8 +662,13 @@ export function OracleBrain() {
                   Loading conversation…
                 </div>
               )}
-              {messages.map(m => (
-                <MessageBubble key={m.id} message={m} />
+              {messages.map((m, i) => (
+                <MessageBubble
+                  key={m.id}
+                  message={m}
+                  isLast={i === messages.length - 1}
+                  onRegenerate={i === messages.length - 1 && m.role === 'assistant' && !m.streaming ? handleRegenerate : undefined}
+                />
               ))}
               <div ref={messagesEndRef} />
             </div>
@@ -796,8 +830,18 @@ function WelcomeScreen({
 // Message bubble with tool-call cards
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, isLast, onRegenerate }: { message: ChatMessage; isLast?: boolean; onRegenerate?: () => void }) {
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!message.content) return;
+    navigator.clipboard.writeText(message.content).then(() => {
+      setCopied(true);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => toast.error('Failed to copy'));
+  }, [message.content]);
 
   return (
     <motion.div
@@ -859,6 +903,30 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             )}
             {message.streaming && message.content && (
               <span className="inline-block h-4 w-1.5 bg-emerald-400 animate-pulse align-middle" />
+            )}
+
+            {/* Action row: Copy + Regenerate (only when not streaming) */}
+            {!message.streaming && message.content && (
+              <div className="flex items-center gap-1 pt-1">
+                <button
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+                  title="Copy response"
+                >
+                  {copied ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                {onRegenerate && (
+                  <button
+                    onClick={onRegenerate}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+                    title="Regenerate response"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Regenerate
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

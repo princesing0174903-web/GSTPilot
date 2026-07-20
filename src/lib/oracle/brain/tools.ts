@@ -647,6 +647,356 @@ const sendReminderTool: OracleTool = {
   },
 };
 
+// ─── Tool: getTopCustomer (largest / top revenue customer) ─────────────────────
+
+const getTopCustomerTool: OracleTool = {
+  name: 'getTopCustomer',
+  description:
+    'Find the customer with the highest total invoiced revenue. Returns top 5 customers ranked by revenue. Use when asked "who is my largest customer" or "top revenue customer".',
+  category: 'read',
+  argsSchema: {
+    limit: { type: 'number', description: 'number of top customers to return (default 5, max 20)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const limit = Math.min(Number(args.limit) || 5, 20);
+    // Query invoices through the Client relation (Client.firmId = orgId)
+    const rows = await db.invoice.findMany({
+      where: { client: { firmId: orgId } },
+      select: { buyerName: true, totalAmount: true, status: true, client: { select: { tradeName: true } } },
+    }).catch(() => []);
+    if (rows.length === 0) {
+      return { ok: true, summary: 'I don\'t have enough business data — no invoices found to compute top customers.' };
+    }
+    const grouped = new Map<string, { name: string; revenue: number; invoiceCount: number }>();
+    for (const r of rows as any[]) {
+      const name = r.buyerName ?? r.client?.tradeName ?? 'Unknown';
+      const existing = grouped.get(name) ?? { name, revenue: 0, invoiceCount: 0 };
+      existing.revenue += r.totalAmount ?? 0;
+      existing.invoiceCount += 1;
+      grouped.set(name, existing);
+    }
+    const list = Array.from(grouped.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, limit);
+    const top = list[0];
+    const totalRevenue = rows.reduce((s: number, r: any) => s + (r.totalAmount ?? 0), 0);
+    const share = totalRevenue > 0 ? (top.revenue / totalRevenue) : 0;
+    const summary =
+      `Top customer: **${top.name}** with ${inr(top.revenue)} in revenue across ${top.invoiceCount} invoice(s) (${pct(share)} of total revenue).` +
+      (list.length > 1 ? ` Next: ${list.slice(1, 3).map(c => `${c.name} (${inr(c.revenue)})`).join(', ')}.` : '');
+    return {
+      ok: true,
+      summary,
+      data: list,
+      artifacts: [{
+        kind: 'table' as const,
+        title: 'Top Customers by Revenue',
+        columns: ['Rank', 'Customer', 'Revenue', 'Invoices', 'Share'],
+        rows: list.map((c, i) => ({
+          Rank: i + 1,
+          Customer: c.name,
+          Revenue: inr(c.revenue),
+          Invoices: c.invoiceCount,
+          Share: totalRevenue > 0 ? pct(c.revenue / totalRevenue) : '-',
+        })),
+      }],
+    };
+  },
+};
+
+// ─── Tool: getNewestInvoice ───────────────────────────────────────────────────
+
+const getNewestInvoiceTool: OracleTool = {
+  name: 'getNewestInvoice',
+  description:
+    'Get the most recently created invoice(s). Returns the latest invoice with full details (number, customer, amount, status, date, due date). Use when asked "show newest invoice" or "latest invoice".',
+  category: 'read',
+  argsSchema: {
+    limit: { type: 'number', description: 'number of recent invoices (default 1, max 10)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const limit = Math.min(Number(args.limit) || 1, 10);
+    const rows = await db.invoice.findMany({
+      where: { client: { firmId: orgId } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true, invoiceNumber: true, buyerName: true, status: true, paymentStatus: true,
+        totalAmount: true, balanceAmount: true, invoiceDate: true, dueDate: true, createdAt: true,
+        client: { select: { tradeName: true } },
+      },
+    }).catch(() => []);
+    if (rows.length === 0) {
+      return { ok: true, summary: 'I don\'t have enough business data — no invoices have been created yet.' };
+    }
+    const latest = rows[0] as any;
+    const customerName = latest.buyerName ?? latest.client?.tradeName ?? '—';
+    const summary =
+      `Newest invoice: **${latest.invoiceNumber ?? '—'}** for **${customerName}**, ` +
+      `${inr(latest.totalAmount ?? 0)} (${latest.paymentStatus ?? latest.status}). ` +
+      `Issued ${latest.invoiceDate ?? '—'}, ` +
+      `due ${latest.dueDate ?? '—'}.` +
+      (rows.length > 1 ? ` ${rows.length - 1} more recent invoice(s) available.` : '');
+    return {
+      ok: true,
+      summary,
+      data: rows,
+      artifacts: [{
+        kind: 'table' as const,
+        title: 'Most Recent Invoices',
+        columns: ['Invoice #', 'Customer', 'Status', 'Total', 'Balance', 'Issued', 'Due'],
+        rows: rows.map((r: any) => ({
+          'Invoice #': r.invoiceNumber,
+          Customer: r.buyerName ?? r.client?.tradeName ?? '-',
+          Status: r.paymentStatus ?? r.status,
+          Total: inr(r.totalAmount ?? 0),
+          Balance: inr(r.balanceAmount ?? 0),
+          Issued: r.invoiceDate ?? '-',
+          Due: r.dueDate ?? '-',
+        })),
+      }],
+    };
+  },
+};
+
+// ─── Tool: getInvoiceMetrics (average invoice value + distribution) ────────────
+
+const getInvoiceMetricsTool: OracleTool = {
+  name: 'getInvoiceMetrics',
+  description:
+    'Compute invoice metrics: average invoice value, median, min, max, total, and count. Use when asked "average invoice value" or "invoice statistics".',
+  category: 'read',
+  argsSchema: {},
+  async execute(orgId): Promise<ToolResult> {
+    const rows = await db.invoice.findMany({
+      where: { client: { firmId: orgId } },
+      select: { totalAmount: true, paymentStatus: true },
+    }).catch(() => []);
+    if (rows.length === 0) {
+      return { ok: true, summary: 'I don\'t have enough business data — no invoices found to compute metrics.' };
+    }
+    const totals = rows.map((r: any) => r.totalAmount ?? 0).filter(n => n > 0).sort((a, b) => a - b);
+    const count = totals.length;
+    const sum = totals.reduce((s, n) => s + n, 0);
+    const avg = count > 0 ? sum / count : 0;
+    const median = count > 0
+      ? (count % 2 === 1 ? totals[Math.floor(count / 2)] : (totals[count / 2 - 1] + totals[count / 2]) / 2)
+      : 0;
+    const min = count > 0 ? totals[0] : 0;
+    const max = count > 0 ? totals[count - 1] : 0;
+    const paidCount = rows.filter((r: any) => r.paymentStatus === 'paid').length;
+    const overdueCount = rows.filter((r: any) => r.paymentStatus === 'overdue').length;
+    const summary =
+      `Average invoice value: **${inr(avg)}** across ${count} invoice(s). ` +
+      `Range: ${inr(min)} – ${inr(max)}. Median: ${inr(median)}. ` +
+      `Paid: ${paidCount}, Overdue: ${overdueCount}.`;
+    return {
+      ok: true,
+      summary,
+      data: { count, sum, avg, median, min, max, paidCount, overdueCount },
+      artifacts: [{
+        kind: 'metric' as const,
+        title: 'Invoice Metrics',
+        items: [
+          { label: 'Average', value: inr(avg) },
+          { label: 'Median', value: inr(median) },
+          { label: 'Min', value: inr(min) },
+          { label: 'Max', value: inr(max) },
+          { label: 'Total', value: inr(sum) },
+          { label: 'Count', value: String(count) },
+        ],
+      }],
+    };
+  },
+};
+
+// ─── Tool: getRecentActivity ──────────────────────────────────────────────────
+
+const getRecentActivityTool: OracleTool = {
+  name: 'getRecentActivity',
+  description:
+    'List recent business activity (invoices created, payments received, expenses logged, GST filings, customer additions). Returns the latest 10 timeline events. Use when asked "recent activity" or "what happened recently".',
+  category: 'read',
+  argsSchema: {
+    limit: { type: 'number', description: 'number of events (default 10, max 30)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const limit = Math.min(Number(args.limit) || 10, 30);
+
+    // Try the Activity table first (canonical timeline)
+    let activities: Array<{ id: string; type: string; description: string; createdAt: Date; metadata?: string | null }> = [];
+    try {
+      activities = await db.activity.findMany({
+        where: { firmId: orgId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, type: true, description: true, createdAt: true, metadata: true },
+      });
+    } catch { activities = []; }
+
+    // If Activity table is empty, synthesize a timeline from the source tables
+    if (activities.length === 0) {
+      const [recentInvoices, recentPayments, recentExpenses, recentFilings] = await Promise.all([
+        db.invoice.findMany({
+          where: { client: { firmId: orgId } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, createdAt: true, client: { select: { tradeName: true } } },
+        }).catch(() => []),
+        db.payment.findMany({
+          where: { client: { firmId: orgId } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, amount: true, createdAt: true, partyName: true, partyType: true },
+        }).catch(() => []),
+        db.expense.findMany({
+          where: { client: { firmId: orgId } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, vendor: true, amount: true, category: true, createdAt: true },
+        }).catch(() => []),
+        db.gstrFiling.findMany({
+          where: { client: { firmId: orgId } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, returnType: true, status: true, createdAt: true },
+        }).catch(() => []),
+      ]);
+      const events: Array<{ createdAt: Date; type: string; description: string }> = [];
+      for (const inv of recentInvoices as any[]) {
+        const name = inv.buyerName ?? inv.client?.tradeName ?? '—';
+        events.push({ createdAt: inv.createdAt, type: 'invoice', description: `Invoice ${inv.invoiceNumber ?? '—'} created for ${name} (${inr(inv.totalAmount ?? 0)})` });
+      }
+      for (const pay of recentPayments as any[]) {
+        events.push({ createdAt: pay.createdAt, type: 'payment', description: `Payment of ${inr(pay.amount ?? 0)} ${pay.partyType === 'vendor' ? 'to ' + (pay.partyName ?? '—') : 'from ' + (pay.partyName ?? '—')}` });
+      }
+      for (const exp of recentExpenses as any[]) {
+        events.push({ createdAt: exp.createdAt, type: 'expense', description: `Expense logged: ${exp.category ?? '—'} to ${exp.vendor ?? '—'} (${inr(exp.amount ?? 0)})` });
+      }
+      for (const fil of recentFilings as any[]) {
+        events.push({ createdAt: fil.createdAt, type: 'gst', description: `GSTR-${fil.returnType ?? '—'} filing ${fil.status ?? '—'}` });
+      }
+      events.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      activities = events.slice(0, limit).map((e, i) => ({ id: `synth-${i}`, type: e.type, description: e.description, createdAt: e.createdAt, metadata: null }));
+    }
+
+    if (activities.length === 0) {
+      return { ok: true, summary: 'I don\'t have enough business data — no recent activity found.' };
+    }
+
+    const summary =
+      `${activities.length} recent event(s):\n` +
+      activities.slice(0, 5).map(a => `  • ${new Date(a.createdAt).toLocaleDateString('en-IN')} — ${a.description}`).join('\n');
+
+    return {
+      ok: true,
+      summary,
+      data: activities,
+      artifacts: [{
+        kind: 'list' as const,
+        title: 'Recent Activity',
+        items: activities.map(a => ({
+          text: a.description,
+          date: new Date(a.createdAt).toLocaleString('en-IN'),
+          type: a.type,
+        })),
+      }],
+    };
+  },
+};
+
+// ─── Tool: getConnectedIntegrations ───────────────────────────────────────────
+
+const getConnectedIntegrationsTool: OracleTool = {
+  name: 'getConnectedIntegrations',
+  description:
+    'Check which third-party integrations are connected (Google Workspace, Zoho Books, etc.) with their last sync status. Use when asked "what integrations are connected" or "is Zoho synced".',
+  category: 'read',
+  argsSchema: {},
+  async execute(orgId): Promise<ToolResult> {
+    const integrations: Array<{ provider: string; connected: boolean; detail: string }> = [];
+
+    // Google Workspace tokens
+    const googleCount = await db.googleWorkspaceToken.count({
+      where: { organizationId: orgId, revokedAt: null },
+    }).catch(() => 0);
+    const googleLatest = await db.googleWorkspaceToken.findFirst({
+      where: { organizationId: orgId, revokedAt: null },
+      orderBy: { connectedAt: 'desc' },
+      select: { userEmail: true, connectedAt: true, expiryDate: true },
+    }).catch(() => null);
+    integrations.push({
+      provider: 'Google Workspace',
+      connected: googleCount > 0,
+      detail: googleLatest
+        ? `${googleLatest.userEmail} · connected ${new Date(googleLatest.connectedAt).toLocaleDateString('en-IN')}`
+        : 'Not connected',
+    });
+
+    // Zoho Books tokens
+    const zohoCount = await db.zohoBooksToken.count({
+      where: { organizationId: orgId, revokedAt: null },
+    }).catch(() => 0);
+    const zohoLatest = await db.zohoBooksToken.findFirst({
+      where: { organizationId: orgId, revokedAt: null },
+      orderBy: { connectedAt: 'desc' },
+      select: { zohoOrgName: true, connectedAt: true },
+    }).catch(() => null);
+    // Last sync from ZohoSyncLog (if available)
+    const zohoLastSync = await db.zohoSyncLog.findFirst({
+      where: { organizationId: orgId },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true, status: true },
+    }).catch(() => null);
+    integrations.push({
+      provider: 'Zoho Books',
+      connected: zohoCount > 0,
+      detail: zohoLatest
+        ? `${zohoLatest.zohoOrgName ?? 'Connected'} · synced ${zohoLastSync?.startedAt ? new Date(zohoLastSync.startedAt).toLocaleDateString('en-IN') : 'never'}`
+        : 'Not connected',
+    });
+
+    // Generic Integration table (catch-all)
+    try {
+      const genericIntegrations = await db.integration.findMany({
+        where: { tenantId: orgId, connected: true },
+        take: 10,
+        select: { provider: true, displayName: true, status: true, lastSyncAt: true },
+      });
+      for (const gi of genericIntegrations) {
+        integrations.push({
+          provider: gi.displayName ?? gi.provider ?? 'Integration',
+          connected: true,
+          detail: `${gi.status} · ${gi.lastSyncAt ? 'synced ' + new Date(gi.lastSyncAt).toLocaleDateString('en-IN') : 'never synced'}`,
+        });
+      }
+    } catch {}
+
+    const connectedCount = integrations.filter(i => i.connected).length;
+    const summary =
+      integrations.length === 0
+        ? 'I don\'t have enough business data — no integrations found.'
+        : `${connectedCount} of ${integrations.length} integration(s) connected: ` +
+          integrations.map(i => `${i.provider} (${i.connected ? '✓' : '✗'})`).join(', ') + '.';
+
+    return {
+      ok: true,
+      summary,
+      data: integrations,
+      artifacts: [{
+        kind: 'table' as const,
+        title: 'Connected Integrations',
+        columns: ['Provider', 'Status', 'Details'],
+        rows: integrations.map(i => ({
+          Provider: i.provider,
+          Status: i.connected ? '✓ Connected' : '✗ Not connected',
+          Details: i.detail,
+        })),
+      }],
+    };
+  },
+};
+
 // ─── Tool: recallMemory ───────────────────────────────────────────────────────
 
 const recallMemoryTool: OracleTool = {
@@ -707,6 +1057,11 @@ export const ORACLE_TOOLS: OracleTool[] = [
   getGSTStatusTool,
   getOverdueCustomersTool,
   getCashflowAnalysisTool,
+  getTopCustomerTool,
+  getNewestInvoiceTool,
+  getInvoiceMetricsTool,
+  getRecentActivityTool,
+  getConnectedIntegrationsTool,
   createInvoiceTool,
   sendReminderTool,
   recallMemoryTool,

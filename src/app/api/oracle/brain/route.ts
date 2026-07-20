@@ -134,9 +134,47 @@ export async function POST(request: NextRequest) {
   });
 
   // ─── Build the system prompt ────────────────────────────────────────────────
-  const [memoryBlock, snapshot] = await Promise.all([
+  // Context Builder: gather business snapshot + recent activity + integrations
+  const [memoryBlock, snapshot, recentActivity, integrations] = await Promise.all([
     getWorkspaceMemoryBlock(orgId).catch(() => '(memory unavailable)'),
     getBusinessSnapshot(orgId).catch(() => null),
+    // Fetch recent activity (last 5 events)
+    (async () => {
+      try {
+        const acts = await db.activity.findMany({
+          where: { firmId: orgId },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { type: true, description: true, createdAt: true },
+        });
+        if (acts.length > 0) return acts;
+        // Synthesize from source tables if Activity table is empty
+        const [invs, pays] = await Promise.all([
+          db.invoice.findMany({ where: { client: { firmId: orgId } }, orderBy: { createdAt: 'desc' }, take: 3, select: { invoiceNumber: true, buyerName: true, totalAmount: true, createdAt: true, client: { select: { tradeName: true } } } }).catch(() => []),
+          db.payment.findMany({ where: { client: { firmId: orgId } }, orderBy: { createdAt: 'desc' }, take: 2, select: { amount: true, createdAt: true, partyName: true } }).catch(() => []),
+        ]);
+        const events: Array<{ type: string; description: string; createdAt: Date }> = [];
+        for (const i of invs as any[]) {
+          const name = i.buyerName ?? i.client?.tradeName ?? '—';
+          events.push({ type: 'invoice', description: `Invoice ${i.invoiceNumber ?? '—'} for ${name} (₹${(i.totalAmount ?? 0).toLocaleString('en-IN')})`, createdAt: i.createdAt });
+        }
+        for (const p of pays as any[]) events.push({ type: 'payment', description: `Payment ₹${(p.amount ?? 0).toLocaleString('en-IN')} ${p.partyName ? 'from ' + p.partyName : 'received'}`, createdAt: p.createdAt });
+        return events.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
+      } catch { return []; }
+    })(),
+    // Fetch connected integrations
+    (async () => {
+      const result: Array<{ provider: string; connected: boolean }> = [];
+      try {
+        const g = await db.googleWorkspaceToken.count({ where: { organizationId: orgId, revokedAt: null } }).catch(() => 0);
+        result.push({ provider: 'Google Workspace', connected: g > 0 });
+      } catch {}
+      try {
+        const z = await db.zohoBooksToken.count({ where: { organizationId: orgId, revokedAt: null } }).catch(() => 0);
+        result.push({ provider: 'Zoho Books', connected: z > 0 });
+      } catch {}
+      return result;
+    })(),
   ]);
 
   const snapshotContext = snapshot
@@ -155,7 +193,15 @@ Company financials as of ${new Date(snapshot.generatedAt).toLocaleString('en-IN'
 - Health score: ${snapshot.healthScore}/100 (${snapshot.healthScoreLabel}), Risk: ${snapshot.riskScore}/100
 - Collection rate: ${(snapshot.collectionRate * 100).toFixed(1)}%, avg days to pay: ${snapshot.avgDaysToPay}
 - Forecast: next month revenue ₹${snapshot.forecast.nextMonthRevenue.toLocaleString('en-IN')} (${snapshot.forecast.trend})`
-    : '## Live Business Context\n(No business data yet — the database is empty. Use tools to query and createInvoice to add data.)';
+    : '## Live Business Context\n(No business data yet — the database is empty. If asked for numbers, say "I don\'t have enough business data." Use tools to query and createInvoice to add data.)';
+
+  const activityContext = (recentActivity && recentActivity.length > 0)
+    ? `\n\n## Latest Activity (auto-injected)\n${recentActivity.map(a => `- ${new Date(a.createdAt).toLocaleDateString('en-IN')}: ${a.description}`).join('\n')}`
+    : '\n\n## Latest Activity\n(No recent activity recorded.)';
+
+  const integrationContext = (integrations && integrations.length > 0)
+    ? `\n\n## Connected Integrations (auto-injected)\n${integrations.map(i => `- ${i.provider}: ${i.connected ? '✓ Connected' : '✗ Not connected'}`).join('\n')}`
+    : '\n\n## Connected Integrations\n(No integrations configured.)';
 
   const systemPrompt = `You are Oracle — the AI brain of GSTPilot, an Indian GST + finance management platform.
 
@@ -178,9 +224,19 @@ You are not a chatbot. You are an AI employee — a virtual CFO + COO + Complian
 - Match the user's language (English / Hindi / Hinglish — whatever they use).
 
 ## When to Call Tools
-- "How much revenue?" → call getBusinessSnapshot (or use the auto-injected context below)
-- "Show me overdue invoices" → call getOverdueCustomers
-- "Who owes me money?" → call getOverdueCustomers
+- "How much revenue?" → use auto-injected snapshot, or call getBusinessSnapshot
+- "Cash position?" → use auto-injected snapshot (cash field)
+- "Receivables?" → use auto-injected snapshot (receivables field)
+- "How many customers?" → use auto-injected snapshot (customerCount)
+- "How many invoices?" → use auto-injected snapshot (invoiceCount)
+- "Pending collections?" → use auto-injected snapshot (receivables + overdueReceivables)
+- "Business health?" → use auto-injected snapshot (healthScore + healthScoreLabel)
+- "Largest customer?" or "Top revenue customer?" → call getTopCustomer
+- "Newest invoice?" or "Latest invoice?" → call getNewestInvoice
+- "Overdue invoices?" or "Who owes me money?" → call getOverdueCustomers
+- "Recent activity?" or "What happened recently?" → call getRecentActivity (or use auto-injected activity)
+- "Connected integrations?" → call getConnectedIntegrations (or use auto-injected integrations)
+- "Average invoice value?" → call getInvoiceMetrics
 - "What's my GST liability?" → call getGSTStatus (or use auto-injected context)
 - "Create an invoice for X" → call createInvoice with items
 - "Send reminders to overdue customers" → call sendReminder
@@ -188,9 +244,15 @@ You are not a chatbot. You are an AI employee — a virtual CFO + COO + Complian
 - "What do you know about my business?" → call recallMemory with empty query
 - "Why is my cashflow decreasing?" → call getCashflowAnalysis, then reason
 
-You already have a business snapshot in your context. For simple KPI questions, quote it directly. For detailed breakdowns (specific invoices, customers, expenses), call the relevant tool.
+## CRITICAL — No Hallucination Rule
+- You already have a business snapshot, recent activity, and integrations in your context. For simple KPI questions, quote those numbers directly.
+- If the snapshot shows zero revenue / zero customers / zero invoices, and the user asks about numbers, say: "I don't have enough business data." — DO NOT invent numbers.
+- For detailed breakdowns (specific invoices, customers, expenses, top customer, newest invoice, metrics), call the relevant tool.
+- Never fabricate customer names, invoice numbers, amounts, or dates. Every number must come from the snapshot or a tool result.
 
 ${snapshotContext}
+${activityContext}
+${integrationContext}
 
 ${memoryBlock}
 

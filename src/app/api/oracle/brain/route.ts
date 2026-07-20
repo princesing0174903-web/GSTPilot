@@ -23,6 +23,7 @@ import ZAI from 'z-ai-web-dev-sdk';
 import { db } from '@/lib/db';
 import {
   ORACLE_TOOL_MAP,
+  CONFIRMATION_REQUIRED_TOOLS,
   parseToolCalls,
   stripToolCalls,
   buildToolsPromptBlock,
@@ -39,6 +40,72 @@ const MAX_TOOL_ITERATIONS = 4;
 interface BrainMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+}
+
+// ─── Action preview helper ───────────────────────────────────────────────────
+// Maps a confirmation-required tool name + args → a single-line, human-readable
+// summary of what will happen if the user approves. Used by the `action-confirm`
+// SSE event so the UI can show a meaningful prompt in the confirm dialog.
+function buildActionPreview(tool: string, args: Record<string, any>): string {
+  switch (tool) {
+    case 'createInvoice': {
+      const customer = String(args.customerName ?? args.buyerName ?? 'customer');
+      const items = Array.isArray(args.items) ? args.items : [];
+      let total = 0;
+      for (const it of items as any[]) {
+        const qty = Number(it?.quantity ?? 1);
+        const rate = Number(it?.rate ?? 0);
+        const gstRate = Number(it?.gstRate ?? 18);
+        total += qty * rate * (1 + gstRate / 100);
+      }
+      const totalStr = total > 0
+        ? `₹${total.toLocaleString('en-IN')}`
+        : 'total pending';
+      const itemStr = items.length === 0
+        ? 'no items yet'
+        : `${items.length} item${items.length === 1 ? '' : 's'}`;
+      return `Create invoice for ${customer} — ${itemStr}, total ${totalStr}`;
+    }
+    case 'createCustomer': {
+      const name = String(args.name ?? args.tradeName ?? 'new customer');
+      const gstin = args.gstin ? ` (GSTIN: ${args.gstin})` : '';
+      return `Create customer "${name}"${gstin}`;
+    }
+    case 'createExpense': {
+      const vendor = String(args.vendor ?? 'vendor');
+      const amount = Number(args.amount ?? 0);
+      const category = String(args.category ?? 'Miscellaneous');
+      const date = args.date ? String(args.date) : 'today';
+      return `Record expense: ${category} — ${vendor}, ₹${amount.toLocaleString('en-IN')} on ${date}`;
+    }
+    case 'createPayment': {
+      const party = String(args.partyName ?? 'party');
+      const amount = Number(args.amount ?? 0);
+      const date = args.paymentDate ? String(args.paymentDate) : 'today';
+      const dir = String(args.partyType ?? 'customer') === 'vendor' ? 'to' : 'from';
+      return `Record payment: ₹${amount.toLocaleString('en-IN')} ${dir} ${party} on ${date}`;
+    }
+    case 'createTask': {
+      const title = String(args.title ?? 'new task');
+      const due = args.dueDate ? ` due ${args.dueDate}` : '';
+      const pri = args.priority ? ` (${args.priority})` : '';
+      return `Create task: "${title}"${due}${pri}`;
+    }
+    case 'generateGSTReturn': {
+      const type = String(args.returnType ?? 'GSTR-1');
+      const period = args.period ? String(args.period) : '—';
+      return `Generate ${type} return for period ${period}`;
+    }
+    case 'sendReminder': {
+      const channel = String(args.channel ?? 'email');
+      const target = args.customerName
+        ? ` to ${args.customerName}`
+        : ' to all overdue customers';
+      return `Send ${channel} reminder${target}`;
+    }
+    default:
+      return `Execute action: ${tool}`;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -386,9 +453,94 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             break;
           }
 
+          // ─── Confirmation intercept ───────────────────────────────────────
+          // If ANY tool call in this response is a confirmation-required action
+          // (createInvoice, createCustomer, createExpense, createPayment,
+          // createTask, generateGSTReturn, sendReminder), we DO NOT execute it
+          // (or any other tool in this response) yet. Instead we:
+          //   1. Persist the assistant's pre-call text (so it shows in the thread)
+          //   2. Emit an `action-confirm` SSE event with a human-readable preview
+          //   3. Emit a `done` event with a `pendingAction` payload
+          //   4. Close the stream — the frontend shows the confirm dialog and
+          //      POSTs to /api/oracle/brain/confirm to actually run the tool.
+          const confirmCall = toolCalls.find(c => CONFIRMATION_REQUIRED_TOOLS.has(c.tool));
+          if (confirmCall) {
+            const toolCallId = `tc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+            const preview = buildActionPreview(confirmCall.tool, confirmCall.args);
+
+            // Persist the assistant's text (stripped of tool-call blocks) so the
+            // thread shows what Oracle said before asking for confirmation.
+            const confirmDisplayContent = stripToolCalls(assistantContent) || `I'll ${preview.toLowerCase()} — please confirm.`;
+            const confirmParts = [{
+              type: 'tool-call' as const,
+              tool: confirmCall.tool,
+              args: confirmCall.args,
+              pending: true,
+            }];
+
+            const confirmAssistantMessage = await db.oracleAIMessage.create({
+              data: {
+                sessionId,
+                firmId: orgId,
+                userId,
+                role: 'assistant',
+                content: confirmDisplayContent,
+                parts: JSON.stringify(confirmParts),
+                status: 'completed',
+                model: 'glm-4.6',
+              },
+            }).catch(() => null);
+
+            // Update session counters (user msg + assistant msg = +2)
+            if (sessionId) {
+              db.oracleAISession.update({
+                where: { id: sessionId },
+                data: {
+                  messageCount: { increment: 2 },
+                  lastMessageAt: new Date(),
+                },
+              }).catch(() => {});
+            }
+
+            // Best-effort: persist a 'pending' audit row for the intercepted call
+            db.oracleAIToolCall.create({
+              data: {
+                sessionId,
+                firmId: orgId,
+                userId,
+                toolName: confirmCall.tool,
+                args: JSON.stringify(confirmCall.args),
+                status: 'pending',
+                durationMs: 0,
+              },
+            }).catch(() => {});
+
+            // Emit the action-confirm + done events and close the stream
+            send({
+              type: 'action-confirm',
+              tool: confirmCall.tool,
+              args: confirmCall.args,
+              preview,
+              toolCallId,
+              messageId: confirmAssistantMessage?.id ?? null,
+            });
+            send({
+              type: 'done',
+              messageId: confirmAssistantMessage?.id ?? null,
+              sessionId,
+              pendingAction: {
+                toolCallId,
+                tool: confirmCall.tool,
+                args: confirmCall.args,
+                preview,
+              },
+            });
+            controller.close();
+            return;
+          }
+
           // ─── Execute each tool call ────────────────────────────────────────
           // Keep the assistant's pre-tool text (stripped of call blocks) as part of the conversation
-          const strippedContent = stripToolCalls(assistantContent);
           conversation.push({ role: 'assistant', content: assistantContent });
 
           for (const call of toolCalls) {

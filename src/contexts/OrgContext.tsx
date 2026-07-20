@@ -24,17 +24,10 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import {
-  fetchOrCreateUserProfile,
-  fetchOrganization,
-  fetchMembership,
-  fetchOrganizationMembers,
-  fetchUserOrganizations,
-  setCurrentOrganization as setCurrentOrganizationService,
-  markOnboardingComplete as markOnboardingCompleteService,
-} from '@/lib/auth/organizations';
+// Type-only import — erased at compile time, does NOT pull in the firebase/auth
+// runtime module. Keeps OrgContext in a LIGHT webpack chunk.
+import { type User as FirebaseUser } from 'firebase/auth';
+// errors.ts, permissions.ts, types.ts are pure (no Firebase import) — safe statically.
 import { friendlyAuthError } from '@/lib/auth/errors';
 import { can } from '@/lib/auth/permissions';
 import type {
@@ -46,6 +39,23 @@ import type {
   OrgMembership,
 } from '@/lib/auth/types';
 import { useAuth } from './AuthContext';
+
+// ── Lazy Firebase + org-service loaders ───────────────────────────────────────
+// @/lib/firebase and @/lib/auth/organizations both pull in the Firebase SDK
+// (~40 MB). We import them dynamically so Firebase compiles in its OWN chunk,
+// only when the org context actually needs to resolve (after sign-in).
+type FirebaseModule = typeof import('@/lib/firebase');
+type OrgServiceModule = typeof import('@/lib/auth/organizations');
+let firebaseCache: Promise<FirebaseModule> | null = null;
+let orgServiceCache: Promise<OrgServiceModule> | null = null;
+function loadFirebase(): Promise<FirebaseModule> {
+  if (!firebaseCache) firebaseCache = import('@/lib/firebase');
+  return firebaseCache;
+}
+function loadOrgService(): Promise<OrgServiceModule> {
+  if (!orgServiceCache) orgServiceCache = import('@/lib/auth/organizations');
+  return orgServiceCache;
+}
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -162,18 +172,21 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         const provider =
           fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
 
+        // Lazy-load the org service module (pulls Firebase) on first use.
+        const orgService = await loadOrgService();
+
         // 1. Fetch / create the user profile AND the user's org memberships
         //    in PARALLEL (previously sequential — saved ~200-500ms on login).
         console.log('[Org] Fetching profile + memberships (attempt', attempt + 1, ')');
         const [profileResult, membershipsResult] = await Promise.all([
-          fetchOrCreateUserProfile({
+          orgService.fetchOrCreateUserProfile({
             uid: fbUser.uid,
             email: fbUser.email || '',
             displayName: fbUser.displayName,
             photoURL: fbUser.photoURL,
             provider,
           }),
-          fetchUserOrganizations(fbUser.uid),
+          orgService.fetchUserOrganizations(fbUser.uid),
         ]);
 
         const { profile: userProfile, error: profileError } = profileResult;
@@ -204,7 +217,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
         if (!orgId && memberships.length > 0) {
           orgId = memberships[0].organization.id;
-          setCurrentOrganizationService(fbUser.uid, orgId).catch(() => {});
+          orgService.setCurrentOrganization(fbUser.uid, orgId).catch(() => {});
         }
 
         if (!orgId) {
@@ -225,8 +238,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setMembership(membershipFromList.member);
         } else {
           const [orgResult, memberResult] = await Promise.all([
-            fetchOrganization(orgId),
-            fetchMembership(orgId, fbUser.uid),
+            orgService.fetchOrganization(orgId),
+            orgService.fetchMembership(orgId, fbUser.uid),
           ]);
 
           if (orgResult.error || !orgResult.organization) {
@@ -243,7 +256,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setMembership(memberResult.member);
         }
 
-        fetchOrganizationMembers(orgId).then((membersResult) => {
+        orgService.fetchOrganizationMembers(orgId).then((membersResult) => {
           setMembers(membersResult.members);
         }).catch(() => {});
 
@@ -347,6 +360,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
    * is already set and doesn't need reloading.
    */
   const reload = useCallback(async () => {
+    const { auth } = await loadFirebase();
     if (!auth.currentUser) {
       // Demo / local mode — nothing to reload from Firestore.
       return;
@@ -362,8 +376,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
    */
   const switchOrganization = useCallback(
     async (orgId: string): Promise<{ error: string | null }> => {
+      const { auth } = await loadFirebase();
+      const orgService = await loadOrgService();
       if (!auth.currentUser) return { error: 'Not signed in.' };
-      const { error: switchError } = await setCurrentOrganizationService(
+      const { error: switchError } = await orgService.setCurrentOrganization(
         auth.currentUser.uid,
         orgId
       );
@@ -383,8 +399,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
    */
   const completeOnboarding = useCallback(
     async (orgId: string) => {
+      const { auth } = await loadFirebase();
+      const orgService = await loadOrgService();
       if (!auth.currentUser) return;
-      const { error: onboardError } = await markOnboardingCompleteService(
+      const { error: onboardError } = await orgService.markOnboardingComplete(
         auth.currentUser.uid,
         orgId
       );
@@ -400,119 +418,133 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   // ── Reactively resolve the org context whenever the auth user changes ──
   useEffect(() => {
-    // If React says "not authenticated" but Firebase still has a currentUser,
-    // this is a transient state (HMR remount, brief re-render) — don't wipe
-    // the org context. Only reset on a genuine sign-out (no Firebase user).
-    if (!isAuthenticated || !user) {
-      if (auth.currentUser) {
-        // Firebase still has a user — this is a transient blip. Wait for
-        // onAuthStateChanged to re-sync the React state.
-        return;
-      }
-      // Genuine sign-out — reset org state. This synchronous clear is the
-      // correct reaction to an external auth-state change.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProfile(null);
-      setOrganization(null);
-      setMembership(null);
-      setMembers([]);
-      setOrganizations([]);
-      setIsPreviewMode(false);
-      setLoading(false);
-      setError(null);
-      loadingForRef.current = null;
-      return;
-    }
+    // Firebase is loaded lazily so this effect can't read `auth.currentUser`
+    // synchronously. We kick off the lazy load and act on the result.
+    let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
 
-    // ── Demo user: create a local workspace so the dashboard renders without
-    //    Firestore. Demo users have no Firebase Auth session, so
-    //    resolveOrgContext (which needs a FirebaseUser) can't be called.
-    //    Without this, `loading` stays true forever → 8s timeout screen.
-    if (user.provider === 'demo') {
-      console.log('[Org] Demo user detected — creating local workspace');
-      const localOrgId = `local-${user.id}`;
-      const localOrg: OrganizationDoc = {
-        id: localOrgId,
-        name: user.name + "'s Workspace",
-        slug: 'my-workspace',
-        ownerId: user.id,
-        logoUrl: null,
-        gstin: null,
-        plan: 'free',
-        status: 'active',
-        createdAt: null,
-        updatedAt: null,
-      };
-      const localMember: OrganizationMemberDoc = {
-        id: `${localOrgId}_${user.id}`,
-        organizationId: localOrgId,
-        userId: user.id,
-        userEmail: user.email,
-        userDisplayName: user.name,
-        userPhotoURL: null,
-        role: 'owner',
-        status: 'active',
-        invitedBy: null,
-        invitedAt: null,
-        joinedAt: null,
-        createdAt: null,
-        updatedAt: null,
-      };
-      const localProfile: UserProfileDoc = {
-        uid: user.id,
-        email: user.email,
-        displayName: user.name,
-        photoURL: null,
-        phone: null,
-        company: null,
-        gstin: null,
-        role: 'owner',
-        provider: 'email',
-        emailVerified: true,
-        onboardingCompleted: true,
-        currentOrganizationId: localOrgId,
-        createdAt: null,
-        updatedAt: null,
-      };
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProfile(localProfile);
-      setOrganization(localOrg);
-      setMembership(localMember);
-      setMembers([localMember]);
-      setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
-      setIsPreviewMode(false);
-      setLoading(false);
-      setError(null);
-      loadingForRef.current = user.id;
-      try {
-        localStorage.setItem('gstpilot_org_id', localOrgId);
-      } catch {
-        /* non-fatal */
-      }
-      return;
-    }
+    loadFirebase()
+      .then(({ auth, onIdTokenChanged }) => {
+        if (cancelled) return;
 
-    // The Firebase user is the source of truth for the uid + token. Listen
-    // to `onIdTokenChanged` so we also catch token refreshes (PART 7).
-    const unsubscribe = onIdTokenChanged(auth, async (fbUser) => {
-      if (!fbUser) {
-        // Token revoked / session expired — AuthContext will handle sign-out.
-        return;
-      }
-      // Only do a full re-resolve if the uid changed. Token refreshes alone
-      // don't require reloading the org context.
-      if (loadingForRef.current !== fbUser.uid) {
-        await resolveOrgContext(fbUser);
-      }
-    });
+        // If React says "not authenticated" but Firebase still has a currentUser,
+        // this is a transient state (HMR remount, brief re-render) — don't wipe
+        // the org context. Only reset on a genuine sign-out (no Firebase user).
+        if (!isAuthenticated || !user) {
+          if (auth.currentUser) {
+            // Firebase still has a user — this is a transient blip. Wait for
+            // onAuthStateChanged to re-sync the React state.
+            return;
+          }
+          // Genuine sign-out — reset org state. This synchronous clear is the
+          // correct reaction to an external auth-state change.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setProfile(null);
+          setOrganization(null);
+          setMembership(null);
+          setMembers([]);
+          setOrganizations([]);
+          setIsPreviewMode(false);
+          setLoading(false);
+          setError(null);
+          loadingForRef.current = null;
+          return;
+        }
 
-    // Kick off the initial resolve immediately.
-    if (auth.currentUser && loadingForRef.current !== auth.currentUser.uid) {
-      resolveOrgContext(auth.currentUser);
-    }
+        // ── Demo user: create a local workspace so the dashboard renders without
+        //    Firestore. Demo users have no Firebase Auth session, so
+        //    resolveOrgContext (which needs a FirebaseUser) can't be called.
+        //    Without this, `loading` stays true forever → 8s timeout screen.
+        if (user.provider === 'demo') {
+          console.log('[Org] Demo user detected — creating local workspace');
+          const localOrgId = `local-${user.id}`;
+          const localOrg: OrganizationDoc = {
+            id: localOrgId,
+            name: user.name + "'s Workspace",
+            slug: 'my-workspace',
+            ownerId: user.id,
+            logoUrl: null,
+            gstin: null,
+            plan: 'free',
+            status: 'active',
+            createdAt: null,
+            updatedAt: null,
+          };
+          const localMember: OrganizationMemberDoc = {
+            id: `${localOrgId}_${user.id}`,
+            organizationId: localOrgId,
+            userId: user.id,
+            userEmail: user.email,
+            userDisplayName: user.name,
+            userPhotoURL: null,
+            role: 'owner',
+            status: 'active',
+            invitedBy: null,
+            invitedAt: null,
+            joinedAt: null,
+            createdAt: null,
+            updatedAt: null,
+          };
+          const localProfile: UserProfileDoc = {
+            uid: user.id,
+            email: user.email,
+            displayName: user.name,
+            photoURL: null,
+            phone: null,
+            company: null,
+            gstin: null,
+            role: 'owner',
+            provider: 'email',
+            emailVerified: true,
+            onboardingCompleted: true,
+            currentOrganizationId: localOrgId,
+            createdAt: null,
+            updatedAt: null,
+          };
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setProfile(localProfile);
+          setOrganization(localOrg);
+          setMembership(localMember);
+          setMembers([localMember]);
+          setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
+          setIsPreviewMode(false);
+          setLoading(false);
+          setError(null);
+          loadingForRef.current = user.id;
+          try {
+            localStorage.setItem('gstpilot_org_id', localOrgId);
+          } catch {
+            /* non-fatal */
+          }
+          return;
+        }
+
+        // The Firebase user is the source of truth for the uid + token. Listen
+        // to `onIdTokenChanged` so we also catch token refreshes (PART 7).
+        unsubscribe = onIdTokenChanged(auth, async (fbUser) => {
+          if (!fbUser) {
+            // Token revoked / session expired — AuthContext will handle sign-out.
+            return;
+          }
+          // Only do a full re-resolve if the uid changed. Token refreshes alone
+          // don't require reloading the org context.
+          if (loadingForRef.current !== fbUser.uid) {
+            await resolveOrgContext(fbUser);
+          }
+        });
+
+        // Kick off the initial resolve immediately.
+        if (auth.currentUser && loadingForRef.current !== auth.currentUser.uid) {
+          resolveOrgContext(auth.currentUser);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Org] Firebase load failed — org context inactive:', err);
+      });
 
     return () => {
-      unsubscribe();
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
     };
   }, [isAuthenticated, user?.id, user, resolveOrgContext]);
 

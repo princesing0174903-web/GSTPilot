@@ -24,7 +24,7 @@ import {
   Receipt, Users, AlertTriangle, FileText, Database, Zap, Clock,
   ChevronRight, Loader2, BrainCircuit, Wrench, CheckCircle2, XCircle,
   Menu, X, Lightbulb, IndianRupee, ShieldCheck, BarChart3,
-  Copy, RotateCcw,
+  Copy, RotateCcw, Square,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -699,10 +699,11 @@ export function OracleBrain() {
                 <Button
                   onClick={stopStreaming}
                   size="icon"
-                  className="h-12 w-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                  className="h-12 w-12 rounded-xl bg-zinc-800 hover:bg-rose-600/90 text-zinc-300 hover:text-white border border-zinc-700 hover:border-rose-500 transition-colors"
                   variant="outline"
+                  title="Stop generating"
                 >
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Square className="h-4 w-4 fill-current" />
                 </Button>
               ) : (
                 <Button

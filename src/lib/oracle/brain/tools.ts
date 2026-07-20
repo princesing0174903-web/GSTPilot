@@ -132,24 +132,26 @@ const queryInvoicesTool: OracleTool = {
   },
   async execute(orgId, args): Promise<ToolResult> {
     const limit = Math.min(Number(args.limit) || 20, 50);
-    const where: any = { firmId: orgId };
-    if (args.status === 'paid') where.status = 'paid';
-    else if (args.status === 'unpaid') where.status = { in: ['sent', 'unpaid', 'partial'] };
-    else if (args.status === 'overdue') where.status = 'overdue';
+    // Invoice has no firmId — it is scoped through client.firmId.
+    // `status` is the GST lifecycle (draft/sent), `paymentStatus` is the financial state (unpaid/partial/paid/overdue).
+    const where: any = { client: { firmId: orgId } };
+    if (args.status === 'paid') where.paymentStatus = 'paid';
+    else if (args.status === 'unpaid') where.paymentStatus = { in: ['unpaid', 'partial'] };
+    else if (args.status === 'overdue') where.paymentStatus = 'overdue';
     else if (args.status === 'draft') where.status = 'draft';
     if (args.customerName) {
-      where.clientName = { contains: String(args.customerName), mode: 'insensitive' };
+      where.buyerName = { contains: String(args.customerName), mode: 'insensitive' };
     }
     const rows = await db.invoice.findMany({
       where,
-      orderBy: { invoiceDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
-        id: true, invoiceNumber: true, clientName: true, status: true,
-        total: true, balanceAmount: true, invoiceDate: true, dueDate: true,
+        id: true, invoiceNumber: true, buyerName: true, status: true, paymentStatus: true,
+        totalAmount: true, balanceAmount: true, invoiceDate: true, dueDate: true,
       },
-    });
-    const total = rows.reduce((s, r) => s + (r.total ?? 0), 0);
+    }).catch(() => []);
+    const total = rows.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
     const balance = rows.reduce((s, r) => s + (r.balanceAmount ?? 0), 0);
     const summary =
       rows.length === 0
@@ -165,11 +167,11 @@ const queryInvoicesTool: OracleTool = {
         columns: ['Invoice #', 'Customer', 'Status', 'Total', 'Balance', 'Date'],
         rows: rows.map(r => ({
           'Invoice #': r.invoiceNumber,
-          Customer: r.clientName,
-          Status: r.status,
-          Total: inr(r.total ?? 0),
+          Customer: r.buyerName ?? '-',
+          Status: r.paymentStatus ?? r.status,
+          Total: inr(r.totalAmount ?? 0),
           Balance: inr(r.balanceAmount ?? 0),
-          Date: r.invoiceDate ? new Date(r.invoiceDate).toLocaleDateString('en-IN') : '-',
+          Date: r.invoiceDate ?? '-',
         })),
       }] : undefined,
     };
@@ -189,11 +191,12 @@ const queryCustomersTool: OracleTool = {
   },
   async execute(orgId, args): Promise<ToolResult> {
     const limit = Math.min(Number(args.limit) || 20, 50);
+    // Client has firmId directly. Field names: tradeName / contactEmail / contactPhone / state.
     const where: any = { firmId: orgId };
     if (args.search) {
       where.OR = [
-        { name: { contains: String(args.search), mode: 'insensitive' } },
-        { email: { contains: String(args.search), mode: 'insensitive' } },
+        { tradeName: { contains: String(args.search), mode: 'insensitive' } },
+        { contactEmail: { contains: String(args.search), mode: 'insensitive' } },
         { gstin: { contains: String(args.search), mode: 'insensitive' } },
       ];
     }
@@ -201,8 +204,8 @@ const queryCustomersTool: OracleTool = {
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: { id: true, name: true, email: true, phone: true, gstin: true, city: true },
-    });
+      select: { id: true, tradeName: true, contactEmail: true, contactPhone: true, gstin: true, state: true },
+    }).catch(() => []);
     const summary = rows.length === 0 ? 'No customers found.' : `Found ${rows.length} customer(s).`;
     return {
       ok: true,
@@ -211,13 +214,13 @@ const queryCustomersTool: OracleTool = {
       artifacts: rows.length > 0 ? [{
         kind: 'table' as const,
         title: 'Customers',
-        columns: ['Name', 'Email', 'Phone', 'GSTIN', 'City'],
+        columns: ['Name', 'Email', 'Phone', 'GSTIN', 'State'],
         rows: rows.map(r => ({
-          Name: r.name,
-          Email: r.email ?? '-',
-          Phone: r.phone ?? '-',
-          GSTIN: r.gstin ?? '-',
-          City: r.city ?? '-',
+          Name: r.tradeName,
+          Email: r.contactEmail ?? '-',
+          Phone: r.contactPhone ?? '-',
+          GSTIN: r.gstin,
+          State: r.state ?? '-',
         })),
       }] : undefined,
     };
@@ -236,14 +239,15 @@ const queryExpensesTool: OracleTool = {
   },
   async execute(orgId, args): Promise<ToolResult> {
     const limit = Math.min(Number(args.limit) || 20, 50);
-    const where: any = { firmId: orgId };
+    // Expense has no firmId — scoped through client.firmId. Fields: vendor / date / category / amount.
+    const where: any = { client: { firmId: orgId } };
     if (args.category) where.category = { contains: String(args.category), mode: 'insensitive' };
     const rows = await db.expense.findMany({
       where,
-      orderBy: { expenseDate: 'desc' },
+      orderBy: { date: 'desc' },
       take: limit,
-      select: { id: true, vendorName: true, category: true, amount: true, expenseDate: true, status: true },
-    });
+      select: { id: true, vendor: true, category: true, amount: true, date: true, status: true },
+    }).catch(() => []);
     const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
     const summary = rows.length === 0 ? 'No expenses found.' : `Found ${rows.length} expense(s). Total: ${inr(total)}.`;
     return {
@@ -255,10 +259,10 @@ const queryExpensesTool: OracleTool = {
         title: 'Expenses',
         columns: ['Vendor', 'Category', 'Amount', 'Date', 'Status'],
         rows: rows.map(r => ({
-          Vendor: r.vendorName ?? '-',
+          Vendor: r.vendor ?? '-',
           Category: r.category ?? '-',
           Amount: inr(r.amount ?? 0),
-          Date: r.expenseDate ? new Date(r.expenseDate).toLocaleDateString('en-IN') : '-',
+          Date: r.date ?? '-',
           Status: r.status ?? '-',
         })),
       }] : undefined,
@@ -278,14 +282,15 @@ const queryPaymentsTool: OracleTool = {
   },
   async execute(orgId, args): Promise<ToolResult> {
     const limit = Math.min(Number(args.limit) || 20, 50);
-    const where: any = { firmId: orgId };
-    if (args.direction === 'received') where.type = 'received';
-    else if (args.direction === 'paid') where.type = 'paid';
+    // Payment has no firmId — scoped through client.firmId. partyType: customer|vendor. paymentMode: upi|bank|...
+    const where: any = { client: { firmId: orgId } };
+    if (args.direction === 'received') where.partyType = 'customer';
+    else if (args.direction === 'paid') where.partyType = 'vendor';
     const rows = await db.payment.findMany({
       where,
       orderBy: { paymentDate: 'desc' },
       take: limit,
-      select: { id: true, type: true, partyName: true, amount: true, paymentDate: true, method: true, referenceNumber: true },
+      select: { id: true, partyType: true, partyName: true, amount: true, paymentDate: true, paymentMode: true, referenceNo: true },
     }).catch(() => []);
     const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
     const summary = rows.length === 0 ? 'No payments found.' : `Found ${rows.length} payment(s). Total: ${inr(total)}.`;
@@ -301,12 +306,13 @@ const getGSTStatusTool: OracleTool = {
   category: 'read',
   argsSchema: {},
   async execute(orgId): Promise<ToolResult> {
+    // GSTRFiling has no firmId — scoped through client.firmId. Fields: returnType, period, status, totalTax, filedDate.
     const [filings, snap] = await Promise.all([
       db.gSTRFiling.findMany({
-        where: { firmId: orgId },
-        orderBy: { dueDate: 'desc' },
+        where: { client: { firmId: orgId } },
+        orderBy: { createdAt: 'desc' },
         take: 10,
-        select: { id: true, returnType: true, period: true, status: true, dueDate: true, netTaxPayable: true },
+        select: { id: true, returnType: true, period: true, status: true, totalTax: true, filedDate: true, createdAt: true },
       }).catch(() => []),
       getBusinessSnapshot(orgId, { forceRefresh: true }),
     ]);
@@ -318,7 +324,7 @@ const getGSTStatusTool: OracleTool = {
       `• Net GST liability: ${inr(snap.gstLiability)}\n` +
       `• Filed returns: ${snap.filedReturns}, Pending: ${snap.pendingReturns}, Overdue: ${snap.overdueReturns}` +
       (upcoming.length > 0
-        ? `\n• Upcoming filings:\n` + upcoming.map(f => `  - ${f.returnType} for ${f.period}, due ${f.dueDate ? new Date(f.dueDate).toLocaleDateString('en-IN') : '-'}, status: ${f.status}`).join('\n')
+        ? `\n• Upcoming filings:\n` + upcoming.map(f => `  - ${f.returnType} for ${f.period}, status: ${f.status}, tax: ${inr(f.totalTax ?? 0)}`).join('\n')
         : '');
     return {
       ok: true,
@@ -327,13 +333,13 @@ const getGSTStatusTool: OracleTool = {
       artifacts: filings.length > 0 ? [{
         kind: 'table' as const,
         title: 'GST Filings',
-        columns: ['Return', 'Period', 'Status', 'Due Date', 'Net Payable'],
+        columns: ['Return', 'Period', 'Status', 'Tax', 'Filed'],
         rows: filings.map(f => ({
           Return: f.returnType,
           Period: f.period,
           Status: f.status,
-          'Due Date': f.dueDate ? new Date(f.dueDate).toLocaleDateString('en-IN') : '-',
-          'Net Payable': inr(f.netTaxPayable ?? 0),
+          Tax: inr(f.totalTax ?? 0),
+          Filed: f.filedDate ?? '-',
         })),
       }] : undefined,
     };
@@ -348,22 +354,26 @@ const getOverdueCustomersTool: OracleTool = {
   category: 'read',
   argsSchema: {},
   async execute(orgId): Promise<ToolResult> {
+    // Overdue = paymentStatus 'overdue'. Scoped via client.firmId. buyerName (not clientName). dueDate is a String ISO date.
     const rows = await db.invoice.findMany({
-      where: { firmId: orgId, status: 'overdue' },
+      where: { client: { firmId: orgId }, paymentStatus: 'overdue' },
       orderBy: { dueDate: 'asc' },
       take: 50,
-      select: { id: true, invoiceNumber: true, clientName: true, balanceAmount: true, dueDate: true, total: true },
-    });
+      select: { id: true, invoiceNumber: true, buyerName: true, balanceAmount: true, dueDate: true, totalAmount: true },
+    }).catch(() => []);
     const now = new Date();
     const grouped = new Map<string, { name: string; total: number; count: number; oldestDays: number }>();
     for (const r of rows) {
-      const name = r.clientName ?? 'Unknown';
+      const name = r.buyerName ?? 'Unknown';
       const existing = grouped.get(name) ?? { name, total: 0, count: 0, oldestDays: 0 };
       existing.total += r.balanceAmount ?? 0;
       existing.count += 1;
       if (r.dueDate) {
-        const days = Math.floor((now.getTime() - new Date(r.dueDate).getTime()) / 86400000);
-        existing.oldestDays = Math.max(existing.oldestDays, days);
+        const d = new Date(r.dueDate);
+        if (!isNaN(d.getTime())) {
+          const days = Math.floor((now.getTime() - d.getTime()) / 86400000);
+          existing.oldestDays = Math.max(existing.oldestDays, days);
+        }
       }
       grouped.set(name, existing);
     }
@@ -470,102 +480,158 @@ const createInvoiceTool: OracleTool = {
     if (items.length === 0) {
       return { ok: false, summary: 'Cannot create invoice: at least one line item is required.' };
     }
-    let subtotal = 0;
-    let taxTotal = 0;
+    let taxableValue = 0;
+    let cgstTotal = 0;
+    let sgstTotal = 0;
+    let igstTotal = 0;
     const invoiceItems = items.map((it: any, idx: number) => {
       const qty = Number(it.quantity ?? 1);
-      const rate = Number(it.rate ?? 0);
-      const gstRate = Number(it.gstRate ?? 18) / 100;
-      const lineNet = qty * rate;
-      const lineTax = lineNet * gstRate;
-      subtotal += lineNet;
-      taxTotal += lineTax;
+      const unitPrice = Number(it.rate ?? 0);
+      const gstRate = Number(it.gstRate ?? 18);
+      const lineNet = qty * unitPrice;
+      const lineTax = lineNet * (gstRate / 100);
+      taxableValue += lineNet;
+      cgstTotal += lineTax / 2;
+      sgstTotal += lineTax / 2;
       return {
-        id: `item-${idx + 1}`,
-        name: String(it.name ?? 'Item'),
+        lineNumber: idx + 1,
+        description: String(it.name ?? 'Item'),
+        hsnCode: it.hsnCode ? String(it.hsnCode) : null,
         quantity: qty,
-        rate,
-        gstRate: Number(it.gstRate ?? 18),
-        taxableAmount: lineNet,
+        unit: it.unit ? String(it.unit) : 'NOS',
+        unitPrice,
+        taxableValue: lineNet,
+        cgstRate: gstRate / 2,
+        sgstRate: gstRate / 2,
+        igstRate: 0,
+        cessRate: 0,
         cgst: lineTax / 2,
         sgst: lineTax / 2,
-        total: lineNet + lineTax,
+        igst: 0,
+        cess: 0,
+        totalAmount: lineNet + lineTax,
       };
     });
-    const total = subtotal + taxTotal;
+    const totalAmount = taxableValue + cgstTotal + sgstTotal + igstTotal;
     const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
     const now = new Date();
-    const dueDate = args.dueDate ? new Date(args.dueDate) : new Date(now.getTime() + 15 * 86400000);
+    const invoiceDateStr = args.invoiceDate ? String(args.invoiceDate) : now.toISOString().slice(0, 10);
+    const dueDateStr = args.dueDate
+      ? String(args.dueDate)
+      : new Date(now.getTime() + 15 * 86400000).toISOString().slice(0, 10);
 
-    // Try to find an existing client by name; if not found, create one.
+    // Find an existing client by tradeName (case-insensitive). Client requires gstin (unique) — if creating, synthesize one.
     let client = await db.client.findFirst({
-      where: { firmId: orgId, name: { equals: customerName, mode: 'insensitive' } },
-      select: { id: true },
+      where: { firmId: orgId, tradeName: { equals: customerName, mode: 'insensitive' } },
+      select: { id: true, gstin: true },
     }).catch(() => null);
     if (!client) {
-      client = await db.client.create({
-        data: { firmId: orgId, name: customerName, type: 'customer' },
-        select: { id: true },
-      }).catch(() => null);
+      try {
+        client = await db.client.create({
+          data: {
+            firmId: orgId,
+            tradeName: customerName,
+            gstin: `LOCAL-${Date.now()}`,  // synthetic unique GSTIN for local customers
+            entityType: 'regular',
+            status: 'active',
+          },
+          select: { id: true, gstin: true },
+        });
+      } catch (e) {
+        console.error('[oracle-tool createInvoice] client create failed:', e);
+        return { ok: false, summary: `Failed to create customer "${customerName}". ${(e as Error).message}` };
+      }
     }
 
     const invoice = await db.invoice.create({
       data: {
-        firmId: orgId,
-        clientId: client?.id ?? null,
+        clientId: client.id,
         invoiceNumber,
-        clientName: customerName,
-        status: 'draft',
-        invoiceDate: args.invoiceDate ? new Date(args.invoiceDate) : now,
-        dueDate,
-        subtotal,
-        cgst: taxTotal / 2,
-        sgst: taxTotal / 2,
+        invoiceDate: invoiceDateStr,
+        sellerGstin: 'LOCAL-SELLER',
+        buyerGstin: client.gstin,
+        buyerName: customerName,
+        invoiceType: 'B2B',
+        taxableValue,
+        cgst: cgstTotal,
+        sgst: sgstTotal,
         igst: 0,
-        total,
-        balanceAmount: total,
+        cess: 0,
+        totalAmount,
+        status: 'draft',
+        dueDate: dueDateStr,
+        gstAmount: cgstTotal + sgstTotal + igstTotal,
+        paidAmount: 0,
+        balanceAmount: totalAmount,
+        paymentStatus: 'unpaid',
         notes: args.notes ? String(args.notes) : null,
       },
-      select: { id: true, invoiceNumber: true, total: true, dueDate: true },
-    }).catch((e) => { console.error('[oracle-tool createInvoice]', e); return null; });
+      select: { id: true, invoiceNumber: true, totalAmount: true, dueDate: true },
+    }).catch((e) => { console.error('[oracle-tool createInvoice] invoice create:', e); return null; });
 
     if (!invoice) {
       return { ok: false, summary: `Failed to create invoice for ${customerName}. Database error.` };
     }
 
-    // Persist invoice items if the InvoiceItem model is available
+    // Persist invoice items — InvoiceItem requires lineNumber, unit, unitPrice, taxableValue, cgstRate, sgstRate, igstRate, cessRate, cgst, sgst, igst, cess, totalAmount.
     try {
       await db.invoiceItem.createMany({
         data: invoiceItems.map(it => ({
           invoiceId: invoice.id,
-          description: it.name,
+          lineNumber: it.lineNumber,
+          description: it.description,
+          hsnCode: it.hsnCode,
           quantity: it.quantity,
-          rate: it.rate,
-          amount: it.total,
+          unit: it.unit,
+          unitPrice: it.unitPrice,
+          taxableValue: it.taxableValue,
+          cgstRate: it.cgstRate,
+          sgstRate: it.sgstRate,
+          igstRate: it.igstRate,
+          cessRate: it.cessRate,
           cgst: it.cgst,
           sgst: it.sgst,
+          igst: it.igst,
+          cess: it.cess,
+          totalAmount: it.totalAmount,
         })),
       });
     } catch (e) {
-      // InvoiceItem model may have a different shape — non-fatal
       console.warn('[oracle-tool createInvoice] items not persisted:', (e as Error).message);
+    }
+
+    // Log activity for the timeline
+    try {
+      await db.activity.create({
+        data: {
+          firmId: orgId,
+          type: 'invoice',
+          description: `Invoice ${invoice.invoiceNumber} created for ${customerName} (${inr(invoice.totalAmount)})`,
+          metadata: JSON.stringify({ invoiceId: invoice.id, customer: customerName, total: invoice.totalAmount }),
+        },
+      });
+    } catch (e) {
+      console.warn('[oracle-tool createInvoice] activity not logged:', (e as Error).message);
     }
 
     return {
       ok: true,
-      summary: `✅ Created invoice ${invoice.invoiceNumber} for ${customerName}. Total: ${inr(invoice.total)}. Due: ${new Date(invoice.dueDate).toLocaleDateString('en-IN')}. Status: Draft. You can review and send it from the Invoices page.`,
-      data: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, total, customerName, items: invoiceItems },
+      summary: `✅ Created invoice ${invoice.invoiceNumber} for ${customerName}. Total: ${inr(invoice.totalAmount)}. Due: ${invoice.dueDate}. Status: Draft. You can review and send it from the Invoices page.`,
+      data: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, totalAmount, customerName, items: invoiceItems },
       artifacts: [{
         kind: 'table' as const,
         title: `Invoice ${invoice.invoiceNumber}`,
         columns: ['Item', 'Qty', 'Rate', 'GST %', 'Amount'],
-        rows: invoiceItems.map(it => ({
-          Item: it.name,
-          Qty: it.quantity,
-          Rate: inr(it.rate),
-          'GST %': it.gstRate + '%',
-          Amount: inr(it.total),
-        })),
+        rows: invoiceItems.map(it => {
+          const gstPct = it.cgstRate + it.sgstRate;
+          return {
+            Item: it.description,
+            Qty: it.quantity,
+            Rate: inr(it.unitPrice),
+            'GST %': gstPct + '%',
+            Amount: inr(it.totalAmount),
+          };
+        }),
       }],
     };
   },
@@ -584,47 +650,48 @@ const sendReminderTool: OracleTool = {
   },
   async execute(orgId, args): Promise<ToolResult> {
     const channel = String(args.channel ?? 'email');
-    // Fetch overdue invoices
-    const where: any = { firmId: orgId, status: 'overdue' };
+    // Overdue invoices scoped via client.firmId + paymentStatus 'overdue'. buyerName (not clientName).
+    const where: any = { client: { firmId: orgId }, paymentStatus: 'overdue' };
     if (args.customerName) {
-      where.clientName = { contains: String(args.customerName), mode: 'insensitive' };
+      where.buyerName = { contains: String(args.customerName), mode: 'insensitive' };
     }
     const invoices = await db.invoice.findMany({
       where,
-      select: { id: true, invoiceNumber: true, clientName: true, balanceAmount: true, dueDate: true, clientId: true },
+      select: { id: true, invoiceNumber: true, buyerName: true, balanceAmount: true, dueDate: true, clientId: true, totalAmount: true },
       take: 50,
-    });
+    }).catch(() => []);
     if (invoices.length === 0) {
       return { ok: false, summary: args.customerName ? `No overdue invoices found for "${args.customerName}".` : 'No overdue invoices to send reminders for.' };
     }
     // Group by customer
-    const byCustomer = new Map<string, { invoices: typeof invoices; total: number }>();
+    const byCustomer = new Map<string, { invoices: typeof invoices; total: number; clientId: string | null }>();
     for (const inv of invoices) {
-      const name = inv.clientName ?? 'Unknown';
-      const existing = byCustomer.get(name) ?? { invoices: [], total: 0 };
+      const name = inv.buyerName ?? 'Unknown';
+      const existing = byCustomer.get(name) ?? { invoices: [], total: 0, clientId: null };
       existing.invoices.push(inv);
       existing.total += inv.balanceAmount ?? 0;
+      existing.clientId = existing.clientId ?? inv.clientId;
       byCustomer.set(name, existing);
     }
-    // Create communication logs
+    // Create communication logs — CommunicationLog fields: clientId, channel, eventType, recipient, recipientName, messagePreview, status, triggerSource, metadata.
     const logs: { customer: string; amount: number; invoiceCount: number }[] = [];
     for (const [name, group] of byCustomer) {
+      const preview = `Dear ${name}, this is a reminder that ${group.invoices.length} invoice(s) totaling ${inr(group.total)} are overdue. Please arrange payment at your earliest convenience. Invoices: ${group.invoices.map(i => i.invoiceNumber).join(', ')}.`;
       try {
         await db.communicationLog.create({
           data: {
-            firmId: orgId,
+            clientId: group.clientId,
             channel,
+            eventType: 'overdue',
+            recipient: 'on-record',
             recipientName: name,
-            recipientId: group.invoices[0]?.clientId ?? null,
-            subject: `Payment Reminder — ${group.invoices.length} invoice(s) overdue`,
-            body: `Dear ${name}, this is a reminder that ${group.invoices.length} invoice(s) totaling ${inr(group.total)} are overdue. Please arrange payment at your earliest convenience. Invoices: ${group.invoices.map(i => i.invoiceNumber).join(', ')}.`,
-            status: 'queued',
-            direction: 'outbound',
-            type: 'reminder',
+            messagePreview: preview.slice(0, 200),
+            status: 'sent',
+            triggerSource: 'ai_engine',
+            metadata: JSON.stringify({ invoices: group.invoices.map(i => i.id), total: group.total }),
           },
         });
       } catch (e) {
-        // CommunicationLog model may differ — non-fatal
         console.warn('[oracle-tool sendReminder] log not persisted:', (e as Error).message);
       }
       logs.push({ customer: name, amount: group.total, invoiceCount: group.invoices.length });
@@ -855,7 +922,7 @@ const getRecentActivityTool: OracleTool = {
           take: 5,
           select: { id: true, vendor: true, amount: true, category: true, createdAt: true },
         }).catch(() => []),
-        db.gstrFiling.findMany({
+        db.gSTRFiling.findMany({
           where: { client: { firmId: orgId } },
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -1046,9 +1113,403 @@ const saveMemoryTool: OracleTool = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — ACTION ENGINE TOOLS
+// These tools require user confirmation before execution. The brain route
+// intercepts ACTION-category tool calls and emits an "action-confirm" SSE event
+// instead of executing immediately. The frontend shows a confirmation card.
+// Only when the user confirms does the frontend POST to /api/oracle/brain/execute
+// which runs the tool for real.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Tool: createCustomer (ACTION) ────────────────────────────────────────────
+
+const createCustomerTool: OracleTool = {
+  name: 'createCustomer',
+  description: 'Create a new customer (Client). Required: name (tradeName). Optional: gstin, email, phone, state, stateCode, address. Returns the created customer ID. REQUIRES CONFIRMATION.',
+  category: 'action',
+  argsSchema: {
+    name: { type: 'string', description: 'customer trade name (required)', required: true },
+    gstin: { type: 'string', description: 'GSTIN (must be unique). If omitted, a synthetic LOCAL- prefixed GSTIN is generated.' },
+    email: { type: 'string', description: 'contact email' },
+    phone: { type: 'string', description: 'contact phone' },
+    state: { type: 'string', description: 'state name' },
+    stateCode: { type: 'string', description: 'GST state code (e.g. 07 for Delhi)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const tradeName = String(args.name ?? '').trim();
+    if (!tradeName) return { ok: false, summary: 'Cannot create customer: name is required.' };
+    const gstin = String(args.gstin ?? `LOCAL-${Date.now()}`).trim().toUpperCase();
+    // Check GSTIN uniqueness
+    const existing = await db.client.findUnique({ where: { gstin }, select: { id: true, tradeName: true } }).catch(() => null);
+    if (existing) {
+      return { ok: false, summary: `A customer with GSTIN "${gstin}" already exists (name: ${existing.tradeName}). Use a different GSTIN.` };
+    }
+    const client = await db.client.create({
+      data: {
+        firmId: orgId,
+        tradeName,
+        legalName: tradeName,
+        gstin,
+        contactEmail: args.email ? String(args.email) : null,
+        contactPhone: args.phone ? String(args.phone) : null,
+        state: args.state ? String(args.state) : null,
+        stateCode: args.stateCode ? String(args.stateCode) : null,
+        address: args.address ? String(args.address) : null,
+        entityType: 'regular',
+        status: 'active',
+      },
+      select: { id: true, tradeName: true, gstin: true },
+    }).catch((e) => { console.error('[oracle-tool createCustomer]', e); return null; });
+    if (!client) return { ok: false, summary: `Failed to create customer "${tradeName}". Database error.` };
+    // Log activity
+    try {
+      await db.activity.create({ data: { firmId: orgId, type: 'customer', description: `Customer "${tradeName}" created (GSTIN: ${gstin})`, metadata: JSON.stringify({ clientId: client.id }) } });
+    } catch {}
+    return {
+      ok: true,
+      summary: `✅ Created customer **${client.tradeName}** (GSTIN: ${client.gstin}). You can now create invoices for this customer.`,
+      data: { id: client.id, tradeName: client.tradeName, gstin: client.gstin },
+    };
+  },
+};
+
+// ─── Tool: createExpense (ACTION) ─────────────────────────────────────────────
+
+const createExpenseTool: OracleTool = {
+  name: 'createExpense',
+  description: 'Record a new expense. Required: vendor, amount, category, date. Optional: gst (GST portion), paymentMode, description, gstClaimable. REQUIRES CONFIRMATION.',
+  category: 'action',
+  argsSchema: {
+    vendor: { type: 'string', description: 'vendor name (required)', required: true },
+    amount: { type: 'number', description: 'total amount in INR (required)', required: true },
+    category: { type: 'string', description: 'Office|Travel|Salary|Marketing|Rent|Utilities|Software|Miscellaneous (required)', required: true },
+    date: { type: 'string', description: 'expense date ISO YYYY-MM-DD (required)', required: true },
+    gst: { type: 'number', description: 'GST portion (claimable ITC). Default 0.' },
+    paymentMode: { type: 'string', description: 'upi|bank|cash|cheque|card' },
+    description: { type: 'string', description: 'expense description' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const vendor = String(args.vendor ?? '').trim();
+    const amount = Number(args.amount ?? 0);
+    const category = String(args.category ?? 'Miscellaneous').trim();
+    const date = String(args.date ?? new Date().toISOString().slice(0, 10));
+    if (!vendor) return { ok: false, summary: 'Cannot create expense: vendor is required.' };
+    if (!amount || amount <= 0) return { ok: false, summary: 'Cannot create expense: amount must be greater than 0.' };
+    // Find or create a client for this vendor (expenses link to client). Use firm's first client or create a generic one.
+    let client = await db.client.findFirst({ where: { firmId: orgId, tradeName: { equals: vendor, mode: 'insensitive' } }, select: { id: true } }).catch(() => null);
+    if (!client) {
+      client = await db.client.create({
+        data: { firmId: orgId, tradeName: vendor, gstin: `LOCAL-VENDOR-${Date.now()}`, entityType: 'regular', status: 'active' },
+        select: { id: true },
+      }).catch(() => null);
+    }
+    const expense = await db.expense.create({
+      data: {
+        clientId: client?.id ?? null,
+        vendor,
+        category,
+        amount,
+        gst: Number(args.gst ?? 0),
+        gstClaimable: Number(args.gst ?? 0) > 0,
+        date,
+        paymentMode: args.paymentMode ? String(args.paymentMode) : null,
+        description: args.description ? String(args.description) : null,
+        status: 'recorded',
+      },
+      select: { id: true, vendor: true, amount: true, category: true, date: true },
+    }).catch((e) => { console.error('[oracle-tool createExpense]', e); return null; });
+    if (!expense) return { ok: false, summary: `Failed to create expense. Database error.` };
+    try {
+      await db.activity.create({ data: { firmId: orgId, type: 'expense', description: `Expense logged: ${category} to ${vendor} (${inr(amount)})`, metadata: JSON.stringify({ expenseId: expense.id }) } });
+    } catch {}
+    return {
+      ok: true,
+      summary: `✅ Recorded expense: **${category}** — ${vendor}, ${inr(amount)} on ${date}.`,
+      data: { id: expense.id, vendor: expense.vendor, amount: expense.amount, category: expense.category, date: expense.date },
+    };
+  },
+};
+
+// ─── Tool: createPayment (ACTION) ─────────────────────────────────────────────
+
+const createPaymentTool: OracleTool = {
+  name: 'createPayment',
+  description: 'Record a payment (received from customer or made to vendor). Required: partyName, amount, paymentDate, partyType. Optional: paymentMode, referenceNo, invoiceId, notes. REQUIRES CONFIRMATION.',
+  category: 'action',
+  argsSchema: {
+    partyName: { type: 'string', description: 'customer or vendor name (required)', required: true },
+    amount: { type: 'number', description: 'amount in INR (required)', required: true },
+    paymentDate: { type: 'string', description: 'ISO date YYYY-MM-DD (required)', required: true },
+    partyType: { type: 'string', description: 'customer | vendor (required, default customer)', required: true },
+    paymentMode: { type: 'string', description: 'upi|bank|cash|cheque|card (default upi)' },
+    referenceNo: { type: 'string', description: 'UTR / cheque number' },
+    invoiceId: { type: 'string', description: 'link to an Invoice (for customer payments)' },
+    notes: { type: 'string', description: 'payment notes' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const partyName = String(args.partyName ?? '').trim();
+    const amount = Number(args.amount ?? 0);
+    const paymentDate = String(args.paymentDate ?? new Date().toISOString().slice(0, 10));
+    const partyType = String(args.partyType ?? 'customer');
+    if (!partyName) return { ok: false, summary: 'Cannot create payment: partyName is required.' };
+    if (!amount || amount <= 0) return { ok: false, summary: 'Cannot create payment: amount must be greater than 0.' };
+    // Find or create a client for this party
+    let client = await db.client.findFirst({ where: { firmId: orgId, tradeName: { equals: partyName, mode: 'insensitive' } }, select: { id: true } }).catch(() => null);
+    if (!client) {
+      client = await db.client.create({
+        data: { firmId: orgId, tradeName: partyName, gstin: `LOCAL-${Date.now()}`, entityType: 'regular', status: 'active' },
+        select: { id: true },
+      }).catch(() => null);
+    }
+    const payment = await db.payment.create({
+      data: {
+        clientId: client?.id ?? null,
+        invoiceId: args.invoiceId ? String(args.invoiceId) : null,
+        partyName,
+        partyType,
+        amount,
+        paymentDate,
+        paymentMode: String(args.paymentMode ?? 'upi'),
+        referenceNo: args.referenceNo ? String(args.referenceNo) : null,
+        status: 'completed',
+        notes: args.notes ? String(args.notes) : null,
+      },
+      select: { id: true, partyName: true, amount: true, paymentDate: true, partyType: true },
+    }).catch((e) => { console.error('[oracle-tool createPayment]', e); return null; });
+    if (!payment) return { ok: false, summary: `Failed to create payment. Database error.` };
+    // If linked to an invoice, update the invoice's paid/balance amounts
+    if (args.invoiceId) {
+      try {
+        const inv = await db.invoice.findUnique({ where: { id: String(args.invoiceId) }, select: { id: true, totalAmount: true, paidAmount: true, balanceAmount: true, paymentStatus: true } });
+        if (inv) {
+          const newPaid = (inv.paidAmount ?? 0) + amount;
+          const newBalance = Math.max((inv.totalAmount ?? 0) - newPaid, 0);
+          const newStatus = newBalance <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : inv.paymentStatus);
+          await db.invoice.update({ where: { id: inv.id }, data: { paidAmount: newPaid, balanceAmount: newBalance, paymentStatus: newStatus, paymentDate } });
+        }
+      } catch (e) { console.warn('[oracle-tool createPayment] invoice update failed:', (e as Error).message); }
+    }
+    try {
+      await db.activity.create({ data: { firmId: orgId, type: 'payment', description: `Payment of ${inr(amount)} ${partyType === 'vendor' ? 'to ' + partyName : 'from ' + partyName}`, metadata: JSON.stringify({ paymentId: payment.id }) } });
+    } catch {}
+    return {
+      ok: true,
+      summary: `✅ Recorded payment: ${inr(amount)} ${partyType === 'vendor' ? 'to **' + partyName + '**' : 'from **' + partyName + '**'} on ${paymentDate}.`,
+      data: { id: payment.id, partyName: payment.partyName, amount: payment.amount, paymentDate: payment.paymentDate, partyType: payment.partyType },
+    };
+  },
+};
+
+// ─── Tool: createTask (ACTION) ────────────────────────────────────────────────
+
+const createTaskTool: OracleTool = {
+  name: 'createTask',
+  description: 'Create a follow-up task / to-do item. Required: title. Optional: description, dueDate, priority, relatedTo (entity type), relatedId. Stored in workspace memory as a task. REQUIRES CONFIRMATION.',
+  category: 'action',
+  argsSchema: {
+    title: { type: 'string', description: 'task title (required)', required: true },
+    description: { type: 'string', description: 'task details' },
+    dueDate: { type: 'string', description: 'ISO date YYYY-MM-DD' },
+    priority: { type: 'string', description: 'low | medium | high | urgent (default medium)' },
+    relatedTo: { type: 'string', description: 'invoice | customer | payment | gst | expense' },
+    relatedId: { type: 'string', description: 'ID of the related entity' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const title = String(args.title ?? '').trim();
+    if (!title) return { ok: false, summary: 'Cannot create task: title is required.' };
+    const mem = await saveMemory(orgId, {
+      title: `Task: ${title}`,
+      summary: JSON.stringify({
+        type: 'task',
+        title,
+        description: args.description ? String(args.description) : null,
+        dueDate: args.dueDate ? String(args.dueDate) : null,
+        priority: String(args.priority ?? 'medium'),
+        relatedTo: args.relatedTo ? String(args.relatedTo) : null,
+        relatedId: args.relatedId ? String(args.relatedId) : null,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      }),
+      category: 'task',
+      source: 'oracle-action',
+    });
+    return {
+      ok: true,
+      summary: `✅ Created task: **${title}**${args.dueDate ? ` due ${args.dueDate}` : ''} (priority: ${args.priority ?? 'medium'}). I'll track this in memory.`,
+      data: { id: mem.id, title },
+    };
+  },
+};
+
+// ─── Tool: generateGSTReturn (ACTION) ─────────────────────────────────────────
+
+const generateGSTReturnTool: OracleTool = {
+  name: 'generateGSTReturn',
+  description: 'Prepare a draft GSTR-1 or GSTR-3B return for a given period. Aggregates all invoices in the period, computes total taxable value, output tax (CGST+SGST+IGST), and creates a GSTRFiling record in draft status. Required: returnType, period. Optional: financialYear. REQUIRES CONFIRMATION.',
+  category: 'action',
+  argsSchema: {
+    returnType: { type: 'string', description: 'GSTR-1 | GSTR-3B (required)', required: true },
+    period: { type: 'string', description: 'month-year e.g. "07-2025" for July 2025 (required)', required: true },
+    financialYear: { type: 'string', description: 'FY e.g. "2025-26". Auto-detected if omitted.' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const returnType = String(args.returnType ?? 'GSTR-1').toUpperCase();
+    const period = String(args.period ?? '').trim();
+    if (!period) return { ok: false, summary: 'Cannot generate return: period is required (e.g. "07-2025").' };
+    // Parse period MM-YYYY
+    const [mm, yyyy] = period.split('-').map(s => s.trim());
+    const monthNum = parseInt(mm, 10);
+    const yearNum = parseInt(yyyy, 10);
+    if (!monthNum || !yearNum || monthNum < 1 || monthNum > 12) {
+      return { ok: false, summary: `Invalid period "${period}". Use MM-YYYY format (e.g. 07-2025).` };
+    }
+    // Date range for the month
+    const monthStart = new Date(yearNum, monthNum - 1, 1);
+    const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59);
+    const startDateStr = monthStart.toISOString().slice(0, 10);
+    const endDateStr = monthEnd.toISOString().slice(0, 10);
+    // Aggregate invoices in this period (invoiceDate is a string YYYY-MM-DD)
+    const invoices = await db.invoice.findMany({
+      where: { client: { firmId: orgId }, invoiceDate: { gte: startDateStr, lte: endDateStr }, status: { not: 'draft' } },
+      select: { id: true, invoiceNumber: true, taxableValue: true, cgst: true, sgst: true, igst: true, cess: true, totalAmount: true, buyerName: true, buyerGstin: true },
+    }).catch(() => []);
+    if (invoices.length === 0) {
+      return { ok: false, summary: `No posted invoices found for ${period}. Generate invoices first, or check the period format.` };
+    }
+    const totalTaxableValue = invoices.reduce((s, i) => s + (i.taxableValue ?? 0), 0);
+    const totalCGST = invoices.reduce((s, i) => s + (i.cgst ?? 0), 0);
+    const totalSGST = invoices.reduce((s, i) => s + (i.sgst ?? 0), 0);
+    const totalIGST = invoices.reduce((s, i) => s + (i.igst ?? 0), 0);
+    const totalCess = invoices.reduce((s, i) => s + (i.cess ?? 0), 0);
+    const totalTax = totalCGST + totalSGST + totalIGST + totalCess;
+    const financialYear = args.financialYear ? String(args.financialYear) : (monthNum >= 4 ? `${yearNum}-${(yearNum + 1).toString().slice(-2)}` : `${yearNum - 1}-${yearNum.toString().slice(-2)}`);
+    // Find the firm's first client (GSTRFiling requires clientId)
+    const client = await db.client.findFirst({ where: { firmId: orgId }, select: { id: true, tradeName: true } }).catch(() => null);
+    if (!client) return { ok: false, summary: 'Cannot generate return: no client found for this organization.' };
+    // Check for existing filing for this period + returnType
+    const existing = await db.gSTRFiling.findFirst({ where: { clientId: client.id, returnType, period }, select: { id: true, status: true } }).catch(() => null);
+    if (existing) {
+      return { ok: false, summary: `A ${returnType} for ${period} already exists (status: ${existing.status}). Delete it first if you want to regenerate.` };
+    }
+    const filing = await db.gSTRFiling.create({
+      data: {
+        clientId: client.id,
+        returnType,
+        period,
+        financialYear,
+        status: 'draft',
+        totalInvoices: invoices.length,
+        readyForFiling: invoices.length,
+        totalTaxableValue,
+        totalTax,
+        jsonPayload: JSON.stringify({ invoices: invoices.map(i => ({ invoiceNumber: i.invoiceNumber, buyerName: i.buyerName, buyerGstin: i.buyerGstin, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst, total: i.totalAmount })) }),
+      },
+      select: { id: true, returnType: true, period: true, totalTaxableValue: true, totalTax: true, totalInvoices: true },
+    }).catch((e) => { console.error('[oracle-tool generateGSTReturn]', e); return null; });
+    if (!filing) return { ok: false, summary: `Failed to generate ${returnType} for ${period}. Database error.` };
+    try {
+      await db.activity.create({ data: { firmId: orgId, type: 'gst', description: `${returnType} draft prepared for ${period}: ${invoices.length} invoices, taxable ${inr(totalTaxableValue)}, tax ${inr(totalTax)}`, metadata: JSON.stringify({ filingId: filing.id }) } });
+    } catch {}
+    return {
+      ok: true,
+      summary: `✅ Prepared **${returnType}** draft for **${period}**:\n• Invoices: ${filing.totalInvoices}\n• Total taxable value: ${inr(filing.totalTaxableValue)}\n• Total output tax: ${inr(filing.totalTax)} (CGST ${inr(totalCGST)} + SGST ${inr(totalSGST)} + IGST ${inr(totalIGST)} + Cess ${inr(totalCess)})\n\nStatus: **Draft**. Review it in the Returns page, then file it on the GST portal.`,
+      data: { id: filing.id, returnType: filing.returnType, period: filing.period, totalTaxableValue, totalTax, invoiceCount: invoices.length },
+      artifacts: [{
+        kind: 'metric' as const,
+        title: `${returnType} ${period} Summary`,
+        items: [
+          { label: 'Invoices', value: String(filing.totalInvoices) },
+          { label: 'Taxable Value', value: inr(totalTaxableValue) },
+          { label: 'Output Tax', value: inr(totalTax) },
+          { label: 'CGST', value: inr(totalCGST) },
+          { label: 'SGST', value: inr(totalSGST) },
+          { label: 'IGST', value: inr(totalIGST) },
+        ],
+      }],
+    };
+  },
+};
+
+// ─── Tool: searchWorkspace ────────────────────────────────────────────────────
+
+const searchWorkspaceTool: OracleTool = {
+  name: 'searchWorkspace',
+  description: 'Search across the entire workspace — invoices, customers, expenses, payments, GST filings, and memory. Returns ranked results grouped by entity type. Use when the user asks to "find", "search", or "show me" something specific.',
+  category: 'read',
+  argsSchema: {
+    query: { type: 'string', description: 'search query (required)', required: true },
+    limit: { type: 'number', description: 'max results per entity type (default 5, max 15)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const query = String(args.query ?? '').trim();
+    if (!query) return { ok: false, summary: 'Search query is required.' };
+    const limit = Math.min(Number(args.limit) || 5, 15);
+    const results: { invoices: any[]; customers: any[]; expenses: any[]; payments: any[]; filings: any[]; memory: any[] } = {
+      invoices: [], customers: [], expenses: [], payments: [], filings: [], memory: [],
+    };
+    await Promise.all([
+      db.invoice.findMany({
+        where: { client: { firmId: orgId }, OR: [{ invoiceNumber: { contains: query, mode: 'insensitive' } }, { buyerName: { contains: query, mode: 'insensitive' } }] },
+        take: limit,
+        select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, invoiceDate: true, paymentStatus: true },
+      }).then(r => { results.invoices = r; }).catch(() => {}),
+      db.client.findMany({
+        where: { firmId: orgId, OR: [{ tradeName: { contains: query, mode: 'insensitive' } }, { gstin: { contains: query, mode: 'insensitive' } }, { contactEmail: { contains: query, mode: 'insensitive' } }] },
+        take: limit,
+        select: { id: true, tradeName: true, gstin: true, contactEmail: true, state: true },
+      }).then(r => { results.customers = r; }).catch(() => {}),
+      db.expense.findMany({
+        where: { client: { firmId: orgId }, OR: [{ vendor: { contains: query, mode: 'insensitive' } }, { category: { contains: query, mode: 'insensitive' } }, { description: { contains: query, mode: 'insensitive' } }] },
+        take: limit,
+        select: { id: true, vendor: true, category: true, amount: true, date: true },
+      }).then(r => { results.expenses = r; }).catch(() => {}),
+      db.payment.findMany({
+        where: { client: { firmId: orgId }, OR: [{ partyName: { contains: query, mode: 'insensitive' } }, { referenceNo: { contains: query, mode: 'insensitive' } }] },
+        take: limit,
+        select: { id: true, partyName: true, amount: true, paymentDate: true, partyType: true },
+      }).then(r => { results.payments = r; }).catch(() => {}),
+      db.gSTRFiling.findMany({
+        where: { client: { firmId: orgId }, OR: [{ returnType: { contains: query, mode: 'insensitive' } }, { period: { contains: query, mode: 'insensitive' } }] },
+        take: limit,
+        select: { id: true, returnType: true, period: true, status: true, totalTax: true },
+      }).then(r => { results.filings = r; }).catch(() => {}),
+      recallMemory(orgId, query).then(r => { results.memory = r.slice(0, limit); }).catch(() => {}),
+    ]);
+    const totalCount = Object.values(results).reduce((s, r) => s + r.length, 0);
+    if (totalCount === 0) {
+      return { ok: true, summary: `No results found for "${query}" across invoices, customers, expenses, payments, GST filings, or memory.` };
+    }
+    const lines: string[] = [`Found **${totalCount}** result(s) for "${query}":`];
+    if (results.invoices.length) lines.push(`\n**Invoices (${results.invoices.length})**:\n` + results.invoices.map(i => `  • ${i.invoiceNumber} — ${i.buyerName ?? '-'}, ${inr(i.totalAmount ?? 0)} (${i.paymentStatus})`).join('\n'));
+    if (results.customers.length) lines.push(`\n**Customers (${results.customers.length})**:\n` + results.customers.map(c => `  • ${c.tradeName} — GSTIN: ${c.gstin}${c.state ? ', ' + c.state : ''}`).join('\n'));
+    if (results.expenses.length) lines.push(`\n**Expenses (${results.expenses.length})**:\n` + results.expenses.map(e => `  • ${e.vendor ?? '-'} — ${e.category}, ${inr(e.amount ?? 0)} on ${e.date}`).join('\n'));
+    if (results.payments.length) lines.push(`\n**Payments (${results.payments.length})**:\n` + results.payments.map(p => `  • ${p.partyName} — ${inr(p.amount ?? 0)} on ${p.paymentDate} (${p.partyType})`).join('\n'));
+    if (results.filings.length) lines.push(`\n**GST Filings (${results.filings.length})**:\n` + results.filings.map(f => `  • ${f.returnType} ${f.period} — ${f.status}, tax ${inr(f.totalTax ?? 0)}`).join('\n'));
+    if (results.memory.length) lines.push(`\n**Memory (${results.memory.length})**:\n` + results.memory.map(m => `  • ${m.title}${m.summary ? ': ' + m.summary : ''}`).join('\n'));
+    return {
+      ok: true,
+      summary: lines.join('\n'),
+      data: results,
+      artifacts: [{
+        kind: 'list' as const,
+        title: `Search Results for "${query}"`,
+        items: [
+          ...results.invoices.map((i: any) => ({ text: `Invoice ${i.invoiceNumber} — ${i.buyerName ?? '-'} — ${inr(i.totalAmount ?? 0)}`, type: 'invoice' })),
+          ...results.customers.map((c: any) => ({ text: `Customer ${c.tradeName} — ${c.gstin}`, type: 'customer' })),
+          ...results.expenses.map((e: any) => ({ text: `Expense ${e.vendor} — ${inr(e.amount ?? 0)}`, type: 'expense' })),
+          ...results.payments.map((p: any) => ({ text: `Payment ${p.partyName} — ${inr(p.amount ?? 0)}`, type: 'payment' })),
+          ...results.filings.map((f: any) => ({ text: `${f.returnType} ${f.period} — ${f.status}`, type: 'gst' })),
+        ],
+      }],
+    };
+  },
+};
+
 // ─── Tool registry ────────────────────────────────────────────────────────────
 
 export const ORACLE_TOOLS: OracleTool[] = [
+  // READ tools
   getBusinessSnapshotTool,
   queryInvoicesTool,
   queryCustomersTool,
@@ -1062,11 +1523,31 @@ export const ORACLE_TOOLS: OracleTool[] = [
   getInvoiceMetricsTool,
   getRecentActivityTool,
   getConnectedIntegrationsTool,
+  searchWorkspaceTool,
+  // ACTION tools (require confirmation)
   createInvoiceTool,
+  createCustomerTool,
+  createExpenseTool,
+  createPaymentTool,
+  createTaskTool,
+  generateGSTReturnTool,
   sendReminderTool,
+  // MEMORY tools
   recallMemoryTool,
   saveMemoryTool,
 ];
+
+// Tools that REQUIRE user confirmation before execution.
+// The brain route intercepts these and emits "action-confirm" events.
+export const CONFIRMATION_REQUIRED_TOOLS = new Set([
+  'createInvoice',
+  'createCustomer',
+  'createExpense',
+  'createPayment',
+  'createTask',
+  'generateGSTReturn',
+  'sendReminder',
+]);
 
 export const ORACLE_TOOL_MAP: Record<string, OracleTool> = Object.fromEntries(
   ORACLE_TOOLS.map(t => [t.name, t]),

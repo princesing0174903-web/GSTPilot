@@ -1,28 +1,50 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Root Providers
+// GSTPilot — Root Providers (chunk-split for low-memory sandbox)
 //
 // Provider hierarchy (outer → inner):
-//   ThemeProvider          — light/dark theming
-//   QueryClientProvider    — TanStack Query (server state)
-//   AuthProvider           — Firebase Auth identity (PART 1, 7, 8)
-//   OrgProvider            — Current org + members + role (PART 3, 4)
-//   AppProvider            — View routing / UI state
+//   ThemeProvider          — light/dark theming            (static, light)
+//   QueryClientProvider    — TanStack Query                (static, light)
+//   AuthProvider           — Firebase Auth identity        (DYNAMIC — heavy chunk)
+//   OrgProvider            — Current org + members + role  (DYNAMIC — heavy chunk)
+//   AppProvider            — View routing / UI state       (static, light)
 //
-// OrgProvider MUST sit inside AuthProvider (it reads `useAuth()` to know when
-// the user is authenticated) and outside AppProvider (so views can read org
-// state).
+// MEMORY-SPLIT: AuthProvider and OrgProvider both pull in the Firebase SDK
+// (~40 MB). By loading them via `next/dynamic`, webpack emits Firebase as its
+// own chunk that compiles SEPARATELY from the initial `/` compile. This keeps
+// peak compile memory well under the 4 GB sandbox limit.
+//
+// The providers load sequentially (OrgProvider is a child of AuthProvider, so
+// its chunk is only requested after AuthProvider mounts). Children (AppRouter)
+// render only after ALL providers are mounted, so useAuth()/useOrg()/useApp()
+// are always available.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
+import { Zap } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { AppProvider } from '@/contexts/AppContext';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { OrgProvider } from '@/contexts/OrgContext';
+
+// ── Heavy context providers lazy-loaded so Firebase stays OUT of the initial
+//    `/` compile. Each becomes its own webpack chunk.
+const AuthProvider = dynamic(
+  () => import('@/contexts/AuthContext').then((m) => ({ default: m.AuthProvider })),
+  {
+    ssr: false,
+    loading: () => <ProviderLoader label="Secure auth" />,
+  },
+);
+const OrgProvider = dynamic(
+  () => import('@/contexts/OrgContext').then((m) => ({ default: m.OrgProvider })),
+  {
+    ssr: false,
+    loading: () => <ProviderLoader label="Workspace" />,
+  },
+);
 
 // ── Heavy components lazy-loaded so they stay OUT of the initial `/` compile ──
 // NOTE: OracleLauncher (the blue floating button) was REMOVED per the
@@ -36,6 +58,23 @@ const ReactQueryDevtools = dynamic(
   () => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })),
   { ssr: false, loading: () => null },
 );
+
+// ── Provider loader splash — shown while Firebase chunks compile ──
+function ProviderLoader({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
+          <Zap className="h-5 w-5 accent-text" />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-sm font-medium text-foreground">Loading GSTPilot…</span>
+          <span className="text-xs text-muted-foreground">{label}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

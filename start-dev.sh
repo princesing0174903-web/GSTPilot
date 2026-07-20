@@ -1,12 +1,12 @@
 #!/bin/bash
 # GSTPilot dev server keepalive script
-# Starts the Next.js dev server (webpack mode, 1.5GB heap) and keeps it running.
+# Starts the Next.js dev server (webpack mode, 2.5GB heap) and keeps it running.
 # The server tends to die if left idle in the sandbox, so this script restarts it.
 cd /home/z/my-project
 
 while true; do
   echo "[$(date)] Starting dev server..."
-  NODE_OPTIONS='--max-old-space-size=1536' node node_modules/next/dist/bin/next dev --webpack -p 3000 > dev.log 2>&1 &
+  NODE_OPTIONS='--max-old-space-size=2560' node node_modules/next/dist/bin/next dev --webpack -p 3000 > dev.log 2>&1 &
   SERVER_PID=$!
   echo "[$(date)] Server PID: $SERVER_PID"
 

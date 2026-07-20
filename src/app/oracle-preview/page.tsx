@@ -1,38 +1,33 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Root Page
+// GSTPilot Oracle — Preview Route (/oracle-preview)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Full SaaS application entry point.
+// DEVELOPMENT-ONLY lightweight entry that renders the Oracle AI workspace
+// directly against a local demo organization, WITHOUT requiring sign-in or
+// compiling the heavy DashboardShell + Firebase graph.
 //
-// Flow:
-//   Landing Page → Sign In → Onboarding (first run) → Dashboard → Oracle
-//
-// AppRoot is loaded via `next/dynamic` so the initial server render stays
-// tiny (just the loading splash). The heavy Providers + AppRouter + contexts
-// compile on the client after hydration. The dashboard views inside
-// AppRouter are themselves lazy, so they only compile when the user
-// authenticates and navigates to them.
-//
-// The Oracle Preview (lightweight, Firebase-free Oracle-only entry) remains
-// available as a separate development route at `/oracle-preview`.
+// This route is intended for quick Oracle iteration / demo purposes. The
+// REAL application flow (Landing → Sign In → Dashboard → Oracle) is served
+// at `/` via src/app/page.tsx → AppRoot → AppRouter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import dynamic from 'next/dynamic';
-import { Zap } from 'lucide-react';
 
-const AppRoot = dynamic(
-  () => import('@/components/AppRoot').then((m) => m.AppRoot),
+const OraclePreviewApp = dynamic(
+  () => import('@/components/OraclePreviewApp').then((m) => m.OraclePreviewApp),
   {
     ssr: false,
     loading: () => (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
-            <Zap className="h-5 w-5 accent-text" />
+            <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
           <span className="text-sm font-medium text-muted-foreground">
-            Loading GSTPilot…
+            Loading GSTPilot Oracle…
           </span>
         </div>
       </div>
@@ -40,6 +35,6 @@ const AppRoot = dynamic(
   },
 );
 
-export default function Home() {
-  return <AppRoot />;
+export default function OraclePreviewPage() {
+  return <OraclePreviewApp />;
 }

@@ -4,14 +4,15 @@
 // GSTPilot — Oracle Preview App (lightweight, Firebase-free entry)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Renders Oracle AI directly with a local demo workspace. This module does
-// NOT import AuthContext / OrgContext / @/lib/firebase, so Turbopack's
-// dependency graph stays tiny and the 4 GB dev sandbox doesn't OOM during
-// compile.
+// NOT import AuthContext / OrgContext / @/lib/firebase, so the dependency
+// graph stays tiny and compiles fast.
 //
-// The full app (AppRoot → AppRouter → DashboardShell) remains intact and is
-// used in production. This preview entry is only used by src/app/page.tsx so
-// the sandbox can render Oracle without compiling the 150-view dashboard +
-// Firebase graph.
+// USED BY: src/app/oracle-preview/page.tsx (the /oracle-preview DEV route).
+//
+// The REAL application flow (Landing → Sign In → Dashboard → Oracle) is
+// served at `/` via src/app/page.tsx → AppRoot → AppRouter → DashboardShell.
+// This preview entry exists only as a development convenience for iterating
+// on Oracle without signing in.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { ThemeProvider } from 'next-themes';

@@ -25,18 +25,31 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+// Type-only import — erased at compile time, does NOT pull in the firebase/auth
+// runtime module. This keeps AuthContext in a LIGHT webpack chunk so the
+// landing page can compile without the ~40 MB Firebase SDK.
+import { type User as FirebaseUser } from 'firebase/auth';
+// errors.ts is a pure error-code map (no Firebase import) — safe to import statically.
 import { friendlyAuthError, isSessionError } from '@/lib/auth/errors';
-// Static imports — avoids Turbopack ChunkLoadError on dynamic import('@/lib/auth')
-import {
-  signInWithGoogle as firebaseSignInWithGoogle,
-  signInWithEmail as firebaseSignInWithEmail,
-  signUpWithEmail as firebaseSignUpWithEmail,
-  resetPassword as firebaseResetPassword,
-  logOut as firebaseLogOut,
-  handleRedirectResult as firebaseHandleRedirectResult,
-} from '@/lib/auth';
+
+// ── Lazy Firebase loaders ────────────────────────────────────────────────────
+// @/lib/firebase and @/lib/auth both pull in the Firebase SDK (~40 MB).
+// We import them dynamically so Firebase compiles in its OWN chunk, only when
+// a auth function is actually called (e.g. the user clicks "Sign In").
+// This keeps the initial `/` compile + provider chunk light enough for the
+// 4 GB sandbox.
+type FirebaseModule = typeof import('@/lib/firebase');
+type AuthModule = typeof import('@/lib/auth');
+let firebaseCache: Promise<FirebaseModule> | null = null;
+let authCache: Promise<AuthModule> | null = null;
+function loadFirebase(): Promise<FirebaseModule> {
+  if (!firebaseCache) firebaseCache = import('@/lib/firebase');
+  return firebaseCache;
+}
+function loadAuth(): Promise<AuthModule> {
+  if (!authCache) authCache = import('@/lib/auth');
+  return authCache;
+}
 
 export interface AuthUser {
   id: string;
@@ -155,77 +168,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(SESSION_KEY);
     }
 
-    console.log('[Auth] Subscribing to onAuthStateChanged…');
+    console.log('[Auth] Subscribing to onAuthStateChanged (lazy Firebase load)…');
 
     // ── onAuthStateChanged — the single source of truth ──
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (fbUser) => {
+    // Firebase is loaded dynamically so it compiles in its own chunk. The
+    // 3s safety timer above already unblocks the UI if this takes longer.
+    let unsubscribe: (() => void) | null = null;
+    loadFirebase()
+      .then(({ auth, onAuthStateChanged }) => {
         if (!mounted) return;
+        unsubscribe = onAuthStateChanged(
+          auth,
+          (fbUser) => {
+            if (!mounted) return;
 
-        if (fbUser) {
-          console.log('[Auth] User Loaded — uid:', fbUser.uid, 'email:', fbUser.email);
-          const authUser = firebaseToAuthUser(fbUser);
+            if (fbUser) {
+              console.log('[Auth] User Loaded — uid:', fbUser.uid, 'email:', fbUser.email);
+              const authUser = firebaseToAuthUser(fbUser);
 
-          // A real Firebase user signed in — this is no longer a demo session.
-          isDemoSessionRef.current = false;
+              // A real Firebase user signed in — this is no longer a demo session.
+              isDemoSessionRef.current = false;
 
-          // Fast path: cache matched Firebase user → unblock immediately.
-          if (restoredFromCache && cachedUserIdRef.current === fbUser.uid) {
-            console.log('[Auth] Cache matched — fast path, unblocking immediately');
-            setUser(authUser);
+              // Fast path: cache matched Firebase user → unblock immediately.
+              if (restoredFromCache && cachedUserIdRef.current === fbUser.uid) {
+                console.log('[Auth] Cache matched — fast path, unblocking immediately');
+                setUser(authUser);
+                markInitialized();
+                return;
+              }
+
+              // Full new sign-in (or cache mismatch).
+              console.log('[Auth] Session Created — new sign-in detected');
+              setUser(authUser);
+              cachedUserIdRef.current = authUser.id;
+              try {
+                localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+              } catch {
+                /* storage may be unavailable (private mode) — non-fatal */
+              }
+              markInitialized();
+            } else {
+              // No Firebase user. If this is a demo session (set via
+              // signInDemo), KEEP the demo user — Firebase firing null is
+              // expected because demo users don't have a Firebase Auth session.
+              if (isDemoSessionRef.current) {
+                console.log('[Auth] No Firebase user — keeping demo session (preview mode)');
+                markInitialized();
+                return;
+              }
+              // Genuine sign-out / session expiry — clear everything.
+              console.log('[Auth] No Firebase user — session ended or signed out');
+              localStorage.removeItem(SESSION_KEY);
+              setUser(null);
+              cachedUserIdRef.current = null;
+              markInitialized();
+            }
+          },
+          (authError) => {
+            // onAuthStateChanged error listener — surface a friendly message.
+            if (!mounted) return;
+            console.warn('[Auth] State listener error:', authError);
+            if (isSessionError(authError)) {
+              setError('Your session has ended. Please sign in again.');
+            } else {
+              setError(friendlyAuthError(authError));
+            }
+            localStorage.removeItem(SESSION_KEY);
+            setUser(null);
+            cachedUserIdRef.current = null;
+            isDemoSessionRef.current = false;
             markInitialized();
-            return;
           }
-
-          // Full new sign-in (or cache mismatch).
-          console.log('[Auth] Session Created — new sign-in detected');
-          setUser(authUser);
-          cachedUserIdRef.current = authUser.id;
-          try {
-            localStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-          } catch {
-            /* storage may be unavailable (private mode) — non-fatal */
-          }
-          markInitialized();
-        } else {
-          // No Firebase user. If this is a demo session (set via
-          // signInDemo), KEEP the demo user — Firebase firing null is
-          // expected because demo users don't have a Firebase Auth session.
-          if (isDemoSessionRef.current) {
-            console.log('[Auth] No Firebase user — keeping demo session (preview mode)');
-            markInitialized();
-            return;
-          }
-          // Genuine sign-out / session expiry — clear everything.
-          console.log('[Auth] No Firebase user — session ended or signed out');
-          localStorage.removeItem(SESSION_KEY);
-          setUser(null);
-          cachedUserIdRef.current = null;
-          markInitialized();
-        }
-      },
-      (authError) => {
-        // onAuthStateChanged error listener — surface a friendly message.
-        if (!mounted) return;
-        console.warn('[Auth] State listener error:', authError);
-        if (isSessionError(authError)) {
-          setError('Your session has ended. Please sign in again.');
-        } else {
-          setError(friendlyAuthError(authError));
-        }
-        localStorage.removeItem(SESSION_KEY);
-        setUser(null);
-        cachedUserIdRef.current = null;
-        isDemoSessionRef.current = false;
+        );
+      })
+      .catch((err) => {
+        console.warn('[Auth] Firebase load failed — running in offline/demo mode:', err);
         markInitialized();
-      }
-    );
+      });
 
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
-      unsubscribe();
+      if (unsubscribe) unsubscribe();
     };
   }, []);
 
@@ -234,7 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // signInWithRedirect, the result is delivered here when the page reloads.
   useEffect(() => {
     let active = true;
-    firebaseHandleRedirectResult()
+    loadAuth()
+      .then((m) => m.handleRedirectResult())
       .then((result) => {
         if (!active) return;
         if (result.error) {
@@ -257,7 +282,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Logout ──
   const logout = useCallback(async () => {
     try {
-      await firebaseLogOut();
+      const { logOut } = await loadAuth();
+      await logOut();
     } catch (err) {
       // Even if Firebase signOut fails, clear local state so the user is
       // effectively logged out from the app's perspective.
@@ -276,6 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Note: organization / profile data is owned by OrgContext; here we only
   // refresh the Firebase Auth user's basic info.
   const refreshUserProfile = useCallback(async () => {
+    const { auth } = await loadFirebase();
     const fbUser = auth.currentUser;
     if (!fbUser) return;
     // Force a token refresh so custom claims (if any) are up to date.
@@ -307,6 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Login Started — email:', email);
     setIsLoading(true);
     try {
+      const { signInWithEmail: firebaseSignInWithEmail } = await loadAuth();
       const result = await firebaseSignInWithEmail(email, password);
       if (result.error) {
         console.warn('[Auth] Login failed:', result.error);
@@ -329,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Sign Up Started — email:', email);
     setIsLoading(true);
     try {
+      const { signUpWithEmail: firebaseSignUpWithEmail } = await loadAuth();
       const result = await firebaseSignUpWithEmail(name, email, password);
       if (result.error) {
         console.warn('[Auth] Sign up failed:', result.error);
@@ -354,6 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Google Sign-In Started');
     setIsLoading(true);
     try {
+      const { signInWithGoogle: firebaseSignInWithGoogle } = await loadAuth();
       const result = await firebaseSignInWithGoogle();
       if (result.error) {
         console.warn('[Auth] Google sign-in failed:', result.error);
@@ -415,6 +445,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = useCallback(async (email: string) => {
     console.log('[Auth] Password reset requested for:', email);
     try {
+      const { resetPassword: firebaseResetPassword } = await loadAuth();
       const result = await firebaseResetPassword(email);
       if (result.error) {
         setError(result.error);

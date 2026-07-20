@@ -24,7 +24,7 @@ import {
   Receipt, Users, AlertTriangle, FileText, Database, Zap, Clock,
   ChevronRight, Loader2, BrainCircuit, Wrench, CheckCircle2, XCircle,
   Menu, X, Lightbulb, IndianRupee, ShieldCheck, BarChart3,
-  Copy, RotateCcw, Square,
+  Copy, RotateCcw, Square, ShieldAlert, ArrowRight, Sparkle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -59,6 +59,38 @@ interface MessagePart {
   result?: string;
   error?: string;
   durationMs?: number;
+}
+
+// ─── Action Engine parts (confirmation cards) ─────────────────────────────────
+// These render as inline cards in the chat thread, NOT as modals. The card has
+// five lifecycle states: pending → (confirmed|cancelled) → (executing) → (success|error).
+interface ActionConfirmPart {
+  type: 'action-confirm';
+  tool: string;
+  args: Record<string, any>;
+  toolCallId: string;
+  displayName: string;
+  icon: string;
+  category: string;
+  previewTitle: string;
+  previewFields: Array<{ label: string; value: string; emphasize?: boolean }>;
+  validationFields: Array<{ key: string; label: string; status: 'ok' | 'warn' | 'error'; message?: string; resolvedValue?: string }>;
+  note?: string;
+  // Lifecycle state — mutated in place as the user confirms/cancels and the action executes
+  state: 'pending' | 'confirmed' | 'cancelled' | 'executing' | 'success' | 'error';
+  // Populated after execution
+  successSummary?: string;
+  successData?: Record<string, any>;
+  error?: string;
+  followUp?: { label: string; prompt: string };
+  viewIn?: { label: string; href: string };
+  // Refreshed dashboard context (after success) — used to update memory panel, etc.
+  refreshedContext?: {
+    snapshot?: any;
+    recentInvoices?: any[];
+    recentActivity?: any[];
+    memory?: any[];
+  };
 }
 
 interface Session {
@@ -189,6 +221,25 @@ const TOOL_LABELS: Record<string, string> = {
   saveMemory: 'Save Memory',
 };
 
+// ─── Action Engine: icon resolver for action categories ───────────────────────
+// Maps the `icon` string (sent by the backend from the action's definition) to a
+// Lucide component. Add new icons here as new actions are registered.
+const ACTION_ICONS: Record<string, any> = {
+  FileText,
+  Users,
+  IndianRupee,
+  Receipt,
+  Send,
+  Wrench,
+  ShieldAlert,
+  BarChart3,
+  BrainCircuit,
+};
+
+function resolveActionIcon(iconName: string): any {
+  return ACTION_ICONS[iconName] ?? Wrench;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCoreProps) {
@@ -205,6 +256,9 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror of messages for use in async callbacks (confirmAction/cancelActionCard)
+  // that need to read the latest state without re-creating on every render.
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   // ─── Load sessions + memory when orgId changes ──────────────────────────────
   useEffect(() => {
@@ -277,6 +331,12 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
   // ─── Auto-scroll on new messages ────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
+
+  // Keep messagesRef in sync so async callbacks (confirmAction, cancelActionCard)
+  // can read the latest message state without stale closures.
+  useEffect(() => {
+    messagesRef.current = messages;
   }, [messages]);
 
   // ─── Send message (the core streaming chat) ─────────────────────────────────
@@ -413,6 +473,28 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
                 }));
                 break;
               }
+              case 'action-confirm': {
+                // Action Engine: the LLM emitted a confirmation-required tool call.
+                // The backend has already validated the args against the live DB
+                // (via buildConfirmation) and built an enriched preview. We render
+                // an inline confirmation card with Confirm/Cancel buttons.
+                const part: ActionConfirmPart = {
+                  type: 'action-confirm',
+                  tool: data.tool,
+                  args: data.args ?? {},
+                  toolCallId: data.toolCallId,
+                  displayName: data.displayName ?? data.tool,
+                  icon: data.icon ?? 'Wrench',
+                  category: data.category ?? 'action',
+                  previewTitle: data.preview ?? data.displayName ?? data.tool,
+                  previewFields: Array.isArray(data.previewFields) ? data.previewFields : [],
+                  validationFields: Array.isArray(data.validationFields) ? data.validationFields : [],
+                  note: data.note,
+                  state: 'pending',
+                };
+                updateAssistant(m => ({ ...m, parts: [...m.parts, part] }));
+                break;
+              }
               case 'done':
                 updateAssistant(m => ({ ...m, streaming: false }));
                 refreshSessions();
@@ -455,6 +537,127 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
     abortRef.current?.abort();
     setIsStreaming(false);
   }, []);
+
+  // ─── Action Engine: confirm / cancel handlers ───────────────────────────────
+  // These are called by the ActionConfirmCard when the user clicks Confirm or Cancel.
+  // They POST to /api/oracle/brain/confirm, which calls executeAndRefresh() on the
+  // backend. The card's state is updated in-place as the action executes.
+
+  /**
+   * Update a specific action-confirm part's state across all messages.
+   * Finds the part by toolCallId (unique per confirmation) and applies the updater.
+   */
+  const updateActionPart = useCallback((toolCallId: string, updater: (p: ActionConfirmPart) => ActionConfirmPart) => {
+    setMessages(prev => prev.map(m => ({
+      ...m,
+      parts: m.parts.map(p => {
+        if (p.type === 'action-confirm' && p.toolCallId === toolCallId) {
+          return updater(p as ActionConfirmPart);
+        }
+        return p;
+      }) as any[],
+    })));
+  }, []);
+
+  const confirmAction = useCallback(async (toolCallId: string) => {
+    if (!orgId) return;
+    // Find the part to get the tool + args + sessionId
+    let target: ActionConfirmPart | null = null;
+    for (const m of messagesRef.current) {
+      for (const p of m.parts) {
+        if (p.type === 'action-confirm' && (p as ActionConfirmPart).toolCallId === toolCallId) {
+          target = p as ActionConfirmPart;
+          break;
+        }
+      }
+      if (target) break;
+    }
+    if (!target) return;
+
+    // Optimistically flip to "executing"
+    updateActionPart(toolCallId, p => ({ ...p, state: 'executing' }));
+
+    try {
+      const res = await fetch('/api/oracle/brain/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed: true,
+          toolCallId,
+          tool: target.tool,
+          args: target.args,
+          orgId,
+          sessionId: currentSessionId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok && data.success) {
+        updateActionPart(toolCallId, p => ({
+          ...p,
+          state: 'success',
+          successSummary: data.summary,
+          successData: data.result,
+          followUp: data.followUp,
+          viewIn: data.viewIn,
+          refreshedContext: data.refreshedContext,
+        }));
+        // Refresh the memory panel if the refreshed context includes memory facts
+        if (data.refreshedContext?.memory) {
+          setMemory(data.refreshedContext.memory);
+        } else {
+          refreshMemory();
+        }
+        // Refresh sessions (message count changed)
+        refreshSessions();
+        toast.success(`${target.displayName} completed`);
+      } else if (data.cancelled) {
+        // Server says it was cancelled (shouldn't happen on confirm, but handle gracefully)
+        updateActionPart(toolCallId, p => ({ ...p, state: 'cancelled' }));
+      } else {
+        const errMsg = data.summary || data.error || 'Action failed';
+        updateActionPart(toolCallId, p => ({ ...p, state: 'error', error: errMsg }));
+        toast.error(errMsg);
+      }
+    } catch (e: any) {
+      const errMsg = e.message || 'Network error';
+      updateActionPart(toolCallId, p => ({ ...p, state: 'error', error: errMsg }));
+      toast.error(`Failed to execute action: ${errMsg}`);
+    }
+  }, [orgId, currentSessionId, updateActionPart, refreshMemory, refreshSessions]);
+
+  const cancelActionCard = useCallback(async (toolCallId: string) => {
+    if (!orgId) return;
+    // Find the part to get the tool name
+    let toolName = '';
+    for (const m of messagesRef.current) {
+      for (const p of m.parts) {
+        if (p.type === 'action-confirm' && (p as ActionConfirmPart).toolCallId === toolCallId) {
+          toolName = (p as ActionConfirmPart).tool;
+          break;
+        }
+      }
+      if (toolName) break;
+    }
+    updateActionPart(toolCallId, p => ({ ...p, state: 'cancelled' }));
+    // Best-effort: notify the backend so it marks the tool-call audit row as cancelled
+    try {
+      await fetch('/api/oracle/brain/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed: false,
+          toolCallId,
+          tool: toolName,
+          args: {},
+          orgId,
+          sessionId: currentSessionId,
+        }),
+      });
+    } catch {
+      // Non-critical — the card is already visually cancelled
+    }
+    refreshSessions();
+  }, [orgId, currentSessionId, updateActionPart, refreshSessions]);
 
   // Regenerate the last assistant response: remove it, find the last user message, re-send it
   const handleRegenerate = useCallback(() => {
@@ -672,6 +875,9 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
                   message={m}
                   isLast={i === messages.length - 1}
                   onRegenerate={i === messages.length - 1 && m.role === 'assistant' && !m.streaming ? handleRegenerate : undefined}
+                  onConfirmAction={confirmAction}
+                  onCancelAction={cancelActionCard}
+                  onFollowUp={sendMessage}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -835,7 +1041,21 @@ function WelcomeScreen({
 // Message bubble with tool-call cards
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MessageBubble({ message, isLast, onRegenerate }: { message: ChatMessage; isLast?: boolean; onRegenerate?: () => void }) {
+function MessageBubble({
+  message,
+  isLast,
+  onRegenerate,
+  onConfirmAction,
+  onCancelAction,
+  onFollowUp,
+}: {
+  message: ChatMessage;
+  isLast?: boolean;
+  onRegenerate?: () => void;
+  onConfirmAction?: (toolCallId: string) => void;
+  onCancelAction?: (toolCallId: string) => void;
+  onFollowUp?: (text: string) => void;
+}) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
 
@@ -847,6 +1067,11 @@ function MessageBubble({ message, isLast, onRegenerate }: { message: ChatMessage
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => toast.error('Failed to copy'));
   }, [message.content]);
+
+  // Separate action-confirm parts from tool-call parts so we can render them in
+  // the right order (tool-call cards first, then the action-confirm card).
+  const toolCallParts = message.parts.filter(p => p.type === 'tool-call');
+  const actionConfirmParts = message.parts.filter(p => p.type === 'action-confirm') as ActionConfirmPart[];
 
   return (
     <motion.div
@@ -874,8 +1099,19 @@ function MessageBubble({ message, isLast, onRegenerate }: { message: ChatMessage
         ) : (
           <div className="space-y-3 max-w-[90%]">
             {/* Tool call cards */}
-            {message.parts.filter(p => p.type === 'tool-call').map((p, i) => (
-              <ToolCallCard key={i} part={p as Extract<MessagePart, { type: 'tool-call' }>} />
+            {toolCallParts.map((p, i) => (
+              <ToolCallCard key={`tc-${i}`} part={p as Extract<MessagePart, { type: 'tool-call' }>} />
+            ))}
+
+            {/* Action Engine confirmation cards */}
+            {actionConfirmParts.map((p, i) => (
+              <ActionConfirmCard
+                key={`ac-${p.toolCallId}-${i}`}
+                part={p}
+                onConfirm={onConfirmAction}
+                onCancel={onCancelAction}
+                onFollowUp={onFollowUp}
+              />
             ))}
 
             {/* Text content */}
@@ -1038,6 +1274,239 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
         </div>
       )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ActionConfirmCard — inline confirmation card for the Action Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Renders inline in the chat thread (not a modal). Five lifecycle states:
+//   pending    → blue/amber accent, preview + validation badges + Confirm/Cancel
+//   executing  → spinner overlay, buttons disabled
+//   success    → green accent, success summary + result data + follow-up chip + view-in link
+//   cancelled  → zinc accent, "Action cancelled" note
+//   error      → rose accent, error message
+//
+// The card is purely presentational — all state lives in the parent (OracleBrainCore)
+// and is mutated via updateActionPart() when the user confirms/cancels.
+
+function ActionConfirmCard({
+  part,
+  onConfirm,
+  onCancel,
+  onFollowUp,
+}: {
+  part: ActionConfirmPart;
+  onConfirm?: (toolCallId: string) => void;
+  onCancel?: (toolCallId: string) => void;
+  onFollowUp?: (text: string) => void;
+}) {
+  const Icon = ACTION_ICONS[part.icon] ?? Wrench;
+  const isPending = part.state === 'pending';
+  const isExecuting = part.state === 'executing';
+  const isCancelled = part.state === 'cancelled';
+  const isError = part.state === 'error';
+  const isSuccess = part.state === 'success';
+
+  // Accent color by state
+  const accent = isPending
+    ? 'border-amber-500/40 bg-amber-500/[0.04]'
+    : isExecuting
+      ? 'border-sky-500/40 bg-sky-500/[0.04]'
+      : isSuccess
+        ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
+        : isError
+          ? 'border-rose-500/40 bg-rose-500/[0.04]'
+          : 'border-zinc-700/60 bg-zinc-800/40'; // cancelled
+  const iconBg = isPending
+    ? 'bg-amber-500/15 text-amber-400'
+    : isExecuting
+      ? 'bg-sky-500/15 text-sky-400'
+      : isSuccess
+        ? 'bg-emerald-500/15 text-emerald-400'
+        : isError
+          ? 'bg-rose-500/15 text-rose-400'
+          : 'bg-zinc-700/60 text-zinc-400';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className={`rounded-xl border ${accent} overflow-hidden`}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800/60">
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+          {isExecuting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : isSuccess ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : isError ? (
+            <XCircle className="h-4 w-4" />
+          ) : isCancelled ? (
+            <X className="h-4 w-4" />
+          ) : (
+            <Icon className="h-4 w-4" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-zinc-100 truncate">{part.displayName}</span>
+            <Badge variant="outline" className={`text-[9px] h-4 px-1.5 capitalize ${
+              isPending ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' :
+              isExecuting ? 'text-sky-400 border-sky-500/40 bg-sky-500/10' :
+              isSuccess ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' :
+              isError ? 'text-rose-400 border-rose-500/40 bg-rose-500/10' :
+              'text-zinc-500 border-zinc-700 bg-zinc-800/60'
+            }`}>
+              {part.state}
+            </Badge>
+          </div>
+          <div className="text-xs text-zinc-400 mt-0.5 truncate">{part.previewTitle}</div>
+        </div>
+      </div>
+
+      {/* Body — only show preview fields + validation when pending or executing */}
+      {(isPending || isExecuting) && (
+        <div className="px-4 py-3 space-y-3">
+          {/* Preview fields table */}
+          {part.previewFields.length > 0 && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {part.previewFields.map((f, i) => (
+                <div key={i} className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-600">{f.label}</span>
+                  <span className={`text-xs ${f.emphasize ? 'text-zinc-100 font-semibold' : 'text-zinc-300'}`}>{f.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Validation badges — per-field check/warn/error against live DB */}
+          {part.validationFields.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-zinc-800/40">
+              {part.validationFields.map((v, i) => {
+                const vIcon = v.status === 'ok' ? CheckCircle2 : v.status === 'warn' ? AlertTriangle : XCircle;
+                const VIcon = vIcon;
+                const vColor = v.status === 'ok' ? 'text-emerald-400' : v.status === 'warn' ? 'text-amber-400' : 'text-rose-400';
+                return (
+                  <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                    <VIcon className={`h-3 w-3 mt-0.5 shrink-0 ${vColor}`} />
+                    <span className="text-zinc-400">
+                      <span className="text-zinc-300 font-medium">{v.label}</span>
+                      {v.resolvedValue && <span className="text-zinc-500">: {v.resolvedValue}</span>}
+                      {v.message && <span className={`ml-1 ${vColor}`}>{v.message}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Note */}
+          {part.note && (
+            <div className="flex items-start gap-1.5 text-[11px] text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-md px-2 py-1.5">
+              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span>{part.note}</span>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              size="sm"
+              disabled={isExecuting}
+              onClick={() => onConfirm?.(part.toolCallId)}
+              className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border-0"
+            >
+              {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              {isExecuting ? 'Executing…' : 'Confirm & Execute'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isExecuting}
+              onClick={() => onCancel?.(part.toolCallId)}
+              className="h-8 gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Success state — show summary + result data + follow-up + view-in */}
+      {isSuccess && (
+        <div className="px-4 py-3 space-y-3">
+          {part.successSummary && (
+            <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+              <ReactMarkdown>{part.successSummary}</ReactMarkdown>
+            </div>
+          )}
+          {/* Result data table */}
+          {part.successData && Object.keys(part.successData).length > 0 && (
+            <div className="rounded-md bg-zinc-950/40 border border-zinc-800/60 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1.5">Result</div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {Object.entries(part.successData).slice(0, 8).map(([k, v]) => (
+                  <div key={k} className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-wider text-zinc-600">{k}</span>
+                    <span className="text-[11px] text-zinc-300 truncate">
+                      {typeof v === 'object' && v !== null ? JSON.stringify(v).slice(0, 60) : String(v)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Follow-up chip + view-in link */}
+          {(part.followUp || part.viewIn) && (
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              {part.followUp && (
+                <button
+                  onClick={() => onFollowUp?.(part.followUp!.prompt)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+                >
+                  <Sparkle className="h-3 w-3" />
+                  {part.followUp.label}
+                </button>
+              )}
+              {part.viewIn && (
+                <a
+                  href={part.viewIn.href}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                >
+                  {part.viewIn.label}
+                  <ArrowRight className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cancelled state */}
+      {isCancelled && (
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <X className="h-3 w-3" />
+            Action cancelled — no changes were made to your data.
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {isError && (
+        <div className="px-4 py-3">
+          <div className="flex items-start gap-1.5 text-[11px] text-rose-400">
+            <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+            <span className="whitespace-pre-wrap">{part.error || 'Action failed.'}</span>
+          </div>
+        </div>
+      )}
+    </motion.div>
   );
 }
 

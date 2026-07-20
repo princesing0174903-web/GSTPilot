@@ -31,6 +31,14 @@ import {
 } from '@/lib/oracle/brain/tools';
 import { getWorkspaceMemoryBlock, autoExtractFacts } from '@/lib/oracle/brain/memory';
 import { getBusinessSnapshot } from '@/lib/business/snapshot';
+// ─── Oracle Action Engine (generic) ───────────────────────────────────────────
+// Importing the barrel registers all built-in actions as a side-effect.
+// buildConfirmation() replaces the old inline buildActionPreview() — the brain
+// route no longer needs to know about specific actions. Adding a new action
+// (GST filing, Zoho sync, Banking, Reports, WhatsApp, Email, etc.) is now a
+// pure-additive change in src/lib/oracle/action-engine/definitions/.
+import '@/lib/oracle/action-engine';
+import { buildConfirmation, isRegisteredAction } from '@/lib/oracle/action-engine';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -43,48 +51,14 @@ interface BrainMessage {
 }
 
 // ─── Action preview helper ───────────────────────────────────────────────────
-// Maps a confirmation-required tool name + args → a single-line, human-readable
-// summary of what will happen if the user approves. Used by the `action-confirm`
-// SSE event so the UI can show a meaningful prompt in the confirm dialog.
-function buildActionPreview(tool: string, args: Record<string, any>): string {
+// DEPRECATED — replaced by the generic Action Engine (src/lib/oracle/action-engine).
+// This function is kept only as a fallback for confirmation-required tools that
+// are NOT yet registered as Action Engine actions (e.g. createTask,
+// generateGSTReturn). All five Phase-2 actions (createInvoice, createCustomer,
+// createPayment, createExpense, sendReminder) are registered and use
+// buildConfirmation() instead.
+function buildActionPreviewFallback(tool: string, args: Record<string, any>): string {
   switch (tool) {
-    case 'createInvoice': {
-      const customer = String(args.customerName ?? args.buyerName ?? 'customer');
-      const items = Array.isArray(args.items) ? args.items : [];
-      let total = 0;
-      for (const it of items as any[]) {
-        const qty = Number(it?.quantity ?? 1);
-        const rate = Number(it?.rate ?? 0);
-        const gstRate = Number(it?.gstRate ?? 18);
-        total += qty * rate * (1 + gstRate / 100);
-      }
-      const totalStr = total > 0
-        ? `₹${total.toLocaleString('en-IN')}`
-        : 'total pending';
-      const itemStr = items.length === 0
-        ? 'no items yet'
-        : `${items.length} item${items.length === 1 ? '' : 's'}`;
-      return `Create invoice for ${customer} — ${itemStr}, total ${totalStr}`;
-    }
-    case 'createCustomer': {
-      const name = String(args.name ?? args.tradeName ?? 'new customer');
-      const gstin = args.gstin ? ` (GSTIN: ${args.gstin})` : '';
-      return `Create customer "${name}"${gstin}`;
-    }
-    case 'createExpense': {
-      const vendor = String(args.vendor ?? 'vendor');
-      const amount = Number(args.amount ?? 0);
-      const category = String(args.category ?? 'Miscellaneous');
-      const date = args.date ? String(args.date) : 'today';
-      return `Record expense: ${category} — ${vendor}, ₹${amount.toLocaleString('en-IN')} on ${date}`;
-    }
-    case 'createPayment': {
-      const party = String(args.partyName ?? 'party');
-      const amount = Number(args.amount ?? 0);
-      const date = args.paymentDate ? String(args.paymentDate) : 'today';
-      const dir = String(args.partyType ?? 'customer') === 'vendor' ? 'to' : 'from';
-      return `Record payment: ₹${amount.toLocaleString('en-IN')} ${dir} ${party} on ${date}`;
-    }
     case 'createTask': {
       const title = String(args.title ?? 'new task');
       const due = args.dueDate ? ` due ${args.dueDate}` : '';
@@ -95,13 +69,6 @@ function buildActionPreview(tool: string, args: Record<string, any>): string {
       const type = String(args.returnType ?? 'GSTR-1');
       const period = args.period ? String(args.period) : '—';
       return `Generate ${type} return for period ${period}`;
-    }
-    case 'sendReminder': {
-      const channel = String(args.channel ?? 'email');
-      const target = args.customerName
-        ? ` to ${args.customerName}`
-        : ' to all overdue customers';
-      return `Send ${channel} reminder${target}`;
     }
     default:
       return `Execute action: ${tool}`;
@@ -317,6 +284,20 @@ You are not a chatbot. You are an AI employee — a virtual CFO + COO + Complian
 - For detailed breakdowns (specific invoices, customers, expenses, top customer, newest invoice, metrics), call the relevant tool.
 - Never fabricate customer names, invoice numbers, amounts, or dates. Every number must come from the snapshot or a tool result.
 
+## CRITICAL — Action Execution Rule
+When the user asks you to CREATE, RECORD, SEND, or GENERATE anything (invoice, customer, payment, expense, reminder, GST return, task), you MUST emit a \`tool-call\` block with the structured arguments. NEVER claim "I'll create..." or "I've created..." in plain text without emitting the tool-call block — that bypasses the confirmation step and the action will not actually happen.
+
+The system intercepts confirmation-required tool calls (createInvoice, createCustomer, createPayment, createExpense, createTask, generateGSTReturn, sendReminder) and shows the user a confirmation card BEFORE executing. Your job is ONLY to extract the parameters and emit the tool-call — the system handles validation, confirmation, and execution.
+
+Example correct response:
+\`\`\`tool-call
+{"tool": "createInvoice", "args": {"customerName": "Acme Corp", "items": [{"name": "Consulting", "quantity": 10, "rate": 5000, "gstRate": 18}]}}
+\`\`\`
+I'll set up the invoice for your confirmation.
+
+Example WRONG response (do NOT do this):
+"I'll create an invoice for Acme Corp with 10 units of Consulting at ₹5,000 each." (no tool-call block = no action happens)
+
 ${snapshotContext}
 ${activityContext}
 ${integrationContext}
@@ -453,20 +434,73 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             break;
           }
 
-          // ─── Confirmation intercept ───────────────────────────────────────
-          // If ANY tool call in this response is a confirmation-required action
-          // (createInvoice, createCustomer, createExpense, createPayment,
-          // createTask, generateGSTReturn, sendReminder), we DO NOT execute it
-          // (or any other tool in this response) yet. Instead we:
-          //   1. Persist the assistant's pre-call text (so it shows in the thread)
-          //   2. Emit an `action-confirm` SSE event with a human-readable preview
-          //   3. Emit a `done` event with a `pendingAction` payload
-          //   4. Close the stream — the frontend shows the confirm dialog and
-          //      POSTs to /api/oracle/brain/confirm to actually run the tool.
+          // ─── Confirmation intercept (generic Action Engine) ───────────────
+          // If ANY tool call in this response is a confirmation-required action,
+          // we DO NOT execute it (or any other tool in this response) yet. Instead:
+          //   1. If the action is registered in the Action Engine, call
+          //      buildConfirmation() — this validates the args against the live DB
+          //      and returns an enriched preview with per-field validation results.
+          //      If validation hard-fails, we surface the error back to the LLM so
+          //      it can correct the args and retry — no confirm card is shown.
+          //   2. If the action is NOT registered (e.g. createTask,
+          //      generateGSTReturn), fall back to the legacy inline preview.
+          //   3. Persist the assistant's pre-call text, emit `action-confirm` +
+          //      `done` events, and close the stream. The frontend renders the
+          //      confirmation card; on user approval it POSTs to
+          //      /api/oracle/brain/confirm which calls executeAndRefresh().
           const confirmCall = toolCalls.find(c => CONFIRMATION_REQUIRED_TOOLS.has(c.tool));
           if (confirmCall) {
-            const toolCallId = `tc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            const preview = buildActionPreview(confirmCall.tool, confirmCall.args);
+            // ── Try the generic Action Engine first ──
+            let engineConfirmation: Awaited<ReturnType<typeof buildConfirmation>> | null = null;
+            if (isRegisteredAction(confirmCall.tool)) {
+              try {
+                engineConfirmation = await buildConfirmation(confirmCall.tool, confirmCall.args, orgId);
+              } catch (e) {
+                console.warn(`[brain] buildConfirmation failed for ${confirmCall.tool}:`, (e as Error).message);
+              }
+            }
+
+            // ── Validation hard-failed → feed the error back to the LLM ──
+            if (engineConfirmation && !engineConfirmation.ok) {
+              const validationErrors = engineConfirmation.validation
+                ? engineConfirmation.validation.fields.filter(f => f.status === 'error').map(f => `${f.label}: ${f.message}`).join('; ')
+                : engineConfirmation.error;
+              conversation.push({ role: 'assistant', content: assistantContent });
+              conversation.push({
+                role: 'user',
+                content: `[system] The action cannot be confirmed because: ${validationErrors}. Please correct the parameters and try again, or explain the issue to the user.`,
+              });
+              // Continue the loop — let the LLM respond with corrected args or an explanation
+              continue;
+            }
+
+            // ── Build the confirm payload (engine or fallback) ──
+            let toolCallId: string;
+            let preview: string;
+            let confirmArgs: Record<string, any> = confirmCall.args;
+            let displayName: string = confirmCall.tool;
+            let icon: string = 'Wrench';
+            let category: string = 'action';
+            let previewFields: Array<{ label: string; value: string; emphasize?: boolean }> = [];
+            let validationFields: Array<{ key: string; label: string; status: 'ok' | 'warn' | 'error'; message?: string; resolvedValue?: string }> = [];
+            let note: string | undefined;
+
+            if (engineConfirmation && engineConfirmation.ok) {
+              const c = engineConfirmation.confirmation;
+              toolCallId = c.toolCallId;
+              preview = c.preview.title;
+              displayName = c.displayName;
+              icon = c.icon;
+              category = c.category;
+              previewFields = c.preview.fields;
+              note = c.preview.note;
+              validationFields = c.validation.fields;
+            } else {
+              // Fallback for unregistered confirmation-required tools (createTask,
+              // generateGSTReturn) — use the legacy inline preview.
+              toolCallId = `tc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+              preview = buildActionPreviewFallback(confirmCall.tool, confirmCall.args);
+            }
 
             // Persist the assistant's text (stripped of tool-call blocks) so the
             // thread shows what Oracle said before asking for confirmation.
@@ -474,7 +508,7 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             const confirmParts = [{
               type: 'tool-call' as const,
               tool: confirmCall.tool,
-              args: confirmCall.args,
+              args: confirmArgs,
               pending: true,
             }];
 
@@ -502,14 +536,17 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
               }).catch(() => {});
             }
 
-            // Best-effort: persist a 'pending' audit row for the intercepted call
+            // Best-effort: persist a 'pending' audit row for the intercepted call.
+            // Use the toolCallId as the row id so the confirm route can update it
+            // to 'success'/'error'/'cancelled' after the user acts on the card.
             db.oracleAIToolCall.create({
               data: {
+                id: toolCallId,
                 sessionId,
                 firmId: orgId,
                 userId,
                 toolName: confirmCall.tool,
-                args: JSON.stringify(confirmCall.args),
+                args: JSON.stringify(confirmArgs),
                 status: 'pending',
                 durationMs: 0,
               },
@@ -519,8 +556,15 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             send({
               type: 'action-confirm',
               tool: confirmCall.tool,
-              args: confirmCall.args,
+              args: confirmArgs,
               preview,
+              // ── Action Engine enriched fields (consumed by OracleBrainCore) ──
+              displayName,
+              icon,
+              category,
+              previewFields,
+              validationFields,
+              note,
               toolCallId,
               messageId: confirmAssistantMessage?.id ?? null,
             });
@@ -531,7 +575,7 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
               pendingAction: {
                 toolCallId,
                 tool: confirmCall.tool,
-                args: confirmCall.args,
+                args: confirmArgs,
                 preview,
               },
             });

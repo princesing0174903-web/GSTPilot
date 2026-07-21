@@ -438,7 +438,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           }
           // Genuine sign-out — reset org state. This synchronous clear is the
           // correct reaction to an external auth-state change.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setProfile(null);
           setOrganization(null);
           setMembership(null);
@@ -501,7 +500,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
             createdAt: null,
             updatedAt: null,
           };
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setProfile(localProfile);
           setOrganization(localOrg);
           setMembership(localMember);

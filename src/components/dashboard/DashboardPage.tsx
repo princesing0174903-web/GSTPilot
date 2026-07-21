@@ -1189,7 +1189,7 @@ export default function DashboardPage() {
                   <OracleLivePanel
                     insights={oracleInsights}
                     onPriorityClick={(view) => setCurrentView(view as AppView)}
-                    onAskOracle={() => setCurrentView('ai-business-copilot')}
+                    onAskOracle={() => setCurrentView('oracle-brain')}
                   />
                 ) : (
                   <div className="text-[12px] text-muted-foreground leading-relaxed">
@@ -1250,7 +1250,7 @@ export default function DashboardPage() {
                           <button
                             key={q}
                             type="button"
-                            onClick={() => setCurrentView('ai-business-copilot')}
+                            onClick={() => setCurrentView('oracle-brain')}
                             className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-[#2563EB]/30 hover:text-foreground transition-colors"
                           >
                             {q}
@@ -1264,7 +1264,7 @@ export default function DashboardPage() {
                   <Button
                     size="sm"
                     className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                    onClick={() => setCurrentView('ai-business-copilot')}
+                    onClick={() => setCurrentView('oracle-brain')}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
                     Ask Oracle

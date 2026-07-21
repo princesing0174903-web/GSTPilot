@@ -125,6 +125,7 @@ interface NavItem {
 // COMMAND — entry points + autonomous run modes
 const commandItems: NavItem[] = [
   { title: 'Mission Control', view: 'dashboard', icon: LayoutDashboard, subtitle: 'The One Screen', shortcut: 'G+D' },
+  { title: 'Oracle', view: 'oracle-brain', icon: Sparkles, subtitle: 'Ask · Reason · Act', shortcut: 'G+O', isNew: true },
   { title: 'Execution Engine™', view: 'execution-engine', icon: Zap, subtitle: 'Observe·Think·Execute·Learn', isNew: true },
   { title: 'Business DNA', view: 'business-dna', icon: Fingerprint, subtitle: '6 Scores · Digital DNA', isNew: true },
   { title: "RUN INDIA'S BUSINESS™", view: 'run-india-business', icon: Landmark, subtitle: 'Autonomous Enterprise', isNew: true },

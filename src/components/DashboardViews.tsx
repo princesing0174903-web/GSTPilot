@@ -426,6 +426,7 @@ const REAL_VIEWS = new Set<string>([
   'notices',                  // Notice center (real)
   'ai-business-copilot',      // Oracle chat (real — reads Business Snapshot)
   'ai-cfo',                   // AI CFO dashboard (reads snapshot)
+  'oracle-brain',             // Oracle Brain — streaming chat + tools + memory + sessions
 ])
 
 // ── Feature placeholder metadata for known non-working views ──────────────────

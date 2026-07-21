@@ -1,11 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Action: Create Customer
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// Uses the shared service layer (src/lib/services/customers.ts) so the
+// create performs the EXACT same Prisma write + audit log + graph event +
+// timeline event + activity log as the /api/clients POST route. Zero
+// duplication between the UI and Oracle.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
+import { createCustomer as createCustomerService } from '@/lib/services';
 import {
   registerAction,
-  logActivity,
   type OracleAction,
   type ValidationResult,
   type ActionPreview,
@@ -124,35 +130,37 @@ export const createCustomerAction: OracleAction = {
 
   async execute(args, orgId, ctx): Promise<ActionResult> {
     const tradeName = String(args.name ?? args.tradeName ?? '').trim();
+    // Generate a synthetic GSTIN when none provided (for unregistered customers)
     const gstin = String(args.gstin ?? `LOCAL-${Date.now()}`).trim().toUpperCase();
-    const client = await db.client.create({
-      data: {
-        firmId: orgId,
+    const stateCode = args.stateCode
+      ? String(args.stateCode)
+      : (gstin.length >= 2 ? gstin.slice(0, 2) : undefined);
+
+    const result = await createCustomerService(
+      orgId,
+      {
         tradeName,
         legalName: tradeName,
         gstin,
-        contactEmail: args.email ? String(args.email) : null,
-        contactPhone: args.phone ? String(args.phone) : null,
-        state: args.state ? String(args.state) : null,
-        stateCode: args.stateCode ? String(args.stateCode) : (gstin.length >= 2 ? gstin.slice(0, 2) : null),
-        address: args.address ? String(args.address) : null,
-        entityType: 'regular',
-        status: 'active',
+        contactEmail: args.email ? String(args.email) : undefined,
+        contactPhone: args.phone ? String(args.phone) : undefined,
+        state: args.state ? String(args.state) : undefined,
+        stateCode,
+        address: args.address ? String(args.address) : undefined,
       },
-      select: { id: true, tradeName: true, gstin: true, contactEmail: true, state: true },
-    }).catch((e) => { console.error('[createCustomer] db error:', e); return null; });
+      { userId: ctx.userId, userName: ctx.userId },
+    );
 
-    if (!client) {
-      return { ok: false, summary: `Failed to create customer "${tradeName}". Database error.` };
+    if (!result.ok || !result.data) {
+      return { ok: false, summary: `Failed to create customer "${tradeName}". ${result.error ?? 'Database error.'}` };
     }
 
-    await logActivity(orgId, 'customer', `Customer "${tradeName}" created (GSTIN: ${gstin})`, { clientId: client.id });
-
+    const c = result.data;
     return {
       ok: true,
-      summary: `✅ Created customer **${client.tradeName}** (GSTIN: ${client.gstin}). You can now create invoices for this customer.`,
-      data: { id: client.id, tradeName: client.tradeName, gstin: client.gstin, email: client.contactEmail, state: client.state },
-      followUp: { label: 'Create an invoice', prompt: `Create an invoice for ${client.tradeName} for ₹25,000` },
+      summary: `✅ Created customer **${c.tradeName}** (GSTIN: ${c.gstin}). You can now create invoices for this customer.`,
+      data: { id: c.id, tradeName: c.tradeName, gstin: c.gstin, email: c.contactEmail, state: c.state },
+      followUp: { label: 'Create an invoice', prompt: `Create an invoice for ${c.tradeName} for ₹25,000` },
       viewIn: { label: 'View in Customers', href: '/customers' },
     };
   },

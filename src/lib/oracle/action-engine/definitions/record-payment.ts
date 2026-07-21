@@ -3,11 +3,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
+import { findOrCreateCustomer, recordPayment as recordPaymentService } from '@/lib/services';
 import {
   registerAction,
   inr,
-  findOrCreateClient,
-  logActivity,
   type OracleAction,
   type ValidationResult,
   type ActionPreview,
@@ -148,56 +147,47 @@ export const recordPaymentAction: OracleAction = {
     const partyName = String(args.partyName ?? '').trim();
     const amount = Number(args.amount ?? 0);
     const paymentDate = String(args.paymentDate ?? new Date().toISOString().slice(0, 10));
-    const partyType = String(args.partyType ?? 'customer');
+    const partyType = String(args.partyType ?? 'customer') === 'vendor' ? 'vendor' : 'customer';
     const paymentMode = String(args.paymentMode ?? 'upi');
 
-    const client = await findOrCreateClient(orgId, partyName);
+    // Find-or-create the party as a Client (full side effects via service).
+    const clientResult = await findOrCreateCustomer(
+      orgId,
+      partyName,
+      {},
+      { userId: ctx.userId, userName: ctx.userId },
+    );
+    const clientId = ('data' in clientResult && clientResult.data) ? clientResult.data.id : undefined;
 
-    const payment = await db.payment.create({
-      data: {
-        clientId: client.id,
-        invoiceId: args.invoiceId ? String(args.invoiceId) : null,
+    const result = await recordPaymentService(
+      orgId,
+      {
+        clientId,
         partyName,
-        partyType,
+        partyType: partyType as 'customer' | 'vendor',
         amount,
         paymentDate,
         paymentMode,
-        referenceNo: args.referenceNo ? String(args.referenceNo) : null,
-        status: 'completed',
-        notes: args.notes ? String(args.notes) : null,
+        referenceNo: args.referenceNo ? String(args.referenceNo) : undefined,
+        invoiceId: args.invoiceId ? String(args.invoiceId) : undefined,
+        notes: args.notes ? String(args.notes) : undefined,
       },
-      select: { id: true, partyName: true, amount: true, paymentDate: true, partyType: true },
-    }).catch((e) => { console.error('[recordPayment] db error:', e); return null; });
+      { userId: ctx.userId, userName: ctx.userId },
+    );
 
-    if (!payment) {
-      return { ok: false, summary: `Failed to record payment. Database error.` };
+    if (!result.ok || !result.data) {
+      return { ok: false, summary: `Failed to record payment. ${result.error ?? 'Database error.'}` };
     }
 
-    // If linked to an invoice, update the invoice's paid/balance/payment status
-    let invoiceUpdate: { invoiceNumber?: string; newBalance?: number; newStatus?: string } = {};
-    if (args.invoiceId) {
-      try {
-        const inv = await db.invoice.findUnique({
-          where: { id: String(args.invoiceId) },
-          select: { id: true, invoiceNumber: true, totalAmount: true, paidAmount: true, balanceAmount: true, paymentStatus: true },
-        });
-        if (inv) {
-          const newPaid = (inv.paidAmount ?? 0) + amount;
-          const newBalance = Math.max((inv.totalAmount ?? 0) - newPaid, 0);
-          const newStatus = newBalance <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : inv.paymentStatus);
-          await db.invoice.update({
-            where: { id: inv.id },
-            data: { paidAmount: newPaid, balanceAmount: newBalance, paymentStatus: newStatus, paymentDate },
-          });
-          invoiceUpdate = { invoiceNumber: inv.invoiceNumber, newBalance, newStatus };
-        }
-      } catch (e) {
-        console.warn('[recordPayment] invoice update failed:', (e as Error).message);
-      }
+    const payment = result.data;
+    const invoiceUpdate: { invoiceNumber?: string; newBalance?: number; newStatus?: string } = {};
+    if (payment.invoiceNowPaid && payment.paidInvoiceNumber) {
+      invoiceUpdate.invoiceNumber = payment.paidInvoiceNumber;
+      invoiceUpdate.newBalance = 0;
+      invoiceUpdate.newStatus = 'paid';
     }
 
     const dir = partyType === 'vendor' ? 'to' : 'from';
-    await logActivity(orgId, 'payment', `Payment of ${inr(amount)} ${dir} ${partyName}${invoiceUpdate.invoiceNumber ? ` (linked to ${invoiceUpdate.invoiceNumber})` : ''}`, { paymentId: payment.id, partyName, amount });
 
     const summary = invoiceUpdate.invoiceNumber
       ? `✅ Recorded payment: ${inr(amount)} ${dir} **${partyName}** on ${paymentDate}. Linked invoice ${invoiceUpdate.invoiceNumber} updated — balance now ${inr(invoiceUpdate.newBalance ?? 0)} (status: ${invoiceUpdate.newStatus}).`

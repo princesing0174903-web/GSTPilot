@@ -25,6 +25,7 @@ import {
   ChevronRight, Loader2, BrainCircuit, Wrench, CheckCircle2, XCircle,
   Menu, X, Lightbulb, IndianRupee, ShieldCheck, BarChart3,
   Copy, RotateCcw, Square, ShieldAlert, ArrowRight, Sparkle,
+  UserPlus, Calendar, Landmark, RefreshCw, ClipboardCheck, Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -39,6 +40,10 @@ import { toast } from 'sonner';
 export interface OracleBrainCoreProps {
   orgId: string | null;
   isPreviewMode?: boolean;
+  /** Navigation callback — when Oracle calls `navigate`, this moves the user
+   * to the requested page (e.g. invoices, customers, reports). Wired to the
+   * dashboard's setCurrentView by the OracleBrain wrapper. */
+  onNavigate?: (view: string, entityId?: string) => void;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -215,8 +220,37 @@ const TOOL_LABELS: Record<string, string> = {
   getInvoiceMetrics: 'Invoice Metrics',
   getRecentActivity: 'Recent Activity',
   getConnectedIntegrations: 'Integrations',
+  getPendingFilings: 'Pending Filings',
+  getBankAccounts: 'Bank Accounts',
+  getIntegrationStatus: 'Integration Status',
+  navigate: 'Navigate',
   createInvoice: 'Create Invoice',
+  createCustomer: 'Create Customer',
+  createExpense: 'Record Expense',
+  createPayment: 'Record Payment',
+  createTask: 'Create Task',
+  generateGSTReturn: 'Generate GST Return',
+  generateReport: 'Generate Report',
   sendReminder: 'Send Reminder',
+  updateCustomer: 'Update Customer',
+  deleteCustomer: 'Delete Customer',
+  updateInvoice: 'Update Invoice',
+  deleteInvoice: 'Delete Invoice',
+  duplicateInvoice: 'Duplicate Invoice',
+  sendInvoice: 'Send Invoice',
+  updateExpense: 'Update Expense',
+  deleteExpense: 'Delete Expense',
+  markInvoicePaid: 'Mark Invoice Paid',
+  refundPayment: 'Refund Payment',
+  prepareGstr3b: 'Prepare GSTR-3B',
+  addCrmLead: 'Add CRM Lead',
+  scheduleFollowUp: 'Schedule Follow-up',
+  inviteTeamMember: 'Invite Team Member',
+  updateProfile: 'Update Profile',
+  connectBankAccount: 'Connect Bank Account',
+  exportReport: 'Export Report',
+  syncZoho: 'Sync Zoho',
+  syncGoogle: 'Sync Google',
   recallMemory: 'Recall Memory',
   saveMemory: 'Save Memory',
 };
@@ -234,6 +268,12 @@ const ACTION_ICONS: Record<string, any> = {
   ShieldAlert,
   BarChart3,
   BrainCircuit,
+  UserPlus,
+  Calendar,
+  Landmark,
+  RefreshCw,
+  ClipboardCheck,
+  Settings,
 };
 
 function resolveActionIcon(iconName: string): any {
@@ -242,7 +282,7 @@ function resolveActionIcon(iconName: string): any {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCoreProps) {
+export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: OracleBrainCoreProps) {
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -507,6 +547,20 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
                 }));
                 toast.error(data.error || 'Oracle encountered an error');
                 break;
+              case 'navigate': {
+                // Oracle Navigation: the LLM called `navigate` to move the user
+                // to a different page. Hand off to the dashboard's setCurrentView
+                // (passed in as onNavigate). The user stays in the conversation.
+                if (data.view && onNavigate) {
+                  try {
+                    onNavigate(data.view, data.entityId);
+                    toast.success(`Opened ${data.view}`);
+                  } catch (e) {
+                    console.warn('[oracle] navigate failed:', e);
+                  }
+                }
+                break;
+              }
             }
           } catch (e) {
             // partial JSON — ignore
@@ -531,7 +585,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
     function updateAssistantPlaceholder(id: string, updater: (m: ChatMessage) => ChatMessage) {
       setMessages(prev => prev.map(m => m.id === id ? updater(m) : m));
     }
-  }, [orgId, currentSessionId, isStreaming, refreshSessions, refreshMemory]);
+  }, [orgId, currentSessionId, isStreaming, refreshSessions, refreshMemory, onNavigate]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -878,6 +932,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false }: OracleBrainCor
                   onConfirmAction={confirmAction}
                   onCancelAction={cancelActionCard}
                   onFollowUp={sendMessage}
+                  onNavigate={onNavigate}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -1048,6 +1103,7 @@ function MessageBubble({
   onConfirmAction,
   onCancelAction,
   onFollowUp,
+  onNavigate,
 }: {
   message: ChatMessage;
   isLast?: boolean;
@@ -1055,6 +1111,7 @@ function MessageBubble({
   onConfirmAction?: (toolCallId: string) => void;
   onCancelAction?: (toolCallId: string) => void;
   onFollowUp?: (text: string) => void;
+  onNavigate?: (view: string, entityId?: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -1111,6 +1168,7 @@ function MessageBubble({
                 onConfirm={onConfirmAction}
                 onCancel={onCancelAction}
                 onFollowUp={onFollowUp}
+                onNavigate={onNavigate}
               />
             ))}
 
@@ -1296,11 +1354,13 @@ function ActionConfirmCard({
   onConfirm,
   onCancel,
   onFollowUp,
+  onNavigate,
 }: {
   part: ActionConfirmPart;
   onConfirm?: (toolCallId: string) => void;
   onCancel?: (toolCallId: string) => void;
   onFollowUp?: (text: string) => void;
+  onNavigate?: (view: string, entityId?: string) => void;
 }) {
   const Icon = ACTION_ICONS[part.icon] ?? Wrench;
   const isPending = part.state === 'pending';
@@ -1474,13 +1534,44 @@ function ActionConfirmCard({
                 </button>
               )}
               {part.viewIn && (
-                <a
-                  href={part.viewIn.href}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
-                >
-                  {part.viewIn.label}
-                  <ArrowRight className="h-3 w-3" />
-                </a>
+                onNavigate ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Map common hrefs to dashboard views for in-app navigation
+                      const href = part.viewIn!.href;
+                      const viewMap: Record<string, string> = {
+                        '/customers': 'clients',
+                        '/invoices': 'invoices',
+                        '/expenses': 'expenses',
+                        '/payments': 'payments',
+                        '/banking': 'banking',
+                        '/returns': 'returns',
+                        '/reports': 'analytics',
+                        '/crm': 'crm',
+                        '/documents': 'documents',
+                        '/team': 'team',
+                        '/settings': 'settings',
+                        '/timeline': 'timeline',
+                        '/dashboard': 'dashboard',
+                      };
+                      const view = viewMap[href] ?? 'dashboard';
+                      onNavigate(view);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                  >
+                    {part.viewIn.label}
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <a
+                    href={part.viewIn.href}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                  >
+                    {part.viewIn.label}
+                    <ArrowRight className="h-3 w-3" />
+                  </a>
+                )
               )}
             </div>
           )}

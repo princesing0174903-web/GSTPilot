@@ -3,11 +3,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
+import { findOrCreateCustomer, createExpense as createExpenseService } from '@/lib/services';
 import {
   registerAction,
   inr,
-  findOrCreateClient,
-  logActivity,
   type OracleAction,
   type ValidationResult,
   type ActionPreview,
@@ -150,33 +149,41 @@ export const recordExpenseAction: OracleAction = {
     const date = String(args.date ?? new Date().toISOString().slice(0, 10));
     const gst = Number(args.gst ?? 0);
 
-    const client = await findOrCreateClient(orgId, vendor);
+    // Find-or-create the vendor as a Client (so expenses link to a party).
+    // Vendors are stored as Client records with entityType 'vendor' — the
+    // find-or-create uses the vendor name and generates a LOCAL- GSTIN.
+    const clientResult = await findOrCreateCustomer(
+      orgId,
+      vendor,
+      {},
+      { userId: ctx.userId, userName: ctx.userId },
+    );
+    const clientId = ('data' in clientResult && clientResult.data) ? clientResult.data.id : undefined;
 
-    const expense = await db.expense.create({
-      data: {
-        clientId: client.id,
+    const result = await createExpenseService(
+      orgId,
+      {
+        clientId,
         vendor,
         category,
         amount,
         gst,
-        gstClaimable: gst > 0,
         date,
-        paymentMode: args.paymentMode ? String(args.paymentMode) : null,
-        description: args.description ? String(args.description) : null,
-        status: 'recorded',
+        paymentMode: args.paymentMode ? String(args.paymentMode) : undefined,
+        description: args.description ? String(args.description) : undefined,
       },
-      select: { id: true, vendor: true, amount: true, category: true, date: true },
-    }).catch((e) => { console.error('[recordExpense] db error:', e); return null; });
+      { userId: ctx.userId, userName: ctx.userId },
+    );
 
-    if (!expense) {
-      return { ok: false, summary: `Failed to record expense. Database error.` };
+    if (!result.ok || !result.data) {
+      return { ok: false, summary: `Failed to record expense. ${result.error ?? 'Database error.'}` };
     }
 
-    await logActivity(orgId, 'expense', `Expense logged: ${category} to ${vendor} (${inr(amount)})`, { expenseId: expense.id });
+    const expense = result.data;
 
     return {
       ok: true,
-      summary: `✅ Recorded expense: **${category}** — ${vendor}, ${inr(amount)} on ${date}.`,
+      summary: `✅ Recorded expense: **${expense.category}** — ${vendor}, ${inr(expense.amount)} on ${date}.`,
       data: { id: expense.id, vendor: expense.vendor, amount: expense.amount, category: expense.category, date: expense.date, gstClaimable: gst > 0 },
       artifacts: [{
         kind: 'metric',

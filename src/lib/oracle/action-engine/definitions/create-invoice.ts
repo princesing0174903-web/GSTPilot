@@ -3,11 +3,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
+import { findOrCreateCustomer, createInvoice as createInvoiceService } from '@/lib/services';
 import {
   registerAction,
   inr,
-  findOrCreateClient,
-  logActivity,
   type OracleAction,
   type ValidationResult,
   type ActionPreview,
@@ -150,129 +149,79 @@ export const createInvoiceAction: OracleAction = {
     const customerName = String(args.customerName ?? '').trim();
     const items = Array.isArray(args.items) ? args.items : [];
 
-    // Re-find-or-create the client (defense in depth — resolved in validate but
-    // execute must be self-contained).
-    const client = await findOrCreateClient(orgId, customerName, {
-      gstin: args.customerGstin ? String(args.customerGstin) : undefined,
-      email: args.customerEmail ? String(args.customerEmail) : undefined,
-    });
+    // Find-or-create the customer via the service layer (full side effects:
+    // audit log + graph event + timeline event + activity log).
+    const clientResult = await findOrCreateCustomer(
+      orgId,
+      customerName,
+      {
+        gstin: args.customerGstin ? String(args.customerGstin) : undefined,
+        email: args.customerEmail ? String(args.customerEmail) : undefined,
+      },
+      { userId: ctx.userId, userName: ctx.userId },
+    );
+    if (!('data' in clientResult) || !clientResult.data) {
+      return { ok: false, summary: `Failed to resolve customer "${customerName}". ${('error' in clientResult ? clientResult.error : 'Database error.')}` };
+    }
+    const client = clientResult.data;
 
-    // Compute line items + totals
-    let taxableValue = 0;
-    let cgstTotal = 0;
-    let sgstTotal = 0;
-    const invoiceItems = items.map((it: InvoiceItemInput, idx: number) => {
-      const qty = Number(it.quantity ?? 1);
-      const unitPrice = Number(it.rate ?? it.unitPrice ?? 0);
-      const gstRate = Number(it.gstRate ?? 18);
-      const lineNet = qty * unitPrice;
-      const lineTax = lineNet * (gstRate / 100);
-      taxableValue += lineNet;
-      cgstTotal += lineTax / 2;
-      sgstTotal += lineTax / 2;
-      return {
-        lineNumber: idx + 1,
-        description: String(it.name ?? it.description ?? 'Item'),
-        hsnCode: it.hsnCode ? String(it.hsnCode) : null,
-        quantity: qty,
-        unit: it.unit ? String(it.unit) : 'NOS',
-        unitPrice,
-        taxableValue: lineNet,
-        cgstRate: gstRate / 2,
-        sgstRate: gstRate / 2,
-        igstRate: 0,
-        cessRate: 0,
-        cgst: lineTax / 2,
-        sgst: lineTax / 2,
-        igst: 0,
-        cess: 0,
-        totalAmount: lineNet + lineTax,
-      };
-    });
-    const totalAmount = taxableValue + cgstTotal + sgstTotal;
-    const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
+    // Build line items for the service (and for the confirmation card table)
+    const invoiceItems = items.map((it: InvoiceItemInput) => ({
+      description: String(it.name ?? it.description ?? 'Item'),
+      hsnCode: it.hsnCode ? String(it.hsnCode) : undefined,
+      quantity: Number(it.quantity ?? 1),
+      unitPrice: Number(it.rate ?? it.unitPrice ?? 0),
+      gstRate: Number(it.gstRate ?? 18),
+    }));
+
     const now = new Date();
     const invoiceDateStr = args.invoiceDate ? String(args.invoiceDate) : now.toISOString().slice(0, 10);
     const dueDateStr = args.dueDate
       ? String(args.dueDate)
       : new Date(now.getTime() + 15 * 86400000).toISOString().slice(0, 10);
 
-    const invoice = await db.invoice.create({
-      data: {
+    // Create the invoice via the service layer (full side effects: audit log +
+    // graph event + timeline event + activity log + line-item rows).
+    const result = await createInvoiceService(
+      orgId,
+      {
         clientId: client.id,
-        invoiceNumber,
-        invoiceDate: invoiceDateStr,
-        sellerGstin: 'LOCAL-SELLER',
+        customerName,
         buyerGstin: client.gstin,
-        buyerName: customerName,
-        invoiceType: 'B2B',
-        taxableValue,
-        cgst: cgstTotal,
-        sgst: sgstTotal,
-        igst: 0,
-        cess: 0,
-        totalAmount,
-        status: 'draft',
+        sellerGstin: 'LOCAL-SELLER',
+        date: invoiceDateStr,
         dueDate: dueDateStr,
-        gstAmount: cgstTotal + sgstTotal,
-        paidAmount: 0,
-        balanceAmount: totalAmount,
-        paymentStatus: 'unpaid',
-        notes: args.notes ? String(args.notes) : null,
+        items: invoiceItems,
+        notes: args.notes ? String(args.notes) : undefined,
+        persistLineItems: true,
       },
-      select: { id: true, invoiceNumber: true, totalAmount: true, dueDate: true },
-    }).catch((e) => { console.error('[createInvoice] db error:', e); return null; });
+      { userId: ctx.userId, userName: ctx.userId },
+    );
 
-    if (!invoice) {
-      return { ok: false, summary: `Failed to create invoice for ${customerName}. Database error.` };
+    if (!result.ok || !result.data) {
+      return { ok: false, summary: `Failed to create invoice for ${customerName}. ${result.error ?? 'Database error.'}` };
     }
 
-    // Persist line items
-    try {
-      await db.invoiceItem.createMany({
-        data: invoiceItems.map(it => ({
-          invoiceId: invoice.id,
-          lineNumber: it.lineNumber,
-          description: it.description,
-          hsnCode: it.hsnCode,
-          quantity: it.quantity,
-          unit: it.unit,
-          unitPrice: it.unitPrice,
-          taxableValue: it.taxableValue,
-          cgstRate: it.cgstRate,
-          sgstRate: it.sgstRate,
-          igstRate: it.igstRate,
-          cessRate: it.cessRate,
-          cgst: it.cgst,
-          sgst: it.sgst,
-          igst: it.igst,
-          cess: it.cess,
-          totalAmount: it.totalAmount,
-        })),
-      });
-    } catch (e) {
-      console.warn('[createInvoice] items not persisted:', (e as Error).message);
-    }
-
-    await logActivity(orgId, 'invoice', `Invoice ${invoice.invoiceNumber} created for ${customerName} (${inr(invoice.totalAmount)})`, { invoiceId: invoice.id, customer: customerName, total: invoice.totalAmount });
+    const inv = result.data;
+    const totalAmount = inv.totalAmount;
 
     return {
       ok: true,
-      summary: `✅ Created invoice **${invoice.invoiceNumber}** for ${customerName}. Total: ${inr(invoice.totalAmount)}. Due: ${invoice.dueDate}. Status: Draft. You can review and send it from the Invoices page.`,
-      data: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, totalAmount, customerName, items: invoiceItems, clientId: client.id },
+      summary: `✅ Created invoice **${inv.invoiceNumber}** for ${customerName}. Total: ${inr(totalAmount)}. Due: ${inv.dueDate}. Status: ${inv.status}. You can review and send it from the Invoices page.`,
+      data: { invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, totalAmount, customerName, items: invoiceItems, clientId: client.id },
       artifacts: [{
         kind: 'table',
-        title: `Invoice ${invoice.invoiceNumber}`,
+        title: `Invoice ${inv.invoiceNumber}`,
         columns: ['Item', 'Qty', 'Rate', 'GST %', 'Amount'],
         rows: invoiceItems.map(it => ({
           Item: it.description,
           Qty: it.quantity,
           Rate: inr(it.unitPrice),
-          'GST %': (it.cgstRate + it.sgstRate) + '%',
-          Amount: inr(it.totalAmount),
+          'GST %': it.gstRate + '%',
+          Amount: inr(it.quantity * it.unitPrice * (1 + it.gstRate / 100)),
         })),
       }],
-      followUp: { label: 'Send this invoice', prompt: `Send invoice ${invoice.invoiceNumber} to ${customerName} via email` },
+      followUp: { label: 'Send this invoice', prompt: `Send invoice ${inv.invoiceNumber} to ${customerName} via email` },
       viewIn: { label: 'View in Invoices', href: '/invoices' },
     };
   },

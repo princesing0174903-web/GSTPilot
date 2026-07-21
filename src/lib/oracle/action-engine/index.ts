@@ -20,6 +20,31 @@ import './definitions/send-reminder';
 import './definitions/create-task';
 import './definitions/generate-gst-return';
 import './definitions/generate-report';
+// Priority 1.5 — Complete SaaS Integration: full CRUD for every module.
+// Oracle can now do everything the UI can — update/delete/duplicate/send for
+// invoices + customers + expenses + payments, plus GST (GSTR-3B), banking,
+// reports, CRM leads + follow-ups, team invites, profile, and Zoho/Google sync.
+// Every action calls the same shared service layer (src/lib/services/) or the
+// same lib functions as the REST API routes — zero business-logic duplication.
+import './definitions/update-customer';
+import './definitions/delete-customer';
+import './definitions/update-invoice';
+import './definitions/delete-invoice';
+import './definitions/duplicate-invoice';
+import './definitions/send-invoice';
+import './definitions/update-expense';
+import './definitions/delete-expense';
+import './definitions/mark-invoice-paid';
+import './definitions/refund-payment';
+import './definitions/prepare-gstr3b';
+import './definitions/add-crm-lead';
+import './definitions/schedule-follow-up';
+import './definitions/invite-team-member';
+import './definitions/update-profile';
+import './definitions/connect-bank-account';
+import './definitions/export-report';
+import './definitions/sync-zoho';
+import './definitions/sync-google';
 
 // Public API
 export {

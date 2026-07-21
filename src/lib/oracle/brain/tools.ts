@@ -1506,6 +1506,198 @@ const searchWorkspaceTool: OracleTool = {
   },
 };
 
+// ─── Tool: getPendingFilings ──────────────────────────────────────────────────
+
+const getPendingFilingsTool: OracleTool = {
+  name: 'getPendingFilings',
+  description:
+    'List pending GST return filings (GSTR-1, GSTR-3B) that are not yet filed. Use this when the user asks "what returns are pending", "show pending filings", "what GST is due".',
+  category: 'read',
+  argsSchema: {
+    returnType: { type: 'string', description: 'GSTR-1 | GSTR-3B | all (default: all)' },
+    limit: { type: 'number', description: 'max results (default 20)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const limit = Math.min(Number(args.limit) || 20, 50);
+    const where: any = { status: { not: 'filed' } };
+    if (args.returnType && args.returnType !== 'all') where.returnType = String(args.returnType);
+    const rows = await db.gSTRFiling.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, returnType: true, period: true, status: true, totalTax: true, dueDate: true, createdAt: true },
+    }).catch(() => []);
+    if (rows.length === 0) {
+      return { ok: true, summary: 'No pending GST filings. All returns are filed.', data: { filings: [] } };
+    }
+    const summary = `Pending GST filings (${rows.length}):\n` +
+      rows.map(f => `• ${f.returnType} for ${f.period} — status: ${f.status}${f.totalTax ? `, tax: ${inr(Number(f.totalTax))}` : ''}${f.dueDate ? `, due ${f.dueDate}` : ''}`).join('\n');
+    return {
+      ok: true,
+      summary,
+      data: { filings: rows },
+      artifacts: [{
+        kind: 'table' as const,
+        title: 'Pending Filings',
+        columns: ['Type', 'Period', 'Status', 'Tax', 'Due Date'],
+        rows: rows.map(f => ({
+          Type: f.returnType, Period: f.period, Status: f.status,
+          Tax: f.totalTax ? inr(Number(f.totalTax)) : '—',
+          'Due Date': f.dueDate ?? '—',
+        })),
+      }],
+    };
+  },
+};
+
+// ─── Tool: getBankAccounts ───────────────────────────────────────────────────
+
+const getBankAccountsTool: OracleTool = {
+  name: 'getBankAccounts',
+  description:
+    'List connected bank accounts with balances. Use this when the user asks "what bank accounts do I have", "show my banks", "bank balance".',
+  category: 'read',
+  argsSchema: {},
+  async execute(orgId): Promise<ToolResult> {
+    const rows = await db.bankAccount.findMany({
+      where: { tenantId: orgId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, bankName: true, accountMasked: true, accountType: true, balance: true, status: true, ifsc: true },
+    }).catch(() => []);
+    if (rows.length === 0) {
+      return { ok: true, summary: 'No bank accounts connected. You can connect one via "connect bank account".', data: { accounts: [] } };
+    }
+    const totalBalance = rows.reduce((s, a) => s + Number(a.balance ?? 0), 0);
+    const summary = `Connected bank accounts (${rows.length}), total balance ${inr(totalBalance)}:\n` +
+      rows.map(a => `• ${a.bankName} ${a.accountMasked} (${a.accountType}) — balance ${inr(Number(a.balance ?? 0))} — ${a.status}`).join('\n');
+    return {
+      ok: true,
+      summary,
+      data: { accounts: rows, totalBalance },
+      artifacts: [{
+        kind: 'table' as const,
+        title: 'Bank Accounts',
+        columns: ['Bank', 'Account', 'Type', 'Balance', 'Status'],
+        rows: rows.map(a => ({
+          Bank: a.bankName, Account: a.accountMasked, Type: a.accountType,
+          Balance: inr(Number(a.balance ?? 0)), Status: a.status,
+        })),
+      }],
+    };
+  },
+};
+
+// ─── Tool: getIntegrationStatus ──────────────────────────────────────────────
+
+const getIntegrationStatusTool: OracleTool = {
+  name: 'getIntegrationStatus',
+  description:
+    'Check which integrations are connected (Zoho Books, Google Workspace, GSTN, Banking). Use this when the user asks "is zoho connected", "what integrations do I have", "check google connection".',
+  category: 'read',
+  argsSchema: {
+    provider: { type: 'string', description: 'zoho-books | google | gstn | bank | all (default: all)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const where: any = { tenantId: orgId };
+    if (args.provider && args.provider !== 'all') where.provider = String(args.provider);
+    const rows = await db.integration.findMany({
+      where,
+      select: { id: true, provider: true, status: true, connectedAt: true, lastSyncAt: true },
+      orderBy: { createdAt: 'desc' },
+    }).catch(() => []);
+    const known = ['zoho-books', 'google', 'gstn', 'bank'];
+    const connected = new Set(rows.map(r => r.provider));
+    const all = args.provider && args.provider !== 'all' ? [String(args.provider)] : known;
+    const lines = all.map(p => {
+      const r = rows.find(x => x.provider === p);
+      return r
+        ? `• ${p}: ${r.status}${r.lastSyncAt ? ` (last synced ${new Date(r.lastSyncAt).toLocaleDateString('en-IN')})` : ''}`
+        : `• ${p}: not connected`;
+    });
+    const summary = `Integration status:\n${lines.join('\n')}`;
+    return {
+      ok: true,
+      summary,
+      data: { integrations: rows, connected: Array.from(connected) },
+    };
+  },
+};
+
+// ─── Tool: navigate ───────────────────────────────────────────────────────────
+// Oracle Navigation — lets Oracle move the user through the SaaS without
+// touching the sidebar. The LLM emits a navigate tool-call; the brain route
+// emits a `navigate` SSE event that the frontend turns into setCurrentView().
+// This tool does NOT require confirmation (navigation is non-destructive).
+
+/** Valid navigation targets — mirrors the AppView union + VIEW_REGISTRY. */
+const NAVIGATE_VIEWS: Record<string, string> = {
+  dashboard: 'dashboard',
+  home: 'dashboard',
+  invoices: 'invoices',
+  invoice: 'invoices',
+  clients: 'clients',
+  customers: 'clients',
+  customer: 'clients',
+  returns: 'returns',
+  return: 'returns',
+  gst: 'returns',
+  banking: 'banking',
+  bank: 'banking',
+  expenses: 'expenses',
+  expense: 'expenses',
+  payments: 'payments',
+  payment: 'payments',
+  reports: 'analytics',
+  report: 'analytics',
+  analytics: 'analytics',
+  crm: 'crm',
+  leads: 'crm',
+  documents: 'documents',
+  document: 'documents',
+  timeline: 'timeline',
+  activity: 'timeline',
+  team: 'team',
+  settings: 'settings',
+  notifications: 'notifications',
+  tasks: 'tasks',
+  task: 'tasks',
+  vendors: 'vendors',
+  vendor: 'vendors',
+  reconcile: 'reconcile',
+  reconciliation: 'reconcile',
+  inventory: 'inventory',
+  products: 'inventory',
+  'oracle-brain': 'oracle-brain',
+  oracle: 'oracle-brain',
+};
+
+const navigateTool: OracleTool = {
+  name: 'navigate',
+  description:
+    'Navigate the user to a specific page/section of GSTPilot. Use this when the user says "open invoices", "go to customers", "show reports", "open banking", "take me to settings", etc. The user stays in the conversation — they can continue chatting after navigating. Valid targets: dashboard, invoices, clients (customers), returns (GST), banking, expenses, payments, reports (analytics), crm (leads), documents, timeline (activity), team, settings, notifications, tasks, vendors, reconcile, inventory (products), oracle.',
+  category: 'action',
+  argsSchema: {
+    view: { type: 'string', required: true, description: 'The page to open: dashboard, invoices, clients, returns, banking, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle' },
+    entityId: { type: 'string', description: 'Optional: a specific record id to deep-link to (e.g. a customerId when opening a customer detail)' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const rawView = String(args.view ?? '').trim().toLowerCase();
+    const resolved = NAVIGATE_VIEWS[rawView] ?? (Object.values(NAVIGATE_VIEWS).includes(rawView) ? rawView : '');
+    if (!resolved) {
+      return {
+        ok: false,
+        summary: `Unknown page "${rawView}". Valid pages: dashboard, invoices, clients, returns, banking, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle.`,
+      };
+    }
+    // The brain route reads result.data.navigate to emit the `navigate` SSE event.
+    return {
+      ok: true,
+      summary: `Navigating to ${resolved}.`,
+      data: { navigate: { view: resolved, entityId: args.entityId ? String(args.entityId) : undefined } },
+    };
+  },
+};
+
 // ─── Tool registry ────────────────────────────────────────────────────────────
 
 export const ORACLE_TOOLS: OracleTool[] = [
@@ -1524,6 +1716,13 @@ export const ORACLE_TOOLS: OracleTool[] = [
   getRecentActivityTool,
   getConnectedIntegrationsTool,
   searchWorkspaceTool,
+  // Priority 1.5 read tools — module-specific reads that complement the
+  // generic query* tools above.
+  getPendingFilingsTool,
+  getBankAccountsTool,
+  getIntegrationStatusTool,
+  // NAVIGATION tool (non-destructive, no confirmation)
+  navigateTool,
   // ACTION tools (require confirmation)
   createInvoiceTool,
   createCustomerTool,
@@ -1547,6 +1746,30 @@ export const CONFIRMATION_REQUIRED_TOOLS = new Set([
   'createTask',
   'generateGSTReturn',
   'sendReminder',
+  // Priority 1.5 — Complete SaaS Integration: every write action goes through
+  // the Action Engine confirmation pipeline (validate → preview → confirm →
+  // execute → refresh). Destructive actions (delete, refund) always confirm;
+  // even safe writes (update, duplicate, send) confirm so the user sees a
+  // preview of exactly what will change before it happens.
+  'updateCustomer',
+  'deleteCustomer',
+  'updateInvoice',
+  'deleteInvoice',
+  'duplicateInvoice',
+  'sendInvoice',
+  'updateExpense',
+  'deleteExpense',
+  'markInvoicePaid',
+  'refundPayment',
+  'prepareGstr3b',
+  'addCrmLead',
+  'scheduleFollowUp',
+  'inviteTeamMember',
+  'updateProfile',
+  'connectBankAccount',
+  'exportReport',
+  'syncZoho',
+  'syncGoogle',
 ]);
 
 export const ORACLE_TOOL_MAP: Record<string, OracleTool> = Object.fromEntries(

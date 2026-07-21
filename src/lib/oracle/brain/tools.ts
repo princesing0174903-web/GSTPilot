@@ -19,6 +19,7 @@
 
 import { db } from '@/lib/db';
 import { getBusinessSnapshot } from '@/lib/business/snapshot';
+import { getBankingService } from '@/lib/banking-service';
 import { saveMemory, recallMemory, getWorkspaceMemoryBlock } from './memory';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1085,6 +1086,40 @@ const recallMemoryTool: OracleTool = {
   },
 };
 
+// ─── Tool: runWorkflow (WORKFLOW — Priority 2) ────────────────────────────────
+//
+// PSEUDO-TOOL: the brain route intercepts this tool call BEFORE it reaches the
+// normal tool-execution loop. The intercept calls the workflow planner, which
+// builds a WorkflowPlan (template match or LLM-built) and emits a `workflow-plan`
+// SSE event. The frontend renders a WorkflowPlanCard; on user confirm it POSTs
+// to /api/oracle/brain/workflow/execute which streams the executor's per-step
+// progress events.
+//
+// This tool definition exists ONLY so buildToolsPromptBlock() includes it in
+// the LLM's tool list — the LLM needs to know it can emit `runWorkflow`. The
+// execute() function below is never called (the brain route intercepts first),
+// but we provide a stub that returns a helpful message in case of bypass.
+
+const runWorkflowTool: OracleTool = {
+  name: 'runWorkflow',
+  description:
+    'Run a multi-step business workflow that chains multiple actions together (e.g. "create an invoice AND email it", "record a payment AND mark the invoice paid", "add a lead AND schedule a follow-up"). The system plans the steps, shows a confirmation card, then executes them in order with live progress. Use this INSTEAD of emitting multiple separate action tool-calls whenever the user asks for 2+ chained actions.',
+  category: 'action',
+  argsSchema: {
+    message: { type: 'string', required: true, description: 'The FULL original user message describing the multi-step task' },
+    extractedArgs: { type: 'object', description: 'Structured params you extracted (customerName, items, amount, etc.) — the planner uses these to build the plan' },
+  },
+  async execute(_orgId, args): Promise<ToolResult> {
+    // This is never called — the brain route intercepts runWorkflow before the
+    // normal tool-execution loop. If we ever get here, it means the intercept
+    // was bypassed; return a clear message so the user isn't left hanging.
+    return {
+      ok: false,
+      summary: `Workflow "${String(args.message ?? '')}" could not be started directly. The brain route should intercept runWorkflow calls — if you see this, please report it.`,
+    };
+  },
+};
+
 // ─── Tool: saveMemory (ACTION) ────────────────────────────────────────────────
 
 const saveMemoryTool: OracleTool = {
@@ -1587,6 +1622,69 @@ const getBankAccountsTool: OracleTool = {
   },
 };
 
+// ─── Tool: getBankingIntelligence (Banking Service) ──────────────────────────
+// Answers the 8 canonical banking questions by calling the Banking Service's
+// answerQuestion(orgId, question). The service routes the question through
+// intelligence.matchQuestion() → one of 9 builders (8 canonical + generic
+// fallback). Returns a markdown answer + optional metrics + optional table.
+// Read-only — never in CONFIRMATION_REQUIRED_TOOLS.
+
+const getBankingIntelligenceTool: OracleTool = {
+  name: 'getBankingIntelligence',
+  description:
+    'Answer banking questions: total cash, this month\'s expenses, unpaid invoices, cash next week, why cash flow is decreasing, suspicious transactions, largest expenses, which customers pay late. Use this for ANY question about bank balances, cash flow, transactions, reconciliation, or forecasting.',
+  category: 'read',
+  argsSchema: {
+    question: { type: 'string', required: true, description: 'The banking question in the user\'s words (e.g. "how much cash will I have next week", "which customers pay late", "show suspicious transactions")' },
+  },
+  async execute(orgId, args): Promise<ToolResult> {
+    const question = String(args.question ?? '').trim();
+    if (!question) {
+      return { ok: false, summary: 'Cannot answer: question is required.' };
+    }
+    let svc;
+    try {
+      svc = await getBankingService();
+    } catch (e) {
+      return { ok: false, summary: `Banking Service unavailable: ${(e as Error).message}` };
+    }
+    let ans;
+    try {
+      ans = await svc.answerQuestion(orgId, question);
+    } catch (e) {
+      const msg = (e as Error).message;
+      console.error('[oracle-tool getBankingIntelligence]', msg);
+      return { ok: false, summary: `Banking Intelligence failed: ${msg}` };
+    }
+    const artifacts = [];
+    if (ans.metrics && ans.metrics.length > 0) {
+      artifacts.push({
+        kind: 'metric' as const,
+        title: ans.label || 'Key metrics',
+        items: ans.metrics.map(m => ({
+          label: m.label,
+          value: m.value,
+          trend: m.tone === 'positive' ? 'up' : m.tone === 'negative' ? 'down' : undefined,
+        })),
+      });
+    }
+    if (ans.table && ans.table.rows.length > 0) {
+      artifacts.push({
+        kind: 'table' as const,
+        title: ans.label || 'Banking breakdown',
+        columns: ans.table.columns,
+        rows: ans.table.rows,
+      });
+    }
+    return {
+      ok: true,
+      summary: `**${ans.label}**\n\n${ans.answer}`,
+      data: ans,
+      artifacts: artifacts.length > 0 ? artifacts : undefined,
+    };
+  },
+};
+
 // ─── Tool: getIntegrationStatus ──────────────────────────────────────────────
 
 const getIntegrationStatusTool: OracleTool = {
@@ -1643,6 +1741,8 @@ const NAVIGATE_VIEWS: Record<string, string> = {
   gst: 'returns',
   banking: 'banking',
   bank: 'banking',
+  'banking-intelligence': 'banking-intelligence',
+  'banking intelligence': 'banking-intelligence',
   expenses: 'expenses',
   expense: 'expenses',
   payments: 'payments',
@@ -1674,10 +1774,10 @@ const NAVIGATE_VIEWS: Record<string, string> = {
 const navigateTool: OracleTool = {
   name: 'navigate',
   description:
-    'Navigate the user to a specific page/section of GSTPilot. Use this when the user says "open invoices", "go to customers", "show reports", "open banking", "take me to settings", etc. The user stays in the conversation — they can continue chatting after navigating. Valid targets: dashboard, invoices, clients (customers), returns (GST), banking, expenses, payments, reports (analytics), crm (leads), documents, timeline (activity), team, settings, notifications, tasks, vendors, reconcile, inventory (products), oracle.',
+    'Navigate the user to a specific page/section of GSTPilot. Use this when the user says "open invoices", "go to customers", "show reports", "open banking", "open banking intelligence", "take me to settings", etc. The user stays in the conversation — they can continue chatting after navigating. Valid targets: dashboard, invoices, clients (customers), returns (GST), banking, banking-intelligence, expenses, payments, reports (analytics), crm (leads), documents, timeline (activity), team, settings, notifications, tasks, vendors, reconcile, inventory (products), oracle.',
   category: 'action',
   argsSchema: {
-    view: { type: 'string', required: true, description: 'The page to open: dashboard, invoices, clients, returns, banking, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle' },
+    view: { type: 'string', required: true, description: 'The page to open: dashboard, invoices, clients, returns, banking, banking-intelligence, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle' },
     entityId: { type: 'string', description: 'Optional: a specific record id to deep-link to (e.g. a customerId when opening a customer detail)' },
   },
   async execute(orgId, args): Promise<ToolResult> {
@@ -1686,7 +1786,7 @@ const navigateTool: OracleTool = {
     if (!resolved) {
       return {
         ok: false,
-        summary: `Unknown page "${rawView}". Valid pages: dashboard, invoices, clients, returns, banking, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle.`,
+        summary: `Unknown page "${rawView}". Valid pages: dashboard, invoices, clients, returns, banking, banking-intelligence, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle.`,
       };
     }
     // The brain route reads result.data.navigate to emit the `navigate` SSE event.
@@ -1721,6 +1821,10 @@ export const ORACLE_TOOLS: OracleTool[] = [
   getPendingFilingsTool,
   getBankAccountsTool,
   getIntegrationStatusTool,
+  // Priority 3 — Banking Intelligence read tool. Routes any banking question
+  // ("how much cash will I have next week", "which customers pay late", etc.)
+  // through the Banking Service's answerQuestion() intelligence layer.
+  getBankingIntelligenceTool,
   // NAVIGATION tool (non-destructive, no confirmation)
   navigateTool,
   // ACTION tools (require confirmation)
@@ -1731,6 +1835,11 @@ export const ORACLE_TOOLS: OracleTool[] = [
   createTaskTool,
   generateGSTReturnTool,
   sendReminderTool,
+  // WORKFLOW tool (Priority 2 — Autonomous Workflow Engine)
+  // Pseudo-tool: the brain route intercepts this and calls the workflow planner
+  // instead of executing it. NOT in CONFIRMATION_REQUIRED_TOOLS — the workflow
+  // has its own plan/confirm/execute flow separate from single-action confirm.
+  runWorkflowTool,
   // MEMORY tools
   recallMemoryTool,
   saveMemoryTool,
@@ -1770,6 +1879,16 @@ export const CONFIRMATION_REQUIRED_TOOLS = new Set([
   'exportReport',
   'syncZoho',
   'syncGoogle',
+  // Priority 3 — Banking Intelligence: every banking write/transformation
+  // confirms so the user sees a preview card before it runs (import, reconcile,
+  // categorize, forecast, report, export, manual reconcile).
+  'importStatement',
+  'reconcileTransactions',
+  'categorizeTransactions',
+  'forecastCashFlow',
+  'generateCashReport',
+  'exportStatement',
+  'markReconciled',
 ]);
 
 export const ORACLE_TOOL_MAP: Record<string, OracleTool> = Object.fromEntries(

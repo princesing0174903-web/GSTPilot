@@ -45,6 +45,17 @@ import './definitions/connect-bank-account';
 import './definitions/export-report';
 import './definitions/sync-zoho';
 import './definitions/sync-google';
+// Priority 3 — Banking Intelligence: import statements, reconcile, categorize,
+// forecast, reports, exports, manual reconciliation. Every action calls the
+// Banking Service (src/lib/banking-service) — provider-agnostic. When Setu is
+// wired up later, the same actions work against live data with zero changes.
+import './definitions/import-statement';
+import './definitions/reconcile-transactions';
+import './definitions/categorize-transactions';
+import './definitions/forecast-cash-flow';
+import './definitions/generate-cash-report';
+import './definitions/export-statement';
+import './definitions/mark-reconciled';
 
 // Public API
 export {

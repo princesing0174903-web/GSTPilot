@@ -66,6 +66,13 @@ interface MessagePart {
   durationMs?: number;
 }
 
+// ─── Workflow Engine parts (plan + live progress) ─────────────────────────────
+// Priority 2 — Autonomous Workflow Engine. Renders as an inline card that
+// morphs from plan view → progress view as the user confirms and the executor
+// streams per-step SSE events.
+import { WorkflowPlanCard, type WorkflowPart } from './WorkflowCards';
+import type { WorkflowPlan, WorkflowStepResult } from '@/lib/oracle/workflow-engine/types';
+
 // ─── Action Engine parts (confirmation cards) ─────────────────────────────────
 // These render as inline cards in the chat thread, NOT as modals. The card has
 // five lifecycle states: pending → (confirmed|cancelled) → (executing) → (success|error).
@@ -535,6 +542,22 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                 updateAssistant(m => ({ ...m, parts: [...m.parts, part] }));
                 break;
               }
+              case 'workflow-plan': {
+                // Workflow Engine (Priority 2): the planner built a multi-step
+                // WorkflowPlan. We render an inline WorkflowPlanCard with
+                // Confirm/Cancel. On confirm, the card morphs into a live
+                // progress view as the executor streams per-step SSE events.
+                const plan = data.plan as WorkflowPlan;
+                if (!plan || !Array.isArray(plan.steps)) break;
+                const wfPart: WorkflowPart = {
+                  type: 'workflow-plan',
+                  plan,
+                  source: data.source,
+                  state: 'pending',
+                };
+                updateAssistant(m => ({ ...m, parts: [...m.parts, wfPart as any] }));
+                break;
+              }
               case 'done':
                 updateAssistant(m => ({ ...m, streaming: false }));
                 refreshSessions();
@@ -712,6 +735,196 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
     refreshSessions();
   }, [orgId, currentSessionId, updateActionPart, refreshSessions]);
+
+  // ─── Workflow Engine: confirm / cancel handlers ──────────────────────────────
+  // Priority 2 — Autonomous Workflow Engine. confirmWorkflow() POSTs the plan
+  // to /api/oracle/brain/workflow/execute and reads the SSE stream, updating the
+  // WorkflowPart in place as each step's events arrive. The card morphs from
+  // plan view → live progress view → final summary view.
+
+  const updateWorkflowPart = useCallback((workflowId: string, updater: (p: WorkflowPart) => WorkflowPart) => {
+    setMessages(prev => prev.map(m => ({
+      ...m,
+      parts: m.parts.map(p => {
+        if (p.type === 'workflow-plan' && (p as any).plan?.id === workflowId) {
+          return updater(p as any) as any;
+        }
+        return p;
+      }) as any[],
+    })));
+  }, []);
+
+  const confirmWorkflow = useCallback(async (plan: WorkflowPlan) => {
+    if (!orgId) return;
+    const wfId = plan.id;
+
+    // Flip to "executing" state immediately
+    updateWorkflowPart(wfId, p => ({ ...p, state: 'executing', stepResults: [] }));
+
+    try {
+      const res = await fetch('/api/oracle/brain/workflow/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan, orgId, sessionId: currentSessionId }),
+      });
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => 'Network error');
+        updateWorkflowPart(wfId, p => ({ ...p, state: 'failed', error: `Failed to start workflow: ${errText}` }));
+        toast.error('Failed to start workflow');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: WorkflowResult | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const evt = JSON.parse(payload);
+            switch (evt.type) {
+              case 'workflow-step-start': {
+                // Mark the step as running
+                updateWorkflowPart(wfId, p => {
+                  const steps = [...(p.stepResults ?? [])];
+                  const idx = steps.findIndex(s => s.stepId === evt.stepId);
+                  const newResult: WorkflowStepResult = {
+                    stepId: evt.stepId,
+                    actionName: evt.actionName,
+                    label: evt.label,
+                    status: 'running',
+                    startedAt: new Date().toISOString(),
+                  };
+                  if (idx === -1) steps.push(newResult);
+                  else steps[idx] = newResult;
+                  return { ...p, stepResults: steps };
+                });
+                break;
+              }
+              case 'workflow-step-success': {
+                updateWorkflowPart(wfId, p => {
+                  const steps = [...(p.stepResults ?? [])];
+                  const idx = steps.findIndex(s => s.stepId === evt.stepId);
+                  const newResult: WorkflowStepResult = {
+                    stepId: evt.stepId,
+                    actionName: steps[idx]?.actionName ?? '',
+                    label: evt.label,
+                    status: 'success',
+                    summary: evt.summary,
+                    data: evt.data,
+                    durationMs: evt.durationMs,
+                    completedAt: new Date().toISOString(),
+                  };
+                  if (idx === -1) steps.push(newResult);
+                  else steps[idx] = newResult;
+                  return { ...p, stepResults: steps };
+                });
+                break;
+              }
+              case 'workflow-step-skipped': {
+                updateWorkflowPart(wfId, p => {
+                  const steps = [...(p.stepResults ?? [])];
+                  const idx = steps.findIndex(s => s.stepId === evt.stepId);
+                  const newResult: WorkflowStepResult = {
+                    stepId: evt.stepId,
+                    actionName: steps[idx]?.actionName ?? '',
+                    label: evt.label,
+                    status: 'skipped',
+                    summary: evt.reason,
+                  };
+                  if (idx === -1) steps.push(newResult);
+                  else steps[idx] = newResult;
+                  return { ...p, stepResults: steps };
+                });
+                break;
+              }
+              case 'workflow-step-failed': {
+                updateWorkflowPart(wfId, p => {
+                  const steps = [...(p.stepResults ?? [])];
+                  const idx = steps.findIndex(s => s.stepId === evt.stepId);
+                  const newResult: WorkflowStepResult = {
+                    stepId: evt.stepId,
+                    actionName: steps[idx]?.actionName ?? '',
+                    label: evt.label,
+                    status: 'failed',
+                    error: evt.error,
+                    completedAt: new Date().toISOString(),
+                  };
+                  if (idx === -1) steps.push(newResult);
+                  else steps[idx] = newResult;
+                  return { ...p, stepResults: steps };
+                });
+                break;
+              }
+              case 'workflow-rollback-done': {
+                // Mark the rolled-back step
+                updateWorkflowPart(wfId, p => {
+                  const steps = [...(p.stepResults ?? [])];
+                  const idx = steps.findIndex(s => s.stepId === evt.stepId);
+                  if (idx !== -1 && evt.ok) {
+                    steps[idx] = { ...steps[idx], status: 'rolled-back', summary: `${steps[idx].summary ?? ''} ⟲ Rolled back.` };
+                  }
+                  return { ...p, stepResults: steps };
+                });
+                break;
+              }
+              case 'workflow-complete': {
+                finalResult = evt.result as WorkflowResult;
+                break;
+              }
+            }
+          } catch {
+            // partial JSON — ignore
+          }
+        }
+      }
+
+      // Set the final state
+      if (finalResult) {
+        updateWorkflowPart(wfId, p => ({
+          ...p,
+          state: finalResult!.status === 'success' ? 'success' : finalResult!.status === 'partial' ? 'partial' : 'failed',
+          result: finalResult!,
+        }));
+        if (finalResult.status === 'success') {
+          toast.success(`Workflow complete: ${plan.title}`);
+        } else if (finalResult.status === 'partial') {
+          toast.warning(`Workflow partially complete — ${finalResult.failedCount} step(s) failed`);
+        } else {
+          toast.error(`Workflow failed — see details in the card`);
+        }
+        // Refresh memory if the result includes refreshed context
+        if (finalResult.refreshedContext?.memory) {
+          setMemory(finalResult.refreshedContext.memory);
+        } else {
+          refreshMemory();
+        }
+        refreshSessions();
+      } else {
+        // Stream ended without a complete event
+        updateWorkflowPart(wfId, p => ({ ...p, state: 'failed', error: 'Workflow stream ended unexpectedly.' }));
+      }
+    } catch (e: any) {
+      const errMsg = e.message || 'Network error';
+      updateWorkflowPart(wfId, p => ({ ...p, state: 'failed', error: errMsg }));
+      toast.error(`Workflow failed: ${errMsg}`);
+    }
+  }, [orgId, currentSessionId, updateWorkflowPart, refreshMemory, refreshSessions]);
+
+  const cancelWorkflow = useCallback((plan: WorkflowPlan) => {
+    updateWorkflowPart(plan.id, p => ({ ...p, state: 'cancelled' }));
+    toast.info(`Workflow cancelled: ${plan.title}`);
+  }, [updateWorkflowPart]);
 
   // Regenerate the last assistant response: remove it, find the last user message, re-send it
   const handleRegenerate = useCallback(() => {
@@ -933,6 +1146,8 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   onCancelAction={cancelActionCard}
                   onFollowUp={sendMessage}
                   onNavigate={onNavigate}
+                  onConfirmWorkflow={confirmWorkflow}
+                  onCancelWorkflow={cancelWorkflow}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -1104,6 +1319,8 @@ function MessageBubble({
   onCancelAction,
   onFollowUp,
   onNavigate,
+  onConfirmWorkflow,
+  onCancelWorkflow,
 }: {
   message: ChatMessage;
   isLast?: boolean;
@@ -1112,6 +1329,8 @@ function MessageBubble({
   onCancelAction?: (toolCallId: string) => void;
   onFollowUp?: (text: string) => void;
   onNavigate?: (view: string, entityId?: string) => void;
+  onConfirmWorkflow?: (plan: WorkflowPlan) => void;
+  onCancelWorkflow?: (plan: WorkflowPlan) => void;
 }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -1125,10 +1344,12 @@ function MessageBubble({
     }).catch(() => toast.error('Failed to copy'));
   }, [message.content]);
 
-  // Separate action-confirm parts from tool-call parts so we can render them in
-  // the right order (tool-call cards first, then the action-confirm card).
+  // Separate action-confirm parts + workflow-plan parts from tool-call parts so
+  // we render them in the right order (tool-call cards first, then the
+  // action-confirm / workflow-plan cards).
   const toolCallParts = message.parts.filter(p => p.type === 'tool-call');
   const actionConfirmParts = message.parts.filter(p => p.type === 'action-confirm') as ActionConfirmPart[];
+  const workflowParts = message.parts.filter(p => p.type === 'workflow-plan') as WorkflowPart[];
 
   return (
     <motion.div
@@ -1169,6 +1390,16 @@ function MessageBubble({
                 onCancel={onCancelAction}
                 onFollowUp={onFollowUp}
                 onNavigate={onNavigate}
+              />
+            ))}
+
+            {/* Workflow Engine plan + progress cards (Priority 2) */}
+            {workflowParts.map((p, i) => (
+              <WorkflowPlanCard
+                key={`wf-${p.plan.id}-${i}`}
+                part={p}
+                onConfirm={onConfirmWorkflow}
+                onCancel={onCancelWorkflow}
               />
             ))}
 

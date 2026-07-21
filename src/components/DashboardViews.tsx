@@ -107,6 +107,10 @@ const PayrollPage = dynamic(() => import('@/components/payroll/PayrollPage'), { 
 const HRMSPage = dynamic(() => import('@/components/hrms/HRMSPage'), { loading: PageLoader, ssr: false })
 const InventoryPage = dynamic(() => import('@/components/inventory/InventoryPage'), { loading: PageLoader, ssr: false })
 const BankingPage = dynamic(() => import('@/components/banking/BankingPage'), { loading: PageLoader, ssr: false })
+// Phase Oracle Priority 3 — Banking Intelligence (modular banking module with
+// service/repository pattern; mock data now, Setu-ready later. Fully additive —
+// the legacy 'banking' view is untouched.)
+const BankingIntelligencePage = dynamic(() => import('@/components/banking-intelligence/BankingIntelligencePage'), { loading: PageLoader, ssr: false })
 const PaymentsPage = dynamic(() => import('@/components/payments/PaymentsPage'), { loading: PageLoader, ssr: false })
 const EInvoicingPage = dynamic(() => import('@/components/e-invoicing/EInvoicingPage'), { loading: PageLoader, ssr: false })
 const TDSPage = dynamic(() => import('@/components/tds/TDSPage'), { loading: PageLoader, ssr: false })
@@ -297,6 +301,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   hrms: HRMSPage,
   inventory: GSTpilotProductsView,
   banking: BankingPage,
+  'banking-intelligence': BankingIntelligencePage,
   payments: GSTpilotPaymentsView,
   'e-invoicing': EInvoicingPage,
   tds: TDSPage,
@@ -417,6 +422,7 @@ const REAL_VIEWS = new Set<string>([
   'expenses',                 // Expenses (real)
   'payments',                 // Payments (real)
   'inventory',                // Products / inventory (real)
+  'banking-intelligence',     // Banking Intelligence (Priority 3 — modular banking module, mock→Setu)
   'settings',                 // Settings (real)
   'google-workspace',         // Google integration (real OAuth)
   'zoho-books',               // Zoho Books integration (real OAuth + sync)

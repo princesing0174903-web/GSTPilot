@@ -171,6 +171,7 @@ const financeItems: NavItem[] = [
   { title: 'E-Invoicing', view: 'e-invoicing', icon: FileOutput, subtitle: 'IRN & E-Way Bill' },
   { title: 'Payments', view: 'payments', icon: Receipt, subtitle: 'Collect & Pay' },
   { title: 'Banking', view: 'banking', icon: Landmark, subtitle: 'Accounts & Reconcile' },
+  { title: 'Banking Intelligence', view: 'banking-intelligence', icon: Landmark, subtitle: 'Cash Flow & Forecast', isNew: true },
   { title: 'Invoices', view: 'invoices', icon: FileScan, subtitle: 'Processing Center' },
   { title: 'Reconcile', view: 'reconcile', icon: Search, subtitle: '2A/2B Matching' },
   { title: 'Payroll', view: 'payroll', icon: Wallet, subtitle: 'Salary & Compliance' },

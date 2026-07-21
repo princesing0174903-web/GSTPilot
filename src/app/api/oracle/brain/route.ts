@@ -39,6 +39,7 @@ import { getBusinessSnapshot } from '@/lib/business/snapshot';
 // pure-additive change in src/lib/oracle/action-engine/definitions/.
 import '@/lib/oracle/action-engine';
 import { buildConfirmation, isRegisteredAction } from '@/lib/oracle/action-engine';
+import { planWorkflow, looksLikeWorkflowRequest } from '@/lib/oracle/workflow-engine';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -302,6 +303,22 @@ You are not a chatbot. You are an AI employee — a virtual CFO + COO + Complian
 - "Send reminders to overdue customers" → call sendReminder
 - "Remember that my GSTIN is..." → call saveMemory
 - "What do you know about my business?" → call recallMemory with empty query
+- "Bank accounts?" or "Bank balance?" → call getBankAccounts (legacy table) OR getBankingIntelligence with the question (richer answer)
+- "How much money do I have?" or "What's my bank balance?" → call getBankingIntelligence with the question
+- "Show this month's expenses" → call getBankingIntelligence
+- "Which invoices are unpaid?" → call getBankingIntelligence
+- "How much cash will I have next week?" → call getBankingIntelligence
+- "Why is cash flow decreasing?" → call getBankingIntelligence
+- "Show suspicious transactions" → call getBankingIntelligence
+- "What are my largest expenses?" → call getBankingIntelligence
+- "Which customer pays late?" → call getBankingIntelligence
+- "Import this bank statement" → call importStatement with format + rawContent + accountId
+- "Reconcile my transactions" → call reconcileTransactions (mode all)
+- "Categorize all transactions" → call categorizeTransactions (mode rules)
+- "Forecast my cash flow" → call forecastCashFlow with horizon
+- "Generate a cash report" → call generateCashReport with period
+- "Export my bank statement" → call exportStatement with format
+- "Mark this transaction reconciled" → call markReconciled with transactionId
 - "Why is my cashflow decreasing?" → call getCashflowAnalysis, then reason
 
 ## Oracle Navigation — Moving Through the SaaS
@@ -309,7 +326,7 @@ You can navigate the user to any page by calling the \`navigate\` tool. The user
 - "Open invoices" / "Go to customers" / "Show reports" → \`navigate\` with view
 - "Take me to banking" / "Open settings" / "Show GST returns" → \`navigate\` with view
 - "Open CRM" / "Go to team" / "Show documents" → \`navigate\` with view
-Valid views: dashboard, invoices, clients, returns, banking, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle.
+Valid views: dashboard, invoices, clients, returns, banking, banking-intelligence, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle.
 Navigation is non-destructive — no confirmation needed.
 
 ## CRITICAL — No Hallucination Rule
@@ -323,9 +340,34 @@ When the user asks you to CREATE, UPDATE, DELETE, RECORD, SEND, DUPLICATE, SYNC,
 
 The system intercepts ALL confirmation-required tool calls and shows the user a confirmation card BEFORE executing. Your job is ONLY to extract the parameters and emit the tool-call — the system handles validation, confirmation, and execution. The confirmation card shows a preview (with validation badges) and the user clicks "Confirm & Execute" or "Cancel".
 
-Confirmation-required actions: createInvoice, updateInvoice, deleteInvoice, duplicateInvoice, sendInvoice, createCustomer, updateCustomer, deleteCustomer, createExpense, updateExpense, deleteExpense, createPayment, markInvoicePaid, refundPayment, prepareGstr3b, generateGSTReturn, addCrmLead, scheduleFollowUp, inviteTeamMember, updateProfile, connectBankAccount, exportReport, syncZoho, syncGoogle, sendReminder, createTask, generateReport.
+Confirmation-required actions: createInvoice, updateInvoice, deleteInvoice, duplicateInvoice, sendInvoice, createCustomer, updateCustomer, deleteCustomer, createExpense, updateExpense, deleteExpense, createPayment, markInvoicePaid, refundPayment, prepareGstr3b, generateGSTReturn, addCrmLead, scheduleFollowUp, inviteTeamMember, updateProfile, connectBankAccount, exportReport, syncZoho, syncGoogle, sendReminder, createTask, generateReport, importStatement, reconcileTransactions, categorizeTransactions, forecastCashFlow, generateCashReport, exportStatement, markReconciled.
 
 For DESTRUCTIVE actions (delete customer, delete invoice, delete expense, refund payment), the confirmation card always includes a ⚠️ warning. Emphasize the permanence in your pre-call text.
+
+## CRITICAL — Workflow Execution Rule (multi-step tasks)
+When the user asks for a MULTI-STEP task — i.e. two or more actions chained together ("create an invoice for ABC and email it", "record this payment and mark the invoice paid", "add a lead and schedule a follow-up", "generate a report and export it") — you MUST emit a single \`runWorkflow\` tool-call instead of multiple individual action tool-calls.
+
+\`\`\`tool-call
+{"tool": "runWorkflow", "args": {"message": "create an invoice for ABC Pvt Ltd for ₹25,000 and email it to the client", "extractedArgs": {"customerName": "ABC Pvt Ltd", "items": [{"name": "Consulting", "quantity": 1, "rate": 25000, "gstRate": 18}]}}}
+\`\`\`
+
+The system will:
+1. Plan the workflow (template match or build a custom chain of registered actions).
+2. Show the user a plan card with all steps listed — they confirm before ANY write happens.
+3. Execute step-by-step, streaming live progress (✓ / ✗ / ⊘ per step).
+4. Handle failures gracefully — report exactly what succeeded and what failed, with automatic rollback for critical failures.
+
+Do NOT emit multiple action tool-calls for a chained task — that would show separate confirmation cards and lose the chaining (step 2 couldn't reference step 1's output). Use \`runWorkflow\` so the steps chain together.
+
+When to use \`runWorkflow\` vs a single action tool-call:
+- "Create an invoice for ABC" → single action (\`createInvoice\`)
+- "Create an invoice for ABC and email it" → workflow (\`runWorkflow\`)
+- "Record this expense" → single action (\`createExpense\`)
+- "Add a lead and schedule a follow-up" → workflow (\`runWorkflow\`)
+- "Prepare my GSTR-3B" → single action (\`prepareGstr3b\`) — UNLESS the user also asks to export/email the summary, then workflow
+- "Import this statement and reconcile everything" → workflow (\`runWorkflow\`)
+
+Always pass the FULL original user message in \`args.message\` and any structured params you extracted in \`args.extractedArgs\`. The planner uses both.
 
 Example correct response:
 \`\`\`tool-call
@@ -470,6 +512,103 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             // No tool calls — this is the final answer
             finalAssistantContent = assistantContent;
             break;
+          }
+
+          // ─── Workflow intercept (Priority 2 — Autonomous Workflow Engine) ────
+          // If the LLM emitted a `runWorkflow` tool call, the user is asking for
+          // a multi-step task. We call the planner (template match or LLM-built),
+          // emit a `workflow-plan` SSE event, and close the stream. The frontend
+          // renders a WorkflowPlanCard; on user confirm it POSTs to
+          // /api/oracle/brain/workflow/execute which streams the executor's
+          // per-step progress events.
+          //
+          // Heuristic safety net: even if the LLM didn't emit runWorkflow, but
+          // the message looks like a workflow request AND the LLM emitted 2+
+          // confirmation-required actions, we treat it as a workflow (the LLM
+          // missed the runWorkflow instruction).
+          const workflowCall = toolCalls.find(c => c.tool === 'runWorkflow');
+          const multiActionConfirmCalls = toolCalls.filter(c => CONFIRMATION_REQUIRED_TOOLS.has(c.tool));
+          const looksLikeWorkflow = looksLikeWorkflowRequest(message);
+          if (workflowCall || (looksLikeWorkflow && multiActionConfirmCalls.length >= 2)) {
+            const wfMessage = workflowCall?.args?.message ? String(workflowCall.args.message) : message;
+            const wfExtractedArgs = (workflowCall?.args?.extractedArgs && typeof workflowCall.args.extractedArgs === 'object')
+              ? workflowCall.args.extractedArgs
+              : multiActionConfirmCalls.length > 0
+                ? Object.assign({}, ...multiActionConfirmCalls.map(c => c.args))
+                : undefined;
+
+            let wfPlanResult;
+            try {
+              wfPlanResult = await planWorkflow({
+                message: wfMessage,
+                orgId,
+                extractedArgs: wfExtractedArgs,
+                sessionId,
+                userId,
+              });
+            } catch (e) {
+              console.warn('[brain] workflow planner failed:', (e as Error).message);
+              wfPlanResult = { ok: false, error: (e as Error).message };
+            }
+
+            if (wfPlanResult.ok && wfPlanResult.plan) {
+              // Persist the assistant's pre-call text so the thread shows what
+              // Oracle said before presenting the plan.
+              const workflowDisplayContent = stripToolCalls(assistantContent) || `I'll run this as a multi-step workflow: **${wfPlanResult.plan.title}**. Here's the plan — please confirm to proceed.`;
+              const workflowParts = [{
+                type: 'workflow-plan' as const,
+                plan: wfPlanResult.plan,
+                source: wfPlanResult.source,
+              }];
+
+              const workflowAssistantMessage = await db.oracleAIMessage.create({
+                data: {
+                  sessionId,
+                  firmId: orgId,
+                  userId,
+                  role: 'assistant',
+                  content: workflowDisplayContent,
+                  parts: JSON.stringify(workflowParts),
+                  status: 'completed',
+                  model: 'glm-4.6',
+                },
+              }).catch(() => null);
+
+              if (sessionId) {
+                db.oracleAISession.update({
+                  where: { id: sessionId },
+                  data: {
+                    messageCount: { increment: 2 },
+                    lastMessageAt: new Date(),
+                  },
+                }).catch(() => {});
+              }
+
+              // Emit the workflow-plan + done events and close the stream
+              send({
+                type: 'workflow-plan',
+                plan: wfPlanResult.plan,
+                source: wfPlanResult.source,
+                messageId: workflowAssistantMessage?.id ?? null,
+              });
+              send({
+                type: 'done',
+                messageId: workflowAssistantMessage?.id ?? null,
+                sessionId,
+                pendingWorkflow: {
+                  workflowId: wfPlanResult.plan.id,
+                  title: wfPlanResult.plan.title,
+                  stepCount: wfPlanResult.plan.steps.length,
+                },
+              });
+              controller.close();
+              return;
+            }
+
+            // Planner failed — fall through to the normal confirmation flow so
+            // the user still gets a single-action confirmation card (better
+            // than a dead-end error). Log the planner failure for debugging.
+            console.warn('[brain] workflow planner returned no plan — falling back to single-action flow:', wfPlanResult.error);
           }
 
           // ─── Confirmation intercept (generic Action Engine) ───────────────

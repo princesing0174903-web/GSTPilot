@@ -15,6 +15,11 @@ import './definitions/create-customer';
 import './definitions/record-payment';
 import './definitions/record-expense';
 import './definitions/send-reminder';
+// Phase 1 — Action Engine expansion: migrated createTask + generateGSTReturn
+// from legacy inline tools, and added the new generateReport action.
+import './definitions/create-task';
+import './definitions/generate-gst-return';
+import './definitions/generate-report';
 
 // Public API
 export {

@@ -22,14 +22,6 @@ export async function GET(request: Request) {
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
-        include: {
-          client: {
-            select: { id: true, businessName: true, gstin: true },
-          },
-          user: {
-            select: { id: true, name: true },
-          },
-        },
       }),
       db.activity.count({ where: Object.keys(where).length > 0 ? where : undefined }),
     ])
@@ -73,14 +65,6 @@ export async function POST(request: Request) {
         type,
         description,
         metadata: metadata ?? null,
-      },
-      include: {
-        client: {
-          select: { id: true, businessName: true },
-        },
-        user: {
-          select: { id: true, name: true },
-        },
       },
     })
 

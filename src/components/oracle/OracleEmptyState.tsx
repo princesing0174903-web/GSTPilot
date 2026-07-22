@@ -4,8 +4,8 @@
 // GSTPilot Oracle — Empty State (ChatGPT-Enterprise redesign)
 //
 // Centered "How can I help with your business today?" headline (text-display)
-// + 4 suggestion cards in a 2x2 grid. Pure black bg, #111111 cards, #1F1F1F
-// borders, blue accent. 150ms opacity fade on mount (no flashy animations).
+// + 4 suggestion cards in a 2x2 grid. Deep dark bg (#0A0A0A), #111111 cards,
+// #1F1F1F borders, gold/amber accent. 150ms opacity fade on mount.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion } from 'framer-motion';
@@ -57,12 +57,12 @@ export function OracleEmptyState({ onPick, userName }: OracleEmptyStateProps) {
   const firstName = userName?.split(' ')[0];
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-4 py-12 text-center">
-      {/* Avatar / orb — minimal, blue */}
+      {/* Avatar / orb — gold/amber gradient with subtle glow */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.15, ease: 'easeOut' }}
-        className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-[#2563EB]/10 ring-1 ring-[#2563EB]/30"
+        className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_0_22px_-4px_rgba(245,158,11,0.55)] ring-1 ring-amber-500/30"
       >
         <InfinitySymbol size={26} />
       </motion.div>
@@ -104,7 +104,7 @@ export function OracleEmptyState({ onPick, userName }: OracleEmptyStateProps) {
               onClick={() => onPick(s.prompt)}
               className="group flex items-start gap-3 rounded-xl border border-[#1F1F1F] bg-[#111111] p-4 text-left transition-colors hover:border-[#2A2A2A] hover:bg-[#161616]"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#2563EB]/10 text-[#3B82F6] transition-colors group-hover:bg-[#2563EB]/15">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 transition-colors group-hover:bg-amber-500/15">
                 <Icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
@@ -121,7 +121,7 @@ export function OracleEmptyState({ onPick, userName }: OracleEmptyStateProps) {
         })}
       </motion.div>
 
-      {/* Capability strip — minimal, blue dots */}
+      {/* Capability strip — minimal, amber dots */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -129,13 +129,13 @@ export function OracleEmptyState({ onPick, userName }: OracleEmptyStateProps) {
         className="mt-9 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] text-white/40"
       >
         <span className="flex items-center gap-1.5">
-          <span className="h-1 w-1 rounded-full bg-[#3B82F6]" /> Grounded in your data
+          <span className="h-1 w-1 rounded-full bg-amber-500" /> Grounded in your data
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-1 w-1 rounded-full bg-[#3B82F6]" /> Remembers context
+          <span className="h-1 w-1 rounded-full bg-amber-500" /> Remembers context
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-1 w-1 rounded-full bg-[#3B82F6]" /> Speaks 10 languages
+          <span className="h-1 w-1 rounded-full bg-amber-500" /> Speaks 10 languages
         </span>
       </motion.div>
     </div>

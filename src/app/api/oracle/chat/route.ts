@@ -315,19 +315,30 @@ async function buildInvoiceEngineContextBlock(organizationId?: string): Promise<
     //    `client.firmId = organizationId` to prevent cross-tenant leaks. ──
     //    For local- (guest/demo) orgs, Prisma returns 0 rows for every read
     //    because no Firm row matches → honest empty state, no leak.
-    const orgFilter = organizationId
-      ? { client: { firmId: organizationId } }
-      : {};
+    // Tenant-scoped filters. Most record types relate to Firm via Client
+    // (`client.firmId`). Payroll relates via Employee (`employee.client.firmId`)
+    // — using the wrong relation throws PrismaClientValidationError, which would
+    // kill the entire context block. We use allSettled so one schema mismatch
+    // never blanks out all record-level detail.
+    const clientFilter = organizationId ? { client: { firmId: organizationId } } : {};
+    const payrollFilter = organizationId ? { employee: { client: { firmId: organizationId } } } : {};
 
-    const [invRows, billRows, expRows, payRows, tdsRows, empRows, prRows] = await Promise.all([
-      db.invoice.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.purchaseBill.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.expense.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.payment.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.tDSRecord.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.employee.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db.payroll.findMany({ where: orgFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+    const settled = await Promise.allSettled([
+      db.invoice.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.purchaseBill.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.expense.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.payment.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.tDSRecord.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.employee.findMany({ where: clientFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db.payroll.findMany({ where: payrollFilter, orderBy: { createdAt: 'desc' }, take: 500 }),
     ]);
+    const invRows = settled[0].status === 'fulfilled' ? settled[0].value : [];
+    const billRows = settled[1].status === 'fulfilled' ? settled[1].value : [];
+    const expRows = settled[2].status === 'fulfilled' ? settled[2].value : [];
+    const payRows = settled[3].status === 'fulfilled' ? settled[3].value : [];
+    const tdsRows = settled[4].status === 'fulfilled' ? settled[4].value : [];
+    const empRows = settled[5].status === 'fulfilled' ? settled[5].value : [];
+    const prRows = settled[6].status === 'fulfilled' ? settled[6].value : [];
 
     const invoices: InvoiceCloudInvoice[] = (invRows ?? []).map((r) => ({
       id: r.id, clientId: r.clientId, invoiceNumber: r.invoiceNumber,

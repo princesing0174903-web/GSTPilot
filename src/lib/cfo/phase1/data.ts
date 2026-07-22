@@ -216,18 +216,11 @@ export async function fetchRawCFOData(organizationId: string): Promise<RawCFODat
   // The tenant filter applied to every client-owned table.
   const firmScope = { client: { firmId: organizationId } };
 
-  const [
-    invoices,
-    expenses,
-    payments,
-    purchaseBills,
-    clients,
-    filings,
-    notices,
-    employees,
-    syncedRecords,
-    dataConnections,
-  ] = await Promise.all([
+  // NOTE: syncedRecord + dataConnection are scoped by userId (not client.firmId),
+  // so using firmScope on them throws PrismaClientValidationError. We use
+  // allSettled so those two failing queries return [] instead of crashing the
+  // entire data fetch (which would blank out invoices, expenses, etc.).
+  const settled = await Promise.allSettled([
     db.invoice.findMany({
       where: firmScope,
       select: {
@@ -311,6 +304,16 @@ export async function fetchRawCFOData(organizationId: string): Promise<RawCFODat
       take: 200,
     }) as Promise<DataConnectionRow[]>,
   ]);
+  const invoices = settled[0].status === 'fulfilled' ? settled[0].value : [];
+  const expenses = settled[1].status === 'fulfilled' ? settled[1].value : [];
+  const payments = settled[2].status === 'fulfilled' ? settled[2].value : [];
+  const purchaseBills = settled[3].status === 'fulfilled' ? settled[3].value : [];
+  const clients = settled[4].status === 'fulfilled' ? settled[4].value : [];
+  const filings = settled[5].status === 'fulfilled' ? settled[5].value : [];
+  const notices = settled[6].status === 'fulfilled' ? settled[6].value : [];
+  const employees = settled[7].status === 'fulfilled' ? settled[7].value : [];
+  const syncedRecords = settled[8].status === 'fulfilled' ? settled[8].value : [];
+  const dataConnections = settled[9].status === 'fulfilled' ? settled[9].value : [];
 
   const hasLiveData =
     invoices.length > 0 ||

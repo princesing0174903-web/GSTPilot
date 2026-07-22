@@ -119,21 +119,31 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
             <li key={task.id}>
               {showHighlight ? (
                 /* Highlighted task — the one step that unlocks the core value
-                   prop. Visually distinct so the user's eye lands here. */
+                   prop (Activate Oracle). Visually distinct so the user's
+                   eye lands here:
+                     • accent-gradient-soft background (vs. plain glass for others)
+                     • Sparkles icon in an accent-gradient chip that pulses
+                       when not yet done, to draw attention
+                     • "CORE FEATURE" pill next to the label
+                     • Filled accent-gradient CTA (not ghost) */
                 <button
                   type="button"
                   onClick={task.onAction}
-                  className="group w-full flex items-center gap-2.5 rounded-lg border border-[#2563EB]/40 bg-[#2563EB]/[0.08] px-2.5 py-2 text-left transition-colors hover:bg-[#2563EB]/[0.14] cursor-pointer"
+                  className="group w-full flex items-center gap-2.5 rounded-lg border border-[#2563EB]/40 accent-gradient-soft px-2.5 py-2 text-left transition-colors hover:border-[#2563EB]/60 cursor-pointer"
                 >
-                  <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-                    <span className="absolute inline-flex h-3.5 w-3.5 rounded-full bg-[#2563EB]/40 opacity-75 animate-ping" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2563EB]" />
+                  <span
+                    className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md accent-gradient ${!task.done ? 'animate-pulse' : ''}`}
+                  >
+                    <Sparkles className="h-3 w-3 text-white" />
                   </span>
-                  <Icon className="h-3.5 w-3.5 shrink-0 accent-text" />
+                  <Icon className="h-4 w-4 shrink-0 accent-text" />
                   <span className="text-[12px] font-semibold text-foreground truncate flex-1 min-w-0">
                     {task.label}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md accent-gradient px-2 py-0.5 text-[10px] font-bold text-white shrink-0">
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-[#2563EB]/30 bg-[#2563EB]/10 px-1.5 py-0 text-[8px] font-bold uppercase tracking-wider accent-text shrink-0">
+                    Core Feature
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md accent-gradient px-2 py-0.5 text-[10px] font-bold text-white shrink-0 shadow-[0_0_16px_-4px_rgba(37,99,235,0.6)]">
                     <Sparkles className="h-2.5 w-2.5" />
                     Activate
                   </span>

@@ -117,6 +117,29 @@ function formatINR(amount: number): string {
   return amount.toLocaleString('en-IN');
 }
 
+/**
+ * Compact Indian-system currency abbreviation.
+ *   1,09,000    → "₹1.09L"
+ *   1,09,00,000 → "₹1.09Cr"
+ *   12,30,000   → "₹12.30L"
+ *   9,500       → "₹9.5K"
+ *   500         → "₹500"
+ *
+ * Used in KPI subtitles / insight copy where the full en-IN grouping
+ * ("₹1,09,000") would visually collide with adjacent UI in narrow cards.
+ * The KPI value itself uses AnimatedNumber's `currencyCompact` formatter
+ * (which performs the same abbreviation during the count-up); this helper
+ * exists for the surrounding copy where a plain string is needed.
+ */
+function abbreviateINR(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 1_00_00_000) return `${sign}₹${(abs / 1_00_00_000).toFixed(2)}Cr`;
+  if (abs >= 1_00_000) return `${sign}₹${(abs / 1_00_000).toFixed(2)}L`;
+  if (abs >= 1_000) return `${sign}₹${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs).toLocaleString('en-IN')}`;
+}
+
 function formatDateIN(dateStr: string): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return '—';
@@ -293,8 +316,10 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+      <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
         <div className="flex items-start justify-between gap-4">
+          {/* min-w-0 + flex-1 lets long subtitles wrap instead of pushing the
+              icon out of the card / truncating to "₹1,09,...". */}
           <div className="space-y-1.5 min-w-0 flex-1">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               {label}
@@ -306,7 +331,9 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
                 value ?? '—'
               )}
             </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">{subtitle}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed break-words">
+              {subtitle}
+            </p>
             {cta && (
               <button
                 type="button"
@@ -981,19 +1008,24 @@ export default function DashboardPage() {
     : `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
   const cashSubtitle = cashEmpty
     ? 'Banking integration coming in Phase 2 · will unlock cash position, reconciliation & cash flow'
-    : `Bank balance · ₹${formatINR(businessSnapshot.bankBalance)}`;
+    : `Bank balance · ${abbreviateINR(businessSnapshot.bankBalance)}`;
 
   const firstName = getFirstName(user?.name);
 
   return (
-    <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+    // relative z-10 on the page wrapper keeps the dashboard's absolutely-
+    // positioned badges / ambient glow from ever visually overlapping the
+    // left sidebar (which lives in a sibling stacking context inside
+    // DashboardShell). The ambient glow below is z-0; all real content sits
+    // inside the `relative z-10` inner wrapper.
+    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
       {/* ── Ambient radial glow ── */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] z-0 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
       />
 
-      <div className="relative page-rhythm space-y-12">
+      <div className="relative z-10 page-rhythm space-y-12">
         {/* ═══ GREETING + QUICK ACTIONS ═══ */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -1017,8 +1049,8 @@ export default function DashboardPage() {
               onClick={() => setCurrentView('clients')}
               className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
-                <Users className="h-3.5 w-3.5" />
+              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
+                <Users className="h-4 w-4 accent-text" />
               </span>
               Add Client
             </Button>
@@ -1028,8 +1060,8 @@ export default function DashboardPage() {
               onClick={() => setCurrentView('invoices')}
               className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
-                <FileText className="h-3.5 w-3.5" />
+              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
+                <FileText className="h-4 w-4 accent-text" />
               </span>
               Create Invoice
             </Button>
@@ -1039,8 +1071,8 @@ export default function DashboardPage() {
               onClick={() => setCurrentView('returns')}
               className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
-                <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
+                <ShieldCheck className="h-4 w-4 accent-text" />
               </span>
               Create Return
             </Button>
@@ -1052,8 +1084,10 @@ export default function DashboardPage() {
           <BusinessSetupProgress tasks={setupTasks} />
         )}
 
-        {/* ═══ 3. KPI CARDS — Revenue / Customers / Invoices / Pending Compliance ═══ */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* ═══ 3. KPI CARDS — Revenue / Customers / Invoices / Pending Compliance
+            Responsive: 1-up on mobile (so large ₹ figures never truncate),
+            2-up on sm+, 4-up on lg+. ═══ */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard
             index={0}
             label="Revenue"
@@ -1067,14 +1101,17 @@ export default function DashboardPage() {
             } : undefined}
           />
 
-          {/* Customers — inline KPI matching KpiCard visual style */}
+          {/* Customers — inline KPI matching KpiCard visual style.
+              Adds an explicit capacity indicator ("X / 10 slots") below the
+              active-client count so the progress bar communicates what it
+              represents instead of being an ambiguous decorative stripe. */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' as const }}
             className="h-full"
           >
-            <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+            <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1.5 min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -1083,7 +1120,7 @@ export default function DashboardPage() {
                   <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
                     <AnimatedNumber value={businessSnapshot.customers} format="integer" />
                   </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
                     {businessSnapshot.customers === 0
                       ? 'No customers yet · add your first client to begin'
                       : `${businessSnapshot.customers} active client${businessSnapshot.customers === 1 ? '' : 's'}`}
@@ -1103,6 +1140,34 @@ export default function DashboardPage() {
                   <Users className="h-4 w-4 accent-text" />
                 </div>
               </div>
+              {/* Capacity indicator — labeled + tooltip so the bar always
+                  communicates what it represents (X of Y client slots). */}
+              {(() => {
+                const CLIENT_CAPACITY = 10; // baseline client-slot budget for a small firm
+                const used = Math.min(businessSnapshot.customers, CLIENT_CAPACITY);
+                const pct = Math.round((used / CLIENT_CAPACITY) * 100);
+                return (
+                  <div
+                    className="mt-3"
+                    title={`${used} of ${CLIENT_CAPACITY} client slots in use`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                        Capacity
+                      </span>
+                      <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">
+                        {used} / {CLIENT_CAPACITY} slots
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+                      <div
+                        className="h-full rounded-full accent-gradient transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </motion.div>
 
@@ -1113,7 +1178,7 @@ export default function DashboardPage() {
             transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' as const }}
             className="h-full"
           >
-            <div className="glass-surface p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+            <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1.5 min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -1122,7 +1187,7 @@ export default function DashboardPage() {
                   <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
                     <AnimatedNumber value={businessSnapshot.invoices.count} format="integer" />
                   </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
                     {businessSnapshot.invoices.count === 0
                       ? 'No invoices yet · create one to track revenue'
                       : `${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'} issued`}
@@ -1284,15 +1349,25 @@ export default function DashboardPage() {
                     <ArrowRight className="h-3 w-3" />
                   </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                    onClick={() => setOracleWizardOpen(true)}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Activate Oracle
-                    <ChevronRight className="h-3 w-3" />
-                  </Button>
+                  /* Activate Oracle CTA — the core product differentiator.
+                     Filled accent gradient (not ghost) + CORE FEATURE pill so
+                     the user's eye lands here. Mirrors the distinct treatment
+                     used in the BusinessSetupProgress checklist row. */
+                  <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0">
+                    <span className="inline-flex items-center gap-1 self-end rounded-full accent-gradient-soft px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider accent-text">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      Core Feature
+                    </span>
+                    <Button
+                      size="sm"
+                      className="accent-gradient text-white hover:opacity-90 gap-1.5 shadow-[0_0_24px_-6px_rgba(37,99,235,0.5)]"
+                      onClick={() => setOracleWizardOpen(true)}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Activate Oracle
+                      <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1371,14 +1446,43 @@ export default function DashboardPage() {
             icon={<Sparkles className="h-4 w-4 accent-text" />}
           >
             {!oracleActivated ? (
-              <EmptyState
-                icon={Brain}
-                title="Oracle requires connected business data"
-                description="Activate Oracle to generate AI-powered recommendations from your live business snapshot."
-                primaryLabel="Activate Oracle"
-                onPrimary={() => setOracleWizardOpen(true)}
-                compact
-              />
+              /* Oracle-not-active empty state — visually distinct from the
+                 generic EmptyState because this is the core product
+                 differentiator. Filled accent-gradient CTA (not ghost) +
+                 CORE FEATURE pill + Sparkles icon to draw the eye. */
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' as const }}
+                className="flex flex-col items-center justify-center text-center py-6 min-h-[160px]"
+              >
+                <div className="flex items-center justify-center h-12 w-12 rounded-2xl accent-gradient-soft mb-3 relative">
+                  <Brain className="h-6 w-6 accent-text" />
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3B82F6] opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#2563EB] border border-background" />
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full accent-gradient-soft px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider accent-text mb-2">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  Core Feature
+                </span>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Oracle requires connected business data
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-xs">
+                  Activate Oracle to generate AI-powered recommendations from your live business snapshot.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-3 accent-gradient text-white hover:opacity-90 gap-1.5 shadow-[0_0_24px_-6px_rgba(37,99,235,0.5)]"
+                  onClick={() => setOracleWizardOpen(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Activate Oracle
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </motion.div>
             ) : mappedAIRecommendations.length === 0 ? (
               <EmptyState
                 icon={CheckCircle2}

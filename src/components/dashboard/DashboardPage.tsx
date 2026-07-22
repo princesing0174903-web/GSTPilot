@@ -282,6 +282,10 @@ interface KpiCardProps {
 }
 
 function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtitle, icon, index, cta }: KpiCardProps) {
+  // Currency values use the compact format (₹1.09L / ₹1.18Cr) inside KPI cards
+  // so large figures never get truncated to "₹1,09,..." in narrow 2-up columns.
+  const resolvedFormat =
+    numericFormat === 'currency' ? 'currencyCompact' : numericFormat;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -295,9 +299,9 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               {label}
             </p>
-            <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
+            <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
               {numericValue !== undefined ? (
-                <AnimatedNumber value={numericValue} format={numericFormat} />
+                <AnimatedNumber value={numericValue} format={resolvedFormat} />
               ) : (
                 value ?? '—'
               )}
@@ -658,6 +662,9 @@ export default function DashboardPage() {
         icon: Sparkles,
         done: oracleActivated,
         onAction: () => setOracleWizardOpen(true),
+        // The single highest-leverage step — visually distinct so the user's
+        // eye lands here and they activate the AI CFO differentiator.
+        highlight: true,
       },
     ],
     [googleConnected, zohoConnected, hasInvoices, hasCustomers, memberships.length, oracleActivated, setCurrentView],
@@ -970,7 +977,7 @@ export default function DashboardPage() {
     ? 'No revenue recorded yet · connect Zoho Books or create invoices'
     : `Total revenue · ${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'}`;
   const complianceSubtitle = complianceEmpty
-    ? 'GSTN integration coming in Phase 2 · create returns manually for now'
+    ? 'GSTN sync coming soon · create returns manually'
     : `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'} · ${metrics.filedReturns} filed`;
   const cashSubtitle = cashEmpty
     ? 'Banking integration coming in Phase 2 · will unlock cash position, reconciliation & cash flow'
@@ -1008,27 +1015,33 @@ export default function DashboardPage() {
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('clients')}
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <Users className="h-3.5 w-3.5" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <Users className="h-3.5 w-3.5" />
+              </span>
               Add Client
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('invoices')}
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <FileText className="h-3.5 w-3.5" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <FileText className="h-3.5 w-3.5" />
+              </span>
               Create Invoice
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('returns')}
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <ShieldCheck className="h-3.5 w-3.5" />
+              </span>
               Create Return
             </Button>
           </div>
@@ -1067,7 +1080,7 @@ export default function DashboardPage() {
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     Customers
                   </p>
-                  <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
+                  <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
                     <AnimatedNumber value={businessSnapshot.customers} format="integer" />
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -1106,7 +1119,7 @@ export default function DashboardPage() {
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     Invoices
                   </p>
-                  <p className="text-3xl font-bold text-foreground tracking-tight truncate tabular">
+                  <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
                     <AnimatedNumber value={businessSnapshot.invoices.count} format="integer" />
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">

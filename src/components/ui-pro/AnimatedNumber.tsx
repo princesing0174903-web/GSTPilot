@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-type FormatType = 'currency' | 'integer' | 'decimal';
+type FormatType = 'currency' | 'currencyCompact' | 'integer' | 'decimal';
 
 interface AnimatedNumberProps {
   value: number;
@@ -36,9 +36,23 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
+// Compact Indian-format currency: 1,09,000 → ₹1.09L, 1,18,00,000 → ₹1.18Cr.
+// Keeps KPI figures readable in narrow cards without truncating to "₹1,09,...".
+function formatCompactINR(val: number): string {
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : '';
+  if (abs >= 1_00_00_000) return `${sign}₹${(abs / 1_00_00_000).toFixed(2)}Cr`;
+  if (abs >= 1_00_000) return `${sign}₹${(abs / 1_00_000).toFixed(2)}L`;
+  if (abs >= 1_000) return `${sign}₹${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs).toLocaleString('en-IN')}`;
+}
+
 function formatValue(val: number, format: FormatType): string {
   if (format === 'currency') {
     return '₹' + Math.round(val).toLocaleString('en-IN');
+  }
+  if (format === 'currencyCompact') {
+    return formatCompactINR(val);
   }
   if (format === 'decimal') {
     return val.toFixed(1);

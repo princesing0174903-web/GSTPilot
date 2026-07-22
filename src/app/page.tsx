@@ -20,9 +20,10 @@
 
 import dynamic from 'next/dynamic';
 import { Zap } from 'lucide-react';
+import { withRetry } from '@/lib/dynamic-retry';
 
 const AppRoot = dynamic(
-  () => import('@/components/AppRoot').then((m) => m.AppRoot),
+  withRetry(() => import('@/components/AppRoot').then((m) => m.AppRoot)),
   {
     ssr: false,
     loading: () => (

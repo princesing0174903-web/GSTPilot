@@ -235,7 +235,7 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
 
   const links = [
     { label: 'Features', href: '#features' },
-    { label: 'Oracle AI', href: '#oracle' },
+    { label: 'AI CFO', href: '#oracle' },
     { label: 'Pricing', href: '#pricing' },
     { label: 'Security', href: '#security' },
   ];
@@ -332,67 +332,72 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
   return (
     <section id="top" className="relative flex min-h-screen items-center overflow-hidden px-4 pt-28 sm:px-6">
       <Aurora />
-      {/* subtle grid */}
+      {/* subtle grid — softened + masked harder behind the text for legibility */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        className="pointer-events-none absolute inset-0 opacity-[0.025]"
         style={{
           backgroundImage:
             'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
-          backgroundSize: '64px 64px',
-          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent)',
+          backgroundSize: '72px 72px',
+          maskImage:
+            'radial-gradient(ellipse 70% 55% at 50% 42%, black, transparent)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse 70% 55% at 50% 42%, black, transparent)',
         }}
       />
 
       <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
-        {/* Official GSTPilot™ logo — subtle, above headline */}
+        {/* Small brand mark — subtle, above the headline (no longer competing) */}
         <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.94 }}
+          initial={{ opacity: 0, y: 12, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, ease: EASE }}
-          className="mb-8 flex justify-center"
+          transition={{ duration: 0.7, ease: EASE }}
+          className="mb-6 flex justify-center"
         >
           <BrandLogo
             variant="icon"
             theme="dark"
-            size={72}
-            className="drop-shadow-[0_0_24px_rgba(59,130,246,0.4)]"
+            size={52}
+            className="drop-shadow-[0_0_18px_rgba(59,130,246,0.35)]"
           />
         </motion.div>
 
+        {/* Who this is for — self-identification pill (above headline) */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.05 }}
           className="flex justify-center"
         >
           <SectionTag>
-            <Sparkles className="h-3 w-3" />
-            The Financial Brain of India™
+            <Building2 className="h-3 w-3" />
+            Built for Chartered Accountants &amp; SMB Finance Teams
           </SectionTag>
         </motion.div>
 
+        {/* OUTCOME-LED HEADLINE — the single largest element on screen */}
         <motion.h1
           initial={{ opacity: 0, y: 24, filter: 'blur(14px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.9, ease: EASE, delay: 0.08 }}
-          className="mt-6 text-5xl font-semibold leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl"
+          transition={{ duration: 0.9, ease: EASE, delay: 0.1 }}
+          className="mt-6 text-4xl font-semibold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-[4.25rem]"
         >
-          Run your entire
-          <br className="hidden sm:block" /> financial operation on{' '}
-          <span className="accent-text">one brain</span>.
+          Automate GST filing &amp; reconciliation —{' '}
+          <span className="accent-text">save hours every week.</span>
         </motion.h1>
 
+        {/* Benefit-led subheadline — one short sentence: who / what / outcome */}
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: EASE, delay: 0.22 }}
-          className="mx-auto mt-6 max-w-2xl text-base text-white/65 sm:text-lg"
+          className="mx-auto mt-6 max-w-2xl text-base text-white/75 sm:text-lg"
         >
-          GSTPilot Infinity unifies GST, Banking, Invoicing, Reconciliation and an AI CFO into a
-          single, always-on operating system — purpose-built for India&apos;s Chartered Accountants
-          and ambitious businesses.
+          For CA firms and growing businesses — unify GST, banking, invoicing and
+          AI-driven insights into one system that reduces errors and speeds up filing.
         </motion.p>
 
+        {/* CTAs — clarified with descriptive microcopy */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -400,24 +405,72 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
           className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
-            Start Free
+            Start Free — 14-day trial
             <ArrowRight className="h-4 w-4" />
           </PrimaryButton>
           <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
-            Book a Demo
+            Book a 15-min demo
           </GhostButton>
         </motion.div>
 
-        <motion.div
+        {/* Microcopy under CTAs — sets expectations, removes friction */}
+        <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/45"
+          transition={{ duration: 0.7, delay: 0.44 }}
+          className="mt-3 text-xs text-white/50"
         >
-          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
-          <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
-          <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
-          <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> India-hosted</span>
+          No credit card required · Import your first invoice in 2 minutes
+        </motion.p>
+
+        {/* TRUST SIGNALS — social proof + compliance, right below the CTAs */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.52 }}
+          className="mt-10 flex flex-col items-center gap-3"
+        >
+          <div className="flex items-center gap-2 text-sm text-white/70">
+            <div className="flex">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+              ))}
+            </div>
+            <span className="font-semibold text-white">Trusted by 1,200+ CA firms</span>
+            <span className="text-white/40">·</span>
+            <span>India-hosted &amp; GSTN-ready</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-white/45">
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
+            <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
+            <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> 256-bit encryption</span>
+          </div>
+        </motion.div>
+
+        {/* 3-POINT PROOF ROW — quick orientation for the curious */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.64 }}
+          className="mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3"
+        >
+          {[
+            { icon: FileText, label: 'Auto-file GST returns' },
+            { icon: Landmark, label: 'Bank reconciliation in 1 click' },
+            { icon: Brain, label: 'AI CFO insights & alerts' },
+          ].map((p) => {
+            const Icon = p.icon;
+            return (
+              <div
+                key={p.label}
+                className="flex items-center justify-center gap-2.5 rounded-xl glass-surface px-4 py-3 text-sm text-white/80"
+              >
+                <Icon className="h-4 w-4 accent-text shrink-0" />
+                <span className="font-medium">{p.label}</span>
+              </div>
+            );
+          })}
         </motion.div>
       </div>
 

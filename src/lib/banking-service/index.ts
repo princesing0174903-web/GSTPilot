@@ -63,3 +63,9 @@ export {
   type BankingQuestionKind,
   type MatchedQuestion,
 } from './intelligence';
+
+// ─── Setu provider (real banking integration) ─────────────────────────────────
+// Live BankingService implementation backed by the Setu AA gateway. Auto-used
+// by getBankingService() when Setu creds are present; falls back to Mock
+// otherwise. See src/lib/setu/ for the SDK.
+export { SetuBankingProvider } from './providers/setu-provider';

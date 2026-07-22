@@ -24,6 +24,12 @@ import { Zap, AlertTriangle, RefreshCw, LogOut } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
+import { withRetry, installChunkErrorHandler } from '@/lib/dynamic-retry';
+
+// Install the global chunk-error safety net once on the client.
+if (typeof window !== 'undefined') {
+  installChunkErrorHandler();
+}
 
 // ── Loading placeholder ───────────────────────────────────────────────────────
 const PageLoader = () => (
@@ -34,18 +40,21 @@ const PageLoader = () => (
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT-LEVEL LAZY COMPONENTS — only 5 dynamic imports at the root level.
+// Each import is wrapped in `withRetry` so transient "Failed to load chunk"
+// errors (common in Next.js 16 dev when the server recompiles) are retried
+// automatically instead of crashing the app.
 // ═══════════════════════════════════════════════════════════════════════════════
-const LandingPage = dynamic(() => import('@/components/landing/LandingPage'), { loading: PageLoader, ssr: false });
-const LoginPage = dynamic(() => import('@/components/auth/LoginPage'), { loading: PageLoader, ssr: false });
-const OnboardingFlow = dynamic(() => import('@/components/onboarding/OnboardingFlow').then(m => ({ default: m.OnboardingFlow })), { loading: PageLoader, ssr: false });
+const LandingPage = dynamic(withRetry(() => import('@/components/landing/LandingPage')), { loading: PageLoader, ssr: false });
+const LoginPage = dynamic(withRetry(() => import('@/components/auth/LoginPage')), { loading: PageLoader, ssr: false });
+const OnboardingFlow = dynamic(withRetry(() => import('@/components/onboarding/OnboardingFlow').then(m => ({ default: m.OnboardingFlow }))), { loading: PageLoader, ssr: false });
 
 // DashboardShell exports DashboardContent + EmailVerificationBanner.
 const DashboardContent = dynamic(
-  () => import('@/components/DashboardShell').then(m => ({ default: m.DashboardContent })),
+  withRetry(() => import('@/components/DashboardShell').then(m => ({ default: m.DashboardContent }))),
   { loading: PageLoader, ssr: false },
 );
 const EmailVerificationBanner = dynamic(
-  () => import('@/components/DashboardShell').then(m => ({ default: m.EmailVerificationBanner })),
+  withRetry(() => import('@/components/DashboardShell').then(m => ({ default: m.EmailVerificationBanner }))),
   { loading: () => null, ssr: false },
 );
 

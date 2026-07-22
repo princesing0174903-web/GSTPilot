@@ -148,17 +148,54 @@ export interface BankingService {
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 /**
- * Returns the active BankingService. Today: MockBankingProvider.
- * Future: when `BANKING_PROVIDER=setu` is set and SetuBankingProvider is
- * implemented, returns that — no caller changes.
+ * Returns the active BankingService.
  *
- * This indirection is the ONLY place that knows which provider is live.
+ * Resolution order:
+ *   1. If `BANKING_PROVIDER=setu` is set OR `BANKING_PROVIDER=auto` (default)
+ *      AND Setu creds are present in env → SetuBankingProvider (live banking
+ *      data via the Setu AA gateway).
+ *   2. Otherwise → MockBankingProvider (in-memory seed data).
+ *
+ * If SetuBankingProvider fails to initialize (missing creds / SDK error),
+ * the factory automatically falls back to MockBankingProvider so the app
+ * never goes dark.
+ *
+ * The chosen provider is cached on `globalThis.__BANKING_SERVICE__` so the
+ * same instance survives HMR + request cycles.
  */
 export async function getBankingService(): Promise<BankingService> {
-  const { MockBankingProvider } = await import('./mock-provider');
-  // Singleton — the mock provider holds in-memory state across requests.
-  if (!globalThis.__BANKING_SERVICE__) {
-    (globalThis as any).__BANKING_SERVICE__ = new MockBankingProvider();
+  // Singleton — the provider holds in-memory state across requests.
+  const GLOBAL = globalThis as unknown as { __BANKING_SERVICE__?: BankingService };
+  if (GLOBAL.__BANKING_SERVICE__) return GLOBAL.__BANKING_SERVICE__;
+
+  const provider = (process.env.BANKING_PROVIDER ?? 'auto').toLowerCase();
+  // Lazy import to avoid pulling setu types into mock-only code paths.
+  const { isSetuConfigured } = await import('@/lib/setu');
+  const useSetu = provider === 'setu' || (provider === 'auto' && isSetuConfigured());
+
+  let svc: BankingService;
+  if (useSetu) {
+    try {
+      const { SetuBankingProvider } = await import('./providers/setu-provider');
+      svc = new SetuBankingProvider();
+      console.log('[banking-service] Provider: SetuBankingProvider (production, live banking data)');
+    } catch (err) {
+      console.error(
+        '[banking-service] SetuBankingProvider failed to initialize — falling back to Mock:',
+        err instanceof Error ? err.message : err,
+      );
+      const { MockBankingProvider } = await import('./mock-provider');
+      svc = new MockBankingProvider();
+      console.warn('[banking-service] Provider: MockBankingProvider (fallback)');
+    }
+  } else {
+    const { MockBankingProvider } = await import('./mock-provider');
+    svc = new MockBankingProvider();
+    console.log(
+      '[banking-service] Provider: MockBankingProvider (BANKING_PROVIDER=mock or Setu not configured)',
+    );
   }
-  return (globalThis as any).__BANKING_SERVICE__ as BankingService;
+
+  GLOBAL.__BANKING_SERVICE__ = svc;
+  return svc;
 }

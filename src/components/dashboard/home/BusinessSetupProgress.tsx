@@ -44,6 +44,13 @@ export interface SetupTask {
   done: boolean;
   /** Called when the user clicks an incomplete task. */
   onAction: () => void;
+  /**
+   * When true, this incomplete task is rendered with a premium accent
+   * highlight + a small CTA button. Use for the single highest-leverage
+   * step (e.g. "Activate Oracle") so it stands out from the regular
+   * checklist items and draws the user toward the core value prop.
+   */
+  highlight?: boolean;
 }
 
 interface BusinessSetupProgressProps {
@@ -107,38 +114,62 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
       <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
         {tasks.map((task) => {
           const Icon = task.icon;
+          const showHighlight = !!task.highlight && !task.done;
           return (
             <li key={task.id}>
-              <button
-                type="button"
-                onClick={() => !task.done && task.onAction()}
-                disabled={task.done}
-                className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
-                  task.done
-                    ? 'cursor-default'
-                    : 'hover:bg-white/[0.04] cursor-pointer'
-                }`}
-              >
-                {task.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                ) : (
-                  <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-                )}
-                <Icon
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    task.done ? 'text-emerald-400/80' : 'text-muted-foreground'
-                  }`}
-                />
-                <span
-                  className={`text-[12px] truncate ${
+              {showHighlight ? (
+                /* Highlighted task — the one step that unlocks the core value
+                   prop. Visually distinct so the user's eye lands here. */
+                <button
+                  type="button"
+                  onClick={task.onAction}
+                  className="group w-full flex items-center gap-2.5 rounded-lg border border-[#2563EB]/40 bg-[#2563EB]/[0.08] px-2.5 py-2 text-left transition-colors hover:bg-[#2563EB]/[0.14] cursor-pointer"
+                >
+                  <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                    <span className="absolute inline-flex h-3.5 w-3.5 rounded-full bg-[#2563EB]/40 opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2563EB]" />
+                  </span>
+                  <Icon className="h-3.5 w-3.5 shrink-0 accent-text" />
+                  <span className="text-[12px] font-semibold text-foreground truncate flex-1 min-w-0">
+                    {task.label}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md accent-gradient px-2 py-0.5 text-[10px] font-bold text-white shrink-0">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    Activate
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => !task.done && task.onAction()}
+                  disabled={task.done}
+                  className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
                     task.done
-                      ? 'text-muted-foreground line-through decoration-emerald-400/40'
-                      : 'text-foreground/90'
+                      ? 'cursor-default'
+                      : 'hover:bg-white/[0.04] cursor-pointer'
                   }`}
                 >
-                  {task.label}
-                </span>
-              </button>
+                  {task.done ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  )}
+                  <Icon
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      task.done ? 'text-emerald-400/80' : 'text-muted-foreground'
+                    }`}
+                  />
+                  <span
+                    className={`text-[12px] truncate ${
+                      task.done
+                        ? 'text-muted-foreground line-through decoration-emerald-400/40'
+                        : 'text-foreground/90'
+                    }`}
+                  >
+                    {task.label}
+                  </span>
+                </button>
+              )}
             </li>
           );
         })}

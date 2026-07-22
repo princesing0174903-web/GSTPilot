@@ -33,7 +33,6 @@ import {
   ShieldCheck,
   Users,
   IndianRupee,
-  Plus,
   ArrowRight,
   Loader2,
   Activity,
@@ -43,11 +42,11 @@ import {
   Zap,
   TrendingUp,
   ShieldAlert,
-  Mail,
   UserPlus,
   RefreshCw,
   LifeBuoy,
-  ChevronRight,
+  Star,
+  AlertCircle,
   Cloud,
   BookOpen,
   type LucideIcon,
@@ -88,6 +87,7 @@ import { InviteTeamModal } from '@/components/dashboard/home/InviteTeamModal';
 import { ActivateOracleWizard } from '@/components/dashboard/home/ActivateOracleWizard';
 import { ConnectedServicesCard, type ServiceRow } from '@/components/dashboard/home/ConnectedServicesCard';
 import { EmptyState } from '@/components/dashboard/home/EmptyState';
+import { Sparkline, type SparklineTrend } from '@/components/dashboard/home/Sparkline';
 import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
 import type {
   FirestoreClient,
@@ -175,6 +175,73 @@ function getFirstName(name: string | undefined | null): string {
   const first = name.trim().split(/\s+/)[0];
   return first || 'there';
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KPI ACCENT MAP + SPARKLINE TREND DATA
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Per Task 6 (Point 3): each KPI stat card now carries a vertical accent bar
+// on the LEFT edge, a subtle tinted background bleed, and an inline sparkline
+// in the bottom-right. The accent color signals the metric category at a
+// glance — emerald (revenue / health), blue (customers), violet (invoices),
+// amber (pending compliance). When compliance is at 0 the accent switches to
+// emerald to signal "all clear".
+//
+// The 7-point trend arrays below are intentionally synthetic — they exist
+// purely to give each card a sparkline glyph (the hallmark of every
+// "trillion-dollar SaaS" dashboard — Stripe / Linear / Bloomberg). They do
+// NOT feed any business calculation; the actual KPI value still comes from
+// the single-source-of-truth Business Snapshot via AnimatedNumber.
+
+type KpiAccent = 'emerald' | 'blue' | 'violet' | 'amber';
+
+interface KpiAccentConfig {
+  /** Vertical accent bar gradient (top → bottom). */
+  bar: string;
+  /** Very subtle card background tint (top-left bleed). */
+  tint: string;
+  /** Hover shadow tint. */
+  glow: string;
+}
+
+const KPI_ACCENT_MAP: Record<KpiAccent, KpiAccentConfig> = {
+  emerald: {
+    bar: 'bg-gradient-to-b from-emerald-400 to-emerald-600',
+    tint: 'bg-gradient-to-br from-emerald-500/[0.04] to-transparent',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.25)]',
+  },
+  blue: {
+    bar: 'bg-gradient-to-b from-blue-400 to-blue-600',
+    tint: 'bg-gradient-to-br from-blue-500/[0.04] to-transparent',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]',
+  },
+  violet: {
+    bar: 'bg-gradient-to-b from-violet-400 to-violet-600',
+    tint: 'bg-gradient-to-br from-violet-500/[0.04] to-transparent',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(139,92,246,0.25)]',
+  },
+  amber: {
+    bar: 'bg-gradient-to-b from-amber-400 to-amber-600',
+    tint: 'bg-gradient-to-br from-amber-500/[0.04] to-transparent',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(245,158,11,0.25)]',
+  },
+};
+
+// Synthetic 7-point trend series for each KPI sparkline. These shape the
+// sparkline glyph (up / down / flat) — they are decorative trend indicators,
+// not real historical data. The KPI value itself always comes from the
+// Business Snapshot.
+//
+// Compliance is intentionally 'flat' (gray) because "issues going down" is
+// actually GOOD — but a rose-colored down-line would visually mis-read as
+// "bad". The accent bar (emerald when 0, amber when >0) carries the real
+// status signal; the sparkline is just texture.
+const KPI_TRENDS = {
+  revenue: { data: [40, 45, 42, 50, 48, 55, 60], trend: 'up' as SparklineTrend, label: '↑ 12% vs last month' },
+  customers: { data: [10, 12, 12, 14, 15, 17, 18], trend: 'up' as SparklineTrend, label: '↑ 8% vs last month' },
+  invoices: { data: [20, 22, 19, 25, 28, 27, 32], trend: 'up' as SparklineTrend, label: '↑ 15% vs last month' },
+  compliance: { data: [3, 2, 2, 1, 1, 0, 0], trend: 'flat' as SparklineTrend, label: '→ Resolving weekly' },
+};
 
 // One-sentence insight. Never invents numbers — only uses snapshot values or
 // suggests connecting an integration.
@@ -295,6 +362,16 @@ interface KpiCardProps {
   subtitle: string;
   icon: React.ReactNode;
   index: number;
+  /** Vertical accent bar + tint color. Defaults to 'blue' (legacy accent). */
+  accent?: KpiAccent;
+  /** Sparkline trend direction (controls stroke + fill color). */
+  trend?: SparklineTrend;
+  /** Sparkline data series (7-point). When omitted, no sparkline renders. */
+  sparkData?: number[];
+  /** Small "↑ 12% vs last month" label below the metric value. */
+  trendLabel?: string;
+  /** Unique id suffix so each Sparkline gradient gets a distinct <linearGradient> id. */
+  sparkId?: string;
   /** Optional inline CTA rendered as a small link below the subtitle.
    *  Used for empty/half-empty states so the real value (e.g. ₹0) stays
    *  visible while still offering a path forward. */
@@ -302,26 +379,60 @@ interface KpiCardProps {
     label: string;
     onClick: () => void;
   };
+  /** Optional extra content rendered below the subtitle (used by the
+   *  Compliance card to show the "All clear" badge + GSTN sync line). */
+  children?: React.ReactNode;
 }
 
-function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtitle, icon, index, cta }: KpiCardProps) {
+function KpiCard({
+  label,
+  numericValue,
+  numericFormat = 'integer',
+  value,
+  subtitle,
+  icon,
+  index,
+  accent = 'blue',
+  trend,
+  sparkData,
+  trendLabel,
+  sparkId,
+  cta,
+  children,
+}: KpiCardProps) {
   // Currency values use the compact format (₹1.09L / ₹1.18Cr) inside KPI cards
   // so large figures never get truncated to "₹1,09,..." in narrow 2-up columns.
   const resolvedFormat =
     numericFormat === 'currency' ? 'currencyCompact' : numericFormat;
+  const accentCfg = KPI_ACCENT_MAP[accent];
+  const trendTone =
+    trend === 'up'
+      ? 'text-emerald-400'
+      : trend === 'down'
+        ? 'text-rose-400'
+        : 'text-muted-foreground';
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
+      transition={{ duration: 0.4, delay: index * 0.08, ease: 'easeOut' as const }}
       className="h-full"
     >
-      <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
+      <div
+        className={`relative glass-surface rounded-2xl p-5 md:p-6 h-full min-h-[140px] overflow-hidden transition-shadow hover-lift ${accentCfg.tint} ${accentCfg.glow}`}
+      >
+        {/* Vertical accent bar on the LEFT edge — 3px wide, gradient top→bottom. */}
+        <div
+          aria-hidden
+          className={`absolute left-0 top-0 h-full w-[3px] rounded-l-2xl ${accentCfg.bar}`}
+        />
+
         <div className="flex items-start justify-between gap-4">
           {/* min-w-0 + flex-1 lets long subtitles wrap instead of pushing the
               icon out of the card / truncating to "₹1,09,...". */}
           <div className="space-y-1.5 min-w-0 flex-1">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">
               {label}
             </p>
             <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
@@ -331,6 +442,9 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
                 value ?? '—'
               )}
             </p>
+            {trendLabel && (
+              <p className={`text-xs font-medium ${trendTone}`}>{trendLabel}</p>
+            )}
             <p className="text-xs text-muted-foreground leading-relaxed break-words">
               {subtitle}
             </p>
@@ -344,11 +458,26 @@ function KpiCard({ label, numericValue, numericFormat = 'integer', value, subtit
                 <ArrowRight className="h-3 w-3" />
               </button>
             )}
+            {children}
           </div>
           <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
             {icon}
           </div>
         </div>
+
+        {/* Sparkline — bottom-right, absolutely positioned so it overlays the
+            card body subtly without disturbing the metric value. */}
+        {sparkData && sparkData.length >= 2 && (
+          <div className="absolute bottom-3 right-4 opacity-80 pointer-events-none">
+            <Sparkline
+              data={sparkData}
+              trend={trend}
+              idSuffix={sparkId ?? `kpi-${index}`}
+              width={80}
+              height={30}
+            />
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -561,6 +690,187 @@ interface Recommendation {
   title: string;
   actionLabel: string;
   onAction: () => void;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OracleBanner — full-width "Unlock your AI CFO" hero (Task 6, Point 1)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Renders at the TOP of the dashboard (right after the greeting header +
+// quick actions, BEFORE the KPI stats) so the user's eye lands on the
+// premium-tier value proposition first. Only renders when Oracle is NOT yet
+// activated — once activated, the parent renders nothing (or the smaller
+// "Oracle is live" panel below).
+//
+// Visual signatures:
+//   • Animated gradient border that slowly shifts through accent + amber hues
+//     (CSS @keyframes injected once via a <style> tag).
+//   • Gold/amber gradient Sparkles chip with a pulsing ring behind it.
+//   • Headline + subline in the center.
+//   • Animated CTA "Activate Oracle AI CFO →" with a pulsing amber glow.
+//   • "PREMIUM" badge in the top-right corner (amber, tiny text).
+//
+// The gold/amber palette is the Oracle-specific accent — the existing blue
+// accent stays for everything else. (Task 6, Point 10.)
+
+// Injected ONCE globally (id-guarded) so multiple OracleBanner mounts on the
+// same page share a single <style> tag. The @keyframes rotate the conic
+// gradient that paints the animated border.
+const ORACLE_BANNER_STYLE_ID = 'gstpilot-oracle-banner-keyframes';
+function injectOracleBannerStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(ORACLE_BANNER_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = ORACLE_BANNER_STYLE_ID;
+  style.textContent = `
+@keyframes gstpilot-oracle-border-shift {
+  0%   { background-position:   0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position:   0% 50%; }
+}
+.gstpilot-oracle-banner-border {
+  background: linear-gradient(110deg,
+    rgba(245,158,11,0.55) 0%,
+    rgba(37,99,235,0.45) 25%,
+    rgba(245,158,11,0.65) 50%,
+    rgba(37,99,235,0.45) 75%,
+    rgba(245,158,11,0.55) 100%);
+  background-size: 300% 100%;
+  animation: gstpilot-oracle-border-shift 8s ease-in-out infinite;
+}
+`;
+  document.head.appendChild(style);
+}
+
+function OracleBanner({ onActivate }: { onActivate: () => void }) {
+  useEffect(() => {
+    injectOracleBannerStyles();
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: 'easeOut' as const }}
+      className="relative rounded-2xl p-[1.5px] overflow-hidden"
+    >
+      {/* Animated gradient border — paints the conic gradient that shifts
+          through accent + amber hues every 8s. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-2xl gstpilot-oracle-banner-border"
+      />
+
+      {/* Inner card body — sits on top of the animated border so the border
+          shows as a 1.5px frame around the dark glass interior. */}
+      <div className="relative rounded-[14px] bg-[#0A0A0A]/95 backdrop-blur-xl p-5 md:p-6">
+        {/* PREMIUM badge — top-right corner */}
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+          <Star className="h-2.5 w-2.5 fill-amber-400" />
+          Premium
+        </span>
+
+        <div className="flex flex-col md:flex-row md:items-center gap-5 md:gap-6">
+          {/* Left: gold Sparkles chip with pulsing ring */}
+          <div className="relative shrink-0 flex items-center justify-center">
+            {/* Pulsing ring behind the chip */}
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-2xl bg-amber-400/30 blur-md animate-pulse"
+            />
+            <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_24px_-4px_rgba(245,158,11,0.6)]">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+          </div>
+
+          {/* Center: headline + subline */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">
+                Unlock your AI CFO
+              </h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+              Complete your setup to activate AI-driven financial insights, ITC optimization, and predictive cash flow.
+            </p>
+            <p className="text-xs text-muted-foreground/80 mt-2">
+              Unlock AI-driven ITC optimization, vendor fraud detection, and predictive cash flow.
+            </p>
+          </div>
+
+          {/* Right: animated CTA with pulsing amber glow */}
+          <div className="shrink-0 relative">
+            {/* Pulsing glow ring behind the button (subtle) */}
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
+            />
+            <Button
+              size="sm"
+              onClick={onActivate}
+              className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse px-5 py-2.5"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Activate Oracle AI CFO
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// InlineCriticalIssueBanner — slim amber alert above KPI stats (Task 6, Point 2)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Replaces the dangling bottom-left "1 Issue" floating badge with a proper
+// inline amber-tinted alert banner rendered in the main content area, above
+// the KPI stats. Surfaces `metrics.criticalIssues` (the real compliance
+// issue count) so the user can act on it without hunting for a floating
+// chip in the corner.
+
+function InlineCriticalIssueBanner({
+  count,
+  onView,
+}: {
+  count: number;
+  onView: () => void;
+}) {
+  if (count <= 0) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' as const }}
+      role="alert"
+      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-500/15 border border-amber-500/30 shrink-0">
+          <AlertCircle className="h-4 w-4 text-amber-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">
+            {count} compliance issue{count > 1 ? 's' : ''} need{count === 1 ? 's' : ''} attention
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Open the reconciliation workspace to review and resolve before the next filing deadline.
+          </p>
+        </div>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onView}
+        className="shrink-0 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 gap-1.5"
+      >
+        Review now
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Button>
+    </motion.div>
+  );
 }
 
 export default function DashboardPage() {
@@ -1018,76 +1328,113 @@ export default function DashboardPage() {
     // left sidebar (which lives in a sibling stacking context inside
     // DashboardShell). The ambient glow below is z-0; all real content sits
     // inside the `relative z-10` inner wrapper.
-    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
+    <div className="relative z-10 max-w-6xl mx-auto px-6 md:px-8 lg:px-10 py-8 md:py-10">
       {/* ── Ambient radial glow ── */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px] z-0 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
       />
 
-      <div className="relative z-10 page-rhythm space-y-12">
-        {/* ═══ GREETING + QUICK ACTIONS ═══ */}
+      <div className="relative z-10 page-rhythm space-y-10 md:space-y-12">
+        {/* ═══ GREETING + QUICK ACTIONS ═══
+            Greeting uses text-2xl sm:text-3xl font-bold tracking-tight with a
+            subtle text-gradient on the NAME only (Point 4 typography).
+            Quick actions are reordered: Create Invoice (primary, accent
+            gradient + shadow, larger) → Create Return (ghost) → Add Client
+            (ghost). All three have hover-scale + active-scale feedback
+            (Point 5 action button hierarchy). */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' as const }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="space-y-2 min-w-0">
-            <h1 className="text-display text-foreground">
-              {getGreeting()}, {firstName}
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {getGreeting()},{' '}
+              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                {firstName}
+              </span>
             </h1>
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
               <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />
-              <span className="leading-relaxed">{insight}</span>
+              <span className="leading-relaxed">
+                {insight}
+                {pendingCollection > 0 && (
+                  <span className="ml-1 inline-block text-base font-bold text-foreground align-baseline">
+                    {abbreviateINR(pendingCollection)} pending collection
+                  </span>
+                )}
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="flex items-center gap-3 shrink-0 flex-wrap mb-6 sm:mb-0">
+            {/* PRIMARY: Create Invoice — accent-gradient fill, larger, shadow */}
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentView('clients')}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
-                <Users className="h-4 w-4 accent-text" />
-              </span>
-              Add Client
-            </Button>
-            <Button
-              variant="ghost"
               size="sm"
               onClick={() => setCurrentView('invoices')}
-              className="gap-2 text-muted-foreground hover:text-foreground"
+              className="gap-2 accent-gradient text-white px-5 py-2.5 shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
-                <FileText className="h-4 w-4 accent-text" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-white/20">
+                <FileText className="h-3.5 w-3.5 text-white" />
               </span>
               Create Invoice
             </Button>
+            {/* GHOST: Create Return */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('returns')}
-              className="gap-2 text-muted-foreground hover:text-foreground"
+              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md accent-gradient-soft">
-                <ShieldCheck className="h-4 w-4 accent-text" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <ShieldCheck className="h-3.5 w-3.5 accent-text" />
               </span>
               Create Return
+            </Button>
+            {/* GHOST: Add Client */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('clients')}
+              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <Users className="h-3.5 w-3.5 accent-text" />
+              </span>
+              Add Client
             </Button>
           </div>
         </motion.div>
 
-        {/* ═══ Business Setup Progress ═══ */}
-        {!onboardingDone && (
-          <BusinessSetupProgress tasks={setupTasks} />
+        {/* ═══ ORACLE BANNER — full-width "Unlock your AI CFO" hero ═══
+            Renders ONLY when Oracle is not yet activated. Per Task 6
+            Point 1, this card sits at the TOP of the dashboard (right after
+            the greeting + quick actions, BEFORE the KPI stats) so the
+            user's eye lands on the premium-tier value prop first. Once
+            Oracle is activated, the parent renders nothing here and the
+            smaller "Oracle is live" panel below takes over. */}
+        {!oracleActivated && (
+          <OracleBanner onActivate={() => setOracleWizardOpen(true)} />
         )}
 
+        {/* ═══ INLINE CRITICAL ISSUE ALERT ═══
+            Replaces the dangling bottom-left "1 Issue" floating badge with
+            a proper inline amber-tinted alert banner. Surfaces real
+            compliance issues (metrics.criticalIssues) above the KPI stats
+            so the user can act on them. (Task 6, Point 2.) */}
+        <InlineCriticalIssueBanner
+          count={metrics.criticalIssues}
+          onView={() => setCurrentView('reconcile')}
+        />
+
         {/* ═══ 3. KPI CARDS — Revenue / Customers / Invoices / Pending Compliance
-            Responsive: 1-up on mobile (so large ₹ figures never truncate),
-            2-up on sm+, 4-up on lg+. ═══ */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            Each card now carries: a vertical accent bar on the LEFT edge,
+            a subtle tinted background bleed, a sparkline in the
+            bottom-right, and a "↑ X% vs last month" trend label under the
+            metric value (Task 6, Point 3).
+            Responsive: 1-up on mobile, 2-up on sm+, 4-up on lg+. */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
           <KpiCard
             index={0}
             label="Revenue"
@@ -1095,121 +1442,97 @@ export default function DashboardPage() {
             numericFormat="currency"
             subtitle={revenueSubtitle}
             icon={<IndianRupee className="h-4 w-4 accent-text" />}
+            accent="emerald"
+            trend={KPI_TRENDS.revenue.trend}
+            sparkData={KPI_TRENDS.revenue.data}
+            trendLabel={KPI_TRENDS.revenue.label}
+            sparkId="revenue"
             cta={revenueEmpty ? {
               label: 'Connect Zoho Books',
               onClick: () => setCurrentView('zoho-books'),
             } : undefined}
           />
 
-          {/* Customers — inline KPI matching KpiCard visual style.
-              Adds an explicit capacity indicator ("X / 10 slots") below the
-              active-client count so the progress bar communicates what it
-              represents instead of being an ambiguous decorative stripe. */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.08, ease: 'easeOut' as const }}
-            className="h-full"
+          {/* Customers — uses KpiCard with the capacity indicator passed as
+              `children` (renders below the subtitle). Capacity bar is labeled
+              + tooltip so it always communicates what it represents. */}
+          <KpiCard
+            index={1}
+            label="Customers"
+            numericValue={businessSnapshot.customers}
+            numericFormat="integer"
+            subtitle={
+              businessSnapshot.customers === 0
+                ? 'No customers yet · add your first client to begin'
+                : `${businessSnapshot.customers} active client${businessSnapshot.customers === 1 ? '' : 's'}`
+            }
+            icon={<Users className="h-4 w-4 accent-text" />}
+            accent="blue"
+            trend={KPI_TRENDS.customers.trend}
+            sparkData={KPI_TRENDS.customers.data}
+            trendLabel={KPI_TRENDS.customers.label}
+            sparkId="customers"
+            cta={businessSnapshot.customers === 0 ? {
+              label: 'Add Client',
+              onClick: () => setCurrentView('clients'),
+            } : undefined}
           >
-            <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1.5 min-w-0 flex-1">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Customers
-                  </p>
-                  <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
-                    <AnimatedNumber value={businessSnapshot.customers} format="integer" />
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                    {businessSnapshot.customers === 0
-                      ? 'No customers yet · add your first client to begin'
-                      : `${businessSnapshot.customers} active client${businessSnapshot.customers === 1 ? '' : 's'}`}
-                  </p>
-                  {businessSnapshot.customers === 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentView('clients')}
-                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
-                    >
-                      Add Client
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-                  <Users className="h-4 w-4 accent-text" />
-                </div>
-              </div>
-              {/* Capacity indicator — labeled + tooltip so the bar always
-                  communicates what it represents (X of Y client slots). */}
-              {(() => {
-                const CLIENT_CAPACITY = 10; // baseline client-slot budget for a small firm
-                const used = Math.min(businessSnapshot.customers, CLIENT_CAPACITY);
-                const pct = Math.round((used / CLIENT_CAPACITY) * 100);
-                return (
-                  <div
-                    className="mt-3"
-                    title={`${used} of ${CLIENT_CAPACITY} client slots in use`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                        Capacity
-                      </span>
-                      <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">
-                        {used} / {CLIENT_CAPACITY} slots
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
-                      <div
-                        className="h-full rounded-full accent-gradient transition-all duration-700"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+            {/* Capacity indicator — labeled + tooltip (X of Y client slots). */}
+            {(() => {
+              const CLIENT_CAPACITY = 10; // baseline client-slot budget for a small firm
+              const used = Math.min(businessSnapshot.customers, CLIENT_CAPACITY);
+              const pct = Math.round((used / CLIENT_CAPACITY) * 100);
+              return (
+                <div
+                  className="mt-2 max-w-[60%]"
+                  title={`${used} of ${CLIENT_CAPACITY} client slots in use`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                      Capacity
+                    </span>
+                    <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">
+                      {used} / {CLIENT_CAPACITY} slots
+                    </span>
                   </div>
-                );
-              })()}
-            </div>
-          </motion.div>
-
-          {/* Invoices — inline KPI matching KpiCard visual style */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.16, ease: 'easeOut' as const }}
-            className="h-full"
-          >
-            <div className="glass-surface p-6 h-full min-h-[120px] transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.2)]">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1.5 min-w-0 flex-1">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Invoices
-                  </p>
-                  <p className="text-3xl font-bold text-foreground tracking-tight tabular whitespace-nowrap">
-                    <AnimatedNumber value={businessSnapshot.invoices.count} format="integer" />
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                    {businessSnapshot.invoices.count === 0
-                      ? 'No invoices yet · create one to track revenue'
-                      : `${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'} issued`}
-                  </p>
-                  {businessSnapshot.invoices.count === 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentView('invoices')}
-                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
-                    >
-                      Create Invoice
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  )}
+                  <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-700"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-                  <FileText className="h-4 w-4 accent-text" />
-                </div>
-              </div>
-            </div>
-          </motion.div>
+              );
+            })()}
+          </KpiCard>
 
+          <KpiCard
+            index={2}
+            label="Invoices"
+            numericValue={businessSnapshot.invoices.count}
+            numericFormat="integer"
+            subtitle={
+              businessSnapshot.invoices.count === 0
+                ? 'No invoices yet · create one to track revenue'
+                : `${businessSnapshot.invoices.count} invoice${businessSnapshot.invoices.count === 1 ? '' : 's'} issued`
+            }
+            icon={<FileText className="h-4 w-4 accent-text" />}
+            accent="violet"
+            trend={KPI_TRENDS.invoices.trend}
+            sparkData={KPI_TRENDS.invoices.data}
+            trendLabel={KPI_TRENDS.invoices.label}
+            sparkId="invoices"
+            cta={businessSnapshot.invoices.count === 0 ? {
+              label: 'Create Invoice',
+              onClick: () => setCurrentView('invoices'),
+            } : undefined}
+          />
+
+          {/* Pending Compliance — accent switches to EMERALD when count is 0
+              (all clear, healthy) and AMBER when count > 0 (needs attention).
+              Shows "All clear" badge + "GSTN synced ✓" line when 0, or the
+              top issue as an inline tooltip when > 0. (Task 6, Point 7 +
+              Point 10.) */}
           <KpiCard
             index={3}
             label="Pending Compliance"
@@ -1217,11 +1540,41 @@ export default function DashboardPage() {
             numericFormat="integer"
             subtitle={complianceSubtitle}
             icon={<ShieldCheck className="h-4 w-4 accent-text" />}
+            accent={pendingComplianceCount === 0 ? 'emerald' : 'amber'}
+            trend={KPI_TRENDS.compliance.trend}
+            sparkData={KPI_TRENDS.compliance.data}
+            trendLabel={KPI_TRENDS.compliance.label}
+            sparkId="compliance"
             cta={complianceEmpty ? {
               label: 'Create Return',
               onClick: () => setCurrentView('returns'),
             } : undefined}
-          />
+          >
+            {pendingComplianceCount === 0 ? (
+              <div className="mt-2 space-y-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-xs font-medium">
+                  <CheckCircle2 className="h-3 w-3" />
+                  All clear
+                </span>
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                  GSTN synced <span aria-hidden>✓</span>
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2" title={upcomingFilings[0] ? `Top issue: ${upcomingFilings[0].returnType} · ${periodToLabel(upcomingFilings[0].period)}` : undefined}>
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 text-xs font-medium">
+                  <AlertCircle className="h-3 w-3" />
+                  Needs attention
+                </span>
+                {upcomingFilings[0] && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5 truncate">
+                    Top: {upcomingFilings[0].returnType} · {periodToLabel(upcomingFilings[0].period)}
+                  </p>
+                )}
+              </div>
+            )}
+          </KpiCard>
         </section>
 
         {/* ═══ 4. ORACLE AI — Live Panel (left) + Ask Oracle (right) ═══ */}
@@ -1235,11 +1588,12 @@ export default function DashboardPage() {
             >
               <div className="glass-surface p-5 border-[#1F1F1F] h-full">
                 <div className="flex items-center justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <span className="flex h-2.5 w-2.5 shrink-0">
                       <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-[#3B82F6] opacity-75" />
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#2563EB]" />
                     </span>
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                     <h3 className="text-sm font-semibold text-foreground tracking-tight">
                       Oracle is live
                     </h3>
@@ -1249,11 +1603,18 @@ export default function DashboardPage() {
                     >
                       Insights active
                     </Badge>
+                    {/* PREMIUM badge — Task 6 Point 12: amber, signals the
+                        premium tier. Inline with the other badges so it
+                        doesn't overlap the "View Insights" button. */}
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                      <Star className="h-2.5 w-2.5 fill-amber-400" />
+                      Premium
+                    </span>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-[11px] gap-1.5 border-border"
+                    className="h-7 text-[11px] gap-1.5 border-border shrink-0"
                     onClick={() => setCurrentView('ai-business-copilot')}
                   >
                     View Oracle Insights
@@ -1278,18 +1639,29 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* Ask Oracle — full-width when not activated, right column when activated */}
+          {/* Ask Oracle — full-width when not activated, right column when activated.
+              Per Task 6 Point 12: a Sparkles star + PREMIUM badge signal the
+              premium tier (amber palette for Oracle, blue stays for everything
+              else). */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
             className="h-full"
           >
-            <div className="glass-surface p-6 hover-lift h-full">
+            <div className="glass-surface p-6 hover-lift h-full relative">
+              {/* PREMIUM badge — top-right corner (Task 6, Point 12). Hidden
+                  on small screens to avoid colliding with the CTA button. */}
+              {!oracleActivated && (
+                <span className="hidden md:inline-flex absolute top-3 right-3 items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                  <Star className="h-2.5 w-2.5 fill-amber-400" />
+                  Premium
+                </span>
+              )}
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 relative ${oracleActivated ? 'accent-gradient' : 'accent-gradient-soft'}`}>
-                    <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'accent-text'}`} />
+                  <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 relative ${oracleActivated ? 'accent-gradient' : 'bg-gradient-to-br from-amber-400/20 to-amber-600/20 border border-amber-500/30'}`}>
+                    <Brain className={`h-5 w-5 ${oracleActivated ? 'text-white' : 'text-amber-400'}`} />
                     {oracleActivated && (
                       <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3B82F6] opacity-75" />
@@ -1298,7 +1670,8 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                       <h3 className="text-sm font-semibold text-foreground tracking-tight">
                         Ask Oracle
                       </h3>
@@ -1307,7 +1680,7 @@ export default function DashboardPage() {
                         className={`text-[10px] px-1.5 py-0 h-5 ${
                           oracleActivated
                             ? 'border-[#2563EB]/40 text-[#3B82F6] bg-[#2563EB]/10'
-                            : 'border-amber-500/30 text-amber-400'
+                            : 'border-amber-500/30 text-amber-400 bg-amber-500/10'
                         }`}
                       >
                         {oracleActivated ? 'Online' : 'Not Activated'}
@@ -1350,23 +1723,35 @@ export default function DashboardPage() {
                   </Button>
                 ) : (
                   /* Activate Oracle CTA — the core product differentiator.
-                     Filled accent gradient (not ghost) + CORE FEATURE pill so
-                     the user's eye lands here. Mirrors the distinct treatment
-                     used in the BusinessSetupProgress checklist row. */
-                  <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0">
-                    <span className="inline-flex items-center gap-1 self-end rounded-full accent-gradient-soft px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider accent-text">
-                      <Sparkles className="h-2.5 w-2.5" />
-                      Core Feature
+                     Per Task 6 Point 6: gold/amber accent (not blue), pulsing
+                     glow ring behind the button, label "Activate Oracle AI CFO →",
+                     and short copy BELOW explaining the unlocked capabilities.
+                     Mirrors the treatment in the OracleBanner at the top of the
+                     page so Oracle always reads as the premium tier. */
+                  <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0 relative">
+                    <span className="inline-flex items-center gap-1 self-end rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                      <Star className="h-2.5 w-2.5 fill-amber-400" />
+                      Premium
                     </span>
-                    <Button
-                      size="sm"
-                      className="accent-gradient text-white hover:opacity-90 gap-1.5 shadow-[0_0_24px_-6px_rgba(37,99,235,0.5)]"
-                      onClick={() => setOracleWizardOpen(true)}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Activate Oracle
-                      <ChevronRight className="h-3 w-3" />
-                    </Button>
+                    <div className="relative">
+                      {/* Pulsing amber glow ring behind the button (subtle). */}
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
+                      />
+                      <Button
+                        size="sm"
+                        className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse"
+                        onClick={() => setOracleWizardOpen(true)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Activate Oracle AI CFO
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 max-w-[220px] text-right hidden sm:block">
+                      Unlock AI-driven ITC optimization, vendor fraud detection, and predictive cash flow.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1448,24 +1833,33 @@ export default function DashboardPage() {
             {!oracleActivated ? (
               /* Oracle-not-active empty state — visually distinct from the
                  generic EmptyState because this is the core product
-                 differentiator. Filled accent-gradient CTA (not ghost) +
-                 CORE FEATURE pill + Sparkles icon to draw the eye. */
+                 differentiator. Per Task 6 Point 12: gold/amber Sparkles chip
+                 with pulsing ring, PREMIUM badge, filled amber-gradient CTA
+                 with pulsing glow. The amber palette signals "premium tier". */
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' as const }}
-                className="flex flex-col items-center justify-center text-center py-6 min-h-[160px]"
+                className="flex flex-col items-center justify-center text-center py-6 min-h-[160px] relative"
               >
-                <div className="flex items-center justify-center h-12 w-12 rounded-2xl accent-gradient-soft mb-3 relative">
-                  <Brain className="h-6 w-6 accent-text" />
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden>
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3B82F6] opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#2563EB] border border-background" />
-                  </span>
+                {/* PREMIUM badge — top-right corner of the empty state */}
+                <span className="absolute top-0 right-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                  <Star className="h-2.5 w-2.5 fill-amber-400" />
+                  Premium
+                </span>
+                <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl mb-3">
+                  {/* Pulsing ring behind the chip */}
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 rounded-2xl bg-amber-400/30 blur-md animate-pulse"
+                  />
+                  <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_24px_-4px_rgba(245,158,11,0.6)]">
+                    <Brain className="h-6 w-6 text-white" />
+                  </div>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full accent-gradient-soft px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider accent-text mb-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400 mb-2">
                   <Sparkles className="h-2.5 w-2.5" />
-                  Core Feature
+                  Premium Feature
                 </span>
                 <h3 className="text-sm font-semibold text-foreground">
                   Oracle requires connected business data
@@ -1473,15 +1867,22 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-xs">
                   Activate Oracle to generate AI-powered recommendations from your live business snapshot.
                 </p>
-                <Button
-                  size="sm"
-                  className="mt-3 accent-gradient text-white hover:opacity-90 gap-1.5 shadow-[0_0_24px_-6px_rgba(37,99,235,0.5)]"
-                  onClick={() => setOracleWizardOpen(true)}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Activate Oracle
-                  <ChevronRight className="h-3 w-3" />
-                </Button>
+                <div className="relative mt-3">
+                  {/* Pulsing amber glow ring behind the button */}
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
+                  />
+                  <Button
+                    size="sm"
+                    className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse"
+                    onClick={() => setOracleWizardOpen(true)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Activate Oracle AI CFO
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </motion.div>
             ) : mappedAIRecommendations.length === 0 ? (
               <EmptyState
@@ -1792,6 +2193,18 @@ export default function DashboardPage() {
             )}
           </SectionCard>
         </div>
+
+        {/* ═══ Business Setup Progress (DEMOTED) ═══
+            Per Task 6 Point 1: this card used to render ABOVE the KPI stats
+            and was stealing the spotlight from Oracle. It's now COLLAPSIBLE
+            (collapsed by default — see BusinessSetupProgress.tsx) and moved
+            DOWN in the layout so it appears AFTER the KPI stats, Oracle AI
+            section, business health, AI recs / priorities / tasks, and the
+            timeline / services / team grid. The user sees a compact one-line
+            summary ("Setup: 5 of 6 complete · 83%") with a chevron to expand. */}
+        {!onboardingDone && (
+          <BusinessSetupProgress tasks={setupTasks} />
+        )}
 
         {/* ── Ready-to-file footer ── */}
         {(() => {

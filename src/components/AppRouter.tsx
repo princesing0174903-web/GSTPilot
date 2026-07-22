@@ -18,7 +18,7 @@
  *  6. Every auth step is logged to the console for debugging.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Zap, AlertTriangle, RefreshCw, LogOut } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
@@ -205,35 +205,53 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   const { loading: orgLoading, organization, reload, isPreviewMode } = useOrg();
   const [timedOut, setTimedOut] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const autoRetriedRef = useRef(false);
 
   useEffect(() => {
     if (!orgLoading && (organization || isPreviewMode)) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setTimedOut(false);
       setElapsed(0);
+      autoRetriedRef.current = false;
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
     setTimedOut(false);
     const startTime = Date.now();
+    // Increased from 8s → 15s. The previous 8s threshold was too aggressive on
+    // slow connections / cold Firebase lazy-loads. Demo users now resolve
+    // synchronously (see OrgContext fast path), so this only affects real
+    // Firebase users on genuinely slow networks.
+    const TIMEOUT_SECONDS = 15;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);
-      if (secs >= 8) {
-        console.error('[Dashboard] Initialization exceeded 8s — showing timeout screen');
+      if (secs >= TIMEOUT_SECONDS) {
+        // Auto-retry once before showing the error screen. Many "timeouts" are
+        // just transient blips that a single reload() resolves instantly.
+        if (!autoRetriedRef.current) {
+          autoRetriedRef.current = true;
+          console.warn('[Dashboard] Initialization slow — auto-retrying org context once');
+          void reload();
+          // Reset the timer for the second attempt; if it also times out we
+          // surface the error screen.
+          return;
+        }
+        console.error('[Dashboard] Initialization exceeded 15s — showing timeout screen');
         setTimedOut(true);
         clearInterval(interval);
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [orgLoading, organization, isPreviewMode]);
+  }, [orgLoading, organization, isPreviewMode, reload]);
 
   const handleRetry = useCallback(() => {
     console.log('[Dashboard] Retry clicked — reloading org context');
     setTimedOut(false);
     setElapsed(0);
+    autoRetriedRef.current = false;
     void reload();
   }, [reload]);
 

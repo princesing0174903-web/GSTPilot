@@ -423,6 +423,83 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
 
+    // ── FAST PATH: Demo users have no Firebase Auth session, so we can set up
+    //    their local workspace SYNCHRONOUSLY without waiting for the lazy
+    //    `loadFirebase()` import. Previously the demo path lived inside the
+    //    `.then()` callback below, which meant `loading` stayed true until
+    //    Firebase finished loading — on slow connections that took >8s and
+    //    triggered the DashboardTimeoutBoundary error screen. Moving it above
+    //    the firebase load means demo users resolve in <1 render cycle.
+    if (isAuthenticated && user && user.provider === 'demo') {
+      // Skip if we've already resolved for this user.
+      if (loadingForRef.current !== user.id) {
+        console.log('[Org] Demo user detected (fast path) — creating local workspace synchronously');
+        const localOrgId = `local-${user.id}`;
+        const localOrg: OrganizationDoc = {
+          id: localOrgId,
+          name: user.name + "'s Workspace",
+          slug: 'my-workspace',
+          ownerId: user.id,
+          logoUrl: null,
+          gstin: null,
+          plan: 'free',
+          status: 'active',
+          createdAt: null,
+          updatedAt: null,
+        };
+        const localMember: OrganizationMemberDoc = {
+          id: `${localOrgId}_${user.id}`,
+          organizationId: localOrgId,
+          userId: user.id,
+          userEmail: user.email,
+          userDisplayName: user.name,
+          userPhotoURL: null,
+          role: 'owner',
+          status: 'active',
+          invitedBy: null,
+          invitedAt: null,
+          joinedAt: null,
+          createdAt: null,
+          updatedAt: null,
+        };
+        const localProfile: UserProfileDoc = {
+          uid: user.id,
+          email: user.email,
+          displayName: user.name,
+          photoURL: null,
+          phone: null,
+          company: null,
+          gstin: null,
+          role: 'owner',
+          provider: 'email',
+          emailVerified: true,
+          onboardingCompleted: true,
+          currentOrganizationId: localOrgId,
+          createdAt: null,
+          updatedAt: null,
+        };
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setProfile(localProfile);
+        setOrganization(localOrg);
+        setMembership(localMember);
+        setMembers([localMember]);
+        setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
+        setIsPreviewMode(false);
+        setLoading(false);
+        setError(null);
+        /* eslint-enable react-hooks/set-state-in-effect */
+        loadingForRef.current = user.id;
+        try {
+          localStorage.setItem('gstpilot_org_id', localOrgId);
+        } catch {
+          /* non-fatal */
+        }
+      }
+      // Demo users never need Firebase — return early so we don't even start
+      // the lazy load. This is the key fix for the 8s timeout.
+      return;
+    }
+
     loadFirebase()
       .then(({ auth, onIdTokenChanged }) => {
         if (cancelled) return;
@@ -450,12 +527,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // ── Demo user: create a local workspace so the dashboard renders without
-        //    Firestore. Demo users have no Firebase Auth session, so
-        //    resolveOrgContext (which needs a FirebaseUser) can't be called.
-        //    Without this, `loading` stays true forever → 8s timeout screen.
-        if (user.provider === 'demo') {
-          console.log('[Org] Demo user detected — creating local workspace');
+        // ── Demo user fallback (should never run because of the fast path above,
+        //    but kept as a safety net in case the fast path was skipped).
+        if (user && user.provider === 'demo') {
+          console.log('[Org] Demo user detected (fallback path) — creating local workspace');
           const localOrgId = `local-${user.id}`;
           const localOrg: OrganizationDoc = {
             id: localOrgId,

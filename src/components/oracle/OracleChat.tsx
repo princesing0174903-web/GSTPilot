@@ -93,12 +93,22 @@ function useSessionUser(): SessionUser {
 
 // ─── Streaming helpers ────────────────────────────────────────────────────────
 
+/**
+ * SSE event shape emitted by /api/oracle/chat.
+ * The API emits OracleStreamChunk-compatible frames:
+ *   { token: string }       — a text token to append
+ *   { done: true }          — stream complete
+ *   { structured: ... }     — structured data card (optional, ignored by chat UI)
+ *   { language: 'hi'|'en' } — detected language hint (optional, ignored)
+ *   { error: string }       — error message (rare; the API usually sends a
+ *                             token with the error text + done:true instead)
+ */
 interface StreamEvent {
-  type: 'delta' | 'followups' | 'done' | 'error' | 'sources';
-  content?: string;
-  prompts?: string[];
-  message?: string;
-  sources?: Array<{ key: string; label: string; recordCount: number; connected: boolean }>;
+  token?: string;
+  done?: boolean;
+  structured?: unknown;
+  language?: string;
+  error?: string;
 }
 
 /**
@@ -107,7 +117,13 @@ interface StreamEvent {
  * for the Sources Panel, and onDone when the stream closes.
  */
 async function streamOracle(
-  payload: { message: string; history: { role: 'user' | 'assistant'; content: string }[]; userEmail?: string },
+  payload: {
+    message: string;
+    history: { role: 'user' | 'assistant'; content: string }[];
+    userEmail?: string;
+    userName?: string;
+    userId?: string;
+  },
   handlers: {
     onDelta: (delta: string) => void;
     onFollowUps: (prompts: string[]) => void;
@@ -118,10 +134,42 @@ async function streamOracle(
   signal?: AbortSignal
 ): Promise<void> {
   try {
+    // ── Build the OracleChatRequest payload ────────────────────────────────
+    // The API expects { messages: [{role, content}], memory, context } — NOT
+    // the legacy { message, history, userEmail } shape. We assemble the
+    // messages array from prior history + the new user message, and include
+    // memory + organizationId so the backend can personalize + scope queries.
+    const messages = [
+      ...payload.history.map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'oracle') as 'user' | 'oracle',
+        content: m.content,
+      })),
+      { role: 'user' as const, content: payload.message },
+    ];
+
+    // Read the current org id from localStorage (set by OrgContext). This is
+    // a client-only component (ssr:false dynamic import), so localStorage is
+    // always available here.
+    let organizationId: string | undefined;
+    try {
+      organizationId = window.localStorage.getItem('gstpilot_org_id') ?? undefined;
+    } catch {
+      /* private mode — non-fatal */
+    }
+
+    const apiPayload = {
+      messages,
+      memory: {
+        userName: payload.userName,
+        userId: payload.userId,
+      },
+      context: organizationId ? { organizationId } : undefined,
+    };
+
     const res = await fetch('/api/oracle/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(apiPayload),
       signal,
     });
 
@@ -152,23 +200,22 @@ async function streamOracle(
 
         try {
           const data = JSON.parse(payloadStr) as StreamEvent;
-          switch (data.type) {
-            case 'delta':
-              if (data.content) handlers.onDelta(data.content);
-              break;
-            case 'followups':
-              if (data.prompts) handlers.onFollowUps(data.prompts);
-              break;
-            case 'sources':
-              if (data.sources && handlers.onSources) handlers.onSources(data.sources);
-              break;
-            case 'done':
-              handlers.onDone();
-              return;
-            case 'error':
-              handlers.onError(data.message || 'Unknown error');
-              return;
+          // Token chunk — append to the streaming assistant message
+          if (data.token) {
+            handlers.onDelta(data.token);
           }
+          // Stream complete — finalize
+          if (data.done) {
+            handlers.onDone();
+            return;
+          }
+          // Explicit error frame (rare — the API usually sends a token + done)
+          if (data.error) {
+            handlers.onError(data.error);
+            return;
+          }
+          // `structured` and `language` frames are ignored by this chat UI —
+          // they're consumed by the richer OracleWorkspace component.
         } catch {
           // skip malformed event
         }
@@ -321,7 +368,7 @@ export function OracleChat() {
     abortRef.current = controller;
 
     await streamOracle(
-      { message, history, userEmail: user?.email },
+      { message, history, userEmail: user?.email, userName: user?.name, userId: user?.id },
       {
         onDelta: (delta) => {
           store.appendDelta(oracleTurnId, delta);

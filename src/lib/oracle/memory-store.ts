@@ -95,9 +95,10 @@ export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
     orderBy: { updatedAt: 'asc' },
   });
 
-  const facts = rows.map((r) => ({ category: r.category, key: r.key, value: r.value }));
+  // The OracleMemory schema uses entityId/summary (not key/value). Map them.
+  const facts = rows.map((r) => ({ category: r.category, key: r.entityId ?? r.title, value: r.summary ?? r.payload }));
   const get = (cat: MemoryCategory, key: string) =>
-    rows.find((r) => r.category === cat && r.key === key)?.value;
+    rows.find((r) => r.category === cat && (r.entityId ?? r.title) === key)?.summary;
 
   return {
     firmName: get('firm', 'name'),
@@ -107,21 +108,28 @@ export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
     preferredLanguage: get('preference', 'preferredLanguage'),
     connectedServices: rows
       .filter((r) => r.category === 'connection')
-      .map((r) => r.key),
+      .map((r) => r.entityId ?? r.title),
     reportsGenerated: rows
       .filter((r) => r.category === 'report')
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map((r) => r.value),
+      .map((r) => r.summary ?? ''),
     recentTopics: rows
       .filter((r) => r.category === 'history')
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, 6)
-      .map((r) => r.value),
+      .map((r) => r.summary ?? ''),
     facts,
   };
 }
 
 // ─── Public: persist a single fact (upsert) ───────────────────────────────────
+//
+// The OracleMemory schema requires firmId + title and has no compound unique
+// key on (category, key). We use a findFirst-then-create/update pattern with
+// entityId as the "key" and summary as the "value". firmId defaults to
+// "oracle-global" since Oracle memory is cross-firm.
+
+const ORACLE_MEMORY_FIRM_ID = 'oracle-global';
 
 export async function rememberFact(
   category: MemoryCategory,
@@ -131,11 +139,30 @@ export async function rememberFact(
   confidence = 1,
 ): Promise<void> {
   if (!value || !value.trim()) return;
-  await db.oracleMemory.upsert({
-    where: { category_key: { category, key } },
-    create: { category, key, value: value.trim(), source, confidence },
-    update: { value: value.trim(), source, confidence },
+  const existing = await db.oracleMemory.findFirst({
+    where: { category, entityId: key },
+    select: { id: true },
   });
+  const title = `${category}:${key}`;
+  const importance = Math.round(confidence * 100);
+  if (existing) {
+    await db.oracleMemory.update({
+      where: { id: existing.id },
+      data: { summary: value.trim(), source, importance },
+    });
+  } else {
+    await db.oracleMemory.create({
+      data: {
+        firmId: ORACLE_MEMORY_FIRM_ID,
+        category,
+        entityId: key,
+        title,
+        summary: value.trim(),
+        source,
+        importance,
+      },
+    });
+  }
 }
 
 // ─── Public: scan an exchange and persist durable facts ───────────────────────

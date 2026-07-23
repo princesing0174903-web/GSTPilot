@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useOracleConversations } from '@/lib/oracle-conversations';
 import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types';
+import type { OracleMetricCard, OracleActionButton, OracleToolExecution } from '@/lib/oracle-conversations';
 import { OracleInput, type OracleInputHandle } from './OracleInput';
 import { OracleWelcomeScreen } from './OracleWelcomeScreen';
 import { OracleThinkingAnimation } from './OracleThinkingAnimation';
@@ -44,6 +45,7 @@ import { OracleMarkdown } from './OracleMarkdown';
 import { OracleDataCard } from './OracleDataCard';
 import { OracleLeftSidebar } from './OracleLeftSidebar';
 import { OracleRightPanel } from './OracleRightPanel';
+import { OracleExecutiveHeader, ActionsRow } from './OracleExecutiveResponse';
 
 // ─── Lightweight inline message renderer ─────────────────────────────────────
 // Renders user/oracle messages as rounded bubbles with gold avatar, plus a
@@ -57,7 +59,7 @@ function LightOracleMessage({
   onDislike,
   onEdit,
 }: {
-  turn: { id: string; role: 'user' | 'oracle'; content: string; streaming?: boolean; error?: boolean; followUps?: string[]; structured?: StructuredQueryResult };
+  turn: { id: string; role: 'user' | 'oracle'; content: string; streaming?: boolean; error?: boolean; followUps?: string[]; structured?: StructuredQueryResult; metrics?: OracleMetricCard[]; actions?: OracleActionButton[]; toolTrace?: OracleToolExecution[]; intent?: string };
   onPickFollowUp?: (prompt: string) => void;
   onRetry?: () => void;
   onLike?: () => void;
@@ -164,6 +166,15 @@ function LightOracleMessage({
           <OracleDataCard data={turn.structured} />
         )}
 
+        {/* PROMPT 4: Executive header — tool trace + deterministic KPI cards */}
+        {!turn.error && (turn.toolTrace?.length || turn.metrics?.length) ? (
+          <OracleExecutiveHeader
+            tools={turn.toolTrace}
+            metrics={turn.metrics}
+            intent={turn.intent}
+          />
+        ) : null}
+
         <div className={`rounded-3xl rounded-bl-md border px-4 py-3 ${turn.error ? 'border-red-500/20 bg-red-500/5' : 'border-[#1F1F1F] bg-[#111111]'}`}>
           {turn.error ? (
             <div className="flex items-center gap-2">
@@ -178,6 +189,11 @@ function LightOracleMessage({
             <OracleMarkdown content={turn.content} streaming={turn.streaming} />
           )}
         </div>
+
+        {/* PROMPT 4: Action buttons (Generate Report, Collect Payment, etc.) */}
+        {!turn.error && !turn.streaming && turn.actions && turn.actions.length > 0 && (
+          <ActionsRow actions={turn.actions} onAction={(p) => onPickFollowUp?.(p)} />
+        )}
 
         {/* ── Premium action row ── */}
         {!turn.error && !turn.streaming && turn.content.length > 0 && (
@@ -366,6 +382,12 @@ interface StreamEvent {
   error?: string;
   structured?: unknown;
   language?: string;
+  // PROMPT 4 pipeline events
+  tools?: { toolId: string; label: string; status: 'running' | 'done' | 'error'; summary: string; recordCount?: number; durationMs?: number }[];
+  intent?: string;
+  metrics?: { key: string; label: string; value: string; sub?: string; trend?: 'up' | 'down' | 'flat'; tone?: 'positive' | 'negative' | 'neutral' | 'warning' }[];
+  actions?: { id: string; label: string; icon: string; prompt: string; tone?: 'primary' | 'default' }[];
+  followUps?: string[];
 }
 
 // ─── streamOracle — with automatic HTTP 400/500 retry ─────────────────────────
@@ -435,6 +457,9 @@ async function streamOracle(
     onDelta: (delta: string) => void;
     onFollowUps: (prompts: string[]) => void;
     onStructured?: (data: StructuredQueryResult) => void;
+    onMetrics?: (metrics: StreamEvent['metrics']) => void;
+    onActions?: (actions: StreamEvent['actions']) => void;
+    onToolTrace?: (tools: StreamEvent['tools'], intent?: string) => void;
     onDone: () => void;
     onError: (message: string) => void;
     onRetry?: (attempt: number) => void;
@@ -490,6 +515,10 @@ async function streamOracle(
         try {
           const data = JSON.parse(payloadStr) as StreamEvent;
           if (data.structured) handlers.onStructured?.(data.structured as StructuredQueryResult);
+          if (data.tools) handlers.onToolTrace?.(data.tools, data.intent);
+          if (data.metrics) handlers.onMetrics?.(data.metrics);
+          if (data.actions) handlers.onActions?.(data.actions);
+          if (data.followUps) handlers.onFollowUps(data.followUps);
           if (data.token) handlers.onDelta(data.token);
           if (data.done) { handlers.onDone(); return; }
           if (data.error) { handlers.onError(FRIENDLY_ERROR); return; }
@@ -601,6 +630,9 @@ export function OracleChat() {
         onDelta: (delta) => store.appendDelta(oracleTurnId, delta),
         onFollowUps: (prompts) => store.setFollowUps(oracleTurnId, prompts),
         onStructured: (data) => store.setStructured(oracleTurnId, data),
+        onToolTrace: (tools, intent) => store.setToolTrace(oracleTurnId, tools ?? [], intent),
+        onMetrics: (metrics) => store.setMetrics(oracleTurnId, metrics ?? []),
+        onActions: (actions) => store.setActions(oracleTurnId, actions ?? []),
         onDone: () => {
           store.finalizeMessage(oracleTurnId);
           setIsStreaming(false);

@@ -35,6 +35,35 @@ export interface OracleSource {
   connected: boolean
 }
 
+/** A KPI card computed deterministically from real Prisma data (PROMPT 4). */
+export interface OracleMetricCard {
+  key: string
+  label: string
+  value: string
+  sub?: string
+  trend?: 'up' | 'down' | 'flat'
+  tone?: 'positive' | 'negative' | 'neutral' | 'warning'
+}
+
+/** An action button rendered beneath the answer (PROMPT 4). */
+export interface OracleActionButton {
+  id: string
+  label: string
+  icon: string
+  prompt: string
+  tone?: 'primary' | 'default'
+}
+
+/** A tool Oracle executed to gather real data (PROMPT 4). */
+export interface OracleToolExecution {
+  toolId: string
+  label: string
+  status: 'running' | 'done' | 'error'
+  summary: string
+  recordCount?: number
+  durationMs?: number
+}
+
 export interface OracleTurn {
   id: string
   role: MessageRole
@@ -45,6 +74,14 @@ export interface OracleTurn {
   sources?: OracleSource[]
   /** Oracle-only: structured data card (table/stats/chart) rendered above text */
   structured?: StructuredQueryResult
+  /** Oracle-only (PROMPT 4): deterministic KPI cards from real data */
+  metrics?: OracleMetricCard[]
+  /** Oracle-only (PROMPT 4): action buttons */
+  actions?: OracleActionButton[]
+  /** Oracle-only (PROMPT 4): tools Oracle executed (trace) */
+  toolTrace?: OracleToolExecution[]
+  /** Oracle-only (PROMPT 4): classified intent */
+  intent?: string
   /** Oracle-only: is the answer still streaming in? */
   streaming?: boolean
   /** Oracle-only: did the stream error? */
@@ -94,6 +131,12 @@ interface OracleConversationsState {
   setFollowUps: (oracleTurnId: string, followUps: string[]) => void
   setSources: (oracleTurnId: string, sources: OracleSource[]) => void
   setStructured: (oracleTurnId: string, structured: StructuredQueryResult) => void
+  /** PROMPT 4: set deterministic KPI cards (from real Prisma data). */
+  setMetrics: (oracleTurnId: string, metrics: OracleMetricCard[]) => void
+  /** PROMPT 4: set action buttons. */
+  setActions: (oracleTurnId: string, actions: OracleActionButton[]) => void
+  /** PROMPT 4: set the tool execution trace + intent. */
+  setToolTrace: (oracleTurnId: string, trace: OracleToolExecution[], intent?: string) => void
   setError: (oracleTurnId: string, errorMessage: string) => void
   finalizeMessage: (oracleTurnId: string) => void
 
@@ -339,6 +382,51 @@ export const useOracleConversations = create<OracleConversationsState>()(
                   ...c,
                   messages: c.messages.map((m) =>
                     m.id === oracleTurnId ? { ...m, structured } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setMetrics: (oracleTurnId, metrics) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, metrics } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setActions: (oracleTurnId, actions) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, actions } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setToolTrace: (oracleTurnId, trace, intent) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, toolTrace: trace, intent } : m
                   ),
                 }
               : c

@@ -6,7 +6,7 @@
 # become fast + low-memory.
 cd /home/z/my-project
 
-HEAP=2560
+HEAP=2048
 PORT=3000
 LOG=dev.log
 PIDFILE=.dev-server.pid

@@ -1,30 +1,31 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Full-Screen AI CFO Experience (Task 8 redesign)
+// GSTPilot Oracle — Premium AI Business Operating System (PROMPT 3)
 //
-// ChatGPT Enterprise + Claude + Harvey AI level:
-//   • Full-screen welcome with "Oracle AI CFO / Your Financial Brain"
-//   • Thinking animation with checklist before streaming
-//   • Rich answer cards (Executive Summary, Cash Flow chart, GST Risk)
-//   • Oracle Actions (buttons instead of typing)
-//   • HTTP 400 errors silently retried — NEVER shown to user
+// Three-column layout (ChatGPT Enterprise + Claude + Perplexity level):
+//   • LEFT  — OracleLeftSidebar (New Chat, Search, Categories, Pinned, Folders)
+//   • CENTER — Chat thread + welcome screen + thinking animation + sticky input
+//   • RIGHT — OracleRightPanel (LIVE insights, health, deadlines, priorities)
 //
-// Layout:
-//   • No messages → Full-screen OracleWelcomeScreen (hero + suggestion cards)
-//   • Has messages → Chat thread (max-w-3xl centered) with rich bubbles
-//   • Sticky premium input at bottom (gold gradient, action icons)
+// Premium feel: glassmorphism, gold gradient brand, framer-motion micro
+// interactions, streaming tokens, thinking checklist, export/like/dislike.
 //
-// Streaming: POST /api/oracle/chat returns SSE.
-//   {token} → append token | {done:true} → finalize | {error} → retry/fallback
+// Resilience: HTTP 400 "messages[] is required" is NEVER shown to the user.
+// The streamOracle helper retries 400/500 with backoff and falls back to a
+// friendly message.
+//
+// Memory: conversations persist to localStorage via useOracleConversations.
+// Oracle never asks the same thing twice — history is passed on every call.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, Bell, LogOut, User as UserIcon, Brain, Plug, Share2,
-  Plus, MessageSquare, Trash2, X, Sparkles, BadgeCheck,
-  Copy, Check, RefreshCw, ThumbsUp,
+  Plus, Sparkles, BadgeCheck,
+  Copy, Check, RefreshCw, ThumbsUp, ThumbsDown,
+  PanelRight, X, Download, FileText, FileSpreadsheet, Pencil,
 } from 'lucide-react';
 import {
   Avatar, AvatarFallback, AvatarImage,
@@ -41,27 +42,33 @@ import { OracleThinkingAnimation } from './OracleThinkingAnimation';
 import { OracleActions } from './OracleActions';
 import { OracleMarkdown } from './OracleMarkdown';
 import { OracleDataCard } from './OracleDataCard';
+import { OracleLeftSidebar } from './OracleLeftSidebar';
+import { OracleRightPanel } from './OracleRightPanel';
 
-// Static imports for essential components. Heavy components (OracleMessage 987 lines,
-// MemoryPanel 967 lines, BusinessGraphPanel 1276 lines) are stubbed/inlined to
-// prevent OOM on 4GB machines during compilation.
-
-// ─── Lightweight inline message renderer (replaces 987-line OracleMessage) ───
-// Renders user/oracle messages as rounded bubbles with gold avatar.
-// Markdown is rendered as plain text with basic formatting — sufficient for
-// the AI CFO chat experience without the heavy OracleMarkdown dependency.
+// ─── Lightweight inline message renderer ─────────────────────────────────────
+// Renders user/oracle messages as rounded bubbles with gold avatar, plus a
+// premium action row: Copy · Regenerate · Like · Dislike · Edit · Export.
 
 function LightOracleMessage({
   turn,
   onPickFollowUp,
   onRetry,
+  onLike,
+  onDislike,
+  onEdit,
 }: {
   turn: { id: string; role: 'user' | 'oracle'; content: string; streaming?: boolean; error?: boolean; followUps?: string[]; structured?: StructuredQueryResult };
   onPickFollowUp?: (prompt: string) => void;
   onRetry?: () => void;
+  onLike?: () => void;
+  onDislike?: () => void;
+  onEdit?: () => void;
 }) {
   const isUser = turn.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const copyMessage = async () => {
@@ -72,16 +79,64 @@ function LightOracleMessage({
     } catch { /* clipboard blocked */ }
   };
 
+  const exportMarkdown = () => {
+    const blob = new Blob([`# Oracle Response\n\n${turn.content}\n`], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `oracle-response-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
+
+  const exportPDF = () => {
+    // Open a print-friendly window with the markdown rendered as plain text.
+    const w = window.open('', '_blank', 'width=800,height=600');
+    if (w) {
+      w.document.write(`<pre style="font-family:system-ui;white-space:pre-wrap;padding:32px;line-height:1.6">${turn.content.replace(/</g, '&lt;')}</pre>`);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 300);
+    }
+    setExportOpen(false);
+  };
+
+  const exportExcel = () => {
+    // Export as CSV (Excel-compatible) — splits lines into rows.
+    const rows = turn.content.split('\n').map((l) => [l]);
+    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `oracle-response-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
+
   if (isUser) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-end"
+        className="group flex justify-end"
       >
         <div className="max-w-[80%] rounded-3xl rounded-br-md bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/20">
           <p className="text-[14px] leading-relaxed text-white whitespace-pre-wrap break-words">{turn.content}</p>
-          <p className="mt-1 text-right text-[10px] text-white/30">{time}</p>
+          <div className="mt-1 flex items-center justify-end gap-2">
+            <p className="text-[10px] text-white/30">{time}</p>
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="text-[10px] text-white/30 opacity-0 transition group-hover:opacity-100 hover:text-amber-300"
+                aria-label="Edit prompt"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     );
@@ -97,8 +152,8 @@ function LightOracleMessage({
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)]">
         <Sparkles className="h-4 w-4 text-white" />
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-1.5">
           <span className="text-[12px] font-semibold text-white">Oracle</span>
           <BadgeCheck className="h-3 w-3 text-amber-500" />
           <span className="text-[10px] text-white/30">{time}</span>
@@ -124,9 +179,9 @@ function LightOracleMessage({
           )}
         </div>
 
-        {/* Action row: copy / regenerate / thumbs up — shown after streaming completes */}
+        {/* ── Premium action row ── */}
         {!turn.error && !turn.streaming && turn.content.length > 0 && (
-          <div className="mt-1.5 flex items-center gap-1 px-1">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 px-1">
             <button
               onClick={copyMessage}
               className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
@@ -148,11 +203,53 @@ function LightOracleMessage({
               </button>
             )}
             <button
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
+              onClick={() => { setLiked((v) => !v); if (!liked) onLike?.(); }}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors hover:bg-white/5 ${liked ? 'text-emerald-400' : 'text-white/40 hover:text-white/70'}`}
               aria-label="Helpful"
             >
               <ThumbsUp className="h-3 w-3" />
             </button>
+            <button
+              onClick={() => { setDisliked((v) => !v); if (!disliked) onDislike?.(); }}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors hover:bg-white/5 ${disliked ? 'text-rose-400' : 'text-white/40 hover:text-white/70'}`}
+              aria-label="Not helpful"
+            >
+              <ThumbsDown className="h-3 w-3" />
+            </button>
+
+            {/* Export dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setExportOpen((v) => !v)}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
+                aria-label="Export response"
+              >
+                <Download className="h-3 w-3" /><span>Export</span>
+              </button>
+              <AnimatePresence>
+                {exportOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="absolute left-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] py-1 shadow-xl"
+                    >
+                      <button onClick={exportPDF} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
+                        <FileText className="h-3.5 w-3.5 text-rose-400" /> PDF
+                      </button>
+                      <button onClick={exportExcel} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" /> Excel (CSV)
+                      </button>
+                      <button onClick={exportMarkdown} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
+                        <FileText className="h-3.5 w-3.5 text-amber-400" /> Markdown
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         )}
 
@@ -175,18 +272,17 @@ function LightOracleMessage({
   );
 }
 
-// Lightweight stubs for heavy panels (MemoryPanel 967 lines, BusinessGraphPanel 1276 lines)
-// These prevent OOM during compilation on memory-constrained machines.
+// ─── Lightweight modal stubs (kept lean to prevent OOM on 4GB sandboxes) ──────
 function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="rounded-2xl border border-[#1F1F1F] bg-[#0A0A0A] p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           <Brain className="h-5 w-5 text-amber-400" />
           <h3 className="text-base font-semibold text-white">Business Memory</h3>
         </div>
-        <p className="text-sm text-white/60">Oracle remembers your business context across conversations.</p>
+        <p className="text-sm text-white/60">Oracle remembers your business context across conversations — customers, invoices, GST history, and company profile. You never have to repeat yourself.</p>
         <button onClick={onClose} className="mt-4 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 ring-1 ring-amber-500/20">Close</button>
       </div>
     </div>
@@ -197,22 +293,22 @@ function ConnectorsPanel({ open, onClose }: { open: boolean; onClose: () => void
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="rounded-2xl border border-[#1F1F1F] bg-[#0A0A0A] p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           <Plug className="h-5 w-5 text-amber-400" />
           <h3 className="text-base font-semibold text-white">Data Connectors</h3>
         </div>
-        <p className="text-sm text-white/60">Connect Zoho Books, GSTN, Banking, and Google Workspace.</p>
+        <p className="text-sm text-white/60">Connect Zoho Books, GSTN, Banking, and Google Workspace to unlock live insights.</p>
         <button onClick={onClose} className="mt-4 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 ring-1 ring-amber-500/20">Close</button>
       </div>
     </div>
   );
 }
-function BusinessGraphPanel({ open, onClose, onOpenConnectors }: { open: boolean; onClose: () => void; onOpenConnectors?: () => void }) {
+function BusinessGraphPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="rounded-2xl border border-[#1F1F1F] bg-[#0A0A0A] p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           <Share2 className="h-5 w-5 text-amber-400" />
           <h3 className="text-base font-semibold text-white">Business Graph</h3>
         </div>
@@ -276,8 +372,7 @@ interface StreamEvent {
 //
 // CRITICAL: The user must NEVER see "messages[] is required" (HTTP 400).
 // On 400/500 errors, we retry up to 3 times with exponential backoff
-// (1s → 2s → 4s). If all retries fail, we show a friendly fallback message
-// instead of the raw error.
+// (1s → 2s → 4s). If all retries fail, we show a friendly fallback message.
 
 const MAX_RETRIES = 3;
 const FRIENDLY_ERROR = "I'm having trouble connecting right now. Please try again in a moment.";
@@ -299,26 +394,21 @@ async function fetchWithRetry(
         signal,
       });
 
-      // 200 OK — return immediately
       if (res.ok) return res;
 
-      // 400 / 500 errors — retry with backoff (unless aborted)
       const bodyText = await res.text().catch(() => '');
       lastError = new Error(`HTTP ${res.status}: ${bodyText}`);
 
-      // Don't retry on 401/403 (auth errors) — those won't fix themselves
       if (res.status === 401 || res.status === 403) {
         throw new Error('Authentication required. Please sign in again.');
       }
 
-      // Retry for 400/500 errors
       if (attempt < MAX_RETRIES - 1) {
-        const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        const delayMs = Math.pow(2, attempt) * 1000;
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
     } catch (err) {
-      // Network error or abort
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
       lastError = err instanceof Error ? err : new Error('Network error');
 
@@ -330,7 +420,6 @@ async function fetchWithRetry(
     }
   }
 
-  // All retries exhausted — throw friendly error
   throw new Error(FRIENDLY_ERROR);
 }
 
@@ -353,7 +442,6 @@ async function streamOracle(
   signal?: AbortSignal
 ): Promise<void> {
   try {
-    // Build the OracleChatRequest payload
     const messages = [
       ...payload.history.map((m) => ({
         role: (m.role === 'user' ? 'user' : 'oracle') as 'user' | 'oracle',
@@ -373,7 +461,6 @@ async function streamOracle(
       context: organizationId ? { organizationId } : undefined,
     };
 
-    // Fetch with automatic retry on 400/500
     const res = await fetchWithRetry(apiPayload, signal);
 
     if (!res.body) {
@@ -415,7 +502,6 @@ async function streamOracle(
       handlers.onDone();
       return;
     }
-    // NEVER expose raw HTTP 400 "messages[] required" — always friendly
     const msg = err instanceof Error ? err.message : 'Network error';
     handlers.onError(msg.includes('HTTP 4') ? FRIENDLY_ERROR : msg);
   }
@@ -434,8 +520,10 @@ export function OracleChat() {
   const activeId = useOracleConversations((s) => s.activeId);
   const getActive = useOracleConversations((s) => s.getActive);
   const createConversation = useOracleConversations((s) => s.createConversation);
+  const setFeedback = useOracleConversations((s) => s.setFeedback);
 
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
@@ -502,8 +590,8 @@ export function OracleChat() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Show thinking animation for 1.8s before stream starts
-    await new Promise((r) => setTimeout(r, 1800));
+    // Show thinking animation for ~2.4s (5 steps × ~480ms) before stream starts
+    await new Promise((r) => setTimeout(r, 2400));
     if (controller.signal.aborted) return;
     setShowThinking(false);
 
@@ -557,9 +645,8 @@ export function OracleChat() {
     handleSend(lastUser.content);
   };
 
-  const handleNewChat = () => {
-    createConversation();
-    setHistoryOpen(false);
+  const handleEditPrompt = (content: string) => {
+    inputRef.current?.setValue(content);
   };
 
   const userInitials = user?.name
@@ -569,11 +656,12 @@ export function OracleChat() {
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#070707] text-white">
       {/* ── Top bar ── */}
-      <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-[#1F1F1F] bg-[#070707]/80 px-3 backdrop-blur-xl md:px-5">
+      <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-[#1F1F1F] bg-[#070707]/80 px-3 backdrop-blur-xl md:px-5">
+        {/* Mobile: open left sidebar */}
         <button
-          onClick={() => setHistoryOpen(true)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
-          aria-label="Conversation history"
+          onClick={() => setLeftOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white lg:hidden"
+          aria-label="Open conversations"
         >
           <Menu className="h-4 w-4" />
         </button>
@@ -586,7 +674,7 @@ export function OracleChat() {
             <div className="flex items-center gap-1.5">
               <span className="text-[15px] font-semibold tracking-tight text-white">Oracle</span>
               <BadgeCheck className="h-3.5 w-3.5 text-amber-500" />
-              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-500">
+              <span className="hidden rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-500 sm:inline">
                 CA-Verified
               </span>
             </div>
@@ -599,6 +687,7 @@ export function OracleChat() {
             onClick={() => setGraphOpen(true)}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
             aria-label="Business Graph"
+            title="Business Graph"
           >
             <Share2 className="h-4 w-4" />
           </button>
@@ -606,15 +695,26 @@ export function OracleChat() {
             onClick={() => setConnectorsOpen(true)}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
             aria-label="Data Connectors"
+            title="Connectors"
           >
             <Plug className="h-4 w-4" />
           </button>
           <button
             onClick={() => setMemoryOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
+            className="hidden h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white sm:flex"
             aria-label="Business Memory"
+            title="Memory"
           >
             <Brain className="h-4 w-4" />
+          </button>
+          {/* Mobile: toggle right panel */}
+          <button
+            onClick={() => setRightOpen(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white xl:hidden"
+            aria-label="Open insights"
+            title="Insights"
+          >
+            <PanelRight className="h-4 w-4" />
           </button>
           <button
             className="relative flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white"
@@ -659,14 +759,21 @@ export function OracleChat() {
         </div>
       </header>
 
-      {/* ── Body ── */}
+      {/* ── Body: 3-column layout ── */}
       <div className="relative z-10 flex min-h-0 flex-1">
+        {/* LEFT — persistent on lg+, drawer on mobile */}
+        <OracleLeftSidebar
+          open={leftOpen}
+          onClose={() => setLeftOpen(false)}
+          onNavigate={() => setLeftOpen(false)}
+        />
+
+        {/* CENTER — chat area */}
         <main className="flex min-w-0 flex-1 flex-col">
-          {/* Scrollable area */}
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
+            className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
           >
             {hasMessages ? (
               <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
@@ -677,6 +784,9 @@ export function OracleChat() {
                         turn={turn}
                         onPickFollowUp={handlePickSuggestion}
                         onRetry={turn.role === 'oracle' && turn.id === messages[messages.length - 1]?.id ? handleRetry : undefined}
+                        onLike={activeId ? () => setFeedback(activeId, 'like') : undefined}
+                        onDislike={activeId ? () => setFeedback(activeId, 'dislike') : undefined}
+                        onEdit={turn.role === 'user' ? () => handleEditPrompt(turn.content) : undefined}
                       />
                       {/* Show Oracle Actions after the last Oracle message when not streaming */}
                       {turn.role === 'oracle' && !turn.streaming && !turn.error &&
@@ -688,7 +798,7 @@ export function OracleChat() {
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="flex gap-3 mt-6"
+                          className="mt-6 flex gap-3"
                         >
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)]">
                             <Sparkles className="h-4 w-4 text-white" />
@@ -723,91 +833,46 @@ export function OracleChat() {
             </div>
           </div>
         </main>
-      </div>
 
-      {/* ── History drawer ── */}
-      <AnimatePresence>
-        {historyOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-40"
-            onClick={() => setHistoryOpen(false)}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.aside
-              initial={{ x: -300 }}
-              animate={{ x: 0 }}
-              exit={{ x: -300 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="absolute left-0 top-0 flex h-full w-72 flex-col border-r border-[#1F1F1F] bg-[#0A0A0A] p-3"
-              onClick={(e) => e.stopPropagation()}
+        {/* RIGHT — persistent on xl+, drawer on mobile/tablet */}
+        <aside className="hidden w-80 shrink-0 border-l border-[#1F1F1F] xl:block">
+          <OracleRightPanel userName={user?.name} onSuggestion={handlePickSuggestion} />
+        </aside>
+
+        {/* Mobile/tablet right panel drawer */}
+        <AnimatePresence>
+          {rightOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50 xl:hidden"
+              onClick={() => setRightOpen(false)}
             >
-              <div className="mb-3 flex items-center justify-between px-1">
-                <span className="text-sm font-semibold text-white">Conversations</span>
-                <button
-                  onClick={() => setHistoryOpen(false)}
-                  className="rounded-lg p-1 text-white/50 hover:bg-white/5 hover:text-white"
-                  aria-label="Close history"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <button
-                onClick={handleNewChat}
-                className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(245,158,11,0.4)]"
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+              <motion.aside
+                initial={{ x: 320 }}
+                animate={{ x: 0 }}
+                exit={{ x: 320 }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                className="absolute right-0 top-0 h-full w-80 border-l border-[#1F1F1F]"
+                onClick={(e) => e.stopPropagation()}
               >
-                <Plus className="h-4 w-4" />
-                New Conversation
-              </button>
-              <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
-                {conversations.length === 0 ? (
-                  <p className="px-2 py-4 text-center text-xs text-white/40">No conversations yet</p>
-                ) : (
-                  conversations.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        useOracleConversations.getState().setActive(c.id);
-                        setHistoryOpen(false);
-                      }}
-                      className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${
-                        c.id === activeId
-                          ? 'bg-white/[0.06] text-white ring-1 ring-inset ring-white/10'
-                          : 'text-white/60 hover:bg-white/[0.03] hover:text-white'
-                      }`}
-                    >
-                      <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                      <span className="truncate">{c.title || 'New conversation'}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          useOracleConversations.getState().deleteConversation(c.id);
-                        }}
-                        className="ml-auto shrink-0 text-white/40 opacity-0 transition group-hover:opacity-100 hover:text-rose-400"
-                        aria-label="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </button>
-                  ))
-                )}
-              </div>
-            </motion.aside>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <OracleRightPanel
+                  userName={user?.name}
+                  onSuggestion={(p) => { handlePickSuggestion(p); setRightOpen(false); }}
+                />
+              </motion.aside>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* ── Slide-in panels ── */}
       <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
       <ConnectorsPanel open={connectorsOpen} onClose={() => setConnectorsOpen(false)} />
-      <BusinessGraphPanel
-        open={graphOpen}
-        onClose={() => setGraphOpen(false)}
-        onOpenConnectors={() => { setGraphOpen(false); setConnectorsOpen(true); }}
-      />
+      <BusinessGraphPanel open={graphOpen} onClose={() => setGraphOpen(false)} />
     </div>
   );
 }

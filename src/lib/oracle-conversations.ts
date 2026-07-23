@@ -19,6 +19,14 @@ import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types'
 
 export type MessageRole = 'user' | 'oracle'
 
+/** Conversation category for the left sidebar filter chips. */
+export type ConversationCategory =
+  | 'business'
+  | 'gst'
+  | 'compliance'
+  | 'finance'
+  | 'general'
+
 /** A data source Oracle read to answer a question (Sources Panel™). */
 export interface OracleSource {
   key: string
@@ -50,6 +58,12 @@ export interface Conversation {
   messages: OracleTurn[]
   createdAt: string
   updatedAt: string
+  /** Pinned to the top of the sidebar. */
+  pinned?: boolean
+  /** Sidebar category filter chip. */
+  category?: ConversationCategory
+  /** Soft feedback recorded for the last Oracle answer. */
+  lastFeedback?: 'like' | 'dislike'
 }
 
 interface OracleConversationsState {
@@ -65,6 +79,13 @@ interface OracleConversationsState {
   setActive: (id: string) => void
   renameConversation: (id: string, title: string) => void
   clearAll: () => void
+
+  // ── Premium sidebar ops (additive) ──
+  togglePin: (id: string) => void
+  setCategory: (id: string, category: ConversationCategory) => void
+  setFeedback: (id: string, feedback: 'like' | 'dislike') => void
+  /** Infer a category from the user's question so the sidebar auto-sorts. */
+  inferCategory: (text: string) => ConversationCategory
 
   // ── Message ops (operate on active conversation) ──
   pushUserMessage: (content: string) => { conversationId: string; userTurnId: string; oracleTurnId: string }
@@ -94,6 +115,32 @@ function deriveTitle(message: string): string {
 
 function nowISO(): string {
   return new Date().toISOString()
+}
+
+/** Standalone category inference (used before the store is hydrated). */
+function inferCategoryFromText(text: string): ConversationCategory {
+  const t = (text || '').toLowerCase()
+  if (/\bgst\b|gstr|itc|input tax|output tax|return|filing|tax liability|tax credit/.test(t)) return 'gst'
+  if (/invoice|customer|client|receivable|payable|vendor|payment|collection/.test(t)) return 'business'
+  if (/compliance|notice|deadline|due date|penalty|audit|reconcil/.test(t)) return 'compliance'
+  if (/cash|profit|revenue|expense|budget|flow|runway|forecast|p&l|balance sheet/.test(t)) return 'finance'
+  return 'general'
+}
+
+/** Folder bucket for the sidebar date grouping (Today / Yesterday / Last Week / Last Month). */
+export type ConversationFolder = 'today' | 'yesterday' | 'lastWeek' | 'lastMonth' | 'older'
+
+export function getConversationFolder(iso: string): ConversationFolder {
+  const then = new Date(iso).getTime()
+  if (isNaN(then)) return 'older'
+  const now = Date.now()
+  const dayMs = 86400000
+  const diffDays = (now - then) / dayMs
+  if (diffDays < 1) return 'today'
+  if (diffDays < 2) return 'yesterday'
+  if (diffDays < 7) return 'lastWeek'
+  if (diffDays < 30) return 'lastMonth'
+  return 'older'
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -147,6 +194,39 @@ export const useOracleConversations = create<OracleConversationsState>()(
       },
 
       clearAll: () => set({ conversations: [], activeId: null }),
+
+      togglePin: (id) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === id ? { ...c, pinned: !c.pinned } : c
+          ),
+        }))
+      },
+
+      setCategory: (id, category) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === id ? { ...c, category } : c
+          ),
+        }))
+      },
+
+      setFeedback: (id, feedback) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === id ? { ...c, lastFeedback: feedback } : c
+          ),
+        }))
+      },
+
+      inferCategory: (text) => {
+        const t = (text || '').toLowerCase()
+        if (/\bgst\b|gstr|itc|input tax|output tax|return|filing|tax liability|tax credit/.test(t)) return 'gst'
+        if (/invoice|customer|client|receivable|payable|vendor|payment|collection/.test(t)) return 'business'
+        if (/compliance|notice|deadline|due date|penalty|audit|reconcil/.test(t)) return 'compliance'
+        if (/cash|profit|revenue|expense|budget|flow|runway|forecast|p&l|balance sheet/.test(t)) return 'finance'
+        return 'general'
+      },
 
       pushUserMessage: (content) => {
         // Ensure we have an active conversation
@@ -310,12 +390,17 @@ export const useOracleConversations = create<OracleConversationsState>()(
 
       ensureTitle: (conversationId, firstMessage) => {
         set((s) => ({
-          conversations: s.conversations.map((c) =>
-            c.id === conversationId &&
-            (c.title === 'New conversation' || !c.title)
-              ? { ...c, title: deriveTitle(firstMessage) }
-              : c
-          ),
+          conversations: s.conversations.map((c) => {
+            if (c.id !== conversationId) return c
+            const shouldRetitle = c.title === 'New conversation' || !c.title
+            const shouldCategorize = !c.category || c.category === 'general'
+            if (!shouldRetitle && !shouldCategorize) return c
+            return {
+              ...c,
+              title: shouldRetitle ? deriveTitle(firstMessage) : c.title,
+              category: shouldCategorize ? inferCategoryFromText(firstMessage) : c.category,
+            }
+          }),
         }))
       },
     }),

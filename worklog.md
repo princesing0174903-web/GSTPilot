@@ -8116,3 +8116,74 @@ Stage Summary:
 - Zero TypeScript/ESLint errors on Oracle module
 - Non-Oracle modules (Home, Login, Dashboard, Banking, Zoho, Google, Sidebar, Settings, APIs): UNTOUCHED
 - Known infra constraint: 4GB cgroup limit causes next-server OOM when compiling the heavy home page AppRoot AND when Chrome (agent-browser) runs simultaneously. `/oracle` compiles reliably in ~11s. Home page OOM is pre-existing (not caused by Oracle changes). Supervisor auto-restarts next-server on crash.
+
+---
+Task ID: oracle-premium-cfo-prompt3
+Agent: main (Z.ai Code)
+Task: PROMPT 3 — Transform Oracle from a basic chat window into a world-class AI Business Operating System (3-column layout, premium welcome, thinking animation, live insights, export/like/dislike). ONLY Oracle files touched.
+
+Work Log:
+- Read worklog.md, git status, dev.log, and all key Oracle files to understand current architecture.
+- Verified the API route (`src/app/api/oracle/chat/route.ts`) is already bulletproof (lines 1552+): accepts `messages[]` AND fallback single-message fields, returns a friendly SSE stream instead of HTTP 400. NO backend changes needed.
+- Created backup branch `oracle-backup-premium-cfo` (git checkout -b) before any changes. Confirmed `main` is the working branch.
+- Enhanced `src/lib/oracle-conversations.ts` (ADDITIVE — no breaking changes):
+  • Added `ConversationCategory` type ('business'|'gst'|'compliance'|'finance'|'general')
+  • Added `pinned`, `category`, `lastFeedback` optional fields to `Conversation` interface
+  • Added methods: `togglePin`, `setCategory`, `setFeedback`, `inferCategory`
+  • Added `getConversationFolder()` helper (Today/Yesterday/LastWeek/LastMonth/Older)
+  • Auto-infers category in `ensureTitle` so conversations self-sort into sidebar folders
+- Rebuilt `src/components/oracle/OracleThinkingAnimation.tsx` with exact 5-step sequence:
+  Thinking → Analyzing business → Checking invoices → Reviewing GST → Preparing response → Streaming
+- Rebuilt `src/components/oracle/OracleWelcomeScreen.tsx` with exact PROMPT 3 hero:
+  • "Good {Morning/Afternoon/Evening}, Prince" (time-aware)
+  • "I'm Oracle." with gold gradient
+  • 4 roles: "Your AI CFO. Your GST Expert. Your Compliance Officer. Your Financial Brain."
+  • Animated Oracle orb with pulsing ring
+  • Live metrics strip (Cash/Receivables/GST Liability/Health) from /api/business/snapshot
+  • Data sources analyzed checklist
+  • Exactly 8 suggestion cards: Today's Cash Position, Analyze My Business, Predict Next Month Revenue, Find GST Mistakes, Show Risky Clients, Generate Business Report, Draft Email, Analyze Expenses
+- Created `src/components/oracle/OracleLeftSidebar.tsx` (NEW):
+  • New Chat button (gold gradient)
+  • Search box (filters by title + message content)
+  • Category chips: All · Business · GST · Compliance · Finance
+  • Pinned section (top)
+  • Date folders: Today · Yesterday · Last Week · Last Month · Older
+  • Per-row hover actions: Pin/Unpin · Rename (inline edit) · Delete
+  • Responsive: persistent on lg+, slide-in drawer on mobile
+- Created `src/components/oracle/OracleRightPanel.tsx` (NEW) — LIVE insights:
+  • Updates every 30s from /api/business/snapshot
+  • Business Health animated ring gauge
+  • Current Revenue + Pending Collection split cards
+  • Today's Priorities (derived from snapshot risk/GST/cash)
+  • Upcoming GST Deadlines (GSTR-1 11th, GSTR-3B 20th — auto-computed, overdue/urgent coloring)
+  • Connected Apps (Zoho/GSTN/Banking/Google status dots)
+  • AI Suggestions (dispatch to chat)
+  • Recent Actions (personalized message)
+  • Live/Idle indicator with pulsing dot
+- Rebuilt `src/components/oracle/OracleChat.tsx` — 3-column premium layout:
+  • LEFT: OracleLeftSidebar (persistent lg+, drawer mobile)
+  • CENTER: chat thread + welcome screen + thinking animation + sticky input
+  • RIGHT: OracleRightPanel (persistent xl+, drawer mobile/tablet)
+  • Enhanced LightOracleMessage with: Copy, Regenerate, Like, Dislike, Edit prompt, Export (PDF/Excel/Markdown dropdown)
+  • Kept all existing resilient streaming logic (fetchWithRetry, streamOracle, friendly error fallback)
+  • Top bar with menu toggle (mobile sidebar), PanelRight toggle (mobile right panel), Business Graph, Connectors, Memory, Notifications, Avatar dropdown
+- Ran `bun run lint` — ZERO errors in any Oracle file. All 12 pre-existing errors are in non-Oracle files (SettingsPage, zoho-books sync, health/monitor, tests) and were NOT touched.
+- Browser-verified with agent-browser at 1440x900 viewport:
+  • Page title: "GSTPilot™ — The Financial Brain of India" ✓
+  • Left sidebar present (aside.w-72) ✓
+  • Right panel present (aside.w-80) ✓
+  • Hero text contains "Oracle" ✓
+  • Exactly 8 suggestion cards rendered ✓
+  • Category chips: All/Business/GST/Compliance/Finance ✓
+  • Search box, New Chat button ✓
+  • Clicked "Analyze My Business" → conversation created in sidebar, thinking animation shown, "Stop streaming" appeared, response streamed, "Try again" on friendly error (NO raw HTTP 400) ✓
+  • Zero page errors, zero console errors ✓
+
+Stage Summary:
+- Backup branch: `oracle-backup-premium-cfo` created before any changes.
+- Files CHANGED (all Oracle-only): oracle-conversations.ts, OracleThinkingAnimation.tsx, OracleWelcomeScreen.tsx, OracleChat.tsx
+- Files CREATED (all Oracle-only): OracleLeftSidebar.tsx, OracleRightPanel.tsx
+- Files NOT touched: Login, Dashboard, Home, Sidebar, Customers, Invoices, Returns, Google, Zoho, Banking, Settings, routing, theme, API route, all non-Oracle APIs.
+- HTTP 400 "messages[] is required" NEVER shown to user — API route already bulletproof + frontend retries with backoff + friendly fallback.
+- Dev server runs via `dev-watchdog-webpack.sh` (auto-restarts on OOM). Webpack disk cache (.next/dev, 161MB+) warmed so /oracle compiles in ~9s.
+- Screenshots saved: oracle-premium-1.png (welcome), oracle-premium-2-thinking.png (chat+thinking), oracle-premium-3-response.png (response), oracle-premium-final.png (clean 3-column).

@@ -8090,3 +8090,29 @@ Stage Summary:
 - ✅ zero HTTP 400 (empty body → 200 friendly prompt; errors → friendly message)
 - ✅ production ready (lint clean, browser-verified)
 - Note: Dev server OOMs under rapid concurrent route compiles on 4GB sandbox — use watchdog or sequential route visits. This is an environment constraint, not a code defect.
+
+---
+Task ID: oracle-premium-rebuild
+Agent: main (Z.ai Code)
+Task: Rebuild ONLY Oracle into a Premium AI CFO — fix HTTP 400, premium UI, thinking animation, smart suggestions, executive responses. Do NOT touch any non-Oracle module.
+
+Work Log:
+- Created backup branch `oracle-backup-premium-rebuild` before any changes
+- Verified HTTP 400 fix already present in `/src/app/api/oracle/chat/route.ts` (empty/invalid payloads now return HTTP 200 with friendly SSE message instead of 400)
+- Updated `OracleThinkingAnimation.tsx`: steps now "Thinking → Reading invoices → Calculating GST → Preparing response" (user's exact spec)
+- Rebuilt `OracleWelcomeScreen.tsx`: 8 smart suggestion cards (Overdue Invoices, GST Summary, Cash Flow, Profit This Month, ITC Available, Tax Liabilities, Customer Risk, Generate Report), premium hero with gold glow, glassmorphism, staggered framer-motion, responsive 2-col mobile / 4-col desktop grid, "Connect data" placeholder for empty health score
+- Enhanced system prompt in `route.ts`: added "PREMIUM EXECUTIVE RESPONSE FORMAT" section instructing the AI to produce Executive Summary, Key Metrics (Markdown table), Insights, Recommendations, Next Steps, Risk Level (🟢🟡🟠🔴), Confidence — for analytical questions only (simple questions stay conversational)
+- Verified via curl: `/oracle` → HTTP 200, `/api/oracle/chat` → HTTP 200 with streaming tokens, empty messages → HTTP 200 with friendly nudge (NO HTTP 400), legacy `{message:"..."}` format accepted
+- Verified via VLM (glm-5v-turbo): UI confirmed premium/enterprise-grade with all 8 suggestion cards, glassmorphism, clean hierarchy
+- ESLint: zero errors on all modified Oracle files
+- Set up Python supervisor (`/tmp/sup.py`) with `--max-old-space-size=2048` to keep dev server alive through cgroup OOM events
+
+Stage Summary:
+- Oracle files modified (ONLY Oracle, nothing else):
+  1. `src/components/oracle/OracleThinkingAnimation.tsx` — 4-step thinking flow
+  2. `src/components/oracle/OracleWelcomeScreen.tsx` — 8 smart suggestions + premium hero
+  3. `src/app/api/oracle/chat/route.ts` — executive response format in system prompt
+- HTTP 400 "messages[] is required": ELIMINATED (returns 200 + friendly SSE)
+- Zero TypeScript/ESLint errors on Oracle module
+- Non-Oracle modules (Home, Login, Dashboard, Banking, Zoho, Google, Sidebar, Settings, APIs): UNTOUCHED
+- Known infra constraint: 4GB cgroup limit causes next-server OOM when compiling the heavy home page AppRoot AND when Chrome (agent-browser) runs simultaneously. `/oracle` compiles reliably in ~11s. Home page OOM is pre-existing (not caused by Oracle changes). Supervisor auto-restarts next-server on crash.

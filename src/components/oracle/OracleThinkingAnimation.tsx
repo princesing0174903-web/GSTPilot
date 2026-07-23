@@ -11,15 +11,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Loader2, Database, Landmark, Receipt, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Check, Loader2, Brain, Landmark, Receipt, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const STEPS = [
-  { label: 'Reading Zoho Books', icon: Database },
-  { label: 'Reading Banking', icon: Landmark },
-  { label: 'Reading GST', icon: Receipt },
-  { label: 'Calculating Cash Flow', icon: TrendingUp },
-  { label: 'Checking Compliance', icon: ShieldCheck },
+  { label: 'Thinking', icon: Brain },
+  { label: 'Reading invoices', icon: Receipt },
+  { label: 'Calculating GST', icon: Landmark },
+  { label: 'Preparing response', icon: TrendingUp },
 ];
 
 export function OracleThinkingAnimation({ compact = false }: { compact?: boolean }) {

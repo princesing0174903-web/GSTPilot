@@ -13,6 +13,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,8 @@ export interface OracleTurn {
   followUps?: string[]
   /** Oracle-only: data sources Oracle read (Sources Panel™) */
   sources?: OracleSource[]
+  /** Oracle-only: structured data card (table/stats/chart) rendered above text */
+  structured?: StructuredQueryResult
   /** Oracle-only: is the answer still streaming in? */
   streaming?: boolean
   /** Oracle-only: did the stream error? */
@@ -69,6 +72,7 @@ interface OracleConversationsState {
   setStreaming: (oracleTurnId: string, streaming: boolean) => void
   setFollowUps: (oracleTurnId: string, followUps: string[]) => void
   setSources: (oracleTurnId: string, sources: OracleSource[]) => void
+  setStructured: (oracleTurnId: string, structured: StructuredQueryResult) => void
   setError: (oracleTurnId: string, errorMessage: string) => void
   finalizeMessage: (oracleTurnId: string) => void
 
@@ -240,6 +244,21 @@ export const useOracleConversations = create<OracleConversationsState>()(
                   ...c,
                   messages: c.messages.map((m) =>
                     m.id === oracleTurnId ? { ...m, sources } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setStructured: (oracleTurnId, structured) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, structured } : m
                   ),
                 }
               : c

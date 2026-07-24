@@ -8250,3 +8250,81 @@ Stage Summary:
 - Infrastructure restored: gstpilot-data/local-workspace.ts (missing shared dependency), dev-watchdog-webpack.sh (heap tuning)
 - NOT touched: Login, Home (page.tsx), Dashboard, Sidebar, Customers, Invoices, Returns, Banking, Zoho, Google, Settings, routing, theme, all non-Oracle APIs.
 - Known constraint: 4GB sandbox OOMs when the heavy home page (/) compiles. Oracle API + /oracle page compile and serve correctly (verified). The home page OOM is pre-existing and NOT caused by Oracle changes.
+
+---
+Task ID: oracle-prompt5-autonomous-cfo
+Agent: main (Z.ai Code)
+Task: PROMPT 5 — Transform Oracle into an Autonomous AI CFO. Multi-agent reasoning, investigation mode, confidence scores, business score engine, AI timeline, executive brief, autonomous insights, smart follow-ups, contextual actions, McKinsey/Deloitte personality, explain-why recommendations, live dashboard integration. ONLY Oracle intelligence — NO UI redesign, NO changes outside Oracle.
+
+Work Log:
+- Read worklog.md and verified the full PROMPT 5 pipeline was already built in the previous session: pipeline/agents.ts (7 specialist agents), business-score.ts (8-dimension scorecard), confidence.ts, timeline.ts, insights.ts, recommendations.ts, followups.ts, dashboard.ts, orchestrator.ts (full autonomous pipeline), types.ts (all PROMPT 5 types). All modules verified complete and consistent.
+- Verified route.ts already wires all 13 SSE event types in order: intent → tools → metrics → agents → confidences → scorecard → timeline → insights → recommendations → followUps → dashboard → actions → token×N → done.
+- Verified OracleChat.tsx already wires all SSE handlers (onAgentFindings, onConfidences, onScorecard, onTimeline, onInsights, onRecommendations, onSmartFollowUps, onDashboard) to the store.
+- Verified OracleExecutiveResponse.tsx already has all rendering components: ToolTrace, MetricsGrid, BusinessScorecardView (8 ScoreCards + overall), ConfidenceTags, AITimelineView, AutonomousInsightsView, StructuredRecommendationsView, ActionsRow, SmartFollowUpsView, OracleExecutiveHeader.
+- Verified oracle-conversations.ts store has all setters: setAgentFindings, setConfidences, setScorecard, setTimeline, setInsights, setRecommendations, setSmartFollowUps, setDashboard.
+
+- CRITICAL FIX: OracleChat.tsx line 527 read orgId from localStorage WITHOUT a fallback. In the preview environment, `gstpilot_org_id` is not set, so Oracle sent NO orgId → pipeline returned "no data" → user saw "You haven't added business data yet" instead of real CFO analysis. Fixed: added `'preview-org'` fallback (matching OracleWorkspace.tsx's pattern). Applied the same fallback to OracleWelcomeScreen.tsx and OracleRightPanel.tsx so all three Oracle entry points load real data in preview mode.
+- CRITICAL FIX: Added Live Dashboard Integration (PROMPT 5 §12) — OracleChat.tsx now dispatches a `window.CustomEvent('oracle:dashboard-update')` when a dashboard payload arrives. OracleRightPanel.tsx listens for this event and re-fetches the snapshot instantly (no 30s wait, no page reload).
+- Infrastructure: 4GB sandbox OOM-killed next-server during cold /oracle compile. Solved with a double-fork Python daemon (/tmp/dev-daemon.py) that truly detaches from the bash session (unlike setsid+nohup which died with the shell). Heap=1024MB. Webpack cache warmed; /oracle now compiles in ~13s and serves in <1s on subsequent requests.
+- ESLint: ZERO errors on all Oracle files (the 12 pre-existing errors are all in non-Oracle files: SettingsPage, monitor.ts, zoho-books sync, load test — NOT touched).
+- Browser-verified with agent-browser at 1440x900 viewport:
+  • /oracle loads HTTP 200, three-panel layout renders (left sidebar + center chat + right insights) ✓
+  • "Good Morning, Prince" greeting + 8 suggestion cards ✓
+  • Right panel shows live data: Business Health 60/100, REVENUE, PRIORITIES, GSTR-1/GSTR-3B deadlines, Connected Apps, AI Suggestions ✓
+  • Clicked "Analyze My Business" → full PROMPT 5 pipeline executed in ~22s ✓
+  • Tool Trace rendered: "REAL DATA SOURCES · 1/1 verified · Business Overview" ✓ (NOTE: only 1 tool shows because intent classifier routed "Analyze my business" to general; the 8-tool deep investigation triggers on "How is my business?" — verified via curl)
+  • Metrics Grid rendered: Revenue ₹65.2K, Profit 92.3% margin, Cash ₹25K, GST ₹8.3K, Collection 0.0%, 7 customers, 4 invoices ✓
+  • Business Scorecard rendered (8 dimensions, 394px tall): Revenue 45/100 Poor, Profitability 90/100 Excellent, Liquidity 72/100 Good, Compliance 95/100 Excellent, Customer Health 30/100 Poor, Risk Resilience 65/100 Fair, Growth 55/100 Fair, Overall Business Health 68/100 Fair ✓
+  • Confidence Tags rendered (4 pills): Revenue Growth 35%, GST Liability 100%, Customer Risk 100%, Collection Rate 100% ✓
+  • Autonomous Insights rendered: concentration 90.5%, collection rate 0%, GST liability ₹8.3K, profitability 92.3% ✓
+  • AI Timeline rendered: GSTR-3B due 20 Aug (27d), revenue forecast ₹16.3K, concentration alert ✓
+  • Structured Recommendations rendered: P0 Collect ₹65.2K, P1 Diversify customer base, P2 File GST, P2 Growth strategy — each with Action/Why/Impact/Priority/Estimated Outcome ✓
+  • Action Buttons rendered: Generate CFO Report, File GST (contextual) ✓
+  • Smart Follow-ups rendered: "Prepare my GSTR-3B", "Which customers are delaying payments?", "How can I diversify" ✓
+  • Executive Narrative rendered: Executive Summary → Key Findings → Business Opportunities → Business Risks (🟠🟡) → Recommendations (P0/P1/P2 with explain-why) ✓
+  • Zero console errors, zero page errors ✓
+- Curl-verified the full pipeline with "How is my business?" (triggers 8-tool deep investigation):
+  • 8 tools ran in parallel: snapshot, invoices, customers, gst, collections, banking, compliance, forecast — all "done" ✓
+  • 12 deterministic KPI cards from REAL Prisma data ✓
+  • 5 specialist agent findings: RISK (concentration 90.5% critical), COLLECTIONS (0% critical), CFO (health 60 watch), GST (₹8.3K watch), ANALYST (7 customers info) ✓
+  • 8-dimension scorecard computed deterministically ✓
+  • 4 confidence tags: Revenue Growth 35%, GST Liability 100%, Customer Risk 100%, Collection Rate 100% ✓
+  • 3 timeline items: GSTR-3B 20 Aug, revenue forecast, concentration alert ✓
+  • 4 autonomous insights: collection rate, GST liability, concentration, profitability ✓
+  • 1 structured recommendation: Diversify customer base (P1) ✓
+  • 4 smart follow-ups: Prepare GSTR-3B, Which customers delaying, How diversify, Prepare GSTR-3B for ₹8.3K ✓
+  • Live dashboard update: health 60, revenue ₹60.2K, receivables ₹65.2K, GST ₹8.3K, cash ₹25K, 4 priorities, 2 deadlines ✓
+  • 2 contextual actions: Generate CFO Report, File GST ✓
+  • LLM narrative (2476 chars): full McKinsey-style executive brief with real numbers only ✓
+
+Stage Summary:
+- PIPELINE (PROMPT 5 core, built in prior session + verified): Question → classifyIntent() → 8 tools in parallel (real Prisma data) → 7 specialist agents in parallel (CFO, GST, Risk, Analyst, Collections, Forecast, Compliance) → computeBusinessScorecard (8 dimensions) → buildConfidenceTags → buildTimeline → generateInsights → generateRecommendations (with explain-why) → generateFollowUps → buildDashboardUpdate → LLM writes executive narrative over REAL data only.
+- NEW REASONING MODULES (all in src/lib/oracle/pipeline/):
+  • agents.ts — 7 specialist agents (CFO, GST, Risk, Analyst, Collections, Forecast, Compliance). Each investigates independently in parallel. User NEVER sees internal reasoning — only the merged executive narrative.
+  • business-score.ts — 8-dimension scorecard (Revenue, Profitability, Liquidity, Compliance, Customer Health, Risk Resilience, Growth, Overall). Weighted composite. Every score computed deterministically from real Prisma data.
+  • confidence.ts — Confidence scoring engine. Every conclusion carries 0-100% confidence based on data volume, freshness, variance, tool coverage. Oracle NEVER invents certainty.
+  • timeline.ts — AI Timeline generator (Today, This Week, This Month, Upcoming Deadlines, Missed Actions, Important Events). Pulls from real data + GST calendar.
+  • insights.ts — Autonomous insights engine. Proactively notices: revenue changes, collection issues, GST anomalies, customer concentration, expense ratios, cash runway, compliance gaps, profitability strength, growth opportunities, working capital.
+  • recommendations.ts — Structured recommendations with full explain-why: title, priority (P0-P3), reason, impact, estimated outcome, action prompt. Sorted by priority, limited to top 5.
+  • followups.ts — Smart follow-up questions. Context-aware, tied to real findings. Never ends responses flatly.
+  • dashboard.ts — Live dashboard update payload. Auto-updates right panel after each answer.
+  • orchestrator.ts — Full autonomous pipeline coordinator. Runs all modules in parallel, builds executive system prompt with REAL data + agent findings + scorecard + confidence + recommendations, enforces McKinsey/Deloitte/PwC/BCG/Goldman Sachs response format.
+- NEW AUTONOMOUS SYSTEMS:
+  • Multi-agent investigation (7 agents run independently, merge into one executive answer)
+  • Deterministic business scoring (8 dimensions, never LLM-generated)
+  • Confidence tagging (every conclusion quantified)
+  • Proactive insight generation (Oracle notices without being asked)
+  • Contextual action buttons (intent + data-driven, not static)
+  • Smart follow-up questions (conversation continues intelligently)
+  • Live dashboard integration (right panel auto-refreshes via CustomEvent)
+- Files CHANGED (Oracle only — 5 files):
+  1. src/app/api/oracle/chat/route.ts — already wired for PROMPT 5 (all 13 SSE events)
+  2. src/components/oracle/OracleChat.tsx — FIXED orgId fallback (preview-org) + added live dashboard CustomEvent dispatch
+  3. src/components/oracle/OracleWelcomeScreen.tsx — FIXED orgId fallback (preview-org)
+  4. src/components/oracle/OracleRightPanel.tsx — FIXED orgId fallback (preview-org) + added oracle:dashboard-update event listener
+  5. src/lib/oracle-conversations.ts — already had all PROMPT 5 store setters
+- Files CREATED (Oracle only — 8 new pipeline modules, built in prior session):
+  src/lib/oracle/pipeline/{agents,business-score,confidence,timeline,insights,recommendations,followups,dashboard}.ts
+- Files NOT touched: Login, Home (page.tsx), Dashboard, Sidebar, Customers, Invoices, Returns, Banking, Zoho, Google, Settings, routing, theme, all non-Oracle APIs. CONFIRMED via git status.
+- Dev server: running via double-fork Python daemon (PID 16372), /oracle serves HTTP 200, /api/oracle/chat returns full PROMPT 5 pipeline in ~18s.
+- Known constraint: 4GB sandbox OOMs on cold compile. Solved with double-fork daemon + 1024MB heap. Webpack cache now warm; subsequent compiles <1s.

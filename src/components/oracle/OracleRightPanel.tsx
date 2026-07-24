@@ -165,8 +165,11 @@ export function OracleRightPanel({ userName, onSuggestion, onClose }: RightPanel
 
   const fetchSnapshot = useCallback(async () => {
     try {
-      const orgId = typeof window !== 'undefined' ? window.localStorage.getItem('gstpilot_org_id') : null;
-      if (!orgId) { setLoading(false); return; }
+      // Fall back to the canonical preview org so the right panel always shows
+      // live insights (matches OracleWorkspace's orgCtx fallback).
+      const orgId = typeof window !== 'undefined'
+        ? (window.localStorage.getItem('gstpilot_org_id') ?? 'preview-org')
+        : 'preview-org';
       const res = await fetch(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`);
       if (res.ok) {
         const data = await res.json();
@@ -181,7 +184,14 @@ export function OracleRightPanel({ userName, onSuggestion, onClose }: RightPanel
     fetchSnapshot();
     // LIVE updates every 30s
     const id = setInterval(fetchSnapshot, 30000);
-    return () => clearInterval(id);
+    // PROMPT 5 §12: Live Dashboard Integration — refresh instantly when Oracle
+    // finishes an analysis (no page reload, no 30s wait).
+    const onOracleDashboard = () => fetchSnapshot();
+    window.addEventListener('oracle:dashboard-update', onOracleDashboard);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('oracle:dashboard-update', onOracleDashboard);
+    };
   }, [fetchSnapshot]);
 
   const healthScore = snapshot?.healthScore ?? 0;

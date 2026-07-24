@@ -168,8 +168,9 @@ export function OracleWelcomeScreen({ userName, onPick }: WelcomeProps) {
     let cancelled = false;
     const fetchSnapshot = async () => {
       try {
-        const orgId = window.localStorage.getItem('gstpilot_org_id');
-        if (!orgId) { setLoading(false); return; }
+        // Fall back to the canonical preview org so the welcome screen always
+        // shows live metrics (matches OracleWorkspace's orgCtx fallback).
+        const orgId = window.localStorage.getItem('gstpilot_org_id') ?? 'preview-org';
         const res = await fetch(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`);
         if (res.ok) {
           const data = await res.json();

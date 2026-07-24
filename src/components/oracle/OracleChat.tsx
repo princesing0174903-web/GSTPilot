@@ -36,7 +36,20 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useOracleConversations } from '@/lib/oracle-conversations';
 import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types';
-import type { OracleMetricCard, OracleActionButton, OracleToolExecution } from '@/lib/oracle-conversations';
+import type {
+  OracleMetricCard,
+  OracleActionButton,
+  OracleToolExecution,
+  OracleTurn,
+  OracleAgentFinding,
+  OracleConfidenceTag,
+  OracleBusinessScorecard,
+  OracleTimelineItem,
+  OracleInsight,
+  OracleRecommendation,
+  OracleSmartFollowUp,
+  OracleDashboardUpdate,
+} from '@/lib/oracle-conversations';
 import { OracleInput, type OracleInputHandle } from './OracleInput';
 import { OracleWelcomeScreen } from './OracleWelcomeScreen';
 import { OracleThinkingAnimation } from './OracleThinkingAnimation';
@@ -45,7 +58,7 @@ import { OracleMarkdown } from './OracleMarkdown';
 import { OracleDataCard } from './OracleDataCard';
 import { OracleLeftSidebar } from './OracleLeftSidebar';
 import { OracleRightPanel } from './OracleRightPanel';
-import { OracleExecutiveHeader, ActionsRow } from './OracleExecutiveResponse';
+import { OracleExecutiveHeader } from './OracleExecutiveResponse';
 
 // ─── Lightweight inline message renderer ─────────────────────────────────────
 // Renders user/oracle messages as rounded bubbles with gold avatar, plus a
@@ -59,7 +72,7 @@ function LightOracleMessage({
   onDislike,
   onEdit,
 }: {
-  turn: { id: string; role: 'user' | 'oracle'; content: string; streaming?: boolean; error?: boolean; followUps?: string[]; structured?: StructuredQueryResult; metrics?: OracleMetricCard[]; actions?: OracleActionButton[]; toolTrace?: OracleToolExecution[]; intent?: string };
+  turn: OracleTurn;
   onPickFollowUp?: (prompt: string) => void;
   onRetry?: () => void;
   onLike?: () => void;
@@ -166,12 +179,31 @@ function LightOracleMessage({
           <OracleDataCard data={turn.structured} />
         )}
 
-        {/* PROMPT 4: Executive header — tool trace + deterministic KPI cards */}
-        {!turn.error && (turn.toolTrace?.length || turn.metrics?.length) ? (
+        {/* PROMPT 5: Executive header — tool trace + metrics + scorecard + insights + timeline + recommendations + actions + smart follow-ups */}
+        {!turn.error && (
+          turn.toolTrace?.length ||
+          turn.metrics?.length ||
+          turn.scorecard ||
+          turn.confidences?.length ||
+          turn.timeline?.length ||
+          turn.insights?.length ||
+          turn.recommendations?.length ||
+          turn.actions?.length ||
+          turn.smartFollowUps?.length
+        ) ? (
           <OracleExecutiveHeader
             tools={turn.toolTrace}
             metrics={turn.metrics}
             intent={turn.intent}
+            scorecard={turn.scorecard}
+            confidences={turn.confidences}
+            timeline={turn.timeline}
+            insights={turn.insights}
+            recommendations={turn.recommendations}
+            followUps={turn.smartFollowUps}
+            actions={turn.actions}
+            onAction={(p) => onPickFollowUp?.(p)}
+            onAsk={(q) => onPickFollowUp?.(q)}
           />
         ) : null}
 
@@ -189,11 +221,6 @@ function LightOracleMessage({
             <OracleMarkdown content={turn.content} streaming={turn.streaming} />
           )}
         </div>
-
-        {/* PROMPT 4: Action buttons (Generate Report, Collect Payment, etc.) */}
-        {!turn.error && !turn.streaming && turn.actions && turn.actions.length > 0 && (
-          <ActionsRow actions={turn.actions} onAction={(p) => onPickFollowUp?.(p)} />
-        )}
 
         {/* ── Premium action row ── */}
         {!turn.error && !turn.streaming && turn.content.length > 0 && (
@@ -388,6 +415,17 @@ interface StreamEvent {
   metrics?: { key: string; label: string; value: string; sub?: string; trend?: 'up' | 'down' | 'flat'; tone?: 'positive' | 'negative' | 'neutral' | 'warning' }[];
   actions?: { id: string; label: string; icon: string; prompt: string; tone?: 'primary' | 'default' }[];
   followUps?: string[];
+  // PROMPT 5 autonomous CFO events
+  agents?: { agent: string; headline: string; analysis: string; severity: 'info' | 'watch' | 'warn' | 'critical'; confidence: number; evidence: string[] }[];
+  confidences?: { label: string; confidence: number; rationale: string }[];
+  scorecard?: OracleBusinessScorecard | null;
+  timeline?: { bucket: 'today' | 'this_week' | 'this_month' | 'upcoming' | 'missed' | 'events'; when: string; title: string; detail?: string; severity?: 'info' | 'watch' | 'warn' | 'critical' }[];
+  insights?: { id: string; headline: string; detail: string; tone: 'positive' | 'negative' | 'warning' | 'opportunity'; metric?: string; actionPrompt?: string }[];
+  recommendations?: { id: string; title: string; priority: 'P0' | 'P1' | 'P2' | 'P3'; reason: string; impact: string; estimatedOutcome: string; actionPrompt?: string }[];
+  // Smart follow-ups as structured objects (PROMPT 5). Legacy string[] followUps
+  // is still supported for backward compatibility.
+  followUpsObj?: { id: string; question: string; rationale?: string }[];
+  dashboard?: OracleDashboardUpdate | null;
 }
 
 // ─── streamOracle — with automatic HTTP 400/500 retry ─────────────────────────
@@ -463,6 +501,15 @@ async function streamOracle(
     onDone: () => void;
     onError: (message: string) => void;
     onRetry?: (attempt: number) => void;
+    // PROMPT 5 autonomous CFO handlers
+    onAgentFindings?: (findings: NonNullable<StreamEvent['agents']>) => void;
+    onConfidences?: (tags: NonNullable<StreamEvent['confidences']>) => void;
+    onScorecard?: (scorecard: OracleBusinessScorecard | null) => void;
+    onTimeline?: (items: NonNullable<StreamEvent['timeline']>) => void;
+    onInsights?: (insights: NonNullable<StreamEvent['insights']>) => void;
+    onRecommendations?: (recs: NonNullable<StreamEvent['recommendations']>) => void;
+    onSmartFollowUps?: (followUps: NonNullable<StreamEvent['followUpsObj']>) => void;
+    onDashboard?: (dashboard: OracleDashboardUpdate | null) => void;
   },
   signal?: AbortSignal
 ): Promise<void> {
@@ -475,15 +522,19 @@ async function streamOracle(
       { role: 'user' as const, content: payload.message },
     ];
 
-    let organizationId: string | undefined;
+    // Resolve the active organization. Prefer the value stored by the workspace
+    // shell; fall back to the canonical preview org so Oracle ALWAYS has real
+    // data to reason over (matches OracleWorkspace's orgCtx fallback).
+    let organizationId: string = 'preview-org';
     try {
-      organizationId = window.localStorage.getItem('gstpilot_org_id') ?? undefined;
-    } catch { /* private mode */ }
+      const stored = window.localStorage.getItem('gstpilot_org_id');
+      if (stored && stored.trim()) organizationId = stored.trim();
+    } catch { /* private mode — keep preview-org */ }
 
     const apiPayload = {
       messages,
       memory: { userName: payload.userName, userId: payload.userId },
-      context: organizationId ? { organizationId } : undefined,
+      context: { organizationId },
     };
 
     const res = await fetchWithRetry(apiPayload, signal);
@@ -518,7 +569,27 @@ async function streamOracle(
           if (data.tools) handlers.onToolTrace?.(data.tools, data.intent);
           if (data.metrics) handlers.onMetrics?.(data.metrics);
           if (data.actions) handlers.onActions?.(data.actions);
-          if (data.followUps) handlers.onFollowUps(data.followUps);
+          // PROMPT 5: the API emits `followUps` as SmartFollowUp objects
+          // ({id, question, rationale}). Legacy `followUps` were string[].
+          // Dispatch based on shape to avoid "Objects are not valid as a React
+          // child" crashes.
+          if (data.followUps) {
+            const first = data.followUps[0];
+            if (first && typeof first === 'object') {
+              handlers.onSmartFollowUps?.(data.followUps as unknown as NonNullable<StreamEvent['followUpsObj']>);
+            } else {
+              handlers.onFollowUps(data.followUps as unknown as string[]);
+            }
+          }
+          // PROMPT 5: dispatch autonomous CFO events
+          if (data.agents) handlers.onAgentFindings?.(data.agents);
+          if (data.confidences) handlers.onConfidences?.(data.confidences);
+          if (data.scorecard !== undefined) handlers.onScorecard?.(data.scorecard ?? null);
+          if (data.timeline) handlers.onTimeline?.(data.timeline);
+          if (data.insights) handlers.onInsights?.(data.insights);
+          if (data.recommendations) handlers.onRecommendations?.(data.recommendations);
+          if (data.followUpsObj) handlers.onSmartFollowUps?.(data.followUpsObj);
+          if (data.dashboard !== undefined) handlers.onDashboard?.(data.dashboard ?? null);
           if (data.token) handlers.onDelta(data.token);
           if (data.done) { handlers.onDone(); return; }
           if (data.error) { handlers.onError(FRIENDLY_ERROR); return; }
@@ -633,6 +704,25 @@ export function OracleChat() {
         onToolTrace: (tools, intent) => store.setToolTrace(oracleTurnId, tools ?? [], intent),
         onMetrics: (metrics) => store.setMetrics(oracleTurnId, metrics ?? []),
         onActions: (actions) => store.setActions(oracleTurnId, actions ?? []),
+        // PROMPT 5: wire autonomous CFO handlers
+        onAgentFindings: (findings) => store.setAgentFindings(oracleTurnId, findings as OracleAgentFinding[]),
+        onConfidences: (tags) => store.setConfidences(oracleTurnId, tags as OracleConfidenceTag[]),
+        onScorecard: (scorecard) => store.setScorecard(oracleTurnId, scorecard as OracleBusinessScorecard | null),
+        onTimeline: (items) => store.setTimeline(oracleTurnId, items as OracleTimelineItem[]),
+        onInsights: (insights) => store.setInsights(oracleTurnId, insights as OracleInsight[]),
+        onRecommendations: (recs) => store.setRecommendations(oracleTurnId, recs as OracleRecommendation[]),
+        onSmartFollowUps: (followUps) => store.setSmartFollowUps(oracleTurnId, followUps as OracleSmartFollowUp[]),
+        onDashboard: (dashboard) => {
+          store.setDashboard(oracleTurnId, dashboard as OracleDashboardUpdate | null);
+          // PROMPT 5 §12: Live Dashboard Integration — broadcast the dashboard
+          // update so the right-side Insights panel refreshes instantly without
+          // a page reload.
+          if (dashboard) {
+            try {
+              window.dispatchEvent(new CustomEvent('oracle:dashboard-update', { detail: dashboard }));
+            } catch { /* SSR / non-browser */ }
+          }
+        },
         onDone: () => {
           store.finalizeMessage(oracleTurnId);
           setIsStreaming(false);

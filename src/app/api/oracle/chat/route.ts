@@ -1,13 +1,24 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Streaming Chat API (PROMPT 4: Real AI Business Brain)
+// GSTPilot Oracle™ — Streaming Chat API (PROMPT 5: Autonomous AI CFO)
 // POST /api/oracle/chat
 //
 // PIPELINE (every message):
 //   1. Parse + validate (NEVER returns HTTP 400 — empty → friendly SSE)
-//   2. runPipeline(): intent → tools → REAL data → executive prompt
+//   2. runPipeline():
+//        intent → tools → real data → multi-agent reasoning → business scorecard
+//        → confidence tags → AI timeline → autonomous insights
+//        → structured recommendations → smart follow-ups → live dashboard update
 //   3. Stream SSE events in order:
-//        { intent, tools:[...] }    ← live tool trace (emitted as each tool finishes)
+//        { intent, tools:[...] }    ← live tool trace
 //        { metrics:[...] }          ← deterministic KPI cards (REAL data)
+//        { agents:[...] }           ← PROMPT 5: agent findings (internal, shown as insights)
+//        { confidences:[...] }      ← PROMPT 5: confidence tags
+//        { scorecard }              ← PROMPT 5: business scorecard
+//        { timeline:[...] }         ← PROMPT 5: AI timeline items
+//        { insights:[...] }         ← PROMPT 5: autonomous insights
+//        { recommendations:[...] }  ← PROMPT 5: structured recommendations
+//        { followUps:[...] }        ← PROMPT 5: smart follow-up questions
+//        { dashboard }              ← PROMPT 5: live dashboard update
 //        { actions:[...] }          ← action buttons
 //        { token:"..." } × N        ← streamed executive narrative (LLM)
 //        { done:true }
@@ -89,21 +100,6 @@ function parseRequest(body: unknown): ParsedRequest {
   };
 }
 
-// ─── Language hint (for the UI cursor) ────────────────────────────────────────
-
-function inferLanguageHint(text: string): string | null {
-  const t = (text || '').toLowerCase();
-  if (/[\u0900-\u097F]/.test(text)) return 'hindi';
-  if (/\b(hindi|devanagari)\b/.test(t)) return 'hindi';
-  if (/\b(tamil)\b/.test(t)) return 'tamil';
-  if (/\b(telugu)\b/.test(t)) return 'telugu';
-  if (/\b(bengali)\b/.test(t)) return 'bengali';
-  if (/\b(gujarati)\b/.test(t)) return 'gujarati';
-  if (/\b(marathi)\b/.test(t)) return 'marathi';
-  if (/\b(punjabi)\b/.test(t)) return 'punjabi';
-  return null;
-}
-
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: Request): Promise<Response> {
@@ -128,15 +124,13 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(stream, { status: 200, headers: sseHeaders() });
   }
 
-  // 3. Run the pipeline (intent → tools → real data → executive prompt).
-  //    The onToolProgress callback streams each tool completion live.
+  // 3. Run the pipeline (intent → tools → agents → scores → insights → prompt).
   let pipeline;
   try {
     pipeline = await runPipeline(parsed.question, {
       organizationId: parsed.organizationId,
       onToolProgress: () => {
-        // Tool progress is emitted after the pipeline resolves (below) to
-        // keep the code simple. The full tool trace is sent as one event.
+        // Tool progress is emitted after the pipeline resolves (below).
       },
     });
   } catch (err) {
@@ -151,7 +145,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // 4. Build the model messages: system prompt (with real data) + history + question.
-  const languageHint = inferLanguageHint(parsed.question);
   const modelMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: pipeline.systemPrompt },
     ...parsed.history.slice(-8).map((m) => ({
@@ -188,13 +181,21 @@ export async function POST(req: Request): Promise<Response> {
     const message = err instanceof Error ? err.message : 'Unknown error';
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        // Still emit the real metrics + tools so the user sees the data even
-        // if the narrative fails.
+        // Still emit ALL the real structured data so the user sees the analysis
+        // even if the narrative fails.
         controller.enqueue(sseChunk({ intent: pipeline.intent, tools: pipeline.tools }));
         controller.enqueue(sseChunk({ metrics: pipeline.metrics }));
+        controller.enqueue(sseChunk({ agents: pipeline.agents.findings }));
+        controller.enqueue(sseChunk({ confidences: pipeline.confidences }));
+        controller.enqueue(sseChunk({ scorecard: pipeline.scorecard }));
+        controller.enqueue(sseChunk({ timeline: pipeline.timeline.items }));
+        controller.enqueue(sseChunk({ insights: pipeline.insights }));
+        controller.enqueue(sseChunk({ recommendations: pipeline.recommendations }));
+        controller.enqueue(sseChunk({ followUps: pipeline.followUps }));
+        controller.enqueue(sseChunk({ dashboard: pipeline.dashboard }));
         controller.enqueue(sseChunk({ actions: pipeline.actions }));
         controller.enqueue(sseChunk({
-          token: `I collected your real business data (see the cards above), but I hit a temporary issue writing the narrative (${message}). The numbers are accurate — try again in a moment for the full analysis.`,
+          token: `I collected your real business data and ran the full multi-agent analysis (see the cards and scores above), but I hit a temporary issue writing the narrative (${message}). The numbers and findings are accurate — try again in a moment for the full executive brief.`,
         }));
         controller.enqueue(sseChunk({ done: true }));
         controller.close();
@@ -209,6 +210,14 @@ export async function POST(req: Request): Promise<Response> {
   const metrics = pipeline.metrics;
   const actions = pipeline.actions;
   const intent = pipeline.intent;
+  const agentFindings = pipeline.agents.findings;
+  const confidences = pipeline.confidences;
+  const scorecard = pipeline.scorecard;
+  const timelineItems = pipeline.timeline.items;
+  const insights = pipeline.insights;
+  const recommendations = pipeline.recommendations;
+  const followUps = pipeline.followUps;
+  const dashboard = pipeline.dashboard;
   const persistCtx = {
     userMessage: parsed.question,
     knownUserName: parsed.userName,
@@ -220,12 +229,26 @@ export async function POST(req: Request): Promise<Response> {
       controller.enqueue(sseChunk({ intent, tools }));
       // (b) Emit deterministic KPI cards (computed from real Prisma data).
       controller.enqueue(sseChunk({ metrics }));
-      // (c) Emit action buttons.
+      // (c) PROMPT 5: Emit agent findings (shown as insights panel).
+      controller.enqueue(sseChunk({ agents: agentFindings }));
+      // (d) PROMPT 5: Emit confidence tags.
+      controller.enqueue(sseChunk({ confidences }));
+      // (e) PROMPT 5: Emit business scorecard.
+      controller.enqueue(sseChunk({ scorecard }));
+      // (f) PROMPT 5: Emit AI timeline.
+      controller.enqueue(sseChunk({ timeline: timelineItems }));
+      // (g) PROMPT 5: Emit autonomous insights.
+      controller.enqueue(sseChunk({ insights }));
+      // (h) PROMPT 5: Emit structured recommendations.
+      controller.enqueue(sseChunk({ recommendations }));
+      // (i) PROMPT 5: Emit smart follow-up questions.
+      controller.enqueue(sseChunk({ followUps }));
+      // (j) PROMPT 5: Emit live dashboard update (auto-updates the right panel).
+      controller.enqueue(sseChunk({ dashboard }));
+      // (k) Emit action buttons.
       controller.enqueue(sseChunk({ actions }));
-      // (d) Language hint (for the UI cursor).
-      if (languageHint) controller.enqueue(sseChunk({ token: '' }));
 
-      // (e) Stream the LLM narrative tokens.
+      // (l) Stream the LLM narrative tokens.
       const reader = upstream!.getReader();
       let buffer = '';
       let emittedAny = false;
@@ -282,7 +305,7 @@ export async function POST(req: Request): Promise<Response> {
         if (!emittedAny) {
           controller.enqueue(sseChunk({
             token: pipeline.hasRealData
-              ? "Based on your real business data (shown in the cards above), everything looks consistent. Let me know which area you'd like me to drill into — revenue, cash, GST, or collections."
+              ? "Based on your real business data (shown in the cards and scores above), everything looks consistent. Let me know which area you'd like me to drill into — revenue, cash, GST, or collections."
               : "You haven't added business data yet. Connect Zoho Books, add invoices, or sync your bank feed — then I can give you a real CFO analysis with live numbers.",
           }));
         }
@@ -291,7 +314,7 @@ export async function POST(req: Request): Promise<Response> {
       } catch (err) {
         if (!emittedAny) {
           controller.enqueue(sseChunk({
-            token: 'My response was interrupted. The real data above is accurate — please try sending that again for the full narrative.',
+            token: 'My response was interrupted. The real data and scores above are accurate — please try sending that again for the full executive brief.',
           }));
         }
         controller.enqueue(sseChunk({ done: true }));

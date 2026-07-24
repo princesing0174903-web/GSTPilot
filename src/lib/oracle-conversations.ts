@@ -64,6 +64,96 @@ export interface OracleToolExecution {
   durationMs?: number
 }
 
+// ─── PROMPT 5: Autonomous AI CFO types (additive) ─────────────────────────────
+
+/** A finding from one of Oracle's internal specialist agents. */
+export interface OracleAgentFinding {
+  agent: 'cfo' | 'gst' | 'risk' | 'analyst' | 'collections' | 'forecast' | 'compliance'
+  headline: string
+  analysis: string
+  severity: 'info' | 'watch' | 'warn' | 'critical'
+  confidence: number
+  evidence: string[]
+}
+
+/** A confidence tag for a conclusion. */
+export interface OracleConfidenceTag {
+  label: string
+  confidence: number
+  rationale: string
+}
+
+/** A single business score component. */
+export interface OracleScoreComponent {
+  key: string
+  label: string
+  score: number
+  grade: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical'
+  reason: string
+}
+
+/** Full business health scorecard. */
+export interface OracleBusinessScorecard {
+  revenue: OracleScoreComponent
+  profitability: OracleScoreComponent
+  liquidity: OracleScoreComponent
+  compliance: OracleScoreComponent
+  customerHealth: OracleScoreComponent
+  risk: OracleScoreComponent
+  growth: OracleScoreComponent
+  overall: OracleScoreComponent
+}
+
+/** A timeline item. */
+export interface OracleTimelineItem {
+  bucket: 'today' | 'this_week' | 'this_month' | 'upcoming' | 'missed' | 'events'
+  when: string
+  title: string
+  detail?: string
+  severity?: 'info' | 'watch' | 'warn' | 'critical'
+}
+
+/** An autonomous proactive insight. */
+export interface OracleInsight {
+  id: string
+  headline: string
+  detail: string
+  tone: 'positive' | 'negative' | 'warning' | 'opportunity'
+  metric?: string
+  actionPrompt?: string
+}
+
+/** A structured recommendation with explain-why. */
+export interface OracleRecommendation {
+  id: string
+  title: string
+  priority: 'P0' | 'P1' | 'P2' | 'P3'
+  reason: string
+  impact: string
+  estimatedOutcome: string
+  actionPrompt?: string
+}
+
+/** A smart follow-up question. */
+export interface OracleSmartFollowUp {
+  id: string
+  question: string
+  rationale?: string
+}
+
+/** Live dashboard update payload. */
+export interface OracleDashboardUpdate {
+  healthScore: number
+  healthLabel: string
+  revenue: string
+  receivables: string
+  gstLiability: string
+  cash: string
+  riskScore: number
+  priorities: { label: string; severity: 'info' | 'watch' | 'warn' | 'critical' }[]
+  upcomingDeadlines: { label: string; when: string; severity: 'info' | 'watch' | 'warn' | 'critical' }[]
+}
+
 export interface OracleTurn {
   id: string
   role: MessageRole
@@ -82,6 +172,22 @@ export interface OracleTurn {
   toolTrace?: OracleToolExecution[]
   /** Oracle-only (PROMPT 4): classified intent */
   intent?: string
+  /** Oracle-only (PROMPT 5): internal agent findings */
+  agentFindings?: OracleAgentFinding[]
+  /** Oracle-only (PROMPT 5): confidence tags */
+  confidences?: OracleConfidenceTag[]
+  /** Oracle-only (PROMPT 5): business scorecard */
+  scorecard?: OracleBusinessScorecard | null
+  /** Oracle-only (PROMPT 5): AI timeline items */
+  timeline?: OracleTimelineItem[]
+  /** Oracle-only (PROMPT 5): autonomous insights */
+  insights?: OracleInsight[]
+  /** Oracle-only (PROMPT 5): structured recommendations */
+  recommendations?: OracleRecommendation[]
+  /** Oracle-only (PROMPT 5): smart follow-up questions */
+  smartFollowUps?: OracleSmartFollowUp[]
+  /** Oracle-only (PROMPT 5): live dashboard update */
+  dashboard?: OracleDashboardUpdate | null
   /** Oracle-only: is the answer still streaming in? */
   streaming?: boolean
   /** Oracle-only: did the stream error? */
@@ -137,6 +243,22 @@ interface OracleConversationsState {
   setActions: (oracleTurnId: string, actions: OracleActionButton[]) => void
   /** PROMPT 4: set the tool execution trace + intent. */
   setToolTrace: (oracleTurnId: string, trace: OracleToolExecution[], intent?: string) => void
+  /** PROMPT 5: set internal agent findings. */
+  setAgentFindings: (oracleTurnId: string, findings: OracleAgentFinding[]) => void
+  /** PROMPT 5: set confidence tags. */
+  setConfidences: (oracleTurnId: string, tags: OracleConfidenceTag[]) => void
+  /** PROMPT 5: set business scorecard. */
+  setScorecard: (oracleTurnId: string, scorecard: OracleBusinessScorecard | null) => void
+  /** PROMPT 5: set AI timeline items. */
+  setTimeline: (oracleTurnId: string, items: OracleTimelineItem[]) => void
+  /** PROMPT 5: set autonomous insights. */
+  setInsights: (oracleTurnId: string, insights: OracleInsight[]) => void
+  /** PROMPT 5: set structured recommendations. */
+  setRecommendations: (oracleTurnId: string, recs: OracleRecommendation[]) => void
+  /** PROMPT 5: set smart follow-up questions. */
+  setSmartFollowUps: (oracleTurnId: string, followUps: OracleSmartFollowUp[]) => void
+  /** PROMPT 5: set live dashboard update. */
+  setDashboard: (oracleTurnId: string, dashboard: OracleDashboardUpdate | null) => void
   setError: (oracleTurnId: string, errorMessage: string) => void
   finalizeMessage: (oracleTurnId: string) => void
 
@@ -427,6 +549,126 @@ export const useOracleConversations = create<OracleConversationsState>()(
                   ...c,
                   messages: c.messages.map((m) =>
                     m.id === oracleTurnId ? { ...m, toolTrace: trace, intent } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setAgentFindings: (oracleTurnId, findings) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, agentFindings: findings } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setConfidences: (oracleTurnId, tags) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, confidences: tags } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setScorecard: (oracleTurnId, scorecard) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, scorecard } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setTimeline: (oracleTurnId, items) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, timeline: items } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setInsights: (oracleTurnId, insights) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, insights } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setRecommendations: (oracleTurnId, recs) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, recommendations: recs } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setSmartFollowUps: (oracleTurnId, followUps) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, smartFollowUps: followUps } : m
+                  ),
+                }
+              : c
+          ),
+        }))
+      },
+
+      setDashboard: (oracleTurnId, dashboard) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId ? { ...m, dashboard } : m
                   ),
                 }
               : c

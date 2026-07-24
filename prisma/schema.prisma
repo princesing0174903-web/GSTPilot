@@ -6137,3 +6137,177 @@ model ZohoBankTransaction {
   @@index([bankAccountId])
   @@index([organizationId, zohoOrgId, transactionDate])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROMPT 6 — Oracle AI Business Brain (Persistent Memory System)
+// Isolated models (OracleBrain* prefix) — additive, never touches existing Oracle models.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── OracleBrainMemory — the core persistent memory record ───────────────────
+// Stores every memory type: conversation, business, user, task, decision,
+// reminder, report, learning. Embeddings are stored as a JSON number array
+// for cosine-similarity semantic search (top-k retrieval).
+model OracleBrainMemory {
+  id            String   @id @default(cuid())
+  firmId        String
+  userId        String?
+  // Memory classification
+  type          String   // conversation | business | user | task | decision | reminder | report | learning | fact
+  subtype       String?  // e.g. summary | topics | actions | intent | result (for conversation)
+  title         String
+  content       String   @default("")  // full text body
+  summary       String?  // one-line TL;DR
+  // Semantic vector (JSON number[] — 256-dim hash embedding). NULL until embedded.
+  embedding     String?
+  // Classification & ranking
+  tags          String   @default("[]") // JSON string[]
+  importance    Int      @default(50)   // 0-100
+  pinned        Boolean  @default(false)
+  source        String   @default("oracle") // oracle | user | system | autonomous
+  // Free-form structured metadata (JSON object)
+  metadata      String   @default("{}")
+  // Lifecycle
+  archived      Boolean  @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([firmId, type, createdAt])
+  @@index([firmId, type, pinned])
+  @@index([firmId, archived])
+  @@index([userId, type])
+}
+
+// ─── OracleBrainTask — autonomous task lifecycle ──────────────────────────────
+// Overdue collection → Create Task → Reminder → Follow-up → Complete.
+model OracleBrainTask {
+  id              String    @id @default(cuid())
+  firmId          String
+  userId          String?
+  title           String
+  description     String    @default("")
+  type            String    @default("custom") // collect_payment | generate_report | file_gst | call_client | review_vendor | custom
+  status          String    @default("pending") // pending | in_progress | reminder_sent | follow_up | completed | cancelled
+  priority        String    @default("medium")  // low | medium | high | critical
+  // Linkage to the business entity this task acts on
+  relatedType     String?   // invoice | customer | return | vendor | account
+  relatedId       String?
+  relatedLabel    String?   // human-readable label (e.g. "INV-1042 — Acme Corp")
+  // Scheduling
+  dueDate         DateTime?
+  reminderSentAt  DateTime?
+  followUpSentAt  DateTime?
+  completedAt     DateTime?
+  completedBy     String?
+  completionNote  String?
+  // Origin traceability
+  sourceMemoryId  String?   // → OracleBrainMemory.id (the insight that spawned this task)
+  autonomous      Boolean   @default(false) // true if Oracle created it autonomously
+  metadata        String    @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([firmId, status, priority])
+  @@index([firmId, dueDate])
+  @@index([firmId, type, status])
+  @@index([userId, status])
+}
+
+// ─── OracleBrainDecision — explainable decision log ──────────────────────────
+// Every Oracle recommendation is logged with reason + evidence + outcome.
+model OracleBrainDecision {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  title           String
+  recommendation  String   @default("")
+  // Explainability (PROMPT 6: Why? Evidence? Confidence? Expected Result?)
+  reason          String   @default("")
+  evidence        String   @default("[]") // JSON string[]
+  expectedOutcome String   @default("")
+  confidence      Int      @default(50)   // 0-100
+  priority        String   @default("P2") // P0 | P1 | P2 | P3
+  // Lifecycle
+  status          String   @default("recommended") // recommended | accepted | rejected | implemented | superseded | failed
+  outcome         String?  // success | failure | partial | pending
+  outcomeNote     String?
+  decidedAt       DateTime?
+  implementedAt   DateTime?
+  // Origin
+  sourceMemoryId  String?
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([firmId, status, createdAt])
+  @@index([firmId, priority])
+}
+
+// ─── OracleBrainReport — auto-generated daily / weekly / monthly reports ─────
+model OracleBrainReport {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  type            String   // daily | weekly | monthly
+  period          String   // "2024-07-24" | "2024-W30" | "2024-07"
+  title           String
+  summary         String   @default("")
+  // Full structured report (JSON): sections, metrics, charts data, etc.
+  content         String   @default("{}")
+  insights        String   @default("[]") // JSON array
+  recommendations String   @default("[]") // JSON array
+  // Metrics snapshot at generation time
+  metrics         String   @default("{}")
+  generatedBy     String   @default("oracle") // oracle | user | scheduled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([firmId, type, period])
+  @@index([firmId, type, createdAt])
+}
+
+// ─── OracleBrainReminder — smart proactive reminders ─────────────────────────
+// GST due, customer overdue, bank balance low, cash runway falling, revenue drop.
+model OracleBrainReminder {
+  id              String    @id @default(cuid())
+  firmId          String
+  userId          String?
+  type            String    // gst_due | customer_overdue | low_balance | cash_runway | revenue_drop | task_due | custom
+  title           String
+  message         String    @default("")
+  severity        String    @default("info") // info | watch | warn | critical
+  relatedType     String?
+  relatedId       String?
+  relatedLabel    String?
+  dueDate         DateTime?
+  triggerDate     DateTime?
+  status          String    @default("active") // active | snoozed | dismissed | acted
+  actionTaken     String?
+  snoozedUntil    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([firmId, status, severity])
+  @@index([firmId, type, status])
+  @@index([firmId, dueDate])
+}
+
+// ─── OracleBrainLearning — auto-learning signals (behavioural patterns) ──────
+// Oracle learns: edits reports → remember; always exports PDF → remember;
+// ignores advice → learn; prefers short → learn; frequent queries → remember.
+model OracleBrainLearning {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  signal          String   // edits_report | exports_pdf | ignores_advice | prefers_short | frequent_query | prefers_language | custom
+  pattern         String   @default("")  // short description of learned behaviour
+  observation     String   @default("")
+  weight          Float    @default(1.0)
+  occurrenceCount Int      @default(1)
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([firmId, userId, signal, pattern])
+  @@index([firmId, signal])
+}

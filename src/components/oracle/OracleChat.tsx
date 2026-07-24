@@ -58,6 +58,7 @@ import { OracleMarkdown } from './OracleMarkdown';
 import { OracleDataCard } from './OracleDataCard';
 import { OracleLeftSidebar } from './OracleLeftSidebar';
 import { OracleRightPanel } from './OracleRightPanel';
+import { OracleBrainPanel } from './OracleBrainPanel';
 import { OracleExecutiveHeader } from './OracleExecutiveResponse';
 
 // ─── Lightweight inline message renderer ─────────────────────────────────────
@@ -992,7 +993,7 @@ export function OracleChat() {
       </div>
 
       {/* ── Slide-in panels ── */}
-      <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
+      <OracleBrainPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} onSuggestion={handlePickSuggestion} />
       <ConnectorsPanel open={connectorsOpen} onClose={() => setConnectorsOpen(false)} />
       <BusinessGraphPanel open={graphOpen} onClose={() => setGraphOpen(false)} />
     </div>

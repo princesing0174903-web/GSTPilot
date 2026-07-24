@@ -31,6 +31,85 @@ import ZAI from 'z-ai-web-dev-sdk';
 import { runPipeline } from '@/lib/oracle/pipeline/orchestrator';
 import { extractAndPersistFacts, loadMemorySnapshot } from '@/lib/oracle/memory-store';
 import type { PipelineSSEEvent, ToolExecution } from '@/lib/oracle/pipeline/types';
+import { getContextSnapshot, storeConversationMemory } from '@/lib/oracle/brain/memory-engine';
+import { hybridSearch } from '@/lib/oracle/brain/semantic-search';
+import { logDecision } from '@/lib/oracle/brain/decision-log';
+import { createAutonomousTaskFromInsight } from '@/lib/oracle/brain/task-engine';
+import { generateRemindersFromSnapshot } from '@/lib/oracle/brain/reminder-engine';
+import { recordLearning, inferPreferencesFromBehavior } from '@/lib/oracle/brain/learning-engine';
+
+/** Render the Brain context snapshot as a system-prompt block. */
+function renderBrainContextBlock(ctx: {
+  businessFacts: { title: string; summary?: string | null }[];
+  userPreferences: { title: string; summary?: string | null }[];
+  openDecisions: { title: string; recommendation?: string }[];
+  activeTasks: { title: string; priority?: string }[];
+  relevantMemories: { title: string; summary?: string | null; content?: string }[];
+  learnings: { pattern: string; observation?: string }[];
+}): string {
+  const lines: string[] = ['## PERSISTENT BRAIN MEMORY (PROMPT 6 — AI Business Brain)'];
+  lines.push('You remember everything across sessions. Use the memories below to ground your answer:');
+
+  if (ctx.relevantMemories.length > 0) {
+    lines.push('');
+    lines.push('### Relevant memories for this question (semantic search):');
+    for (const m of ctx.relevantMemories.slice(0, 5)) {
+      const body = (m.summary || m.content || '').slice(0, 200);
+      lines.push(`- ${m.title}: ${body}`);
+    }
+  }
+
+  if (ctx.businessFacts.length > 0) {
+    lines.push('');
+    lines.push('### Known business facts:');
+    for (const f of ctx.businessFacts.slice(0, 6)) {
+      lines.push(`- ${f.title}${f.summary ? `: ${f.summary.slice(0, 150)}` : ''}`);
+    }
+  }
+
+  if (ctx.userPreferences.length > 0) {
+    lines.push('');
+    lines.push('### User preferences (adapt your style accordingly):');
+    for (const p of ctx.userPreferences.slice(0, 4)) {
+      lines.push(`- ${p.title}${p.summary ? `: ${p.summary.slice(0, 120)}` : ''}`);
+    }
+  }
+
+  if (ctx.openDecisions.length > 0) {
+    lines.push('');
+    lines.push('### Open recommendations (decisions pending your action):');
+    for (const d of ctx.openDecisions.slice(0, 4)) {
+      lines.push(`- ${d.title}${d.recommendation ? ` — ${d.recommendation.slice(0, 100)}` : ''}`);
+    }
+  }
+
+  if (ctx.activeTasks.length > 0) {
+    lines.push('');
+    lines.push('### Active tasks:');
+    for (const t of ctx.activeTasks.slice(0, 5)) {
+      lines.push(`- [${(t.priority || 'med').toUpperCase()}] ${t.title}`);
+    }
+  }
+
+  if (ctx.learnings.length > 0) {
+    lines.push('');
+    lines.push('### What you have learned about this user (adapt behaviour):');
+    for (const l of ctx.learnings.slice(0, 4)) {
+      lines.push(`- ${l.pattern}${l.observation ? ` — ${l.observation.slice(0, 120)}` : ''}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/** Detect intent from the question for memory routing. */
+function detectMemoryIntent(question: string): string {
+  const q = question.toLowerCase();
+  if (/what.*(did|do).*we.*(discuss|talk)|previous.*(gst|conversation)|last (week|month)|continue.*(yesterday|previous)|recommend.*before|pending task|what should i do today/.test(q)) {
+    return 'memory_recall';
+  }
+  return 'general';
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -144,9 +223,44 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(stream, { status: 200, headers: sseHeaders() });
   }
 
-  // 4. Build the model messages: system prompt (with real data) + history + question.
+  // 4. PROMPT 6: Retrieve persistent Brain memory context (parallel — fast).
+  //    This gives Oracle long-term recall: previous conversations, business facts,
+  //    user preferences, open decisions, active tasks, and learned behaviours.
+  const firmId = parsed.organizationId || 'preview-org';
+  const memoryIntent = detectMemoryIntent(parsed.question);
+  let brainBlock = '';
+  let brainContext: Awaited<ReturnType<typeof getContextSnapshot>> | null = null;
+  try {
+    // For memory-recall intents, run a deeper semantic search.
+    const [ctx, semanticHits] = await Promise.all([
+      getContextSnapshot(firmId, parsed.question),
+      memoryIntent === 'memory_recall'
+        ? hybridSearch({ firmId, query: parsed.question, topK: 8, minScore: 0.1 })
+        : Promise.resolve([]),
+    ]);
+    brainContext = ctx;
+    // For memory-recall, override relevantMemories with deeper search results.
+    if (semanticHits.length > 0) {
+      ctx.relevantMemories = semanticHits.map((r) => r.memory);
+    }
+    brainBlock = renderBrainContextBlock({
+      businessFacts: ctx.businessFacts,
+      userPreferences: ctx.userPreferences,
+      openDecisions: ctx.openDecisions,
+      activeTasks: ctx.activeTasks,
+      relevantMemories: ctx.relevantMemories,
+      learnings: ctx.learnings,
+    });
+  } catch {
+    // Brain memory is best-effort — never block the response.
+  }
+
+  // 5. Build the model messages: system prompt (with real data + Brain memory) + history + question.
+  const fullSystemPrompt = brainBlock
+    ? `${pipeline.systemPrompt}\n\n${brainBlock}`
+    : pipeline.systemPrompt;
   const modelMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: pipeline.systemPrompt },
+    { role: 'system', content: fullSystemPrompt },
     ...parsed.history.slice(-8).map((m) => ({
       role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content,
@@ -321,8 +435,8 @@ export async function POST(req: Request): Promise<Response> {
         controller.close();
       }
 
-      // 7. Persist memory facts (non-blocking) — extract durable facts from the
-      //    exchange so Oracle remembers the user's firm/GSTIN/industry forever.
+      // 7. Persist memory (non-blocking) — both legacy OracleMemory facts AND
+      //    the new PROMPT 6 Brain memory (conversation record + decisions + tasks).
       try {
         await extractAndPersistFacts({
           ...persistCtx,
@@ -330,6 +444,84 @@ export async function POST(req: Request): Promise<Response> {
         });
       } catch {
         /* memory persistence is best-effort */
+      }
+
+      // PROMPT 6: Store the full conversation in the Brain + log decisions +
+      // auto-create tasks from insights + generate reminders. All best-effort.
+      try {
+        // (a) Store the conversation as a persistent Brain memory (with embedding).
+        const topics = (pipeline.insights || [])
+          .slice(0, 4)
+          .map((i) => i.headline);
+        const actions = (pipeline.actions || [])
+          .slice(0, 4)
+          .map((a) => a.label);
+        const summary = fullText
+          ? fullText.slice(0, 200).replace(/\s+/g, ' ').trim()
+          : parsed.question.slice(0, 200);
+        await storeConversationMemory({
+          firmId,
+          userId: parsed.userId,
+          conversationId: `chat-${Date.now()}`,
+          userMessage: parsed.question,
+          oracleResponse: fullText || '(no response)',
+          intent: pipeline.intent,
+          topics,
+          actions,
+          result: summary,
+          summary,
+          createdAt: new Date(),
+        }).catch(() => undefined);
+
+        // (b) Log each structured recommendation as an explainable decision.
+        for (const rec of (pipeline.recommendations || []).slice(0, 3)) {
+          await logDecision({
+            firmId,
+            userId: parsed.userId,
+            title: rec.title,
+            recommendation: rec.actionPrompt || rec.title,
+            reason: rec.reason || 'Derived from real business data analysis.',
+            evidence: (rec as { evidence?: string[] }).evidence || [
+              `Priority: ${rec.priority}`,
+              `Impact: ${rec.impact || 'N/A'}`,
+            ],
+            expectedOutcome: rec.estimatedOutcome || rec.impact || 'See impact assessment.',
+            confidence: (rec as { confidence?: number }).confidence ?? 70,
+            priority: rec.priority,
+          }).catch(() => undefined);
+        }
+
+        // (c) Auto-create tasks from critical/warn insights (autonomous tasks).
+        for (const insight of (pipeline.insights || [])
+          .filter((i) => i.severity === 'critical' || i.severity === 'warn')
+          .slice(0, 2)) {
+          await createAutonomousTaskFromInsight(firmId, {
+            headline: insight.headline,
+            detail: insight.detail,
+            severity: insight.severity,
+            actionPrompt: insight.actionPrompt,
+          }).catch(() => undefined);
+        }
+
+        // (d) Generate proactive reminders from the snapshot (deduped).
+        const snap = (pipeline as { snapshot?: { overdueInvoiceCount?: number; gstLiability?: number; cash?: number; runwayDays?: number; receivables?: number } }).snapshot;
+        if (snap) {
+          await generateRemindersFromSnapshot(firmId, {
+            gstLiability: snap.gstLiability,
+            cashBalance: snap.cash,
+            overdueInvoices: [], // snapshot doesn't break out per-invoice; reminder engine handles aggregate
+          }).catch(() => undefined);
+        }
+
+        // (e) Record a frequent-query learning signal (Oracle notices repeated topics).
+        if (parsed.userId && pipeline.intent) {
+          await inferPreferencesFromBehavior(firmId, parsed.userId, {
+            kind: 'frequent_query',
+            detail: parsed.question.slice(0, 80),
+          }).catch(() => undefined);
+        }
+      } catch {
+        /* Brain persistence is best-effort — never block the response */
       }
     },
     cancel() {

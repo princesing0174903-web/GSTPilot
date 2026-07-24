@@ -1,42 +1,162 @@
-// GET  /api/oracle/brain/memory — list workspace memory facts
-// POST /api/oracle/brain/memory — manually add a fact
-// DELETE /api/oracle/brain/memory?id=... — delete a fact
+// ═══════════════════════════════════════════════════════════════════════════════
+// Oracle Brain — Memory API
+// GET  /api/oracle/brain/memory?firmId=...&type=...&limit=...
+// POST /api/oracle/brain/memory  (create a memory)
+// PATCH /api/oracle/brain/memory?id=...  (update/pin/archive)
+// DELETE /api/oracle/brain/memory?id=...
+// ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { listMemory, saveMemory, deleteMemory } from '@/lib/oracle/brain/memory';
+import {
+  createMemory,
+  updateMemory,
+  getMemory,
+  listMemories,
+  togglePin,
+  archiveMemory,
+  deleteMemory,
+  getRecentMemories,
+  getPinnedMemories,
+  searchMemoriesByKeyword,
+} from '@/lib/oracle/brain/memory-engine';
+import type { BrainMemoryType } from '@/lib/oracle/brain/types';
 
-export async function GET(request: NextRequest) {
-  const orgId = request.nextUrl.searchParams.get('orgId');
-  if (!orgId) return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
-  const facts = await listMemory(orgId);
-  return NextResponse.json({ facts });
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function firmIdFrom(req: NextRequest, body?: Record<string, unknown>): string {
+  const url = new URL(req.url);
+  return (
+    (body?.firmId as string) ||
+    url.searchParams.get('firmId') ||
+    'preview-org'
+  );
 }
 
-export async function POST(request: NextRequest) {
-  let body: any = {};
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+export async function GET(req: NextRequest) {
+  try {
+    const url = new URL(req.url);
+    const firmId = url.searchParams.get('firmId') || 'preview-org';
+    const action = url.searchParams.get('action') || 'list';
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const typeParam = url.searchParams.get('type');
+    const types = typeParam
+      ? (typeParam.split(',') as BrainMemoryType[])
+      : undefined;
+    const pinnedOnly = url.searchParams.get('pinned') === 'true';
+    const query = url.searchParams.get('q');
+
+    let result: unknown;
+    if (action === 'recent') {
+      result = await getRecentMemories(firmId, limit);
+    } else if (action === 'pinned') {
+      result = await getPinnedMemories(firmId);
+    } else if (action === 'search' && query) {
+      result = await searchMemoriesByKeyword({ firmId, query, types, limit });
+    } else if (action === 'get' && url.searchParams.get('id')) {
+      result = await getMemory(url.searchParams.get('id')!);
+    } else {
+      result = await listMemories({
+        firmId,
+        types,
+        limit,
+        pinnedOnly,
+        includeArchived: url.searchParams.get('archived') === 'true',
+      });
+    }
+    return NextResponse.json({ ok: true, data: result });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
   }
-  const orgId = String(body.orgId ?? '').trim();
-  if (!orgId) return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
-  const title = String(body.title ?? '').trim();
-  if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 });
-
-  const fact = await saveMemory(orgId, {
-    title,
-    summary: body.summary ?? null,
-    category: body.category ?? 'note',
-    tags: Array.isArray(body.tags) ? body.tags : [],
-    source: 'manual',
-  });
-  return NextResponse.json({ fact });
 }
 
-export async function DELETE(request: NextRequest) {
-  const orgId = request.nextUrl.searchParams.get('orgId');
-  const id = request.nextUrl.searchParams.get('id');
-  if (!orgId || !id) return NextResponse.json({ error: 'orgId and id are required' }, { status: 400 });
-  const ok = await deleteMemory(orgId, id);
-  return NextResponse.json({ ok });
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const memory = await createMemory({
+      firmId: firmIdFrom(req, body),
+      userId: body.userId as string | undefined,
+      type: body.type as BrainMemoryType,
+      subtype: body.subtype as string | undefined,
+      title: body.title as string,
+      content: (body.content as string) || '',
+      summary: body.summary as string | undefined,
+      tags: body.tags as string[] | undefined,
+      importance: body.importance as number | undefined,
+      pinned: body.pinned as boolean | undefined,
+      source: body.source as string | undefined,
+      metadata: body.metadata as Record<string, unknown> | undefined,
+    });
+    return NextResponse.json({ ok: true, data: memory });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id');
+    if (!id) {
+      return NextResponse.json(
+        { ok: false, error: 'id query param required' },
+        { status: 400 },
+      );
+    }
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const action = body.action as string | undefined;
+
+    if (action === 'pin') {
+      return NextResponse.json({
+        ok: true,
+        data: await togglePin(id, body.pinned as boolean | undefined),
+      });
+    }
+    if (action === 'archive') {
+      return NextResponse.json({ ok: true, data: await archiveMemory(id) });
+    }
+
+    const updated = await updateMemory(id, {
+      title: body.title as string | undefined,
+      content: body.content as string | undefined,
+      summary: body.summary as string | undefined,
+      tags: body.tags as string[] | undefined,
+      importance: body.importance as number | undefined,
+      pinned: body.pinned as boolean | undefined,
+      archived: body.archived as boolean | undefined,
+      metadata: body.metadata as Record<string, unknown> | undefined,
+    });
+    return NextResponse.json({ ok: true, data: updated });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id');
+    if (!id) {
+      return NextResponse.json(
+        { ok: false, error: 'id query param required' },
+        { status: 400 },
+      );
+    }
+    await deleteMemory(id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
 }

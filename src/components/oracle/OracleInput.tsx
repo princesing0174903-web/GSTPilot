@@ -21,6 +21,7 @@ import {
   forwardRef,
   useImperativeHandle,
   type KeyboardEvent,
+  type ChangeEvent,
 } from 'react';
 import {
   Paperclip,
@@ -29,6 +30,7 @@ import {
   Mic,
   ArrowUp,
   Square,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +43,10 @@ interface OracleInputProps {
   onSend: (message: string) => void;
   onStop?: () => void;
   isStreaming?: boolean;
+  /** Called when the user picks a file via the attach button. */
+  onFileUpload?: (file: File) => void;
+  /** True while a file is being uploaded — disables the attach button + shows a spinner. */
+  isUploading?: boolean;
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
@@ -60,6 +66,8 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
       onSend,
       onStop,
       isStreaming = false,
+      onFileUpload,
+      isUploading = false,
       placeholder = 'Ask about cash flow, GST filings, ITC, vendor fraud…',
       className,
       autoFocus = true,
@@ -69,6 +77,7 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
     const [value, setValue] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Auto-resize the textarea up to a max height ──
     useEffect(() => {
@@ -109,6 +118,25 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
       onStop?.();
     };
 
+    const handleFilePick = (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      // Always reset the input value so picking the same file twice fires again.
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (!file) return;
+      // Reject obviously unsupported / oversized files client-side (max 8 MB,
+      // matching the server cap).
+      const MAX_BYTES = 8 * 1024 * 1024;
+      if (file.size > MAX_BYTES) {
+        return;
+      }
+      onFileUpload?.(file);
+    };
+
+    const openFilePicker = () => {
+      if (isUploading || isStreaming) return;
+      fileInputRef.current?.click();
+    };
+
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
       // Enter to send (without shift)
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -145,15 +173,25 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
             {/* ── Action icons (left side, before textarea) ── */}
             <button
               type="button"
-              onClick={() => {
-                // Attachments not yet supported — visual only
-              }}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+              onClick={openFilePicker}
+              disabled={isUploading || isStreaming}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-50 disabled:hover:bg-transparent"
               aria-label="Attach file"
-              title="Attach file (coming soon)"
+              title="Attach a document (PDF, image, or text)"
             >
-              <Paperclip className="h-4 w-4" />
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.md,.doc,.docx,.xls,.xlsx"
+              onChange={handleFilePick}
+            />
 
             <button
               type="button"

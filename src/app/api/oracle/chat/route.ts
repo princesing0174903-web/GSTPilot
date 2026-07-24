@@ -337,6 +337,11 @@ export async function POST(req: Request): Promise<Response> {
     knownUserName: parsed.userName,
   };
 
+  // Server-side stream watchdog timer (cleared in start's finally + in cancel).
+  // If the upstream LLM stalls and never closes the stream, we force-close after
+  // 120s so the client is never left waiting forever.
+  let streamWatchdog: ReturnType<typeof setTimeout> | null = null;
+
   const transformed = new ReadableStream<Uint8Array>({
     async start(controller) {
       // (a) Emit the full tool trace + intent FIRST (so the UI shows what ran).
@@ -367,6 +372,21 @@ export async function POST(req: Request): Promise<Response> {
       let buffer = '';
       let emittedAny = false;
       let fullText = '';
+      let closed = false;
+
+      // Idempotent finish — enqueues {done:true} + closes the controller once.
+      const safeFinish = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.enqueue(sseChunk({ done: true }));
+          controller.close();
+        } catch { /* controller already closed — non-fatal */ }
+      };
+
+      // Watchdog — force-close the stream if the upstream LLM stalls.
+      streamWatchdog = setTimeout(safeFinish, 120_000);
+
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -423,16 +443,21 @@ export async function POST(req: Request): Promise<Response> {
               : "You haven't added business data yet. Connect Zoho Books, add invoices, or sync your bank feed — then I can give you a real CFO analysis with live numbers.",
           }));
         }
-        controller.enqueue(sseChunk({ done: true }));
-        controller.close();
+        safeFinish();
       } catch (err) {
-        if (!emittedAny) {
-          controller.enqueue(sseChunk({
-            token: 'My response was interrupted. The real data and scores above are accurate — please try sending that again for the full executive brief.',
-          }));
+        if (!emittedAny && !closed) {
+          try {
+            controller.enqueue(sseChunk({
+              token: 'My response was interrupted. The real data and scores above are accurate — please try sending that again for the full executive brief.',
+            }));
+          } catch { /* controller may be closed */ }
         }
-        controller.enqueue(sseChunk({ done: true }));
-        controller.close();
+        safeFinish();
+      } finally {
+        if (streamWatchdog) {
+          clearTimeout(streamWatchdog);
+          streamWatchdog = null;
+        }
       }
 
       // 7. Persist memory (non-blocking) — both legacy OracleMemory facts AND
@@ -525,6 +550,10 @@ export async function POST(req: Request): Promise<Response> {
       }
     },
     cancel() {
+      if (streamWatchdog) {
+        clearTimeout(streamWatchdog);
+        streamWatchdog = null;
+      }
       upstream?.cancel?.().catch(() => undefined);
     },
   });

@@ -262,6 +262,27 @@ interface OracleConversationsState {
   setError: (oracleTurnId: string, errorMessage: string) => void
   finalizeMessage: (oracleTurnId: string) => void
 
+  /**
+   * Regenerate support: removes every turn AFTER the last user message (the old
+   * Oracle answer), then appends a fresh empty streaming Oracle turn. Returns
+   * the last user message content + the new oracle turn id so the caller can
+   * stream into it. Returns null when there is no user message to regenerate.
+   */
+  regenerateLastOracleTurn: () => { userMessage: string; oracleTurnId: string } | null
+
+  /**
+   * Mark an in-flight Oracle turn as stopped (user pressed Stop). Clears the
+   * streaming flag WITHOUT setting error styling. If the turn has no content,
+   * a neutral placeholder is inserted so an empty bubble never lingers.
+   */
+  markStopped: (oracleTurnId: string) => void
+
+  /**
+   * Hydration cleanup: finalize any turn that was still streaming when the
+   * page was closed/refreshed. Prevents infinite spinners after a reload.
+   */
+  finalizeAllStreaming: () => void
+
   // ── Derived conversation title from first user message ──
   ensureTitle: (conversationId: string, firstMessage: string) => void
 }
@@ -729,6 +750,90 @@ export const useOracleConversations = create<OracleConversationsState>()(
               ...c,
               title: shouldRetitle ? deriveTitle(firstMessage) : c.title,
               category: shouldCategorize ? inferCategoryFromText(firstMessage) : c.category,
+            }
+          }),
+        }))
+      },
+
+      regenerateLastOracleTurn: () => {
+        const state = get()
+        const activeId = state.activeId
+        if (!activeId) return null
+        const conv = state.conversations.find((c) => c.id === activeId)
+        if (!conv) return null
+        // Find the index of the last user message.
+        let lastUserIdx = -1
+        for (let i = conv.messages.length - 1; i >= 0; i--) {
+          if (conv.messages[i].role === 'user') { lastUserIdx = i; break }
+        }
+        if (lastUserIdx === -1) return null
+        const lastUser = conv.messages[lastUserIdx]
+        // Keep everything up to and including the last user message; drop the
+        // old Oracle answer that followed it.
+        const kept = conv.messages.slice(0, lastUserIdx + 1)
+        const oracleTurnId = uid('o')
+        const now = nowISO()
+        const oracleTurn: OracleTurn = {
+          id: oracleTurnId,
+          role: 'oracle',
+          content: '',
+          streaming: true,
+          createdAt: now,
+        }
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === activeId
+              ? { ...c, messages: [...kept, oracleTurn], updatedAt: now }
+              : c
+          ),
+        }))
+        return { userMessage: lastUser.content, oracleTurnId }
+      },
+
+      markStopped: (oracleTurnId) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === s.activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === oracleTurnId && m.role === 'oracle'
+                      ? {
+                          ...m,
+                          streaming: false,
+                          content:
+                            m.content && m.content.trim().length > 0
+                              ? m.content
+                              : 'Generation stopped.',
+                        }
+                      : m
+                  ),
+                  updatedAt: nowISO(),
+                }
+              : c
+          ),
+        }))
+      },
+
+      finalizeAllStreaming: () => {
+        set((s) => ({
+          conversations: s.conversations.map((c) => {
+            const hasStreaming = c.messages.some((m) => m.streaming)
+            if (!hasStreaming) return c
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.streaming
+                  ? {
+                      ...m,
+                      streaming: false,
+                      content:
+                        m.content && m.content.trim().length > 0
+                          ? m.content
+                          : 'This response was interrupted. Please try again.',
+                    }
+                  : m
+              ),
             }
           }),
         }))

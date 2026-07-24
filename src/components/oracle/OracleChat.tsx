@@ -19,8 +19,9 @@
 // Oracle never asks the same thing twice — history is passed on every call.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Menu, Bell, LogOut, User as UserIcon, Brain, Plug, Share2,
   Plus, Sparkles, BadgeCheck,
@@ -434,15 +435,27 @@ interface StreamEvent {
 // CRITICAL: The user must NEVER see "messages[] is required" (HTTP 400).
 // On 400/500 errors, we retry up to 3 times with exponential backoff
 // (1s → 2s → 4s). If all retries fail, we show a friendly fallback message.
+// On 401/403 we attempt ONE silent session-refresh retry, then surface a
+// SESSION_EXPIRED signal so the UI can redirect to login gracefully.
 
 const MAX_RETRIES = 3;
 const FRIENDLY_ERROR = "I'm having trouble connecting right now. Please try again in a moment.";
+const SESSION_EXPIRED_FLAG = '__ORACLE_SESSION_EXPIRED__';
+
+/** Typed sentinel thrown when authentication fails after a refresh attempt. */
+class SessionExpiredError extends Error {
+  constructor() {
+    super(SESSION_EXPIRED_FLAG);
+    this.name = 'SessionExpiredError';
+  }
+}
 
 async function fetchWithRetry(
   payload: unknown,
   signal?: AbortSignal
 ): Promise<Response> {
   let lastError: Error | null = null;
+  let authRetried = false;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -461,7 +474,13 @@ async function fetchWithRetry(
       lastError = new Error(`HTTP ${res.status}: ${bodyText}`);
 
       if (res.status === 401 || res.status === 403) {
-        throw new Error('Authentication required. Please sign in again.');
+        // Give Firebase a moment to rotate the token, then retry ONCE.
+        if (!authRetried) {
+          authRetried = true;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          continue;
+        }
+        throw new SessionExpiredError();
       }
 
       if (attempt < MAX_RETRIES - 1) {
@@ -470,6 +489,7 @@ async function fetchWithRetry(
         continue;
       }
     } catch (err) {
+      if (err instanceof SessionExpiredError) throw err;
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
       lastError = err instanceof Error ? err : new Error('Network error');
 
@@ -502,6 +522,8 @@ async function streamOracle(
     onDone: () => void;
     onError: (message: string) => void;
     onRetry?: (attempt: number) => void;
+    /** Fired when the session is definitively expired (401/403 after refresh). */
+    onSessionExpired?: () => void;
     // PROMPT 5 autonomous CFO handlers
     onAgentFindings?: (findings: NonNullable<StreamEvent['agents']>) => void;
     onConfidences?: (tags: NonNullable<StreamEvent['confidences']>) => void;
@@ -599,12 +621,19 @@ async function streamOracle(
     }
     handlers.onDone();
   } catch (err) {
+    if (err instanceof SessionExpiredError) {
+      handlers.onSessionExpired?.();
+      handlers.onError('Your session has expired. Please sign in again to continue.');
+      return;
+    }
     if (err instanceof DOMException && err.name === 'AbortError') {
       handlers.onDone();
       return;
     }
-    const msg = err instanceof Error ? err.message : 'Network error';
-    handlers.onError(msg.includes('HTTP 4') ? FRIENDLY_ERROR : msg);
+    // Any other failure (network drop, HTTP 5xx after retries, malformed
+    // stream) → friendly message. The user NEVER sees a raw "Failed to fetch"
+    // or "network error" string.
+    handlers.onError(FRIENDLY_ERROR);
   }
 }
 
@@ -630,18 +659,39 @@ export function OracleChat() {
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<OracleInputHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const isStreamingRef = useRef(false);
+  /** Prevents duplicate Send clicks while a request is already in flight. */
+  const sendingRef = useRef(false);
+  /** Watchdog timer — guarantees a loading state can NEVER hang forever. */
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The oracle turn currently being streamed (used by Stop to finalize it). */
+  const streamingTurnIdRef = useRef<string | null>(null);
+  /** Tracks whether any output (token/structured) has arrived, to hide the
+   *  thinking animation at the right moment instead of a fixed delay. */
+  const firstOutputRef = useRef(false);
 
   const activeRef = useRef<ReturnType<typeof getActive>>(null);
   const active = getActive();
 
   useEffect(() => { activeRef.current = active; }, [active]);
   useEffect(() => { isStreamingRef.current = isStreaming; }, [isStreaming]);
+
+  // ── Hydration cleanup ──
+  // Finalize any turn that was still "streaming" when the page was closed or
+  // refreshed. Without this, a reload would show an infinite spinner on the
+  // last Oracle message. (Fixes "Loading states sometimes never end" + ensures
+  // chat history is cleanly preserved after refresh.)
+  useEffect(() => {
+    try {
+      useOracleConversations.getState().finalizeAllStreaming();
+    } catch { /* non-fatal */ }
+  }, []);
 
   const messages = active?.messages ?? [];
   const hasMessages = messages.length > 0;
@@ -671,101 +721,248 @@ export function OracleChat() {
       }));
   }
 
-  // ── Send a message ──
-  const handleSend = async (message: string) => {
-    if (isStreamingRef.current) return;
+  /** Build history for Regenerate — excludes the last user message (which
+   *  streamOracle appends itself) so the prompt isn't duplicated. Reads the
+   *  FRESH store state because the stale activeRef still holds the old turn. */
+  function buildHistoryExcludingLastUser(excludeOracleTurnId: string) {
+    const current = useOracleConversations.getState().getActive();
+    if (!current) return [];
+    const msgs = current.messages;
+    let lastUserIdx = -1;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx === -1) return [];
+    return msgs
+      .slice(0, lastUserIdx)
+      .filter((m) => m.id !== excludeOracleTurnId && !m.streaming && !m.error)
+      .map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      }));
+  }
 
+  // ── Session recovery ──
+  // Fired only when the API returns 401/403 AFTER a silent refresh retry. We
+  // clear the cached session and redirect to the landing/login page with a
+  // clear reason. The user is never left on a broken screen.
+  const handleSessionExpired = useCallback(() => {
+    toast.error('Your session has expired. Redirecting to sign in…');
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* non-fatal */ }
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/?reason=session_expired';
+      }
+    }, 1500);
+  }, []);
+
+  const STREAM_SAFETY_TIMEOUT_MS = 90_000;
+
+  function clearSafetyTimer() {
+    if (safetyTimerRef.current) {
+      clearTimeout(safetyTimerRef.current);
+      safetyTimerRef.current = null;
+    }
+  }
+
+  /** Idempotent cleanup used by onDone/onError/timeout/finally. Guarantees no
+   *  loading flag or timer is left active. */
+  function finishStream(oracleTurnId: string) {
+    clearSafetyTimer();
     const store = useOracleConversations.getState();
-    let convId = store.activeId;
-    if (!convId) convId = store.createConversation();
+    store.finalizeMessage(oracleTurnId);
+    setIsStreaming(false);
+    isStreamingRef.current = false;
+    sendingRef.current = false;
+    setShowThinking(false);
+    abortRef.current = null;
+    streamingTurnIdRef.current = null;
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
-    const { oracleTurnId } = store.pushUserMessage(message);
-    store.ensureTitle(convId, message);
-    const history = buildHistoryPayload(oracleTurnId);
-
-    setIsStreaming(true);
-    isStreamingRef.current = true;
+  /** Core streaming routine shared by Send + Regenerate. Sets up the abort
+   *  controller, a 90s safety watchdog, the thinking animation, and wires
+   *  every SSE handler. Never throws — every path calls finishStream. */
+  async function runStream(
+    oracleTurnId: string,
+    message: string,
+    history: { role: 'user' | 'assistant'; content: string }[]
+  ) {
+    const store = useOracleConversations.getState();
+    firstOutputRef.current = false;
     shouldAutoScrollRef.current = true;
     setShowThinking(true);
+    setIsStreaming(true);
+    isStreamingRef.current = true;
+    streamingTurnIdRef.current = oracleTurnId;
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Show thinking animation for ~2.4s (5 steps × ~480ms) before stream starts
-    await new Promise((r) => setTimeout(r, 2400));
-    if (controller.signal.aborted) return;
-    setShowThinking(false);
+    // Watchdog — NEVER let a loading state hang forever. If the upstream LLM
+    // stalls or the network drops mid-stream, we abort + show a clear error.
+    clearSafetyTimer();
+    safetyTimerRef.current = setTimeout(() => {
+      if (streamingTurnIdRef.current !== oracleTurnId) return; // already finished
+      try { controller.abort(); } catch { /* non-fatal */ }
+      store.setError(oracleTurnId, 'This is taking longer than expected. Please try again.');
+      toast.error('Oracle timed out. Please try again.');
+      finishStream(oracleTurnId);
+    }, STREAM_SAFETY_TIMEOUT_MS);
 
-    await streamOracle(
-      { message, history, userEmail: user?.email, userName: user?.name, userId: user?.id },
-      {
-        onDelta: (delta) => store.appendDelta(oracleTurnId, delta),
-        onFollowUps: (prompts) => store.setFollowUps(oracleTurnId, prompts),
-        onStructured: (data) => store.setStructured(oracleTurnId, data),
-        onToolTrace: (tools, intent) => store.setToolTrace(oracleTurnId, tools ?? [], intent),
-        onMetrics: (metrics) => store.setMetrics(oracleTurnId, metrics ?? []),
-        onActions: (actions) => store.setActions(oracleTurnId, actions ?? []),
-        // PROMPT 5: wire autonomous CFO handlers
-        onAgentFindings: (findings) => store.setAgentFindings(oracleTurnId, findings as OracleAgentFinding[]),
-        onConfidences: (tags) => store.setConfidences(oracleTurnId, tags as OracleConfidenceTag[]),
-        onScorecard: (scorecard) => store.setScorecard(oracleTurnId, scorecard as OracleBusinessScorecard | null),
-        onTimeline: (items) => store.setTimeline(oracleTurnId, items as OracleTimelineItem[]),
-        onInsights: (insights) => store.setInsights(oracleTurnId, insights as OracleInsight[]),
-        onRecommendations: (recs) => store.setRecommendations(oracleTurnId, recs as OracleRecommendation[]),
-        onSmartFollowUps: (followUps) => store.setSmartFollowUps(oracleTurnId, followUps as OracleSmartFollowUp[]),
-        onDashboard: (dashboard) => {
-          store.setDashboard(oracleTurnId, dashboard as OracleDashboardUpdate | null);
-          // PROMPT 5 §12: Live Dashboard Integration — broadcast the dashboard
-          // update so the right-side Insights panel refreshes instantly without
-          // a page reload.
-          if (dashboard) {
-            try {
-              window.dispatchEvent(new CustomEvent('oracle:dashboard-update', { detail: dashboard }));
-            } catch { /* SSR / non-browser */ }
-          }
+    const markFirstOutput = () => {
+      if (!firstOutputRef.current) {
+        firstOutputRef.current = true;
+        setShowThinking(false);
+      }
+    };
+
+    try {
+      await streamOracle(
+        { message, history, userEmail: user?.email, userName: user?.name, userId: user?.id },
+        {
+          onDelta: (delta) => { markFirstOutput(); store.appendDelta(oracleTurnId, delta); },
+          onFollowUps: (prompts) => store.setFollowUps(oracleTurnId, prompts),
+          onStructured: (data) => { markFirstOutput(); store.setStructured(oracleTurnId, data); },
+          onToolTrace: (tools, intent) => { markFirstOutput(); store.setToolTrace(oracleTurnId, tools ?? [], intent); },
+          onMetrics: (metrics) => { markFirstOutput(); store.setMetrics(oracleTurnId, metrics ?? []); },
+          onActions: (actions) => store.setActions(oracleTurnId, actions ?? []),
+          // PROMPT 5: wire autonomous CFO handlers
+          onAgentFindings: (findings) => store.setAgentFindings(oracleTurnId, findings as OracleAgentFinding[]),
+          onConfidences: (tags) => store.setConfidences(oracleTurnId, tags as OracleConfidenceTag[]),
+          onScorecard: (scorecard) => store.setScorecard(oracleTurnId, scorecard as OracleBusinessScorecard | null),
+          onTimeline: (items) => store.setTimeline(oracleTurnId, items as OracleTimelineItem[]),
+          onInsights: (insights) => store.setInsights(oracleTurnId, insights as OracleInsight[]),
+          onRecommendations: (recs) => store.setRecommendations(oracleTurnId, recs as OracleRecommendation[]),
+          onSmartFollowUps: (followUps) => store.setSmartFollowUps(oracleTurnId, followUps as OracleSmartFollowUp[]),
+          onDashboard: (dashboard) => {
+            store.setDashboard(oracleTurnId, dashboard as OracleDashboardUpdate | null);
+            // PROMPT 5 §12: Live Dashboard Integration — broadcast the dashboard
+            // update so the right-side Insights panel refreshes instantly without
+            // a page reload.
+            if (dashboard) {
+              try {
+                window.dispatchEvent(new CustomEvent('oracle:dashboard-update', { detail: dashboard }));
+              } catch { /* SSR / non-browser */ }
+            }
+          },
+          onDone: () => finishStream(oracleTurnId),
+          onError: (errorMessage) => {
+            store.setError(oracleTurnId, errorMessage);
+            // The session-expired path already shows its own toast + redirect.
+            if (!errorMessage.toLowerCase().includes('session has expired')) {
+              toast.error(errorMessage);
+            }
+            finishStream(oracleTurnId);
+          },
+          onSessionExpired: handleSessionExpired,
         },
-        onDone: () => {
-          store.finalizeMessage(oracleTurnId);
-          setIsStreaming(false);
-          isStreamingRef.current = false;
-          setShowThinking(false);
-          abortRef.current = null;
-          requestAnimationFrame(() => inputRef.current?.focus());
-        },
-        onError: (errorMessage) => {
-          store.setError(oracleTurnId, errorMessage);
-          setIsStreaming(false);
-          isStreamingRef.current = false;
-          setShowThinking(false);
-          abortRef.current = null;
-          requestAnimationFrame(() => inputRef.current?.focus());
-        },
-      },
-      controller.signal
-    );
+        controller.signal
+      );
+    } catch {
+      // streamOracle is expected to handle all errors internally, but guard
+      // against any unexpected throw so we never leave a loading state active.
+      store.setError(oracleTurnId, FRIENDLY_ERROR);
+      toast.error('Something went wrong. Please try again.');
+      finishStream(oracleTurnId);
+    }
+  }
+
+  // ── Send a message ──
+  const handleSend = async (message: string) => {
+    if (sendingRef.current || isStreamingRef.current) return;
+    const trimmed = (message || '').trim();
+    if (!trimmed) return;
+    sendingRef.current = true;
+
+    const store = useOracleConversations.getState();
+    let convId = store.activeId;
+    if (!convId) convId = store.createConversation();
+    const { oracleTurnId } = store.pushUserMessage(trimmed);
+    store.ensureTitle(convId, trimmed);
+    const history = buildHistoryPayload(oracleTurnId);
+
+    await runStream(oracleTurnId, trimmed, history);
   };
 
+  // ── Stop generation ──
+  // Aborts the in-flight request AND finalizes the current Oracle turn so the
+  // partial response is kept (or a neutral placeholder if empty). No infinite
+  // spinner is ever left behind.
   const handleStop = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    try { abortRef.current?.abort(); } catch { /* non-fatal */ }
+    const turnId = streamingTurnIdRef.current;
+    if (turnId) {
+      useOracleConversations.getState().markStopped(turnId);
+    }
+    clearSafetyTimer();
     setIsStreaming(false);
     isStreamingRef.current = false;
+    sendingRef.current = false;
     setShowThinking(false);
+    abortRef.current = null;
+    streamingTurnIdRef.current = null;
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const handlePickSuggestion = (prompt: string) => {
+    if (sendingRef.current || isStreamingRef.current) return;
     const store = useOracleConversations.getState();
     const current = store.getActive();
     if (current && current.messages.length > 0) store.createConversation();
     requestAnimationFrame(() => handleSend(prompt));
   };
 
+  // ── Regenerate ──
+  // Resends the LAST user prompt WITHOUT duplicating it. The old Oracle answer
+  // is removed and a fresh streaming turn takes its place. (Fixes the old
+  // Regenerate button which either did nothing or added a duplicate user msg.)
   const handleRetry = () => {
-    const current = activeRef.current;
-    if (!current || isStreamingRef.current) return;
-    const lastUser = [...current.messages].reverse().find((m) => m.role === 'user');
-    if (!lastUser) return;
-    handleSend(lastUser.content);
+    if (sendingRef.current || isStreamingRef.current) return;
+    const store = useOracleConversations.getState();
+    const regen = store.regenerateLastOracleTurn();
+    if (!regen) return;
+    sendingRef.current = true;
+    const history = buildHistoryExcludingLastUser(regen.oracleTurnId);
+    void runStream(regen.oracleTurnId, regen.userMessage, history);
+  };
+
+  // ── File upload ──
+  // Uploads the file to /api/oracle/documents (multipart), then sends a chat
+  // prompt that includes the extracted summary so Oracle grounds its answer in
+  // the document. Shows toast progress + error states.
+  const handleFileUpload = async (file: File) => {
+    if (isUploading || sendingRef.current || isStreamingRef.current) {
+      toast.error('Please wait for the current action to finish.');
+      return;
+    }
+    setIsUploading(true);
+    const toastId = toast.loading(`Uploading "${file.name}"…`);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/oracle/documents', { method: 'POST', body: form });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        document?: { fileName?: string; summary?: string };
+      };
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || 'Upload failed. Please try a different file.');
+      }
+      const doc = data.document;
+      toast.success(`"${doc?.fileName || file.name}" uploaded. Analyzing…`, { id: toastId });
+      const prompt = doc?.summary
+        ? `I uploaded "${doc.fileName}". Here is what was extracted from it:\n\n${doc.summary}\n\nPlease analyze this document and give me the key insights.`
+        : `I uploaded "${doc?.fileName || file.name}". Please analyze this document.`;
+      // Small delay so the success toast can render before the stream begins.
+      setTimeout(() => handleSend(prompt), 300);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed.';
+      toast.error(msg, { id: toastId });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleEditPrompt = (content: string) => {
@@ -949,6 +1146,8 @@ export function OracleChat() {
                 onSend={handleSend}
                 onStop={handleStop}
                 isStreaming={isStreaming}
+                onFileUpload={handleFileUpload}
+                isUploading={isUploading}
               />
               <p className="mt-2 text-center text-[10.5px] text-white/35">
                 Oracle is your AI CFO · Uses live data from your connected accounts · Always verify critical tax decisions

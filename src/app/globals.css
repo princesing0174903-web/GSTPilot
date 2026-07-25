@@ -1651,3 +1651,39 @@
   stroke: #FFFFFF !important;
   stroke-width: 2 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Oracle™ — Premium streaming caret (smooth blink, never flickers)
+   Used by OracleMarkdown while a response is streaming in.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@keyframes oracle-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.oracle-caret {
+  animation: oracle-caret-blink 1s steps(2, start) infinite;
+}
+
+/* Oracle custom scrollbar — slim, dark, premium */
+.oracle-markdown pre::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.oracle-markdown pre::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.oracle-markdown pre::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+.oracle-markdown pre::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+.oracle-markdown pre {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}

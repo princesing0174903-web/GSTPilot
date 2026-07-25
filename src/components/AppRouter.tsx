@@ -218,7 +218,10 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     }
 
     setTimedOut(false);
-    const startTime = Date.now();
+    // `let` (not `const`) so the auto-retry path below can reset it — otherwise
+    // the second attempt inherits the first attempt's elapsed time and trips
+    // the timeout almost immediately, defeating the purpose of the retry.
+    let startTime = Date.now();
     // Increased from 8s → 15s. The previous 8s threshold was too aggressive on
     // slow connections / cold Firebase lazy-loads. Demo users now resolve
     // synchronously (see OrgContext fast path), so this only affects real
@@ -234,8 +237,12 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
           autoRetriedRef.current = true;
           console.warn('[Dashboard] Initialization slow — auto-retrying org context once');
           void reload();
-          // Reset the timer for the second attempt; if it also times out we
-          // surface the error screen.
+          // Reset the timer for the second attempt so the user gets the FULL
+          // 15s grace period again (not just ~1s before the next tick trips
+          // the timeout). Without this reset, `secs` stays >= 15 on the next
+          // tick and the error screen fires almost immediately.
+          startTime = Date.now();
+          setElapsed(0);
           return;
         }
         console.error('[Dashboard] Initialization exceeded 15s — showing timeout screen');

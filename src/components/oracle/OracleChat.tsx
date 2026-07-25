@@ -19,14 +19,13 @@
 // Oracle never asks the same thing twice — history is passed on every call.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Menu, Bell, LogOut, User as UserIcon, Brain, Plug, Share2,
-  Plus, Sparkles, BadgeCheck,
-  Copy, Check, RefreshCw, ThumbsUp, ThumbsDown,
-  PanelRight, X, Download, FileText, FileSpreadsheet, Pencil,
+  Sparkles, BadgeCheck, RefreshCw, Pencil,
+  PanelRight,
 } from 'lucide-react';
 import {
   Avatar, AvatarFallback, AvatarImage,
@@ -51,9 +50,10 @@ import type {
   OracleSmartFollowUp,
   OracleDashboardUpdate,
 } from '@/lib/oracle-conversations';
+import { toFriendlyError } from '@/lib/oracle/oracle-recovery';
 import { OracleInput, type OracleInputHandle } from './OracleInput';
 import { OracleWelcomeScreen } from './OracleWelcomeScreen';
-import { OracleThinkingAnimation } from './OracleThinkingAnimation';
+import { OracleThinkingStatus } from './OracleThinkingStatus';
 import { OracleActions } from './OracleActions';
 import { OracleMarkdown } from './OracleMarkdown';
 import { OracleDataCard } from './OracleDataCard';
@@ -61,77 +61,62 @@ import { OracleLeftSidebar } from './OracleLeftSidebar';
 import { OracleRightPanel } from './OracleRightPanel';
 import { OracleBrainPanel } from './OracleBrainPanel';
 import { OracleExecutiveHeader } from './OracleExecutiveResponse';
+import { OracleMessageActions } from './OracleMessageActions';
+import { OracleFollowUps } from './OracleFollowUps';
+import { OracleResponseCard } from './OracleResponseCards';
 
-// ─── Lightweight inline message renderer ─────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Format a turn's ISO timestamp as a stable "HH:MM" string. Using the turn's
+ *  own createdAt avoids the timestamp-drift bug where `new Date()` was called
+ *  on every render, producing a different time each render cycle. */
+function formatTurnTime(iso: string | undefined): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+// ─── Lightweight inline message renderer (memoized) ──────────────────────────
 // Renders user/oracle messages as rounded bubbles with gold avatar, plus a
-// premium action row: Copy · Regenerate · Like · Dislike · Edit · Export.
+// premium action row powered by OracleMessageActions: Copy · Regenerate ·
+// Continue · Like · Dislike · Share · Export. Follow-ups use OracleFollowUps.
 
-function LightOracleMessage({
+type FeedbackState = 'like' | 'dislike' | undefined;
+
+interface LightOracleMessageProps {
+  turn: OracleTurn;
+  /** Initial per-turn feedback (from a parent cache). */
+  feedback?: FeedbackState;
+  onPickFollowUp?: (prompt: string) => void;
+  onRetry?: () => void;
+  onContinue?: () => void;
+  onLike?: (liked: boolean) => void;
+  onDislike?: (disliked: boolean) => void;
+  onEdit?: () => void;
+  /** Disable Regenerate / Continue while another stream is running. */
+  busy?: boolean;
+  /** The last user prompt — used to generate contextual follow-ups. */
+  lastUserPrompt?: string;
+}
+
+function LightOracleMessageImpl({
   turn,
+  feedback,
   onPickFollowUp,
   onRetry,
+  onContinue,
   onLike,
   onDislike,
   onEdit,
-}: {
-  turn: OracleTurn;
-  onPickFollowUp?: (prompt: string) => void;
-  onRetry?: () => void;
-  onLike?: () => void;
-  onDislike?: () => void;
-  onEdit?: () => void;
-}) {
+  busy = false,
+  lastUserPrompt,
+}: LightOracleMessageProps) {
   const isUser = turn.role === 'user';
-  const [copied, setCopied] = useState(false);
-  const [liked, setLiked] = useState(false);
-  const [disliked, setDisliked] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
-  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const copyMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(turn.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch { /* clipboard blocked */ }
-  };
-
-  const exportMarkdown = () => {
-    const blob = new Blob([`# Oracle Response\n\n${turn.content}\n`], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `oracle-response-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExportOpen(false);
-  };
-
-  const exportPDF = () => {
-    // Open a print-friendly window with the markdown rendered as plain text.
-    const w = window.open('', '_blank', 'width=800,height=600');
-    if (w) {
-      w.document.write(`<pre style="font-family:system-ui;white-space:pre-wrap;padding:32px;line-height:1.6">${turn.content.replace(/</g, '&lt;')}</pre>`);
-      w.document.close();
-      w.focus();
-      setTimeout(() => w.print(), 300);
-    }
-    setExportOpen(false);
-  };
-
-  const exportExcel = () => {
-    // Export as CSV (Excel-compatible) — splits lines into rows.
-    const rows = turn.content.split('\n').map((l) => [l]);
-    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `oracle-response-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExportOpen(false);
-  };
+  // Stable timestamp — derived once from the turn's createdAt, never drifts.
+  const time = formatTurnTime(turn.createdAt);
 
   if (isUser) {
     return (
@@ -143,14 +128,16 @@ function LightOracleMessage({
         <div className="max-w-[80%] rounded-3xl rounded-br-md bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/20">
           <p className="text-[14px] leading-relaxed text-white whitespace-pre-wrap break-words">{turn.content}</p>
           <div className="mt-1 flex items-center justify-end gap-2">
-            <p className="text-[10px] text-white/30">{time}</p>
+            {time && <p className="text-[10px] text-white/30">{time}</p>}
             {onEdit && (
               <button
                 onClick={onEdit}
-                className="text-[10px] text-white/30 opacity-0 transition group-hover:opacity-100 hover:text-amber-300"
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-amber-300 focus:opacity-100 group-hover:opacity-100"
                 aria-label="Edit prompt"
+                title="Edit prompt"
               >
                 <Pencil className="h-3 w-3" />
+                <span>Edit</span>
               </button>
             )}
           </div>
@@ -173,7 +160,7 @@ function LightOracleMessage({
         <div className="mb-1 flex items-center gap-1.5">
           <span className="text-[12px] font-semibold text-white">Oracle</span>
           <BadgeCheck className="h-3 w-3 text-amber-500" />
-          <span className="text-[10px] text-white/30">{time}</span>
+          {time && <span className="text-[10px] text-white/30">{time}</span>}
         </div>
 
         {/* Structured data card (table/stats/chart) — rendered ABOVE the text answer */}
@@ -181,7 +168,7 @@ function LightOracleMessage({
           <OracleDataCard data={turn.structured} />
         )}
 
-        {/* PROMPT 5: Executive header — tool trace + metrics + scorecard + insights + timeline + recommendations + actions + smart follow-ups */}
+        {/* Executive header — tool trace + metrics + scorecard + insights + timeline + recommendations + actions + smart follow-ups */}
         {!turn.error && (
           turn.toolTrace?.length ||
           turn.metrics?.length ||
@@ -214,108 +201,59 @@ function LightOracleMessage({
             <div className="flex items-center gap-2">
               <p className="text-[13px] text-red-400">{turn.content}</p>
               {onRetry && (
-                <button onClick={onRetry} className="ml-auto flex items-center gap-1 text-[11px] font-medium text-amber-400 hover:text-amber-300">
+                <button
+                  onClick={onRetry}
+                  disabled={busy}
+                  className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-amber-400 transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40"
+                  aria-label="Try again"
+                >
                   <RefreshCw className="h-3 w-3" /> Try again
                 </button>
               )}
             </div>
           ) : (
-            <OracleMarkdown content={turn.content} streaming={turn.streaming} />
+            <>
+              {/* Inline AI response card — detects GST/Revenue/Profit/Vendor/Invoice/Risk patterns */}
+              {!turn.streaming && turn.content.length > 0 && (
+                <OracleResponseCard text={turn.content} />
+              )}
+              <OracleMarkdown content={turn.content} streaming={turn.streaming} />
+            </>
           )}
         </div>
 
         {/* ── Premium action row ── */}
         {!turn.error && !turn.streaming && turn.content.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1 px-1">
-            <button
-              onClick={copyMessage}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
-              aria-label="Copy response"
-            >
-              {copied ? (
-                <><Check className="h-3 w-3 text-emerald-400" strokeWidth={2.5} /><span className="text-emerald-400">Copied</span></>
-              ) : (
-                <><Copy className="h-3 w-3" /><span>Copy</span></>
-              )}
-            </button>
-            {onRetry && (
-              <button
-                onClick={onRetry}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
-                aria-label="Regenerate response"
-              >
-                <RefreshCw className="h-3 w-3" /><span>Regenerate</span>
-              </button>
-            )}
-            <button
-              onClick={() => { setLiked((v) => !v); if (!liked) onLike?.(); }}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors hover:bg-white/5 ${liked ? 'text-emerald-400' : 'text-white/40 hover:text-white/70'}`}
-              aria-label="Helpful"
-            >
-              <ThumbsUp className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => { setDisliked((v) => !v); if (!disliked) onDislike?.(); }}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors hover:bg-white/5 ${disliked ? 'text-rose-400' : 'text-white/40 hover:text-white/70'}`}
-              aria-label="Not helpful"
-            >
-              <ThumbsDown className="h-3 w-3" />
-            </button>
-
-            {/* Export dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setExportOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
-                aria-label="Export response"
-              >
-                <Download className="h-3 w-3" /><span>Export</span>
-              </button>
-              <AnimatePresence>
-                {exportOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      className="absolute left-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] py-1 shadow-xl"
-                    >
-                      <button onClick={exportPDF} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
-                        <FileText className="h-3.5 w-3.5 text-rose-400" /> PDF
-                      </button>
-                      <button onClick={exportExcel} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
-                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" /> Excel (CSV)
-                      </button>
-                      <button onClick={exportMarkdown} className="flex w-full items-center gap-2 px-3 py-1.5 text-[11.5px] text-white/70 hover:bg-white/5 hover:text-white">
-                        <FileText className="h-3.5 w-3.5 text-amber-400" /> Markdown
-                      </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+          <OracleMessageActions
+            content={turn.content}
+            onRegenerate={onRetry}
+            onContinue={onContinue}
+            onLike={onLike}
+            onDislike={onDislike}
+            liked={feedback === 'like'}
+            disliked={feedback === 'dislike'}
+            disableRegenerate={busy}
+            disableContinue={busy}
+          />
         )}
 
-        {/* Follow-up chips */}
-        {turn.followUps && turn.followUps.length > 0 && !turn.streaming && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {turn.followUps.map((f, i) => (
-              <button
-                key={i}
-                onClick={() => onPickFollowUp?.(f)}
-                className="rounded-full border border-[#1F1F1F] bg-[#111111] px-3 py-1.5 text-[12px] text-white/60 transition-colors hover:border-amber-500/30 hover:text-amber-300"
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+        {/* ── Contextual follow-up suggestions ── */}
+        {!turn.error && !turn.streaming && turn.content.length > 0 && (
+          <OracleFollowUps
+            smartFollowUps={turn.smartFollowUps}
+            followUps={turn.followUps}
+            answerText={turn.content}
+            lastUserPrompt={lastUserPrompt}
+            onPick={(p) => onPickFollowUp?.(p)}
+            disabled={busy}
+          />
         )}
       </div>
     </motion.div>
   );
 }
+
+const LightOracleMessage = memo(LightOracleMessageImpl);
 
 // ─── Lightweight modal stubs (kept lean to prevent OOM on 4GB sandboxes) ──────
 function MemoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -649,7 +587,6 @@ export function OracleChat() {
   const conversations = useOracleConversations((s) => s.conversations);
   const activeId = useOracleConversations((s) => s.activeId);
   const getActive = useOracleConversations((s) => s.getActive);
-  const createConversation = useOracleConversations((s) => s.createConversation);
   const setFeedback = useOracleConversations((s) => s.setFeedback);
 
   const [leftOpen, setLeftOpen] = useState(false);
@@ -660,6 +597,10 @@ export function OracleChat() {
   const [graphOpen, setGraphOpen] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  /** Per-turn feedback cache: turnId → 'like' | 'dislike'. Stored in component
+   *  state (not the persisted store) so feedback is per-turn, not per-conversation.
+   *  Survives conversation switching because it's keyed by turn id. */
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, FeedbackState>>({});
 
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<OracleInputHandle>(null);
@@ -675,6 +616,12 @@ export function OracleChat() {
   /** Tracks whether any output (token/structured) has arrived, to hide the
    *  thinking animation at the right moment instead of a fixed delay. */
   const firstOutputRef = useRef(false);
+  /** The user prompt for the stream currently in flight — fed to the thinking
+   *  status so the rotating messages adapt to the question's intent. Kept as
+   *  state (not a ref) so reading it during render is allowed. */
+  const [streamingPrompt, setStreamingPrompt] = useState('');
+  /** Debounce handle for smooth auto-scroll during streaming (prevents jank). */
+  const scrollRafRef = useRef<number | null>(null);
 
   const activeRef = useRef<ReturnType<typeof getActive>>(null);
   const active = getActive();
@@ -693,15 +640,51 @@ export function OracleChat() {
     } catch { /* non-fatal */ }
   }, []);
 
+  // ── Unmount cleanup ──
+  // If the user navigates away from /oracle mid-stream, abort the in-flight
+  // request and clear the 90s safety watchdog. Without this, the fetch keeps
+  // running in the background and may try to update state on an unmounted
+  // component (React warning + potential memory pressure on long sessions).
+  useEffect(() => {
+    return () => {
+      try { abortRef.current?.abort(); } catch { /* non-fatal */ }
+      if (safetyTimerRef.current) {
+        clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const messages = active?.messages ?? [];
   const hasMessages = messages.length > 0;
 
-  // Auto-scroll
+  // ── Smooth auto-scroll (debounced via requestAnimationFrame) ──
+  // During streaming, tokens arrive rapidly. Calling scrollTo on every token
+  // causes jank. We coalesce to one rAF per frame for buttery 60 FPS scrolling.
+  const scrollToBottom = useCallback(() => {
+    if (scrollRafRef.current !== null) return; // already scheduled
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollRef.current;
+      if (!el || !shouldAutoScrollRef.current) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+  }, []);
+
   useEffect(() => {
-    if (!scrollRef.current || !shouldAutoScrollRef.current) return;
-    const el = scrollRef.current;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, showThinking]);
+    if (!shouldAutoScrollRef.current) return;
+    scrollToBottom();
+  }, [messages, showThinking, scrollToBottom]);
+
+  // Cancel any pending scroll rAF on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -780,9 +763,9 @@ export function OracleChat() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  /** Core streaming routine shared by Send + Regenerate. Sets up the abort
-   *  controller, a 90s safety watchdog, the thinking animation, and wires
-   *  every SSE handler. Never throws — every path calls finishStream. */
+  /** Core streaming routine shared by Send + Regenerate + Continue. Sets up
+   *  the abort controller, a 90s safety watchdog, the thinking status, and
+   *  wires every SSE handler. Never throws — every path calls finishStream. */
   async function runStream(
     oracleTurnId: string,
     message: string,
@@ -791,6 +774,7 @@ export function OracleChat() {
     const store = useOracleConversations.getState();
     firstOutputRef.current = false;
     shouldAutoScrollRef.current = true;
+    setStreamingPrompt(message); // feeds the rotating thinking status
     setShowThinking(true);
     setIsStreaming(true);
     isStreamingRef.current = true;
@@ -805,8 +789,9 @@ export function OracleChat() {
     safetyTimerRef.current = setTimeout(() => {
       if (streamingTurnIdRef.current !== oracleTurnId) return; // already finished
       try { controller.abort(); } catch { /* non-fatal */ }
-      store.setError(oracleTurnId, 'This is taking longer than expected. Please try again.');
-      toast.error('Oracle timed out. Please try again.');
+      const friendly = toFriendlyError(new Error('timed out'));
+      store.setError(oracleTurnId, friendly.message);
+      toast.error(friendly.message);
       finishStream(oracleTurnId);
     }, STREAM_SAFETY_TIMEOUT_MS);
 
@@ -848,10 +833,12 @@ export function OracleChat() {
           },
           onDone: () => finishStream(oracleTurnId),
           onError: (errorMessage) => {
-            store.setError(oracleTurnId, errorMessage);
+            // Map to a friendly message — never expose raw errors to the user.
+            const friendly = toFriendlyError(errorMessage);
+            store.setError(oracleTurnId, friendly.message);
             // The session-expired path already shows its own toast + redirect.
             if (!errorMessage.toLowerCase().includes('session has expired')) {
-              toast.error(errorMessage);
+              toast.error(friendly.message);
             }
             finishStream(oracleTurnId);
           },
@@ -859,11 +846,12 @@ export function OracleChat() {
         },
         controller.signal
       );
-    } catch {
+    } catch (err) {
       // streamOracle is expected to handle all errors internally, but guard
       // against any unexpected throw so we never leave a loading state active.
-      store.setError(oracleTurnId, FRIENDLY_ERROR);
-      toast.error('Something went wrong. Please try again.');
+      const friendly = toFriendlyError(err);
+      store.setError(oracleTurnId, friendly.message);
+      toast.error(friendly.message);
       finishStream(oracleTurnId);
     }
   }
@@ -907,9 +895,10 @@ export function OracleChat() {
 
   const handlePickSuggestion = (prompt: string) => {
     if (sendingRef.current || isStreamingRef.current) return;
-    const store = useOracleConversations.getState();
-    const current = store.getActive();
-    if (current && current.messages.length > 0) store.createConversation();
+    // Continue in the current conversation — do NOT wipe it. The previous
+    // behavior created a new conversation on every suggestion click, which
+    // discarded the active thread and lost context. `handleSend` creates a
+    // conversation automatically if none exists (welcome-screen case).
     requestAnimationFrame(() => handleSend(prompt));
   };
 
@@ -926,6 +915,57 @@ export function OracleChat() {
     const history = buildHistoryExcludingLastUser(regen.oracleTurnId);
     void runStream(regen.oracleTurnId, regen.userMessage, history);
   };
+
+  // ── Continue response ──
+  // Asks Oracle to keep writing where it left off. Sends a short "continue"
+  // prompt with the full conversation history (including the last Oracle turn)
+  // so the model picks up naturally. Appends a new user + oracle turn pair.
+  const handleContinue = (oracleTurnId: string) => {
+    if (sendingRef.current || isStreamingRef.current) return;
+    const store = useOracleConversations.getState();
+    const current = store.getActive();
+    if (!current) return;
+    // Find the oracle turn we're continuing from
+    const idx = current.messages.findIndex((m) => m.id === oracleTurnId);
+    if (idx === -1) return;
+    const oracleTurn = current.messages[idx];
+    if (!oracleTurn || oracleTurn.role !== 'oracle' || oracleTurn.error) return;
+    // Build history up to and including this oracle turn (so the model sees
+    // its own previous answer and continues from there).
+    const history = current.messages
+      .slice(0, idx + 1)
+      .filter((m) => !m.streaming && !m.error)
+      .map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      }));
+    sendingRef.current = true;
+    const { oracleTurnId: newTurnId } = store.pushUserMessage(
+      'Please continue your previous response from where you left off.'
+    );
+    void runStream(newTurnId, 'Please continue your previous response from where you left off.', history);
+  };
+
+  // ── Per-turn feedback (Like / Dislike) ──
+  // Stored in component state keyed by turn id so it's per-turn (the old store
+  // model was per-conversation, which meant liking one answer "liked" the whole
+  // thread). We also mirror to the store's conversation-level feedback for
+  // backward compatibility with the sidebar.
+  const handleLike = useCallback((turnId: string, liked: boolean) => {
+    setFeedbackMap((prev) => ({
+      ...prev,
+      [turnId]: liked ? 'like' : undefined,
+    }));
+    if (activeId && liked) setFeedback(activeId, 'like');
+  }, [activeId, setFeedback]);
+
+  const handleDislike = useCallback((turnId: string, disliked: boolean) => {
+    setFeedbackMap((prev) => ({
+      ...prev,
+      [turnId]: disliked ? 'dislike' : undefined,
+    }));
+    if (activeId && disliked) setFeedback(activeId, 'dislike');
+  }, [activeId, setFeedback]);
 
   // ── File upload ──
   // Uploads the file to /api/oracle/documents (multipart), then sends a chat
@@ -965,8 +1005,21 @@ export function OracleChat() {
     }
   };
 
-  const handleEditPrompt = (content: string) => {
-    inputRef.current?.setValue(content);
+  // ── Edit previous prompt ──
+  // Truncates the conversation back to BEFORE the clicked user turn (removing
+  // it and everything after), then prefills the input with the old content so
+  // the user can edit and re-send. When they send, it appends as a fresh
+  // message — no duplicate turns, no orphaned answers.
+  const handleEditPrompt = (turnId: string) => {
+    if (sendingRef.current || isStreamingRef.current) {
+      toast.message('Please wait for the current response to finish before editing.');
+      return;
+    }
+    const store = useOracleConversations.getState();
+    const oldContent = store.truncateFromTurn(turnId);
+    if (oldContent) {
+      inputRef.current?.setValue(oldContent);
+    }
   };
 
   const userInitials = user?.name
@@ -1094,42 +1147,64 @@ export function OracleChat() {
             ref={scrollRef}
             onScroll={handleScroll}
             className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
+            role="log"
+            aria-live="polite"
+            aria-label="Oracle conversation"
           >
             {hasMessages ? (
               <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
                 <div className="space-y-6">
-                  {messages.map((turn, idx) => (
-                    <div key={turn.id}>
-                      <LightOracleMessage
-                        turn={turn}
-                        onPickFollowUp={handlePickSuggestion}
-                        onRetry={turn.role === 'oracle' && turn.id === messages[messages.length - 1]?.id ? handleRetry : undefined}
-                        onLike={activeId ? () => setFeedback(activeId, 'like') : undefined}
-                        onDislike={activeId ? () => setFeedback(activeId, 'dislike') : undefined}
-                        onEdit={turn.role === 'user' ? () => handleEditPrompt(turn.content) : undefined}
-                      />
-                      {/* Show Oracle Actions after the last Oracle message when not streaming */}
-                      {turn.role === 'oracle' && !turn.streaming && !turn.error &&
-                        idx === messages.length - 1 && !isStreaming && (
-                        <OracleActions onAction={handlePickSuggestion} />
-                      )}
-                      {/* Thinking animation appears after the latest user message while streaming */}
-                      {turn.role === 'user' && idx === messages.length - 1 && showThinking && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-6 flex gap-3"
-                        >
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)]">
-                            <Sparkles className="h-4 w-4 text-white" />
-                          </div>
-                          <div className="flex-1 rounded-3xl rounded-bl-md border border-[#1F1F1F] bg-[#111111] px-4 py-2">
-                            <OracleThinkingAnimation />
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  ))}
+                  {messages.map((turn, idx) => {
+                    // Find the most recent user message at or before this turn —
+                    // used to generate contextual follow-up suggestions.
+                    let lastUserPrompt: string | undefined;
+                    for (let i = idx; i >= 0; i--) {
+                      if (messages[i].role === 'user') {
+                        lastUserPrompt = messages[i].content;
+                        break;
+                      }
+                    }
+                    const isLastOracle = turn.role === 'oracle' && turn.id === messages[messages.length - 1]?.id;
+                    return (
+                      <div key={turn.id}>
+                        <LightOracleMessage
+                          turn={turn}
+                          feedback={feedbackMap[turn.id]}
+                          lastUserPrompt={lastUserPrompt}
+                          onPickFollowUp={handlePickSuggestion}
+                          onRetry={isLastOracle ? handleRetry : undefined}
+                          onContinue={turn.role === 'oracle' && !turn.error && !turn.streaming ? () => handleContinue(turn.id) : undefined}
+                          onLike={(liked) => handleLike(turn.id, liked)}
+                          onDislike={(disliked) => handleDislike(turn.id, disliked)}
+                          onEdit={turn.role === 'user' ? () => handleEditPrompt(turn.id) : undefined}
+                          busy={isStreaming}
+                        />
+                        {/* Show Oracle Actions after the last Oracle message when not streaming */}
+                        {turn.role === 'oracle' && !turn.streaming && !turn.error &&
+                          idx === messages.length - 1 && !isStreaming && (
+                          <OracleActions onAction={handlePickSuggestion} />
+                        )}
+                        {/* Thinking status appears after the latest user message while streaming.
+                            Uses the contextual rotating status (Reading files / Analyzing invoices /
+                            Searching memory / Building response / Finalizing answer…) adapted to
+                            the user's prompt. */}
+                        {turn.role === 'user' && idx === messages.length - 1 && showThinking && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-6 flex gap-3"
+                          >
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_12px_-2px_rgba(245,158,11,0.4)]">
+                              <Sparkles className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex-1 rounded-3xl rounded-bl-md border border-[#1F1F1F] bg-[#111111] px-4 py-2">
+                              <OracleThinkingStatus prompt={streamingPrompt} compact />
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="h-8" />
               </div>

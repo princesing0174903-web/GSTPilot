@@ -5,31 +5,32 @@
 //
 // ChatGPT Enterprise + Claude level markdown rendering for Oracle responses.
 //   • Full GFM support (tables, strikethrough, task lists, autolinks)
-//   • Syntax-styled code blocks with copy button
+//   • Premium tables: zebra striping, sticky header, hover highlight, amber headers
+//   • Code blocks with copy button + language label
 //   • Headings, lists, blockquotes, inline code — all gold-accented
-//   • Lightweight (no syntax highlighter — keeps bundle small for 4GB sandbox)
-//   • Streaming-safe (renders partial markdown without flicker)
+//   • Streaming-safe: smooth blinking caret that never flickers
+//   • Memoized components for 60 FPS during streaming
 //
 // Used by OracleChat to render Oracle's responses with professional typography.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { memo, useState, type ReactNode } from 'react';
+import { memo, useState, type ReactNode, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Check, Copy } from 'lucide-react';
 
 interface OracleMarkdownProps {
   content: string;
-  /** When true, shows a pulsing cursor at the end (streaming in progress). */
+  /** When true, shows a smooth blinking caret at the end (streaming in progress). */
   streaming?: boolean;
 }
 
 // ─── Code block with copy button ─────────────────────────────────────────────
 
-function CodeBlock({ children, language }: { children: string; language?: string }) {
+const CodeBlock = memo(function CodeBlock({ children, language }: { children: string; language?: string }) {
   const [copied, setCopied] = useState(false);
 
-  const copy = async () => {
+  const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(children);
       setCopied(true);
@@ -37,7 +38,7 @@ function CodeBlock({ children, language }: { children: string; language?: string
     } catch {
       /* clipboard blocked — non-fatal */
     }
-  };
+  }, [children]);
 
   return (
     <div className="group relative my-3 overflow-hidden rounded-xl border border-[#232323] bg-[#0B0B0B]">
@@ -47,8 +48,9 @@ function CodeBlock({ children, language }: { children: string; language?: string
         </span>
         <button
           onClick={copy}
-          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white/70 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
           aria-label="Copy code"
+          title="Copy code"
         >
           {copied ? (
             <>
@@ -68,43 +70,31 @@ function CodeBlock({ children, language }: { children: string; language?: string
       </pre>
     </div>
   );
-}
+});
 
 // ─── Inline node renderer (memoized for streaming performance) ───────────────
 
 const components = {
   h1: ({ children }: { children?: ReactNode }) => (
-    <h1 className="mt-4 mb-2 text-[20px] font-bold tracking-tight text-white first:mt-0">
-      {children}
-    </h1>
+    <h1 className="mt-4 mb-2 text-[20px] font-bold tracking-tight text-white first:mt-0">{children}</h1>
   ),
   h2: ({ children }: { children?: ReactNode }) => (
-    <h2 className="mt-4 mb-2 text-[17px] font-bold tracking-tight text-white first:mt-0">
-      {children}
-    </h2>
+    <h2 className="mt-4 mb-2 text-[17px] font-bold tracking-tight text-white first:mt-0">{children}</h2>
   ),
   h3: ({ children }: { children?: ReactNode }) => (
-    <h3 className="mt-3 mb-1.5 text-[15px] font-semibold tracking-tight text-white first:mt-0">
-      {children}
-    </h3>
+    <h3 className="mt-3 mb-1.5 text-[15px] font-semibold tracking-tight text-white first:mt-0">{children}</h3>
   ),
   h4: ({ children }: { children?: ReactNode }) => (
-    <h4 className="mt-3 mb-1 text-[14px] font-semibold text-white/90 first:mt-0">
-      {children}
-    </h4>
+    <h4 className="mt-3 mb-1 text-[14px] font-semibold text-white/90 first:mt-0">{children}</h4>
   ),
   p: ({ children }: { children?: ReactNode }) => (
-    <p className="my-2 text-[14px] leading-relaxed text-white/90 first:mt-0 last:mb-0">
-      {children}
-    </p>
+    <p className="my-2 text-[14px] leading-relaxed text-white/90 first:mt-0 last:mb-0">{children}</p>
   ),
   ul: ({ children }: { children?: ReactNode }) => (
     <ul className="my-2 space-y-1.5 pl-1">{children}</ul>
   ),
   ol: ({ children }: { children?: ReactNode }) => (
-    <ol className="my-2 space-y-1.5 pl-1 list-decimal list-inside marker:text-amber-400/70">
-      {children}
-    </ol>
+    <ol className="my-2 space-y-1.5 pl-1 list-decimal list-inside marker:text-amber-400/70">{children}</ol>
   ),
   li: ({ children, ...props }: { children?: ReactNode; checked?: boolean | null }) => {
     // Task list item
@@ -113,16 +103,12 @@ const components = {
         <li className="flex items-start gap-2 text-[14px] leading-relaxed text-white/90">
           <span
             className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-              props.checked
-                ? 'border-amber-500 bg-amber-500/20'
-                : 'border-white/20 bg-transparent'
+              props.checked ? 'border-amber-500 bg-amber-500/20' : 'border-white/20 bg-transparent'
             }`}
           >
             {props.checked && <Check className="h-3 w-3 text-amber-400" strokeWidth={3} />}
           </span>
-          <span className={props.checked ? 'text-white/50 line-through' : 'text-white/90'}>
-            {children}
-          </span>
+          <span className={props.checked ? 'text-white/50 line-through' : 'text-white/90'}>{children}</span>
         </li>
       );
     }
@@ -183,24 +169,25 @@ const components = {
     );
   },
   pre: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  // ── Premium tables ──
   table: ({ children }: { children?: ReactNode }) => (
-    <div className="my-3 overflow-x-auto rounded-xl border border-[#1F1F1F]">
+    <div className="my-3 overflow-x-auto rounded-xl border border-[#232323] bg-[#0D0D0D] shadow-sm">
       <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   ),
   thead: ({ children }: { children?: ReactNode }) => (
-    <thead className="bg-[#141414]">{children}</thead>
+    <thead className="sticky top-0 z-10 bg-[#161208]">{children}</thead>
   ),
   th: ({ children }: { children?: ReactNode }) => (
-    <th className="border-b border-[#1F1F1F] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-400/90">
+    <th className="border-b border-amber-500/20 px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-300/90 backdrop-blur-sm">
       {children}
     </th>
   ),
   td: ({ children }: { children?: ReactNode }) => (
-    <td className="border-b border-[#161616] px-3 py-2 text-white/80">{children}</td>
+    <td className="border-b border-[#1A1A1A] px-3.5 py-2 text-white/80">{children}</td>
   ),
   tr: ({ children }: { children?: ReactNode }) => (
-    <tr className="transition-colors hover:bg-white/[0.02]">{children}</tr>
+    <tr className="transition-colors even:bg-white/[0.015] hover:bg-amber-500/[0.04]">{children}</tr>
   ),
 };
 
@@ -213,7 +200,10 @@ function OracleMarkdownImpl({ content, streaming }: OracleMarkdownProps) {
         {content}
       </ReactMarkdown>
       {streaming && (
-        <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-amber-400 align-middle" />
+        <span
+          className="oracle-caret ml-0.5 inline-block h-4 w-[7px] translate-y-0.5 rounded-sm bg-amber-400 align-middle"
+          aria-hidden="true"
+        />
       )}
     </div>
   );

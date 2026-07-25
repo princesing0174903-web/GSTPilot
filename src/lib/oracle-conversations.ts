@@ -285,6 +285,16 @@ interface OracleConversationsState {
 
   // ── Derived conversation title from first user message ──
   ensureTitle: (conversationId: string, firstMessage: string) => void
+
+  /**
+   * Edit-previous-prompt support: removes the given turn AND every turn after
+   * it from the active conversation. Used when the user clicks "Edit" on a
+   * user message — the caller then refills the input with the old content.
+   * When the user re-sends, it appends as a fresh message. Returns the content
+   * of the removed user turn (so the caller can prefill the input), or null
+   * if the turn wasn't found.
+   */
+  truncateFromTurn: (turnId: string) => string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -294,6 +304,14 @@ function uid(prefix = 'turn'): string {
 }
 
 function deriveTitle(message: string): string {
+  // Smart auto-titles: "GST Analysis – ABC Traders" instead of "New conversation".
+  // Lazy import avoids circular deps and keeps the store bundle lean.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { generateSmartTitle } = require('./oracle/oracle-smart-titles') as typeof import('./oracle/oracle-smart-titles')
+    const smart = generateSmartTitle(message)
+    if (smart && smart !== 'New conversation') return smart
+  } catch { /* fall through to basic truncation */ }
   const clean = message.trim().replace(/\s+/g, ' ')
   if (clean.length <= 48) return clean
   return clean.slice(0, 45).trimEnd() + '…'
@@ -837,6 +855,24 @@ export const useOracleConversations = create<OracleConversationsState>()(
             }
           }),
         }))
+      },
+
+      truncateFromTurn: (turnId) => {
+        let removedContent: string | null = null
+        set((s) => ({
+          conversations: s.conversations.map((c) => {
+            if (c.id !== s.activeId) return c
+            const idx = c.messages.findIndex((m) => m.id === turnId)
+            if (idx === -1) return c
+            removedContent = c.messages[idx].content
+            return {
+              ...c,
+              messages: c.messages.slice(0, idx), // remove this turn + everything after
+              updatedAt: nowISO(),
+            }
+          }),
+        }))
+        return removedContent
       },
     }),
     {

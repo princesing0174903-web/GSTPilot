@@ -20,6 +20,7 @@ import {
   useState,
   forwardRef,
   useImperativeHandle,
+  useCallback,
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
@@ -32,6 +33,7 @@ import {
   Square,
   Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export interface OracleInputHandle {
@@ -118,19 +120,21 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
       onStop?.();
     };
 
-    const handleFilePick = (e: ChangeEvent<HTMLInputElement>) => {
+    const handleFilePick = useCallback((e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       // Always reset the input value so picking the same file twice fires again.
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (!file) return;
       // Reject obviously unsupported / oversized files client-side (max 8 MB,
-      // matching the server cap).
+      // matching the server cap). Show a friendly toast so the user knows why
+      // nothing happened.
       const MAX_BYTES = 8 * 1024 * 1024;
       if (file.size > MAX_BYTES) {
+        toast.error(`"${file.name}" is too large. Maximum file size is 8 MB.`);
         return;
       }
       onFileUpload?.(file);
-    };
+    }, [onFileUpload]);
 
     const openFilePicker = () => {
       if (isUploading || isStreaming) return;
@@ -196,11 +200,19 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
             <button
               type="button"
               onClick={() => {
-                // Future: trigger chart-rendering mode
+                const ta = textareaRef.current;
+                if (!ta) return;
+                const prompt = 'Show me a chart of ';
+                setValue((v) => (v ? v : prompt));
+                requestAnimationFrame(() => {
+                  ta.focus();
+                  ta.setSelectionRange(prompt.length, prompt.length);
+                });
               }}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300"
-              aria-label="Show me a chart"
-              title="Show me a chart"
+              disabled={isStreaming}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40 disabled:hover:bg-transparent"
+              aria-label="Insert chart prompt"
+              title="Ask Oracle for a chart"
             >
               <BarChart3 className="h-4 w-4" />
             </button>
@@ -208,11 +220,19 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
             <button
               type="button"
               onClick={() => {
-                // Future: open the agent picker
+                const ta = textareaRef.current;
+                if (!ta) return;
+                const prompt = 'Run an agent to ';
+                setValue((v) => (v ? v : prompt));
+                requestAnimationFrame(() => {
+                  ta.focus();
+                  ta.setSelectionRange(prompt.length, prompt.length);
+                });
               }}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300"
-              aria-label="Run an agent"
-              title="Run an agent"
+              disabled={isStreaming}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40 disabled:hover:bg-transparent"
+              aria-label="Insert agent prompt"
+              title="Ask Oracle to run an agent"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
@@ -240,14 +260,12 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
               aria-label="Message Oracle"
             />
 
-            {/* Voice button (visual) */}
+            {/* Voice button (visual — coming soon) */}
             <button
               type="button"
-              onClick={() => {
-                // Voice input not yet supported — visual only
-              }}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
-              aria-label="Voice input"
+              disabled
+              className="flex h-9 w-9 shrink-0 cursor-not-allowed items-center justify-center rounded-full text-white/25"
+              aria-label="Voice input (coming soon)"
               title="Voice input (coming soon)"
             >
               <Mic className="h-4 w-4" />

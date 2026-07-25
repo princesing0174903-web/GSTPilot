@@ -76,14 +76,29 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
       return;
     }
     setLoading(true);
+
+    // Watchdog: if Firestore never sends the first snapshot within 10s
+    // (rare cold-start / offline scenario), clear loading so the UI doesn't
+    // hang on a spinner forever. The subscription stays open — when the
+    // snapshot eventually arrives it'll still update state.
+    let firstSnapshotReceived = false;
+    const watchdog = setTimeout(() => {
+      if (!firstSnapshotReceived) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLoading(false);
+      }
+    }, 10_000);
+
     const unsubscribe = subscribeCustomers(
       currentOrgId,
       (list) => {
+        firstSnapshotReceived = true;
         setCustomers(list);
         setLoading(false);
         setError(null);
       },
       (err) => {
+        firstSnapshotReceived = true;
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
@@ -102,7 +117,10 @@ export function useGSTpilotCustomers(): UseGSTpilotCustomersResult {
         });
       },
     );
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(watchdog);
+      unsubscribe();
+    };
   }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {

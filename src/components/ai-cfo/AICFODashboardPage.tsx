@@ -19,7 +19,7 @@
 // Tagline: Understand Your Business. Predict Your Future. Recommend Your Next Move.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain, TrendingUp, TrendingDown, Wallet, IndianRupee, FileText, CreditCard,
@@ -36,6 +36,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import type { CFOResponse, RiskLevel, CFORecommendation } from '@/lib/cfo/types';
+import { fetchWithTimeout } from '@/lib/async';
 import AICFOPhase1Sections from './AICFOPhase1Sections';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -770,20 +771,38 @@ export default function AICFODashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Single-flight + unmount safety for the polling fetch.
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchData = useCallback(async () => {
+    // Single-flight: skip overlapping polls.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       setRefreshing(true);
-      const res = await fetch('/api/ai-cfo', { cache: 'no-store' });
+      const res = await fetchWithTimeout('/api/ai-cfo', {
+        cache: 'no-store',
+        timeoutMs: 20_000,
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as CFOResponse;
+      if (!mountedRef.current) return;
       setData(json);
       setError(null);
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Failed to load CFO insights');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+      inFlightRef.current = false;
     }
   }, []);
 

@@ -55,6 +55,7 @@ import {
   type SimulationScenario,
 } from '@/lib/autonomous/types';
 import { SCENARIO_META } from '@/lib/autonomous/simulator';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,11 +169,12 @@ function ExecutiveCard({ exec }: { exec: ExecutiveAgent }) {
 
 // ─── Decision Card ────────────────────────────────────────────────────────────
 
-function DecisionCard({ d, onApprove, onReject, onExecute }: {
+function DecisionCard({ d, onApprove, onReject, onExecute, busy }: {
   d: AutonomousDecision;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onExecute: (id: string) => void;
+  busy?: boolean;
 }) {
   return (
     <Card className="bg-white/[0.03] border-white/[0.08]">
@@ -235,17 +237,20 @@ function DecisionCard({ d, onApprove, onReject, onExecute }: {
         <div className="flex gap-2 mt-3">
           {d.status === 'pending' && (
             <>
-              <Button size="sm" variant="default" className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(d.id)}>
-                <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+              <Button size="sm" variant="default" disabled={busy} className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(d.id)}>
+                {busy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                Approve
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-[11px] border-red-500/30 text-red-300 hover:bg-red-500/10" onClick={() => onReject(d.id)}>
-                <XCircle className="h-3 w-3 mr-1" /> Reject
+              <Button size="sm" variant="outline" disabled={busy} className="h-7 text-[11px] border-red-500/30 text-red-300 hover:bg-red-500/10" onClick={() => onReject(d.id)}>
+                {busy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
+                Reject
               </Button>
             </>
           )}
           {(d.status === 'approved' || d.status === 'auto_approved') && (
-            <Button size="sm" variant="default" className="h-7 text-[11px]" onClick={() => onExecute(d.id)}>
-              <Play className="h-3 w-3 mr-1" /> Execute
+            <Button size="sm" variant="default" disabled={busy} className="h-7 text-[11px]" onClick={() => onExecute(d.id)}>
+              {busy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+              Execute
             </Button>
           )}
         </div>
@@ -324,20 +329,41 @@ export default function AutonomousEnterprisePage() {
   const [memoryResults, setMemoryResults] = useState<ReturnType<typeof Array> | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [lastRun, setLastRun] = useState<{ consensus: string; decisions: number } | null>(null);
+  // busyId tracks the decision currently being mutated (Approve/Reject/Execute)
+  // so its card can show a spinner AND we can single-flight duplicate clicks.
+  const [busyId, setBusyId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchDashboard = useCallback(async (silent = false) => {
+    // Single-flight: skip overlapping polls.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     if (!silent) setRefreshing(true);
     try {
-      const res = await fetch('/api/autonomous/dashboard', { cache: 'no-store' });
+      const res = await fetchWithTimeout('/api/autonomous/dashboard', {
+        cache: 'no-store',
+        timeoutMs: 20_000,
+      });
+      if (!mountedRef.current) return;
       if (!res.ok) throw new Error('Failed to load dashboard');
       const json = await res.json();
-      setData(json);
+      if (mountedRef.current) setData(json);
     } catch (e) {
+      if (!mountedRef.current) return;
       if (!silent) toast({ title: 'Load failed', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+      inFlightRef.current = false;
     }
   }, [toast]);
 
@@ -350,60 +376,85 @@ export default function AutonomousEnterprisePage() {
   // ─── Actions ────────────────────────────────────────────────────────────────
 
   const onApprove = async (id: string) => {
+    // Single-flight: prevent double-clicks on the same decision.
+    if (busyId === id) return;
+    setBusyId(id);
     try {
-      const res = await fetch('/api/autonomous/approve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetchWithTimeout('/api/autonomous/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decisionId: id, role: 'ceo' }),
+        timeoutMs: 20_000,
       });
       if (!res.ok) throw new Error('Approve failed');
       toast({ title: 'Decision approved', description: 'Oracle will execute it autonomously.' });
       fetchDashboard(true);
     } catch (e) {
       toast({ title: 'Approve failed', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' });
+    } finally {
+      setBusyId(null);
     }
   };
 
   const onReject = async (id: string) => {
+    if (busyId === id) return;
+    setBusyId(id);
     try {
-      const res = await fetch('/api/autonomous/reject', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetchWithTimeout('/api/autonomous/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decisionId: id, role: 'ceo' }),
+        timeoutMs: 20_000,
       });
       if (!res.ok) throw new Error('Reject failed');
       toast({ title: 'Decision rejected', description: 'Learning Engine recorded the rejection.' });
       fetchDashboard(true);
     } catch (e) {
       toast({ title: 'Reject failed', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' });
+    } finally {
+      setBusyId(null);
     }
   };
 
   const onExecute = async (id: string) => {
+    if (busyId === id) return;
+    setBusyId(id);
     try {
-      const res = await fetch('/api/autonomous/execute', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetchWithTimeout('/api/autonomous/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decisionId: id, role: 'ceo' }),
+        timeoutMs: 30_000,
       });
       if (!res.ok) throw new Error('Execute failed');
       toast({ title: 'Execution triggered', description: 'Autonomous workflow started. Everything is logged.' });
       fetchDashboard(true);
     } catch (e) {
       toast({ title: 'Execute failed', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' });
+    } finally {
+      setBusyId(null);
     }
   };
 
   const onVoice = async (cmd?: string) => {
     const command = cmd ?? voiceInput.trim();
     if (!command) return;
+    if (voiceBusy) return; // single-flight
     setVoiceBusy(true);
-    setVoiceInput('');
+    // NOTE: don't clear voiceInput until the fetch succeeds — if it fails we
+    // want the user to be able to retry / edit the command without retyping.
     try {
-      const res = await fetch('/api/autonomous/execute', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetchWithTimeout('/api/autonomous/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command }),
+        timeoutMs: 30_000,
       });
       if (!res.ok) throw new Error('Voice command failed');
       const json = await res.json();
       const vc = json.command as VoiceCommand;
+      // Success — safe to clear the input now.
+      setVoiceInput('');
       toast({
         title: `Intent: ${vc.intent}`,
         description: json.executed ? json.result : `${vc.plan.length} steps planned. Requires approval (${vc.riskLevel} risk).`,
@@ -419,9 +470,10 @@ export default function AutonomousEnterprisePage() {
   const onRunCompany = async () => {
     setVoiceBusy(true);
     try {
-      const res = await fetch('/api/autonomous/run-company', {
+      const res = await fetchWithTimeout('/api/autonomous/run-company', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dryRun: false }),
+        timeoutMs: 60_000,
       });
       if (!res.ok) throw new Error('Run company failed');
       const json = await res.json();
@@ -444,9 +496,10 @@ export default function AutonomousEnterprisePage() {
   const onSimulate = async () => {
     setSimBusy(true);
     try {
-      const res = await fetch('/api/autonomous/simulate', {
+      const res = await fetchWithTimeout('/api/autonomous/simulate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario: simScenario }),
+        timeoutMs: 30_000,
       });
       if (!res.ok) throw new Error('Simulation failed');
       const json = await res.json();
@@ -469,7 +522,7 @@ export default function AutonomousEnterprisePage() {
       const url = memoryQuery
         ? `/api/autonomous/memory?q=${encodeURIComponent(memoryQuery)}&limit=50`
         : '/api/autonomous/memory?limit=50';
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetchWithTimeout(url, { cache: 'no-store', timeoutMs: 20_000 });
       if (!res.ok) throw new Error('Memory search failed');
       const json = await res.json();
       setMemoryResults(json.entries);
@@ -480,7 +533,13 @@ export default function AutonomousEnterprisePage() {
     }
   };
 
-  useEffect(() => { onMemorySearch(); /* initial memory load */ }, []);
+  // Initial memory load. Safe because onMemorySearch's finally always sets
+  // memoryBusy=false; if the component unmounts mid-fetch, the state update
+  // is a no-op on a dead component (React 18 silent). The fetchWithTimeout
+  // ensures the request can't hang forever.
+  useEffect(() => {
+    void onMemorySearch();
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -626,7 +685,7 @@ export default function AutonomousEnterprisePage() {
                 <Card className="bg-white/[0.03] border-white/[0.08] sm:col-span-2"><CardContent className="p-6 text-center text-sm text-muted-foreground">No active decisions. Run the company to generate proposals.</CardContent></Card>
               )}
               {data.decisions.map((d) => (
-                <DecisionCard key={d.id} d={d} onApprove={onApprove} onReject={onReject} onExecute={onExecute} />
+                <DecisionCard key={d.id} d={d} onApprove={onApprove} onReject={onReject} onExecute={onExecute} busy={busyId === d.id} />
               ))}
             </div>
           </TabsContent>

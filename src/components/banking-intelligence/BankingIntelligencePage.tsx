@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { apiPost } from './helpers';
 import type { BankingAccount } from '@/lib/banking-service/types';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Lazy-loaded tab components (keeps initial bundle small) ──────────────────
 
@@ -130,10 +131,15 @@ export default function BankingIntelligencePage({
   }, []);
 
   // Sync All — iterate over every account.
+  // Single-flight: prevent double-clicks from firing concurrent sync runs.
+  // Each per-account sync gets its own timeout via apiPost's underlying
+  // fetchWithTimeout (30s default).
   const handleSyncAll = React.useCallback(async () => {
+    if (syncingAll) return;
     setSyncingAll(true);
     try {
-      const res = await fetch('/api/banking-intel/accounts').then((r) => r.json());
+      const res = await fetchWithTimeout('/api/banking-intel/accounts', { timeoutMs: 20_000 })
+        .then((r) => r.json());
       const accounts: BankingAccount[] = res?.accounts ?? [];
       if (accounts.length === 0) {
         toast.info('No accounts to sync');
@@ -141,16 +147,16 @@ export default function BankingIntelligencePage({
       }
       let ok = 0;
       let failed = 0;
-      await Promise.all(
-        accounts.map(async (a) => {
-          try {
-            await apiPost('/api/banking-intel/accounts/sync', { accountId: a.id });
-            ok += 1;
-          } catch {
-            failed += 1;
-          }
-        }),
+      // Promise.allSettled so a single hung/failed account doesn't block the rest.
+      const results = await Promise.allSettled(
+        accounts.map((a) =>
+          apiPost('/api/banking-intel/accounts/sync', { accountId: a.id }, { timeoutMs: 30_000 }),
+        ),
       );
+      for (const r of results) {
+        if (r.status === 'fulfilled') ok += 1;
+        else failed += 1;
+      }
       if (failed === 0) {
         toast.success(`Synced ${ok} account${ok === 1 ? '' : 's'}`);
       } else {
@@ -162,7 +168,7 @@ export default function BankingIntelligencePage({
     } finally {
       setSyncingAll(false);
     }
-  }, []);
+  }, [syncingAll]);
 
   return (
     <div className="space-y-6">

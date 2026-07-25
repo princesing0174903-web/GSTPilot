@@ -1235,7 +1235,26 @@ export default function DashboardPage() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
 
-  if (snapshotLoading || metricsLoading || invoicesLoading || googleLoading || zohoLoading) {
+  // ── Loading safety timer (Task 2) ──
+  // The dashboard gates on 5 hooks (snapshot / metrics / invoices / google /
+  // zoho). Any one of them hanging would otherwise leave the skeleton up
+  // forever. After 12s we bail out and let the error-state branch render
+  // (or the dashboard itself, with whatever data we have). Each hook already
+  // has its own timeout via useBusinessSnapshot/use-firestore/etc.
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  useEffect(() => {
+    const allLoading = snapshotLoading || metricsLoading || invoicesLoading || googleLoading || zohoLoading;
+    if (!allLoading) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setLoadingTimedOut(true), 12_000);
+    return () => clearTimeout(t);
+  }, [snapshotLoading, metricsLoading, invoicesLoading, googleLoading, zohoLoading]);
+
+  const allInitialLoading =
+    snapshotLoading || metricsLoading || invoicesLoading || googleLoading || zohoLoading;
+  if (allInitialLoading && !loadingTimedOut) {
     return <DashboardSkeleton />;
   }
 

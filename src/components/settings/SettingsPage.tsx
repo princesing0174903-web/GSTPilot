@@ -439,7 +439,12 @@ function OrganizationSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    if (!orgId) return;
+    // Even when orgId is empty, we MUST clear loading so the section doesn't
+    // sit on a spinner forever waiting for an org that won't arrive.
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/settings/organization', { headers: buildHeaders() });
@@ -680,14 +685,23 @@ function AppearanceSection() {
     setTheme(t);
     setSaving(true);
     try {
-      await fetch('/api/settings/theme', {
+      const res = await fetch('/api/settings/theme', {
         method: 'PUT',
         headers: buildHeaders(),
         body: JSON.stringify({ theme: t }),
       });
+      // Check res.ok — otherwise a 500 would falsely toast success.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Failed to save theme (${res.status})`);
+      }
       toast.success(`Theme set to ${t}`);
-    } catch {
-      // Theme is applied locally via next-themes even if the server save fails.
+    } catch (err) {
+      // Theme is applied locally via next-themes even if the server save fails,
+      // but we surface the failure so the user knows it didn't sync.
+      toast.error('Theme applied locally', {
+        description: err instanceof Error ? err.message : 'Could not sync to the server — your preference will reset on next login.',
+      });
     } finally {
       setSaving(false);
     }
@@ -1113,7 +1127,11 @@ function IntegrationsSection() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!orgId || !userId) return;
+    // Clear loading even when prerequisites are missing — never hang.
+    if (!orgId || !userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [g, z, zs] = await Promise.all([
@@ -1439,25 +1457,36 @@ function TeamSection() {
     }
   };
 
+  const [memberBusy, setMemberBusy] = useState<string | null>(null);
+
   const handleRoleChange = async (memberUserId: string, newRole: OrgRole) => {
     if (!orgId) return;
+    // Single-flight: prevent double-clicks on the same row.
+    if (memberBusy === memberUserId) return;
+    setMemberBusy(memberUserId);
     try {
       const result = await updateMemberRole(orgId, memberUserId, newRole);
       if (result.error) throw new Error(result.error);
       toast.success('Role updated');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update role');
+    } finally {
+      setMemberBusy(null);
     }
   };
 
   const handleRemove = async (memberUserId: string) => {
     if (!orgId) return;
+    if (memberBusy === memberUserId) return;
+    setMemberBusy(memberUserId);
     try {
       const result = await removeMember(orgId, memberUserId);
       if (result.error) throw new Error(result.error);
       toast.success('Member removed');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to remove member');
+    } finally {
+      setMemberBusy(null);
     }
   };
 
@@ -1529,7 +1558,11 @@ function TeamSection() {
                     <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">Owner</Badge>
                   ) : isOwner ? (
                     <>
-                      <Select value={m.role} onValueChange={(v) => handleRoleChange(m.userId, v as OrgRole)}>
+                      <Select
+                        value={m.role}
+                        onValueChange={(v) => handleRoleChange(m.userId, v as OrgRole)}
+                        disabled={memberBusy === m.userId}
+                      >
                         <SelectTrigger className="h-8 w-32 bg-zinc-900 border-zinc-800 text-xs text-white">
                           <SelectValue />
                         </SelectTrigger>
@@ -1539,10 +1572,11 @@ function TeamSection() {
                       </Select>
                       <button
                         onClick={() => handleRemove(m.userId)}
-                        className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        disabled={memberBusy === m.userId}
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                         aria-label="Remove member"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {memberBusy === m.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     </>
                   ) : (
@@ -1661,7 +1695,10 @@ function ApiKeysSection() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/settings/api-keys?organizationId=${encodeURIComponent(orgId)}`, { headers: buildHeaders() });
@@ -1695,7 +1732,12 @@ function ApiKeysSection() {
     }
   };
 
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   const handleRevoke = async (id: string) => {
+    // Single-flight: prevent double-clicks on the same key.
+    if (revokingId === id) return;
+    setRevokingId(id);
     try {
       const res = await fetch(`/api/settings/api-keys/${id}?organizationId=${encodeURIComponent(orgId)}`, {
         method: 'DELETE', headers: buildHeaders(),
@@ -1706,13 +1748,25 @@ function ApiKeysSection() {
       void load();
     } catch {
       toast.error('Failed to revoke key');
+    } finally {
+      setRevokingId(null);
     }
   };
 
+  // Track the copy-reset timeout so it can be cleared on unmount (no setState
+  // after unmount, no overlapping timeouts on rapid clicks).
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
@@ -1766,10 +1820,11 @@ function ApiKeysSection() {
                   {k.status === 'active' && (
                     <button
                       onClick={() => handleRevoke(k.id)}
-                      className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      disabled={revokingId === k.id}
+                      className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                       aria-label="Revoke key"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {revokingId === k.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </button>
                   )}
                 </div>
@@ -1904,7 +1959,10 @@ function BillingSection() {
   const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/settings/billing?organizationId=${encodeURIComponent(orgId)}`, { headers: buildHeaders() });
@@ -2051,17 +2109,30 @@ function DataSection() {
   const [confirmName, setConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [firmName, setFirmName] = useState('');
+  const [firmNameError, setFirmNameError] = useState<string | null>(null);
 
-  // Load the firm name so we can show the user exactly what to type.
+  // Load the firm name so we can show the user exactly what to type. If the
+  // fetch fails we surface an inline error AND fall back to a permissive
+  // empty-string check so the user can still delete their workspace.
   useEffect(() => {
     if (!orgId) return;
+    let mounted = true;
     (async () => {
       try {
         const res = await fetch('/api/settings/organization', { headers: buildHeaders() });
         const body = await res.json();
-        if (body.organization?.name) setFirmName(body.organization.name);
-      } catch { /* ignore */ }
+        if (!mounted) return;
+        if (body.organization?.name) {
+          setFirmName(body.organization.name);
+          setFirmNameError(null);
+        }
+      } catch {
+        if (!mounted) return;
+        // Don't block delete — the user can still type the name they remember.
+        setFirmNameError('Could not load your workspace name. Type it manually to confirm.');
+      }
     })();
+    return () => { mounted = false; };
   }, [orgId, buildHeaders]);
 
   const handleExport = async () => {
@@ -2189,10 +2260,12 @@ function DataSection() {
                 All clients, invoices, Zoho-synced records, firm settings, and the firm itself will be permanently removed.
                 Audit log entries (userId-scoped) are retained. Zoho Books tokens are revoked.
               </p>
+              {firmNameError && (
+                <p className="text-xs text-amber-400 mt-2">{firmNameError}</p>
+              )}
               <DangerButton
                 onClick={() => setDeleteOpen(true)}
                 className="mt-3"
-                disabled={!firmName}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Workspace
@@ -2227,7 +2300,14 @@ function DataSection() {
             <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              disabled={confirmName.toLowerCase() !== firmName.toLowerCase() || deleting}
+              disabled={
+                deleting ||
+                // If we have the firm name, require an exact (case-insensitive) match.
+                // If we DON'T have it (firmNameError), require any non-empty confirm.
+                (firmNameError
+                  ? confirmName.trim().length === 0
+                  : confirmName.toLowerCase() !== firmName.toLowerCase())
+              }
               className="bg-red-600 hover:bg-red-500 text-white border-0 disabled:opacity-50"
             >
               {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}

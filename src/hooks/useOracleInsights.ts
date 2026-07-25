@@ -19,6 +19,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
+import { fetchWithTimeout } from '@/lib/async';
 
 // Re-export the OracleInsights type from the activation route so any
 // component can import it from a single, hook-side location.
@@ -27,6 +28,8 @@ export type { OracleInsights } from '@/app/api/oracle/activate/route';
 import type { OracleInsights } from '@/app/api/oracle/activate/route';
 
 const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
+const FETCH_TIMEOUT_MS = 30_000;
+const TOKEN_TIMEOUT_MS = 10_000;
 
 export interface UseOracleInsightsResult {
   insights: OracleInsights | null;
@@ -43,63 +46,94 @@ export function useOracleInsights(): UseOracleInsightsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
-  const orgIdRef = useRef<string | null>(null);
+  const orgIdRef = useRef<string | null>(orgId);
   orgIdRef.current = orgId;
+  const abortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
   const fetchInsights = useCallback(async () => {
+    // Single-flight.
+    if (inFlightRef.current) return;
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId) {
-      setInsights(null);
-      setLoading(false);
-      setError(null);
+      if (mountedRef.current) {
+        setInsights(null);
+        setLoading(false);
+        setError(null);
+      }
       return;
     }
+
+    inFlightRef.current = true;
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const isLocalOrg = currentOrgId.startsWith('local-');
 
       // Real orgs require a Firebase ID token for server-side auth.
-      // Local- orgs (guest/demo) skip auth entirely — the API route handles
-      // them with in-memory insights generation.
       let idToken: string | null = null;
       if (!isLocalOrg) {
         const { auth } = await import('@/lib/firebase');
         const currentUser = auth.currentUser;
         if (!currentUser) {
-          setInsights(null);
-          setLoading(false);
-          setError(null);
+          if (mountedRef.current) {
+            setInsights(null);
+            setLoading(false);
+            setError(null);
+          }
           return;
         }
-        idToken = await currentUser.getIdToken();
+        // Token fetch with a manual timeout — Firebase's getIdToken can hang.
+        idToken = await Promise.race([
+          currentUser.getIdToken(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), TOKEN_TIMEOUT_MS)),
+        ]);
       }
 
       const url = `/api/oracle/activation-insights?organizationId=${encodeURIComponent(currentOrgId)}`;
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         cache: 'no-store',
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        signal: controller.signal,
+        timeoutMs: FETCH_TIMEOUT_MS,
       });
 
       if (res.status === 401 || res.status === 403) {
-        // Not authenticated / not a member — treat as "no insights yet".
-        setInsights(null);
-        setError(null);
+        if (mountedRef.current && !controller.signal.aborted) {
+          setInsights(null);
+          setError(null);
+        }
         return;
       }
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Request failed (${res.status})`);
-      }
-
       const data = (await res.json()) as OracleInsights;
-      setInsights(data);
-      setError(null);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setInsights(data);
+        setError(null);
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load Oracle insights.';
-      setError(msg);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setError(msg);
+      }
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (mountedRef.current && !controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
 

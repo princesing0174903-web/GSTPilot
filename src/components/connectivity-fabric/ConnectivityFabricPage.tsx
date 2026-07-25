@@ -24,13 +24,13 @@
 //  10. Security Posture (OAuth, mTLS, Zero Trust, token rotation)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Globe, Plug, PlugZap, Shield, Activity, Database, Webhook, RefreshCw,
   Server, Cloud, Cpu, Landmark, FileText, MessageCircle, Banknote, Truck,
   ShoppingBag, BarChart3, Code2, Users, Wallet, Search, Star, Download,
-  CheckCircle2, XCircle, Clock, AlertTriangle, Loader2, Zap, Key, Lock,
+  CheckCircle2, XCircle, Clock, AlertTriangle, AlertCircle, Loader2, Zap, Key, Lock,
   RotateCw, Eye, EyeOff, Plus, Trash2, Send, ChevronRight, Boxes,
   FileSearch, GitBranch, Layers, type LucideIcon,
 } from 'lucide-react';
@@ -67,6 +67,7 @@ import {
   type ConnectorDefinition,
 } from '@/lib/connectivity/types';
 import { CONNECTOR_CATALOG, listByCategory, TOTAL_CATALOG_CONNECTORS } from '@/lib/connectivity/registry';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────────
 function timeAgo(iso: string): string {
@@ -167,6 +168,9 @@ export default function ConnectivityFabricPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<ConnectivityDashboard | null>(null);
+  // Track fetch failures separately from loading so a failed initial fetch
+  // can surface a retry UI instead of an infinite skeleton.
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [tab, setTab] = useState('catalog');
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<ConnectorCategory | 'all'>('all');
@@ -175,17 +179,38 @@ export default function ConnectivityFabricPage() {
   const [pendingUninstall, setPendingUninstall] = useState<{ connectorId: string; provider: string } | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
+  // Single-flight: skip overlapping polls if the previous tick is still pending.
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const fetchDashboard = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      const res = await fetch('/api/connectivity');
+      const res = await fetchWithTimeout('/api/connectivity', { timeoutMs: 20_000 });
+      if (!mountedRef.current) return;
       if (res.ok) {
         const data = await res.json();
         setDashboard(data);
+        setFetchError(null);
+      } else {
+        // Non-OK response — surface as an error so the user can retry.
+        setFetchError(`Failed to load connectivity dashboard (${res.status}).`);
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       console.warn('[Connectivity] Fetch error:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to load connectivity dashboard.';
+      setFetchError(msg);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+      inFlightRef.current = false;
     }
   }, []);
 
@@ -199,12 +224,13 @@ export default function ConnectivityFabricPage() {
   const handleInstall = async (def: ConnectorDefinition) => {
     setActionLoading(`install-${def.key}`);
     try {
-      const res = await fetch('/api/connectivity/install', {
+      const res = await fetchWithTimeout('/api/connectivity/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectorKey: def.key, displayName: def.name }),
+        timeoutMs: 30_000,
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ success: false, message: 'Server returned a non-JSON response.' }));
       toast({
         title: result.success ? 'Connector installed' : 'Install failed',
         description: result.message,
@@ -212,7 +238,7 @@ export default function ConnectivityFabricPage() {
       });
       if (result.success) fetchDashboard();
     } catch (err) {
-      toast({ title: 'Install failed', description: String(err), variant: 'destructive' });
+      toast({ title: 'Install failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -221,12 +247,13 @@ export default function ConnectivityFabricPage() {
   const handleAuthenticate = async (connectorId: string) => {
     setActionLoading(`auth-${connectorId}`);
     try {
-      const res = await fetch('/api/connectivity/authenticate', {
+      const res = await fetchWithTimeout('/api/connectivity/authenticate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectorId }),
+        timeoutMs: 30_000,
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ success: false, message: 'Server returned a non-JSON response.' }));
       toast({
         title: result.success ? 'Authenticated' : 'Authentication failed',
         description: result.message,
@@ -234,7 +261,7 @@ export default function ConnectivityFabricPage() {
       });
       if (result.success) fetchDashboard();
     } catch (err) {
-      toast({ title: 'Authentication failed', description: String(err), variant: 'destructive' });
+      toast({ title: 'Authentication failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -243,12 +270,13 @@ export default function ConnectivityFabricPage() {
   const handleTest = async (connectorId: string) => {
     setActionLoading(`test-${connectorId}`);
     try {
-      const res = await fetch('/api/connectivity/test', {
+      const res = await fetchWithTimeout('/api/connectivity/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectorId }),
+        timeoutMs: 30_000,
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ success: false, message: 'Server returned a non-JSON response.' }));
       toast({
         title: result.success ? 'Test passed' : 'Test failed',
         description: result.message,
@@ -256,7 +284,7 @@ export default function ConnectivityFabricPage() {
       });
       if (result.success) fetchDashboard();
     } catch (err) {
-      toast({ title: 'Test failed', description: String(err), variant: 'destructive' });
+      toast({ title: 'Test failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -265,12 +293,13 @@ export default function ConnectivityFabricPage() {
   const handleSync = async (connectorId: string) => {
     setActionLoading(`sync-${connectorId}`);
     try {
-      const res = await fetch('/api/connectivity/sync', {
+      const res = await fetchWithTimeout('/api/connectivity/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectorId, trigger: 'manual' }),
+        timeoutMs: 60_000,
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ success: false, message: 'Server returned a non-JSON response.' }));
       toast({
         title: result.success ? 'Sync completed' : 'Sync failed',
         description: result.message,
@@ -278,7 +307,7 @@ export default function ConnectivityFabricPage() {
       });
       if (result.success) fetchDashboard();
     } catch (err) {
-      toast({ title: 'Sync failed', description: String(err), variant: 'destructive' });
+      toast({ title: 'Sync failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
     }
@@ -295,12 +324,13 @@ export default function ConnectivityFabricPage() {
     if (!pending) return;
     setActionLoading(`uninstall-${pending.connectorId}`);
     try {
-      const res = await fetch('/api/connectivity/uninstall', {
+      const res = await fetchWithTimeout('/api/connectivity/uninstall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectorId: pending.connectorId }),
+        timeoutMs: 30_000,
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ success: false, message: 'Server returned a non-JSON response.' }));
       toast({
         title: result.success ? 'Uninstalled' : 'Uninstall failed',
         description: result.message,
@@ -308,7 +338,7 @@ export default function ConnectivityFabricPage() {
       });
       if (result.success) fetchDashboard();
     } catch (err) {
-      toast({ title: 'Uninstall failed', description: String(err), variant: 'destructive' });
+      toast({ title: 'Uninstall failed', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setActionLoading(null);
       setPendingUninstall(null);
@@ -327,7 +357,8 @@ export default function ConnectivityFabricPage() {
   });
 
   // ─── Render ──────────────────────────────────────────────────────────────────
-  if (loading || !dashboard) {
+  // Initial load (no error yet, no dashboard yet) → skeleton.
+  if (loading && !dashboard && !fetchError) {
     return (
       <div className="p-6 space-y-4">
         <Skeleton className="h-12 w-2/3" />
@@ -338,6 +369,42 @@ export default function ConnectivityFabricPage() {
       </div>
     );
   }
+
+  // Fetch failed AND we have no cached dashboard → show retry UI instead of
+  // sitting on the skeleton forever.
+  if (fetchError && !dashboard) {
+    return (
+      <div className="p-6 flex min-h-[60vh] items-center justify-center">
+        <div className="flex max-w-md flex-col items-center gap-4 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20">
+            <AlertCircle className="h-7 w-7 text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Couldn&apos;t load connectivity</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{fetchError}</p>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setFetchError(null);
+                setLoading(true);
+                void fetchDashboard();
+              }}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Reload page
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If we have a dashboard but a background poll failed (e.g. transient blip),
+  // keep showing the cached dashboard. The error is logged but doesn't block UI.
 
   return (
     <div className="p-4 md:p-6 space-y-5 min-h-screen">
@@ -368,8 +435,9 @@ export default function ConnectivityFabricPage() {
               <Activity className="h-3 w-3 mr-1" />
               {dashboard.activeConnectors} active
             </Badge>
-            <Button size="sm" variant="outline" onClick={fetchDashboard}>
-              <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+            <Button size="sm" variant="outline" onClick={fetchDashboard} disabled={loading}>
+              {loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Refresh
             </Button>
           </div>
         </div>

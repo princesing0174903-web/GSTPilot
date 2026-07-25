@@ -29,6 +29,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
+import { fetchWithTimeout } from '@/lib/async';
 import type {
   Recommendation,
   RecommendationPriority,
@@ -55,6 +56,7 @@ export interface UseAIRecommendationsResult {
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
 const REFRESH_INTERVAL_MS = 60_000; // 60 seconds — matches snapshot cache TTL
+const FETCH_TIMEOUT_MS = 30_000;
 
 export function useAIRecommendations(): UseAIRecommendationsResult {
   const { organization } = useOrg();
@@ -65,39 +67,67 @@ export function useAIRecommendations(): UseAIRecommendationsResult {
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const orgIdRef = useRef<string | null>(null);
+  const orgIdRef = useRef<string | null>(orgId);
   orgIdRef.current = orgId;
+  const abortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
   const fetchRecommendations = useCallback(async () => {
+    // Single-flight: skip if a previous fetch is still pending.
+    if (inFlightRef.current) return;
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId) {
-      setRecommendations([]);
-      setLoading(false);
-      setError(null);
+      if (mountedRef.current) {
+        setRecommendations([]);
+        setLoading(false);
+        setError(null);
+      }
       return;
     }
 
+    inFlightRef.current = true;
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const url = `/api/recommendations?organizationId=${encodeURIComponent(currentOrgId)}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetchWithTimeout(url, {
+        cache: 'no-store',
+        signal: controller.signal,
+        timeoutMs: FETCH_TIMEOUT_MS,
+      });
       const data = (await res.json()) as {
         recommendations?: Recommendation[];
         error?: string;
       };
-
-      if (!res.ok) {
-        throw new Error(data?.error || `Request failed (${res.status})`);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setRecommendations(data.recommendations ?? []);
+        setError(null);
       }
-
-      setRecommendations(data.recommendations ?? []);
-      setError(null);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load recommendations.';
-      setError(msg);
-      // Degrade gracefully — keep showing the previous list rather than
-      // flashing an empty state on transient network errors.
+      if (mountedRef.current && !controller.signal.aborted) {
+        setError(msg);
+        // Degrade gracefully — keep showing the previous list rather than
+        // flashing an empty state on transient network errors.
+      }
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (mountedRef.current && !controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
 

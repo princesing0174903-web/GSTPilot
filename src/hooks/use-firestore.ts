@@ -123,8 +123,27 @@ function useFirestoreCollection<T>(
       return;
     }
 
-    // Org still resolving — stay in loading state, but don't subscribe yet.
+    // Org still resolving — keep loading state true briefly, but never hang.
+    // A safety timeout (OrgContext resolves in <3s for demo users and <15s for
+    // real Firebase users via the DashboardTimeoutBoundary) means this branch
+    // is a transient state, not a permanent one. If we ever land here with
+    // orgLoading=false, clear loading so we don't sit on a spinner forever.
     if (orgLoading && !organizationId) {
+      // Stay loading while org is genuinely resolving. OrgContext will fire
+      // a re-render with `organization` set, which re-runs this effect.
+      // Safety: ensure loading can't hang forever even if OrgContext stalls.
+      const watchdog = setTimeout(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLoading(false);
+      }, 30_000);
+      return () => clearTimeout(watchdog);
+    }
+    // If we got here with no organization at all (e.g. local workspace,
+    // preview mode, or post-sign-out), clear loading immediately.
+    if (!organizationId) {
+      setData([]);
+      setLoading(false);
+      setError(null);
       return;
     }
 
@@ -505,54 +524,70 @@ export function useOrgMembers() {
 // ─── Executive Scores (computed from live data) ─────────────────────────────
 
 export function useFirmExecutiveScores(): { scores: FirmExecutiveScores; loading: boolean } {
-  const { data: clients } = useFireClients();
-  const { data: returns } = useFireReturns();
-  const { data: invoices } = useFireInvoices();
-  const { data: reconciliations } = useFireReconciliations();
-  const { data: activities } = useFireRecentActivities(50);
+  const clientsHook = useFireClients();
+  const returnsHook = useFireReturns();
+  const invoicesHook = useFireInvoices();
+  const reconciliationsHook = useFireReconciliations();
+  const activitiesHook = useFireRecentActivities(50);
 
-  const loading = clients.length === 0 && returns.length === 0;
+  const clients = clientsHook.data;
+  const returns = returnsHook.data;
+  const invoices = invoicesHook.data;
+  const reconciliations = reconciliationsHook.data;
+  const activities = activitiesHook.data;
+
+  // Real loading flag — true until ALL 5 underlying hooks resolve their first
+  // snapshot (or set loading=false on the no-org / permission-denied path).
+  // The previous `clients.length === 0 && returns.length === 0` heuristic was
+  // wrong: legitimately-empty data looked "loaded" and triggered fake "50"
+  // fallback scores. Now we wait for every hook to finish its initial load.
+  const loading =
+    clientsHook.loading ||
+    returnsHook.loading ||
+    invoicesHook.loading ||
+    reconciliationsHook.loading ||
+    activitiesHook.loading;
 
   const scores = useMemo<FirmExecutiveScores>(() => {
     if (loading) {
       return { firmHealth: 0, revenue: 0, compliance: 0, teamEfficiency: 0, clientSatisfaction: 0, cashFlow: 0 };
     }
 
-    // Firm Health: weighted avg of client health scores
+    // Firm Health: weighted avg of client health scores (0 if no active clients).
     const activeClients = clients.filter(c => c.status === 'active');
     const avgHealth = activeClients.length > 0
       ? activeClients.reduce((s, c) => s + (c.healthScore || 0), 0) / activeClients.length
-      : 50;
+      : 0;
 
-    // Revenue Score: based on tax volume
+    // Revenue Score: based on tax volume (0 if no invoices).
     const totalTax = invoices.reduce((s, i) => s + (i.totalTax || 0) + (i.cgst || 0) + (i.sgst || 0) + (i.igst || 0), 0);
     const revenueScore = Math.min(100, Math.round((totalTax / 1000000) * 100));
 
-    // Compliance Score: filed vs total returns
+    // Compliance Score: filed vs total returns (0 if no returns).
     const filedReturns = returns.filter(r => r.status === 'filed').length;
-    const complianceScore = returns.length > 0 ? Math.round((filedReturns / returns.length) * 100) : 50;
+    const complianceScore = returns.length > 0 ? Math.round((filedReturns / returns.length) * 100) : 0;
 
-    // Team Efficiency: based on completed activities
+    // Team Efficiency: based on completed activities (0 if none).
     const completedActivities = activities.filter(a => a.type.includes('filed') || a.type.includes('completed') || a.type.includes('resolved')).length;
-    const teamEfficiency = activities.length > 0 ? Math.min(100, Math.round((completedActivities / Math.max(activities.length, 1)) * 100)) : 50;
+    const teamEfficiency = activities.length > 0 ? Math.min(100, Math.round((completedActivities / Math.max(activities.length, 1)) * 100)) : 0;
 
-    // Client Satisfaction: inverse of overdue + health
+    // Client Satisfaction: inverse of overdue + health (0 if no active clients).
     const overdueClients = activeClients.filter(c => (c.pendingReturnCount || 0) > 0).length;
-    const clientSatisfaction = activeClients.length > 0 ? Math.round(((activeClients.length - overdueClients) / activeClients.length) * 100) : 50;
+    const clientSatisfaction = activeClients.length > 0 ? Math.round(((activeClients.length - overdueClients) / activeClients.length) * 100) : 0;
 
-    // Cash Flow: based on reconciliation match rate
+    // Cash Flow: based on reconciliation match rate (0 if no records).
     const matchedRecons = reconciliations.filter(r => r.matched > 0);
     const totalMatched = matchedRecons.reduce((s, r) => s + r.matched, 0);
     const totalRecords = matchedRecons.reduce((s, r) => s + r.totalRecords, 0);
-    const cashFlow = totalRecords > 0 ? Math.round((totalMatched / totalRecords) * 100) : 50;
+    const cashFlow = totalRecords > 0 ? Math.round((totalMatched / totalRecords) * 100) : 0;
 
     return {
-      firmHealth: Math.round(avgHealth) || 50,
-      revenue: revenueScore || 50,
-      compliance: complianceScore || 50,
-      teamEfficiency: teamEfficiency || 50,
-      clientSatisfaction: clientSatisfaction || 50,
-      cashFlow: cashFlow || 50,
+      firmHealth: Math.round(avgHealth),
+      revenue: revenueScore,
+      compliance: complianceScore,
+      teamEfficiency,
+      clientSatisfaction,
+      cashFlow,
     };
   }, [clients, returns, invoices, reconciliations, activities, loading]);
 

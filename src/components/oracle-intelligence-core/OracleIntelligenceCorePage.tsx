@@ -22,7 +22,7 @@
 //   10. Security & Audit      — security stats + audit log table
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -60,6 +60,7 @@ import type {
   ConversationTurn, MemoryCategory, MemorySource, LearningCategory,
   InsightCategory, ModelChoice,
 } from '@/lib/oracle-core/types';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Local types mirroring API response shapes ──────────────────────────────
 
@@ -363,11 +364,16 @@ function truncate(s: string, n: number): string {
 }
 
 // ─── Fetch helper ───────────────────────────────────────────────────────────
+//
+// Wraps fetch with a 30s AbortController timeout (via fetchWithTimeout) and a
+// strict res.ok check. Throws on non-2xx responses with the JSON body's
+// `error` field if present (falls back to a generic HTTP message).
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { 'Content-Type': 'application/json' },
     ...init,
+    timeoutMs: init?.signal ? 0 : 30_000, // disable internal timeout if caller passes a signal
   });
   const data = await res.json().catch(() => ({ error: 'Invalid JSON' }));
   if (!res.ok) {
@@ -390,26 +396,45 @@ export default function OracleIntelligenceCorePage() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
 
-  // Poll dashboard every 30 seconds
+  // Poll dashboard every 30 seconds. The `dashLoading` check uses a ref so
+  // `loadDashboard`'s identity stays stable — otherwise the effect re-runs
+  // on every loading-state flip, causing duplicate fetches + interval churn.
+  const dashLoadingRef = useRef(dashLoading);
+  useEffect(() => { dashLoadingRef.current = dashLoading; }, [dashLoading]);
+  // Single-flight: skip overlapping polls.
+  const dashInFlightRef = useRef(false);
+  const dashMountedRef = useRef(true);
+  useEffect(() => {
+    dashMountedRef.current = true;
+    return () => { dashMountedRef.current = false; };
+  }, []);
+
   const loadDashboard = useCallback(async () => {
+    if (dashInFlightRef.current) return;
+    dashInFlightRef.current = true;
     try {
       const d = await fetchJson<OracleDashboard>('/api/oracle/dashboard');
+      if (!dashMountedRef.current) return;
       setDashboard(d);
     } catch (e) {
-      // Silent fail on poll — initial load will surface errors via toast
-      if (dashLoading) {
+      if (!dashMountedRef.current) return;
+      // Silent fail on poll — initial load will surface errors via toast.
+      if (dashLoadingRef.current) {
         toast.error('Failed to load Oracle dashboard', {
           description: e instanceof Error ? e.message : 'Unknown error',
         });
       }
     } finally {
-      setDashLoading(false);
+      if (dashMountedRef.current) {
+        setDashLoading(false);
+      }
+      dashInFlightRef.current = false;
     }
-  }, [dashLoading]);
+  }, []);
 
   useEffect(() => {
-    loadDashboard();
-    const id = setInterval(loadDashboard, 30_000);
+    void loadDashboard();
+    const id = setInterval(() => { void loadDashboard(); }, 30_000);
     return () => clearInterval(id);
   }, [loadDashboard]);
 
@@ -1658,25 +1683,43 @@ function KnowledgeSynthesisTab() {
     }
   }, []);
 
+  // busyId tracks which insight is being mutated so we can disable its button
+  // (single-flight) and show a spinner.
+  const [insightBusyId, setInsightBusyId] = useState<string | null>(null);
+
   const handleAcknowledge = useCallback(async (id: string) => {
+    if (insightBusyId === id) return;
+    setInsightBusyId(id);
     try {
-      await fetch(`/api/oracle/insights/${id}/acknowledge`, { method: 'POST' });
+      const res = await fetchJson<{ ok?: boolean }>(`/api/oracle/insights/${id}/acknowledge`, { method: 'POST' });
+      void res;
       setInsights((prev) => prev.map((i) => i.id === id ? { ...i, acknowledged: true } : i));
       toast.success('Insight acknowledged');
-    } catch {
-      toast.error('Failed to acknowledge insight');
+    } catch (e) {
+      toast.error('Failed to acknowledge insight', {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setInsightBusyId(null);
     }
-  }, []);
+  }, [insightBusyId]);
 
   const handleActOn = useCallback(async (id: string) => {
+    if (insightBusyId === id) return;
+    setInsightBusyId(id);
     try {
-      await fetch(`/api/oracle/insights/${id}/act-on`, { method: 'POST' });
+      const res = await fetchJson<{ ok?: boolean }>(`/api/oracle/insights/${id}/act-on`, { method: 'POST' });
+      void res;
       setInsights((prev) => prev.map((i) => i.id === id ? { ...i, acknowledged: true, actedOn: true } : i));
       toast.success('Insight marked as acted on');
-    } catch {
-      toast.error('Failed to mark insight as acted on');
+    } catch (e) {
+      toast.error('Failed to mark insight as acted on', {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setInsightBusyId(null);
     }
-  }, []);
+  }, [insightBusyId]);
 
   return (
     <div className="space-y-4">
@@ -1759,19 +1802,21 @@ function KnowledgeSynthesisTab() {
                     size="sm"
                     variant="outline"
                     onClick={() => handleAcknowledge(ins.id)}
-                    disabled={ins.acknowledged}
+                    disabled={ins.acknowledged || insightBusyId === ins.id}
                     className="gap-1.5 text-xs h-7"
                   >
-                    <ThumbsUp className="h-3 w-3" /> Acknowledge
+                    {insightBusyId === ins.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ThumbsUp className="h-3 w-3" />}
+                    Acknowledge
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleActOn(ins.id)}
-                    disabled={ins.actedOn}
+                    disabled={ins.actedOn || insightBusyId === ins.id}
                     className="gap-1.5 text-xs h-7"
                   >
-                    <Square className="h-3 w-3" /> Act On
+                    {insightBusyId === ins.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+                    Act On
                   </Button>
                 </div>
               </CardContent>
@@ -1797,6 +1842,7 @@ function MultiModelRouterTab() {
     choice: ModelChoice;
     estimatedCostUsd: number;
   } | null>(null);
+  const [routeBusy, setRouteBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1814,6 +1860,8 @@ function MultiModelRouterTab() {
   }, []);
 
   const handleRoute = useCallback(async () => {
+    if (routeBusy) return; // single-flight
+    setRouteBusy(true);
     try {
       const res = await fetchJson<{
         choice: ModelChoice;
@@ -1832,8 +1880,10 @@ function MultiModelRouterTab() {
       toast.error('Routing failed', {
         description: e instanceof Error ? e.message : 'Unknown error',
       });
+    } finally {
+      setRouteBusy(false);
     }
-  }, [routePurpose, routeTier, routeTokens]);
+  }, [routePurpose, routeTier, routeTokens, routeBusy]);
 
   if (loading) return <LoadingBlock label="Loading model catalog…" />;
 
@@ -1889,8 +1939,9 @@ function MultiModelRouterTab() {
               />
             </div>
             <div className="flex items-end">
-              <Button onClick={handleRoute} className="w-full gap-1.5">
-                <Zap className="h-4 w-4" /> Route
+              <Button onClick={handleRoute} disabled={routeBusy} className="w-full gap-1.5">
+                {routeBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                {routeBusy ? 'Routing…' : 'Route'}
               </Button>
             </div>
           </div>
@@ -2296,7 +2347,8 @@ function ContextEngineTab() {
     setRefreshing(true);
     const tid = toast.loading('Gathering fresh context from all 17 modules…');
     try {
-      await fetch('/api/oracle/context', { method: 'POST' });
+      const res = await fetchJson<{ ok?: boolean }>('/api/oracle/context', { method: 'POST' });
+      void res;
       await load();
       toast.success('Context refreshed', { id: tid });
     } catch (e) {

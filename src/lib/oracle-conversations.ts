@@ -212,9 +212,21 @@ export interface Conversation {
 interface OracleConversationsState {
   conversations: Conversation[]
   activeId: string | null
+  /**
+   * A prompt pre-filled from another page (e.g. the "Ask Oracle" button on
+   * the Invoices / Customers / Returns workspaces). When OracleChat mounts
+   * or when this is set while it is already mounted, it consumes the value
+   * via `consumePendingPrompt()` and populates the composer with it.
+   * Not persisted (cleared on reload) — see `partialize` below.
+   */
+  pendingPrompt: string | null
 
   // ── Selectors ──
   getActive: () => Conversation | null
+
+  // ── Pending prompt (cross-page prefill) ──
+  setPendingPrompt: (prompt: string) => void
+  consumePendingPrompt: () => string | null
 
   // ── Conversation lifecycle ──
   createConversation: () => string
@@ -354,11 +366,25 @@ export const useOracleConversations = create<OracleConversationsState>()(
     (set, get) => ({
       conversations: [],
       activeId: null,
+      pendingPrompt: null,
 
       getActive: () => {
         const { conversations, activeId } = get()
         if (!activeId) return null
         return conversations.find((c) => c.id === activeId) || null
+      },
+
+      setPendingPrompt: (prompt) => {
+        const trimmed = (prompt || '').trim()
+        if (!trimmed) return
+        set({ pendingPrompt: trimmed })
+      },
+
+      consumePendingPrompt: () => {
+        const { pendingPrompt } = get()
+        if (!pendingPrompt) return null
+        set({ pendingPrompt: null })
+        return pendingPrompt
       },
 
       createConversation: () => {

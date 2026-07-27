@@ -68,6 +68,7 @@ import {
   periodToLabel,
   getFinancialYear,
 } from '@/lib/gst-utils';
+import { AskOracleButton } from '@/components/oracle/AskOracleButton';
 
 // ─── API response shapes (subset of Prisma models) ─────────────────────────
 
@@ -1385,14 +1386,17 @@ export default function ReturnsPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight">Filing Workspace</h1>
           </div>
-          <Button
-            size="sm"
-            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            <Plus className="size-4" />
-            Create Return
-          </Button>
+          <div className="flex items-center gap-2">
+            <AskOracleButton context="returns" />
+            <Button
+              size="sm"
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              <Plus className="size-4" />
+              Create Return
+            </Button>
+          </div>
         </motion.div>
 
         <div className="flex-1 flex items-center justify-center">
@@ -1466,6 +1470,7 @@ export default function ReturnsPage() {
               ))}
             </SelectContent>
           </Select>
+          <AskOracleButton context="returns" />
           <Button
             size="sm"
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-9"

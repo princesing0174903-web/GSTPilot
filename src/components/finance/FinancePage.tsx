@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { AskOracleButton } from '@/components/oracle/AskOracleButton';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -484,19 +485,26 @@ export function FinancePage() {
       <div className="mx-auto max-w-[1200px]">
         {/* ─── Header ─── */}
         <motion.div {...FADE_UP}>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Wallet className="size-3.5" />
-            <span className="text-[11px] font-medium uppercase tracking-[0.18em]">
-              Finance
-            </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Wallet className="size-3.5" />
+                <span className="text-[11px] font-medium uppercase tracking-[0.18em]">
+                  Finance
+                </span>
+              </div>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground md:text-[40px]">
+                Connect Your Business Data
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-[15px]">
+                Connect your financial stack. Oracle becomes smarter with every
+                connection.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <AskOracleButton context="finance" size="md" />
+            </div>
           </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground md:text-[40px]">
-            Connect Your Business Data
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-[15px]">
-            Connect your financial stack. Oracle becomes smarter with every
-            connection.
-          </p>
         </motion.div>
 
         {/* ─── Sync Engine™ status bar ─── */}

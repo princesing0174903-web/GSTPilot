@@ -588,6 +588,8 @@ export function OracleChat() {
   const activeId = useOracleConversations((s) => s.activeId);
   const getActive = useOracleConversations((s) => s.getActive);
   const setFeedback = useOracleConversations((s) => s.setFeedback);
+  const pendingPrompt = useOracleConversations((s) => s.pendingPrompt);
+  const consumePendingPrompt = useOracleConversations((s) => s.consumePendingPrompt);
 
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
@@ -639,6 +641,25 @@ export function OracleChat() {
       useOracleConversations.getState().finalizeAllStreaming();
     } catch { /* non-fatal */ }
   }, []);
+
+  // ── Cross-page prefill ──
+  // When the user clicks "Ask Oracle" on another workspace page (invoices,
+  // customers, returns, finance), that page calls setPendingPrompt(prompt) on
+  // the oracle-conversations store and navigates to /oracle. We consume that
+  // pending prompt here: pull it out of the store (clearing it) and push it
+  // into the composer via the input handle. Re-runs whenever `pendingPrompt`
+  // changes so it also works if the user is already on /oracle.
+  useEffect(() => {
+    if (!pendingPrompt) return;
+    const consumed = consumePendingPrompt();
+    if (!consumed) return;
+    // Defer to the next frame so the OracleInput is mounted (it lives later in
+    // the JSX tree) and setValue can target the textarea ref.
+    const raf = requestAnimationFrame(() => {
+      try { inputRef.current?.setValue(consumed); } catch { /* non-fatal */ }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [pendingPrompt, consumePendingPrompt]);
 
   // ── Unmount cleanup ──
   // If the user navigates away from /oracle mid-stream, abort the in-flight

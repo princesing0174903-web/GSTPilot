@@ -93,6 +93,7 @@ import {
   type CreateInvoicePayload,
 } from '@/hooks/useInvoicesApi';
 import { useClientsApi } from '@/hooks/useClientsApi';
+import { AskOracleButton } from '@/components/oracle/AskOracleButton';
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 
@@ -440,13 +441,16 @@ export default function InvoiceWorkspacePage() {
                 Create, validate, and track GST invoices
               </p>
             </div>
-            <Button
-              onClick={openCreateDialog}
-              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
-            >
-              <Plus className="size-4" />
-              Create Invoice
-            </Button>
+            <div className="flex items-center gap-2">
+              <AskOracleButton context="invoices" />
+              <Button
+                onClick={openCreateDialog}
+                className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+              >
+                <Plus className="size-4" />
+                Create Invoice
+              </Button>
+            </div>
           </motion.div>
 
           <ProfessionalEmptyState
@@ -550,13 +554,16 @@ export default function InvoiceWorkspacePage() {
               {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {clients.length} client{clients.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <Button
-            onClick={openCreateDialog}
-            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
-          >
-            <Plus className="size-4" />
-            Create Invoice
-          </Button>
+          <div className="flex items-center gap-2">
+            <AskOracleButton context="invoices" />
+            <Button
+              onClick={openCreateDialog}
+              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+            >
+              <Plus className="size-4" />
+              Create Invoice
+            </Button>
+          </div>
         </motion.div>
 
         {/* ── Summary Cards ── */}

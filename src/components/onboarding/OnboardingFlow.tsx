@@ -1,5 +1,18 @@
 'use client';
 
+// DEPRECATED: Questionnaire removed. Kept for type exports only.
+//
+// The multi-step onboarding questionnaire (firm name, GSTIN, ICAI membership,
+// etc.) was removed in favor of SILENT auto-provisioning: when an
+// authenticated user has no organization, `AutoProvisionWorkspace` (in
+// `src/components/AppRouter.tsx`) creates a default workspace named
+// "${user.name}'s Workspace" in the background and navigates directly to the
+// dashboard. The user never sees a questionnaire.
+//
+// This file is intentionally NOT deleted because it exports `OnboardingData`
+// and `OnboardingDestination` types that other modules may reference. The
+// component itself is no longer rendered anywhere.
+
 import { useState, useCallback } from 'react';
 import { BrandLogo } from '@/components/brand';
 import { motion, AnimatePresence } from 'framer-motion';

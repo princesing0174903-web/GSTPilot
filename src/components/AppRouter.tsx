@@ -46,7 +46,12 @@ const PageLoader = () => (
 // ═══════════════════════════════════════════════════════════════════════════════
 const LandingPage = dynamic(withRetry(() => import('@/components/landing/LandingPage')), { loading: PageLoader, ssr: false });
 const LoginPage = dynamic(withRetry(() => import('@/components/auth/LoginPage')), { loading: PageLoader, ssr: false });
-const OnboardingFlow = dynamic(withRetry(() => import('@/components/onboarding/OnboardingFlow').then(m => ({ default: m.OnboardingFlow }))), { loading: PageLoader, ssr: false });
+
+// NOTE: `OnboardingFlow` (the multi-step questionnaire) was previously a root
+// dynamic import here. It has been REMOVED — the questionnaire flow is gone.
+// After authentication, users without an org are silently auto-provisioned a
+// default workspace by `<AutoProvisionWorkspace />` below. The
+// `OnboardingFlow.tsx` file is kept on disk only for its type exports.
 
 // DashboardShell exports DashboardContent + EmailVerificationBanner.
 const DashboardContent = dynamic(
@@ -59,97 +64,50 @@ const EmailVerificationBanner = dynamic(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// OnboardingScreen — uses OnboardingFlow (dynamic) + lazy firebase imports
+// AutoProvisionWorkspace — SILENT replacement for the old OnboardingScreen.
+//
+// When `needsOnboarding` is true (authenticated, no org, no error), this
+// component renders a brief "Setting up your workspace…" loading state and
+// AUTO-CREATES a default workspace in the background using the same logic the
+// old `handleSkip` used:
+//     createOrganization({ name: "${user.name}'s Workspace", plan: 'free' })
+//   → completeOnboarding(orgId)
+//   → setCurrentView('dashboard') + setCurrentScreen('app')
+//
+// The multi-step questionnaire (`OnboardingFlow`) is NO LONGER RENDERED.
+// `OnboardingFlow.tsx` is kept on disk only for its type exports.
+//
+// Demo users never reach this component — OrgContext's fast path (lines
+// 433-489) creates a local workspace synchronously, so `needsOrganization`
+// is always false for them. This component only renders for real Firebase
+// users whose profile resolved but who have no organization yet.
+//
+// On failure (e.g. Firestore write error), shows a minimal error card with a
+// Retry button — does NOT loop. A `ranRef` guards against double-invocation
+// under React StrictMode / HMR remounts.
 // ═══════════════════════════════════════════════════════════════════════════════
-function OnboardingScreen() {
+function AutoProvisionWorkspace() {
   const { user } = useAuth();
   const { completeOnboarding } = useOrg();
   const { setCurrentScreen, setCurrentView } = useApp();
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  // Track the latest in-flight provision attempt so the Retry button doesn't
+  // stack a second call on top of one that's still running.
+  const provisionInFlightRef = useRef(false);
+  // Track whether we've ever kicked off provisioning for this mount. Prevents
+  // StrictMode double-invoke from creating two organizations.
+  const ranRef = useRef(false);
 
-  const createOrganizationForUser = async (
-    data: import('@/components/onboarding/OnboardingFlow').OnboardingData
-  ): Promise<{ orgId: string | null; error: string | null }> => {
-    if (!user) return { orgId: null, error: 'No authenticated user found.' };
-
-    const { createOrganization, updateUserProfile } = await import('@/lib/auth/organizations');
-    const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
-    const { db } = await import('@/lib/firebase');
-
-    const { organization, error: orgError } = await createOrganization({
-      name: data.firmName,
-      ownerId: user.id,
-      ownerEmail: user.email,
-      ownerDisplayName: data.fullName || user.name,
-      ownerPhotoURL: user.picture || null,
-      gstin: data.gstin || null,
-      plan: 'free',
-    });
-    if (orgError || !organization) {
-      return { orgId: null, error: orgError || 'Could not create your organization.' };
-    }
-
-    try {
-      await updateUserProfile(user.id, {
-        displayName: data.fullName,
-        phone: data.phone,
-        company: data.firmName,
-        gstin: data.gstin || null,
-      });
-      await setDoc(doc(db, 'onboarding', user.id), {
-        ...data,
-        organizationId: organization.id,
-        completedAt: serverTimestamp(),
-      }, { merge: true });
-    } catch (err) {
-      console.warn('[Onboarding] Profile enrichment failed:', err);
-    }
-
-    return { orgId: organization.id, error: null };
-  };
-
-  const handleOnboardingComplete = async (
-    data: import('@/components/onboarding/OnboardingFlow').OnboardingData,
-    destination?: import('@/components/onboarding/OnboardingFlow').OnboardingDestination
-  ) => {
-    setSaveError(null);
+  const provision = useCallback(async () => {
+    if (provisionInFlightRef.current) return;
     if (!user) {
-      setSaveError('No authenticated user found. Please sign in again.');
+      setError('No authenticated user found. Please sign in again.');
       return;
     }
-
-    setIsSubmitting(true);
-    try {
-      const { orgId, error: createError } = await createOrganizationForUser(data);
-      if (createError || !orgId) {
-        setSaveError(createError || 'Could not create your organization. Please try again.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      await completeOnboarding(orgId);
-      setCurrentView(destination || 'dashboard');
-      setCurrentScreen('app');
-    } catch (err) {
-      setSaveError(
-        err instanceof Error
-          ? err.message
-          : 'Something went wrong while setting up your workspace.'
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleSkip = async () => {
-    setSaveError(null);
-    if (!user) {
-      setSaveError('No authenticated user found. Please sign in again.');
-      return;
-    }
-
-    setIsSubmitting(true);
+    provisionInFlightRef.current = true;
+    setIsProvisioning(true);
+    setError(null);
     try {
       const { createOrganization } = await import('@/lib/auth/organizations');
       const { organization, error: orgError } = await createOrganization({
@@ -162,33 +120,104 @@ function OnboardingScreen() {
         plan: 'free',
       });
       if (orgError || !organization) {
-        setSaveError(orgError || 'Could not create your workspace. Please try again.');
-        setIsSubmitting(false);
+        setError(orgError || 'Could not create your workspace. Please try again.');
+        setIsProvisioning(false);
+        provisionInFlightRef.current = false;
         return;
       }
       await completeOnboarding(organization.id);
+      // After `completeOnboarding`, OrgContext re-resolves and `organization`
+      // becomes set → `needsOnboarding` flips to false → AppRouter falls
+      // through to the DashboardTimeoutBoundary. The two calls below ensure
+      // the app screen is set immediately without waiting an extra render.
       setCurrentView('dashboard');
       setCurrentScreen('app');
     } catch (err) {
-      setSaveError(
+      setError(
         err instanceof Error
           ? err.message
           : 'Something went wrong while setting up your workspace.'
       );
     } finally {
-      setIsSubmitting(false);
+      setIsProvisioning(false);
+      provisionInFlightRef.current = false;
     }
-  };
+  }, [user, completeOnboarding, setCurrentView, setCurrentScreen]);
 
+  // Kick off provisioning once on mount.
+  useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
+    void provision();
+    // Intentionally empty deps — runs once per mount. `provision` is stable
+    // for the lifetime of this component (only depends on `user`, which
+    // can't change without unmounting).
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    void provision();
+  }, [provision]);
+
+  // ── Error state: minimal card with Retry button. Does NOT auto-loop. ──
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex max-w-md flex-col items-center gap-5 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
+            <AlertTriangle className="h-7 w-7 text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Couldn&apos;t set up your workspace</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{error}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRetry}
+              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Reload page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Loading state: brief, while we silently create the workspace. ──
+  // Mirrors the visual language of the DashboardTimeoutBoundary loading shell
+  // (same top bar + spinner) so the transition from "Loading your workspace…"
+  // → "Setting up your workspace…" → dashboard feels continuous.
   return (
-    <OnboardingFlow
-      onComplete={handleOnboardingComplete}
-      onSkip={handleSkip}
-      userEmail={user?.email}
-      userName={user?.name}
-      error={saveError}
-      onDismissError={() => setSaveError(null)}
-    />
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background">
+      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600">
+            <Zap className="h-4 w-4 text-white" />
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-foreground">
+            GSTPilot Infinity<span className="accent-text">™</span>
+          </span>
+        </div>
+      </header>
+      <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-sm font-medium text-foreground">
+              {isProvisioning ? 'Setting up your workspace…' : 'Preparing your dashboard…'}
+            </span>
+            <span className="text-xs text-muted-foreground">This will only take a moment.</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -369,7 +398,8 @@ function AuthErrorScreen({ message, onRetry }: { message: string; onRetry: () =>
 // Routing priority:
 //   1. isInitializing → loading splash (max 3s)
 //   2. isAuthenticated → ALWAYS dashboard (with boundary for loading/error)
-//      • If needs onboarding (no org, no error) → OnboardingScreen
+//      • If needs onboarding (no org, no error) → AutoProvisionWorkspace
+//        (silently creates a default workspace, then navigates to dashboard)
 //      • Otherwise → DashboardTimeoutBoundary > DashboardContent
 //   3. currentScreen === 'login' → LoginPage
 //   4. Default → LandingPage (only for unauthenticated visitors)
@@ -433,9 +463,14 @@ export function AppRouter() {
   // AUTHENTICATED ROUTING — the user is signed in. They NEVER see landing.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Authenticated but no organization AND no error → onboarding creates one.
+  // ── Authenticated but no organization AND no error → SILENTLY auto-provision
+  // a default workspace. The old behavior rendered a multi-step questionnaire
+  // (`<OnboardingScreen />` → `<OnboardingFlow>`); the questionnaire is gone.
+  // The AutoProvisionWorkspace component shows a brief loading state while it
+  // creates a default workspace in the background, then navigates to the
+  // dashboard. Demo users never reach this branch (OrgContext fast path).
   if (isAuthenticated && needsOnboarding && !orgError) {
-    return <OnboardingScreen />;
+    return <AutoProvisionWorkspace />;
   }
 
   // ── Authenticated → ALWAYS render the dashboard. The DashboardTimeoutBoundary

@@ -49,6 +49,7 @@ import {
   createMeeting, updateMeeting, deleteMeeting,
 } from '@/lib/firestore-service'
 import type { FirestoreLead, FirestoreDeal, FirestoreMeeting, LeadStatus, LeadSource, DealStage, MeetingType, MeetingStatus } from '@/lib/firestore-schema'
+import { AskOracleButton } from '@/components/oracle/AskOracleButton'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -1481,6 +1482,7 @@ export default function CRMPage() {
           <p className="text-sm text-muted-foreground mt-0.5">Manage leads, deals, and client relationships</p>
         </div>
         <div className="flex items-center gap-2">
+          <AskOracleButton context="customers" />
           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setShowAddLead(true)}>
             <UserPlus className="h-3.5 w-3.5" /> Add Lead
           </Button>

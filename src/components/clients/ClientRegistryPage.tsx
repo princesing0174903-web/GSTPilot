@@ -80,6 +80,7 @@ import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
+import { AskOracleButton } from '@/components/oracle/AskOracleButton';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
 
 // ─── Type for client (API-backed, Prisma shape) ───────────────────────────────
@@ -440,10 +441,13 @@ export default function ClientRegistryPage() {
             Manage your GST client portfolio
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-700 gap-2 self-start">
-          <Plus className="h-4 w-4" />
-          Add Client
-        </Button>
+        <div className="flex items-center gap-2 self-start">
+          <AskOracleButton context="customers" />
+          <Button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-700 gap-2 self-start">
+            <Plus className="h-4 w-4" />
+            Add Client
+          </Button>
+        </div>
       </div>
 
       {/* ── Search & Filters ────────────────────────────────────────────────── */}

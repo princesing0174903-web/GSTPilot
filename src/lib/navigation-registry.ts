@@ -63,7 +63,7 @@ export const VIEW_REGISTRY: Record<string, NavEntry> = {
   },
   'oracle-brain': {
     view: 'oracle-brain',
-    label: 'Oracle',
+    label: 'Oracle AI',
     icon: BrainCircuit,
     inSidebar: true,
     href: '/oracle',

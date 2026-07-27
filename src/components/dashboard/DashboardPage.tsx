@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -84,7 +85,7 @@ import { toast } from 'sonner';
 // ── Home sub-components ──────────────────────────────────────────────────────
 import { BusinessSetupProgress, type SetupTask } from '@/components/dashboard/home/BusinessSetupProgress';
 import { InviteTeamModal } from '@/components/dashboard/home/InviteTeamModal';
-import { ActivateOracleWizard } from '@/components/dashboard/home/ActivateOracleWizard';
+import { OracleDailyBrief } from '@/components/dashboard/home/OracleDailyBrief';
 import { ConnectedServicesCard, type ServiceRow } from '@/components/dashboard/home/ConnectedServicesCard';
 import { EmptyState } from '@/components/dashboard/home/EmptyState';
 import { Sparkline, type SparklineTrend } from '@/components/dashboard/home/Sparkline';
@@ -693,135 +694,6 @@ interface Recommendation {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// OracleBanner — full-width "Unlock your AI CFO" hero (Task 6, Point 1)
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// Renders at the TOP of the dashboard (right after the greeting header +
-// quick actions, BEFORE the KPI stats) so the user's eye lands on the
-// premium-tier value proposition first. Only renders when Oracle is NOT yet
-// activated — once activated, the parent renders nothing (or the smaller
-// "Oracle is live" panel below).
-//
-// Visual signatures:
-//   • Animated gradient border that slowly shifts through accent + amber hues
-//     (CSS @keyframes injected once via a <style> tag).
-//   • Gold/amber gradient Sparkles chip with a pulsing ring behind it.
-//   • Headline + subline in the center.
-//   • Animated CTA "Activate Oracle AI CFO →" with a pulsing amber glow.
-//   • "PREMIUM" badge in the top-right corner (amber, tiny text).
-//
-// The gold/amber palette is the Oracle-specific accent — the existing blue
-// accent stays for everything else. (Task 6, Point 10.)
-
-// Injected ONCE globally (id-guarded) so multiple OracleBanner mounts on the
-// same page share a single <style> tag. The @keyframes rotate the conic
-// gradient that paints the animated border.
-const ORACLE_BANNER_STYLE_ID = 'gstpilot-oracle-banner-keyframes';
-function injectOracleBannerStyles() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById(ORACLE_BANNER_STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = ORACLE_BANNER_STYLE_ID;
-  style.textContent = `
-@keyframes gstpilot-oracle-border-shift {
-  0%   { background-position:   0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position:   0% 50%; }
-}
-.gstpilot-oracle-banner-border {
-  background: linear-gradient(110deg,
-    rgba(245,158,11,0.55) 0%,
-    rgba(37,99,235,0.45) 25%,
-    rgba(245,158,11,0.65) 50%,
-    rgba(37,99,235,0.45) 75%,
-    rgba(245,158,11,0.55) 100%);
-  background-size: 300% 100%;
-  animation: gstpilot-oracle-border-shift 8s ease-in-out infinite;
-}
-`;
-  document.head.appendChild(style);
-}
-
-function OracleBanner({ onActivate }: { onActivate: () => void }) {
-  useEffect(() => {
-    injectOracleBannerStyles();
-  }, []);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' as const }}
-      className="relative rounded-2xl p-[1.5px] overflow-hidden"
-    >
-      {/* Animated gradient border — paints the conic gradient that shifts
-          through accent + amber hues every 8s. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 rounded-2xl gstpilot-oracle-banner-border"
-      />
-
-      {/* Inner card body — sits on top of the animated border so the border
-          shows as a 1.5px frame around the dark glass interior. */}
-      <div className="relative rounded-[14px] bg-[#0A0A0A]/95 backdrop-blur-xl p-5 md:p-6">
-        {/* PREMIUM badge — top-right corner */}
-        <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
-          <Star className="h-2.5 w-2.5 fill-amber-400" />
-          Premium
-        </span>
-
-        <div className="flex flex-col md:flex-row md:items-center gap-5 md:gap-6">
-          {/* Left: gold Sparkles chip with pulsing ring */}
-          <div className="relative shrink-0 flex items-center justify-center">
-            {/* Pulsing ring behind the chip */}
-            <span
-              aria-hidden
-              className="absolute inset-0 rounded-2xl bg-amber-400/30 blur-md animate-pulse"
-            />
-            <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_24px_-4px_rgba(245,158,11,0.6)]">
-              <Sparkles className="h-6 w-6 text-white" />
-            </div>
-          </div>
-
-          {/* Center: headline + subline */}
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">
-                Unlock your AI CFO
-              </h3>
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-              Complete your setup to activate AI-driven financial insights, ITC optimization, and predictive cash flow.
-            </p>
-            <p className="text-xs text-muted-foreground/80 mt-2">
-              Unlock AI-driven ITC optimization, vendor fraud detection, and predictive cash flow.
-            </p>
-          </div>
-
-          {/* Right: animated CTA with pulsing amber glow */}
-          <div className="shrink-0 relative">
-            {/* Pulsing glow ring behind the button (subtle) */}
-            <span
-              aria-hidden
-              className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
-            />
-            <Button
-              size="sm"
-              onClick={onActivate}
-              className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse px-5 py-2.5"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Activate Oracle AI CFO
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // InlineCriticalIssueBanner — slim amber alert above KPI stats (Task 6, Point 2)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
@@ -874,6 +746,7 @@ function InlineCriticalIssueBanner({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const {
     setCurrentView,
     setSelectedClientId,
@@ -926,7 +799,6 @@ export default function DashboardPage() {
   // Modal open-states
   // ═══════════════════════════════════════════════════════════════════════════
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const [oracleWizardOpen, setOracleWizardOpen] = useState(false);
 
   // ── Client lookup map ──
   const clientMap = useMemo(() => {
@@ -995,16 +867,17 @@ export default function DashboardPage() {
       },
       {
         id: 'oracle',
-        label: oracleActivated ? 'Oracle Online' : 'Activate Oracle',
+        label: oracleActivated ? 'Oracle Online' : 'Open Oracle',
         icon: Sparkles,
         done: oracleActivated,
-        onAction: () => setOracleWizardOpen(true),
-        // The single highest-leverage step — visually distinct so the user's
-        // eye lands here and they activate the AI CFO differentiator.
+        onAction: () => router.push('/oracle'),
+        // Oracle is the intelligence layer of the platform. The setup task is
+        // still highlighted (it's the single highest-leverage step) but the
+        // action now OPENS Oracle rather than launching an activation wizard.
         highlight: true,
       },
     ],
-    [googleConnected, zohoConnected, hasInvoices, hasCustomers, memberships.length, oracleActivated, setCurrentView],
+    [googleConnected, zohoConnected, hasInvoices, hasCustomers, memberships.length, oracleActivated, router],
   );
 
   const setupComplete = setupTasks.filter((t) => t.done).length;
@@ -1426,16 +1299,15 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* ═══ ORACLE BANNER — full-width "Unlock your AI CFO" hero ═══
-            Renders ONLY when Oracle is not yet activated. Per Task 6
-            Point 1, this card sits at the TOP of the dashboard (right after
-            the greeting + quick actions, BEFORE the KPI stats) so the
-            user's eye lands on the premium-tier value prop first. Once
-            Oracle is activated, the parent renders nothing here and the
-            smaller "Oracle is live" panel below takes over. */}
-        {!oracleActivated && (
-          <OracleBanner onActivate={() => setOracleWizardOpen(true)} />
-        )}
+        {/* ═══ ORACLE DAILY BRIEF ═══
+            Replaces the old promotional "Unlock your AI CFO" banner. Oracle
+            is positioned as the intelligence layer of the platform — NOT an
+            advertised feature. This card surfaces real, data-driven insight
+            lines (overdue invoices, GST deadlines, cash-flow status, AI recs)
+            derived from the live business snapshot, GST returns, AI
+            recommendations, dashboard metrics, and Oracle insights. The
+            entire card is clickable and opens the Oracle page. */}
+        <OracleDailyBrief />
 
         {/* ═══ INLINE CRITICAL ISSUE ALERT ═══
             Replaces the dangling bottom-left "1 Issue" floating badge with
@@ -1647,7 +1519,7 @@ export default function DashboardPage() {
                   <OracleLivePanel
                     insights={oracleInsights}
                     onPriorityClick={(view) => setCurrentView(view as AppView)}
-                    onAskOracle={() => setCurrentView('oracle-brain')}
+                    onAskOracle={() => router.push('/oracle')}
                   />
                 ) : (
                   <div className="text-[12px] text-muted-foreground leading-relaxed">
@@ -1708,7 +1580,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                       {oracleActivated
                         ? 'Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.'
-                        : 'Connect your business data to unlock Oracle. Activate to enable advanced analysis, predictions, and automated actions.'}
+                        : 'Open Oracle any time to ask questions about your business. Insights get richer as you connect Google, Zoho Books, and create invoices.'}
                     </p>
                     {oracleActivated && (
                       <div className="flex flex-wrap items-center gap-1.5 mt-3">
@@ -1720,7 +1592,7 @@ export default function DashboardPage() {
                           <button
                             key={q}
                             type="button"
-                            onClick={() => setCurrentView('oracle-brain')}
+                            onClick={() => router.push('/oracle')}
                             className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-[#2563EB]/30 hover:text-foreground transition-colors"
                           >
                             {q}
@@ -1734,44 +1606,29 @@ export default function DashboardPage() {
                   <Button
                     size="sm"
                     className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                    onClick={() => setCurrentView('oracle-brain')}
+                    onClick={() => router.push('/oracle')}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
                     Ask Oracle
                     <ArrowRight className="h-3 w-3" />
                   </Button>
                 ) : (
-                  /* Activate Oracle CTA — the core product differentiator.
-                     Per Task 6 Point 6: gold/amber accent (not blue), pulsing
-                     glow ring behind the button, label "Activate Oracle AI CFO →",
-                     and short copy BELOW explaining the unlocked capabilities.
-                     Mirrors the treatment in the OracleBanner at the top of the
-                     page so Oracle always reads as the premium tier. */
-                  <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0 relative">
-                    <span className="inline-flex items-center gap-1 self-end rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
-                      <Star className="h-2.5 w-2.5 fill-amber-400" />
-                      Premium
-                    </span>
-                    <div className="relative">
-                      {/* Pulsing amber glow ring behind the button (subtle). */}
-                      <span
-                        aria-hidden
-                        className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
-                      />
-                      <Button
-                        size="sm"
-                        className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse"
-                        onClick={() => setOracleWizardOpen(true)}
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        Activate Oracle AI CFO
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2 max-w-[220px] text-right hidden sm:block">
-                      Unlock AI-driven ITC optimization, vendor fraud detection, and predictive cash flow.
-                    </p>
-                  </div>
+                  /* Open Oracle — the intelligence layer of the platform.
+                     Replaces the old "Activate Oracle AI CFO" CTA. Oracle is no
+                     longer gated behind a wizard; the user opens the full Oracle
+                     experience at /oracle and engages with whatever data is
+                     already connected. The amber accent signals the Oracle
+                     tier; no pulsing glow / "Premium" badge so the card reads
+                     as a tool, not an advertisement. */
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_18px_-4px_rgba(245,158,11,0.45)]"
+                    onClick={() => router.push('/oracle')}
+                  >
+                    <Brain className="h-3.5 w-3.5" />
+                    Open Oracle
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
                 )}
               </div>
             </div>
@@ -1850,58 +1707,43 @@ export default function DashboardPage() {
             icon={<Sparkles className="h-4 w-4 accent-text" />}
           >
             {!oracleActivated ? (
-              /* Oracle-not-active empty state — visually distinct from the
-                 generic EmptyState because this is the core product
-                 differentiator. Per Task 6 Point 12: gold/amber Sparkles chip
-                 with pulsing ring, PREMIUM badge, filled amber-gradient CTA
-                 with pulsing glow. The amber palette signals "premium tier". */
+              /* Oracle-not-active empty state — premium tier treatment, but
+                 NO "Activate" CTA. Per the Oracle redesign, Oracle is no
+                 longer gated behind a wizard. The user is invited to OPEN
+                 Oracle at /oracle, where it will engage with whatever data is
+                 already connected. The amber palette still signals the Oracle
+                 tier (Brain chip, amber ring); copy is honest about the
+                 current data state. */
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' as const }}
-                className="flex flex-col items-center justify-center text-center py-6 min-h-[160px] relative"
+                className="flex flex-col items-center justify-center text-center py-6 min-h-[160px]"
               >
-                {/* PREMIUM badge — top-right corner of the empty state */}
-                <span className="absolute top-0 right-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
-                  <Star className="h-2.5 w-2.5 fill-amber-400" />
-                  Premium
-                </span>
                 <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl mb-3">
-                  {/* Pulsing ring behind the chip */}
                   <span
                     aria-hidden
-                    className="absolute inset-0 rounded-2xl bg-amber-400/30 blur-md animate-pulse"
+                    className="absolute inset-0 rounded-2xl bg-amber-400/20 blur-md"
                   />
                   <div className="relative flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_24px_-4px_rgba(245,158,11,0.6)]">
                     <Brain className="h-6 w-6 text-white" />
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400 mb-2">
-                  <Sparkles className="h-2.5 w-2.5" />
-                  Premium Feature
-                </span>
                 <h3 className="text-sm font-semibold text-foreground">
-                  Oracle requires connected business data
+                  Connect data for richer Oracle recommendations
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-xs">
-                  Activate Oracle to generate AI-powered recommendations from your live business snapshot.
+                  Oracle is ready when you are — open it any time. Connect Zoho Books or create invoices to unlock AI-driven recommendations from your live snapshot.
                 </p>
-                <div className="relative mt-3">
-                  {/* Pulsing amber glow ring behind the button */}
-                  <span
-                    aria-hidden
-                    className="absolute inset-0 rounded-md bg-amber-500/30 blur-md animate-ping"
-                  />
-                  <Button
-                    size="sm"
-                    className="relative bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-pulse"
-                    onClick={() => setOracleWizardOpen(true)}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Activate Oracle AI CFO
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  size="sm"
+                  className="mt-3 bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 gap-1.5 shadow-[0_0_18px_-4px_rgba(245,158,11,0.45)]"
+                  onClick={() => router.push('/oracle')}
+                >
+                  <Brain className="h-3.5 w-3.5" />
+                  Open Oracle
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
               </motion.div>
             ) : mappedAIRecommendations.length === 0 ? (
               <EmptyState
@@ -2279,26 +2121,12 @@ export default function DashboardPage() {
         onOpenChange={setInviteModalOpen}
         onInvited={() => reloadOrg()}
       />
-      <ActivateOracleWizard
-        open={oracleWizardOpen}
-        onOpenChange={setOracleWizardOpen}
-        onActivated={() => {
-          reloadOrg();
-          refreshSnapshot();
-        }}
-        integrations={{
-          gstn: false,
-          bank: false,
-          google: googleConnected,
-          zoho: zohoConnected,
-          invoices: hasInvoices,
-        }}
-        dataQuality={{
-          customers: businessSnapshot.customers,
-          invoices: businessSnapshot.invoices.count,
-          hasRevenue: businessSnapshot.revenue > 0,
-        }}
-      />
+      {/* NOTE: ActivateOracleWizard is intentionally NOT rendered from the
+          dashboard anymore. Per the Oracle redesign, Oracle is no longer
+          gated behind an activation wizard — it opens directly at /oracle.
+          The wizard component file is retained for backwards compatibility
+          with any code paths that may still import it, but no UI in the
+          dashboard triggers it. */}
     </div>
   );
 }

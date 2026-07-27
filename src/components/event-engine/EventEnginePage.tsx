@@ -656,7 +656,7 @@ export default function EventEnginePage() {
   const [filterSource, setFilterSource] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [epsCounter, setEpsCounter] = useState(0)
-  const [totalProcessed, setTotalProcessed] = useState(48932)
+  const [totalProcessed, setTotalProcessed] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const eventCountRef = useRef(0)
 
@@ -706,26 +706,39 @@ export default function EventEnginePage() {
   }, [events])
 
   const donutData = useMemo(() => [
-    { label: 'Invoice', value: eventCounts['invoice.created'] + 4521, color: '#2563EB' },
-    { label: 'Payment', value: eventCounts['payment.collected'] + 3890, color: '#3B82F6' },
-    { label: 'Return', value: eventCounts['return.filed'] + 2934, color: '#2563EB' },
-    { label: 'Document', value: eventCounts['document.uploaded'] + 2107, color: '#0ea5e9' },
-    { label: 'Task', value: eventCounts['task.assigned'] + 1845, color: '#f59e0b' },
-    { label: 'Notice', value: eventCounts['notice.received'] + 892, color: '#ef4444' },
-    { label: 'Client', value: eventCounts['client.added'] + 674, color: '#8b5cf6' },
-    { label: 'AI Decision', value: eventCounts['ai.decision'] + 1243, color: '#a855f7' },
+    { label: 'Invoice', value: eventCounts['invoice.created'], color: '#2563EB' },
+    { label: 'Payment', value: eventCounts['payment.collected'], color: '#3B82F6' },
+    { label: 'Return', value: eventCounts['return.filed'], color: '#2563EB' },
+    { label: 'Document', value: eventCounts['document.uploaded'], color: '#0ea5e9' },
+    { label: 'Task', value: eventCounts['task.assigned'], color: '#f59e0b' },
+    { label: 'Notice', value: eventCounts['notice.received'], color: '#ef4444' },
+    { label: 'Client', value: eventCounts['client.added'], color: '#8b5cf6' },
+    { label: 'AI Decision', value: eventCounts['ai.decision'], color: '#a855f7' },
   ], [eventCounts])
 
   const hourlyData = useMemo(() => {
+    // Aggregate REAL events by hour for the last 24 hours.
+    // When no events exist (no webhook subscriptions configured yet),
+    // every bucket is 0 — an honest empty state instead of Math.random().
     const now = new Date()
-    return Array.from({ length: 24 }, (_, i) => {
+    const buckets: { hour: string; count: number }[] = []
+    const countsByHour = new Map<number, number>()
+    for (const e of events) {
+      const ts = e.timestamp ? new Date(e.timestamp).getTime() : NaN
+      if (isNaN(ts)) continue
+      const hourIdx = Math.floor((now.getTime() - ts) / 3600000) // hours ago
+      if (hourIdx < 0 || hourIdx >= 24) continue
+      countsByHour.set(23 - hourIdx, (countsByHour.get(23 - hourIdx) ?? 0) + 1)
+    }
+    for (let i = 0; i < 24; i++) {
       const hour = new Date(now.getTime() - (23 - i) * 3600000)
-      return {
+      buckets.push({
         hour: hour.toLocaleTimeString('en-IN', { hour: '2-digit', hour12: true }),
-        count: Math.floor(Math.random() * 200 + 50 + (i > 8 && i < 18 ? 150 : 0)),
-      }
-    })
-  }, [])
+        count: countsByHour.get(i) ?? 0,
+      })
+    }
+    return buckets
+  }, [events])
 
   // ── Firestore data counts ──
   const liveClientCount = fireClients.length

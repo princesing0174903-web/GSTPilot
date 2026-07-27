@@ -387,8 +387,10 @@ export function buildInitialSteps(kind: OracleActionKind): OracleTaskStep[] {
 }
 
 // ─── Result Formatter ────────────────────────────────────────────────────────
-// Substitutes {count} and {amount} placeholders with sensible values derived
-// from the Business Memory (so the result feels grounded in real data).
+// Substitutes {count} and {amount} placeholders with values derived from the
+// Business Memory. When ctx doesn't supply real values, we use 0 (honest
+// empty) instead of fabricating random numbers — the caller should pass real
+// counts/amounts if it wants them shown.
 
 export function formatActionResult(
   kind: OracleActionKind,
@@ -396,8 +398,8 @@ export function formatActionResult(
 ): string {
   const meta = ACTION_LIBRARY[kind];
   if (!meta) return 'Task completed.';
-  const count = ctx.count ?? Math.floor(Math.random() * 5) + 2;
-  const amount = ctx.amount ?? Math.floor(Math.random() * 50 + 10) * 10000;
+  const count = ctx.count ?? 0;
+  const amount = ctx.amount ?? 0;
   // Templates already include the ₹ prefix where needed, so we only substitute
   // the raw number. If a template uses {amount} without a ₹ prefix, we add one.
   const amountStr = amount.toLocaleString('en-IN');

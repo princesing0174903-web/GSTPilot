@@ -2,19 +2,64 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { calculateGSTDataQualityScore, validateGSTIN } from '@/lib/gst-utils'
 
-// GET /api/health-score?clientId=X — Calculate and return health score for a client
-// Query param: clientId (required)
-// Returns { score, breakdown: { missingGstin, invalidGstin, duplicateInvoices, filingDelays, validationErrors } }
+// GET /api/health-score?clientId=X              — Calculate and return health score for a client
+// GET /api/health-score?clientId=X& trend=1     — Also return historical trend (HealthScore records)
+// GET /api/health-score?trends=1                — Return trend sparkline data for ALL clients (bulk)
+// GET /api/health-score                         — Return list of all clients with current health scores
+//
+// Returns { score, breakdown: {...} } for single client
+// Returns { score, breakdown, trend: [{score,period,createdAt}] } when trend=1
+// Returns { trends: { [clientId]: [{score,period}] } } when trends=1 (bulk)
+// Returns { clients: [{id, tradeName, gstin, healthScore, state}] } when no params
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
+    const wantTrend = searchParams.get('trend') === '1'
+    const bulkTrends = searchParams.get('trends') === '1'
 
+    // ── Bulk trend endpoint: sparkline data for every client ──
+    // Returns the last 6 HealthScore records (oldest → newest) per client.
+    // Used by ClientHealthPage to render real sparklines instead of Math.random().
+    if (bulkTrends) {
+      const allScores = await db.healthScore.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 600, // cap: ~6 months × 100 clients
+        select: {
+          clientId: true,
+          score: true,
+          period: true,
+          createdAt: true,
+        },
+      });
+      // Group by clientId, keep last 6, reverse to chronological order
+      const byClient = new Map<string, { score: number; period: string | null; createdAt: string }[]>();
+      for (const s of allScores) {
+        let arr = byClient.get(s.clientId);
+        if (!arr) { arr = []; byClient.set(s.clientId, arr); }
+        if (arr.length < 6) arr.push({ score: s.score, period: s.period, createdAt: s.createdAt.toISOString() });
+      }
+      const trends: Record<string, { score: number; period: string | null; createdAt: string }[]> = {};
+      for (const [cid, arr] of byClient.entries()) {
+        trends[cid] = arr.reverse();
+      }
+      return NextResponse.json({ trends });
+    }
+
+    // ── List endpoint: all clients with current health scores ──
     if (!clientId) {
-      return NextResponse.json(
-        { error: 'clientId is required' },
-        { status: 400 }
-      )
+      const clients = await db.client.findMany({
+        select: {
+          id: true,
+          tradeName: true,
+          gstin: true,
+          healthScore: true,
+          state: true,
+          status: true,
+        },
+        orderBy: { healthScore: 'asc' },
+      });
+      return NextResponse.json({ clients });
     }
 
     // Verify client exists
@@ -125,6 +170,36 @@ export async function GET(request: Request) {
           period: currentPeriod,
         },
       })
+    }
+
+    // If trend requested, fetch historical HealthScore records (last 6, chronological)
+    if (wantTrend) {
+      const history = await db.healthScore.findMany({
+        where: { clientId },
+        orderBy: { createdAt: 'desc' },
+        take: 6,
+        select: {
+          score: true,
+          period: true,
+          createdAt: true,
+        },
+      });
+      const trend = history.reverse().map((h) => ({
+        score: h.score,
+        period: h.period,
+        createdAt: h.createdAt.toISOString(),
+      }));
+      return NextResponse.json({
+        score,
+        breakdown: {
+          missingGstin,
+          invalidGstin,
+          duplicateInvoices,
+          filingDelays,
+          validationErrors,
+        },
+        trend,
+      });
     }
 
     return NextResponse.json({

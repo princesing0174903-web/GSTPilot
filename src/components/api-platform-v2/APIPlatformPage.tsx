@@ -1109,7 +1109,7 @@ print(filing.arn)  # AA110125001234F`,
               />
             ) : (
               demoApiKeys.filter(k => k.status === 'active').map((apiKey) => {
-                const usage = Math.round(Math.random() * 40 + 10);
+                const usage = 0;
                 return (
                   <div key={apiKey.id} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">

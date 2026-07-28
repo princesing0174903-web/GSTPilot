@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(stored) as AuthUser;
         if (parsed.id) {
           console.log('[Auth] Restored session from cache for user:', parsed.id);
-          // eslint-disable-next-line react-hooks/set-state-in-effect
+           
           setUser(parsed);
           cachedUserIdRef.current = parsed.id;
           restoredFromCache = true;
@@ -482,6 +482,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5000);
     return () => clearTimeout(timer);
   }, [isLoading]);
+
+  // ── Session-expired handler ──
+  // When any API route returns 401 SESSION_EXPIRED / AUTH_REQUIRED, the
+  // apiFetch wrapper (src/hooks/api.ts) and TanStack Query mutation onError
+  // (src/components/providers.tsx) dispatch a `gstpilot:session-expired`
+  // CustomEvent. We listen for it here and attempt a token refresh; if that
+  // fails, we sign the user out so they can re-authenticate cleanly instead
+  // of seeing repeated permission-denied errors on every request.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let refreshing = false;
+    const handleSessionExpired = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        // Try to refresh the Firebase ID token. If the user is still signed
+        // in to Firebase, this succeeds and the next request will work.
+        const { auth: fbAuth } = await import('@/lib/firebase');
+        const currentUser = fbAuth.currentUser;
+        if (currentUser) {
+          await currentUser.getIdToken(true);
+          console.log('[Auth] Session refreshed after 401');
+        } else {
+          // No Firebase user — force logout.
+          console.warn('[Auth] No Firebase user on 401 — signing out');
+          await logout();
+        }
+      } catch (err) {
+        console.warn('[Auth] Token refresh failed on 401 — signing out:', err);
+        await logout();
+      } finally {
+        refreshing = false;
+      }
+    };
+    window.addEventListener('gstpilot:session-expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('gstpilot:session-expired', handleSessionExpired);
+    };
+     
+  }, []);
 
   return (
     <AuthContext.Provider

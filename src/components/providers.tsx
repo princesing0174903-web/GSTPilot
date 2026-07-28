@@ -26,8 +26,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { Zap } from 'lucide-react';
+import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { AppProvider } from '@/contexts/AppContext';
+import { OfflineBanner } from '@/components/shared/OfflineBanner';
 
 // ── Heavy context providers lazy-loaded so Firebase stays OUT of the initial
 //    `/` compile. Each becomes its own webpack chunk.
@@ -83,7 +85,59 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 30 * 1000,
-            retry: 1,
+            // Retry ONLY transient errors (network, 5xx, 429). 4xx errors
+            // (400/401/403/404) are deterministic and must NOT be retried —
+            // retrying them wastes a round-trip and can lock accounts out
+            // (e.g. too many 401s → auth/too-many-requests).
+            retry: (failureCount, error) => {
+              // Custom predicate — never retry 4xx.
+              const status =
+                (error as { status?: number })?.status ??
+                (error as { response?: { status?: number } })?.response?.status;
+              if (typeof status === 'number' && status >= 400 && status < 500) {
+                return false;
+              }
+              return failureCount < 2;
+            },
+            // Keep showing stale data while refetching (prevents flicker on
+            // page navigation).
+            placeholderData: (prev: unknown) => prev,
+          },
+          mutations: {
+            // Retry mutations once on transient errors only.
+            retry: (failureCount, error) => {
+              const status =
+                (error as { status?: number })?.status ??
+                (error as { response?: { status?: number } })?.response?.status;
+              if (typeof status === 'number' && status >= 400 && status < 500) {
+                return false;
+              }
+              return failureCount < 1;
+            },
+            // Auto-toast mutation errors that the caller doesn't handle.
+            onError: (error, _variables, _context) => {
+              const status =
+                (error as { status?: number })?.status ??
+                (error as { response?: { status?: number } })?.response?.status;
+              // 401 → session-expired (AuthContext handles re-login).
+              if (status === 401) {
+                try {
+                  window.dispatchEvent(new CustomEvent('gstpilot:session-expired'));
+                } catch {
+                  // ignore
+                }
+                return;
+              }
+              // Don't double-toast if the mutation already has an onError
+              // handler that called toast — we only fire as a safety net for
+              // mutations WITHOUT their own onError.
+              const message =
+                (error as Error)?.message &&
+                !/firebase|firestore|prisma/i.test((error as Error).message)
+                  ? (error as Error).message.slice(0, 140)
+                  : 'Something went wrong. Please try again.';
+              toast.error(message);
+            },
           },
         },
       })
@@ -97,6 +151,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <AppProvider>
               {children}
               <Toaster />
+              <OfflineBanner />
               {/* Preview stability: shows a professional reconnect overlay when
                   the dev server briefly restarts, instead of a browser error. */}
               <DevServerReconnect />

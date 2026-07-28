@@ -108,7 +108,50 @@ async function doFetch(
 /**
  * Wraps fetch with AbortController-based timeout + optional retry.
  * Throws `FetchTimeoutError` on timeout, `FetchHttpError` on non-2xx responses.
+ *
+ * AUTO-AUTH: For relative `/api/` requests in the browser, automatically
+ * injects the `x-gstpilot-actor` header (JSON {uid, email}) read from
+ * localStorage. This is the sandbox/preview fallback that requireAuth()
+ * expects when the Firebase Admin SDK isn't configured. Without this header,
+ * every requireAuth-gated route returns 401 AUTH_REQUIRED.
  */
+function injectAuthHeaders(input: string | URL, init: RequestInit): RequestInit {
+  // Only inject for browser-side relative /api/ requests.
+  if (typeof window === 'undefined') return init;
+  const urlStr = typeof input === 'string' ? input : input.toString();
+  if (!urlStr.startsWith('/api/') && !urlStr.startsWith('./api/')) return init;
+
+  // Don't override if the caller already set the header.
+  const existingHeaders = init.headers as Record<string, string> | undefined;
+  if (existingHeaders && (existingHeaders['x-gstpilot-actor'] || existingHeaders['X-Gstpilot-Actor'])) {
+    return init;
+  }
+
+  // Read the cached session from localStorage (set by AuthContext).
+  let actorJson: string | null = null;
+  try {
+    const raw = localStorage.getItem('gstpilot_session');
+    if (raw) {
+      const session = JSON.parse(raw) as { id?: string; email?: string };
+      if (session.id) {
+        actorJson = JSON.stringify({ uid: session.id, email: session.email ?? '' });
+      }
+    }
+  } catch {
+    // localStorage not available or session corrupted — skip injection.
+  }
+
+  if (!actorJson) return init;
+
+  return {
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      'x-gstpilot-actor': actorJson,
+    },
+  };
+}
+
 export async function fetchWithTimeout(
   input: string | URL,
   options: FetchWithTimeoutOptions = {},
@@ -121,10 +164,13 @@ export async function fetchWithTimeout(
     ...rest
   } = options;
 
+  // Auto-inject the x-gstpilot-actor header for /api/ requests (browser only).
+  const authedRest = injectAuthHeaders(input, rest);
+
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await doFetch(input, rest, externalSignal ?? null, timeoutMs);
+      const res = await doFetch(input, authedRest, externalSignal ?? null, timeoutMs);
 
       if (!res.ok) {
         // Try to extract a friendly error message from the JSON body.

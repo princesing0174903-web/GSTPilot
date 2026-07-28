@@ -26,17 +26,47 @@ import type {
 } from '@/types/gst';
 
 // ─── API Fetch Helper ─────────────────────────────────────────────────────────
+//
+// Uses the production-grade `fetchWithTimeout` wrapper (AbortController +
+// 30s timeout + retry on transient errors). On 401, broadcasts a global
+// 'session-expired' event so AuthContext can force re-login.
+
+import { fetchWithTimeout, FetchHttpError } from '@/lib/async';
+
+function broadcastSessionExpired() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('gstpilot:session-expired'));
+  } catch {
+    // ignore — older browsers
+  }
+}
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
+  try {
+    const res = await fetchWithTimeout(url, {
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      ...options,
+      // Retry once on transient (5xx/network) errors. 4xx are NOT retried.
+      retries: 1,
+    });
+    // 204 No Content — nothing to parse.
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } catch (err) {
+    // Detect 401 SESSION_EXPIRED / AUTH_REQUIRED and broadcast so the
+    // AuthContext can refresh the token or force re-login.
+    if (err instanceof FetchHttpError) {
+      if (err.status === 401) {
+        broadcastSessionExpired();
+      }
+      // Re-throw with the friendly server-provided message (already extracted
+      // by fetchWithTimeout from the JSON error body).
+      throw err;
+    }
+    // Network error / timeout — surface a friendly message.
+    throw err;
   }
-  return res.json();
 }
 
 // ─── Query Key Factory ────────────────────────────────────────────────────────

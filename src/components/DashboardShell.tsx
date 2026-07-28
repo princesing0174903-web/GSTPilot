@@ -44,6 +44,7 @@ import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 import { BrandLogo } from '@/components/brand'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import CommandPalette from '@/components/command-palette/CommandPalette'
+import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
 
 // DashboardViews is itself a lazy-loaded registry of 150 view components.
 // Keeping it dynamic means this shell file only compiles the layout chrome,
@@ -193,7 +194,12 @@ export function DashboardContent() {
 
         {/* MAIN WORKSPACE */}
         <main className="min-w-0 flex-1 overflow-y-auto pb-24 custom-scrollbar">
-          <DashboardViews view={currentView} />
+          <ViewErrorBoundary
+            key={currentView}
+            viewName={getViewMeta(currentView)?.label || currentView}
+          >
+            <DashboardViews view={currentView} />
+          </ViewErrorBoundary>
         </main>
       </div>
 

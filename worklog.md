@@ -9562,3 +9562,36 @@ The onboarding questionnaire is GONE from the rendering pipeline. The new auth f
 - Zero ESLint errors. Zero TypeScript errors on changed files. Turbopack compiles cleanly.
 - No remaining issues identified.
 
+
+---
+Task ID: 6-oracle-redesign (COMPLETED + VERIFIED)
+Agent: Z.ai Code (main) + full-stack-developer subagent
+Task: Redesign Oracle experience — remove Activate banner, add Daily Brief card, sidebar polish, page-level Ask Oracle buttons. No UI redesign of the overall app.
+
+Work Log:
+- Subagent created OracleDailyBrief.tsx (480 lines) — premium dashboard card using real data from useBusinessSnapshot, useInvoices, useFireReturns, useAIRecommendations, useLiveDashboardMetrics, useOracleInsights. Entire card is clickable → opens Oracle.
+- Subagent created AskOracleButton.tsx (130 lines) — reusable small button with Brain icon, generates page-specific prompts, navigates to Oracle with context.
+- Subagent edited DashboardPage.tsx: removed OracleBanner component + render, removed all "Activate Oracle AI CFO" CTAs, replaced with "Open Oracle" buttons, wired OracleDailyBrief into the dashboard layout (line 1310).
+- Subagent added AskOracleButton to 5 workspace pages: InvoiceWorkspacePage, ClientRegistryPage, ReturnsPage, CRMPage, FinancePage.
+- Main agent fixed critical missing module: src/lib/gstpilot-data/local-workspace.ts was deleted (caused 500 error — shouldSkipFirestore not exported). Recreated with isLocalOrgId() + shouldSkipFirestore() helpers.
+- Main agent cleared .next cache to resolve stale Turbopack chunk errors.
+- Browser verification completed:
+  * Dashboard loads with Oracle Daily Brief card, zero errors
+  * "Activate Oracle" banner is GONE — only "Open Oracle" buttons remain
+  * Clicking Daily Brief card opens Oracle chat workspace
+  * Sidebar "Oracle AI" navigation works
+  * Ask Oracle button verified on Invoices, Customers (Client Registry), Returns pages
+  * Mobile responsive (390x844 viewport) — Daily Brief card renders cleanly
+  * Zero console errors, zero runtime errors
+
+Stage Summary:
+- Oracle is now the intelligence layer of GSTPilot, not an advertised feature.
+- 2 new files created (OracleDailyBrief.tsx, AskOracleButton.tsx)
+- 7 existing files modified (DashboardPage, InvoiceWorkspacePage, ClientRegistryPage, ReturnsPage, CRMPage, FinancePage, local-workspace.ts)
+- OracleBanner component completely removed
+- All "Activate Oracle" CTAs replaced with "Open Oracle" or removed
+- Ask Oracle buttons on 5 workspace pages open Oracle with page-specific context
+- Daily Brief card shows real business data (health, collections, GST alerts, cash flow, AI recs, risks)
+- Screenshots saved: verify-oracle-daily-brief.png, verify-oracle-opened.png, verify-ask-oracle-invoices.png, verify-ask-oracle-customers.png, verify-ask-oracle-returns.png
+- ESLint: zero errors on all changed files
+- No UI redesign of the overall app — only Oracle's UX and positioning changed

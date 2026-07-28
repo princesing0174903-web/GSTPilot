@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { autoCategorize } from '@/lib/invoices/expenses'
 import { graphEvents } from '@/lib/graph/live-update'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
 
 /** Resolve orgId for an expense from header, body, or Client.firmId lookup. */
 async function resolveOrgForExpense(
@@ -45,6 +46,11 @@ function parseActorHeader(req: NextRequest): { userId?: string; userName?: strin
 // returns empty (prevents cross-tenant data leak).
 export async function GET(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const category = searchParams.get('category')
@@ -59,6 +65,15 @@ export async function GET(request: NextRequest) {
       // No tenant scope — return empty rather than leak cross-tenant data
       return NextResponse.json({ expenses: [] })
     }
+
+    // ── 2. AUTHORIZATION — when an orgId is available, verify membership ────
+    // (When only a clientId is provided, the resource is uniquely identified,
+    //  so we skip the org-membership check — same trust model as before.)
+    if (organizationId) {
+      const memberResult = await requireOrgMembership(uid, organizationId)
+      if (memberResult instanceof NextResponse) return memberResult
+    }
+
     if (category) where.category = category
 
     const expenses = await db.expense.findMany({
@@ -69,16 +84,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ expenses: expenses ?? [] })
   } catch (error) {
     console.error('GET /api/expenses error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch expenses' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your expenses right now. Please try again.')
   }
 }
 
 // POST /api/expenses — Record a new Expense
 export async function POST(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       clientId,
@@ -97,6 +114,15 @@ export async function POST(request: NextRequest) {
         { error: 'amount and date are required' },
         { status: 400 }
       )
+    }
+
+    // ── 2. AUTHORIZATION — verify membership when an orgId can be resolved ──
+    // Resolve the orgId early via the existing helper so we can gate the write.
+    // The same orgId is reused below for the timeline emit (no double-resolve).
+    const orgId = await resolveOrgForExpense(request, body ?? {})
+    if (orgId) {
+      const memberResult = await requireOrgMembership(uid, orgId)
+      if (memberResult instanceof NextResponse) return memberResult
     }
 
     // Auto-categorize when category not provided
@@ -138,7 +164,7 @@ export async function POST(request: NextRequest) {
     graphEvents.expenseRecorded(expense.id, vendor ?? 'unknown', expense.amount, finalCategory)
 
     // ── Business Timeline — emit expense.created (fire-and-forget) ──
-    const orgId = await resolveOrgForExpense(request, body ?? {})
+    // orgId was resolved above for the membership check; reuse it here.
     if (orgId) {
       await emitTimelineEvent({
         organizationId: orgId,
@@ -163,16 +189,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ expense }, { status: 201 })
   } catch (error) {
     console.error('POST /api/expenses error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create expense' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not record the expense right now. Please try again.')
   }
 }
 
 // PATCH /api/expenses?id=XXX — Update an existing expense
 export async function PATCH(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
@@ -211,16 +239,18 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ expense })
   } catch (error) {
     console.error('PATCH /api/expenses error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update expense' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the expense right now. Please try again.')
   }
 }
 
 // DELETE /api/expenses?id=XXX — Delete an expense
 export async function DELETE(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
@@ -242,9 +272,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/expenses error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete expense' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete the expense right now. Please try again.')
   }
 }

@@ -210,12 +210,25 @@ export async function markOnboardingComplete(
 /**
  * Create a new organization and make the creator the `owner` member.
  *
- * This is a two-write operation:
+ * This is a three-write operation:
  *   1. `organizations/{orgId}` — the tenant root
  *   2. `organization_members/{memberId}` — owner membership row
+ *   3. `users/{ownerId}` — set `currentOrganizationId`
  *
- * The user's `currentOrganizationId` is then set so subsequent reads are
- * scoped to this org.
+ * IDEMPOTENCY: Before creating a new org, this function checks whether the
+ * user already owns an org with the same name. If so, it reuses that org
+ * instead of creating a duplicate. This prevents orphaned org docs from
+ * accumulating when the caller retries after a step-2 failure (the previous
+ * bug: step 1 succeeded, step 2 failed, retry created a NEW orphaned org).
+ *
+ * ROLLBACK: If the membership row (step 2) fails, the org doc (step 1) is
+ * best-effort deleted so we don't leave orphans. If the user-profile update
+ * (step 3) fails, we keep the org + membership (they're valid) — the user
+ * just needs to refresh.
+ *
+ * PERMISSION-ERROR HANDLING: If step 2 fails with Firestore permission-denied,
+ * the error is returned to the caller so AutoProvisionWorkspace can fall back
+ * to a local workspace (rather than hard-error-ing the user).
  */
 export async function createOrganization(params: {
   name: string;
@@ -239,6 +252,46 @@ export async function createOrganization(params: {
   try {
     const slug = slugifyOrg(name);
 
+    // ── IDEMPOTENCY CHECK ──────────────────────────────────────────────────
+    // Look for an existing org doc with the same name+ownerId. If found AND
+    // the user already has an active membership in it, reuse it. This handles
+    // the retry-after-failure case where step 1 succeeded but step 2 failed.
+    try {
+      const existingMemberQ = query(
+        collection(db, 'organization_members'),
+        where('userId', '==', ownerId),
+        where('status', '==', 'active')
+      );
+      const existingMemberSnap = await getDocs(existingMemberQ);
+      for (const memberDoc of existingMemberSnap.docs) {
+        const memberData = memberDoc.data();
+        if (memberData.role !== 'owner') continue;
+        const orgSnap = await getDoc(doc(db, 'organizations', memberData.organizationId));
+        if (!orgSnap.exists()) continue;
+        const orgData = orgSnap.data();
+        if (orgData.name === name && orgData.ownerId === ownerId) {
+          // Reuse this org. It's a complete, valid org the user already owns.
+          console.log('[Org] Reusing existing org for owner (idempotent create):', orgSnap.id);
+          const reusedOrg: OrganizationDoc = {
+            id: orgSnap.id,
+            name: orgData.name ?? name,
+            slug: orgData.slug ?? slug,
+            ownerId: orgData.ownerId ?? ownerId,
+            logoUrl: orgData.logoUrl ?? null,
+            gstin: orgData.gstin ?? gstin,
+            plan: orgData.plan ?? plan,
+            status: orgData.status ?? 'active',
+            createdAt: orgData.createdAt ?? null,
+            updatedAt: orgData.updatedAt ?? null,
+          };
+          return { organization: reusedOrg, error: null };
+        }
+      }
+    } catch (idempotencyErr) {
+      // Non-fatal — log and proceed to create a new org.
+      console.warn('[Org] Idempotency check failed (non-fatal):', friendlyFirestoreError(idempotencyErr));
+    }
+
     // 1. Create the organization document.
     const orgRef = await addDoc(collection(db, 'organizations'), {
       name,
@@ -255,27 +308,54 @@ export async function createOrganization(params: {
     const orgId = orgRef.id;
 
     // 2. Create the owner membership row.
-    await setDoc(doc(collection(db, 'organization_members'), `${orgId}_${ownerId}`), {
-      organizationId: orgId,
-      userId: ownerId,
-      userEmail: ownerEmail,
-      userDisplayName: ownerDisplayName,
-      userPhotoURL: ownerPhotoURL || null,
-      role: 'owner' as OrgRole,
-      status: 'active' as MemberStatus,
-      invitedBy: null,
-      invitedAt: serverTimestamp(),
-      joinedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    //    This is the step that previously failed with permission-denied due
+    //    to the chicken-and-egg in the Firestore rules (isOwnerOrAdmin
+    //    required the membership doc to already exist). The rules have been
+    //    fixed to allow the bootstrap path; this rollback is a safety net for
+    //    any other failure (network, quota, etc.).
+    try {
+      await setDoc(doc(collection(db, 'organization_members'), `${orgId}_${ownerId}`), {
+        organizationId: orgId,
+        userId: ownerId,
+        userEmail: ownerEmail,
+        userDisplayName: ownerDisplayName,
+        userPhotoURL: ownerPhotoURL || null,
+        role: 'owner' as OrgRole,
+        status: 'active' as MemberStatus,
+        invitedBy: null,
+        invitedAt: serverTimestamp(),
+        joinedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (memberErr) {
+      // ROLLBACK: best-effort delete the orphaned org doc so retries don't
+      // accumulate duplicates. Log but don't throw — the original error is
+      // the one we want to surface.
+      console.warn('[Org] Membership create failed — rolling back org doc:', friendlyFirestoreError(memberErr));
+      try {
+        await deleteDoc(doc(db, 'organizations', orgId));
+      } catch (rollbackErr) {
+        console.warn('[Org] Rollback failed (orphaned org doc may remain):', friendlyFirestoreError(rollbackErr));
+      }
+      // Surface the friendly error to the caller. AutoProvisionWorkspace will
+      // fall back to a local workspace rather than hard-erroring the user.
+      return { organization: null, error: friendlyFirestoreError(memberErr) };
+    }
 
     // 3. Set the user's current organization.
-    await updateDoc(doc(db, 'users', ownerId), {
-      currentOrganizationId: orgId,
-      onboardingCompleted: true,
-      updatedAt: serverTimestamp(),
-    });
+    //    If this fails, the org + membership are still valid — the user just
+    //    won't have currentOrganizationId set. They'll re-resolve on next
+    //    load via fetchUserOrganizations. Non-fatal.
+    try {
+      await updateDoc(doc(db, 'users', ownerId), {
+        currentOrganizationId: orgId,
+        onboardingCompleted: true,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (profileErr) {
+      console.warn('[Org] Profile update failed (non-fatal — org + membership are valid):', friendlyFirestoreError(profileErr));
+    }
 
     const orgDoc: OrganizationDoc = {
       id: orgId,

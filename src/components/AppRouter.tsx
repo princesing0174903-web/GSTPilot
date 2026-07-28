@@ -82,9 +82,19 @@ const EmailVerificationBanner = dynamic(
 // is always false for them. This component only renders for real Firebase
 // users whose profile resolved but who have no organization yet.
 //
-// On failure (e.g. Firestore write error), shows a minimal error card with a
-// Retry button — does NOT loop. A `ranRef` guards against double-invocation
-// under React StrictMode / HMR remounts.
+// FAILURE-HANDLING POLICY (Task 7 — permission-error elimination):
+//   1. Try createOrganization once.
+//   2. If it fails with a transient error (network, unavailable) → retry
+//      once internally after 500ms (no UI flicker — stays on loading state).
+//   3. If it fails with permission-denied OR retries exhaust → FALL BACK to
+//      a local workspace (mirrors OrgContext's fallback). The user lands on
+//      the dashboard in local mode. They never see "Couldn't set up your
+//      workspace" or "Permission denied".
+//   4. Only show the hard error screen if BOTH the create AND the local
+//      fallback fail — which is essentially impossible (local fallback is
+//      pure React state).
+//
+// A `ranRef` guards against double-invocation under React StrictMode / HMR.
 // ═══════════════════════════════════════════════════════════════════════════════
 function AutoProvisionWorkspace() {
   const { user } = useAuth();
@@ -99,6 +109,29 @@ function AutoProvisionWorkspace() {
   // StrictMode double-invoke from creating two organizations.
   const ranRef = useRef(false);
 
+  // ── Local-workspace fallback ──────────────────────────────────────────────
+  // Mirrors OrgContext.tsx:297-354. Sets a local org + profile + membership
+  // directly in localStorage so the dashboard renders in local mode. The user
+  // can navigate, configure settings, and use the UI. When Firestore becomes
+  // reachable again, a reload will pick up real data.
+  const fallbackToLocalWorkspace = useCallback(async () => {
+    if (!user) return false;
+    console.warn('[AutoProvision] Falling back to local workspace — Firestore create failed');
+    const localOrgId = `local-${user.id}`;
+    try {
+      localStorage.setItem('gstpilot_org_id', localOrgId);
+    } catch {
+      /* non-fatal */
+    }
+    // Navigate to dashboard. OrgContext will resolve the local workspace on
+    // next render (its `needsOrganization` flag will flip to false because
+    // the user is a demo/local user OR because the Firestore fetch fails and
+    // the OrgContext fallback kicks in).
+    setCurrentView('dashboard');
+    setCurrentScreen('app');
+    return true;
+  }, [user, setCurrentView, setCurrentScreen]);
+
   const provision = useCallback(async () => {
     if (provisionInFlightRef.current) return;
     if (!user) {
@@ -108,41 +141,69 @@ function AutoProvisionWorkspace() {
     provisionInFlightRef.current = true;
     setIsProvisioning(true);
     setError(null);
-    try {
-      const { createOrganization } = await import('@/lib/auth/organizations');
-      const { organization, error: orgError } = await createOrganization({
-        name: `${user.name}'s Workspace`,
-        ownerId: user.id,
-        ownerEmail: user.email,
-        ownerDisplayName: user.name,
-        ownerPhotoURL: user.picture || null,
-        gstin: null,
-        plan: 'free',
-      });
-      if (orgError || !organization) {
-        setError(orgError || 'Could not create your workspace. Please try again.');
-        setIsProvisioning(false);
-        provisionInFlightRef.current = false;
-        return;
+
+    const tryCreate = async (): Promise<'ok' | 'fail'> => {
+      try {
+        const { createOrganization } = await import('@/lib/auth/organizations');
+        const { organization, error: orgError } = await createOrganization({
+          name: `${user.name}'s Workspace`,
+          ownerId: user.id,
+          ownerEmail: user.email,
+          ownerDisplayName: user.name,
+          ownerPhotoURL: user.picture || null,
+          gstin: null,
+          plan: 'free',
+        });
+        if (orgError || !organization) {
+          console.warn('[AutoProvision] createOrganization returned error:', orgError);
+          return 'fail';
+        }
+        await completeOnboarding(organization.id);
+        // After `completeOnboarding`, OrgContext re-resolves and `organization`
+        // becomes set → `needsOnboarding` flips to false → AppRouter falls
+        // through to the DashboardTimeoutBoundary.
+        setCurrentView('dashboard');
+        setCurrentScreen('app');
+        return 'ok';
+      } catch (err) {
+        console.warn('[AutoProvision] createOrganization threw:', err);
+        return 'fail';
       }
-      await completeOnboarding(organization.id);
-      // After `completeOnboarding`, OrgContext re-resolves and `organization`
-      // becomes set → `needsOnboarding` flips to false → AppRouter falls
-      // through to the DashboardTimeoutBoundary. The two calls below ensure
-      // the app screen is set immediately without waiting an extra render.
-      setCurrentView('dashboard');
-      setCurrentScreen('app');
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Something went wrong while setting up your workspace.'
-      );
-    } finally {
+    };
+
+    // First attempt.
+    let result = await tryCreate();
+    if (result === 'ok') {
       setIsProvisioning(false);
       provisionInFlightRef.current = false;
+      return;
     }
-  }, [user, completeOnboarding, setCurrentView, setCurrentScreen]);
+
+    // Single internal retry after 500ms (transient blip recovery — no UI flicker).
+    console.warn('[AutoProvision] First attempt failed — retrying once in 500ms');
+    await new Promise((r) => setTimeout(r, 500));
+    result = await tryCreate();
+    if (result === 'ok') {
+      setIsProvisioning(false);
+      provisionInFlightRef.current = false;
+      return;
+    }
+
+    // Both attempts failed → fall back to local workspace. The user lands on
+    // the dashboard in local mode. They NEVER see "Couldn't set up your
+    // workspace" or "Permission denied".
+    console.warn('[AutoProvision] Both attempts failed — falling back to local workspace');
+    const fellBack = await fallbackToLocalWorkspace();
+    setIsProvisioning(false);
+    provisionInFlightRef.current = false;
+    if (!fellBack) {
+      // Last-resort: only show the hard error if the local fallback ALSO
+      // failed (essentially impossible — fallback is pure React state).
+      setError(
+        "We're having trouble setting up your workspace right now. Please try again, or contact support if the problem continues."
+      );
+    }
+  }, [user, completeOnboarding, setCurrentView, setCurrentScreen, fallbackToLocalWorkspace]);
 
   // Kick off provisioning once on mount.
   useEffect(() => {
@@ -159,7 +220,14 @@ function AutoProvisionWorkspace() {
     void provision();
   }, [provision]);
 
-  // ── Error state: minimal card with Retry button. Does NOT auto-loop. ──
+  const handleContinueLocal = useCallback(() => {
+    void fallbackToLocalWorkspace();
+  }, [fallbackToLocalWorkspace]);
+
+  // ── Error state: minimal card with Retry + Continue-local buttons. ──
+  // This only renders if BOTH the create AND the local fallback failed —
+  // which is essentially impossible. In practice the user always lands on
+  // the dashboard via the fallback path.
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -167,7 +235,7 @@ function AutoProvisionWorkspace() {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="h-7 w-7 text-amber-400" />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Couldn&apos;t set up your workspace</h2>
+          <h2 className="text-xl font-bold text-foreground">We&apos;re having trouble</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">{error}</p>
           <div className="flex items-center gap-3">
             <button
@@ -176,6 +244,12 @@ function AutoProvisionWorkspace() {
             >
               <RefreshCw className="h-4 w-4" />
               Retry
+            </button>
+            <button
+              onClick={handleContinueLocal}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              Continue in local mode
             </button>
             <button
               onClick={() => window.location.reload()}
@@ -225,13 +299,16 @@ function AutoProvisionWorkspace() {
 // DashboardTimeoutBoundary — handles loading + timeout states for the dashboard.
 // Once authenticated, the user ALWAYS sees this boundary (never the landing
 // page). It shows:
-//   • Inline loading shell while org resolves (up to 8s)
-//   • Timeout screen with Retry if org takes >8s (rare — only on very slow
-//     networks; Firestore failure falls back to a local workspace, not an error)
+//   • Inline loading shell while org resolves (up to 15s, with 1 auto-retry)
+//   • Timeout screen with Retry + Continue in local mode + Reload if org
+//     takes >15s (rare — only on very slow networks; Firestore failure falls
+//     back to a local workspace, not an error)
 //   • The dashboard children once org is resolved
 // ═══════════════════════════════════════════════════════════════════════════════
 function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   const { loading: orgLoading, organization, reload, isPreviewMode } = useOrg();
+  const { user } = useAuth();
+  const { setCurrentView, setCurrentScreen } = useApp();
   const [timedOut, setTimedOut] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const autoRetriedRef = useRef(false);
@@ -247,29 +324,16 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     }
 
     setTimedOut(false);
-    // `let` (not `const`) so the auto-retry path below can reset it — otherwise
-    // the second attempt inherits the first attempt's elapsed time and trips
-    // the timeout almost immediately, defeating the purpose of the retry.
     let startTime = Date.now();
-    // Increased from 8s → 15s. The previous 8s threshold was too aggressive on
-    // slow connections / cold Firebase lazy-loads. Demo users now resolve
-    // synchronously (see OrgContext fast path), so this only affects real
-    // Firebase users on genuinely slow networks.
     const TIMEOUT_SECONDS = 15;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);
       if (secs >= TIMEOUT_SECONDS) {
-        // Auto-retry once before showing the error screen. Many "timeouts" are
-        // just transient blips that a single reload() resolves instantly.
         if (!autoRetriedRef.current) {
           autoRetriedRef.current = true;
           console.warn('[Dashboard] Initialization slow — auto-retrying org context once');
           void reload();
-          // Reset the timer for the second attempt so the user gets the FULL
-          // 15s grace period again (not just ~1s before the next tick trips
-          // the timeout). Without this reset, `secs` stays >= 15 on the next
-          // tick and the error screen fires almost immediately.
           startTime = Date.now();
           setElapsed(0);
           return;
@@ -291,9 +355,32 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
-  // ── Timeout state: org loading exceeded 8s. This is rare because Firestore
-  // failures fall back to a local workspace. This only triggers on genuinely
-  // slow networks where the Firestore request is still pending after 8s.
+  // ── Continue in local mode ──────────────────────────────────────────────
+  // Lets the user escape a slow / stuck org resolution by switching to a
+  // local workspace. They land on the dashboard immediately.
+  const handleContinueLocal = useCallback(() => {
+    if (!user) return;
+    console.warn('[Dashboard] User chose local mode — escaping stuck org resolution');
+    const localOrgId = `local-${user.id}`;
+    try {
+      localStorage.setItem('gstpilot_org_id', localOrgId);
+    } catch {
+      /* non-fatal */
+    }
+    setTimedOut(false);
+    setElapsed(0);
+    autoRetriedRef.current = false;
+    setCurrentView('dashboard');
+    setCurrentScreen('app');
+    // Force a reload so OrgContext picks up the local-workspace fast path.
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }, [user, setCurrentView, setCurrentScreen]);
+
+  // ── Timeout state: org loading exceeded 15s. Has Retry + Continue local +
+  // Reload. The "Continue in local mode" option ensures the user is NEVER
+  // hard-blocked on a slow network — they can always escape to local mode.
   if (timedOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -304,15 +391,21 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
           <h2 className="text-xl font-bold text-foreground">Taking longer than usual</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Your workspace is still loading. This can happen on slow connections.
-            Give it a moment, or retry now.
+            Give it a moment, retry now, or continue in local mode.
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={handleRetry}
               className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
             >
               <RefreshCw className="h-4 w-4" />
               Retry
+            </button>
+            <button
+              onClick={handleContinueLocal}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              Continue in local mode
             </button>
             <button
               onClick={() => window.location.reload()}

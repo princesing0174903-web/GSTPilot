@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { safeAudit } from '@/lib/audit/safe-write';
+import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -34,6 +35,11 @@ function getTenant(request: Request): { userEmail: string | null; userId: string
 // GET /api/settings/profile
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { userEmail } = getTenant(request);
     if (!userEmail) {
       return NextResponse.json(
@@ -46,10 +52,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ profile });
   } catch (error) {
     console.error('[/api/settings/profile] GET error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to load profile' },
-      { status: 500 },
-    );
+    return friendlyApiError(error, 'We could not load your profile right now. Please try again.');
   }
 }
 
@@ -57,7 +60,12 @@ export async function GET(request: Request) {
 // Body: { name?, role?, designation?, firmName?, industry?, city?, timezone?, preferredLanguage? }
 export async function PUT(request: Request) {
   try {
-    const { userEmail, userId } = getTenant(request);
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
+    const { userEmail } = getTenant(request);
     if (!userEmail) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
@@ -85,7 +93,7 @@ export async function PUT(request: Request) {
 
     try {
       await safeAudit({
-        userId: userId ?? null,
+        userId: uid,
         action: 'PROFILE_UPDATED',
         entity: 'UserProfile',
         entityId: profile.id,
@@ -99,9 +107,6 @@ export async function PUT(request: Request) {
     return NextResponse.json({ profile });
   } catch (error) {
     console.error('[/api/settings/profile] PUT error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update profile' },
-      { status: 500 },
-    );
+    return friendlyApiError(error, 'We could not update your profile right now. Please try again.');
   }
 }

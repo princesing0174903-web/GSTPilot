@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { safeAudit } from '@/lib/audit/safe-write';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -36,10 +37,19 @@ function resolveOrg(request: Request): { orgId: string | null; userId: string | 
 // GET /api/settings/organization
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { orgId } = resolveOrg(request);
     if (!orgId) {
       return NextResponse.json({ error: 'organizationId is required', organization: null }, { status: 400 });
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, orgId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     const firm = await db.firm.findUnique({ where: { id: orgId } });
     if (!firm) {
@@ -66,10 +76,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ organization: firm });
   } catch (error) {
     console.error('[/api/settings/organization] GET error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to load organization' },
-      { status: 500 },
-    );
+    return friendlyApiError(error, 'We could not load your organization settings right now. Please try again.');
   }
 }
 
@@ -78,10 +85,19 @@ export async function GET(request: Request) {
 //         contactPhone?, website?, logoUrl? }
 export async function PUT(request: Request) {
   try {
-    const { orgId, userId } = resolveOrg(request);
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
+    const { orgId } = resolveOrg(request);
     if (!orgId) {
       return NextResponse.json({ error: 'organizationId is required' }, { status: 400 });
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, orgId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     const body = await request.json().catch(() => ({}));
     const allowed: Record<string, unknown> = {};
@@ -110,7 +126,7 @@ export async function PUT(request: Request) {
 
     try {
       await safeAudit({
-        userId: userId ?? null,
+        userId: uid,
         action: 'ORGANIZATION_UPDATED',
         entity: 'Firm',
         entityId: firm.id,
@@ -124,9 +140,6 @@ export async function PUT(request: Request) {
     return NextResponse.json({ organization: firm });
   } catch (error) {
     console.error('[/api/settings/organization] PUT error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update organization' },
-      { status: 500 },
-    );
+    return friendlyApiError(error, 'We could not update your organization settings right now. Please try again.');
   }
 }

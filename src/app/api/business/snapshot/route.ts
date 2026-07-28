@@ -31,12 +31,18 @@
 import { NextResponse } from 'next/server';
 import { getBusinessSnapshot as getFinSnapshot, emptySnapshot } from '@/lib/financial-engine';
 import { getBusinessSnapshot as getRichSnapshot, type BusinessSnapshot as RichSnapshot } from '@/lib/business/snapshot';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { searchParams } = new URL(request.url);
     const tenantId = searchParams.get('organizationId') || searchParams.get('firmId');
     const forceRefresh = searchParams.get('forceRefresh') === 'true';
@@ -45,6 +51,10 @@ export async function GET(request: Request) {
       // No tenant scope → return empty snapshot (not an error)
       return NextResponse.json(emptySnapshot());
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, tenantId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     // ── Fetch BOTH snapshots in parallel ──
     // `rich` is the canonical source for headline numbers (includes Zoho data).
@@ -231,12 +241,6 @@ export async function GET(request: Request) {
     // Log the detailed error internally, return a friendly message
     console.error('[/api/business/snapshot] Error computing business snapshot:', error);
 
-    return NextResponse.json(
-      {
-        error: 'We could not load your business snapshot right now. Please try again.',
-        code: 'SNAPSHOT_FAILED',
-      },
-      { status: 500 },
-    );
+    return friendlyApiError(error, 'We could not load your business snapshot right now. Please try again.');
   }
 }

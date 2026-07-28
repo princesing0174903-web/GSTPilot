@@ -2,12 +2,18 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { createNotification } from '@/lib/notifications'
 import { safeAudit } from '@/lib/audit/safe-write'
+import { requireAuth, friendlyApiError } from '@/lib/auth/session'
 
 // GET /api/notifications — Fetch notifications with filters
 // Query params: userId, clientId, isRead, category, limit(20), offset
 // Returns { notifications: [...], unreadCount: number }
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     const clientId = searchParams.get('clientId')
@@ -70,10 +76,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ notifications, unreadCount })
   } catch (error) {
     console.error('GET /api/notifications error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch notifications' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your notifications right now. Please try again.')
   }
 }
 
@@ -82,6 +85,11 @@ export async function GET(request: Request) {
 // Returns { notification }
 export async function POST(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       userId,
@@ -124,10 +132,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ notification }, { status: 201 })
   } catch (error) {
     console.error('POST /api/notifications error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not create the notification right now. Please try again.')
   }
 }
 
@@ -137,6 +142,11 @@ export async function POST(request: Request) {
 // Returns { notification }
 export async function PATCH(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const { id, isRead, read, dismissed, readAt } = body
 
@@ -208,16 +218,18 @@ export async function PATCH(request: Request) {
     ) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the notification right now. Please try again.')
   }
 }
 
 // DELETE /api/notifications?id=xxx — Delete a notification
 export async function DELETE(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -250,9 +262,6 @@ export async function DELETE(request: Request) {
     ) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete the notification right now. Please try again.')
   }
 }

@@ -8,12 +8,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateRecommendations } from '@/lib/recommendations/engine';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { searchParams } = new URL(req.url);
     const organizationId = (searchParams.get('organizationId') ?? '').trim();
 
@@ -23,6 +29,10 @@ export async function GET(req: NextRequest) {
         generatedAt: new Date().toISOString(),
       });
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, organizationId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     const recommendations = await generateRecommendations(organizationId);
     return NextResponse.json({

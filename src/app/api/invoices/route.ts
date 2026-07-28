@@ -8,6 +8,7 @@ import {
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma `Invoice` model has NO `firmId` field — it reaches
@@ -68,6 +69,10 @@ function parseActorHeader(req: Request): { userId?: string; userName?: string } 
 
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
     const period = searchParams.get('period');
@@ -79,6 +84,9 @@ export async function GET(request: Request) {
     if (!tenantId) {
       return NextResponse.json({ invoices: [] });
     }
+
+    const memberResult = await requireOrgMembership(uid, tenantId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     // Build a where clause scoped by the tenant via the client relation.
     // Invoice → Client → firmId. The `cloud` branch and the regular branch
@@ -110,10 +118,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ invoices });
   } catch (error) {
     console.error('Error fetching invoices:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch invoices' },
-      { status: 500 }
-    );
+    return friendlyApiError(error, 'We could not load your invoices right now. Please try again.');
   }
 }
 
@@ -122,6 +127,10 @@ export async function GET(request: Request) {
 // flow. When `cloud` is not set, the original GST invoice flow runs unchanged.
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const body = await request.json();
 
     // ── Invoice Cloud™ branch ──────────────────────────────────────────────
@@ -271,6 +280,8 @@ export async function POST(request: Request) {
       // ── Business Timeline — emit invoice.created (fire-and-forget) ──
       const cloudOrgId = await resolveOrgForInvoice(request, body, resolvedClientId);
       if (cloudOrgId) {
+        const memberResult = await requireOrgMembership(uid, cloudOrgId);
+        if (memberResult instanceof NextResponse) return memberResult;
         await emitTimelineEvent({
           organizationId: cloudOrgId,
           type: 'invoice.created',
@@ -374,6 +385,8 @@ export async function POST(request: Request) {
     // ── Business Timeline — emit invoice.created (fire-and-forget) ──
     const nativeOrgId = await resolveOrgForInvoice(request, body, clientId);
     if (nativeOrgId) {
+      const memberResult = await requireOrgMembership(uid, nativeOrgId);
+      if (memberResult instanceof NextResponse) return memberResult;
       await emitTimelineEvent({
         organizationId: nativeOrgId,
         type: 'invoice.created',
@@ -396,16 +409,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (error) {
     console.error('POST /api/invoices error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create invoice' },
-      { status: 500 }
-    );
+    return friendlyApiError(error, 'We could not create the invoice right now. Please try again.');
   }
 }
 
 // PATCH /api/invoices — Update an existing invoice
 export async function PATCH(request: Request) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -443,16 +457,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ invoice });
   } catch (error) {
     console.error('PATCH /api/invoices error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update invoice' },
-      { status: 500 }
-    );
+    return friendlyApiError(error, 'We could not update the invoice right now. Please try again.');
   }
 }
 
 // DELETE /api/invoices — Delete an invoice
 export async function DELETE(request: Request) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -475,6 +490,10 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Tenant scope check — verify the invoice belongs to a workspace the caller can access.
+    const memberResult = await requireOrgMembership(uid, existing.client.firmId);
+    if (memberResult instanceof NextResponse) return memberResult;
+
     // Create audit log before deletion
     await db.auditLog.create({
       data: {
@@ -491,9 +510,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/invoices error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete invoice' },
-      { status: 500 }
-    );
+    return friendlyApiError(error, 'We could not delete the invoice right now. Please try again.');
   }
 }

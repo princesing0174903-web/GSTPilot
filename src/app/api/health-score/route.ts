@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { calculateGSTDataQualityScore, validateGSTIN } from '@/lib/gst-utils'
+import { requireAuth, friendlyApiError } from '@/lib/auth/session'
 
 // GET /api/health-score?clientId=X              — Calculate and return health score for a client
 // GET /api/health-score?clientId=X& trend=1     — Also return historical trend (HealthScore records)
@@ -13,6 +14,11 @@ import { calculateGSTDataQualityScore, validateGSTIN } from '@/lib/gst-utils'
 // Returns { clients: [{id, tradeName, gstin, healthScore, state}] } when no params
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const wantTrend = searchParams.get('trend') === '1'
@@ -214,9 +220,6 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error('GET /api/health-score error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to calculate health score' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not calculate the health score right now. Please try again.')
   }
 }

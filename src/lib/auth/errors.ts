@@ -63,10 +63,17 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 
 /**
  * Map of common Firestore error codes → friendly messages.
+ *
+ * IMPORTANT: messages here are shown directly to end users. They must NEVER
+ * say "Permission denied" or "Contact your organization admin" — those phrases
+ * are misleading for the most common case (a brand-new user creating their
+ * FIRST workspace, where the Firestore membership row doesn't exist yet). The
+ * user IS the admin; the rule just can't see that yet. Use neutral, actionable
+ * language instead.
  */
 const FIRESTORE_ERROR_MESSAGES: Record<string, string> = {
-  'permission-denied': "You don't have permission to do this. Contact your organization admin.",
-  'PERMISSION_DENIED': "You don't have permission to do this. Contact your organization admin.",
+  'permission-denied': "We couldn't complete that action right now. Please try again, or contact support if the problem continues.",
+  'PERMISSION_DENIED': "We couldn't complete that action right now. Please try again, or contact support if the problem continues.",
   'unavailable': 'The service is temporarily unavailable. Please try again.',
   'UNAVAILABLE': 'The service is temporarily unavailable. Please try again.',
   'deadline-exceeded': 'The request timed out. Please try again.',
@@ -128,13 +135,24 @@ export function friendlyAuthError(error: unknown): string {
     const name = (error as { name?: string }).name;
     if (name && FIRESTORE_ERROR_MESSAGES[name]) return FIRESTORE_ERROR_MESSAGES[name];
 
-    // Fall back to the message if it's safe (we trust Firebase's user-facing
-    // messages for auth, but treat firestore messages with caution).
+    // ── Leak guard ──
+    // Previously this branch returned the raw `error.message` for any error
+    // with a `code` (i.e. virtually every Firebase error whose code wasn't in
+    // our map). That leaked internal Firebase strings like
+    // "Firebase: Error (auth/internal-error)." to the UI.
+    //
+    // New policy: if the error has a `code`, NEVER surface the raw message —
+    // the user gets the FALLBACK_MESSAGE. The raw message is still logged
+    // server-side / in the console for debugging. Only surface raw messages
+    // for plain `Error` instances with NO code (e.g. app-thrown errors with
+    // intentionally user-facing text).
+    if (code) {
+      return FALLBACK_MESSAGE;
+    }
     const message = (error as { message?: string }).message;
-    if (message && typeof message === 'string' && message.length < 200) {
-      // Only surface the raw message if it doesn't look like an internal
-      // Firebase stack trace.
-      if (!/firebase|firestore/i.test(message) || code) {
+    if (message && typeof message === 'string' && message.length > 0 && message.length < 200) {
+      // No code + short message → safe to surface (app-thrown, intentional).
+      if (!/firebase|firestore/i.test(message)) {
         return message;
       }
     }
@@ -182,5 +200,26 @@ export function isTransientError(error: unknown): boolean {
     code === 'deadline-exceeded' ||
     code === 'DEADLINE_EXCEEDED' ||
     code === 'auth/too-many-requests'
+  );
+}
+
+/**
+ * Returns `true` if the error is a Firestore permission-denied error.
+ *
+ * Callers should use this to trigger a graceful fallback (e.g. switch to local
+ * workspace mode) RATHER than surfacing the error to the user. Permission-denied
+ * on first-org-create is a known false negative (the membership row doesn't
+ * exist yet), and even on subsequent calls it usually means the Firebase project
+ * is in locked-down mode — the user is still valid, they just need a fallback.
+ */
+export function isPermissionError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: string }).code || '';
+  const name = (error as { name?: string }).name || '';
+  return (
+    code === 'permission-denied' ||
+    code === 'PERMISSION_DENIED' ||
+    name === 'permission-denied' ||
+    name === 'PERMISSION_DENIED'
   );
 }

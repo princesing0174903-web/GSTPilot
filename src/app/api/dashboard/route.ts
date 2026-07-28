@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { isOverdue, getFilingDueDate } from '@/lib/gst-utils'
 import { getBusinessSnapshot } from '@/lib/business/snapshot'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma models here (Client / Invoice / GSTRFiling / Issue /
@@ -47,6 +48,11 @@ function emptyDashboard() {
 // GET /api/dashboard — Fetch dashboard metrics (tenant-scoped)
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     // Accept either organizationId (modern) or firmId (legacy) — they are the
     // same tenant identifier in this app's current state.
@@ -56,6 +62,10 @@ export async function GET(request: Request) {
     if (!tenantId) {
       return NextResponse.json(emptyDashboard())
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     // ── 1. Fetch the canonical Business Snapshot ──
     // Provides totalClients (customerCount), totalInvoices (invoiceCount),
@@ -244,9 +254,6 @@ export async function GET(request: Request) {
     return NextResponse.json(dashboard)
   } catch (error) {
     console.error('GET /api/dashboard error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch dashboard metrics' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your dashboard metrics right now. Please try again.')
   }
 }

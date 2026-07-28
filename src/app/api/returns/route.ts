@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
 
 // GET /api/returns — List returns with optional filters
 //
@@ -10,6 +11,11 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 // an empty list when no tenant scope is provided.
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     // Accept either organizationId (modern) or firmId (legacy) — same tenant id.
@@ -22,6 +28,10 @@ export async function GET(request: Request) {
     if (!tenantId) {
       return NextResponse.json({ returns: [] })
     }
+
+    // ── 2. AUTHORIZATION — verify org membership ────────────────────────────
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     const where: Record<string, unknown> = { firmId: tenantId }
     if (clientId) where.clientId = clientId
@@ -45,16 +55,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ returns })
   } catch (error) {
     console.error('GET /api/returns error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch returns' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your returns right now. Please try again.')
   }
 }
 
 // POST /api/returns — Create a new return
 export async function POST(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       firmId,
@@ -70,6 +82,10 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    // ── 2. AUTHORIZATION — verify org membership for the target firmId ──────
+    const memberResult = await requireOrgMembership(uid, firmId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     // Check if a return already exists for this client + returnType + period
     const existing = await db.gSTRFiling.findUnique({
@@ -145,16 +161,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ return: ret }, { status: 201 })
   } catch (error) {
     console.error('POST /api/returns error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create return' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not create the return right now. Please try again.')
   }
 }
 
 // PATCH /api/returns — Update return status
 export async function PATCH(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const { id, status, filedDate, acknowledgmentNumber, filedBy, jsonPayload } = body
 
@@ -172,6 +190,10 @@ export async function PATCH(request: Request) {
     if (!existing) {
       return NextResponse.json({ error: 'Return not found' }, { status: 404 })
     }
+
+    // ── 2. AUTHORIZATION — verify org membership for the return's firmId ────
+    const memberResult = await requireOrgMembership(uid, existing.firmId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     const data: Record<string, unknown> = {}
     if (status !== undefined) data.status = status
@@ -232,9 +254,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ return: ret })
   } catch (error) {
     console.error('PATCH /api/returns error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update return' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the return right now. Please try again.')
   }
 }

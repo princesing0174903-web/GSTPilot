@@ -127,15 +127,47 @@ service cloud.firestore {
     }
 
     // ─── Organization Members ─────────────────────────────────────────────
+
+    // True if the user is the owner of the org doc (per its `ownerId` field).
+    // Used to bootstrap the FIRST membership row, which `isOwnerOrAdmin` cannot
+    // authorize because `isOrgMember` calls `exists()` on the very doc being
+    // created — a chicken-and-egg that previously blocked every brand-new
+    // workspace creation with permission-denied.
+    function isOrgOwnerByDoc(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/organizations/$(orgId))
+        && get(/databases/$(database)/documents/organizations/$(orgId))
+             .data.ownerId == uid();
+    }
+
     match /organization_members/{memberId} {
       // Self-read OR any member of the org can read the full roster.
       allow read: if isSignedIn()
         && (uid() == resource.data.userId
             || isOrgMember(resource.data.organizationId));
 
-      // Owners/admins can create new member rows (invites).
+      // Create rules (two paths):
+      //   1. BOOTSTRAP PATH — the very first membership row for a brand-new
+      //      org. `isOwnerOrAdmin` cannot succeed here (the doc doesn't exist
+      //      yet). Instead we verify:
+      //        • the requester is signed in
+      //        • the org doc exists AND its `ownerId` == uid()
+      //        • the new member doc's id matches `${orgId}_${uid}`
+      //        • the new member's `userId` == uid() (self-membership)
+      //        • the new member's `role` == 'owner' (first member is always owner)
+      //   2. INVITE PATH — owner/admin of an already-populated org invites a
+      //      new member (existing rule, unchanged).
       allow create: if isSignedIn()
-        && isOwnerOrAdmin(request.resource.data.organizationId);
+        && (
+          // Bootstrap path — first member of a new org
+          (
+            isOrgOwnerByDoc(request.resource.data.organizationId)
+            && request.resource.data.userId == uid()
+            && request.resource.data.role == 'owner'
+          )
+          // Invite path — owner/admin of an existing org
+          || isOwnerOrAdmin(request.resource.data.organizationId)
+        );
 
       // Role / status changes are owner/admin only. A member may NOT change
       // their own role (prevents privilege escalation).

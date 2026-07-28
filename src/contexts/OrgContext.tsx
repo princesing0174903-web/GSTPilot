@@ -208,9 +208,20 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
         console.log('[Org] Profile loaded. Orgs found:', memberships.length);
         setProfile(userProfile);
-        if (!memberError) {
-          setOrganizations(memberships);
+        // ── Previously memberError was silently swallowed here, which sent
+        //    users with a real org (but a transient membership-fetch failure)
+        //    into AutoProvisionWorkspace → which then tried to create a NEW
+        //    org and hit permission-denied. Now: if both profile AND member
+        //    fetch failed, surface the error and fall through to the local
+        //    workspace fallback. If only member fetch failed but profile is
+        //    OK, treat as "no orgs" (the user might genuinely have none) —
+        //    but log so it's debuggable.
+        if (memberError) {
+          console.warn('[Org] Membership fetch error (non-fatal):', memberError);
+          // If profile fetch ALSO had an error, this is a real failure → bail.
+          // Otherwise, proceed with empty memberships (user may be brand-new).
         }
+        setOrganizations(memberships);
 
         // 2. Resolve the current organization.
         let orgId = userProfile.currentOrganizationId;

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
 
 /** Resolve orgId for a payment from header, body, or Client.firmId lookup. */
 async function resolveOrgForPayment(
@@ -45,6 +46,11 @@ function parseActorHeader(req: NextRequest): { userId?: string; userName?: strin
 // returns empty (prevents cross-tenant data leak).
 export async function GET(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const partyType = searchParams.get('partyType')
@@ -59,6 +65,13 @@ export async function GET(request: NextRequest) {
       // No tenant scope — return empty rather than leak cross-tenant data
       return NextResponse.json({ payments: [] })
     }
+
+    // ── 2. AUTHORIZATION — when an orgId is available, verify membership ────
+    if (organizationId) {
+      const memberResult = await requireOrgMembership(uid, organizationId)
+      if (memberResult instanceof NextResponse) return memberResult
+    }
+
     if (partyType) where.partyType = partyType
 
     const payments = await db.payment.findMany({
@@ -69,10 +82,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ payments: payments ?? [] })
   } catch (error) {
     console.error('GET /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch payments' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your payments right now. Please try again.')
   }
 }
 
@@ -80,6 +90,11 @@ export async function GET(request: NextRequest) {
 // or purchase bill when one is referenced.
 export async function POST(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       clientId,
@@ -99,6 +114,15 @@ export async function POST(request: NextRequest) {
         { error: 'partyName, partyType, amount, paymentDate and paymentMode are required' },
         { status: 400 }
       )
+    }
+
+    // ── 2. AUTHORIZATION — verify membership when an orgId can be resolved ──
+    // Resolve the orgId early via the existing helper so we can gate the write.
+    // The same orgId is reused below for the timeline emit (no double-resolve).
+    const orgId = await resolveOrgForPayment(request, body)
+    if (orgId) {
+      const memberResult = await requireOrgMembership(uid, orgId)
+      if (memberResult instanceof NextResponse) return memberResult
     }
 
     const paymentAmount = Number(amount) || 0
@@ -204,7 +228,7 @@ export async function POST(request: NextRequest) {
     try { await emitCollectionNode(payment.id) } catch (e) { console.error('[graph] emitCollectionNode failed', e) }
 
     // ── Business Timeline events (fire-and-forget — never break the payment) ──
-    const orgId = await resolveOrgForPayment(request, body)
+    // orgId was resolved above for the membership check; reuse it here.
     if (orgId) {
       const actor = parseActorHeader(request)
       const isCustomerPayment = partyType !== 'vendor'
@@ -260,16 +284,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {
     console.error('POST /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to record payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not record the payment right now. Please try again.')
   }
 }
 
 // PATCH /api/payments?id=XXX — Update a payment (e.g., mark reconciled)
 export async function PATCH(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
@@ -310,16 +336,18 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ payment })
   } catch (error) {
     console.error('PATCH /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the payment right now. Please try again.')
   }
 }
 
 // DELETE /api/payments?id=XXX — Delete a payment
 export async function DELETE(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
@@ -341,9 +369,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete the payment right now. Please try again.')
   }
 }

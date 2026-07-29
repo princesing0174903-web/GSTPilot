@@ -518,7 +518,7 @@ export default function DashboardPage() {
   const { data: returns } = useFireReturns();
   const { events: timelineEvents, loading: timelineLoading } = useTimelineEvents(15);
   const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
-  const { insights: oracleInsights, loading: oracleInsightsLoading } = useOracleInsights();
+  const { insights: oracleInsights } = useOracleInsights();
 
   // ── Loading safety timer (12s) — never let the skeleton hang forever ──
   // The timer is armed while loading; if it fires before loading clears, we
@@ -538,50 +538,12 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [allLoading]);
 
-  if (allLoading && !loadingTimedOut) {
-    return <DashboardSkeleton />;
-  }
-
-  // ── Hard error state (only for non-permission, non-network failures) ──
-  const isPermissionOrNetworkError = (msg: string | null): boolean => {
-    if (!msg) return false;
-    return /permission|insufficient|unauthenticated|not authorized|missing or|network|fetch|failed to fetch|load failed/i.test(msg);
-  };
-  if (snapshotError && !isPermissionOrNetworkError(snapshotError)) {
-    return (
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10">
-        <div className="glass-surface rounded-2xl p-8 text-center border border-rose-500/20">
-          <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 mx-auto mb-4">
-            <AlertTriangle className="h-6 w-6 text-rose-400" />
-          </div>
-          <h3 className="font-semibold text-foreground text-lg">
-            We couldn&apos;t load your dashboard
-          </h3>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
-            Something went wrong while fetching your business data. Please try again.
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-5">
-            <Button onClick={refreshSnapshot} className="accent-gradient text-white hover:opacity-90 gap-1.5">
-              <RefreshCw className="h-4 w-4" />
-              Retry
-            </Button>
-            <Button variant="outline" onClick={() => window.location.reload()} className="gap-1.5">
-              Reload page
-            </Button>
-            <Button variant="ghost" onClick={() => setCurrentView('settings')} className="text-muted-foreground gap-1.5">
-              <LifeBuoy className="h-4 w-4" />
-              Support
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
-  // DERIVED VALUES (all real — no Math.random, no fabricated percentages)
+  // DERIVED HOOKS — all useMemo calls MUST run before any early return.
+  // React Rules of Hooks: hooks cannot be called conditionally or after a
+  // conditional return. We compute every derived value up-front here so the
+  // loading / error early-returns below are safe.
   // ═══════════════════════════════════════════════════════════════════════════
-  const firstName = getFirstName(user?.name);
 
   // ── Health score tier (real, from snapshot.healthScore) ──
   const hasHealthScore = snapshot.healthScore > 0 && snapshot.hasLiveData;
@@ -593,9 +555,6 @@ export default function DashboardPage() {
     if (s >= 50) return { label: 'At Risk', tone: 'amber' as const };
     return { label: 'Critical', tone: 'amber' as const };
   }, [hasHealthScore, snapshot.healthScore]);
-
-  // ── Today's Revenue = current-month invoiced sales (real snapshot field) ──
-  const todaysRevenue = snapshot.revenueThisMonth ?? 0;
 
   // ── Pending GST = net GST liability (output tax − input tax) ──
   const pendingGst = snapshot.gst?.netLiability ?? 0;
@@ -725,6 +684,55 @@ export default function DashboardPage() {
     }
     return n;
   }, [aiRecommendations, oracleInsights]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EARLY RETURNS — safe now because every hook above ran unconditionally.
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (allLoading && !loadingTimedOut) {
+    return <DashboardSkeleton />;
+  }
+
+  // ── Hard error state (only for non-permission, non-network failures) ──
+  const isPermissionOrNetworkError = (msg: string | null): boolean => {
+    if (!msg) return false;
+    return /permission|insufficient|unauthenticated|not authorized|missing or|network|fetch|failed to fetch|load failed/i.test(msg);
+  };
+  if (snapshotError && !isPermissionOrNetworkError(snapshotError)) {
+    return (
+      <div className="relative max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10">
+        <div className="glass-surface rounded-2xl p-8 text-center border border-rose-500/20">
+          <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 mx-auto mb-4">
+            <AlertTriangle className="h-6 w-6 text-rose-400" />
+          </div>
+          <h3 className="font-semibold text-foreground text-lg">
+            We couldn&apos;t load your dashboard
+          </h3>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+            Something went wrong while fetching your business data. Please try again.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-5">
+            <Button onClick={refreshSnapshot} className="accent-gradient text-white hover:opacity-90 gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()} className="gap-1.5">
+              Reload page
+            </Button>
+            <Button variant="ghost" onClick={() => setCurrentView('settings')} className="text-muted-foreground gap-1.5">
+              <LifeBuoy className="h-4 w-4" />
+              Support
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NON-HOOK DERIVED VALUES (safe to compute after the early returns above)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const firstName = getFirstName(user?.name);
+  const todaysRevenue = snapshot.revenueThisMonth ?? 0;
 
   // ── AI recommendation icon mapping ──
   const iconForAIRec = (type: AIRecommendation['type']): LucideIcon => {

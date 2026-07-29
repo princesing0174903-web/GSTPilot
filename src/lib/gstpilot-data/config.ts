@@ -65,6 +65,26 @@ export function isSyntheticOrgId(
 }
 
 /**
+ * Returns true when the gstpilot-data Firestore hooks should short-circuit
+ * to an empty result (no subscription, no permission-denied error).
+ *
+ * True when:
+ *   - the app is running in preview mode (no real Firestore backing), OR
+ *   - the org id is null/empty, OR
+ *   - the org id is synthetic (preview-org, demo, …) or local- (client-only).
+ *
+ * Used by every `useGSTpilot*` hook as the single guard before subscribing.
+ */
+export function shouldSkipFirestore(
+  organizationId: string | null | undefined,
+  isPreviewMode: boolean,
+): boolean {
+  if (isPreviewMode) return true;
+  if (!organizationId) return true;
+  return isSyntheticOrgId(organizationId);
+}
+
+/**
  * Build the Firestore collection path for a given org's subcollection.
  *
  *   organizations/{organizationId}/{subcollection}

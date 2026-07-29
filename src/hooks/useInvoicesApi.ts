@@ -18,6 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Types (mirror the Prisma Invoice model) ─────────────────────────────────
 
@@ -115,9 +116,10 @@ export function useInvoicesApi(): UseInvoicesApiResult {
 
     (async () => {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `/api/invoices?cloud=true&organizationId=${encodeURIComponent(orgId)}`,
           { cache: 'no-store' },
+          { timeoutMs: 20_000, retries: 1 },
         );
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
@@ -153,11 +155,15 @@ export function useInvoicesApi(): UseInvoicesApiResult {
       }
       setSaving(true);
       try {
-        const res = await fetch('/api/invoices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        const res = await fetchWithTimeout(
+          '/api/invoices',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          },
+          { timeoutMs: 20_000, retries: 1 },
+        );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `HTTP ${res.status}`);
@@ -195,11 +201,15 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         list.map((inv) => (inv.id === id ? { ...inv, ...patch } as ApiInvoice : inv)),
       );
       try {
-        const res = await fetch('/api/invoices', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, ...patch }),
-        });
+        const res = await fetchWithTimeout(
+          '/api/invoices',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...patch }),
+          },
+          { timeoutMs: 20_000, retries: 1 },
+        );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `HTTP ${res.status}`);
@@ -244,9 +254,10 @@ export function useInvoicesApi(): UseInvoicesApiResult {
       // Optimistic: remove immediately.
       setInvoices((list) => list.filter((inv) => inv.id !== id));
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `/api/invoices?id=${encodeURIComponent(id)}`,
           { method: 'DELETE' },
+          { timeoutMs: 20_000, retries: 1 },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
+import { fetchWithTimeout } from '@/lib/async';
 
 export interface ApiClient {
   id: string;
@@ -59,9 +60,10 @@ export function useClientsApi(): UseClientsApiResult {
 
     (async () => {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `/api/clients?organizationId=${encodeURIComponent(orgId)}`,
           { cache: 'no-store' },
+          { timeoutMs: 20_000, retries: 1 },
         );
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);

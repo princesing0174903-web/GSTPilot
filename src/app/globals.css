@@ -1687,3 +1687,23 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Premium Skeleton Shimmer — used by ClientRegistryPage + future premium tables.
+   Renders a soft, slow left-to-right sweep over the skeleton block, so loading
+   rows feel alive without distracting from the layout. Never use indigo/blue.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@keyframes gstpilot-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  background-size: 200% 100%;
+  animation: gstpilot-shimmer 1.8s ease-in-out infinite;
+}

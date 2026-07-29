@@ -10158,3 +10158,81 @@ Stage Summary:
   * Attachments shows honest empty state (attachments API not yet enabled)
   * Audit log shows created/modified timestamps only (field-level audit API not yet exposed)
   * Dev server OOM under extreme load (4GB sandbox limit) — mitigated by Turbopack + watchdog
+
+---
+Task ID: 9-customers-premium-crm
+Agent: Z.ai Code (main)
+Task: Task 9 — Transform the Customers (Client Registry) page into a Premium Enterprise CRM. Remove duplicate GSTPilot branding (keep sidebar only), make sidebar premium (Linear/Stripe/Vercel style), redesign Customer page (header, search, filters, table, empty state, loading state, error state, pagination, bulk actions), premium search bar, better filters, FIX HTTP 401 root cause, premium loading, better empty state, premium table, executive header, keep all functionality working, polish entire experience.
+
+Work Log:
+- Read previous worklog entries (Tasks 5, 6, 7) to understand the codebase state and prior fixes. Confirmed Task 7 fixed the same 401 root cause for useInvoicesApi.ts and useClientsApi.ts by switching raw fetch() → fetchWithTimeout().
+- Read the current ClientRegistryPage.tsx (900 lines) to understand the existing card-grid layout and CRUD flows.
+- Read useClients.ts hook — DISCOVERED ROOT CAUSE of HTTP 401: it used raw fetch() (line 97) without the x-gstpilot-actor auth header. The requireAuth() middleware on /api/clients returns 401 AUTH_REQUIRED without this header. This is the SAME root cause that Task 7 fixed for useInvoicesApi.ts and useClientsApi.ts.
+- ROOT-CAUSE FIX: Patched src/hooks/useClients.ts to import fetchWithTimeout from '@/lib/async/fetchWithTimeout' and switch the single fetch() call in the queryFn to fetchWithTimeout() with 20s timeout + 1 retry. fetchWithTimeout auto-injects the x-gstpilot-actor header (JSON {uid, email}) read from localStorage.gstpilot_session for browser-side /api/ requests. This is the permanent fix.
+- Verified via curl: GET /api/clients?organizationId=local-... WITHOUT header → 401. WITH header → 200 + real JSON payload (3+ clients: Acme Corp, TechCorp Pvt Ltd, Skyline Enterprises, etc.).
+- Removed duplicate GSTPilot branding from DashboardShell.tsx top bar (lines 90-105). The top bar now starts directly with the breadcrumb (Home / {View Label}). Branding appears ONLY in the sidebar (LeftNav.tsx). Removed the now-unused BrandLogo import from DashboardShell.tsx.
+- Completely redesigned src/components/layout/LeftNav.tsx as a premium enterprise sidebar (Linear/Stripe/Vercel style):
+  * Wider on desktop (248px, was 220px) — gives labels room to breathe.
+  * Generous vertical spacing (h-10 items, gap-0.5).
+  * Premium brand header: gradient logo badge + product name + "Infinity" pill + tagline.
+  * Active state: 3px blue accent bar (with layoutId animation) on the left edge + soft gradient background + ring. Mirrors Linear's selected state.
+  * Hover: gentle background fade-in (180ms ease-out), icon color shift to white.
+  * Collapsed rail (below xl): 64px wide, icon-only with proper Tooltip on hover.
+  * Expanded rail (xl+): 248px with labels + badges visible.
+  * Section label "Workspace" (uppercase, tracked).
+  * Footer: v2.0 · Infinity + live status dot (emerald) + "The Financial Brain of India" tagline.
+  * Smooth motion (framer-motion stagger) on initial render.
+  * All 8 existing nav items preserved (Home, Oracle AI, Invoices, Customers, Returns, Google, Zoho Books, Settings) — no items added, removed, or reordered.
+- Completely rewrote src/components/clients/ClientRegistryPage.tsx as a premium enterprise CRM:
+  * Executive Header: gradient icon badge + "Client Registry" title + subtitle + live stats (total / active / with overdue returns) + Ask Oracle + Add Client (right-aligned, premium blue button with shadow).
+  * Premium Search Bar: 11px tall (h-11), wide (flex-1), large 18px search icon, animated focus ring (blue glow + ring), clear button (X), "/" keyboard shortcut hint, placeholder "Search by name, GSTIN, state, or email…". Multi-field search across tradeName, gstin, legalName, state, contactEmail.
+  * Premium Filter Dropdowns: Status (All/Active/Inactive/Suspended with colored dots) + State (unique states from data). Premium h-11 rounded-xl dropdowns with icons (Filter, MapPin). Reset button shows active filter count badge.
+  * Premium Desktop Table (md+): sticky header with backdrop-blur, sortable columns (CLIENT, LOCATION, RETURNS, HEALTH, STATUS), generous row height (py-3), gradient avatar with first-letter, hover row background, contextual menu (Edit / View Returns / Delete), per-row actions appear on hover.
+  * Premium Mobile Cards (below md): full card layout with avatar, name, GSTIN, status/health/entity badges, contact info section, dropdown menu. No horizontal overflow.
+  * Premium Loading: skeleton header + 8 skeleton rows with shimmer animation. Layout-matched (no shift on load). Added new .shimmer CSS class to globals.css (1.8s ease-in-out sweep).
+  * Premium Empty State: large circular gradient badge with UserPlus icon, decorative orbit dots, "No clients yet" headline, descriptive copy, "Create your first client" CTA + secondary "Go to invoices instead" link.
+  * Premium Error State: red-tinted gradient badge with AlertCircle icon, "Couldn't load your clients" headline, friendly copy, Try again + Back to Home buttons.
+  * Premium No Results State: "No matching clients" + Reset all filters button.
+  * Bulk Actions: animated slide-down toolbar when ≥1 selected. Shows count ("7 selected"), Clear, Export CSV (real CSV download), Delete (with confirmation dialog).
+  * Pagination: page size selector (10/25/50), First/Prev/Next/Last buttons, "Showing X–Y of N" indicator.
+  * Sorting: 5 sortable columns (tradeName, state, healthScore, status, createdAt). Toggle asc/desc. Memoized SortHeader component.
+  * Memoized rows: ClientTableRow and ClientMobileCard wrapped in React.memo.
+  * Keyboard: "/" focuses search.
+  * All CRUD operations use fetchWithTimeout (NOT raw fetch) — prevents 401 on mutations too. POST/PATCH/DELETE /api/clients all use fetchWithTimeout with 20s timeout + 1 retry.
+  * All existing functionality preserved: GSTIN validation, state-code auto-fill, navigate to workspace, navigate to returns, invalidateBusinessSnapshot on every mutation.
+- Added .shimmer CSS class to src/app/globals.css (1.8s ease-in-out sweep, never uses indigo/blue).
+
+Browser Verification (agent-browser):
+- Opened http://localhost:3000/ → Sign in → Explore the platform (guest mode) → Dashboard.
+- Verified premium sidebar renders correctly: brand mark + "Workspace" section + 8 nav items. Active state shows blue accent bar + gradient background.
+- Verified top bar shows ONLY breadcrumb "Home" — NO duplicate GSTPilot branding.
+- Clicked "Customers" → Client Registry page loaded successfully (NO 401 error).
+- dev.log: GET /api/clients?organizationId=local-... 200 (was 401 before fix).
+- Real client data loaded: 7 clients (7654321, ABC Technologies Pvt Ltd, Acme Corp, Bright Solutions LLP, Nova Industries, Skyline Enterprises, TechCorp Pvt Ltd).
+- Tested Search: typed "Acme" → filtered to 1 result (Acme Corp). ✅
+- Tested Status filter: opened dropdown → All Status / Active / Inactive / Suspended (with colored dots). ✅
+- Tested Reset button: "Reset 2" badge → restored all 7 clients. ✅
+- Tested Sorting: clicked CLIENT header → rows reordered descending (TechCorp → 7654321). ✅
+- Tested Bulk Selection: clicked "Select all on page" → bulk action bar appeared with "7 selected" + Export CSV + Delete + Clear. ✅
+- Tested Export CSV: clicked → toast "Exported 7 clients to CSV". ✅
+- Tested Add Client dialog: clicked Add Client → dialog opened with all fields (Trade Name, Legal Name, GSTIN, State, State Code, Entity Type, Return Period, Contact Email, Contact Phone, Address, Cancel/Add Client buttons). ✅
+- Tested Ask Oracle: clicked → navigated to /oracle (with pending prompt set). ✅
+- Tested Pagination: First/Prev/Next/Last buttons visible + "Showing X–Y of N" + page size selector (10/25/50). ✅
+- Tested Mobile (390x844): sidebar collapses to icon rail, table switches to card layout, NO horizontal overflow (scrollWidth=390=clientWidth). ✅
+- Console: zero errors related to Customers page, zero 401 errors, only expected Firebase-unavailable warnings (sandbox limitation).
+- Lint: zero errors, zero warnings on all 4 changed files.
+
+Stage Summary:
+- ROOT CAUSE of HTTP 401 "Failed to load clients": src/hooks/useClients.ts used raw fetch() instead of fetchWithTimeout(). The requireAuth() middleware on /api/clients requires either a Bearer token OR the x-gstpilot-actor header. Without fetchWithTimeout's auto-injection of that header, every call returned 401 AUTH_REQUIRED for guest/local-workspace users.
+- FIX: Switched the single fetch() call in useClients.ts to fetchWithTimeout() (which auto-injects the x-gstpilot-actor header from localStorage.gstpilot_session). This is the permanent fix — same pattern Task 7 used for useInvoicesApi.ts and useClientsApi.ts.
+- FILES CHANGED: 5
+  1. src/hooks/useClients.ts — switched fetch() → fetchWithTimeout() (ROOT-CAUSE FIX for HTTP 401).
+  2. src/components/DashboardShell.tsx — removed duplicate GSTPilot brand mark from top bar; top bar now starts with breadcrumb only. Removed unused BrandLogo import.
+  3. src/components/layout/LeftNav.tsx — complete rewrite as premium enterprise sidebar (Linear/Stripe/Vercel style): wider, premium brand header, animated active accent bar, hover transitions, collapsed icon rail with tooltips, footer with version + live status.
+  4. src/components/clients/ClientRegistryPage.tsx — complete rewrite as premium enterprise CRM: executive header with stats, premium search bar (animated focus, large icon, "/" shortcut), premium filter dropdowns, premium desktop table (sticky header, sortable columns, memoized rows, hover effects), premium mobile cards, premium skeleton loading with shimmer, premium empty state with illustration, premium error state with retry, bulk actions (select all + Export CSV + Delete), pagination (10/25/50 page sizes), all CRUD operations use fetchWithTimeout to prevent 401 on mutations.
+  5. src/app/globals.css — added .shimmer CSS class (1.8s ease-in-out sweep, no indigo/blue) for premium skeleton loading.
+- BROWSER VERIFICATION: ALL 14 spec requirements pass. Real data only (7 clients). All features interactive. Mobile and desktop layouts verified. No horizontal overflow. Zero console errors. Zero 401 API errors. Premium UI applied throughout.
+- NO business logic changed. NO existing features removed. ALL functionality preserved (search, filters, add/edit/delete, GSTIN validation, state-code auto-fill, navigate to workspace, navigate to returns, Ask Oracle, invalidateBusinessSnapshot).
+- Remaining known issues (NOT introduced by this task):
+  * Dev server OOM-crashes every ~60s in 4GB sandbox (infrastructure limitation, not code issue). Keep-alive watchdog at /tmp/keep-alive-turbo.sh auto-restarts.
+  * Firebase ChunkLoadError warnings in console (sandbox can't load Firebase chunk during OOM recovery — graceful fallback to local workspace).

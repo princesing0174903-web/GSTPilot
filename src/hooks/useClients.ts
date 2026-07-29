@@ -39,6 +39,22 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
+import { fetchWithTimeout } from '@/lib/async/fetchWithTimeout';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROOT-CAUSE FIX (Task 9 — "Failed to load clients (HTTP 401)"):
+// Previously this hook called raw `fetch()`. The `requireAuth()` middleware on
+// `/api/clients` requires either a Bearer token OR the `x-gstpilot-actor`
+// header (sandbox/preview fallback). Without that header, every call returned
+// 401 AUTH_REQUIRED and the Customers page showed "Failed to load clients".
+//
+// `fetchWithTimeout` auto-injects the `x-gstpilot-actor` header for browser-side
+// `/api/` requests by reading `localStorage.gstpilot_session` (set by AuthContext).
+// Switching the single `fetch()` call below to `fetchWithTimeout()` permanently
+// fixes the 401 for guest/local-workspace users.
+//
+// Bonus: 20s timeout + 1 retry on transient (5xx/network) errors.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /** Subset of the Prisma `Client` model returned by GET /api/clients. */
 export interface ClientOption {
@@ -94,9 +110,12 @@ export function useClients(): UseClientsResult {
     // "Loading…" state we want dropdowns to render.
     queryFn: async ({ signal }) => {
       if (!orgId) return [] as ClientOption[];
-      const res = await fetch(
+      // Use fetchWithTimeout so the `x-gstpilot-actor` header is auto-injected
+      // (fixes HTTP 401 AUTH_REQUIRED for guest/local-workspace users).
+      const res = await fetchWithTimeout(
         `/api/clients?organizationId=${encodeURIComponent(orgId)}`,
         { signal },
+        { timeoutMs: 20_000, retries: 1 },
       );
       if (!res.ok) {
         throw new Error(`Failed to load clients (HTTP ${res.status})`);

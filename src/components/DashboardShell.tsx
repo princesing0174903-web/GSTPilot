@@ -41,7 +41,9 @@ import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 // NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
 // experience at /oracle, launched by <OracleLauncher /> (mounted globally in
 // providers.tsx). No more docked sidebar popup.
-import { BrandLogo } from '@/components/brand'
+// NOTE (Task 9): BrandLogo import removed — the duplicate brand mark that
+// lived in the top bar has been removed. Branding now lives ONLY in the
+// sidebar (LeftNav.tsx), so the content area starts with the breadcrumb.
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import CommandPalette from '@/components/command-palette/CommandPalette'
 import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
@@ -87,39 +89,28 @@ export function DashboardContent() {
 
       {/* ═══ TOP BAR ═══ */}
       <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[#1F1F1F] bg-[#000000] px-4 md:px-6">
-        {/* Brand + subtitle — official GSTPilot winged logo */}
-        <button
-          onClick={() => setCurrentView('dashboard')}
-          className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
-          aria-label="GSTPilot Infinity — Home"
-        >
-          <BrandLogo variant="icon" theme="dark" size={28} animated={false} disableGlow />
-          <div className="hidden flex-col items-start leading-none sm:flex">
-            <span className="text-sm font-semibold tracking-tight text-foreground">
-              GSTPilot Infinity<span className="accent-text">™</span>
-            </span>
-            <span className="text-[10px] font-medium text-muted-foreground">
-              The Financial Brain of India
-            </span>
-          </div>
-        </button>
-
-        {/* Breadcrumb — shows current view location */}
-        {currentView !== 'dashboard' && (
-          <div className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
-            <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
-            <button
-              onClick={() => setCurrentView('dashboard')}
-              className="transition-colors hover:text-foreground"
-            >
-              Home
-            </button>
-            <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
-            <span className="font-medium text-foreground">
-              {getViewMeta(currentView).label}
-            </span>
-          </div>
-        )}
+        {/* Breadcrumb — content area starts directly here.
+            NOTE (Task 9): The duplicate GSTPilot brand mark that used to live
+            in the top bar has been removed. Branding now appears ONLY inside
+            the sidebar (LeftNav.tsx), so the content area begins cleanly with
+            the breadcrumb. On the dashboard view the breadcrumb shows just
+            "Home"; on sub-pages it shows "Home / {View Label}". */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground"
+          >
+            Home
+          </button>
+          {currentView !== 'dashboard' && (
+            <>
+              <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
+              <span className="rounded-md px-1.5 py-1 font-medium text-foreground">
+                {getViewMeta(currentView).label}
+              </span>
+            </>
+          )}
+        </div>
 
         {/* Right cluster: Search · Notifications · Theme · Profile */}
         <div className="ml-auto flex items-center gap-1.5">

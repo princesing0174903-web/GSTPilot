@@ -33,7 +33,7 @@
 //   widgets. When a value is 0, we show 0 with an honest subtitle.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +81,54 @@ import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
 import type { TimelineEvent } from '@/lib/timeline/emit';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LAZY BELOW-THE-FOLD — defers mounting of below-the-fold sections until the
+// user scrolls near them. Prevents expensive initial render of Action Center,
+// AI Recommendations, and Recent Activity when the user first lands on the
+// dashboard (they only see the Hero + Oracle + Snapshot above the fold).
+// ═══════════════════════════════════════════════════════════════════════════════
+function useInView(rootMargin = '400px 0px'): { ref: React.RefCallback<HTMLDivElement>; inView: boolean } {
+  const [inView, setInView] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (node && !inView) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setInView(true);
+            observerRef.current?.disconnect();
+            observerRef.current = null;
+          }
+        },
+        { rootMargin },
+      );
+      observerRef.current.observe(node);
+    }
+  }, [inView, rootMargin]);
+
+  useEffect(() => {
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, []);
+
+  return { ref, inView };
+}
+
+function LazySection({ children, placeholderHeight = 320 }: { children: (inView: boolean) => React.ReactNode; placeholderHeight?: number }) {
+  const { ref, inView } = useInView();
+  return (
+    <div ref={ref} style={{ minHeight: inView ? undefined : placeholderHeight }}>
+      {children(inView)}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORMATTERS
@@ -660,30 +708,23 @@ export default function DashboardPage() {
       });
     }
 
-    // 6. Bank reconciliation pending (when bank connected but unreconciled)
-    if (snapshot.hasLiveData && snapshot.bankBalance > 0 && metrics.criticalIssues === 0) {
-      items.push({
-        id: 'bank-reconcile',
-        icon: Landmark,
-        tone: 'blue',
-        title: 'Bank reconciliation up to date',
-        detail: `${abbreviateINR(snapshot.bankBalance)} bank balance · all transactions matched`,
-        view: 'banking',
-      });
-    }
+    // NOTE: "Bank reconciliation up to date" was previously shown here as a
+    // pseudo-action. Removed — it was a status, not an action, and added
+    // noise to the Action Center. Real actions only now.
 
     return items;
   }, [returns, snapshot, metrics, pendingGst]);
 
-  // ── Oracle insight count (real — from AI recs + Oracle insights + actions) ──
-  const oracleInsightCount = useMemo(() => {
-    let n = aiRecommendations.length;
-    if (oracleInsights) {
-      n += oracleInsights.aiAlerts?.length ?? 0;
-      n += oracleInsights.risks?.length ?? 0;
-    }
-    return n;
+  // ── Oracle breakdown (real — from AI recs + Oracle insights + actions) ──
+  // Three honest counts shown on the Oracle widget: insights, risks, actions.
+  const oracleBreakdown = useMemo(() => {
+    const insightCount = oracleInsights?.aiAlerts?.length ?? 0;
+    const riskCount = oracleInsights?.risks?.length ?? 0;
+    const actionCount = aiRecommendations.length;
+    const total = insightCount + riskCount + actionCount;
+    return { insightCount, riskCount, actionCount, total };
   }, [aiRecommendations, oracleInsights]);
+  const oracleInsightCount = oracleBreakdown.total;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // EARLY RETURNS — safe now because every hook above ran unconditionally.
@@ -758,14 +799,8 @@ export default function DashboardPage() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10">
-      {/* Ambient radial glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] z-0 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
-      />
-
-      <div className="relative z-10 space-y-10 md:space-y-12">
+    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+      <div className="relative z-10 space-y-6 md:space-y-8">
         {/* ════════════════════════════════════════════════════════════════════
             SECTION 1 — HERO
             Greeting + 3 hero stats (Health Score, Today's Revenue, Pending GST)
@@ -777,42 +812,56 @@ export default function DashboardPage() {
           transition={{ duration: 0.5, ease: 'easeOut' as const }}
           className="space-y-6"
         >
-          {/* Greeting */}
-          <div className="space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              {getGreeting()},{' '}
-              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                {firstName}
-              </span>
-            </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {snapshot.hasLiveData
-                ? `Here's your business at a glance — ${abbreviateINR(snapshot.revenue)} revenue this FY, ${snapshot.customers} client${snapshot.customers === 1 ? '' : 's'}, ${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'}.`
-                : 'Your workspace is ready. Connect Google or Zoho Books, or create your first invoice to see live business data here.'}
-            </p>
+          {/* Greeting — single line, no redundant summary (tiles below show the numbers) */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="space-y-1.5">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                {getGreeting()},{' '}
+                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  {firstName}
+                </span>
+              </h1>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {snapshot.hasLiveData
+                  ? `${actionItems.length > 0 ? `${actionItems.length} action${actionItems.length === 1 ? '' : 's'} pending` : 'You\'re all caught up'} · ${abbreviateINR(snapshot.bankBalance)} cash on hand`
+                  : 'Your workspace is ready — create your first invoice to see live business data here.'}
+              </p>
+            </div>
+            {/* Health Score badge — moved out of hero stats into a compact pill */}
+            {hasHealthScore && healthTier && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-surface shrink-0">
+                <Brain className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-xs font-medium text-muted-foreground">Health</span>
+                <span className="text-sm font-bold text-foreground tabular-nums">{snapshot.healthScore}</span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
+                  {healthTier.label}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* 3 Hero Stats */}
+          {/* 3 Hero Stats — EXECUTIVE PRIORITY ORDER:
+              1. Cash Position  → "How much money do I have?"
+              2. This Month's Revenue → revenue performance
+              3. Pending GST → compliance status
+              No per-stat CTAs (they duplicated the quick-action buttons below). */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Business Health Score */}
+            {/* 1. Cash Position — bank balance + net cash flow */}
             <HeroStat
               index={0}
-              label="Business Health Score"
-              numericValue={hasHealthScore ? snapshot.healthScore : undefined}
-              valueString={hasHealthScore ? undefined : '—'}
-              numericFormat="integer"
+              label="Cash Position"
+              numericValue={snapshot.bankBalance}
+              numericFormat="currencyCompact"
               subtitle={
-                hasHealthScore
-                  ? `${snapshot.healthScoreFactors?.length ?? 0} factors · auto-calculated from your real financials`
-                  : 'Connect integrations or create invoices to generate your health score'
+                snapshot.bankBalance > 0
+                  ? `Bank balance · ${snapshot.netCashFlow >= 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net flow this FY`
+                  : 'Connect your bank account to see live cash position'
               }
-              icon={<Brain className="h-4 w-4 text-emerald-400" />}
+              icon={<Wallet className="h-4 w-4 text-emerald-400" />}
               accent="emerald"
-              badge={healthTier ? { label: healthTier.label, tone: healthTier.tone } : undefined}
-              cta={!hasHealthScore ? { label: 'Connect data', onClick: () => setCurrentView('google-workspace') } : undefined}
             />
 
-            {/* Today's Revenue (current month) */}
+            {/* 2. This Month's Revenue */}
             <HeroStat
               index={1}
               label="This Month's Revenue"
@@ -821,11 +870,10 @@ export default function DashboardPage() {
               subtitle={
                 todaysRevenue > 0
                   ? `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} issued · FY total ${abbreviateINR(snapshot.revenue)}`
-                  : 'No invoices issued this month · create one to start tracking revenue'
+                  : 'No invoices issued this month yet'
               }
               icon={<IndianRupee className="h-4 w-4 text-blue-400" />}
               accent="blue"
-              cta={todaysRevenue === 0 ? { label: 'Create invoice', onClick: () => setCurrentView('invoices') } : undefined}
             >
               {todaysRevenue > 0 && revenueMom.direction !== 'flat' && (
                 <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${revenueMom.direction === 'up' ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -835,7 +883,7 @@ export default function DashboardPage() {
               )}
             </HeroStat>
 
-            {/* Pending GST */}
+            {/* 3. Pending GST */}
             <HeroStat
               index={2}
               label="Pending GST"
@@ -848,16 +896,15 @@ export default function DashboardPage() {
               }
               icon={<Receipt className="h-4 w-4 text-amber-400" />}
               accent="amber"
-              cta={pendingGst === 0 ? { label: 'Create return', onClick: () => setCurrentView('returns') } : undefined}
             />
           </div>
 
-          {/* 3 Quick Actions — only the most important */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Primary Quick Actions — ONE entry point per feature, no duplication */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button
               size="sm"
               onClick={() => setCurrentView('invoices')}
-              className="gap-2 accent-gradient text-white px-5 py-2.5 shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+              className="gap-2 accent-gradient text-white px-4 py-2 shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-white/20">
                 <FileText className="h-3.5 w-3.5 text-white" />
@@ -890,62 +937,89 @@ export default function DashboardPage() {
         </motion.section>
 
         {/* ════════════════════════════════════════════════════════════════════
-            SECTION 2 — ORACLE AI (single built-in assistant card)
-            No "Activate" buttons, no duplicate Oracle CTAs.
+            SECTION 2 — ORACLE AI WIDGET
+            Structured breakdown: insights · risks · recommended actions.
+            Single "Open Oracle" button — no duplicate CTAs.
         ════════════════════════════════════════════════════════════════════ */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.1, ease: 'easeOut' as const }}
         >
-          <button
-            type="button"
-            onClick={() => router.push('/oracle')}
-            className="group relative w-full text-left rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
-          >
+          <div className="relative glass-surface rounded-2xl p-5 md:p-6 border-amber-500/15 overflow-hidden">
             <div
               aria-hidden
-              className="absolute inset-0 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.05] via-transparent to-transparent pointer-events-none transition-colors group-hover:border-amber-500/35"
+              className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-amber-500/[0.06] blur-3xl"
             />
-            <div className="relative glass-surface rounded-2xl p-5 md:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div className="relative flex items-center justify-center h-11 w-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_-4px_rgba(245,158,11,0.55)] shrink-0">
-                    <Brain className="h-5 w-5 text-white" />
-                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border border-background" />
+            <div className="relative flex flex-col lg:flex-row lg:items-center gap-5">
+              {/* Left: brand + status */}
+              <div className="flex items-start gap-3.5 min-w-0 lg:min-w-[280px] shrink-0">
+                <div className="relative flex items-center justify-center h-11 w-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_-4px_rgba(245,158,11,0.55)] shrink-0">
+                  <Brain className="h-5 w-5 text-white" />
+                  <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border border-background" />
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold text-foreground tracking-tight">
+                      Oracle AI
+                    </h2>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+                      <span className="h-1 w-1 rounded-full bg-amber-400 animate-pulse" />
+                      Built-in
                     </span>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base font-semibold text-foreground tracking-tight">
-                        Oracle AI
-                      </h2>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
-                        <span className="h-1 w-1 rounded-full bg-amber-400 animate-pulse" />
-                        Built-in
-                      </span>
-                    </div>
-                    <p className="text-sm text-foreground/90 mt-1 leading-relaxed">
-                      {oracleInsightCount > 0
-                        ? `${getGreeting()}. I found ${oracleInsightCount} important financial insight${oracleInsightCount === 1 ? '' : 's'} today.`
-                        : `${getGreeting()}. Your workspace is ready — ask me anything about your clients, returns, or compliance.`}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {oracleInsights
-                        ? 'Insights auto-refresh from your live business data.'
-                        : 'Insights get richer as you connect Google, Zoho Books, and create invoices.'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-sm font-medium text-amber-400 shrink-0 transition-transform group-hover:translate-x-0.5">
-                  View Insights
-                  <ArrowRight className="h-4 w-4" />
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    {oracleBreakdown.total > 0
+                      ? 'Live analysis from your business data.'
+                      : 'Insights appear as you create invoices and connect integrations.'}
+                  </p>
                 </div>
               </div>
+
+              {/* Middle: three metric pills */}
+              <div className="grid grid-cols-3 gap-3 flex-1 min-w-0">
+                <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-amber-400" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Insights</span>
+                  </div>
+                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.insightCount}</p>
+                  <p className="text-[10px] text-muted-foreground">financial alerts</p>
+                </div>
+                <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] px-3 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 text-rose-400" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Risks</span>
+                  </div>
+                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.riskCount}</p>
+                  <p className="text-[10px] text-muted-foreground">detected</p>
+                </div>
+                <div className="rounded-xl border border-blue-500/15 bg-blue-500/[0.04] px-3 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="h-3 w-3 text-blue-400" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</span>
+                  </div>
+                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.actionCount}</p>
+                  <p className="text-[10px] text-muted-foreground">recommended</p>
+                </div>
+              </div>
+
+              {/* Right: single Open Oracle CTA */}
+              <div className="shrink-0">
+                <Button
+                  onClick={() => router.push('/oracle')}
+                  className="gap-2 bg-gradient-to-br from-amber-400 to-amber-600 text-white border-0 hover:opacity-90 px-4 py-2 w-full lg:w-auto"
+                >
+                  <Brain className="h-3.5 w-3.5" />
+                  Open Oracle
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-          </button>
+          </div>
         </motion.section>
 
         {/* ════════════════════════════════════════════════════════════════════
@@ -1043,8 +1117,10 @@ export default function DashboardPage() {
 
         {/* ════════════════════════════════════════════════════════════════════
             SECTION 4 — ACTION CENTER + SECTION 5 — AI RECOMMENDATIONS
-            (side by side on desktop)
+            (side by side on desktop, lazy-loaded when scrolled into view)
         ════════════════════════════════════════════════════════════════════ */}
+        <LazySection placeholderHeight={380}>
+          {(inView) => inView ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* SECTION 4 — ACTION CENTER */}
           <motion.section
@@ -1161,12 +1237,25 @@ export default function DashboardPage() {
             )}
           </motion.section>
         </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+                <ProSkeleton className="h-8 w-32" />
+              </div>
+              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+                <ProSkeleton className="h-8 w-32" />
+              </div>
+            </div>
+          )}
+        </LazySection>
 
         {/* ════════════════════════════════════════════════════════════════════
-            SECTION 6 — RECENT ACTIVITY
+            SECTION 6 — RECENT ACTIVITY (lazy-loaded when scrolled into view)
             A single chronological feed of every business event: invoices,
             returns, payments, bank sync, Zoho sync, Google Drive.
         ════════════════════════════════════════════════════════════════════ */}
+        <LazySection placeholderHeight={360}>
+          {(inView) => inView ? (
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1256,6 +1345,12 @@ export default function DashboardPage() {
             </ScrollArea>
           )}
         </motion.section>
+          ) : (
+            <div className="glass-surface rounded-2xl p-5 md:p-6 h-[360px] flex items-center justify-center">
+              <ProSkeleton className="h-8 w-32" />
+            </div>
+          )}
+        </LazySection>
       </div>
     </div>
   );

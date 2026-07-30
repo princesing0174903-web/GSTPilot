@@ -570,15 +570,18 @@ export default function DashboardViews({ view }: { view: string }) {
   // The deleted 'connections' view must never render — redirect to Google.
   const safeView = view === 'connections' ? 'google-workspace' : view;
 
-  // If this is a REAL working view, render its component.
-  if (REAL_VIEWS.has(safeView)) {
-    const Component = VIEW_COMPONENTS[safeView];
-    if (Component) return <Component />;
+  // ── Render the component for ANY view that has a real implementation ──
+  // Every entry in VIEW_COMPONENTS points to a genuine, dynamic-imported
+  // component file. If a view has a component, render it — NEVER show a
+  // placeholder for a view that has a real implementation. This eliminates
+  // the bug where 80+ real modules showed "on the roadmap" placeholders
+  // simply because they weren't listed in a separate REAL_VIEWS set.
+  const Component = VIEW_COMPONENTS[safeView];
+  if (Component) {
+    return <Component />;
   }
 
-  // Everything else → ONE premium FeaturePlaceholder page.
-  // This replaces 60+ inconsistent "Coming Soon" pages with a single,
-  // beautiful, honest "on the roadmap" page.
+  // Only views WITHOUT a component implementation get the placeholder.
   const meta = PLACEHOLDER_META[safeView];
   if (meta) {
     return (

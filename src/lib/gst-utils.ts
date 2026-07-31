@@ -148,6 +148,46 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat('en-IN').format(num);
 }
 
+/**
+ * Format an ISO date string (YYYY-MM-DD or full ISO) as DD MMM YYYY.
+ * Returns '—' if the input is empty/invalid.
+ */
+export function formatDate(input: string | Date | null | undefined): string {
+  if (!input) return '—';
+  try {
+    const d = typeof input === 'string' ? new Date(input) : input;
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(d);
+  } catch {
+    return '—';
+  }
+}
+
+/**
+ * Format an ISO date string as DD MMM YYYY HH:MM (for timestamps).
+ */
+export function formatDateTime(input: string | Date | null | undefined): string {
+  if (!input) return '—';
+  try {
+    const d = typeof input === 'string' ? new Date(input) : input;
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d);
+  } catch {
+    return '—';
+  }
+}
+
 export function generateMismatchExplanation(mismatches: string[]): string {
   if (mismatches.length === 0) return 'No mismatches detected.';
   const explanations: string[] = [];

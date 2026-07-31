@@ -10465,3 +10465,57 @@ Stage Summary:
 - ALL 15 spec requirements verified passing. Real data only. All features interactive (create, save draft, file, download JSON/PDF, duplicate, archive, delete, search, filter, sort, bulk select, export CSV, pagination, detail sheet, Oracle Fix Automatically). Mobile + desktop responsive. Pure-black dark theme. No 401/403/500. No console errors from Returns code.
 - Dev server stable in webpack mode (2560MB heap). Turbopack OOM-crashes on the large ReturnsPage chunk compile — webpack mode is the stable path in the 4GB sandbox.
 - NO other pages touched. NO business logic removed. ALL existing functionality preserved + enhanced.
+
+---
+Task ID: 11-audit-1
+Agent: Explore (Invoice module audit)
+Task: Research-only audit of the Invoice module (frontend + API + Prisma + hooks + types)
+
+Work Log:
+- Read tail of worklog (last ~400 lines) to understand project context: GSTPilot Next.js 16 SaaS, dev server OOM-unstable in 4GB sandbox (use webpack mode), Returns module recently rewritten with the same `businessName` vs `tradeName` bug pattern now suspected in the Invoice module.
+- Read /home/z/my-project/src/hooks/useInvoicesApi.ts (297 lines) — Prisma-backed hook. Calls GET /api/invoices?cloud=true&organizationId=X with fetchWithTimeout. Exposes createInvoice (POST /api/invoices), updateInvoice (PATCH /api/invoices with {id, ...patch} body), approveInvoice (PATCH status='approved'), deleteInvoice (DELETE /api/invoices?id=X). All use fetchWithTimeout + optimistic updates + invalidateBusinessSnapshot().
+- Read /home/z/my-project/src/hooks/useClientsApi.ts (94 lines) — GET /api/clients?organizationId=X. ApiClient has {id, gstin, tradeName, legalName?, state?, stateCode?, status, healthScore, contactEmail?, contactPhone?, createdAt?, updatedAt?}. ✅ uses `tradeName` (correct).
+- Read full InvoiceWorkspacePage.tsx (2913 lines) in 4 chunks. Mapped: state vars, useMemo/useCallback blocks, render tree (Header, 5 KPI cards, FilterBar, BulkActionBar, Table+Mobile cards, Pagination, Details Sheet, Create Dialog). All API call sites + handlers catalogued.
+- Read Prisma schema for Client (lines 28-73), Invoice (75-122), AuditLog (243-257), Firm (576-597), InvoiceItem (600-623). All field names captured exactly.
+- Read all 8 invoice API routes:
+  • /api/invoices/route.ts (515 lines) — GET (cloud+legacy branches), POST (cloud+legacy branches), PATCH, DELETE. Has requireAuth + requireOrgMembership on GET/POST/DELETE but NOT on PATCH.
+  • /api/invoices/[id]/route.ts (21 lines) — GET only, NO auth check.
+  • /api/invoices/create/route.ts (29 lines) — POST, NO auth check.
+  • /api/invoices/pdf/route.ts (25 lines) — POST, NO auth check.
+  • /api/invoices/send/route.ts (26 lines) — POST, NO auth check.
+  • /api/invoices/payment-link/route.ts (25 lines) — POST, NO auth check.
+  • /api/invoices/import/route.ts (41 lines) — POST, NO auth check.
+  • /api/invoices/extract/route.ts (89 lines) — POST, NO auth check.
+- Read /home/z/my-project/src/lib/invoices/invoices.ts (411 lines) — engine with generateInvoiceNumber, calculateInvoiceTotals, getInvoices, getInvoice, createInvoice, generatePaymentLink, generatePdf, sendInvoice. Found CRITICAL bug at line 339: `input.buyerName ?? client?.businessName ?? 'Unknown'` — Client has no `businessName` field (real field is `tradeName`).
+- Read /home/z/my-project/src/lib/invoices/types.ts (809 lines) — confirmed InvoiceDTO, CreateInvoiceInput, SendChannel types. InvoiceStatus union is only 'draft'|'sent'|'paid'|'partial'|'overdue'|'cancelled' (mismatched with frontend's broader set).
+- Read /home/z/my-project/src/types/gst.ts (first 270 lines) — InvoiceStatus here is 'draft'|'approved'|'filed'|'cancelled' (even narrower). MATCH_STATUS_CONFIG uses light-theme Tailwind classes. RISK_LEVEL_CONFIG uses text icons (✓ ⚠ ▲ ✕). INVOICE_TYPE_TO_SECTION maps 8 invoice types to 6 GSTR1 sections.
+- Read /home/z/my-project/src/lib/gst-utils.ts lines 130-164 — formatCurrency uses Intl.NumberFormat INR with 0 fraction digits; formatNumber uses en-IN grouping.
+- Read /home/z/my-project/src/components/shared/ProfessionalEmptyState.tsx (205 lines) — props: {icon, title, description, action?, secondaryAction?, accent?, compact?, className?}. 6 accent options (emerald/teal/cyan/violet/amber/rose). Action shape: {label, onClick, icon?}.
+- Read /home/z/my-project/src/contexts/AppContext.tsx (selected lines) — useApp() returns {currentView, setCurrentView, ...}. setCurrentView(view: AppView) for nav.
+- Read /home/z/my-project/src/contexts/OrgContext.tsx (selected lines) — useOrg() returns {organization: OrganizationDoc|null, ...}. useCurrentOrgId() returns organization?.id ?? null. OrganizationDoc has {id, name, slug, gstin, ...}.
+- Listed /home/z/my-project/src/components/ui/ — 47 shadcn/ui primitives exist: alert, alert-dialog, accordion, aspect-ratio, avatar, badge, breadcrumb, button, calendar, card, carousel, chart, checkbox, collapsible, command, context-menu, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toast, toaster, toggle, toggle-group, tooltip.
+- Read /home/z/my-project/src/lib/async/fetchWithTimeout.ts (selected lines) — fetchWithTimeout auto-injects x-gstpilot-actor header from localStorage 'gstpilot_session' for relative /api/ requests. This is the sandbox auth fallback that requireAuth() expects.
+- Cross-checked every frontend/API field reference against the Prisma Invoice/InvoiceItem/Client schema. Catalogued 19 bugs (see Stage Summary).
+
+Stage Summary:
+- ROOT BUG: /home/z/my-project/src/lib/invoices/invoices.ts:339 references `client?.businessName` which DOES NOT EXIST on the Prisma Client model (real field is `tradeName`). This is the same bug pattern that broke the Returns module. Any invoice created via /api/invoices/create (POST) gets `buyerName: 'Unknown'` instead of the client's trade name.
+- MISSING AUTH: 6 of 8 invoice API routes have NO requireAuth(): /api/invoices/[id] GET, /api/invoices/create POST, /api/invoices/pdf POST, /api/invoices/send POST, /api/invoices/payment-link POST, /api/invoices/import POST, /api/invoices/extract POST. Only /api/invoices (GET/POST/PATCH/DELETE) has requireAuth.
+- MISSING TENANT SCOPE on PATCH: /api/invoices PATCH does NOT call requireOrgMembership — any authenticated user can update ANY invoice. DELETE correctly checks (line 494) but PATCH skips.
+- LINE-ITEM DATA LOSS: Cloud POST branch (route.ts:140-306) computes totals from items[] but NEVER persists InvoiceItem records. The `description` and `hsnCode` fields from the dialog are dropped. The Invoice.hsnCode field is set to null. The frontend Sheet → Items tab synthesizes a single "aggregated" row instead of showing real line items.
+- INVOICE TYPE HARDCODED: Cloud POST always sets `invoiceType: 'B2B'`, `gstr1Section: 'b2b'`. The Create dialog has no invoiceType picker.
+- TYPE-NARROW InvoiceStatus: /home/z/my-project/src/types/gst.ts:19 has `InvoiceStatus = 'draft'|'approved'|'filed'|'cancelled'` — only 4 values. The frontend's STATUS_CONFIG supports 11 statuses (draft, sent, viewed, issued, partially_paid, paid, approved, filed, overdue, cancelled, archived). Type imports are bypassed with `as string` casts.
+- LIGHT-THEME COLORS: MATCH_STATUS_CONFIG + RISK_LEVEL_CONFIG use light-theme Tailwind classes (text-emerald-700, bg-emerald-50). The Invoice Workspace is dark-themed. The page defines its own RISK_BADGE with dark classes; MATCH_STATUS_CONFIG.bgColor is used raw on the invoice row (line 648) — light grey/emerald/amber pills on a dark table. Visual inconsistency.
+- TAXABLE SORT BUG: InvoiceWorkspacePage.tsx:2431 wires the "Taxable" column header to `sortKey="totalAmount"` instead of a `taxableValue` sort key. Clicking "Taxable" sorts by total amount.
+- NO PER-ROW ACTIONS for Send / Mark Paid / PDF / Print / Duplicate / Share / Edit. Only Approve + Delete per row. All other actions are bulk-only (and "PDF" is actually a print-window opener, not an API call).
+- NO A4 INVOICE PREVIEW: No proper invoice preview / A4 view. Bulk "PDF" just calls `printInvoices()` which opens `window.open()` with raw HTML.
+- NO ORACLE AI PANEL: Only `<AskOracleButton context="invoices" />` (header button). No inline Oracle AI right panel like the Returns module has.
+- 5 KPI CARDS: Total Invoices, Paid, Pending, Overdue, Total Value. (Risk-items count is in header subtitle, not a card.)
+- TABLE: sortable (6 cols), filterable (status/client/gstRate/risk + advanced date+amount range), paginated (10/25/50/100), bulk-selectable with select-all.
+- CREATE DIALOG: supports line items (description, hsn, qty, unit price, gst rate) with preview totals (taxable/tax/total). NO discount, NO cess, NO unit field, NO invoice type. Items are computed into totals but NOT persisted as InvoiceItem records.
+- DETAILS SHEET: 5 tabs (Overview, Items, GST, Payments, History). Items tab synthesizes 1 aggregated row. Payments tab shows only paidAmount total (no per-payment records). History tab shows timeline from timestamps + audit log stub (created/updated only — no real AuditLog fetch). Attachments tab is empty placeholder.
+- MOBILE: card list below md, full table md+. Responsive OK.
+- ERROR STATE: friendly card with retry + back-to-dashboard.
+- EMPTY STATE: ProfessionalEmptyState with "Create your first invoice" + "Add a client first" CTAs.
+- LOADING SKELETON: layout-matched KPI + filter + table skeleton.
+- DEAD CODE: formatFileSize + getFileIcon exported at bottom of InvoiceWorkspacePage.tsx (lines 2900-2911) but never used internally.
+- NEXT ACTIONS for the rewrite: (1) Fix businessName→tradeName in lib/invoices/invoices.ts:339. (2) Add requireAuth + requireOrgMembership to all 6 unprotected routes. (3) Add requireOrgMembership check to PATCH /api/invoices. (4) Persist InvoiceItem records in cloud POST branch. (5) Add taxableValue sort key. (6) Add per-row Send/Mark Paid/PDF/Duplicate/Edit actions. (7) Add real A4 invoice preview. (8) Add Oracle AI inline panel. (9) Add invoiceType picker to Create dialog. (10) Consider dark-theme variants of MATCH_STATUS_CONFIG + RISK_LEVEL_CONFIG.

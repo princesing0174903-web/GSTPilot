@@ -11,13 +11,11 @@ import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
-// LEGACY NOTE: The Prisma `Invoice` model has NO `firmId` field — it reaches
-// the tenant through `client.firmId`. The modern org model uses
-// `organizationId` (Firestore). There is no firmId↔organizationId mapping yet,
-// so for THIS sprint we accept either `?organizationId=` or `?firmId=` as a
-// query param and treat the value as the tenant id (the orgId IS the firmId in
-// this app's current state). When neither is provided, we return an empty list
-// instead of leaking ALL invoices platform-wide.
+// The Prisma `Invoice` model has NO `firmId` field — it reaches the tenant
+// through `client.firmId`. The modern org model uses `organizationId`
+// (Firestore). The orgId IS the firmId in this app's current state. When
+// neither is provided on GET, we return an empty list instead of leaking ALL
+// invoices platform-wide.
 
 /**
  * Resolve the organizationId for a newly-created invoice. Checks (in order):
@@ -67,6 +65,21 @@ function parseActorHeader(req: Request): { userId?: string; userName?: string } 
   }
 }
 
+/** Maps an InvoiceType to its GSTR-1 section (b2b / b2cl / b2cs / exp / cdnr / nil). */
+function invoiceTypeToSection(invoiceType: string | undefined | null): string {
+  switch ((invoiceType ?? 'B2B').toUpperCase()) {
+    case 'B2B': return 'b2b';
+    case 'B2C LARGE': return 'b2cl';
+    case 'B2C SMALL': return 'b2cs';
+    case 'EXPORT': return 'exp';
+    case 'CREDIT NOTE': return 'cdnr';
+    case 'DEBIT NOTE': return 'cdnr';
+    case 'NIL RATED': return 'nil';
+    case 'EXEMPTED': return 'nil';
+    default: return 'b2b';
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const authResult = await requireAuth(request);
@@ -89,19 +102,20 @@ export async function GET(request: Request) {
     if (memberResult instanceof NextResponse) return memberResult;
 
     // Build a where clause scoped by the tenant via the client relation.
-    // Invoice → Client → firmId. The `cloud` branch and the regular branch
-    // both apply this same scope.
     const where: Record<string, unknown> = { client: { firmId: tenantId } };
     if (clientId) where.clientId = clientId;
     if (period) where.period = period;
 
     // ── Invoice Cloud™ branch ────────────────────────────────────────────────
-    // When cloud=true and no specific filters, return invoices with the new
-    // financial fields. Returns an empty array when the DB is empty (real
-    // empty state — no mock data). Still scoped by tenant.
+    // Returns invoices with the new financial fields. Includes line items +
+    // client so the frontend can render a real Items tab + show client info
+    // without an extra round-trip. Empty array when the DB is empty.
     if (cloud && !clientId && !period) {
       const invoices = await db.invoice.findMany({
         where,
+        include: {
+          items: { orderBy: { lineNumber: 'asc' } },
+        },
         orderBy: { createdAt: 'desc' },
       });
       return NextResponse.json({ invoices: invoices ?? [] });
@@ -111,6 +125,7 @@ export async function GET(request: Request) {
       where,
       include: {
         client: true,
+        items: { orderBy: { lineNumber: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -125,6 +140,15 @@ export async function GET(request: Request) {
 // POST /api/invoices — Create a new invoice
 // Branches on `body.cloud === true` to invoke the Invoice Cloud™ creation
 // flow. When `cloud` is not set, the original GST invoice flow runs unchanged.
+//
+// Cloud branch accepts:
+//   { cloud:true, clientId?, customerName, buyerGstin?, sellerGstin?, date?,
+//     dueDate?, items:[{ description?, hsnCode?, quantity, unitPrice, gstRate,
+//     discount?, cessRate?, unit? }], invoiceType?, notes?, recurring?,
+//     recurringCycle?, notesFinance?, isInterState?, organizationId? }
+//
+// Also supports `duplicateFrom: <id>` — clones an existing invoice's line
+// items + client into a new draft with a fresh invoice number.
 export async function POST(request: Request) {
   try {
     const authResult = await requireAuth(request);
@@ -133,10 +157,115 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
+    // ── Duplicate branch (clone an existing invoice) ──────────────────────
+    if (body?.duplicateFrom && typeof body.duplicateFrom === 'string') {
+      const source = await db.invoice.findUnique({
+        where: { id: body.duplicateFrom },
+        include: { items: true, client: true },
+      });
+      if (!source) {
+        return NextResponse.json({ error: 'Source invoice not found' }, { status: 404 });
+      }
+      // Tenant scope check on the source.
+      const memberResult = await requireOrgMembership(uid, source.client.firmId ?? '');
+      if (memberResult instanceof NextResponse) return memberResult;
+
+      const existing = await db.invoice.findMany({
+        where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
+        select: { invoiceNumber: true },
+      });
+      const invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
+      const today = new Date().toISOString().split('T')[0];
+
+      const cloned = await db.invoice.create({
+        data: {
+          clientId: source.clientId,
+          invoiceNumber,
+          invoiceDate: today,
+          sellerGstin: source.sellerGstin,
+          buyerGstin: source.buyerGstin,
+          buyerName: source.buyerName,
+          invoiceType: source.invoiceType,
+          gstr1Section: source.gstr1Section,
+          taxableValue: source.taxableValue,
+          cgst: source.cgst,
+          sgst: source.sgst,
+          igst: source.igst,
+          cess: source.cess,
+          totalAmount: source.totalAmount,
+          hsnCode: source.hsnCode,
+          reverseCharge: source.reverseCharge,
+          status: 'draft',
+          matchStatus: 'unmatched',
+          riskLevel: 'low',
+          riskScore: 0,
+          period: today.slice(0, 7),
+          notes: source.notes,
+          dueDate: source.dueDate,
+          gstAmount: source.gstAmount,
+          paidAmount: 0,
+          balanceAmount: source.totalAmount,
+          paymentStatus: 'unpaid',
+          recurring: false,
+          recurringCycle: null,
+          notesFinance: source.notesFinance,
+          sentToCustomer: false,
+          items: source.items.length > 0 ? {
+            create: source.items.map((it, idx) => ({
+              lineNumber: idx + 1,
+              description: it.description,
+              hsnCode: it.hsnCode,
+              quantity: it.quantity,
+              unit: it.unit,
+              unitPrice: it.unitPrice,
+              taxableValue: it.taxableValue,
+              cgstRate: it.cgstRate,
+              sgstRate: it.sgstRate,
+              igstRate: it.igstRate,
+              cessRate: it.cessRate,
+              cgst: it.cgst,
+              sgst: it.sgst,
+              igst: it.igst,
+              cess: it.cess,
+              totalAmount: it.totalAmount,
+            })),
+          } : undefined,
+        },
+        include: { items: true, client: true },
+      });
+
+      await db.auditLog.create({
+        data: {
+          clientId: source.clientId,
+          action: 'Invoice Duplicated',
+          entity: 'invoice',
+          entityId: cloned.id,
+          details: `Invoice ${invoiceNumber} duplicated from ${source.invoiceNumber}`,
+        },
+      });
+
+      graphEvents.invoiceCreated(cloned.id, cloned.invoiceNumber, cloned.totalAmount, cloned.buyerGstin ?? undefined);
+      try { await emitInvoiceNode(cloned.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
+
+      const dupOrgId = await resolveOrgForInvoice(request, body, source.clientId);
+      if (dupOrgId) {
+        const memberResult2 = await requireOrgMembership(uid, dupOrgId);
+        if (memberResult2 instanceof NextResponse) return memberResult2;
+        await emitTimelineEvent({
+          organizationId: dupOrgId,
+          type: 'invoice.created',
+          title: `Invoice ${invoiceNumber} duplicated`,
+          description: `Duplicated from ${source.invoiceNumber} — ₹${cloned.totalAmount.toLocaleString('en-IN')} draft.`,
+          actor: parseActorHeader(request),
+          metadata: { invoiceId: cloned.id, invoiceNumber, sourceInvoiceId: source.id, sourceInvoiceNumber: source.invoiceNumber, amount: cloned.totalAmount },
+          severity: 'info',
+        });
+      }
+
+      return NextResponse.json({ invoice: cloned }, { status: 201 });
+    }
+
     // ── Invoice Cloud™ branch ──────────────────────────────────────────────
-    // Accepts customerName, date, dueDate, items[] (with description, hsnCode,
-    // quantity, unitPrice, gstRate). Computes totals via calculateInvoiceTotals
-    // and generates an invoice number when not supplied.
     if (body?.cloud === true) {
       const {
         clientId: cloudClientId,
@@ -152,6 +281,8 @@ export async function POST(request: Request) {
         recurring,
         recurringCycle,
         notesFinance,
+        invoiceType: cloudInvoiceType,
+        terms,
       } = body ?? {}
 
       if (!customerName || !Array.isArray(items) || items.length === 0) {
@@ -170,26 +301,33 @@ export async function POST(request: Request) {
           ? isInterState
           : Boolean(sellerState && buyerState && sellerState !== buyerState);
 
-      // Convert the API's line-item shape ({ description, quantity, unitPrice, gstRate })
-      // to the engine's shape ({ taxableValue, cgstRate, sgstRate, igstRate }).
+      // Convert the API's line-item shape ({ description, quantity, unitPrice,
+      // gstRate, discount, cessRate }) to the engine's shape + compute per-line
+      // totals. Discount is a percentage off the gross (qty*price). cessRate is
+      // a percentage on the taxable value.
       const lineItems: InvoiceLineItem[] = items.map((it: {
         quantity?: number;
         unitPrice?: number;
         gstRate?: number;
+        discount?: number;
+        cessRate?: number;
       }) => {
         const qty = Number(it.quantity) || 0;
         const price = Number(it.unitPrice) || 0;
-        const taxable = Math.round(qty * price * 100) / 100;
+        const gross = qty * price;
+        const disc = Math.min(Math.max(Number(it.discount) || 0, 0), 100);
+        const taxable = Math.round((gross * (1 - disc / 100)) * 100) / 100;
         const rate = Number(it.gstRate) || 0;
         return {
           taxableValue: taxable,
           cgstRate: interState ? 0 : rate / 2,
           sgstRate: interState ? 0 : rate / 2,
           igstRate: interState ? rate : 0,
+          cessRate: Number(it.cessRate) || 0,
         };
       });
 
-      const totals = calculateInvoiceTotals(lineItems);
+      const totals = calculateInvoiceTotals(lineItems, items);
 
       // Generate the next invoice number if not provided
       let invoiceNumber = cloudInvoiceNumber
@@ -201,10 +339,7 @@ export async function POST(request: Request) {
         invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber))
       }
 
-      // ── Resolve a clientId (required by the Invoice model).
-      // If the caller did not supply one, fall back to the first client in the DB,
-      // or auto-create a generic "Invoice Cloud Customer" client so the invoice
-      // can always be persisted. This keeps the Invoice Cloud UX frictionless. ──
+      // ── Resolve a clientId (required by the Invoice model). ──
       let resolvedClientId = cloudClientId as string | undefined
       if (!resolvedClientId) {
         const firstClient = await db.client.findFirst({ select: { id: true } })
@@ -224,6 +359,57 @@ export async function POST(request: Request) {
         }
       }
 
+      // Tenant scope check before create (when an org is resolvable).
+      const cloudOrgId = await resolveOrgForInvoice(request, body, resolvedClientId);
+      if (cloudOrgId) {
+        const memberResult = await requireOrgMembership(uid, cloudOrgId);
+        if (memberResult instanceof NextResponse) return memberResult;
+      }
+
+      const invType = (cloudInvoiceType ?? 'B2B').toString();
+      const gstr1Section = invoiceTypeToSection(invType);
+
+      // Build the InvoiceItem.create[] payload — persists real line items.
+      const itemsCreate = items.map((it: {
+        description?: string;
+        hsnCode?: string;
+        quantity?: number;
+        unit?: string;
+        unitPrice?: number;
+        gstRate?: number;
+        discount?: number;
+        cessRate?: number;
+      }, idx: number) => {
+        const qty = Number(it.quantity) || 0;
+        const price = Number(it.unitPrice) || 0;
+        const gross = qty * price;
+        const disc = Math.min(Math.max(Number(it.discount) || 0, 0), 100);
+        const taxable = Math.round((gross * (1 - disc / 100)) * 100) / 100;
+        const rate = Number(it.gstRate) || 0;
+        const cessR = Number(it.cessRate) || 0;
+        const cgstR = interState ? 0 : rate / 2;
+        const sgstR = interState ? 0 : rate / 2;
+        const igstR = interState ? rate : 0;
+        return {
+          lineNumber: idx + 1,
+          description: it.description ?? null,
+          hsnCode: it.hsnCode ?? null,
+          quantity: qty,
+          unit: it.unit ?? 'NOS',
+          unitPrice: price,
+          taxableValue: taxable,
+          cgstRate: cgstR,
+          sgstRate: sgstR,
+          igstRate: igstR,
+          cessRate: cessR,
+          cgst: Math.round(taxable * cgstR) / 100,
+          sgst: Math.round(taxable * sgstR) / 100,
+          igst: Math.round(taxable * igstR) / 100,
+          cess: Math.round(taxable * cessR) / 100,
+          totalAmount: Math.round((taxable + (taxable * rate / 100) + (taxable * cessR / 100)) * 100) / 100,
+        };
+      });
+
       const invoice = await db.invoice.create({
         data: {
           clientId: resolvedClientId,
@@ -232,17 +418,17 @@ export async function POST(request: Request) {
           sellerGstin: cloudSellerGstin ?? '',
           buyerGstin: cloudBuyerGstin ?? null,
           buyerName: customerName,
-          invoiceType: 'B2B',
-          gstr1Section: 'b2b',
+          invoiceType: invType,
+          gstr1Section,
           taxableValue: totals.taxableValue,
           cgst: totals.cgst,
           sgst: totals.sgst,
           igst: totals.igst,
-          cess: 0,
+          cess: totals.cess,
           totalAmount: totals.totalAmount,
-          hsnCode: null,
+          hsnCode: itemsCreate[0]?.hsnCode ?? null,
           reverseCharge: false,
-          status: 'issued',
+          status: 'draft',
           matchStatus: 'unmatched',
           riskLevel: 'low',
           riskScore: 0,
@@ -258,7 +444,9 @@ export async function POST(request: Request) {
           recurringCycle: recurringCycle ?? null,
           notesFinance: notesFinance ?? null,
           sentToCustomer: false,
+          items: { create: itemsCreate },
         },
+        include: { items: true, client: true },
       });
 
       await db.auditLog.create({
@@ -278,10 +466,7 @@ export async function POST(request: Request) {
       try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
 
       // ── Business Timeline — emit invoice.created (fire-and-forget) ──
-      const cloudOrgId = await resolveOrgForInvoice(request, body, resolvedClientId);
       if (cloudOrgId) {
-        const memberResult = await requireOrgMembership(uid, cloudOrgId);
-        if (memberResult instanceof NextResponse) return memberResult;
         await emitTimelineEvent({
           organizationId: cloudOrgId,
           type: 'invoice.created',
@@ -297,6 +482,7 @@ export async function POST(request: Request) {
             taxableValue: totals.taxableValue,
             gstAmount: totals.gstAmount,
             dueDate: dueDate ?? null,
+            terms: terms ?? null,
           },
           severity: 'info',
         });
@@ -336,6 +522,13 @@ export async function POST(request: Request) {
         { error: 'clientId and invoiceNumber are required' },
         { status: 400 }
       );
+    }
+
+    // Tenant scope check on the legacy branch too.
+    const legacyOrgId = await resolveOrgForInvoice(request, body, clientId);
+    if (legacyOrgId) {
+      const memberResult = await requireOrgMembership(uid, legacyOrgId);
+      if (memberResult instanceof NextResponse) return memberResult;
     }
 
     const invoice = await db.invoice.create({
@@ -383,12 +576,9 @@ export async function POST(request: Request) {
     try { await emitInvoiceNode(invoice.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
 
     // ── Business Timeline — emit invoice.created (fire-and-forget) ──
-    const nativeOrgId = await resolveOrgForInvoice(request, body, clientId);
-    if (nativeOrgId) {
-      const memberResult = await requireOrgMembership(uid, nativeOrgId);
-      if (memberResult instanceof NextResponse) return memberResult;
+    if (legacyOrgId) {
       await emitTimelineEvent({
-        organizationId: nativeOrgId,
+        organizationId: legacyOrgId,
         type: 'invoice.created',
         title: `Invoice ${invoiceNumber} created`,
         description: `₹${Number(totalAmount ?? 0).toLocaleString('en-IN')} invoice issued${buyerName ? ` for ${buyerName}` : ''}.`,
@@ -414,6 +604,8 @@ export async function POST(request: Request) {
 }
 
 // PATCH /api/invoices — Update an existing invoice
+// Auth + tenant-scoped: the caller must be a member of the org that owns the
+// invoice's client.firmId. Prevents cross-tenant edits.
 export async function PATCH(request: Request) {
   try {
     const authResult = await requireAuth(request);
@@ -421,7 +613,7 @@ export async function PATCH(request: Request) {
     const { uid } = authResult;
 
     const body = await request.json();
-    const { id, ...updates } = body;
+    const { id, items: newItems, ...updates } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -430,14 +622,95 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // Fetch existing to verify tenant scope.
+    const existing = await db.invoice.findUnique({
+      where: { id },
+      include: { client: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      );
+    }
+    const memberResult = await requireOrgMembership(uid, existing.client.firmId ?? '');
+    if (memberResult instanceof NextResponse) return memberResult;
+
     // Remove fields that shouldn't be directly updated
     delete updates.createdAt;
     delete updates.updatedAt;
+    delete updates.id;
+
+    // ── If line items are supplied, replace them atomically ──
+    if (Array.isArray(newItems)) {
+      await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
+      if (newItems.length > 0) {
+        const interState = updates.igst !== undefined
+          ? Number(updates.igst) > 0
+          : (Number(existing.igst) > 0);
+        const itemsCreate = newItems.map((it: {
+          description?: string;
+          hsnCode?: string;
+          quantity?: number;
+          unit?: string;
+          unitPrice?: number;
+          gstRate?: number;
+          discount?: number;
+          cessRate?: number;
+        }, idx: number) => {
+          const qty = Number(it.quantity) || 0;
+          const price = Number(it.unitPrice) || 0;
+          const gross = qty * price;
+          const disc = Math.min(Math.max(Number(it.discount) || 0, 0), 100);
+          const taxable = Math.round((gross * (1 - disc / 100)) * 100) / 100;
+          const rate = Number(it.gstRate) || 0;
+          const cessR = Number(it.cessRate) || 0;
+          const cgstR = interState ? 0 : rate / 2;
+          const sgstR = interState ? 0 : rate / 2;
+          const igstR = interState ? rate : 0;
+          return {
+            invoiceId: id,
+            lineNumber: idx + 1,
+            description: it.description ?? null,
+            hsnCode: it.hsnCode ?? null,
+            quantity: qty,
+            unit: it.unit ?? 'NOS',
+            unitPrice: price,
+            taxableValue: taxable,
+            cgstRate: cgstR,
+            sgstRate: sgstR,
+            igstRate: igstR,
+            cessRate: cessR,
+            cgst: Math.round(taxable * cgstR) / 100,
+            sgst: Math.round(taxable * sgstR) / 100,
+            igst: Math.round(taxable * igstR) / 100,
+            cess: Math.round(taxable * cessR) / 100,
+            totalAmount: Math.round((taxable + (taxable * rate / 100) + (taxable * cessR / 100)) * 100) / 100,
+          };
+        });
+        await db.invoiceItem.createMany({ data: itemsCreate });
+      }
+    }
+
+    // Recompute balanceAmount if paidAmount or totalAmount changed.
+    if (updates.paidAmount !== undefined || updates.totalAmount !== undefined) {
+      const paid = Number(updates.paidAmount ?? existing.paidAmount);
+      const total = Number(updates.totalAmount ?? existing.totalAmount);
+      updates.balanceAmount = Math.max(0, Math.round((total - paid) * 100) / 100);
+      // Derive paymentStatus.
+      if (paid >= total && total > 0) updates.paymentStatus = 'paid';
+      else if (paid > 0) updates.paymentStatus = 'partial';
+      else if (existing.dueDate && new Date(existing.dueDate).getTime() < Date.now() && paid < total) {
+        updates.paymentStatus = 'overdue';
+      } else {
+        updates.paymentStatus = 'unpaid';
+      }
+    }
 
     const invoice = await db.invoice.update({
       where: { id },
       data: updates,
-      include: { client: true },
+      include: { client: true, items: { orderBy: { lineNumber: 'asc' } } },
     });
 
     // Create audit log

@@ -33,6 +33,7 @@ export interface InvoiceLineItem {
   cgstRate: number;
   sgstRate: number;
   igstRate: number;
+  cessRate?: number;
 }
 
 export interface InvoiceTotals {
@@ -40,6 +41,7 @@ export interface InvoiceTotals {
   cgst: number;
   sgst: number;
   igst: number;
+  cess: number;
   gstAmount: number;
   totalAmount: number;
 }
@@ -47,27 +49,40 @@ export interface InvoiceTotals {
 /**
  * Aggregates a list of line items into GST-split totals. Either CGST+SGST
  * (intra-state) or IGST (inter-state) is populated depending on the rates set
- * per line. cess is not modelled at line level here — caller can extend.
+ * per line. CESS is computed when cessRate > 0.
+ *
+ * The optional second argument is the raw API line items (with discount +
+ * cessRate) — when supplied, we recompute per-line cess from the gross taxable
+ * value so the totals match exactly what's persisted to InvoiceItem rows.
  */
-export function calculateInvoiceTotals(items: InvoiceLineItem[]): InvoiceTotals {
+export function calculateInvoiceTotals(
+  items: InvoiceLineItem[],
+  rawItems?: Array<{ discount?: number; cessRate?: number; quantity?: number; unitPrice?: number }>,
+): InvoiceTotals {
   let taxableValue = 0;
   let cgst = 0;
   let sgst = 0;
   let igst = 0;
-  for (const it of items) {
+  let cess = 0;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
     taxableValue += it.taxableValue;
     cgst += (it.taxableValue * it.cgstRate) / 100;
     sgst += (it.taxableValue * it.sgstRate) / 100;
     igst += (it.taxableValue * it.igstRate) / 100;
+    const cessRate = it.cessRate ?? rawItems?.[i]?.cessRate ?? 0;
+    cess += (it.taxableValue * Number(cessRate) || 0) / 100;
   }
   const gstAmount = round2(cgst + sgst + igst);
+  const cessRound = round2(cess);
   return {
     taxableValue: round2(taxableValue),
     cgst: round2(cgst),
     sgst: round2(sgst),
     igst: round2(igst),
+    cess: cessRound,
     gstAmount,
-    totalAmount: round2(taxableValue + gstAmount),
+    totalAmount: round2(taxableValue + gstAmount + cessRound),
   };
 }
 
@@ -336,7 +351,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceD
       invoiceDate: today,
       sellerGstin: input.sellerGstin ?? '',
       buyerGstin: input.buyerGstin ?? client?.gstin ?? null,
-      buyerName: input.buyerName ?? client?.businessName ?? 'Unknown',
+      buyerName: input.buyerName ?? client?.tradeName ?? 'Unknown',
       invoiceType: input.invoiceType ?? 'B2B',
       taxableValue: totals.taxableValue,
       cgst: totals.cgst,

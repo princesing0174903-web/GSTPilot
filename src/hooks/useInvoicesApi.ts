@@ -71,6 +71,17 @@ export interface CreateInvoicePayload {
   notes?: string;
 }
 
+/** Shape of an Oracle AI insight payload returned by `/api/invoices/[id]/insights`. */
+export interface InvoiceInsights {
+  paymentPrediction: { likelyPayDate: string | null; confidence: number; reasoning: string };
+  latePaymentRisk: { level: 'low' | 'medium' | 'high' | 'critical'; score: number; factors: string[] };
+  anomalies: Array<{ type: string; severity: 'info' | 'warning' | 'critical'; message: string }>;
+  duplicateDetection: Array<{ type: string; invoiceId: string; invoiceNumber: string; confidence: number; reason: string }>;
+  gstMismatch: { hasMismatch: boolean; details: string };
+  collectionSuggestion: { action: string; message: string; channel: 'email' | 'whatsapp' | 'call' };
+  oneClickFixes: Array<{ id: string; label: string; description: string; endpoint: string; method: 'POST' | 'PATCH'; body: Record<string, unknown> }>;
+}
+
 export interface UseInvoicesApiResult {
   invoices: ApiInvoice[];
   loading: boolean;
@@ -81,6 +92,16 @@ export interface UseInvoicesApiResult {
   deleteInvoice: (id: string) => Promise<boolean>;
   /** Set the invoice status to `approved` via PATCH. */
   approveInvoice: (id: string) => Promise<ApiInvoice | null>;
+  /** Mark an invoice paid (full or partial) via POST /api/invoices/mark-paid. */
+  markPaid: (id: string, paidAmount?: number, paymentMode?: string, paymentDate?: string) => Promise<ApiInvoice | null>;
+  /** Duplicate an invoice via POST /api/invoices/duplicate. */
+  duplicateInvoice: (id: string) => Promise<ApiInvoice | null>;
+  /** Fetch Oracle AI insights for an invoice via GET /api/invoices/[id]/insights. */
+  fetchInsights: (id: string) => Promise<InvoiceInsights | null>;
+  /** Send an invoice (email/whatsapp/sms) via POST /api/invoices/send. */
+  sendInvoice: (id: string, channel?: 'email' | 'whatsapp' | 'sms') => Promise<ApiInvoice | null>;
+  /** Generate a print-ready HTML + UPI payment link via POST /api/invoices/pdf. */
+  generatePdf: (id: string) => Promise<{ html: string; paymentLink: string; invoice: ApiInvoice } | null>;
   /** True while any mutation is in-flight (used for button spinners). */
   saving: boolean;
 }
@@ -283,6 +304,165 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     [orgId],
   );
 
+  // ── Mark Paid (POST /api/invoices/mark-paid) ──
+  const markPaid = useCallback(
+    async (id: string, paidAmount?: number, paymentMode?: string, paymentDate?: string): Promise<ApiInvoice | null> => {
+      if (!orgId) return null;
+      setSaving(true);
+      try {
+        const res = await fetchWithTimeout(
+          '/api/invoices/mark-paid',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, paidAmount, paymentMode, paymentDate }),
+          },
+          { timeoutMs: 20_000, retries: 1 },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as { invoice: ApiInvoice };
+        setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
+        invalidateBusinessSnapshot();
+        return json.invoice;
+      } catch (err) {
+        console.error('[useInvoicesApi] markPaid failed:', err);
+        setError(err instanceof Error ? err.message : 'Unable to record payment. Please try again.');
+        return null;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [orgId],
+  );
+
+  // ── Duplicate (POST /api/invoices/duplicate) ──
+  const duplicateInvoice = useCallback(
+    async (id: string): Promise<ApiInvoice | null> => {
+      if (!orgId) return null;
+      setSaving(true);
+      try {
+        const res = await fetchWithTimeout(
+          '/api/invoices/duplicate',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          },
+          { timeoutMs: 20_000, retries: 1 },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as { invoice: ApiInvoice };
+        setInvoices((prev) => [json.invoice, ...prev]);
+        invalidateBusinessSnapshot();
+        return json.invoice;
+      } catch (err) {
+        console.error('[useInvoicesApi] duplicate failed:', err);
+        setError(err instanceof Error ? err.message : 'Unable to duplicate this invoice. Please try again.');
+        return null;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [orgId],
+  );
+
+  // ── Fetch Oracle AI insights (GET /api/invoices/[id]/insights) ──
+  const fetchInsights = useCallback(
+    async (id: string): Promise<InvoiceInsights | null> => {
+      if (!orgId) return null;
+      try {
+        const res = await fetchWithTimeout(
+          `/api/invoices/${encodeURIComponent(id)}/insights`,
+          { cache: 'no-store' },
+          { timeoutMs: 20_000, retries: 1 },
+        );
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return (await res.json()) as InvoiceInsights;
+      } catch (err) {
+        console.error('[useInvoicesApi] fetchInsights failed:', err);
+        return null;
+      }
+    },
+    [orgId],
+  );
+
+  // ── Send invoice (POST /api/invoices/send) ──
+  const sendInvoice = useCallback(
+    async (id: string, channel: 'email' | 'whatsapp' | 'sms' = 'email'): Promise<ApiInvoice | null> => {
+      if (!orgId) return null;
+      setSaving(true);
+      try {
+        const res = await fetchWithTimeout(
+          '/api/invoices/send',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, channel }),
+          },
+          { timeoutMs: 20_000, retries: 1 },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as { invoice: ApiInvoice };
+        setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
+        invalidateBusinessSnapshot();
+        return json.invoice;
+      } catch (err) {
+        console.error('[useInvoicesApi] send failed:', err);
+        setError(err instanceof Error ? err.message : 'Unable to send this invoice. Please try again.');
+        return null;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [orgId],
+  );
+
+  // ── Generate PDF (POST /api/invoices/pdf) ──
+  const generatePdf = useCallback(
+    async (id: string): Promise<{ html: string; paymentLink: string; invoice: ApiInvoice } | null> => {
+      if (!orgId) return null;
+      setSaving(true);
+      try {
+        const res = await fetchWithTimeout(
+          '/api/invoices/pdf',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          },
+          { timeoutMs: 25_000, retries: 1 },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as { html: string; paymentLink: string; invoice: ApiInvoice };
+        // Keep the local list in sync (status may have transitioned, though we
+        // removed the auto-mark-sent side effect — still safe to refresh).
+        setInvoices((list) => list.map((inv) => (inv.id === id ? { ...inv, ...json.invoice } : inv)));
+        return json;
+      } catch (err) {
+        console.error('[useInvoicesApi] generatePdf failed:', err);
+        setError(err instanceof Error ? err.message : 'Unable to generate PDF. Please try again.');
+        return null;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [orgId],
+  );
+
   return {
     invoices,
     loading,
@@ -292,6 +472,11 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     updateInvoice,
     deleteInvoice,
     approveInvoice,
+    markPaid,
+    duplicateInvoice,
+    fetchInsights,
+    sendInvoice,
+    generatePdf,
     saving,
   };
 }

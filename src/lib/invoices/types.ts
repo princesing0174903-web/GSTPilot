@@ -328,10 +328,14 @@ export function inrShort(n: number): string {
 export interface CreateInvoiceLineItem {
   description?: string;
   hsnCode?: string;
+  quantity?: number;
+  unit?: string;
+  unitPrice?: number;
   taxableValue: number;
   cgstRate?: number;
   sgstRate?: number;
   igstRate?: number;
+  cessRate?: number;
 }
 
 export interface CreateInvoiceInput {

@@ -13,6 +13,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { extractInvoiceFromDataUrl } from '@/lib/gstpilot-data/invoice-extraction';
+import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,12 @@ const ALLOWED_MIME = new Set([
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Auth: this is a stateless VLM call (no DB write), but the
+    // extraction service is metered + returns business data, so we still
+    // require a verified caller. ──
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+
     const body = (await req.json()) as ExtractRequestBody;
 
     if (!body.dataUrl || !body.mimeType) {
@@ -75,15 +82,6 @@ export async function POST(req: NextRequest) {
       error: result.error,
     });
   } catch (err) {
-    console.error('[api/invoices/extract] error:', err);
-    const message = err instanceof Error ? err.message : 'Extraction failed';
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'Invoice analysis failed. Please ensure the document is clear and try again.',
-        technicalDetail: process.env.NODE_ENV === 'development' ? message : undefined,
-      },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'We could not analyze this invoice. Please ensure the document is clear and try again.');
   }
 }

@@ -10519,3 +10519,88 @@ Stage Summary:
 - LOADING SKELETON: layout-matched KPI + filter + table skeleton.
 - DEAD CODE: formatFileSize + getFileIcon exported at bottom of InvoiceWorkspacePage.tsx (lines 2900-2911) but never used internally.
 - NEXT ACTIONS for the rewrite: (1) Fix businessName→tradeName in lib/invoices/invoices.ts:339. (2) Add requireAuth + requireOrgMembership to all 6 unprotected routes. (3) Add requireOrgMembership check to PATCH /api/invoices. (4) Persist InvoiceItem records in cloud POST branch. (5) Add taxableValue sort key. (6) Add per-row Send/Mark Paid/PDF/Duplicate/Edit actions. (7) Add real A4 invoice preview. (8) Add Oracle AI inline panel. (9) Add invoiceType picker to Create dialog. (10) Consider dark-theme variants of MATCH_STATUS_CONFIG + RISK_LEVEL_CONFIG.
+
+---
+Task ID: 2-backend
+Agent: full-stack-developer (Invoice API bug fixes + new endpoints)
+Task: Fix all Invoice API route bugs + add mark-paid, duplicate, insights endpoints
+
+Work Log:
+
+Verification of existing fixes (FIX 1–12) — all confirmed in place from prior agent work:
+- FIX 1: src/app/api/invoices/import/route.ts — requireAuth + requireOrgMembership (reads x-gstpilot-orgid / body.organizationId, falls back to client.firmId when clientId supplied) + friendlyApiError on the 500 path. src/app/api/invoices/extract/route.ts — requireAuth (stateless VLM) + friendlyApiError.
+- FIX 2: src/app/api/invoices/route.ts cloud POST (lines 347–393) — resolves cloudOrgId via resolveOrgForInvoice (header → body → client.firmId), returns 400 when no org resolvable, scopes db.client.findFirst by `{ firmId: cloudOrgId }` (NEVER `findFirst({})`), and creates orphan clients with `firmId: cloudOrgId` (NOT null). requireOrgMembership(uid, cloudOrgId) gates the write.
+- FIX 3: src/app/api/invoices/create/route.ts — TIGHTENED in this pass. Previously fell back to header/body org when client.firmId was null, which was a tenant-isolation bug (a caller could create invoices for an orphan client "under" a different org by spoofing the header). Now uses `client.firmId ?? ''` strictly per spec; orphan clients get a friendly 400 "Please assign it to an organization first." requireAuth + clientId-required (400) + items-required (400) + requireOrgMembership all in place.
+- FIX 4: src/app/api/invoices/route.ts PATCH (line 665) — `delete updates.clientId;` present alongside createdAt/updatedAt/id.
+- FIX 5: src/app/api/invoices/route.ts PATCH (lines 668–746) — when items[] present: deleteMany old items, build itemsCreate, call calculateInvoiceTotals(itemsCreate, newItems), merge taxableValue/cgst/sgst/igst/cess/gstAmount/totalAmount into updates, then recompute balanceAmount = max(0, total - paid) and paymentStatus via derivePaymentStatus using the recomputed totalAmount.
+- FIX 6: src/app/api/invoices/pdf/route.ts (line 58) — `const amt = invoice.balanceAmount || invoice.totalAmount;` then `am=${amt}` in the UPI link.
+- FIX 7: src/lib/invoices/invoices.ts createInvoice (lines 326–406) — builds itemsCreate with lineNumber/description/hsnCode/quantity(1)/unit('NOS')/unitPrice(0)/taxableValue/cgstRate/sgstRate/igstRate/cessRate + computed cgst/sgst/igst/cess/totalAmount per line, persists via `items: { create: itemsCreate }`, uses `totals.cess` (not hardcoded 0), uses the module-level round2 (functionally identical to the spec's local r2). types.ts CreateInvoiceLineItem already extended with description/hsnCode/quantity/unit/unitPrice/cessRate.
+- FIX 8: src/app/api/invoices/pdf/route.ts + payment-link/route.ts — NO LONGER mutate sentToCustomer/sentAt/status. pdf writes AuditLog `{ action: 'pdf_generated', entity: 'invoice', entityId }`. payment-link writes AuditLog `{ action: 'payment_link_generated', entity: 'invoice', entityId, details: JSON.stringify({ paymentLink }) }`.
+- FIX 9: src/app/api/invoices/route.ts cloud GET (line 119) — `include: { client: true, items: { orderBy: { lineNumber: 'asc' } } }`.
+- FIX 10: src/app/api/invoices/_helpers.ts — assertInvoiceTenantAccess(uid, invoice) returns 404 for null invoice OR null client.firmId (orphan), else requireOrgMembership(uid, firmId). Used in: GET /:id, POST duplicate branch, PATCH, DELETE, /send, /pdf, /payment-link, and all 3 new endpoints below.
+- FIX 11: covered by FIX 1 (friendlyApiError in /import).
+- FIX 12: covered by FIX 8 (audit log in /payment-link).
+
+New endpoints created in this pass:
+- NEW ENDPOINT A — POST /api/invoices/mark-paid/route.ts (CREATED)
+  • Body: { id, paidAmount?, paymentMode?, paymentDate? }. paidAmount omitted → fully paid (= totalAmount).
+  • requireAuth + assertInvoiceTenantAccess.
+  • Recomputes balanceAmount = max(0, total - paid), paymentStatus via derivePaymentStatus.
+  • Status logic: fully paid → 'paid' (never downgrades from 'paid'); partial on draft → 'sent'; otherwise leave as-is.
+  • AuditLog { action: 'invoice_marked_paid', entity: 'invoice', entityId }.
+  • invalidateGraph().
+  • Returns { invoice } with client + items.
+  • try/catch with friendlyApiError.
+
+- NEW ENDPOINT B — POST /api/invoices/duplicate/route.ts (CREATED)
+  • Body: { id }.
+  • requireAuth + assertInvoiceTenantAccess on the source invoice (with client + items included).
+  • Fetches existing INV-YYYY- numbers for the year, calls generateInvoiceNumber.
+  • Creates new invoice: status='draft', paymentStatus='unpaid', paidAmount=0, balanceAmount=source.totalAmount, sentToCustomer=false. Copies buyerName/buyerGstin/sellerGstin/invoiceType/gstr1Section/taxableValue/cgst/sgst/igst/cess/gstAmount/totalAmount/hsnCode/reverseCharge/dueDate/notes/notesFinance.
+  • Clones line items with a fresh 1..N lineNumber sequence (description/hsnCode/quantity/unit/unitPrice/taxableValue/rates/per-line amounts).
+  • AuditLog { action: 'invoice_duplicated', entity: 'invoice', entityId: newId, details: JSON.stringify({ sourceId }) }.
+  • invalidateGraph().
+  • Returns { invoice: newInvoice } (201).
+
+- NEW ENDPOINT C — GET /api/invoices/[id]/insights/route.ts (CREATED)
+  • requireAuth + assertInvoiceTenantAccess. Fetches invoice + client + items, plus last 50 same-tenant invoices (for anomaly + duplicate detection).
+  • Deterministic heuristic insights (NO external AI call):
+    - paymentPrediction: { likelyPayDate, confidence, reasoning } — overdue→today+7d/0.6; due in future→dueDate/0.8; paid→null/1.0/"Already paid."; no due date→today+14d/0.5.
+    - latePaymentRisk: { level, score, factors } — overdue→critical(90); due ≤3 days & unpaid→high(75); partial→medium(50); else low(15).
+    - anomalies: unusual GST rate (not in {0,5,12,18,28}); |taxable+gst+cess−total|>1; total > 3× recent average.
+    - duplicateDetection: same buyerName + |totalDiff|≤1 + created within 30 days. Max 3.
+    - gstMismatch: { hasMismatch, details } — |cgst+sgst+igst+cess − gstAmount|>1; inter-state with CGST/SGST; intra-state with IGST.
+    - collectionSuggestion: { action, message, channel } — overdue→whatsapp reminder; due ≤3 days→email pre-due; paid→thank-you email.
+    - oneClickFixes: overdue→{send-reminder, POST /api/invoices/send}; gstMismatch→{recalculate, PATCH /api/invoices with recalculated items}; draft→{approve-send, PATCH /api/invoices status:'sent'}.
+  • try/catch with friendlyApiError. Always 200 on success path.
+
+Lint + type-check:
+- `npx eslint` on the 4 touched/created files (create, mark-paid, duplicate, [id]/insights) → EXIT 0, zero errors, zero warnings.
+- `npx tsc --noEmit --skipLibCheck` on the full project → zero errors mentioning any invoice route or lib/invoices file.
+- Full `bun run lint` shows 12 pre-existing errors + 23 warnings in OTHER modules (MissionControlPage, SettingsPage, charts, zoho sync-engine, etc.) — NONE in any file I touched or verified.
+
+Dev server note:
+- The sandbox dev server was not running on arrival (dev.log showed a single "Ready in 1401ms / Compiling / ..." with no follow-up). I briefly started it via run-dev.sh to verify, but it OOM-crashed during the initial webpack compile (4GB sandbox, ~3.5GB webpack heap — the same instability noted in prior worklog entries). I killed it to free memory. The new API routes are lazy-compiled on first request, so they will compile cleanly when the frontend or a curl hits them. Syntax was independently verified via `bun build --no-bundle` (transpiles all 3 new files cleanly) + `npx tsc --noEmit` (zero errors on touched files).
+
+Stage Summary:
+- Files CHANGED/CREATED (4):
+  1. src/app/api/invoices/create/route.ts — MODIFIED (tightened FIX 3: removed header/body org fallback for orphan clients; now uses client.firmId ?? '' strictly per spec, closing a tenant-isolation loophole).
+  2. src/app/api/invoices/mark-paid/route.ts — CREATED (NEW ENDPOINT A).
+  3. src/app/api/invoices/duplicate/route.ts — CREATED (NEW ENDPOINT B).
+  4. src/app/api/invoices/[id]/insights/route.ts — CREATED (NEW ENDPOINT C).
+- Files VERIFIED already-correct (no edits needed, from prior agent work):
+  • src/app/api/invoices/route.ts (GET cloud include client, POST cloud tenant-scope, PATCH strip clientId + recompute totals, DELETE, POST duplicate branch — all use assertInvoiceTenantAccess)
+  • src/app/api/invoices/[id]/route.ts (GET with assertInvoiceTenantAccess)
+  • src/app/api/invoices/_helpers.ts (assertInvoiceTenantAccess helper)
+  • src/app/api/invoices/import/route.ts (requireAuth + requireOrgMembership + friendlyApiError)
+  • src/app/api/invoices/extract/route.ts (requireAuth + friendlyApiError)
+  • src/app/api/invoices/pdf/route.ts (no state mutation, audit log, balanceAmount||totalAmount for UPI)
+  • src/app/api/invoices/payment-link/route.ts (no state mutation, audit log with paymentLink)
+  • src/app/api/invoices/send/route.ts (assertInvoiceTenantAccess)
+  • src/lib/invoices/invoices.ts (createInvoice persists InvoiceItem rows, uses totals.cess, round2)
+  • src/lib/invoices/types.ts (CreateInvoiceLineItem extended with description/hsnCode/quantity/unit/unitPrice/cessRate)
+- Endpoints verified: all 12 fixes confirmed in place; 3 new endpoints created with correct auth, tenant-scoping, audit logging, graph invalidation, and friendly error handling.
+- Endpoints NOT live-verified via curl (dev server OOM-crashed in sandbox): mark-paid, duplicate, [id]/insights. Syntax + type-check + lint all pass. They will compile on first request in a stable environment.
+- Lint: zero errors on all touched files.
+- TypeScript: zero errors on all touched files.
+- No other modules touched. Returns and Customers modules untouched as instructed.

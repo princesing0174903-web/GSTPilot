@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
   calculateInvoiceTotals,
+  derivePaymentStatus,
   generateInvoiceNumber,
   type InvoiceLineItem,
 } from '@/lib/invoices/invoices';
@@ -9,6 +10,7 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { assertInvoiceTenantAccess } from './_helpers';
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // The Prisma `Invoice` model has NO `firmId` field — it reaches the tenant
@@ -114,6 +116,7 @@ export async function GET(request: Request) {
       const invoices = await db.invoice.findMany({
         where,
         include: {
+          client: true,
           items: { orderBy: { lineNumber: 'asc' } },
         },
         orderBy: { createdAt: 'desc' },
@@ -163,12 +166,9 @@ export async function POST(request: Request) {
         where: { id: body.duplicateFrom },
         include: { items: true, client: true },
       });
-      if (!source) {
-        return NextResponse.json({ error: 'Source invoice not found' }, { status: 404 });
-      }
-      // Tenant scope check on the source.
-      const memberResult = await requireOrgMembership(uid, source.client.firmId ?? '');
-      if (memberResult instanceof NextResponse) return memberResult;
+      // FIX 10: orphan source invoices (null firmId) → 404 (not 403).
+      const dupAccessErr = await assertInvoiceTenantAccess(uid, source);
+      if (dupAccessErr) return dupAccessErr;
 
       const existing = await db.invoice.findMany({
         where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
@@ -340,12 +340,44 @@ export async function POST(request: Request) {
       }
 
       // ── Resolve a clientId (required by the Invoice model). ──
+      // CRITICAL: scope the lookup to the resolved org's firmId — never call
+      // `db.client.findFirst({})` (which would adopt the FIRST client across
+      // ALL tenants). When no org can be resolved we 400 — orphan invoices
+      // are not allowed in the cloud branch.
+      let cloudOrgId = await resolveOrgForInvoice(request, body, undefined);
+      // If an explicit clientId was provided and no org was resolvable from
+      // header/body, fall back to the client's firmId — then verify membership.
+      if (!cloudOrgId && cloudClientId) {
+        const explicitClient = await db.client.findUnique({
+          where: { id: cloudClientId },
+          select: { firmId: true },
+        });
+        if (explicitClient?.firmId) cloudOrgId = explicitClient.firmId;
+      }
+      if (!cloudOrgId) {
+        return NextResponse.json(
+          { error: 'A client or organization is required to create an invoice.' },
+          { status: 400 },
+        );
+      }
+
+      // Tenant scope check before create — verifies the caller is a member of
+      // the resolved org. Done here so a 403 short-circuits before any write.
+      {
+        const memberResult = await requireOrgMembership(uid, cloudOrgId);
+        if (memberResult instanceof NextResponse) return memberResult;
+      }
+
       let resolvedClientId = cloudClientId as string | undefined
       if (!resolvedClientId) {
-        const firstClient = await db.client.findFirst({ select: { id: true } })
+        const firstClient = await db.client.findFirst({
+          where: { firmId: cloudOrgId },
+          select: { id: true },
+        })
         if (firstClient) {
           resolvedClientId = firstClient.id
         } else {
+          // Auto-create an orphan client SCOPED to the resolved org — never null.
           const created = await db.client.create({
             data: {
               gstin: `29CLOUD${Date.now().toString().slice(-6)}Z1Z5`,
@@ -353,17 +385,11 @@ export async function POST(request: Request) {
               legalName: customerName || 'Invoice Cloud Customer',
               status: 'active',
               healthScore: 100,
+              firmId: cloudOrgId,
             },
           })
           resolvedClientId = created.id
         }
-      }
-
-      // Tenant scope check before create (when an org is resolvable).
-      const cloudOrgId = await resolveOrgForInvoice(request, body, resolvedClientId);
-      if (cloudOrgId) {
-        const memberResult = await requireOrgMembership(uid, cloudOrgId);
-        if (memberResult instanceof NextResponse) return memberResult;
       }
 
       const invType = (cloudInvoiceType ?? 'B2B').toString();
@@ -627,28 +653,26 @@ export async function PATCH(request: Request) {
       where: { id },
       include: { client: true },
     });
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'Invoice not found' },
-        { status: 404 }
-      );
-    }
-    const memberResult = await requireOrgMembership(uid, existing.client.firmId ?? '');
-    if (memberResult instanceof NextResponse) return memberResult;
+    // FIX 10: orphan invoices (null firmId) → 404 (not 403).
+    const accessErr = await assertInvoiceTenantAccess(uid, existing);
+    if (accessErr) return accessErr;
 
-    // Remove fields that shouldn't be directly updated
+    // Remove fields that shouldn't be directly updated.
+    // FIX 4: `clientId` is stripped to prevent cross-tenant invoice moves.
     delete updates.createdAt;
     delete updates.updatedAt;
     delete updates.id;
+    delete updates.clientId;
 
     // ── If line items are supplied, replace them atomically ──
     if (Array.isArray(newItems)) {
       await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
+      let itemsCreate: Array<Record<string, unknown>> = [];
       if (newItems.length > 0) {
         const interState = updates.igst !== undefined
           ? Number(updates.igst) > 0
           : (Number(existing.igst) > 0);
-        const itemsCreate = newItems.map((it: {
+        itemsCreate = newItems.map((it: {
           description?: string;
           hsnCode?: string;
           quantity?: number;
@@ -690,21 +714,35 @@ export async function PATCH(request: Request) {
         });
         await db.invoiceItem.createMany({ data: itemsCreate });
       }
+
+      // FIX 5: when items[] is replaced, recompute totals from the new line
+      // items so the invoice header stays consistent. Merges taxableValue,
+      // cgst, sgst, igst, cess, gstAmount, totalAmount into `updates`.
+      const lineItemsForTotals: InvoiceLineItem[] = itemsCreate.map((it) => ({
+        taxableValue: Number(it.taxableValue) || 0,
+        cgstRate: Number(it.cgstRate) || 0,
+        sgstRate: Number(it.sgstRate) || 0,
+        igstRate: Number(it.igstRate) || 0,
+        cessRate: Number(it.cessRate) || 0,
+      }));
+      const totals = calculateInvoiceTotals(lineItemsForTotals, newItems as Array<{ cessRate?: number }> );
+      updates.taxableValue = totals.taxableValue;
+      updates.cgst = totals.cgst;
+      updates.sgst = totals.sgst;
+      updates.igst = totals.igst;
+      updates.cess = totals.cess;
+      updates.gstAmount = totals.gstAmount;
+      updates.totalAmount = totals.totalAmount;
     }
 
-    // Recompute balanceAmount if paidAmount or totalAmount changed.
+    // Recompute balanceAmount if paidAmount or totalAmount changed (or items replaced).
     if (updates.paidAmount !== undefined || updates.totalAmount !== undefined) {
       const paid = Number(updates.paidAmount ?? existing.paidAmount);
       const total = Number(updates.totalAmount ?? existing.totalAmount);
       updates.balanceAmount = Math.max(0, Math.round((total - paid) * 100) / 100);
-      // Derive paymentStatus.
-      if (paid >= total && total > 0) updates.paymentStatus = 'paid';
-      else if (paid > 0) updates.paymentStatus = 'partial';
-      else if (existing.dueDate && new Date(existing.dueDate).getTime() < Date.now() && paid < total) {
-        updates.paymentStatus = 'overdue';
-      } else {
-        updates.paymentStatus = 'unpaid';
-      }
+      // Derive paymentStatus via the shared engine helper.
+      const due = (updates.dueDate !== undefined ? String(updates.dueDate) : existing.dueDate) || undefined;
+      updates.paymentStatus = derivePaymentStatus(paid, total, due);
     }
 
     const invoice = await db.invoice.update({
@@ -756,16 +794,9 @@ export async function DELETE(request: Request) {
       include: { client: true },
     });
 
-    if (!existing) {
-      return NextResponse.json(
-        { error: 'Invoice not found' },
-        { status: 404 }
-      );
-    }
-
-    // Tenant scope check — verify the invoice belongs to a workspace the caller can access.
-    const memberResult = await requireOrgMembership(uid, existing.client.firmId);
-    if (memberResult instanceof NextResponse) return memberResult;
+    // FIX 10: orphan invoices (null firmId) → 404 (not 403).
+    const delAccessErr = await assertInvoiceTenantAccess(uid, existing);
+    if (delAccessErr) return delAccessErr;
 
     // Create audit log before deletion
     await db.auditLog.create({

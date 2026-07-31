@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { requireAuth, friendlyApiError } from '@/lib/auth/session';
+import { assertInvoiceTenantAccess } from '../_helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,13 +26,9 @@ export async function GET(
         items: { orderBy: { lineNumber: 'asc' } },
       },
     });
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-
-    // Tenant scope check — verify the invoice belongs to a workspace the caller can access.
-    const memberResult = await requireOrgMembership(uid, invoice.client.firmId ?? '');
-    if (memberResult instanceof NextResponse) return memberResult;
+    // FIX 10: orphan invoices (null firmId) → 404 (not 403).
+    const accessErr = await assertInvoiceTenantAccess(uid, invoice);
+    if (accessErr) return accessErr;
 
     return NextResponse.json({ invoice });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { requireAuth, friendlyApiError } from '@/lib/auth/session';
+import { assertInvoiceTenantAccess } from '../_helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,11 @@ export const dynamic = 'force-dynamic';
 // scoped to the caller's org. The HTML is rendered into an iframe or a new
 // window on the client, where the user can print or "Save as PDF" via the
 // browser's native dialog.
+//
+// FIX 8: this route NO LONGER mutates invoice state. Generating a PDF preview
+// is a read-only operation — it must not flip `sentToCustomer`/`status`. An
+// `AuditLog` row (action: 'pdf_generated') is written instead so the action
+// is still observable.
 export async function POST(req: Request) {
   try {
     const authResult = await requireAuth(req);
@@ -30,40 +36,31 @@ export async function POST(req: Request) {
         items: { orderBy: { lineNumber: 'asc' } },
       },
     });
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
+    // FIX 10: orphan invoices (null firmId) → 404 (not 403).
+    const accessErr = await assertInvoiceTenantAccess(uid, invoice);
+    if (accessErr) return accessErr;
 
-    // Tenant scope check.
-    const memberResult = await requireOrgMembership(uid, invoice.client.firmId ?? '');
-    if (memberResult instanceof NextResponse) return memberResult;
-
-    // Mark as sent if it was a draft.
-    const updated = await db.invoice.update({
-      where: { id: body.id },
-      data: {
-        sentToCustomer: true,
-        sentAt: new Date().toISOString(),
-        status: invoice.status === 'draft' ? 'sent' : invoice.status,
-      },
-    });
-
+    // Audit log only — no state mutation. (FIX 8)
     await db.auditLog.create({
       data: {
         clientId: invoice.clientId,
-        action: 'Invoice PDF Generated',
+        action: 'pdf_generated',
         entity: 'invoice',
         entityId: invoice.id,
         details: `PDF generated for invoice ${invoice.invoiceNumber}`,
       },
     });
 
-    const html = buildInvoiceHtml(updated, invoice.client, invoice.items);
-    const paymentLink = `upi://pay?pa=business@upi&pn=${encodeURIComponent(invoice.client.tradeName)}&tr=${invoice.invoiceNumber}&am=${updated.totalAmount}&cu=INR`;
+    const html = buildInvoiceHtml(invoice, invoice.client, invoice.items);
+    // FIX 6: UPI amount should use the outstanding balance (falling back to
+    // the total when the balance is 0 — e.g. fully paid invoices still need
+    // a payable amount for reprint/reconciliation).
+    const amt = invoice.balanceAmount || invoice.totalAmount;
+    const paymentLink = `upi://pay?pa=business@upi&pn=${encodeURIComponent(invoice.client.tradeName)}&tr=${invoice.invoiceNumber}&am=${amt}&cu=INR`;
 
     return NextResponse.json({
       success: true,
-      invoice: updated,
+      invoice,
       html,
       paymentLink,
       message: `Generated the PDF and payment link for Invoice ${invoice.invoiceNumber}.`,

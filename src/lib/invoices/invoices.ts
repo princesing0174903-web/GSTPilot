@@ -334,15 +334,44 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceD
   });
   const invoiceNo = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
 
-  // Calculate totals from line items
+  // Calculate totals from line items (FIX 7: also persist per-line rows below).
   const items = input.items.map((it) => ({
     taxableValue: it.taxableValue,
     cgstRate: it.cgstRate ?? 0,
     sgstRate: it.sgstRate ?? 0,
     igstRate: it.igstRate ?? 0,
+    cessRate: it.cessRate ?? 0,
   }));
-  const totals = calculateInvoiceTotals(items);
+  const totals = calculateInvoiceTotals(items, input.items);
   const today = input.invoiceDate ?? new Date().toISOString().slice(0, 10);
+
+  // FIX 7: build InvoiceItem rows so descriptions, HSN codes, qty, unit price
+  // are persisted — not just the aggregate totals on the Invoice header.
+  const itemsCreate = input.items.map((it, idx) => {
+    const taxable = Number(it.taxableValue) || 0;
+    const cgstR = Number(it.cgstRate) ?? 0;
+    const sgstR = Number(it.sgstRate) ?? 0;
+    const igstR = Number(it.igstRate) ?? 0;
+    const cessR = Number(it.cessRate) ?? 0;
+    return {
+      lineNumber: idx + 1,
+      description: it.description ?? null,
+      hsnCode: it.hsnCode ?? null,
+      quantity: it.quantity ?? 1,
+      unit: it.unit ?? 'NOS',
+      unitPrice: it.unitPrice ?? 0,
+      taxableValue: taxable,
+      cgstRate: cgstR,
+      sgstRate: sgstR,
+      igstRate: igstR,
+      cessRate: cessR,
+      cgst: round2(taxable * cgstR / 100),
+      sgst: round2(taxable * sgstR / 100),
+      igst: round2(taxable * igstR / 100),
+      cess: round2(taxable * cessR / 100),
+      totalAmount: round2(taxable + taxable * (cgstR + sgstR + igstR + cessR) / 100),
+    };
+  });
 
   const created = await db.invoice.create({
     data: {
@@ -357,7 +386,8 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceD
       cgst: totals.cgst,
       sgst: totals.sgst,
       igst: totals.igst,
-      cess: 0,
+      // FIX 7: capture cess from totals (was hardcoded 0).
+      cess: totals.cess,
       gstAmount: totals.gstAmount,
       totalAmount: totals.totalAmount,
       status: 'draft',
@@ -367,7 +397,9 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceD
       notes: input.notes ?? null,
       recurring: input.recurring ?? false,
       recurringCycle: input.recurringCycle ?? null,
+      items: { create: itemsCreate },
     },
+    include: { items: true },
   });
 
   return mapInvoice(created);

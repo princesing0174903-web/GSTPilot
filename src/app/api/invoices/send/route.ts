@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { requireAuth, friendlyApiError } from '@/lib/auth/session';
+import { assertInvoiceTenantAccess } from '../_helpers';
 import type { SendChannel } from '@/lib/invoices/types';
 
 export const dynamic = 'force-dynamic';
@@ -25,13 +26,9 @@ export async function POST(req: Request) {
       where: { id: body.id },
       include: { client: true },
     });
-    if (!existing) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-
-    // Tenant scope check.
-    const memberResult = await requireOrgMembership(uid, existing.client.firmId ?? '');
-    if (memberResult instanceof NextResponse) return memberResult;
+    // FIX 10: orphan invoices (null firmId) → 404 (not 403).
+    const accessErr = await assertInvoiceTenantAccess(uid, existing);
+    if (accessErr) return accessErr;
 
     const updated = await db.invoice.update({
       where: { id: body.id },

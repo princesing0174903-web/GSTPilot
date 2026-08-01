@@ -2935,20 +2935,33 @@ model AppWebhook {
 //       (the app code references db.bankTransaction.findMany on every account).
 model BankAccount {
   id              String   @id @default(cuid())
+  organizationId  String   @default("local") // tenant scope
   bankName        String
+  bankLogoUrl     String?  // bank logo / brand color
+  accountNumber   String   @default("") // full (mock) account number
   accountMasked   String
-  accountType     String   @default("savings") // savings | current | overdraft | credit_card
+  accountType     String   @default("current") // current | savings | od | cash_wallet | upi_wallet | credit_card
   ifsc            String?
-  balance         Float    @default(0)
-  availableBalance Float   @default(0)
+  branch          String?  // bank branch name
+  owner           String?  // account holder name
+  balance         Float    @default(0) // current / ledger balance
+  availableBalance Float   @default(0) // withdrawable balance
   overdraftLimit  Float    @default(0)
   upiHandle       String?
+  currency        String   @default("INR")
+  provider        String   @default("mock") // mock | setu | razorpayx | aa | perfios | finvu
   aaConsent       Boolean  @default(false) // Account Aggregator consent
   aaConsentExpiry DateTime?
-  status          String   @default("connected") // connected | disconnected | syncing | error
+  status          String   @default("active") // active | paused | syncing | error | disconnected
   lastSyncAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  transactions    BankTransaction[]
+  reconciliations BankReconciliation[]
+  imports         StatementImport[]
+
+  @@index([organizationId])
 }
 
 
@@ -5283,25 +5296,39 @@ model Workspace {
 
 model BankTransaction {
   id               String   @id @default(cuid())
+  organizationId   String   @default("local") // tenant scope
   accountId        String
+  account          BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   date             DateTime
+  valueDate        DateTime? // bank value date
   description      String
-  amount           Float
+  narration        String?  // bank-provided narration
+  amount           Float    // always positive — see `type` for direction
   type             String   // credit | debit
-  category         String?  // vendor | sales | expense | tax | etc.
-  referenceNo      String?
+  balance          Float?   // running balance after this txn
+  category         String?  // sales | purchase | gst | salary | rent | utilities | loan | interest | transfer | investment | cash_withdrawal | fee | refund | other
+  counterparty     String?  // extracted counterparty name
+  referenceNo      String?  // UTR / reference number
+  reference        String?  // alias for referenceNo (bank statement ref)
+  upiRef           String?
+  status           String   @default("posted") // posted | pending | reconciled | disputed
+  source           String   @default("statement") // statement | api | import | manual
   matched          Boolean  @default(false)
   matchedInvoiceId String?
-  matchType        String?  // exact | fuzzy | manual
+  matchType        String?  // exact | partial | duplicate | overpayment | underpayment | missing | suspicious
   matchConfidence  Float?   @default(0)
-  upiRef           String?
-  balanceAfter     Float?
+  reconciledAt     DateTime?
+  reconciledBy     String?
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  // TODO: relation to BankAccount (bankAccountId → BankAccount.id)
-  // TODO: relation to Invoice (matchedInvoiceId → Invoice.id)
+  reconciliations  BankReconciliation[]
+
+  @@index([accountId])
+  @@index([organizationId])
+  @@index([date])
+  @@index([matched])
 }
 
 model AGIApproval {
@@ -6310,4 +6337,91 @@ model OracleBrainLearning {
 
   @@unique([firmId, userId, signal, pattern])
   @@index([firmId, signal])
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TASK 12 — Banking & Reconciliation Module (GSTPilot Infinity™)
+//
+// Production-ready banking architecture. Uses IBankProvider adapter pattern:
+//   BankProvider (interface) → MockProvider (now) → SetuProvider (later)
+// All data lives in the local Prisma/SQLite database. Switching to a real
+// provider later only requires changing the provider implementation — the
+// schema, service layer, API routes, and UI remain unchanged.
+//
+// Models: BankReconciliation, StatementImport, CashFlowSnapshot
+// (BankAccount + BankTransaction enhanced above with additive fields.)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Bank Reconciliation (one match between a bank txn and an invoice/payment) ─
+model BankReconciliation {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  transactionId   String
+  transaction     BankTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  invoiceId       String?  // matched invoice (sales or purchase)
+  paymentId       String?  // matched payment record
+  matchType       String   // exact | partial | duplicate | overpayment | underpayment | missing | suspicious
+  confidence      Float    @default(0) // 0..1
+  expectedAmount  Float?   // invoice / payment amount
+  actualAmount    Float?   // bank transaction amount
+  difference      Float    @default(0) // actualAmount - expectedAmount
+  status          String   @default("pending") // pending | approved | rejected
+  matchedBy       String   @default("auto") // auto | manual
+  matchedAt       DateTime?
+  approvedBy      String?
+  approvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  account         BankAccount? @relation(fields: [accountId], references: [id])
+  accountId       String?
+
+  @@index([organizationId])
+  @@index([transactionId])
+  @@index([invoiceId])
+  @@index([status])
+}
+
+// ─── Statement Import (one CSV/Excel bank statement import run) ───────────────
+model StatementImport {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  accountId       String?
+  account         BankAccount? @relation(fields: [accountId], references: [id])
+  fileName        String
+  fileType        String   @default("csv") // csv | xlsx | txt
+  fileSize        Int      @default(0)
+  totalRows       Int      @default(0)
+  importedRows    Int      @default(0)
+  duplicateRows   Int      @default(0)
+  errorRows       Int      @default(0)
+  status          String   @default("pending") // pending | processing | completed | failed | partial
+  errors          String   @default("[]") // JSON array of {row, message}
+  uploadedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([accountId])
+}
+
+// ─── Cash Flow Snapshot (daily/weekly/monthly aggregated cash position) ───────
+model CashFlowSnapshot {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  date            DateTime
+  openingBalance  Float    @default(0)
+  closingBalance  Float    @default(0)
+  totalInflow     Float    @default(0)
+  totalOutflow    Float    @default(0)
+  netFlow         Float    @default(0)
+  creditCount     Int      @default(0)
+  debitCount      Int      @default(0)
+  period          String   @default("daily") // daily | weekly | monthly | quarterly | yearly
+  createdAt       DateTime @default(now())
+
+  @@unique([organizationId, date, period])
+  @@index([organizationId, date])
 }

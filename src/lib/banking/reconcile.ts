@@ -73,7 +73,7 @@ export interface ReconcileResult {
  * Normalize a name for comparison: lowercase, strip common suffixes (Pvt Ltd,
 // LLP, Ltd), collapse whitespace, strip punctuation.
  */
-function normalizeName(s: string): string {
+export function normalizeName(s: string): string {
   return s
     .toLowerCase()
     .replace(/\b(pvt|private|ltd|limited|llp|llc|inc|corp|corporation|co|company|and|sons|brothers)\b/g, '')
@@ -114,7 +114,7 @@ function levenshtein(a: string, b: string): number {
  * Similarity score 0..1 between two names. 1 = identical, 0 = completely
  * different. Uses a normalized Levenshtein distance.
  */
-function nameSimilarity(a: string, b: string): number {
+export function nameSimilarity(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
   if (!na || !nb) return 0;
@@ -130,7 +130,7 @@ function nameSimilarity(a: string, b: string): number {
  * Amount similarity. Returns 1 for exact, scaled down for differences.
  * Within ±2%: >= 0.85. Beyond ±5%: 0.
  */
-function amountSimilarity(bankAmount: number, invoiceAmount: number): number {
+export function amountSimilarity(bankAmount: number, invoiceAmount: number): number {
   if (invoiceAmount === 0) return 0;
   const diff = Math.abs(bankAmount - invoiceAmount);
   const pct = diff / invoiceAmount;
@@ -146,7 +146,7 @@ function amountSimilarity(bankAmount: number, invoiceAmount: number): number {
  * Check whether the bank transaction's reference / description mentions an
  * invoice number. Returns the matched invoice id or null.
  */
-function matchByReference(tx: BankTransaction, invoices: ReconcileInvoiceRef[]): ReconcileInvoiceRef | null {
+export function matchByReference(tx: BankTransaction, invoices: ReconcileInvoiceRef[]): ReconcileInvoiceRef | null {
   if (!tx.referenceNumber && !tx.description) return null;
   const haystack = `${tx.referenceNumber ?? ''} ${tx.description}`.toUpperCase();
 

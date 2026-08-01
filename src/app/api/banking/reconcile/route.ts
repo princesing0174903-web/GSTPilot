@@ -1,58 +1,66 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Reconcile API
+// GSTPilot Banking Module™ — Reconciliation API (TASK 12)
 //
-// POST /api/banking/reconcile
-//   Body: { organizationId, transactions, invoices }
-//   Returns: { ok: true, result: { transactions: BankTransaction[] } }
+// GET  /api/banking/reconcile?organizationId=...&matchType=...&status=...&limit=...
+//   → { summary: ReconciliationSummary, records: BankReconciliationRecord[] }
+//   Calls getReconciliationSummary(orgId) + listReconciliations(orgId, filters) in parallel.
 //
-// Runs the reconciliation engine against a set of bank transactions + invoices.
-// The client passes the transactions (read from Firestore) + invoices (read from
-// the invoice engine); the server returns the reconciled transactions with
-// updated `invoiceId`, `reconciled`, and `matchConfidence` fields.
-//
-// The client then persists the updates via updateTransaction().
+// POST /api/banking/reconcile?organizationId=...
+//   → runReconciliation(orgId)
+//   Returns { summary, matched } — the reconciliation engine's full output.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
-import { reconcileTransactions } from '@/lib/banking/reconcile';
-import type { BankTransaction } from '@/lib/banking-provider/types';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import {
+  getReconciliationSummary,
+  listReconciliations,
+  runReconciliation,
+} from '@/lib/banking-prisma';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
+    const sp = url.searchParams;
+    const matchType = sp.get('matchType') || undefined;
+    const status = sp.get('status') || undefined;
+    const limitParam = sp.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+
+    const [summary, records] = await Promise.all([
+      getReconciliationSummary(orgId),
+      listReconciliations(orgId, { matchType, status, limit }),
+    ]);
+
+    return NextResponse.json({ summary, records });
+  } catch (err) {
+    return friendlyApiError(err, 'Failed to load reconciliation data.');
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { transactions, invoices } = body as {
-      transactions?: BankTransaction[];
-      invoices?: Array<{
-        id: string;
-        invoiceNumber: string;
-        clientName: string;
-        grandTotal: number;
-        balanceDue: number;
-        invoiceType: 'sales' | 'purchase';
-      }>;
-    };
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
 
-    if (!Array.isArray(transactions)) {
-      return NextResponse.json(
-        { ok: false, error: 'transactions (array) is required.' },
-        { status: 400 },
-      );
-    }
-    if (!Array.isArray(invoices)) {
-      return NextResponse.json(
-        { ok: false, error: 'invoices (array) is required.' },
-        { status: 400 },
-      );
-    }
-
-    const reconciled = reconcileTransactions(transactions, invoices);
-    return NextResponse.json({ ok: true, result: { transactions: reconciled } });
+    const result = await runReconciliation(orgId);
+    return NextResponse.json({ success: true, ...result });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[api/banking/reconcile] error:', message);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return friendlyApiError(err, 'Failed to run reconciliation.');
   }
 }

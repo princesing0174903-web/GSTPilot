@@ -260,6 +260,9 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      /* ── HIDDEN per Step 0 (Product Mode) — fake/placeholder modules ──
+         invoice-cloud (duplicate of invoices), execution-engine, digital-twin
+         have no real backend. Uncomment to restore once they become real.
       {
         id: 'cmd-invoice-cloud',
         label: 'Open Invoice Cloud',
@@ -296,6 +299,7 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      ── END HIDDEN ── */
       {
         id: 'cmd-create-return',
         label: 'Create Return',
@@ -384,6 +388,10 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      /* ── HIDDEN per Step 0 (Product Mode) — fake/placeholder modules ──
+         generate, autopilot, ai-software-factory, autonomous-enterprise,
+         enterprise-cloud-platform, enterprise-ai-platform, global-enterprise-network
+         have no real backend. Uncomment to restore once they become real.
       {
         id: 'cmd-open-generate',
         label: 'Open AI Generation Workbench',
@@ -461,6 +469,7 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      ── END HIDDEN ── */
       // ─── Google Workspace — Enterprise Integration ───
       {
         id: 'cmd-open-google-workspace',
@@ -473,7 +482,8 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
-      // ─── Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ───
+      /* ── HIDDEN per Step 0 (Product Mode) — Phase 13 Enterprise Collaboration ──
+         All 11 Phase 13 modules have no real backend. Uncomment to restore.
       {
         id: 'cmd-open-enterprise-command-center',
         label: 'Open Enterprise Command Center™',
@@ -595,6 +605,7 @@ export default function CommandPalette() {
         },
         group: 'Phase 13 — Enterprise',
       },
+      ── END HIDDEN (Phase 13) ── */
       // Hidden per stabilization directive — global expansion uses demo data (src/lib/global/data.ts, data-enterprise.ts contain fabricated per-country revenue/tax).
       // The 12 components under src/components/global-expansion/* are still registered in DashboardViews.tsx (routes remain reachable) but their Command Palette nav buttons are hidden until the demo data is replaced with real per-country records.
       /* ─── Phase 14 — Global Expansion & International Financial Operating System™ ─── HIDDEN
@@ -731,7 +742,8 @@ export default function CommandPalette() {
         group: 'Phase 14 — Global',
       },
       */ // ─── END Phase 14 — Global Expansion (HIDDEN per stabilization directive) ───
-      // ─── Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ───
+      /* ── HIDDEN per Step 0 (Product Mode) — Phase 16 Global Financial Cloud ──
+         All 16 Phase 16 modules have no real backend. Uncomment to restore.
       {
         id: 'cmd-open-global-financial-cloud',
         label: 'Open Global Financial Cloud™ Hub',
@@ -908,6 +920,7 @@ export default function CommandPalette() {
         },
         group: 'Phase 16 — Cloud',
       },
+      ── END HIDDEN (Phase 16) ── */
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]
   );

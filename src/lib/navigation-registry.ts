@@ -27,6 +27,8 @@ import {
   Cloud,
   BookOpen,
   Settings,
+  Landmark,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 import type { AppView } from '@/contexts/AppContext';
@@ -97,8 +99,25 @@ export const VIEW_REGISTRY: Record<string, NavEntry> = {
     description: 'GST returns — create, validate, and file GSTR-1 and GSTR-3B.',
     category: 'finance',
   },
+  banking: {
+    view: 'banking',
+    label: 'Banking',
+    icon: Landmark,
+    inSidebar: true,
+    description: 'Bank accounts, transactions, reconciliation, and cash flow.',
+    category: 'finance',
+    badge: 'Demo',
+  },
+  reports: {
+    view: 'reports',
+    label: 'Reports',
+    icon: BarChart3,
+    inSidebar: true,
+    description: 'Financial reports, filing summaries, and business analytics.',
+    category: 'finance',
+  },
 
-  // ── Integrations (real) ──
+  // ── Integrations (real, shown in secondary sidebar section) ──
   'google-workspace': {
     view: 'google-workspace',
     label: 'Google',

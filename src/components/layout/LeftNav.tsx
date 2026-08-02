@@ -27,13 +27,21 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { BrandLogo } from '@/components/brand';
-import { SIDEBAR_ITEMS } from '@/lib/navigation-registry';
+import { SIDEBAR_ITEMS, type NavEntry } from '@/lib/navigation-registry';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// Split sidebar items: primary (core workspace) vs integrations (secondary).
+const PRIMARY_ITEMS: NavEntry[] = SIDEBAR_ITEMS.filter(
+  (v) => v.category !== 'integrations',
+);
+const INTEGRATION_ITEMS: NavEntry[] = SIDEBAR_ITEMS.filter(
+  (v) => v.category === 'integrations',
+);
 
 // Views that belong to each nav group — keeps active state correct in sub-views.
 const NAV_GROUP_MAP: Partial<Record<string, AppView>> = {
@@ -53,6 +61,8 @@ const NAV_GROUP_MAP: Partial<Record<string, AppView>> = {
   reconcile: 'returns',
   'google-workspace': 'google-workspace',
   'zoho-books': 'zoho-books',
+  banking: 'banking',
+  reports: 'reports',
   vendors: 'clients',
   expenses: 'invoices',
   payments: 'invoices',
@@ -130,7 +140,7 @@ export function LeftNav() {
             Workspace
           </div>
 
-          {SIDEBAR_ITEMS.map((item, i) => {
+          {PRIMARY_ITEMS.map((item, i) => {
             const isActive = activeGroup === item.view;
             const Icon = item.icon;
             const isHovered = hovered === item.view;
@@ -225,6 +235,74 @@ export function LeftNav() {
               </Tooltip>
             );
           })}
+
+          {/* ─── Integrations (secondary section) ─────────────────────── */}
+          {INTEGRATION_ITEMS.length > 0 && (
+            <>
+              <div className="hidden px-2.5 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#52525B] xl:block">
+                Integrations
+              </div>
+              {INTEGRATION_ITEMS.map((item, i) => {
+                const isActive = activeGroup === item.view;
+                const Icon = item.icon;
+                const isHovered = hovered === item.view;
+
+                const button = (
+                  <motion.button
+                    key={item.view}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2, delay: 0.03 * (PRIMARY_ITEMS.length + i), ease: 'easeOut' }}
+                    onHoverStart={() => setHovered(item.view)}
+                    onHoverEnd={() => setHovered(null)}
+                    onFocus={() => setHovered(item.view)}
+                    onBlur={() => setHovered(null)}
+                    onClick={() => setCurrentView(item.view)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'group relative flex h-10 items-center rounded-lg text-[13px] font-medium outline-none',
+                      'transition-all duration-[180ms] ease-out',
+                      'focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40',
+                      'justify-center w-10',
+                      'xl:w-full xl:justify-start xl:gap-2.5 xl:px-2.5',
+                      isActive
+                        ? 'bg-gradient-to-r from-[#3B82F6]/[0.10] to-[#3B82F6]/[0.04] text-white ring-1 ring-inset ring-[#3B82F6]/20'
+                        : 'text-[#A1A1AA] hover:bg-white/[0.04] hover:text-white',
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        'h-[18px] w-[18px] shrink-0 transition-colors duration-200',
+                        isActive
+                          ? 'text-[#60A5FA]'
+                          : isHovered
+                            ? 'text-white'
+                            : 'text-[#71717A]',
+                      )}
+                      strokeWidth={isActive ? 2.25 : 2}
+                    />
+                    <span className="hidden truncate xl:inline">{item.label}</span>
+                    <span className="pointer-events-none absolute left-[110%] top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-[#18181B] px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100 xl:hidden">
+                      {item.label}
+                    </span>
+                  </motion.button>
+                );
+
+                return (
+                  <Tooltip key={item.view}>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="xl:hidden"
+                      sideOffset={8}
+                    >
+                      {item.label}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </>
+          )}
         </div>
 
         {/* ─── Footer ──────────────────────────────────────────────────── */}

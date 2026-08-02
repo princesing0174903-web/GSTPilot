@@ -48,13 +48,14 @@ import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import CommandPalette from '@/components/command-palette/CommandPalette'
 import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
 
-// DashboardViews is itself a lazy-loaded registry of 150 view components.
+// DashboardViews is a lazy-loaded registry of ~21 real view components.
 // Keeping it dynamic means this shell file only compiles the layout chrome,
-// not every dashboard view.
+// not every dashboard view. (Product Mode · Step 0: fakes are feature-flagged
+// off and no longer in the build graph.)
 const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
   loading: () => (
     <div className="flex h-full min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
     </div>
   ),
   ssr: false,

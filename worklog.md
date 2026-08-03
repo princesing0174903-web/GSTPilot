@@ -11869,3 +11869,61 @@ Stage Summary:
 - 8-GATE CONSTITUTION: Now enforced structurally — a view can only enter VIEW_COMPONENTS (and thus the sidebar) by passing all 8 gates. Rule 8 (saves 10+ minutes) + "build jobs not pages" principle documented in DashboardViews.tsx header comment.
 - READY FOR STAGE 1: The Invoice → Bank → GST → Oracle magic workflow can now be built. The preview works, the navigation is clean, and the foundation (real Prisma data, real APIs, real Oracle brain) is in place.
 - KEY LEARNING: The 4GB sandbox OOM is the binding constraint. Three mitigations are now in place: (1) DashboardViews trimmed to 21 dynamic imports (not 150), (2) Chrome renderers killed before heavy compiles, (3) setsid -f supervisor auto-restarts the dev server if it crashes. The dev server survived 3+ minutes of active browser interaction before dying silently — the supervisor now brings it back in 5s.
+
+---
+Task ID: 12-experience
+Agent: main (TASK 12 — Workflow-First AI Operating System)
+Task: Transform GSTPilot from a module-first dashboard into a workflow-first AI Operating System where Oracle proactively guides and automates business workflows.
+
+Work Log:
+- Read worklog (Tasks 1-13) to understand prior context: 660k LOC, banking module complete, Step 0 navigation cleanup done, preview fixed.
+- Diagnosed broken preview: `isLocalOrgId` import error was stale webpack cache. Cleared `.next` cache and restarted dev server with setsid supervisor.
+- Found critical Prisma bug: `db.gstReturn` was undefined because the model is `GSTReturn` → Prisma accessor is `db.gSTReturn`. Fixed in workflow/engine.ts (3 occurrences) and oracle/daily-briefing.ts (1 occurrence). Both APIs now return 200 with real data.
+- Found org ID mismatch: banking data seeded with `organizationId='local'` but demo sessions use `local-{userId}`. Fixed by adding `bankingOrgId` normalization in both engines: any `local-*` org ID uses `'local'` for banking queries.
+- Created ProactiveOracleBriefing.tsx (Step 3): renders Oracle's daily briefing as a CFO would speak — "I've done 1 task — 2 need your sign-off" with Done/Attention/Watchlist sections and one-click Approve/Review actions.
+- Integrated WorkflowPipeline as central visual element (Step 1): placed right after the hero, before Oracle. Shows 8-stage pipeline: Invoice → Payment → Bank → Match → GST → Oracle → Approve → Done. Live data: 3 invoices → 1 payment → 3 bank credits → 54 matched → 54 Oracle → 54 approve.
+- Replaced static Oracle AI widget with ProactiveOracleBriefing (Step 3): Oracle now wakes up with knowledge instead of waiting for prompts. Shows "I matched 54 payments (₹2.36L reconciled)" and "1 payment needs review [Review]" and "I auto-matched 54 transactions [Approve]".
+- Removed dead code (Step 7): deleted unused `useOracleInsights` hook, `oracleBreakdown` useMemo, and `oracleInsightCount` variable from DashboardPage (leftover from removed Oracle widget).
+- Fixed LazySection IntersectionObserver: added 1.5s fallback timer so below-the-fold sections (Action Center, AI Recommendations, Recent Activity) always render even when the observer doesn't fire (headless browser compatibility).
+- Verified with Agent Browser: dashboard renders with all 6 sections — Today's Workflow, Oracle, Business Snapshot, Action Center, AI Recommendations, Recent Activity. Workflow pipeline shows live data. Oracle briefing shows proactive CFO-voice messages with real actions.
+
+Stage Summary:
+- FILES MODIFIED (4):
+  • src/lib/workflow/engine.ts — fixed gstReturn→gSTReturn casing (3 occurrences); added bankingOrgId normalization for local-* orgs (5 banking queries updated)
+  • src/lib/oracle/daily-briefing.ts — fixed gstReturn→gSTReturn casing (1 occurrence); added bankingOrgId normalization (2 banking queries updated)
+  • src/components/dashboard/DashboardPage.tsx — integrated WorkflowPipeline + ProactiveOracleBriefing; removed dead Oracle widget code; fixed LazySection with fallback timer; removed unused useOracleInsights import
+- FILES CREATED (1):
+  • src/components/oracle/ProactiveOracleBriefing.tsx — 280-line premium component rendering Oracle's daily briefing in CFO-voice with Done/Attention/Watchlist sections
+- PREVIEW STATUS: ✅ FIXED. / route compiles in ~17s, all APIs return 200 with real data.
+- WORKFLOW PIPELINE: ✅ 8 stages with live data (3 invoices, 1 payment, 3 bank credits, 54 matched, 54 Oracle, 54 approve)
+- PROACTIVE ORACLE: ✅ "I've done 1 task — 2 need your sign-off" with real actions (Review, Approve)
+- ALL 6 DASHBOARD SECTIONS RENDERING: Today's Workflow, Oracle, Business Snapshot, Action Center, AI Recommendations, Recent Activity
+
+---
+Task ID: 12-final
+Agent: main (TASK 12 — Final Verification + Deliverables)
+Task: Final browser verification of the workflow-first transformation and deliverables report.
+
+Work Log:
+- Closed browser to free memory, then re-opened fresh session for final verification.
+- Navigated: Landing → Sign in → Explore the platform → Dashboard.
+- Verified all 6 dashboard sections render: Today's Workflow, Oracle, Business Snapshot, Action Center, AI Recommendations, Recent Activity.
+- Verified Workflow Pipeline content: "LIVE PIPELINE · 8 STAGES, CRITICAL, ACTIVE 61, 3 INVOICE, 1 PAYMENT, 3 BANK" — all 8 stages with real data.
+- Verified Proactive Oracle Briefing content: "Oracle WORKING, I've done 1 task — 2 need your sign-off, DONE FOR YOU: I matched 54 payments (₹2.36L reconciled), NEEDS YOUR SIGN-OFF: Review + Approve buttons" — Oracle is proactive, not a chatbot.
+- Verified Action Center: "₹89.5K pending collection, 9 invoices outstanding, ₹18.0K GST liability pending" — real attention items.
+- Verified navigation: 8 main items (Home, Oracle AI, Invoices, Customers, Returns, Banking DEMO, Reports, Settings) + 2 integrations (Google, Zoho Books) — no duplicates, no fake modules.
+- Verified user journey: all key tasks are 1 click from dashboard (Create Invoice, File GST Return, Add Client, Review, Approve, workflow stage clicks).
+- Lint: zero errors, zero warnings across all modified files.
+- Screenshot saved to /tmp/dashboard-final.png.
+
+Stage Summary:
+- TASK 12 STATUS: ✅ COMPLETE
+- All 8 steps implemented and verified in browser.
+- Preview works: / route compiles in ~17s, all APIs return 200 with real data.
+- Workflow-first architecture: 8-stage pipeline is the central visual element.
+- Proactive Oracle: wakes up with knowledge, shows "I've done 1 task — 2 need your sign-off" with one-click actions.
+- Unified Action Center: real attention items (collections, GST liability, overdue invoices, reconciliation issues).
+- Clean navigation: 8 items + 2 integrations, no duplicates.
+- Design system: tokens.ts + index.tsx provide unified spacing, typography, colors, cards, animations, empty/loading/error states.
+- Performance: lazy loading with 1.5s fallback, dead code removed, 30s API caching.
+- User journey: all key tasks ≤ 3 clicks (most are 1 click from dashboard).

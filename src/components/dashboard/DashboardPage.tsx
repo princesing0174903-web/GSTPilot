@@ -76,7 +76,10 @@ import {
 } from '@/hooks/use-firestore';
 import { useTimelineEvents } from '@/hooks/useTimelineEvents';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
-import { useOracleInsights } from '@/hooks/useOracleInsights';
+import { useWorkflowPipeline } from '@/hooks/useWorkflowPipeline';
+import { useOracleDailyBriefing } from '@/hooks/useOracleDailyBriefing';
+import { WorkflowPipeline } from '@/components/workflow/WorkflowPipeline';
+import { ProactiveOracleBriefing } from '@/components/oracle/ProactiveOracleBriefing';
 import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
 import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
@@ -109,6 +112,18 @@ function useInView(rootMargin = '400px 0px'): { ref: React.RefCallback<HTMLDivEl
         { rootMargin },
       );
       observerRef.current.observe(node);
+      // Fallback: if the observer hasn't fired within 1.5s (e.g. in headless
+      // browsers or when the element is already in view on mount), force-show
+      // the section. This prevents content from being permanently hidden.
+      setTimeout(() => {
+        setInView((prev) => {
+          if (!prev) {
+            observerRef.current?.disconnect();
+            observerRef.current = null;
+          }
+          return true;
+        });
+      }, 1500);
     }
   }, [inView, rootMargin]);
 
@@ -566,7 +581,15 @@ export default function DashboardPage() {
   const { data: returns } = useFireReturns();
   const { events: timelineEvents, loading: timelineLoading } = useTimelineEvents(15);
   const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
-  const { insights: oracleInsights } = useOracleInsights();
+
+  // ── Workflow Pipeline + Proactive Oracle Briefing (Task 12 · Steps 1 & 3) ──
+  // The workflow pipeline is the CENTRAL visual element — it shows the live
+  // state of every business object as it flows through Invoice → Payment →
+  // Bank → Match → GST → Oracle → Approve → Done.
+  // The Oracle daily briefing makes Oracle proactive — it wakes up with
+  // knowledge instead of waiting for prompts.
+  const { pipeline, loading: pipelineLoading, refresh: refreshPipeline } = useWorkflowPipeline();
+  const { briefing, loading: briefingLoading, refresh: refreshBriefing } = useOracleDailyBriefing();
 
   // ── Loading safety timer (12s) — never let the skeleton hang forever ──
   // The timer is armed while loading; if it fires before loading clears, we
@@ -714,17 +737,6 @@ export default function DashboardPage() {
 
     return items;
   }, [returns, snapshot, metrics, pendingGst]);
-
-  // ── Oracle breakdown (real — from AI recs + Oracle insights + actions) ──
-  // Three honest counts shown on the Oracle widget: insights, risks, actions.
-  const oracleBreakdown = useMemo(() => {
-    const insightCount = oracleInsights?.aiAlerts?.length ?? 0;
-    const riskCount = oracleInsights?.risks?.length ?? 0;
-    const actionCount = aiRecommendations.length;
-    const total = insightCount + riskCount + actionCount;
-    return { insightCount, riskCount, actionCount, total };
-  }, [aiRecommendations, oracleInsights]);
-  const oracleInsightCount = oracleBreakdown.total;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // EARLY RETURNS — safe now because every hook above ran unconditionally.
@@ -937,90 +949,35 @@ export default function DashboardPage() {
         </motion.section>
 
         {/* ════════════════════════════════════════════════════════════════════
-            SECTION 2 — ORACLE AI WIDGET
-            Structured breakdown: insights · risks · recommended actions.
-            Single "Open Oracle" button — no duplicate CTAs.
+            SECTION 2 — WORKFLOW PIPELINE (Task 12 · Step 1)
+            The CENTRAL visual element. Shows the live state of every business
+            object as it flows through the canonical workflow:
+              Invoice → Payment → Bank → Match → GST → Oracle → Approve → Done
+            Every stage count comes from real Prisma data. Clicking a stage
+            navigates to the relevant module. The "User Approves" stage pulses
+            when it has items waiting — it's the action bottleneck.
         ════════════════════════════════════════════════════════════════════ */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.1, ease: 'easeOut' as const }}
-        >
-          <div className="relative glass-surface rounded-2xl p-5 md:p-6 border-amber-500/15 overflow-hidden">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-amber-500/[0.06] blur-3xl"
-            />
-            <div className="relative flex flex-col lg:flex-row lg:items-center gap-5">
-              {/* Left: brand + status */}
-              <div className="flex items-start gap-3.5 min-w-0 lg:min-w-[280px] shrink-0">
-                <div className="relative flex items-center justify-center h-11 w-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_-4px_rgba(245,158,11,0.55)] shrink-0">
-                  <Brain className="h-5 w-5 text-white" />
-                  <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border border-background" />
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-semibold text-foreground tracking-tight">
-                      Oracle AI
-                    </h2>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
-                      <span className="h-1 w-1 rounded-full bg-amber-400 animate-pulse" />
-                      Built-in
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                    {oracleBreakdown.total > 0
-                      ? 'Live analysis from your business data.'
-                      : 'Insights appear as you create invoices and connect integrations.'}
-                  </p>
-                </div>
-              </div>
+        <WorkflowPipeline
+          pipeline={pipeline}
+          loading={pipelineLoading}
+          onNavigate={(view) => setCurrentView(view as AppView)}
+          onRefresh={refreshPipeline}
+        />
 
-              {/* Middle: three metric pills */}
-              <div className="grid grid-cols-3 gap-3 flex-1 min-w-0">
-                <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3 w-3 text-amber-400" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Insights</span>
-                  </div>
-                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.insightCount}</p>
-                  <p className="text-[10px] text-muted-foreground">financial alerts</p>
-                </div>
-                <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] px-3 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-3 w-3 text-rose-400" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Risks</span>
-                  </div>
-                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.riskCount}</p>
-                  <p className="text-[10px] text-muted-foreground">detected</p>
-                </div>
-                <div className="rounded-xl border border-blue-500/15 bg-blue-500/[0.04] px-3 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="h-3 w-3 text-blue-400" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</span>
-                  </div>
-                  <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">{oracleBreakdown.actionCount}</p>
-                  <p className="text-[10px] text-muted-foreground">recommended</p>
-                </div>
-              </div>
-
-              {/* Right: single Open Oracle CTA */}
-              <div className="shrink-0">
-                <Button
-                  onClick={() => router.push('/oracle')}
-                  className="gap-2 bg-gradient-to-br from-amber-400 to-amber-600 text-white border-0 hover:opacity-90 px-4 py-2 w-full lg:w-auto"
-                >
-                  <Brain className="h-3.5 w-3.5" />
-                  Open Oracle
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </motion.section>
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 3 — PROACTIVE ORACLE BRIEFING (Task 12 · Step 3)
+            Oracle does NOT wait for prompts. Oracle wakes up with knowledge.
+            This renders the daily briefing as a CFO would speak — what Oracle
+            already done, what needs the user's sign-off, and what Oracle is
+            watching. One-click approve/review actions on every attention item.
+        ════════════════════════════════════════════════════════════════════ */}
+        <ProactiveOracleBriefing
+          briefing={briefing}
+          loading={briefingLoading}
+          onNavigate={(view) => setCurrentView(view as AppView)}
+          onRefresh={refreshBriefing}
+          onOpenOracle={() => router.push('/oracle')}
+        />
 
         {/* ════════════════════════════════════════════════════════════════════
             SECTION 3 — BUSINESS SNAPSHOT

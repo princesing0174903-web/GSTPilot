@@ -161,53 +161,57 @@ export function SettingsPage() {
   }, [pendingSettingsSection, setPendingSettingsSection]);
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
-        {/* ── Header ── */}
-        <div className="mb-8 md:mb-12">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
-            Settings
-          </h1>
-          <p className="text-sm md:text-base text-zinc-400 mt-2">
-            Manage your organization, account, and system preferences.
-          </p>
-        </div>
+    // Fixed-layout Settings shell (Stripe-style):
+    //   • Root fills the viewport height of its parent <main> and clips overflow.
+    //   • The settings sub-nav (left) is shrink-0 with its own vertical scroll.
+    //   • The content panel (right) is flex-1 with its own vertical scroll.
+    //   • The application header, sidebar, and this nav never move — only the
+    //     content panel scrolls.
+    <div className="flex h-full flex-col lg:flex-row overflow-hidden bg-black text-white">
+      {/* ── Sidebar Nav ── */}
+      <SettingsSidebar
+        activeSection={activeSection}
+        onSelect={setActiveSection}
+        isMobile={isMobile}
+      />
 
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* ── Sidebar Nav ── */}
-          <SettingsSidebar
-            activeSection={activeSection}
-            onSelect={setActiveSection}
-            isMobile={isMobile}
-          />
-
-          {/* ── Main Content ── */}
-          <div className="flex-1 min-w-0">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeSection}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-              >
-                {activeSection === 'organization' && <OrganizationSection />}
-                {activeSection === 'appearance' && <AppearanceSection />}
-                {activeSection === 'profile' && <ProfileSection />}
-                {activeSection === 'security' && <SecuritySection />}
-                {activeSection === 'integrations' && <IntegrationsSection />}
-                {activeSection === 'notifications' && <NotificationsSection />}
-                {activeSection === 'team' && <TeamSection />}
-                {activeSection === 'apikeys' && <ApiKeysSection />}
-                {activeSection === 'audit' && <AuditLogSection />}
-                {activeSection === 'billing' && <BillingSection />}
-                {activeSection === 'data' && <DataSection />}
-                {activeSection === 'danger' && <DangerZoneSection />}
-              </motion.div>
-            </AnimatePresence>
+      {/* ── Main Content (only this region scrolls) ── */}
+      <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
+        <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12">
+          {/* ── Header ── */}
+          <div className="mb-8 md:mb-12">
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
+              Settings
+            </h1>
+            <p className="text-sm md:text-base text-zinc-400 mt-2">
+              Manage your organization, account, and system preferences.
+            </p>
           </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              {activeSection === 'organization' && <OrganizationSection />}
+              {activeSection === 'appearance' && <AppearanceSection />}
+              {activeSection === 'profile' && <ProfileSection />}
+              {activeSection === 'security' && <SecuritySection />}
+              {activeSection === 'integrations' && <IntegrationsSection />}
+              {activeSection === 'notifications' && <NotificationsSection />}
+              {activeSection === 'team' && <TeamSection />}
+              {activeSection === 'apikeys' && <ApiKeysSection />}
+              {activeSection === 'audit' && <AuditLogSection />}
+              {activeSection === 'billing' && <BillingSection />}
+              {activeSection === 'data' && <DataSection />}
+              {activeSection === 'danger' && <DangerZoneSection />}
+            </motion.div>
+          </AnimatePresence>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -231,7 +235,7 @@ function SettingsSidebar({
 
   if (isMobile) {
     return (
-      <div className="mb-4">
+      <div className="shrink-0 px-4 pt-6 pb-2">
         <Select value={activeSection} onValueChange={(v) => onSelect(v as SectionId)}>
           <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white">
             <SelectValue />
@@ -251,9 +255,13 @@ function SettingsSidebar({
     );
   }
 
+  // Desktop: fixed sub-nav panel with its own vertical scroll. The parent
+  // <main> already clips overflow, so this panel never causes the whole app
+  // to scroll — only this nav (if it ever overflows) and the content panel
+  // scroll independently.
   return (
-    <nav className="w-60 shrink-0">
-      <div className="sticky top-8 space-y-6">
+    <nav className="w-64 shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-zinc-900/70 bg-zinc-950/30 px-4 py-8">
+      <div className="space-y-6">
         {Object.entries(groups).map(([groupName, items]) => (
           <div key={groupName}>
             <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">

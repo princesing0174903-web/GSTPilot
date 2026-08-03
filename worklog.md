@@ -11927,3 +11927,750 @@ Stage Summary:
 - Design system: tokens.ts + index.tsx provide unified spacing, typography, colors, cards, animations, empty/loading/error states.
 - Performance: lazy loading with 1.5s fallback, dead code removed, 30s API caching.
 - User journey: all key tasks ≤ 3 clicks (most are 1 click from dashboard).
+
+---
+Task ID: PQA-15
+Agent: subagent (Premium Loading + Scroll Fix)
+Task: Build premium loading system and fix scrolling chaos.
+
+Work Log:
+- Read worklog (Tasks 1-13) to understand prior context: 660k LOC, banking module complete, preview working via setsid supervisor. Identified the five high-priority spinner files to replace (page.tsx, AppRoot.tsx, AppRouter.tsx, DashboardShell.tsx, DashboardViews.tsx) plus providers-lazy.tsx as a sixth full-screen spinner. Confirmed `Zap`-logo loading splash and `animate-spin rounded-full border-2 border-emerald-500 border-t-transparent` spinners were the two patterns to eliminate.
+- Confirmed the existing `.shimmer` class in src/app/globals.css (1.8s left-to-right sweep, rgba(255,255,255,0.02→0.08)) and `.custom-scrollbar` class (6px thin, dark #2A2A2A thumb) are available for the new skeleton + scroll work.
+- Inlined the real GSTPilot logo SVG (from /public/logo.svg) directly into the new loading component so the splash has zero runtime asset dependencies — no <img src="/logo.svg"> fetch during the brief loading window, no FOUC.
+- Created src/components/ui/premium-loading.tsx (~280 lines) exporting:
+  • PremiumGlobalLoading — full-screen matte-black (#000) splash with: soft radial blue glow (animated opacity pulse 2.5s), glass-effect card (backdrop-blur 12px, subtle 1px white/6% border, soft inset highlight), inlined GSTPilot logo mark that fades in (opacity 0→1, scale 0.96→1.0, 400ms ease-out) then breathes gently (scale 1.0→1.02→1.0, 2.5s ease-in-out, infinite, 400ms delay), "GSTPilot" wordmark + "Infinity" pill (fade-in 200ms delayed). No rotation, no spinner, no bouncing dots, no progress bars. Renders synchronously (no useEffect) so next/dynamic({ loading: ... }) can use it directly.
+  • PremiumPageLoader — smaller page-level loader for lazy-loaded views: centered 48px breathing logo mark + soft glow + optional label. Same dark theme. No glass card, no full-viewport takeover.
+  • PremiumLoadingStyles — injects the four keyframes (fade-in, breathe, wordmark-fade, glow-pulse) once per document via a stable <style> tag (React dedupes by element identity).
+- Created src/components/ui/premium-skeletons.tsx (~290 lines) exporting:
+  • ShimmerBlock — base primitive: #181818 block + .shimmer sweep class.
+  • DashboardSkeleton — greeting + 4 KPI cards + wide chart panel (14 bars) + recent-activity list (6 rows with avatars).
+  • TableSkeleton — header row + N body rows (default 8) × M columns (default 5), with varied shimmer widths so it doesn't look like a grid.
+  • FormSkeleton — N label + input field pairs (default 5) + action buttons row.
+  • OracleSkeleton — Oracle avatar header + alternating Oracle/user message bubbles + composer bar.
+  • ChartSkeleton — title row + chart body with Y-axis ticks + 12 varying-height bars + X-axis labels.
+  • InvoiceSkeleton — invoice table with invoice-#-chip, client (avatar + name), amount, status pill, date, action icons columns × 8 rows.
+  All skeletons use bg #181818 blocks + the existing .shimmer sweep (rgba(255,255,255,0.04→0.08)), wrapped in #0C0C0C cards with rgba(255,255,255,0.06) borders — matches the GSTPilot dark theme.
+- Replaced 6 full-page / full-section generic spinners with premium components:
+  1. src/app/page.tsx — Zap-logo + "Loading GSTPilot…" splash → <PremiumGlobalLoading /> (next/dynamic loading placeholder).
+  2. src/components/AppRoot.tsx — same Zap-logo PageLoader → <PremiumGlobalLoading />.
+  3. src/components/AppRouter.tsx — three replacements:
+     a. PageLoader const (used by 5 root dynamic() imports: LandingPage, LoginPage, DashboardContent, EmailVerificationBanner) → <PremiumPageLoader />.
+     b. AutoProvisionWorkspace loading state (animate-spin emerald circle + "Setting up your workspace…") → <PremiumPageLoader label="Setting up your workspace…" />.
+     c. DashboardTimeoutBoundary loading state (animate-spin emerald circle + "Loading your workspace… {N}s") → <PremiumPageLoader label="Loading your workspace… {N}s" />.
+     d. AppRouter auth-initializing splash (Zap-logo + glass-surface + "Loading GSTPilot…") → <PremiumGlobalLoading />.
+  4. src/components/DashboardShell.tsx — DashboardViews dynamic() loading placeholder (animate-spin emerald circle) → <PremiumPageLoader />.
+  5. src/components/DashboardViews.tsx — PageLoader const (used by 21 view dynamic() imports) → <PremiumPageLoader />.
+  6. src/components/providers-lazy.tsx — full-screen inline-style spinner (gstpilot-providers-spin keyframe) → <PremiumGlobalLoading />. (Bonus: this was the very first thing users saw while Firebase chunk loaded — now it matches the rest of the brand.)
+  Spinner pattern "animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" now returns ZERO matches across src/components/ — eliminated entirely.
+- Did NOT touch the 90 files that use `<Loader2 className="... animate-spin" />` — those are almost all small inline button/indicator spinners (e.g. "Saving…", "Syncing…", "Refreshing…"). Verified by spot-checking several: every match is inside a button or as a tiny inline indicator next to a status label, not a full-page loader. Per task instructions, these are fine.
+- Fixed the scrolling chaos in src/components/DashboardShell.tsx:
+  • Root div was already `flex h-screen flex-col overflow-hidden` ✓ — left as-is.
+  • Header was already `shrink-0` ✓ — left as-is.
+  • Two-column workspace was already `flex min-h-0 flex-1` ✓ — left as-is.
+  • Removed `pb-24` from the main <main> (was compensating for body scroll; now that overflow-hidden is enforced on root, the pad is unnecessary and was creating a phantom scroll region at the bottom of every view).
+  • Sidebar wrapper left as bare `<div className="shrink-0">` — does NOT add its own scroll. LeftNav manages its own h-full + internal scroll.
+- Fixed the scrolling chaos in src/components/layout/LeftNav.tsx:
+  • <nav> got `overflow-hidden` added (was missing). Now: `flex h-full flex-col overflow-hidden border-r border-[#1A1A1A] bg-[#0A0A0A]`.
+  • Brand header button got `shrink-0` added (was missing) — now pinned at top.
+  • Primary nav <div> got `overflow-y-auto overflow-x-hidden custom-scrollbar` added (was just `flex flex-1 flex-col gap-0.5`). Now scrolls independently with the thin dark rail. Section labels (Workspace / Integrations) scroll WITH the list — correct behavior.
+  • Footer got `shrink-0` added (was missing) — now pinned at bottom.
+  Net effect: only the primary nav list scrolls. Brand header + footer never move. Body never scrolls. Main content area scrolls independently. Each region has its own scroll context. No more "whole app scrolls / sidebar scrolls / both scroll" chaos.
+- Mobile behavior preserved: the sidebar still collapses to a 64px icon rail below the `xl` breakpoint (unchanged). The footer is `hidden xl:block` so it doesn't appear on mobile — no scroll conflict. The new overflow-y-auto on the primary nav list is harmless on mobile (the rail has 8 items, all fit without scrolling).
+
+Verification:
+- TypeScript: scoped `tsc -p` check on the 9 modified/created files → ZERO errors in any of the new or modified files. (Pre-existing errors in unrelated files like banking/clients/invoices/design-system are NOT in scope and were not touched.)
+- ESLint: `npx eslint <9 files> --max-warnings 0` → ZERO errors, ZERO warnings across all 9 files.
+- Spinner audit: `grep "animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" src/components/` → ZERO matches (was 3 files before, now 0).
+- Did not change routing, did not add new pages/features, did not touch the GSTPilot dark theme (pure black + blue accent preserved).
+
+Stage Summary:
+- Files created: 2
+  • src/components/ui/premium-loading.tsx (~280 lines) — PremiumGlobalLoading + PremiumPageLoader + inlined GSTPilot logo SVG + keyframes
+  • src/components/ui/premium-skeletons.tsx (~290 lines) — DashboardSkeleton, TableSkeleton, FormSkeleton, OracleSkeleton, ChartSkeleton, InvoiceSkeleton (+ ShimmerBlock primitive)
+- Files modified: 6
+  • src/app/page.tsx — Zap splash → PremiumGlobalLoading
+  • src/components/AppRoot.tsx — PageLoader → PremiumGlobalLoading
+  • src/components/AppRouter.tsx — 4 spinner instances replaced (PageLoader const, AutoProvisionWorkspace loading, DashboardTimeoutBoundary loading, auth-initializing splash)
+  • src/components/DashboardShell.tsx — DashboardViews loading placeholder → PremiumPageLoader; removed pb-24 from <main>
+  • src/components/DashboardViews.tsx — PageLoader const → PremiumPageLoader
+  • src/components/providers-lazy.tsx — inline-style spinner → PremiumGlobalLoading
+  • src/components/layout/LeftNav.tsx — added overflow-hidden to <nav>, overflow-y-auto + custom-scrollbar to primary nav <div>, shrink-0 to brand header + footer
+- Spinners replaced: 7 (3 emerald animate-spin circles + 3 Zap-logo splash variants + 1 providers-lazy inline-style spinner). 0 emerald spinners remain in src/components/.
+- Scroll fixes:
+  • Root div: flex h-screen flex-col overflow-hidden (was already correct, verified)
+  • Header: shrink-0 (was already correct, verified)
+  • Two-column workspace: flex min-h-0 flex-1 (was already correct, verified)
+  • Main <main>: removed pb-24, kept min-w-0 flex-1 overflow-y-auto custom-scrollbar
+  • Sidebar wrapper: bare shrink-0 div (no own scroll — LeftNav manages h-full)
+  • LeftNav <nav>: + overflow-hidden
+  • LeftNav brand header: + shrink-0
+  • LeftNav primary nav list: + overflow-y-auto overflow-x-hidden custom-scrollbar
+  • LeftNav footer: + shrink-0
+
+---
+Task ID: PQA-3
+Agent: subagent (Internal IDs Removal)
+Task: Remove all internal IDs, UUIDs, and database references from the Customers module UI.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (tail -200) to understand prior context: 660k LOC project, banking module complete, Step 0 navigation cleanup done, preview fixed, Tasks 1-13 history reviewed.
+- Inventoried Customers module components: 3 files in src/components/clients/ (ClientRegistryPage.tsx 1866 LOC, ClientWorkspacePage.tsx 770 LOC, ClientDetailPage.tsx 1042 LOC). No ClientListTable.tsx exists (task said "if it exists").
+- Searched for `ZOHO-CONTACT-`, `LOCAL-`, `client.id`, `client.clientId`, `contact_id`, `zoho_contact_id`, UUIDs, `externalId`, `sourceId` patterns across the module.
+- Root-cause analysis: identified that synthetic GSTINs are STORED in the database by design (services/customers.ts:321 → `LOCAL-${Date.now()}` for walk-in customers; integrations/zoho-books/sync-engine.ts:813 → `ZOHO-CONTACT-${zc.zohoContactId}` for Zoho imports without GST numbers). These were LEAKING to the UI via `{formatGSTIN(client.gstin)}` and `{client.gstin}` direct renders in the GSTIN column. Same for `client.tradeName`, `client.state`, etc. when those fields contained undefined/null values producing "undefined 11"-style outputs.
+- Diagnosed the 4 user-reported complaints:
+  • `ZOHO-CONTACT-397665...` — synthetic GSTIN from Zoho Books sync (no real GSTIN on the Zoho contact).
+  • `LOCAL-178...` — synthetic GSTIN from walk-in/unregistered customer creation.
+  • `undefined 11` — likely `{client.something_undefined} {someCount}` in a row render where the field was undefined.
+  • `BX64KOOZ` — a short alphanumeric slug (possibly a Zoho invoice number or slug) shown in a customer-adjacent field.
+- Created `src/lib/clients/display-utils.ts` (210 lines) — pure display-layer helpers that sanitize values AT RENDER TIME ONLY (no data fetching / API / DB changes):
+  • `isSyntheticOrInternalId(value)` — detects synthetic prefixes (LOCAL-*, ZOHO-CONTACT-*, ZOHO-VENDOR-*, TEMP-*, GUEST-*, WALKIN-*, UNREGISTERED-*, SYNTHETIC-*), UUIDs, Prisma CUIDs, and 16+ char hex strings. Intentionally CONSERVATIVE — does NOT flag short alphanumeric slugs (8-15 chars) because those can be legitimate business identifiers (invoice numbers, GSTINs, etc.).
+  • `displayGSTIN(gstin, placeholder='—')` — returns formatted GSTIN if it passes `validateGSTIN()`, else placeholder. This catches ALL of: synthetic prefixes, UUIDs, CUIDs, and any non-15-char-non-GSTIN-format value (e.g. "BX64KOOZ").
+  • `displayText(value, placeholder='—')` — returns trimmed value if non-empty, non-`undefined`/`null` literal, non-synthetic-ID; else placeholder. Used for tradeName, legalName, state, contactEmail, contactPhone, returnPeriod, document filenames, activity titles.
+  • `displayNumber(value, placeholder='—')` — returns `String(value)` if finite number; else placeholder. Used for healthScore, complianceProfile fields, return counts.
+  • `displayOwner(client, placeholder='—')` — derives Owner from contactEmail → contactPhone → placeholder, with each candidate sanitized via displayText.
+  • `displayOutstanding(amount, placeholder='—')` — formats an outstanding amount as INR; if no amount available (current API doesn't expose receivables), returns placeholder. Future-proof for when the API is extended.
+  • Smoke-tested with the 4 user-reported values + 10 other cases (real GSTIN, real business names, UUIDs, CUIDs, hex IDs, empty/null/undefined). All produce the correct output: synthetic IDs → '—', real values preserved.
+- Updated `src/components/clients/ClientRegistryPage.tsx`:
+  • Imported display helpers; removed unused `Building2`, `User`, `Sparkles`, `formatGSTIN` imports (kept `validateGSTIN` for the edit-form validation).
+  • Rewrote `ClientTableRow` (desktop row) to display EXACTLY the 8 spec'd columns: 1) Company (avatar + sanitized tradeName), 2) GSTIN (sanitized — synthetic → em dash), 3) State (sanitized), 4) Owner (derived from contactEmail/phone, sanitized), 5) Outstanding (placeholder until API exposes receivables), 6) Returns (filed count + overdue indicator), 7) Health (score badge), 8) Status (badge). Removed the entityType chip and stateCode chip (not in spec). Removed the contactEmail sub-line under the State column (moved to Owner column). All `aria-label`s now use sanitized tradeName.
+  • Rewrote `ClientMobileCard` (mobile card) to mirror the same 8 fields in a stacked layout: header (avatar + Company + actions menu), GSTIN sub-line, Status + Health badges, then a business-fields section with State / Owner / Returns / Outstanding rows.
+  • Updated the desktop table sticky header to render 8 column labels: Company | GSTIN | State | Owner | Outstanding | Returns | Health | Status (Company/GSTIN/State/Health/Status are sortable via SortHeader; Owner/Outstanding/Returns are non-sortable labels).
+  • Updated `handleBulkExport` CSV export to run every text field through `displayText(..., '')` and the GSTIN through `displayGSTIN(..., '')` so exported CSVs never contain synthetic IDs either.
+  • Updated `openEdit` so the edit dialog's GSTIN input does NOT pre-fill with a synthetic ID — if the stored value is synthetic, the field is blank, letting the user enter a real GSTIN. The db row keeps its synthetic key until the user saves a real one.
+  • Updated `handleDelete` success toast and the single-delete AlertDialog title to use `displayText(deleteTarget.tradeName, ...)` so they never render "Delete undefined?".
+- Updated `src/components/clients/ClientWorkspacePage.tsx`:
+  • Imported display helpers.
+  • Header card: replaced `{client.tradeName}` → `displayText(client.tradeName, 'Unnamed Client')`; `{client.legalName}` → conditional + `displayText(..., '')`; `{client.gstin}` → `displayGSTIN(client.gstin)` (with italic styling when placeholder); `{client.state}` → `displayText(client.state)`; compliance profile numeric fields → `displayNumber(..., '—')`.
+  • Breadcrumb: `{client.tradeName}` → `displayText(client.tradeName, 'Client')`.
+  • GST Return Timeline: `{ret.returnType}` → `{ret.returnType || '—'}` (other fields already null-safe).
+  • Recent Invoices: `{inv.invoiceNumber}`, `{inv.invoiceType}`, `{inv.matchStatus}`, `{inv.riskLevel}` → `|| '—'` fallbacks; `formatCurrency(inv.totalAmount)` → `formatCurrency(inv.totalAmount ?? 0)`.
+  • Documents list: `{doc.fileName}` → `displayText(doc.fileName, 'Untitled document')`; `{doc.documentType}` → `{doc.documentType || 'document'}`; empty createdAt → `'—'`.
+  • Activity Timeline: `{event.title}` → `displayText(event.title, 'Activity')`; `{event.description}` → `displayText(event.description, '')`.
+- Updated `src/components/clients/ClientDetailPage.tsx`:
+  • Imported display helpers.
+  • Header card: `{client.tradeName}` (in title and breadcrumb) → `displayText(...)`; `{client.status}` → `{client.status || '—'}`; `{client.gstin}` → `displayGSTIN(client.gstin)` with italic styling when placeholder; `{client.state}` → `displayText(client.state)`; `{client.contactEmail}` → `displayText(client.contactEmail)`; `{client.contactPhone}` → `displayText(client.contactPhone)`; `{client.returnPeriod}` fallback → `displayText(client.returnPeriod, 'Monthly')`.
+  • Last Activity card: `{(lastActivity).details ?? (lastActivity).action}` → `displayText(..., '') || displayText(..., 'Activity')`.
+  • Recent Notifications: `{n.title}` and `{n.message}` → sanitized via `displayText(..., ...)`.
+  • Documents table: `{d.name ?? d.fileName}` → `displayText(d.name, '') || displayText(d.fileName, 'Untitled document')`.
+  • Upload dialog text: `{client.tradeName}` → `displayText(client.tradeName, 'this client')`.
+  • Returns table: `{r.period}` and `{r.returnType}` → `|| '—'` fallbacks.
+  • Reconciliation runs: `{run.period}` → `{run.period || '—'}`; mismatch invoice number `{mm.invoice?.invoiceNumber ?? mm.invoiceId ?? '—'}` → sanitized via displayText chain (so internal invoiceId UUIDs don't leak when invoiceNumber is missing).
+  • Activity tab: `{a.details ?? a.action}` → `displayText(..., '') || displayText(..., 'Activity')`.
+  • `openEdit` form: same synthetic-GSTIN blanking logic as the registry page.
+- Constraint compliance verified:
+  • NO data fetching changes (useClients hook untouched, /api/clients route untouched, Prisma queries untouched).
+  • NO API changes (route.ts unchanged).
+  • NO database schema changes (prisma/schema.prisma untouched).
+  • NO routing changes (DashboardViews.tsx view mapping untouched).
+  • NO new features or pages (only display-layer sanitization + column restructure within existing pages).
+  • Internal IDs still used internally in `key={client.id}`, `onClick={... client.id}`, `setSelectedClientId(client.id)`, fetch URLs `/api/clients?id=...`, and PATCH/DELETE request bodies — these are correct (handlers, not rendered text).
+- Lint: `npx eslint src/lib/clients/display-utils.ts src/components/clients/ClientRegistryPage.tsx src/components/clients/ClientWorkspacePage.tsx src/components/clients/ClientDetailPage.tsx --max-warnings 0` → ZERO errors, ZERO warnings across all 4 files.
+- Transpile check (bun build --target browser): all 4 files compile cleanly (ClientRegistryPage, ClientWorkspacePage, ClientDetailPage export defaults; display-utils exports all 6 helpers).
+- Fixed one self-inflicted JSX syntax bug discovered during lint: a template-literal className was missing the closing `}` for the JSX expression (had `}\`` instead of `}\`}`). Fixed before final lint pass.
+- Refactored display-utils mid-task: removed the SHORT_RANDOM_SLUG_REGEX check from `isSyntheticOrInternalId` after smoke-testing revealed it was too aggressive — it was flagging real GSTINs like "22AAAAA0000A1Z5" (15 alphanumeric chars, no spaces) as synthetic. The check is now CONSERVATIVE: only synthetic prefixes, UUIDs, CUIDs, and 16+ char hex strings are flagged. Short slugs like "BX64KOOZ" are still caught by `displayGSTIN` (since they don't pass the GSTIN format regex) when they appear in the GSTIN field, but are preserved by `displayText` when they appear in business-name fields (since they could be legitimate invoice numbers or slugs).
+
+Stage Summary:
+- Files modified (4):
+  • src/components/clients/ClientRegistryPage.tsx — rewrote ClientTableRow + ClientMobileCard to display exactly the 8 spec'd business columns; updated sticky header; sanitized CSV export, edit form pre-fill, delete toasts/dialogs; cleaned up unused imports.
+  • src/components/clients/ClientWorkspacePage.tsx — sanitized header card, breadcrumb, KPI values, return timeline, recent invoices, documents list, activity timeline.
+  • src/components/clients/ClientDetailPage.tsx — sanitized header card, breadcrumb, last-activity card, notifications, documents table, upload dialog, returns table, reconciliation runs + mismatches, activity tab; sanitized edit form pre-fill.
+- Files created (1):
+  • src/lib/clients/display-utils.ts (210 lines) — pure display-layer helpers: `isSyntheticOrInternalId`, `displayGSTIN`, `displayText`, `displayNumber`, `displayOwner`, `displayOutstanding`. Smoke-tested with the 4 user-reported values + 10 other cases; all produce correct output.
+- Internal IDs removed from:
+  • ClientRegistryPage desktop row (GSTIN column, State column sub-line, entityType chip, stateCode chip)
+  • ClientRegistryPage mobile card (GSTIN sub-line, entityType chip, stateCode chip, raw contactEmail/Phone)
+  • ClientRegistryPage sticky header (replaced "Client"/"Location" labels with 8 spec'd column labels)
+  • ClientRegistryPage CSV export (synthetic GSTINs now blank, not exported)
+  • ClientRegistryPage edit dialog (synthetic GSTIN no longer pre-filled in the input)
+  • ClientRegistryPage delete confirmation (toast + AlertDialog title no longer render "undefined")
+  • ClientWorkspacePage header card (tradeName, legalName, gstin, state, compliance numbers)
+  • ClientWorkspacePage breadcrumb (tradeName)
+  • ClientWorkspacePage Recent Invoices (null-safe invoiceNumber, invoiceType, matchStatus, riskLevel, totalAmount)
+  • ClientWorkspacePage GST Return Timeline (null-safe returnType)
+  • ClientWorkspacePage Documents list (sanitized fileName, documentType, createdAt)
+  • ClientWorkspacePage Activity Timeline (sanitized title, description)
+  • ClientDetailPage header card (tradeName, status, gstin, state, contactEmail, contactPhone, returnPeriod)
+  • ClientDetailPage Last Activity + Recent Notifications (sanitized details/action, title/message)
+  • ClientDetailPage Documents table (sanitized name/fileName)
+  • ClientDetailPage Returns table (null-safe period, returnType)
+  • ClientDetailPage Reconciliation runs + mismatch invoice numbers (null-safe period, sanitized invoiceNumber/invoiceId fallback)
+  • ClientDetailPage Activity tab (sanitized details/action)
+  • ClientDetailPage Upload dialog (sanitized client name in copy)
+  • ClientDetailPage edit form (synthetic GSTIN no longer pre-filled)
+- Replacement fields shown (the 8 spec'd columns now visible everywhere):
+  • Company (tradeName) — sanitized via displayText
+  • GSTIN — sanitized via displayGSTIN (synthetic → em dash, real GSTINs preserved)
+  • State — sanitized via displayText
+  • Owner — derived from contactEmail/Phone via displayOwner (NEW column; was previously mixed into the Location column)
+  • Outstanding — placeholder via displayOutstanding (NEW column; API doesn't expose receivables yet, shows em dash until extended)
+  • Returns — count via displayNumber + overdue indicator
+  • Health — score badge (sanitized via displayNumber)
+  • Status — badge (null-safe via `|| '—'`)
+- Constraints honored:
+  • NO data fetching changes (useClients hook untouched).
+  • NO API changes (/api/clients route untouched).
+  • NO database schema changes (prisma/schema.prisma untouched — synthetic GSTINs still stored as `LOCAL-...` / `ZOHO-CONTACT-...` in the DB; only the DISPLAY layer hides them).
+  • NO routing changes.
+  • NO new features or pages — only display-layer sanitization + column restructure within existing pages.
+  • `key={client.id}`, `onClick={... client.id}`, `setSelectedClientId(client.id)`, fetch URL params, and PATCH/DELETE request bodies still use the raw internal IDs (correct — these are handlers, not rendered text).
+- Lint: ZERO errors, ZERO warnings across all 4 modified/created files.
+- Transpile: all 4 files compile cleanly via `bun build --target browser`.
+- Type-check: targeted check on the 4 files passes; full-project `tsc --noEmit` OOMs at the 2GB sandbox limit (same constraint noted in prior worklogs for Tasks 10/12/13 — not caused by these changes).
+
+---
+
+## Task ID: explore-1
+- **Agent**: Explore (sub-agent)
+- **Task**: Research and report on 10 modules of the GSTPilot Next.js project (Invoice, Oracle, Dashboard, Reports, Clients, Banking, Settings, Google Workspace, Zoho Books, Oracle API routes). Read-only exploration — NO code changes. Foundation for an upcoming quality sprint.
+
+### Work Log
+
+Read prior worklog context (Task: PQA-3 Internal IDs Removal in Clients module — established that `display-utils.ts` sanitizes synthetic IDs at render time across `ClientRegistryPage`, `ClientWorkspacePage`, `ClientDetailPage`). Then systematically explored all 10 requested modules. All findings below use exact file paths, line numbers, and code snippets.
+
+#### 1. Invoice module — `src/components/invoices/InvoiceWorkspacePage.tsx` (870 lines)
+
+**`.localeCompare(` calls** — all 6 calls are in `sortInvoices()` (lines 151–195). ALL are null-safe via `?? ''`:
+
+| Line | Code | Variables | Null check? |
+|------|------|-----------|-------------|
+| 160 | `(a.invoiceNumber ?? '').localeCompare(b.invoiceNumber ?? '', undefined, { numeric: true }) * dir` | `invoiceNumber` | ✅ `?? ''` on both sides, plus `{numeric:true}` for natural sort |
+| 164 | `na.localeCompare(nb) * dir` where `na = clientMap.get(a.clientId)?.tradeName ?? a.buyerName ?? ''` and `nb = clientMap.get(b.clientId)?.tradeName ?? b.buyerName ?? ''` | client tradeName, falling back to buyerName | ✅ Optional chain + `?? ''` chain |
+| 167 | `(a.buyerGstin ?? '').localeCompare(b.buyerGstin ?? '') * dir` | `buyerGstin` | ✅ `?? ''` |
+| 185 | `(a.status ?? '').localeCompare(b.status ?? '') * dir` | `status` | ✅ `?? ''` |
+| 187 | `(a.paymentStatus ?? '').localeCompare(b.paymentStatus ?? '') * dir` | `paymentStatus` | ✅ `?? ''` |
+| 189 | `(a.riskLevel ?? '').localeCompare(b.riskLevel ?? '') * dir` | `riskLevel` | ✅ `?? ''` |
+
+Note: lines 160/164 use `undefined` as the locales arg (browser default); the other 4 calls omit the locales arg entirely (also defaults to browser locale). None pass an explicit `'en'` or `'en-IN'` locale, so collation order depends on the user's runtime locale — a potential minor consistency issue (e.g. sort order of accented or non-Latin characters could differ between users).
+
+**`.sort(` call** — single call at line 157: `const sorted = [...invoices].sort((a, b) => { switch (sort.key) {...} })`. Spreads first (does not mutate input). All 12 sort keys handle undefined:
+- Numeric fields use `?? 0`: `taxableValue` (line 179), `gstAmount` (181), `totalAmount` (183).
+- Date fields use `? new Date(...).getTime() : <fallback>`: `invoiceDate` falls back to `createdAt` (lines 169–170), `dueDate` falls back to `0` (lines 174–175).
+- All string fields use `?? ''` (see table above).
+- `default: return 0` (line 190) for unknown keys — sort is stable.
+
+**Component structure**:
+- Root: `<div className="min-h-screen flex flex-col bg-black text-foreground">` (line 641). Uses `min-h-screen` (NOT `h-screen`).
+- `<header className="sticky top-0 z-30 backdrop-blur-xl bg-black/70 border-b border-white/[0.06]">` (line 643) — sticky header.
+- `<main className="flex-1 px-4 md:px-6 py-6">` (line 688) — flex-1 fills remaining height; contains a `grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6` for left content + right Oracle panel.
+- Right Oracle panel: `<aside className="hidden xl:block"><div className="sticky top-20 space-y-4">...</div></aside>` (lines 773–785) — sticky on desktop.
+- `<footer className="mt-auto border-t border-white/[0.06] bg-black/70 backdrop-blur-xl">` (line 790) — `mt-auto` pushes footer to bottom of `min-h-screen` flex column.
+- **No explicit `overflow-*` container** — the page scrolls the whole document (relies on browser native scroll of `min-h-screen`). The sticky header + sticky Oracle aside both pin via `top-0`/`top-20`. No `overflow-y-auto` scroll container inside the page.
+
+#### 2. Oracle module — `src/components/oracle/OracleBrain.tsx` (50 lines) + `OracleBrainCore.tsx` (1852 lines) + `OracleBrainPanel.tsx` (712 lines)
+
+`OracleBrain.tsx` is a **thin wrapper** (50 lines): pulls `organization` from `OrgContext`, `setCurrentView` from `AppContext`, and forwards them as `orgId`/`isPreviewMode`/`onNavigate` props to `OracleBrainCore`. Comment at line 8–10 explicitly states "The actual UI + logic lives in `OracleBrainCore.tsx`, which has NO context dependency (so it can be used in lightweight preview environments without pulling in Firebase)."
+
+**Streaming mechanism** — `fetch + ReadableStream` (NOT EventSource, NOT polling). SSE-style parsing on the client side. All logic in `OracleBrainCore.tsx::sendMessage` (lines 390–611):
+
+```ts
+// Line 422–436
+const controller = new AbortController();
+abortRef.current = controller;
+const res = await fetch('/api/oracle/brain', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: trimmed, sessionId: currentSessionId, orgId, userId: undefined }),
+  signal: controller.signal,
+});
+if (!res.ok || !res.body) { throw new Error(`HTTP ${res.status}`); }
+
+// Line 442–454
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+let buffer = '';
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  // Parse SSE events (separated by \n\n)  ← manual SSE parser
+  const events = buffer.split('\n\n');
+  buffer = events.pop() ?? '';
+  for (const evt of events) {
+    const line = evt.split('\n').find(l => l.startsWith('data:'));
+    const payload = line.slice(5).trim();
+    const data = JSON.parse(payload);
+    switch (data.type) {
+      case 'session': ... setCurrentSessionId(data.sessionId); break;
+      case 'token': updateAssistant(m => ({...m, content: m.content + (data.text || '')})); break;
+      case 'tool-start': ... case 'tool-result': ... case 'tool-error': ...
+      case 'action-confirm': ... case 'workflow-plan': ...
+      case 'done': updateAssistant(m => ({...m, streaming: false})); refreshSessions(); break;
+      case 'error': ... toast.error(data.error); break;
+      case 'navigate': onNavigate(data.view, data.entityId); break;
+    }
+  }
+}
+```
+
+**Fetch/abort logic**:
+- `abortRef = useRef<AbortController | null>(null)` (line 305).
+- `stopStreaming` callback (lines 613–616): `abortRef.current?.abort(); setIsStreaming(false);`
+- Catch path (lines 593–602): detects `AbortError` and appends `'\n\n_(stopped)_'` to the partial message; other errors render `⚠️ Connection error: ${e.message}. Please try again.` and toast `"Failed to reach Oracle"`.
+- `finally` block (lines 603–606): clears `isStreaming` and nulls `abortRef`.
+
+**"Continue" / "Regenerate" buttons**:
+- **Regenerate** exists: `handleRegenerate` (lines 930–946) — pops the trailing assistant message, finds the last user message, re-calls `sendMessage` with that user text. Wired via `onRegenerate={i === messages.length - 1 && m.role === 'assistant' && !m.streaming ? handleRegenerate : undefined}` (line 1144). The button itself renders in `MessageBubble` at lines 1449–1458 (icon `RotateCcw`, label "Regenerate", `title="Regenerate response"`).
+- **No "Continue" button** — there is a **Stop** button: lines 1180–1187, renders a `Square` icon (`h-4 w-4 fill-current`), `title="Stop generating"`, `className="...rounded-xl bg-zinc-800 hover:bg-rose-600/90..."`, calls `stopStreaming` on click. Only visible while `isStreaming` is true (the input bar swaps Send → Stop while streaming).
+
+**CFO conversational vs dashboard dump** — Oracle does **both**. Welcome message at line 1244: `"I'm Oracle — your AI CFO, COO, and compliance officer. I read your live business data, take real actions, and remember what matters."` Streamed responses contain BOTH:
+- **Conversational CFO narrative**: `data.type === 'token'` events stream free-text LLM tokens (line 473 — appends to `m.content`).
+- **Structured cards alongside text**: the message's `parts[]` array can contain `tool-call`, `action-confirm`, and `workflow-plan` parts (lines 475–560). Each renders as an inline card (tool result with summary + duration; action confirmation card with preview fields + Confirm/Cancel; workflow plan card with step list + Confirm/Cancel).
+- The upstream `/api/oracle/brain` endpoint ALSO emits a richer event set (see §10 below) — though `OracleBrainCore` only consumes `session/token/tool-start/tool-result/tool-error/action-confirm/workflow-plan/done/error/navigate`. The richer `metrics/agents/scorecard/insights/recommendations/followUps/dashboard/actions` events emitted by `/api/oracle/chat` are NOT consumed by `OracleBrainCore` (they appear to belong to the older `OracleChat`/`OraclePanel` variant).
+
+**API endpoint**: `POST /api/oracle/brain` (line 426). Body: `{ message, sessionId, orgId, userId }`. Response: SSE stream of `{type, ...}` events.
+
+`OracleBrainPanel.tsx` is a separate **memory side-panel** (712 lines) — fetches `/api/oracle/brain/memory`, `/api/oracle/brain/decisions`, `/api/oracle/brain/tasks`, `/api/oracle/brain/learning`, `/api/oracle/brain/reminders`, `/api/oracle/brain/daily-summary`, `/api/oracle/brain/search` (lines 178–185, 212). NOT a chat — just displays memories/decisions/tasks/learnings/reminders with pin/archive/complete/accept/dismiss actions. No streaming.
+
+#### 3. Dashboard page — `src/components/dashboard/DashboardPage.tsx` (1336 lines)
+
+**Health score calculations**: only ONE place on the dashboard renders a health score, and it does NOT re-compute. The canonical source is `useBusinessSnapshot()` → `/api/business/snapshot` → `src/lib/business/snapshot.ts::computeHealthScore` (referenced in comment at lines 619–626):
+
+```tsx
+// Line 619–638
+// ── Health score tier (CANONICAL — uses snapshot.healthScoreLabel) ──
+// The rich snapshot engine (`src/lib/business/snapshot.ts::computeHealthScore`)
+// is the SINGLE source of truth for the business health score + its label.
+// We do NOT re-compute a label locally — we just look up the tone for the
+// canonical label. This is the ONLY place on the dashboard where the health
+// score number or label is displayed. (AI Recommendations used to duplicate
+// it via a "Low Health Score" rule; that rule has been removed from
+// `src/lib/recommendations/engine.ts`.)
+const hasHealthScore = snapshot.healthScore > 0 && snapshot.hasLiveData;
+const healthLabel = snapshot.healthScoreLabel;
+const healthTier = useMemo<{ label: string; tone: 'emerald' | 'amber' | 'rose' } | null>(() => {
+  if (!hasHealthScore || !healthLabel) return null;
+  const tone = healthLabel === 'Excellent' || healthLabel === 'Good' ? 'emerald'
+    : healthLabel === 'Fair' ? 'amber' : 'rose';  // Poor | Critical
+  return { label: healthLabel, tone };
+}, [hasHealthScore, healthLabel]);
+```
+
+The actual 0–100 number + label comes from `snapshot.healthScore` and `snapshot.healthScoreLabel` (both fields on the snapshot response). Labels are `Excellent | Good | Fair | Poor | Critical` (5 tiers, mapped to 3 tones locally). The displayed number is `<span className="text-sm font-bold text-foreground tabular-nums">{snapshot.healthScore}</span>` (line 869).
+
+**Data source breakdown** — the dashboard uses FIVE distinct data hooks (lines 579–583), NOT one:
+1. `useBusinessSnapshot()` → `/api/business/snapshot` — health score, health label, today's revenue, pending GST, cash, runway, overdue invoices, pending collections, customers count, invoices count, GST liability, forecast. (THE primary source for ALL headline numbers.)
+2. `useLiveDashboardMetrics()` → Firestore — `metrics.criticalIssues` (line 728) for reconciliation issue count.
+3. `useFireReturns()` → Firestore — returns list (used for overdue returns calculation, lines 659–673).
+4. `useTimelineEvents(15)` → `/api/timeline` — recent business events for the activity feed.
+5. `useAIRecommendations()` → `/api/recommendations` — rules-engine recommendations over the snapshot.
+
+**Every place that shows "health score" / "pending collection" / "unpaid invoices"**:
+
+| Metric | Source | File:Line | Code |
+|--------|--------|-----------|------|
+| Health score NUMBER | `snapshot.healthScore` (snapshot API) | DashboardPage.tsx:869 | `{snapshot.healthScore}` |
+| Health score LABEL | `snapshot.healthScoreLabel` (snapshot API) | DashboardPage.tsx:871 | `{healthTier.label}` |
+| Pending collection ₹ | `snapshot.collections?.totalOutstanding` (snapshot API) | DashboardPage.tsx:715, 721 | `const outstanding = snapshot.collections?.totalOutstanding ?? 0; ... title: \`${abbreviateINR(outstanding)} pending collection\`` |
+| Overdue invoices COUNT | `snapshot.overdueInvoiceCount` (snapshot API) | DashboardPage.tsx:696, 701 | `if (snapshot.overdueInvoiceCount > 0) { ... title: \`${snapshot.overdueInvoiceCount} overdue invoice${...}\` }` |
+| Overdue ₹ amount | `snapshot.overdueReceivables` (snapshot API) | DashboardPage.tsx:702 | `detail: \`${abbreviateINR(snapshot.overdueReceivables ?? 0)} past due...\`` |
+| Invoices COUNT (total, paid+unpaid) | `snapshot.invoices.count` (snapshot API) | DashboardPage.tsx:1065 | `numericValue={snapshot.invoices.count}` |
+| Invoices OVERDUE count (subtitle) | `snapshot.invoices.overdue` (snapshot API) | DashboardPage.tsx:1067 | `subtitle={\`${snapshot.invoices.overdue > 0 ? \`${snapshot.invoices.overdue} overdue\` : 'none overdue'}\`}` |
+| Critical reconciliation issues | `metrics.criticalIssues` (useLiveDashboardMetrics, Firestore) | DashboardPage.tsx:728, 733 | `if (metrics.criticalIssues > 0) { ... title: \`${metrics.criticalIssues} reconciliation issue${...}\` }` |
+
+**Note on the historical "₹89.5K pending collection reported alongside a '0 invoices unpaid' widget" bug** — the comment at lines 707–714 explicitly explains this was a labelling bug: `snapshot.invoices.count` is the TOTAL count (paid + unpaid), NOT the unpaid count. The fix was to display the ₹ outstanding amount as the truthful metric (line 721) and NOT echo `invoices.count` as "N invoices outstanding". The dashboard now deliberately suppresses the unpaid-invoice COUNT and shows only the ₹ amount. The "pending collection" item is also gated: `if (outstanding > 0 && snapshot.overdueInvoiceCount === 0)` (line 716) — shown only when there are NO overdue invoices (otherwise the overdue-invoices item already covers it).
+
+So: every health/pending/unpaid number on the dashboard flows through ONE shared API (`/api/business/snapshot`), with one exception — `metrics.criticalIssues` (reconciliation issues) comes from a separate Firestore hook. The dashboard itself does NOT compute any health score, label, or threshold locally; it only maps the canonical label to a color tone.
+
+#### 4. Reports module — `src/components/reports/ReportsPage.tsx` (2650 lines) + `src/components/DashboardViews.tsx`
+
+**`ReportsPage.tsx` is a REAL page** (2650 lines), NOT a redirect and NOT a placeholder. Exports `export default function ReportsPage()` at line 321. Has real state, real data hooks, real GSTR-1/3B draft generation:
+
+```tsx
+// Line 321–350
+export default function ReportsPage() {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [filings, setFilings] = useState<GSTRFiling[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedClientId, setSelectedClientId] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(...);
+  const [selectedYear, setSelectedYear] = useState<string>(...);
+  const [returnType, setReturnType] = useState<string>('GSTR-1');
+  const [includeSections, setIncludeSections] = useState<Record<GSTR1Section, boolean>>({...});
+  const [recentExports, setRecentExports] = useState<RecentExport[]>(() => loadHistory());
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<RecentExport | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('export');
+
+  // Real data hooks (lines 357–362)
+  const { invoices: engineInvoices, stats: invoiceStats, loading: engineLoading } = useInvoices();
+  const fireReturnsQ = useFireReturns();
+  const fireReconsQ = useFireReconciliations();
+  const { metrics: liveMetrics } = useLiveDashboardMetrics();
+  // GST Return Engine (lines 374–378)
+  const { summary: gstSummary, itcSummary, gstr1Draft, gstr3bDraft, ... } = useGstReturnEngine(currentPeriod);
+```
+
+Has tabs (`activeTab` defaults to `'export'` at line 350). Generates real GSTR-1/3B drafts from `gst_transactions` collection, persists export history to Firestore (line 745: `console.error('Failed to persist report to Firestore:', err)`), supports client/month/year filters.
+
+**DashboardViews.tsx mapping** — `'reports'` view maps DIRECTLY to the real ReportsPage (NOT a redirect):
+- Line 54: `const ReportsPage = dynamic(() => import('@/components/reports/ReportsPage'), { loading: PageLoader, ssr: false })`
+- Line 86: `reports: ReportsPage,` (in `VIEW_COMPONENTS` map)
+- `'reports'` is NOT in `VIEW_REDIRECTS` (lines 112–133).
+- `'reports'` is NOT in `DISABLED_VIEWS` (lines 149–204).
+- Confirmed: clicking "Reports" in the sidebar loads the real 2650-line ReportsPage.
+
+#### 5. Clients module — `src/components/clients/ClientRegistryPage.tsx` (1955 lines)
+
+**Customer table columns** — the desktop table sticky header (lines 1459–1527) renders exactly 8 columns in this order:
+
+| # | Column header | Width class | Sortable? | Sort key |
+|---|---------------|-------------|-----------|----------|
+| 1 | Company | `flex-1` | ✅ Yes | `tradeName` (line 1463) |
+| 2 | GSTIN | `hidden w-36 md:block` | ✅ Yes | `gstin` (line 1473) |
+| 3 | State | `hidden w-36 md:block` | ✅ Yes | `state` (line 1483) |
+| 4 | Owner | `hidden w-44 lg:block` | ❌ No (plain `<span>` label, lines 1491–1493) | — |
+| 5 | Outstanding | `hidden w-28 lg:block` | ❌ No (plain `<span>`, lines 1497–1499) | — |
+| 6 | Returns | `hidden w-28 lg:block` | ❌ No (plain `<span>`, lines 1502–1504) | — |
+| 7 | Health | `hidden w-20 lg:block` | ✅ Yes | `healthScore` (line 1511) |
+| 8 | Status | `w-24` | ✅ Yes | `status` (line 1521) |
+
+(Plus a leading checkbox column at line 1454 and a trailing `w-8` spacer at line 1527 for the row action menu.)
+
+5 columns are sortable (Company, GSTIN, State, Health, Status); 3 are not (Owner, Outstanding, Returns).
+
+**Raw IDs shown?** — NO. As established in the prior PQA-3 task, all display values are sanitized through `src/lib/clients/display-utils.ts` at render time. The relevant sanitization calls (confirmed present in this file):
+- Line 387: `const tradeNameDisplay = displayText(client.tradeName, 'Unnamed Client');`
+- Line 388: `const gstinDisplay = displayGSTIN(client.gstin);`
+- Line 389: `const stateDisplay = displayText(client.state);`
+- Line 390: `const ownerDisplay = displayOwner(client);`
+- (Outstanding uses `displayOutstanding(...)`; Returns uses `displayNumber(...)`; Health uses `displayNumber(...)`; Status uses `|| '—'` fallback.)
+- Same pattern repeats for the mobile card at lines 557–561.
+
+`displayGSTIN()` catches `LOCAL-*`, `ZOHO-CONTACT-*`, `ZOHO-VENDOR-*`, `TEMP-*`, `GUEST-*`, `WALKIN-*`, `UNREGISTERED-*`, `SYNTHETIC-*` prefixes, UUIDs, Prisma CUIDs, 16+ char hex strings, AND any non-15-char-non-GSTIN-format value (like `BX64KOOZ`) — replaces all with an em-dash `—`. So no raw IDs leak to the rendered table.
+
+`client.id` is used only in `key={client.id}` (lines 1534, 1615), `onClick` handlers, `setSelectedIds`, and PATCH/DELETE request bodies — correct (handlers, not rendered text).
+
+The edit dialog (lines 858–865) explicitly blanks the GSTIN input when the stored value is synthetic, so the user can enter a real GSTIN:
+```tsx
+// Line 863–864
+const rawGstin = client.gstin || '';
+const gstinForForm = displayGSTIN(rawGstin, '') === '' ? '' : rawGstin;
+```
+
+CSV export (lines 1024–1025 comment + handler) runs every field through `displayText(..., '')` and `displayGSTIN(..., '')` so synthetic IDs are blank in the export too.
+
+#### 6. Banking module — `src/components/banking/BankingPage.tsx` (552 lines) + `BankingStatusPills.tsx`
+
+**"Mock Provider" / "Demo Banking" / "Fake Banking" strings** — NONE exist anywhere in `src/components/banking/`. Grep for `/Mock|Demo|Fake|placeholder|simulated|simulat|sandbox|test.?mode|provider.?status|coming soon/i` in `BankingPage.tsx` returned no matches; grep for `/Mock Provider|Demo Banking|Fake Banking|Sandbox Environment|Sandbox Mode|Test Mode/i` across the entire `banking/` directory returned only one file:
+
+```
+src/components/banking/BankingStatusPills.tsx:
+  152:  // Premium, honest labelling: a non-live provider is a "Sandbox Environment"
+  153:  // (not "Mock Provider"). It is real software running on seeded test data.
+  156:    : 'Sandbox Environment';
+```
+
+So the strings "Mock Provider", "Demo Banking", "Fake Banking" **do not appear** anywhere in the banking UI. The comment at lines 152–153 explicitly documents that the team deliberately chose "Sandbox Environment" over "Mock Provider" as honest labelling.
+
+**Banking provider status display** — `ProviderBadge` component (`BankingStatusPills.tsx` lines 151–159):
+```tsx
+export function ProviderBadge({ provider, isLive }: { provider: string; isLive: boolean }) {
+  // Premium, honest labelling: a non-live provider is a "Sandbox Environment"
+  // (not "Mock Provider"). It is real software running on seeded test data.
+  const label = isLive
+    ? `${provider} (live)`
+    : 'Sandbox Environment';
+  const tone: Tone = isLive ? 'success' : 'gold';
+  return <Pill label={label} tone={tone} icon={ShieldCheck} dot pulse={!isLive} size="sm" />;
+}
+```
+
+- If `isLive === true`: shows `"{provider} (live)"` (e.g. "HDFC (live)") in emerald/green tone, with a steady dot.
+- If `isLive === false`: shows `"Sandbox Environment"` in gold tone, with a pulsing dot.
+
+Where it's rendered:
+- `BankingHeader` (`BankingPage.tsx` line 440): `{providerInfo && <ProviderBadge provider={providerInfo.provider} isLive={providerInfo.isLive} />}` — appears next to the Refresh/Import buttons in the sticky header.
+- `BankingFooter` (`BankingPage.tsx` lines 485–489): `<span>Provider: <span className="font-medium text-foreground">{providerInfo.name}</span></span>` — footer shows the raw provider NAME (not the badge) plus last activity timestamp.
+
+`providerInfo` is fetched via `api.fetchProviderInfo()` (line 109) in the `loadDashboard` Promise.all (lines 105–114). Type is `ProviderInfo` from `@/lib/banking-prisma/types`.
+
+#### 7. Settings module — `src/components/settings/SettingsPage.tsx` (2420 lines)
+
+**Layout structure** — Stripe-style fixed-layout shell. Does NOT scroll the whole application; only the content panel scrolls:
+
+```tsx
+// Line 163–216
+return (
+  // Fixed-layout Settings shell (Stripe-style):
+  //   • Root fills the viewport height of its parent <main> and clips overflow.
+  //   • The settings sub-nav (left) is shrink-0 with its own vertical scroll.
+  //   • The content panel (right) is flex-1 with its own vertical scroll.
+  //   • The application header, sidebar, and this nav never move — only the
+  //     content panel scrolls.
+  <div className="flex h-full flex-col lg:flex-row overflow-hidden bg-black text-white">
+    {/* ── Sidebar Nav ── */}
+    <SettingsSidebar activeSection={activeSection} onSelect={setActiveSection} isMobile={isMobile} />
+
+    {/* ── Main Content (only this region scrolls) ── */}
+    <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12">
+        {/* Header */}
+        <div className="mb-8 md:mb-12">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">Settings</h1>
+          <p className="text-sm md:text-base text-zinc-400 mt-2">Manage your organization, account, and system preferences.</p>
+        </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={activeSection} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+            {activeSection === 'organization' && <OrganizationSection />}
+            {activeSection === 'appearance' && <AppearanceSection />}
+            {activeSection === 'profile' && <ProfileSection />}
+            {activeSection === 'security' && <SecuritySection />}
+            {activeSection === 'integrations' && <IntegrationsSection />}
+            {activeSection === 'notifications' && <NotificationsSection />}
+            {activeSection === 'team' && <TeamSection />}
+            {activeSection === 'apikeys' && <ApiKeysSection />}
+            {activeSection === 'audit' && <AuditLogSection />}
+            {activeSection === 'billing' && <BillingSection />}
+            {activeSection === 'data' && <DataSection />}
+            {activeSection === 'danger' && <DangerZoneSection />}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </main>
+  </div>
+);
+```
+
+**Key points**:
+- Root is `flex h-full flex-col lg:flex-row overflow-hidden` — root explicitly clips overflow, so the parent `<main>` (the dashboard shell's main content area) is the viewport. The Settings page never grows beyond the viewport.
+- `<main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">` — only this region scrolls vertically. `custom-scrollbar` is a project-wide class for thin/branded scrollbars.
+- 12 settings sections: `organization`, `appearance`, `profile`, `security`, `integrations`, `notifications`, `team`, `apikeys`, `audit`, `billing`, `data`, `danger`. Switched via `activeSection` state, animated with `framer-motion` (fade + slide).
+
+**Settings sidebar** — YES, it has its own sidebar (`SettingsSidebar` component, lines 223–264+):
+- Desktop (line 262–263): `<nav className="w-64 shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-zinc-900/70 bg-zinc-950/30 px-4 py-8">` — `w-64` fixed-width sub-nav, its own vertical scrollbar (only used if the section list ever overflows).
+- Mobile (lines 236–255): renders a `<Select>` dropdown instead of a sidebar (because horizontal space is limited).
+- Sections are grouped into 3 groups: `Account`, `Workspace`, `System` (line 231: `const g: Record<string, NavSection[]> = { Account: [], Workspace: [], System: [] };`).
+- So the layout is: [Settings sub-sidebar 256px | Main content scrollable]. The parent dashboard shell's app-sidebar + top-header remain fixed; only the Settings content panel scrolls.
+
+There is also one nested scroll container at line 1930 (audit log event list): `<div className="space-y-1 max-h-[600px] overflow-y-auto pr-2">` — caps the audit event list at 600px height with its own scroll.
+
+#### 8. Google integration — `src/components/google-workspace/GoogleWorkspacePage.tsx` (1211 lines)
+
+**"No messages loaded" string** — YES, present at line 751:
+```tsx
+// Line 748–755  (inside GmailTab, when messages array is empty)
+<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-6 text-center">
+  <Inbox className="h-5 w-5 text-muted-foreground/60" />
+  <p className="text-xs text-muted-foreground">
+    No messages loaded yet.
+  </p>
+  <p className="text-[10px] text-muted-foreground/70">
+    Click <span className="font-medium text-foreground">Load</span> above to fetch your latest Gmail messages.
+  </p>
+</div>
+```
+
+So the empty state shows: `Inbox` icon + "No messages loaded yet." headline + "Click Load above to fetch your latest Gmail messages." subtitle. This is the per-tab empty state for Gmail when the user has connected but hasn't clicked "Load" yet.
+
+**Current UX**:
+- **`ConnectionHeader`** (lines 59–197): connect/disconnect/status header. Shows Google Workspace title + status badge (`Checking…` while `statusLoading`, then `Connected as {userEmail}` or `Not connected`). Buttons: Refresh status, Connect Google (blue `#4285F4` button — fetches consent URL from `/api/integrations/google/connect` and redirects browser there), Disconnect (with AlertDialog confirmation at line 176–180: "Disconnect Google Workspace? — Live data from Gmail, Drive, and Calendar will stop syncing. You can reconnect anytime.").
+- **OAuth callback banner** (lines 1122–1147): detects `?google_connected=1` or `?google_error=...` query params from the OAuth callback redirect, surfaces a one-shot toast-like banner ("Google Workspace connected successfully." or "Google connection failed: {error}"), then cleans the URL via `window.history.replaceState`.
+- **`NotConnectedGate`** (lines 201–219): if `!status?.connected`, renders a full-card CTA: amber `Plug` icon + "Connect Google Workspace" + "This tab requires a connected Google account. Click Connect Google above to grant access to Gmail, Drive, Docs, Sheets, and Calendar." Wraps each tab so non-connected users see the CTA on every tab.
+- **5 service tabs** (line 1120): `useState<ServiceTab>('gmail')` — Gmail, Drive, Docs, Sheets, Calendar.
+- **Unified Activity card** (lines 425–575): "Sync Now" button triggers `loadActivity()` which fetches Gmail messages, Drive files, and Calendar events in parallel (`Promise.all` at line 435), then merges into a unified `activities[]` array typed by `ActivityKind` (`'email' | 'file' | 'event'`). Empty state at line 575: skeleton rows while `loadingActivity && activities.length === 0`.
+- **Per-tab pattern**: each tab (GmailTab, DriveTab, CalendarTab) has its own `Load`/`Refresh` button that triggers a real API call (`gmailMessages(15)`, `driveFiles()`, `calendarEvents(10)`). Each shows its own empty state when the array is empty (e.g. "No messages loaded yet." for Gmail).
+- **Honest labelling** (line 299–301 comment): "IMPORTANT: no faked data. If the user has just connected and the API returns empty arrays (or errors), we show an honest empty state asking them to sync now to populate the feed."
+
+#### 9. Zoho integration — `src/components/zoho-books/ZohoBooksPage.tsx` (967 lines)
+
+**Technical fields shown?** — YES, several technical/internal identifiers are surfaced in the `ConnectionDetails` card (lines 596–794):
+
+| Field | Where | Value type | Sensitive? |
+|-------|-------|------------|------------|
+| `ID: {syncStatus.zohoOrgId}` | SyncPanel, line 489 (Badge) | Zoho Org ID (numeric) | Medium — internal Zoho ID |
+| `ID: {status.zohoOrgId}` | ConnectionDetails, line 717 (Badge) | Same Zoho Org ID (duplicate display) | Medium |
+| `Data center: {status.dataCenter}` | Line 723 | String like `in`, `com`, `eu` | Low — public |
+| `Access Token` | Line 761–763 | **String literal** `"AES-256-GCM encrypted"` (NOT the actual token) | ✅ Safe — value is masked |
+| `Token Storage` | Line 767–769 | **String literal** `"ZohoBooksToken (Prisma)"` — exposes the raw Prisma model name | Low — code-implementation detail |
+| `Zoho User ID` | Line 785–787 | `status.zohoUserId` (raw Zoho user ID) | Medium — internal Zoho ID |
+| `Connected At`, `Last Connected` | Lines 756, 774 | ISO timestamp → `toLocaleString()` | Low |
+| `User Email` | Line 780 | `status.userEmail` | Low — same as connected user |
+| `Scopes` | Lines 734–744 | OAuth scope areas as badges (e.g. `ZohoBooks.fullaccess.books`) | Low — useful transparency |
+| Test Connection result: `gst_no`, `email`, `plan_name`, `country_name`, `currency_code`, `is_org_active` | Lines 685–693 | Raw Zoho organization profile fields | Low — business metadata |
+
+**Important**: actual token VALUES are NEVER displayed. The `Refresh Token` button at line 180 is a button LABEL (it force-refreshes the access token via `/api/integrations/zoho/refresh`), not a token display. The `Access Token` row in the meta grid always shows the literal string `"AES-256-GCM encrypted"` regardless of whether a token exists.
+
+So the page does expose some technical identifiers (Zoho Org ID × 2 displays, Zoho User ID, raw Prisma model name `ZohoBooksToken (Prisma)`, data center), but NOT actual credentials. A user-facing "quality sprint" might consider hiding the raw Prisma model name and consolidating the duplicate Zoho Org ID display.
+
+**Business metrics surfaced** — `SyncPanel` (lines 318–566) surfaces these:
+- **Last Sync** (line 476): `timeAgo(lastSync.startedAt)` + duration subtitle (e.g. "2m ago · 12.3s").
+- **Records Imported** (line 482): `totalRecords.toLocaleString('en-IN')` + `${lastSync.mode} sync` subtitle (incremental/full).
+- **Organization** (line 488): `syncStatus?.organizationName ?? 'Not mapped'` + `ID: ${syncStatus.zohoOrgId}` subtitle.
+- **Status** (line 494): `lastSync.status` — `Completed` (emerald) / `Partial` (amber) / `Failed` (red) / `Running` (animated).
+- **Live progress bar** (lines 431–468): while `isRunning`, shows percentage + step indicator (e.g. "Syncing customers… 67%"). Color-coded red gradient while running, emerald when complete, red when failed.
+- **Per-entity record counts**: rendered in a grid below the metrics (records by customers/invoices/bills/etc — `syncStatus?.recordsImported` object).
+- **Sync mode toggle** (lines 396–417): Incremental vs Full sync toggle.
+- **Sync Now button** (lines 419–427): Zoho-red `#C8202F` button, calls `triggerSync({ mode })`.
+- **Test Connection** (lines 628–638): "Probes the Zoho Books API with a real authenticated request to verify the connection" — surfaces organization profile (name, plan, country, currency, GSTIN, contact email, active status).
+- **Disconnect confirmation** (lines 215–219): "All synced customers, invoices, bills, and payments will remain in GSTPilot, but live sync will stop. You can reconnect anytime."
+- **Oracle integration callout** (line 560): `"What is my cash balance?" — answers come from your live Zoho Books data.` Tells the user Oracle reads the synced tables directly.
+- **Security note** (lines 945–950): "Tokens are AES-256-GCM encrypted at rest. Only your organization can access them. Disconnect anytime to revoke access."
+
+#### 10. Oracle API — `src/app/api/oracle/` directory
+
+**Route files (62 total)** — full inventory:
+
+```
+activate/route.ts                              activation-insights/route.ts
+action/route.ts                                actions/route.ts
+agents/route.ts                                analyze/route.ts
+asr/route.ts                                   ask/route.ts
+audit/route.ts                                 briefing/route.ts
+brain/autonomous-suggestions/route.ts          brain/briefing/route.ts
+brain/confirm/route.ts                         brain/daily-summary/route.ts
+brain/decisions/route.ts                       brain/learning/route.ts
+brain/memory/route.ts                          brain/reports/route.ts
+brain/reminders/route.ts                       brain/search/route.ts
+brain/sessions/[id]/route.ts                   brain/sessions/route.ts
+brain/tasks/route.ts                           brain/timeline/route.ts
+brain/workflow/execute/route.ts                brain/workflow/plan/route.ts
+brain/route.ts                                 chat/route.ts
+context/route.ts                               conversations/route.ts
+dashboard/route.ts                             daily-briefing/route.ts
+diagnose/route.ts                              documents/route.ts
+executives/route.ts                            forecast/route.ts
+insights/route.ts                              learn/route.ts
+memory/route.ts                                models/route.ts
+plan/route.ts                                  query/route.ts
+real-data/route.ts                             reasoning/route.ts
+recommendations/route.ts                       route/route.ts
+search/route.ts                                sources/route.ts
+speak/route.ts                                 transcribe/route.ts
+tts/route.ts                                   validate/route.ts
+cfo/analyze/route.ts                           cfo/audit/route.ts
+cfo/communicate/create/route.ts                cfo/communicate/execute/route.ts
+cfo/execute/route.ts                           cfo/invoice/create/route.ts
+cfo/invoice/execute/route.ts                   cfo/invoice/pdf/route.ts
+cfo/payment-link/create/route.ts               cfo/payment-link/execute/route.ts
+cfo/payment-link/webhook/route.ts              cfo/report/export/route.ts
+```
+
+**Two main chat endpoints**: `/api/oracle/chat` (562 lines) and `/api/oracle/brain` (961 lines). The OracleBrainCore UI component calls `/api/oracle/brain` (POST), NOT `/api/oracle/chat`.
+
+**`/api/oracle/chat` streaming** — REAL stream (not buffered), full SSE pipeline. `src/app/api/oracle/chat/route.ts`:
+
+- `export const runtime = 'nodejs';` (line 114)
+- `export const dynamic = 'force-dynamic';` (line 115)
+- Headers (lines 119–126): `Content-Type: text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-transform`, `Connection: keep-alive`, `X-Accel-Buffering: no` (the last header explicitly tells proxies NOT to buffer).
+- SSE chunk encoder (lines 128–130): `function sseChunk(obj) { return new TextEncoder().encode(\`data: ${JSON.stringify(obj)}\\n\\n\`); }`
+- Returns a real `ReadableStream<Uint8Array>` (line 561: `return new Response(transformed, { status: 200, headers: sseHeaders() });`).
+- **Pipeline order** (lines 345–368): emits 11 structured SSE events BEFORE the LLM token stream begins:
+  1. `{ intent, tools }` — intent classification + tool trace
+  2. `{ metrics }` — deterministic KPI cards (real Prisma data)
+  3. `{ agents }` — multi-agent findings
+  4. `{ confidences }` — confidence tags
+  5. `{ scorecard }` — business scorecard
+  6. `{ timeline }` — AI timeline items
+  7. `{ insights }` — autonomous insights
+  8. `{ recommendations }` — structured recommendations
+  9. `{ followUps }` — smart follow-up questions
+  10. `{ dashboard }` — live dashboard update
+  11. `{ actions }` — action buttons
+  Then streams `{ token: "..." }` × N from the upstream LLM, then `{ done: true }`.
+- **Upstream LLM** (lines 274–293): `ZAI.create()` → `zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })`. Falls back to a non-streaming path if the SDK returns a non-stream result (lines 283–293).
+- **Watchdog** (lines 343, 388, 457–460): `streamWatchdog = setTimeout(safeFinish, 120_000);` — force-closes the stream after 120s if the upstream LLM stalls. Cleared in `finally` and in `cancel()`.
+- **`safeFinish()` idempotent closer** (lines 378–385): ensures `{done:true}` is enqueued exactly once even if the watchdog fires after natural completion.
+- **Resilience**: never returns HTTP 400 (lines 194–204 — empty/malformed input emits a friendly SSE message instead). Pipeline failures (lines 215–224) and LLM failures (lines 294–319) both emit a complete structured SSE response (with all 11 events + a friendly error token + done) so the user always sees the analysis even if the narrative fails.
+- **Non-blocking memory persistence** (lines 463–550): after the stream closes, persists the conversation as a Brain memory, logs decisions from recommendations, auto-creates tasks from critical/warn insights, generates reminders from the snapshot, and records a frequent-query learning signal. All `.catch(() => undefined)` — best-effort, never blocks.
+- **Cancel handler** (lines 552–558): clears the watchdog and calls `upstream.cancel()`.
+
+**`/api/oracle/brain` streaming** — also a REAL SSE stream, similar pattern:
+- `runtime = 'nodejs'` (line 44), `maxDuration = 60` (line 45 — Vercel function timeout).
+- Real `ReadableStream<Uint8Array>` (line 400).
+- ZAI SDK `stream: true` (line 442).
+- Reads via `upstream.getReader()` (line 475), parses `data:` lines, re-emits as `{type, ...}` SSE events.
+- `MAX_TOOL_ITERATIONS = 4` (line 47) — supports multi-turn tool calling loops (LLM calls a tool → backend executes → returns result → LLM continues).
+- Event types (lines 12–18 of file header): `session`, `token`, `tool-start`, `tool-result`, `tool-error`, `done`, `error`, plus `action-confirm` and `workflow-plan` for the Action Engine and Workflow Engine.
+- Headers (lines 953–958): `text/event-stream; charset=utf-8`, `no-cache, no-transform`, `keep-alive`.
+- Returns 400 for invalid JSON / missing message (lines 83–99) — LESS defensive than `/api/oracle/chat` (which never 400s).
+
+**Conclusion**: Both `/api/oracle/chat` and `/api/oracle/brain` are REAL streaming endpoints using `ReadableStream<Uint8Array>` + SSE protocol. Neither is buffered. The Brain endpoint is what `OracleBrainCore` actually consumes (the chat endpoint appears to belong to the older `OracleChat`/`OraclePanel` variant that emits the richer 11-event pipeline).
+
+### Stage Summary
+
+This was a READ-ONLY exploration task. **No files were modified.** Findings below are the foundation for an upcoming quality sprint.
+
+**Key findings by module**:
+
+1. **InvoiceWorkspacePage.tsx** — `sortInvoices()` (lines 151–195) has 6 `.localeCompare()` calls, ALL null-safe via `?? ''`. Single `.sort()` call (line 157) handles all 12 sort keys with proper `?? 0` (numeric) / `? new Date(...).getTime() : <fallback>` (dates) / `?? ''` (strings) guards. Component root is `min-h-screen flex flex-col` with sticky header + sticky Oracle aside + `mt-auto` footer — page scrolls the whole document (no internal scroll container). Minor inconsistency: 6 `localeCompare` calls use browser-default locale (`undefined`/omitted 2nd arg) instead of explicit `'en'` or `'en-IN'`.
+
+2. **Oracle module** — `OracleBrain.tsx` (50 lines) is a thin wrapper around `OracleBrainCore.tsx` (1852 lines). Streaming uses `fetch + ReadableStream` with manual SSE parsing (lines 422–592), AbortController in `abortRef` (line 305), `stopStreaming()` calls `abortRef.current?.abort()` (line 614). Has **Regenerate** button (`handleRegenerate` lines 930–946, button at lines 1449–1458) and **Stop** button (lines 1180–1187, swaps Send → Stop while streaming). NO "Continue" button. Oracle is BOTH conversational CFO AND structured dashboard dump — streams LLM tokens PLUS renders inline cards for `tool-call`, `action-confirm`, `workflow-plan` parts. Welcome message: "I'm Oracle — your AI CFO, COO, and compliance officer." Endpoint: `POST /api/oracle/brain`. (`OracleBrainPanel.tsx` is a separate memory side-panel, NOT a chat.)
+
+3. **DashboardPage.tsx** — Health score is SINGLE-SOURCE: `useBusinessSnapshot()` → `/api/business/snapshot` → `src/lib/business/snapshot.ts::computeHealthScore`. Number = `snapshot.healthScore` (line 869), label = `snapshot.healthScoreLabel` (line 871), 5 tiers (Excellent/Good/Fair/Poor/Critical) mapped to 3 tones locally. Dashboard does NOT re-compute any health score. Pending collection ₹ = `snapshot.collections?.totalOutstanding` (line 715). Overdue invoice count = `snapshot.overdueInvoiceCount` (line 696). The dashboard uses 5 distinct data hooks (snapshot, liveMetrics, fireReturns, timelineEvents, aiRecommendations) — health/pending/unpaid all come from snapshot, critical-issues count comes from Firestore metrics. Historical "₹89.5K pending collection + 0 invoices unpaid" bug was fixed by suppressing the unpaid COUNT and showing only the ₹ amount.
+
+4. **ReportsPage.tsx** — REAL page (2650 lines), NOT a redirect, NOT a placeholder. Generates real GSTR-1/3B drafts from `gst_transactions`, supports client/month/year filters, persists export history to Firestore. DashboardViews.tsx line 86 maps `'reports' → ReportsPage` directly (no redirect, not in DISABLED_VIEWS).
+
+5. **ClientRegistryPage.tsx** — Desktop table sticky header (lines 1459–1527) shows exactly 8 columns: **Company | GSTIN | State | Owner | Outstanding | Returns | Health | Status** (5 sortable: Company/GSTIN/State/Health/Status; 3 non-sortable: Owner/Outstanding/Returns). NO raw IDs leak — all values sanitized via `display-utils.ts` (`displayGSTIN`, `displayText`, `displayOwner`, `displayOutstanding`, `displayNumber`). `client.id` only in `key=`/`onClick`/PATCH/DELETE bodies (correct). Edit form blanks synthetic GSTINs (line 864). CSV export sanitizes too (line 1024).
+
+6. **BankingPage.tsx** — Strings "Mock Provider", "Demo Banking", "Fake Banking" DO NOT EXIST anywhere in `src/components/banking/`. Provider status uses honest labelling via `ProviderBadge` (`BankingStatusPills.tsx` lines 151–159): if `isLive` → `"{provider} (live)"` (emerald, steady dot); else → `"Sandbox Environment"` (gold, pulsing dot). Rendered in `BankingHeader` (line 440) next to Refresh/Import buttons; footer (line 487) shows raw provider NAME. `providerInfo` fetched via `api.fetchProviderInfo()` in `loadDashboard` Promise.all (line 109).
+
+7. **SettingsPage.tsx** — Root is `flex h-full flex-col lg:flex-row overflow-hidden bg-black text-white` (line 170) — does NOT scroll the whole app; only `<main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">` (line 179) scrolls. HAS its own sidebar (`SettingsSidebar` lines 223–264+): desktop = `<nav className="w-64 shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-zinc-900/70 bg-zinc-950/30 px-4 py-8">`; mobile = `<Select>` dropdown. 12 sections: organization, appearance, profile, security, integrations, notifications, team, apikeys, audit, billing, data, danger (grouped into Account/Workspace/System). One nested scroll container at line 1930 (audit log event list, `max-h-[600px]`).
+
+8. **GoogleWorkspacePage.tsx** — YES, says "No messages loaded yet." at line 751 (inside GmailTab empty state, with `Inbox` icon + subtitle "Click Load above to fetch your latest Gmail messages."). 5 tabs (Gmail/Drive/Docs/Sheets/Calendar), each with its own `Load`/`Refresh` button. `ConnectionHeader` (lines 59–197) has Connect Google (`#4285F4` button, fetches consent URL from `/api/integrations/google/connect`), Disconnect (with AlertDialog confirmation), Refresh status. `NotConnectedGate` (lines 201–219) shows full-card CTA on every tab when not connected. OAuth callback banner (lines 1122–1147) detects `?google_connected=1`/`?google_error=...` and surfaces a one-shot toast, then cleans the URL. Unified Activity card with "Sync Now" button fetches Gmail+Drive+Calendar in parallel. Honest labelling: "no faked data" (line 299 comment).
+
+9. **ZohoBooksPage.tsx** — Technical fields ARE shown in `ConnectionDetails` card (lines 596–794): Zoho Org ID shown TWICE (line 489 + line 717), Zoho User ID (line 786), data center (line 723), raw Prisma model name `"ZohoBooksToken (Prisma)"` (line 768). ACTUAL TOKEN VALUES are NEVER displayed — `Access Token` row always shows literal `"AES-256-GCM encrypted"` (line 762); `Refresh Token` is a button LABEL (force-refreshes token via API), not a token display. Business metrics surfaced: Last Sync (time-ago + duration), Records Imported (total + per-entity), Organization Name, Sync Status (Completed/Partial/Failed/Running with progress bar), Test Connection result (organization profile: name/plan/country/currency/GSTIN/email/active). Quality-sprint opportunity: hide raw Prisma model name, consolidate duplicate Zoho Org ID display.
+
+10. **Oracle API** — 62 route files in `src/app/api/oracle/`. Two main chat endpoints:
+    - **`/api/oracle/chat`** (562 lines) — REAL stream (`text/event-stream`, `ReadableStream<Uint8Array>`, `X-Accel-Buffering: no`). Emits 11 structured SSE events (intent/tools/metrics/agents/confidences/scorecard/timeline/insights/recommendations/followUps/dashboard/actions) BEFORE streaming `{token:"..."}` × N from ZAI SDK (`stream: true`), then `{done:true}`. 120s watchdog. Never returns HTTP 400 — empty/malformed input gets friendly SSE. Non-blocking memory persistence after stream closes. Appears to belong to the older OracleChat/OraclePanel variant.
+    - **`/api/oracle/brain`** (961 lines) — REAL stream (`text/event-stream`, `ReadableStream<Uint8Array>`, `maxDuration=60`). This is what `OracleBrainCore` actually calls. Event types: `session`, `token`, `tool-start`, `tool-result`, `tool-error`, `action-confirm`, `workflow-plan`, `done`, `error`, `navigate`. Supports multi-turn tool calling (`MAX_TOOL_ITERATIONS = 4`). Returns 400 for invalid JSON / missing message (less defensive than /chat). Uses ZAI SDK `stream: true` + `upstream.getReader()`.
+
+Both endpoints are REAL streams — neither is buffered. The Brain endpoint is the active one wired to the OracleBrain UI; the chat endpoint appears to be legacy/parallel infrastructure.
+
+
+---
+
+## Task ID: pqs-google
+**Agent**: gmail-autoload-ux-fixer (single-agent direct task)
+**Task**: Fix the Google Workspace Gmail tab — it showed a dead "No messages loaded yet." state with a manual "Click Load above" prompt. Auto-load messages on tab open (when Google connected) + replace empty/loading copy with premium shimmer/empty states. No API/auth/route/data-structure changes; ref guard to prevent infinite loops.
+
+### Work Log
+1. Read `worklog.md` tail for prior context (file is 1211 lines; GmailTab at lines 637–779; dead empty state was at line 751; `NotConnectedGate` already ensures GmailTab only mounts when `status?.connected === true`).
+2. Read `GoogleWorkspacePage.tsx` GmailTab block + `src/hooks/useGoogleWorkspace.ts` to confirm `status` is exposed by the hook and the gate already guarantees `connected === true` on mount.
+3. Applied 5 edits to `src/components/google-workspace/GoogleWorkspacePage.tsx` via MultiEdit:
+   - **Import**: added `useRef` to `import { useEffect, useState, useCallback, useRef } from 'react';`.
+   - **GmailTab state**: destructured `status` from `useGoogleWorkspace()`; added `hasLoaded` state (drives UI) + `hasLoadedRef` ref (non-reactive guard).
+   - **Auto-load `useEffect`** (new, after `loadMessages`): fires when `status?.connected` is true and `!hasLoadedRef.current`. Sets the ref true, flips `hasLoaded` state, then calls `void loadMessages()` + `void loadProfile()`. Deps `[status?.connected, loadMessages, loadProfile]`. Ref guard ⇒ at most once per mount ⇒ no infinite loop, no refetch on every render. `eslint-disable-next-line react-hooks/set-state-in-effect` on the `setHasLoaded(true)` line (mirrors existing pattern at line 118).
+   - **Button label**: renamed `Load` → `Refresh` (icon was already `RefreshCw`; button now only serves explicit re-fetches since auto-load handles the initial load). Handler unchanged — still calls both `loadProfile()` + `loadMessages()`.
+   - **Profile empty state**: replaced stale `Click "Load" to fetch your Gmail profile.` (referenced the now-renamed button) with a 3-row `Skeleton` shimmer during `loading || !hasLoaded`, and `No Gmail profile available.` when truly empty after load.
+   - **Messages empty state** (the headline fix): replaced the dead `No messages loaded yet.` / `Click Load above to fetch…` block with a 3-way conditional:
+     - `messages.length === 0 && (loading || !hasLoaded)` → spinner + `Fetching your latest messages…` label + 4 shimmer `Skeleton` rows mirroring the message-row layout.
+     - `messages.length === 0 && !(loading || !hasLoaded)` → `Inbox` icon + `No messages in your inbox.` (truly empty after a successful load).
+     - `messages.length > 0` → unchanged message list (stale data stays visible during a manual refresh rather than flashing to shimmer — better UX).
+4. Ran `npx eslint src/components/google-workspace/GoogleWorkspacePage.tsx`. My changes produced **zero** new lint errors; the `react-hooks/set-state-in-effect` disable I added is correctly consumed (no "unused directive" warning at line 678). Two **pre-existing** issues remain in untouched regions (line 471 unused-disable in the Activity card's effect; line 561 `Activity` icon not imported from lucide-react) — both outside the Gmail tab and outside this task's scope.
+5. Dev server (`dev.log`) restarted clean: `✓ Ready in 4.1s`, no runtime errors.
+6. Wrote agent-ctx record at `/home/z/my-project/agent-ctx/pqs-google-gmail-autoload.md`.
+
+### Stage Summary
+Gmail tab now auto-loads messages + profile the moment it's opened while Google is connected — no manual click required. First paint shows a shimmer (`Fetching your latest messages…` + skeleton rows / profile skeleton) instead of a dead empty box, so the tab feels alive instantly. If the inbox is genuinely empty after load, it shows a calm `No messages in your inbox.`. The manual `Refresh` button still works for explicit re-fetches. No API, auth, data-structure, route, or connection-flow changes. Ref guard guarantees the auto-load fires exactly once per mount (no infinite loops). Files touched: `src/components/google-workspace/GoogleWorkspacePage.tsx` only.
+
+---
+Task ID: pqs-final
+Agent: main (Product Quality Sprint)
+Task: Premium UX Foundation + Product Quality Sprint — fix loading, scrolling, Invoice crash, Oracle UX, Zoho/Google polish, verify all pages
+
+Work Log:
+- Read worklog.md (explore-1 section) to understand current state: Clients sanitized, Banking uses "Sandbox Environment", Settings is Stripe-style, Dashboard has single health score, Reports is real page, Oracle has real streaming
+- Fixed Invoice localeCompare CRASH in InvoiceBuilder.tsx line 1267: `a.value.localeCompare(b.value)` → `a[1].localeCompare(b[1])` (Object.entries returns [key, value] arrays, not {value} objects). This was the root cause of "Cannot read properties of undefined (reading 'localeCompare')" error in the Invoice module.
+- Fixed scrolling system: replaced `min-h-screen` with `h-full` in InvoiceWorkspacePage.tsx (1), BankingPage.tsx (3), GoogleWorkspacePage.tsx (1), ZohoBooksPage.tsx (1) — eliminates nested scroll chaos, each area now scrolls independently
+- Updated Oracle system prompt (/api/oracle/brain/route.ts): added "Executive Briefing Style" section — Oracle now answers like a CFO (greeting + checkmark bullets for completed work + one attention item + question) instead of dumping dashboard headers (### Revenue ### Cash ### GST)
+- Hidden Zoho Books technical fields: removed Zoho Org ID Badge, data center display, "Token Storage: ZohoBooksToken (Prisma)" MetaItem, "Zoho User ID" MetaItem; replaced with business-focused "Connected Since", "Security: Bank-grade encryption", "Admin Email"
+- Fixed Google Workspace lint errors: added missing `Activity` import, removed unused eslint-disable directive
+- Google Workspace auto-load: subagent added useEffect that auto-loads Gmail messages when tab is active + Google is connected (with ref guard to prevent loops), replaced "No messages loaded yet" with premium loading shimmer + "No messages in your inbox" empty state
+- Verified premium loading system already exists and is wired in (PremiumGlobalLoading in page.tsx, AppRoot.tsx; PremiumPageLoader in DashboardViews.tsx, DashboardShell.tsx, AppRouter.tsx)
+- Verified premium skeletons already exist (premium-skeletons.tsx: DashboardSkeleton, TableSkeleton, FormSkeleton, OracleSkeleton, ChartSkeleton, InvoiceSkeleton)
+- Verified Returns "File Return" button works: calls POST /api/gstr-filing/[id]/file, if mock provider returns MOCK_PROVIDER_CANNOT_FILE, opens DemoFilingModal with download JSON + mark-ready-to-file options (not a dead button)
+- Verified Reports routing: 'reports' view maps directly to ReportsPage in DashboardViews.tsx (no redirect to invoices)
+- Verified Banking uses "Sandbox Environment" label (not Mock/Demo/Fake)
+- Verified Customers table columns: COMPANY | GSTIN | STATE | OWNER | OUTSTANDING | HEALTH | STATUS (no raw IDs)
+
+Stage Summary:
+- Agent Browser verified ALL pages render correctly: Dashboard (workflow pipeline + Oracle briefing + snapshot), Oracle (CFO greeting + quick actions + insights), Invoices (no crash!), Customers (clean columns), Returns (filing workflow + Oracle AI), Banking (SANDBOX badge), Reports (filing packages), Settings (Organization section), Google Workspace (connected + Gmail tab), Zoho Books (business sync center, no technical fields)
+- The Invoice crash is FIXED — root cause was Object.entries().sort() using .value instead of [1]
+- Scrolling is clean — no more nested scroll chaos
+- Oracle answers like a CFO, not a dashboard
+- Zoho is a Business Sync Center, not developer tooling
+- Google Workspace feels alive (auto-loads, no dead empty state)
+- All lint passes cleanly (0 errors)
+- Dev server healthy (HTTP 200, fast cached loads)

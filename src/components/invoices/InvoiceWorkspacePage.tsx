@@ -182,11 +182,11 @@ function sortInvoices(
       case 'totalAmount':
         return ((a.totalAmount ?? 0) - (b.totalAmount ?? 0)) * dir;
       case 'status':
-        return a.status.localeCompare(b.status) * dir;
+        return (a.status ?? '').localeCompare(b.status ?? '') * dir;
       case 'paymentStatus':
-        return a.paymentStatus.localeCompare(b.paymentStatus) * dir;
+        return (a.paymentStatus ?? '').localeCompare(b.paymentStatus ?? '') * dir;
       case 'riskLevel':
-        return a.riskLevel.localeCompare(b.riskLevel) * dir;
+        return (a.riskLevel ?? '').localeCompare(b.riskLevel ?? '') * dir;
       default:
         return 0;
     }
@@ -638,7 +638,7 @@ export default function InvoiceWorkspacePage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="min-h-screen flex flex-col bg-black text-foreground">
+    <div className="h-full flex flex-col bg-black text-foreground">
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-black/70 border-b border-white/[0.06]">
         <div className="px-4 md:px-6 py-3 flex items-center gap-3">

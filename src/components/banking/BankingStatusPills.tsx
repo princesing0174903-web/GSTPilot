@@ -149,7 +149,11 @@ export function HealthScoreBadge({ score, size = 'sm' }: { score: number; size?:
 // ─── Provider Badge ───────────────────────────────────────────────────────────
 
 export function ProviderBadge({ provider, isLive }: { provider: string; isLive: boolean }) {
-  const label = provider === 'mock' ? 'Mock Provider' : `${provider} (live)`;
+  // Premium, honest labelling: a non-live provider is a "Sandbox Environment"
+  // (not "Mock Provider"). It is real software running on seeded test data.
+  const label = isLive
+    ? `${provider} (live)`
+    : 'Sandbox Environment';
   const tone: Tone = isLive ? 'success' : 'gold';
   return <Pill label={label} tone={tone} icon={ShieldCheck} dot pulse={!isLive} size="sm" />;
 }

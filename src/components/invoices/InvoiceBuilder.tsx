@@ -1264,7 +1264,7 @@ export function InvoiceBuilder({
                     <SelectContent className="border-white/[0.08] bg-zinc-950/95 text-zinc-100">
                       <SelectItem value="__none__" className="focus:bg-emerald-500/10">— Auto —</SelectItem>
                       {Object.entries(STATE_CODE_TO_NAME)
-                        .sort((a, b) => a.value.localeCompare(b.value))
+                        .sort((a, b) => a[1].localeCompare(b[1]))
                         .map(([code, name]) => (
                           <SelectItem key={code} value={code} className="focus:bg-emerald-500/10 focus:text-emerald-200">
                             {name} ({code})

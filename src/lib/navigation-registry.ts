@@ -106,7 +106,7 @@ export const VIEW_REGISTRY: Record<string, NavEntry> = {
     inSidebar: true,
     description: 'Bank accounts, transactions, reconciliation, and cash flow.',
     category: 'finance',
-    badge: 'Demo',
+    badge: 'Sandbox',
   },
   reports: {
     view: 'reports',

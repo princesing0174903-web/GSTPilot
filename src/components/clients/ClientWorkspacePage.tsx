@@ -40,6 +40,11 @@ import { Separator } from '@/components/ui/separator';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+import {
+  displayGSTIN,
+  displayText,
+  displayNumber,
+} from '@/lib/clients/display-utils';
 import { toast } from 'sonner';
 import {
   useFireClient,
@@ -421,7 +426,7 @@ export default function ClientWorkspacePage() {
             Client Portfolio
           </Button>
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{client.tradeName}</span>
+          <span className="text-xs text-muted-foreground">{displayText(client.tradeName, 'Client')}</span>
         </div>
 
         {/* Main header card */}
@@ -432,7 +437,9 @@ export default function ClientWorkspacePage() {
               <HealthRing score={healthScore} size={72} strokeWidth={5} />
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl font-semibold text-foreground tracking-tight">{client.tradeName}</h1>
+                  <h1 className="text-xl font-semibold text-foreground tracking-tight">
+                    {displayText(client.tradeName, 'Unnamed Client')}
+                  </h1>
                   <Badge className={`gap-1 text-[10px] px-2 py-0.5 ${
                     riskLevel === 'Low' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : riskLevel === 'Medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -442,17 +449,25 @@ export default function ClientWorkspacePage() {
                     <Shield className="size-2.5" />{riskLevel}
                   </Badge>
                 </div>
-                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
+                {displayText(client.legalName, '') !== '' && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {displayText(client.legalName, '')}
+                  </p>
+                )}
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
+                  {/* GSTIN — sanitized (synthetic IDs render as em dash) */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Building2 className="size-3 text-slate-400" />
-                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
+                    <span className={`font-mono font-medium ${displayGSTIN(client.gstin) === '—' ? 'italic text-muted-foreground/60' : 'text-foreground'}`}>
+                      {displayGSTIN(client.gstin)}
+                    </span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
+                  {/* State — sanitized */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <MapPin className="size-3 text-slate-400" />
-                    <span>{client.state}</span>
+                    <span>{displayText(client.state)}</span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
                   <span className="text-xs text-muted-foreground">
@@ -470,16 +485,16 @@ export default function ClientWorkspacePage() {
                   <div className="flex flex-wrap gap-3 mt-3">
                     <div className="text-xs text-muted-foreground">
                       Filing Compliance: <span className={`font-medium ${client.complianceProfile.filingCompliance >= 80 ? 'text-emerald-600' : client.complianceProfile.filingCompliance >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                        {client.complianceProfile.filingCompliance}%
+                        {displayNumber(client.complianceProfile.filingCompliance, '—')}%
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Overdue Returns: <span className={`font-medium ${client.complianceProfile.overdueReturns > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {client.complianceProfile.overdueReturns}
+                        {displayNumber(client.complianceProfile.overdueReturns, '—')}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Avg Filing Delay: <span className="font-medium text-foreground">{client.complianceProfile.averageFilingDelay}d</span>
+                      Avg Filing Delay: <span className="font-medium text-foreground">{displayNumber(client.complianceProfile.averageFilingDelay, '—')}d</span>
                     </div>
                   </div>
                 )}
@@ -586,7 +601,7 @@ export default function ClientWorkspacePage() {
                     transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
                     className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
                   >
-                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.returnType}</div>
+                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.returnType || '—'}</div>
                     <div className="col-span-2 text-sm text-muted-foreground">{periodToLabel(ret.period)}</div>
                     <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
                     <div className="col-span-2 text-xs text-muted-foreground">
@@ -639,16 +654,16 @@ export default function ClientWorkspacePage() {
                     transition={{ delay: 0.35 + index * 0.03, duration: 0.3 }}
                     className="grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-muted/20 transition-colors items-center"
                   >
-                    <div className="col-span-2 text-xs font-medium text-foreground truncate">{inv.invoiceNumber}</div>
+                    <div className="col-span-2 text-xs font-medium text-foreground truncate">{inv.invoiceNumber || '—'}</div>
                     <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
-                    <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceType}</div>
+                    <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceType || '—'}</div>
                     <div className="col-span-2">
                       <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
                         inv.matchStatus === 'matched' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : inv.matchStatus === 'mismatch' ? 'bg-red-50 text-red-700 border-red-200'
                         : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
-                        {inv.matchStatus}
+                        {inv.matchStatus || '—'}
                       </Badge>
                     </div>
                     <div className="col-span-2">
@@ -658,10 +673,10 @@ export default function ClientWorkspacePage() {
                         : inv.riskLevel === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200'
                         : 'bg-red-50 text-red-700 border-red-200'
                       }`}>
-                        {inv.riskLevel}
+                        {inv.riskLevel || '—'}
                       </Badge>
                     </div>
-                    <div className="col-span-2 text-xs font-medium text-foreground text-right">{formatCurrency(inv.totalAmount)}</div>
+                    <div className="col-span-2 text-xs font-medium text-foreground text-right">{formatCurrency(inv.totalAmount ?? 0)}</div>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -708,8 +723,8 @@ export default function ClientWorkspacePage() {
                     <FileText className="size-4 text-slate-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate" title={doc.fileName}>{doc.fileName}</p>
-                    <p className="text-xs text-muted-foreground">{doc.documentType} &middot; {doc.createdAt ? formatRelativeTime(doc.createdAt as string) : ''}</p>
+                    <p className="text-sm font-medium text-foreground truncate" title={doc.fileName}>{displayText(doc.fileName, 'Untitled document')}</p>
+                    <p className="text-xs text-muted-foreground">{doc.documentType || 'document'} &middot; {doc.createdAt ? formatRelativeTime(doc.createdAt as string) : '—'}</p>
                   </div>
                   <div className="shrink-0">{getDocStatusBadge(doc.status)}</div>
                 </motion.div>
@@ -750,9 +765,9 @@ export default function ClientWorkspacePage() {
                       <IconComp className="size-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground truncate">{event.title}</p>
+                      <p className="text-sm text-foreground truncate">{displayText(event.title, 'Activity')}</p>
                       {event.description && (
-                        <p className="text-xs text-muted-foreground truncate">{event.description}</p>
+                        <p className="text-xs text-muted-foreground truncate">{displayText(event.description, '')}</p>
                       )}
                     </div>
                     <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.createdAt as string)}</span>

@@ -1,26 +1,37 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — AI Recommendations Engine
 //
-// Generates REAL recommendations from the Business Snapshot (single source of
-// truth) + targeted Prisma enrichment queries.
+// Generates REAL strategic recommendations from the Business Snapshot (single
+// source of truth) + targeted Prisma enrichment queries.
+//
+// DESIGN PRINCIPLE — NO DUPLICATES WITH THE DASHBOARD:
+//   The dashboard already surfaces *actionable* items in the Action Center
+//   (overdue invoices, pending collection, GST liability, reconciliation
+//   issues, upcoming returns) and the *business health score* in the hero
+//   pill. This engine MUST NOT re-emit those same items as recommendations —
+//   doing so caused the user-reported "₹89.5K pending collection" + "9 invoices
+//   unpaid" contradiction (the engine mislabeled `invoices.count` — total
+//   invoices — as the unpaid count) and the "40 / 58 / Poor / Fair" multi-
+//   health-score confusion (the engine emitted a "Business health is X/100"
+//   rule that disagreed with the hero pill).
+//
+//   This engine therefore focuses on STRATEGIC advice only:
+//     • Cash Below Monthly Expenses  — runway warning (strategic)
+//     • High Risk Score              — elevated risk (strategic, distinct
+//                                       from health score)
+//     • ITC Available                — optimization opportunity (claim ITC)
+//     • Overdue Tomorrow             — proactive warning (Prisma enrichment)
+//     • Revenue Dropped              — trend alert (Prisma enrichment)
+//     • Customer Payment Delays      — relationship risk (Prisma enrichment)
+//     • Top Customer Concentration   — diversification advice (Prisma)
 //
 // Rules:
 //   1. NEVER calculate revenue/cash/GST/health independently — always from snapshot.
 //   2. Use Prisma ONLY for record-level enrichment (overdue-tomorrow invoices,
 //      customer payment delays, top customer by revenue).
-//   3. Sort by priority (critical → high → medium → low) then dueInDays.
-//
-// Recommendation types:
-//   - High Outstanding (₹85,000 outstanding)
-//   - Overdue Tomorrow (2 invoices become overdue tomorrow)
-//   - Revenue Dropped (Revenue dropped 12%)
-//   - GST Filing Due (GST filing due in 5 days)
-//   - Customer Payment Delays (Customer ABC delayed 3 times)
-//   - Cash Below Monthly Expenses (Cash balance is below monthly expenses)
-//   - Low Health Score (Business health is 35/100)
-//   - High Risk Score (Risk score elevated)
-//   - Top Customer Concentration (Customer X is 45% of revenue)
-//   - ITC Available (₹12,000 ITC available to claim)
+//   3. Do NOT emit rules that duplicate the Action Center or the hero pill —
+//      the dashboard is the single surface for those.
+//   4. Sort by priority (critical → high → medium → low) then dueInDays.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
@@ -96,42 +107,31 @@ export function generateRecommendationsFromSnapshot(snapshot: {
 }): Recommendation[] {
   const recs: Recommendation[] = [];
 
-  // 1. High Outstanding
-  const outstanding = snapshot.invoices?.outstanding ?? snapshot.receivables ?? 0;
-  const invoiceCount = snapshot.invoices?.count ?? 0;
-  if (outstanding > 0) {
-    recs.push({
-      id: `rec-receivables-${hashId('outstanding')}`,
-      type: 'receivables',
-      priority: outstanding > 100000 ? 'high' : 'medium',
-      title: `Collect ${formatIndian(outstanding)} outstanding`,
-      description: `${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'} unpaid. Follow up with customers to accelerate cash flow.`,
-      metric: { label: 'Outstanding', value: formatIndian(outstanding) },
-      actionView: 'invoices',
-      actionLabel: 'View Invoices',
-    });
-  }
+  // NOTE: The following dashboard-surface items are INTENTIONALLY NOT emitted
+  // here (they belong to the Action Center or the hero pill, not strategic AI
+  // recommendations):
+  //
+  //   • "Collect ₹X outstanding" — Action Center already shows
+  //     "₹X pending collection" as an actionable item. Re-emitting it here
+  //     caused the user-reported "9 invoices unpaid" contradiction (this
+  //     engine was mislabeling `invoices.count` — total invoices — as the
+  //     unpaid count). The Action Center uses the truthful outstanding ₹
+  //     amount only.
+  //
+  //   • "GST filing due — N returns pending" — Action Center already shows
+  //     "₹X GST liability pending" (net output tax − ITC) and the next
+  //     upcoming/overdue return. The Oracle daily briefing additionally
+  //     reports "GSTR-3B prepared — ready to file" when Oracle has drafted
+  //     the return. Re-emitting it as a recommendation was redundant.
+  //
+  //   • "Business health is X/100 — needs attention" — the hero pill in the
+  //     DashboardPage header already renders the canonical health score +
+  //     label from `/api/business/snapshot`. Re-emitting it here caused the
+  //     "40 / 58 / Poor / Fair" multi-score confusion (the engine fetched
+  //     the snapshot at a different moment than the client, producing a
+  //     different number that disagreed with the hero pill).
 
-  // 2. GST Filing Due
-  const pending = snapshot.pendingReturns ?? 0;
-  const overdueReturns = snapshot.overdueReturns ?? 0;
-  if (pending > 0) {
-    recs.push({
-      id: `rec-compliance-${hashId('gst-due')}`,
-      type: 'compliance',
-      priority: overdueReturns > 0 ? 'critical' : 'high',
-      title: `GST filing due — ${pending} return${pending === 1 ? '' : 's'} pending`,
-      description: overdueReturns > 0
-        ? `${overdueReturns} return${overdueReturns === 1 ? '' : 's'} overdue. File immediately to avoid ₹200/day penalty.`
-        : 'File before the due date to stay compliant.',
-      metric: { label: 'Pending Returns', value: String(pending) },
-      actionView: 'returns',
-      actionLabel: 'View Returns',
-      dueInDays: overdueReturns > 0 ? 0 : 5,
-    });
-  }
-
-  // 3. Cash Below Monthly Expenses
+  // 1. Cash Below Monthly Expenses (strategic runway warning)
   const cash = snapshot.cash ?? 0;
   const monthlyBurn = snapshot.runway?.monthlyBurnRate ?? 0;
   const runwayMonths = snapshot.runway?.monthsRemaining ?? 0;
@@ -148,22 +148,11 @@ export function generateRecommendationsFromSnapshot(snapshot: {
     });
   }
 
-  // 4. Low Health Score
-  const health = snapshot.healthScore ?? 0;
-  if (health > 0 && health < 50) {
-    recs.push({
-      id: `rec-risk-${hashId('low-health')}`,
-      type: 'risk',
-      priority: 'high',
-      title: `Business health is ${Math.round(health)}/100 — needs attention`,
-      description: 'Health score is driven by revenue trend, outstanding %, cash balance, compliance, and overdue invoices. Review the factors below.',
-      metric: { label: 'Health Score', value: `${Math.round(health)}/100`, trend: 'down' },
-      actionView: 'ai-business-copilot',
-      actionLabel: 'Ask Oracle',
-    });
-  }
-
-  // 5. High Risk Score
+  // 2. High Risk Score (strategic — distinct from the hero pill health score)
+  // The risk score is a DIFFERENT metric from the health score (risk is
+  // additive on triggered factors; health is a weighted composite). It is
+  // NOT displayed in the dashboard header, so it's safe to surface here as
+  // a strategic recommendation.
   const risk = snapshot.riskScore ?? 0;
   if (risk > 60) {
     recs.push({
@@ -178,7 +167,7 @@ export function generateRecommendationsFromSnapshot(snapshot: {
     });
   }
 
-  // 6. ITC Available
+  // 3. ITC Available (strategic optimization — claimable input tax credit)
   const itc = snapshot.gst?.itcAvailable ?? 0;
   if (itc > 0) {
     recs.push({

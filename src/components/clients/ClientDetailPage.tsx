@@ -33,6 +33,10 @@ import {
 import type { ReturnType, DocumentType, FilingStatus, MatchStatus } from '@/types/gst';
 import { FILING_STATUS_CONFIG, MATCH_STATUS_CONFIG } from '@/types/gst';
 import { formatCurrency } from '@/lib/gst-utils';
+import {
+  displayGSTIN,
+  displayText,
+} from '@/lib/clients/display-utils';
 
 // React Query hooks
 import {
@@ -321,9 +325,15 @@ export default function ClientDetailPage() {
   // ─── Handlers ──────────────────────────────────────────────────────────
   const openEdit = () => {
     if (!client) return;
+    // PQA-3: Don't pre-fill the GSTIN input with a synthetic/internal ID
+    // (LOCAL-*, ZOHO-CONTACT-*, etc.). If the stored value is synthetic, leave
+    // the field blank so the user can enter a real GSTIN. The underlying db
+    // row keeps its synthetic key until the user saves a real one.
+    const rawGstin = client.gstin ?? '';
+    const gstinForForm = displayGSTIN(rawGstin, '') === '' ? '' : rawGstin;
     setEf({
       tradeName: client.tradeName,
-      gstin: client.gstin,
+      gstin: gstinForForm,
       state: client.state ?? '',
       returnPeriod: client.returnPeriod ?? 'monthly',
       contactEmail: client.contactEmail ?? '',
@@ -504,7 +514,7 @@ export default function ClientDetailPage() {
             <ArrowLeft className="h-3.5 w-3.5" /> Clients
           </Button>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground font-medium">{client.tradeName}</span>
+          <span className="text-foreground font-medium">{displayText(client.tradeName, 'Client')}</span>
         </div>
 
         {/* Client Header Card */}
@@ -519,18 +529,20 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2.5">
-                    <h1 className="text-xl font-bold text-foreground">{client.tradeName}</h1>
-                    <Badge variant="outline" className={statusCls}>{client.status}</Badge>
+                    <h1 className="text-xl font-bold text-foreground">{displayText(client.tradeName, 'Unnamed Client')}</h1>
+                    <Badge variant="outline" className={statusCls}>{client.status || '—'}</Badge>
                   </div>
-                  <p className="text-xs font-mono text-muted-foreground tracking-wide">{client.gstin}</p>
+                  <p className={`text-xs font-mono tracking-wide ${displayGSTIN(client.gstin) === '—' ? 'italic text-muted-foreground/60' : 'text-muted-foreground'}`}>
+                    {displayGSTIN(client.gstin)}
+                  </p>
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-                    {client.state && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{client.state}</span>}
-                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{client.returnPeriod === 'monthly' ? 'Monthly Filing' : client.returnPeriod === 'quarterly' ? 'Quarterly Filing' : `${client.returnPeriod || 'Monthly'} Filing`}</span>
-                    {client.contactEmail && <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{client.contactEmail}</span>}
+                    {client.state && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{displayText(client.state)}</span>}
+                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{client.returnPeriod === 'monthly' ? 'Monthly Filing' : client.returnPeriod === 'quarterly' ? 'Quarterly Filing' : `${displayText(client.returnPeriod, 'Monthly')} Filing`}</span>
+                    {client.contactEmail && <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{displayText(client.contactEmail)}</span>}
                   </div>
                   {client.contactPhone && (
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{client.contactPhone}</span>
+                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{displayText(client.contactPhone)}</span>
                     </div>
                   )}
                 </div>
@@ -628,7 +640,7 @@ export default function ClientDetailPage() {
                       {getActivityIcon((lastActivity as any).action ?? '')}
                     </div>
                     <div>
-                      <p className="text-sm text-foreground">{(lastActivity as any).details ?? (lastActivity as any).action}</p>
+                      <p className="text-sm text-foreground">{displayText((lastActivity as any).details, '') || displayText((lastActivity as any).action, 'Activity')}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime((lastActivity as any).timestamp)}</p>
                     </div>
                   </div>
@@ -650,7 +662,7 @@ export default function ClientDetailPage() {
                     {clientNotifications.map((n: any) => (
                       <div key={n.id} className="flex items-center gap-2 text-xs">
                         <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                        <span className={`text-foreground truncate ${n.isRead ? 'opacity-60' : 'font-medium'}`}>{n.title}{n.message ? `: ${n.message}` : ''}</span>
+                        <span className={`text-foreground truncate ${n.isRead ? 'opacity-60' : 'font-medium'}`}>{displayText(n.title, 'Notification')}{n.message ? `: ${displayText(n.message, '')}` : ''}</span>
                       </div>
                     ))}
                   </div>
@@ -728,7 +740,7 @@ export default function ClientDetailPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getFileIcon(d.fileType ?? d.name?.split('.').pop() ?? '')}
-                            <span className="text-sm font-medium">{d.name ?? d.fileName}</span>
+                            <span className="text-sm font-medium">{displayText(d.name, '') || displayText(d.fileName, 'Untitled document')}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground uppercase">{d.fileType ?? 'other'}</TableCell>
@@ -755,7 +767,7 @@ export default function ClientDetailPage() {
             <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
-                <p className="text-sm text-muted-foreground">Upload files for {client.tradeName}</p>
+                <p className="text-sm text-muted-foreground">Upload files for {displayText(client.tradeName, 'this client')}</p>
                 <div className="border-2 border-dashed border-border/60 rounded-xl p-8 text-center hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors cursor-pointer relative">
                   <CloudUpload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
                   <p className="text-sm font-medium">Click to browse files</p>
@@ -811,8 +823,8 @@ export default function ClientDetailPage() {
                     const cfg = FILING_STATUS_CONFIG[r.status as keyof typeof FILING_STATUS_CONFIG];
                     return (
                       <TableRow key={r.id}>
-                        <TableCell className="text-sm font-medium">{r.period}</TableCell>
-                        <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType}</Badge></TableCell>
+                        <TableCell className="text-sm font-medium">{r.period || '—'}</TableCell>
+                        <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType || '—'}</Badge></TableCell>
                         <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[10px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
@@ -889,7 +901,7 @@ export default function ClientDetailPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Badge className="bg-emerald-50 text-emerald-700 text-xs">{run.sources ?? 'GSTR-1'}</Badge>
-                          <span className="text-sm font-medium">{run.period}</span>
+                          <span className="text-sm font-medium">{run.period || '—'}</span>
                         </div>
                         <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}>
                           {run.status === 'running' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
@@ -922,7 +934,7 @@ export default function ClientDetailPage() {
                               <div key={mm.id} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
                                   <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                  <span className="font-mono">{mm.invoice?.invoiceNumber ?? mm.invoiceId ?? '—'}</span>
+                                  <span className="font-mono">{displayText(mm.invoice?.invoiceNumber, mm.invoiceId ? '' : '—') || (mm.invoiceId ? displayText(mm.invoiceId, '—') : '—')}</span>
                                   <Badge variant="outline" className="text-[10px]">{MATCH_STATUS_CONFIG[mm.matchStatus as keyof typeof MATCH_STATUS_CONFIG]?.label ?? mm.matchStatus}</Badge>
                                 </div>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => handleResolveMismatch(mm.id)} disabled={updateReconWorkflowMutation.isPending}>
@@ -995,7 +1007,7 @@ export default function ClientDetailPage() {
                       {getActivityIcon(a.action ?? '')}
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
-                      <p className="text-sm text-foreground">{a.details ?? a.action}</p>
+                      <p className="text-sm text-foreground">{displayText(a.details, '') || displayText(a.action, 'Activity')}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
                     </div>
                   </motion.div>

@@ -50,6 +50,16 @@ export interface BusinessSnapshot {
 
   // ── Risk & health ──
   healthScore: number;   // 0–100
+  /**
+   * Canonical label from the rich snapshot engine
+   * (`src/lib/business/snapshot.ts::computeHealthScore`).
+   * One of: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical'.
+   * Populated by `/api/business/snapshot` (merged from rich).
+   * Optional because the legacy financial-engine snapshot doesn't compute it;
+   * consumers should fall back to deriving a label from `healthScore` only
+   * when this field is undefined.
+   */
+  healthScoreLabel?: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical';
   risks: {
     overallRisk: number;  // 0–100 (higher = worse)
     overdueExposure: number;
@@ -96,6 +106,7 @@ export function emptySnapshot(): BusinessSnapshot {
     customers: 0,
     vendors: 0,
     healthScore: 0,
+    healthScoreLabel: 'Critical',
     risks: { overallRisk: 0, overdueExposure: 0, complianceRisk: 0, cashFlowRisk: 0, riskLevel: 'low' },
     forecast: { nextMonthRevenue: 0, nextMonthExpenses: 0, projectedCash: 0, confidence: 0 },
     runway: { monthsRemaining: null, monthlyBurnRate: 0, isProfitable: false },

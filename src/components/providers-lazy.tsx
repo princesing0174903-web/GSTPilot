@@ -8,32 +8,11 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { Zap, AlertTriangle, RefreshCw } from 'lucide-react'
+import { PremiumGlobalLoading } from '@/components/ui/premium-loading'
 
 function ProvidersLoader() {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '16px',
-        background: '#000',
-        color: '#e2e8f0',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        zIndex: 9999,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: 700 }}>
-        <Zap size={18} style={{ color: '#3B82F6' }} />
-        <span>GSTPilot™</span>
-      </div>
-      <div style={{ width: '24px', height: '24px', border: '2px solid rgba(59,130,246,0.2)', borderTopColor: '#3B82F6', borderRadius: '50%', animation: 'gstpilot-providers-spin 0.7s linear infinite' }} />
-      <style>{`@keyframes gstpilot-providers-spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  // Premium full-screen loader — logo fade-in + breathing animation. No spinner.
+  return <PremiumGlobalLoading />
 }
 
 /**

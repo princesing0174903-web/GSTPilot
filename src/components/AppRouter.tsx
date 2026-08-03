@@ -25,18 +25,15 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
 import { withRetry, installChunkErrorHandler } from '@/lib/dynamic-retry';
+import { PremiumPageLoader, PremiumGlobalLoading } from '@/components/ui/premium-loading';
 
 // Install the global chunk-error safety net once on the client.
 if (typeof window !== 'undefined') {
   installChunkErrorHandler();
 }
 
-// ── Loading placeholder ───────────────────────────────────────────────────────
-const PageLoader = () => (
-  <div className="flex h-full min-h-[60vh] items-center justify-center">
-    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-  </div>
-);
+// ── Loading placeholder (premium page-level loader) ──────────────────────────
+const PageLoader = () => <PremiumPageLoader />;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT-LEVEL LAZY COMPONENTS — only 5 dynamic imports at the root level.
@@ -281,15 +278,9 @@ function AutoProvisionWorkspace() {
         </div>
       </header>
       <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-sm font-medium text-foreground">
-              {isProvisioning ? 'Setting up your workspace…' : 'Preparing your dashboard…'}
-            </span>
-            <span className="text-xs text-muted-foreground">This will only take a moment.</span>
-          </div>
-        </div>
+        <PremiumPageLoader
+          label={isProvisioning ? 'Setting up your workspace…' : 'Preparing your dashboard…'}
+        />
       </div>
     </div>
   );
@@ -440,15 +431,9 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
         </header>
         {/* Loading workspace */}
         <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-sm font-medium text-foreground">Loading your workspace…</span>
-              <span className="text-xs text-muted-foreground">
-                {elapsed > 0 ? `${elapsed}s elapsed` : 'Resolving organization'}
-              </span>
-            </div>
-          </div>
+          <PremiumPageLoader
+            label={elapsed > 0 ? `Loading your workspace… ${elapsed}s` : 'Loading your workspace…'}
+          />
         </div>
       </div>
     );
@@ -535,16 +520,7 @@ export function AppRouter() {
 
   // ── Loading state while authentication initializes (max 3s via safety timer).
   if (isInitializing && !isAuthenticated && currentScreen !== 'login') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
-            <Zap className="h-5 w-5 accent-text" />
-          </div>
-          <span className="text-sm text-muted-foreground font-medium">Loading GSTPilot…</span>
-        </div>
-      </div>
-    );
+    return <PremiumGlobalLoading />;
   }
 
   // ── Auth error → proper error page with Retry Login

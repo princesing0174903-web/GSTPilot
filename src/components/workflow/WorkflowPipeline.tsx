@@ -142,7 +142,12 @@ const STATUS_STYLES: Record<StageStatus, StatusStyle> = {
   },
 };
 
-// ─── Health badge metadata ───────────────────────────────────────────────────
+// ─── Pipeline status metadata ───────────────────────────────────────────────
+// NOTE: This is the WORKFLOW PIPELINE status (derived from stage counts),
+// NOT the business health score. The labels are intentionally distinct from
+// the business health label vocabulary (Excellent/Good/Fair/Poor/Critical)
+// so users don't conflate the two. The canonical business health score lives
+// ONLY in the DashboardPage hero pill.
 
 interface HealthMeta {
   label: string;
@@ -154,28 +159,28 @@ interface HealthMeta {
 
 const HEALTH_META: Record<StageStatus, HealthMeta> = {
   healthy: {
-    label: 'Healthy',
+    label: 'On Track',
     dot: 'bg-emerald-500',
     text: 'text-emerald-300',
     chip: 'bg-emerald-500/10 border-emerald-500/25',
     Icon: CheckCircle,
   },
   warning: {
-    label: 'Warning',
+    label: 'Needs Attention',
     dot: 'bg-amber-500',
     text: 'text-amber-300',
     chip: 'bg-amber-500/10 border-amber-500/25',
     Icon: AlertTriangle,
   },
   critical: {
-    label: 'Critical',
+    label: 'Blocked',
     dot: 'bg-rose-500',
     text: 'text-rose-300',
     chip: 'bg-rose-500/10 border-rose-500/25',
     Icon: AlertOctagon,
   },
   clear: {
-    label: 'Clear',
+    label: 'Idle',
     dot: 'bg-zinc-600',
     text: 'text-zinc-400',
     chip: 'bg-white/[0.04] border-white/[0.06]',
@@ -200,6 +205,10 @@ function formatCount(n: number): string {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function HealthBadge({ health }: { health: StageStatus }) {
+  // Renders the WORKFLOW PIPELINE status badge (On Track / Needs Attention /
+  // Blocked / Idle). Renamed from "Healthy/Warning/Critical/Clear" to avoid
+  // vocabulary collision with the business health score (Excellent/Good/Fair/
+  // Poor/Critical) shown in the DashboardPage hero pill.
   const meta = HEALTH_META[health] ?? HEALTH_META.clear;
   const Icon = meta.Icon;
   return (
@@ -506,7 +515,8 @@ function WorkflowPipelineImpl({
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Health badge */}
+          {/* Pipeline status badge (NOT a business health score — the
+              canonical health score lives in the DashboardPage hero pill) */}
           <HealthBadge health={health} />
 
           {/* Total active count */}
@@ -580,12 +590,12 @@ function WorkflowPipelineImpl({
       {!loading && !isEmpty && (
         <footer className="mt-4 hidden items-center gap-4 border-t border-white/[0.04] pt-3 md:flex">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500">
-            Status:
+            Pipeline status:
           </span>
-          <LegendDot color="bg-emerald-500" label="Healthy" />
-          <LegendDot color="bg-amber-500" label="Warning" />
-          <LegendDot color="bg-rose-500" label="Critical" />
-          <LegendDot color="bg-zinc-600" label="Clear" />
+          <LegendDot color="bg-emerald-500" label="On Track" />
+          <LegendDot color="bg-amber-500" label="Needs Attention" />
+          <LegendDot color="bg-rose-500" label="Blocked" />
+          <LegendDot color="bg-zinc-600" label="Idle" />
           <span className="ml-auto text-[10px] text-zinc-600">
             {pipeline?.computedAt
               ? `Updated ${new Date(pipeline.computedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`

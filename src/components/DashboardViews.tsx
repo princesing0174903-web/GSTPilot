@@ -32,13 +32,10 @@ import {
   Building2, Globe, TrendingUp, type LucideIcon,
 } from 'lucide-react'
 import { FeaturePlaceholder } from '@/components/design-system/FeaturePlaceholder'
+import { PremiumPageLoader } from '@/components/ui/premium-loading'
 
-// ── Loading placeholder ────────────────────────────────────────────────────────
-const PageLoader = () => (
-  <div className="flex h-full min-h-[60vh] items-center justify-center">
-    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-  </div>
-)
+// ── Loading placeholder (premium page-level loader) ──────────────────────────
+const PageLoader = () => <PremiumPageLoader />
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // REAL VIEW COMPONENTS — the only dynamic imports in the build graph.

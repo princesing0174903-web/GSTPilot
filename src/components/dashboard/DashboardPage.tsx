@@ -616,16 +616,26 @@ export default function DashboardPage() {
   // loading / error early-returns below are safe.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Health score tier (real, from snapshot.healthScore) ──
+  // ── Health score tier (CANONICAL — uses snapshot.healthScoreLabel) ──
+  // The rich snapshot engine (`src/lib/business/snapshot.ts::computeHealthScore`)
+  // is the SINGLE source of truth for the business health score + its label.
+  // We do NOT re-compute a label locally — we just look up the tone for the
+  // canonical label. This is the ONLY place on the dashboard where the health
+  // score number or label is displayed. (AI Recommendations used to duplicate
+  // it via a "Low Health Score" rule; that rule has been removed from
+  // `src/lib/recommendations/engine.ts`.)
   const hasHealthScore = snapshot.healthScore > 0 && snapshot.hasLiveData;
-  const healthTier = useMemo(() => {
-    if (!hasHealthScore) return null;
-    const s = snapshot.healthScore;
-    if (s >= 85) return { label: 'Excellent', tone: 'emerald' as const };
-    if (s >= 70) return { label: 'Healthy', tone: 'emerald' as const };
-    if (s >= 50) return { label: 'At Risk', tone: 'amber' as const };
-    return { label: 'Critical', tone: 'amber' as const };
-  }, [hasHealthScore, snapshot.healthScore]);
+  const healthLabel = snapshot.healthScoreLabel;
+  const healthTier = useMemo<{ label: string; tone: 'emerald' | 'amber' | 'rose' } | null>(() => {
+    if (!hasHealthScore || !healthLabel) return null;
+    const tone: 'emerald' | 'amber' | 'rose' =
+      healthLabel === 'Excellent' || healthLabel === 'Good'
+        ? 'emerald'
+        : healthLabel === 'Fair'
+          ? 'amber'
+          : 'rose'; // Poor | Critical
+    return { label: healthLabel, tone };
+  }, [hasHealthScore, healthLabel]);
 
   // ── Pending GST = net GST liability (output tax − input tax) ──
   const pendingGst = snapshot.gst?.netLiability ?? 0;
@@ -695,6 +705,13 @@ export default function DashboardPage() {
     }
 
     // 3. Pending collections (real snapshot.collections.totalOutstanding)
+    // Shown ONLY when there are no overdue invoices (the overdue-invoices item
+    // above already covers that case). `snapshot.invoices.count` is the TOTAL
+    // invoice count (paid + unpaid), NOT the unpaid count — so we deliberately
+    // do NOT echo it here as "N invoices outstanding". The unpaid-count
+    // contradiction (₹89.5K pending collection reported alongside a "0
+    // invoices unpaid" widget elsewhere) came from mislabeling `invoices.count`
+    // as the unpaid count. The outstanding ₹ amount is the truthful metric.
     const outstanding = snapshot.collections?.totalOutstanding ?? 0;
     if (outstanding > 0 && snapshot.overdueInvoiceCount === 0) {
       items.push({
@@ -702,7 +719,7 @@ export default function DashboardPage() {
         icon: Wallet,
         tone: 'amber',
         title: `${abbreviateINR(outstanding)} pending collection`,
-        detail: `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} outstanding · click to chase`,
+        detail: 'Awaiting customer payment · click to chase',
         view: 'invoices',
       });
     }
@@ -839,10 +856,15 @@ export default function DashboardPage() {
                   : 'Your workspace is ready — create your first invoice to see live business data here.'}
               </p>
             </div>
-            {/* Health Score badge — moved out of hero stats into a compact pill */}
+            {/* Health Score badge — the SINGLE canonical health display on the
+                dashboard. The number + label both come from the business
+                snapshot API (`/api/business/snapshot` → rich engine). No other
+                widget renders a health score (AI Recs no longer emits a
+                "Business health is X/100" rule; the WorkflowPipeline header
+                shows a *pipeline* status badge, not a business health score). */}
             {hasHealthScore && healthTier && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-surface shrink-0">
-                <Brain className="h-3.5 w-3.5 text-emerald-400" />
+                <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-emerald-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
                 <span className="text-xs font-medium text-muted-foreground">Health</span>
                 <span className="text-sm font-bold text-foreground tabular-nums">{snapshot.healthScore}</span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>

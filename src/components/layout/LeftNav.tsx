@@ -71,7 +71,6 @@ const NAV_GROUP_MAP: Partial<Record<string, AppView>> = {
   timeline: 'dashboard',
   settings: 'settings',
   'firm-command-center': 'dashboard',
-  reports: 'invoices',
   accounting: 'invoices',
 };
 
@@ -91,7 +90,10 @@ export function LeftNav() {
       <nav
         aria-label="Primary"
         className={cn(
-          'flex h-full flex-col border-r border-[#1A1A1A] bg-[#0A0A0A]',
+          // Sidebar owns its full height (parent gives it h-full via the shell).
+          // overflow-hidden on the nav itself — only the primary nav list below
+          // scrolls, never the whole nav. The footer is pinned (shrink-0).
+          'flex h-full flex-col overflow-hidden border-r border-[#1A1A1A] bg-[#0A0A0A]',
           'w-[64px] px-2 py-4',
           // Expand on xl breakpoint — wider rail with labels
           'xl:w-[248px] xl:px-3',
@@ -107,7 +109,7 @@ export function LeftNav() {
             }
           }}
           className={cn(
-            'group/brand mb-5 flex h-11 items-center gap-2.5 rounded-xl px-2 outline-none',
+            'group/brand mb-5 flex h-11 shrink-0 items-center gap-2.5 rounded-xl px-2 outline-none',
             'transition-all duration-200 hover:bg-white/[0.03]',
             'focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40',
             'xl:justify-start xl:px-2.5',
@@ -134,7 +136,11 @@ export function LeftNav() {
         </button>
 
         {/* ─── Primary Nav ──────────────────────────────────────────────── */}
-        <div className="flex flex-1 flex-col gap-0.5">
+        {/* The primary nav list owns its own vertical scroll. The custom-scrollbar
+            class keeps the rail thin + dark + unobtrusive. Brand header above
+            (shrink-0) and footer below (shrink-0) are pinned outside the scroll
+            region, so they never move. */}
+        <div className="custom-scrollbar flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
           {/* Section label — visible only on expanded sidebar */}
           <div className="hidden px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#52525B] xl:block">
             Workspace
@@ -306,7 +312,7 @@ export function LeftNav() {
         </div>
 
         {/* ─── Footer ──────────────────────────────────────────────────── */}
-        <div className="mt-3 hidden border-t border-[#1A1A1A] pt-3 xl:block">
+        <div className="mt-3 hidden shrink-0 border-t border-[#1A1A1A] pt-3 xl:block">
           <div className="flex items-center justify-between px-2.5">
             <span className="text-[10px] font-medium text-[#52525B]">
               v2.0 · Infinity

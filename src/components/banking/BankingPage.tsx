@@ -209,7 +209,7 @@ export default function BankingPage() {
 
   if (error && !dashboard) {
     return (
-      <div className="flex min-h-screen flex-col bg-black">
+      <div className="flex h-full flex-col bg-black">
         <main className="flex-1 px-4 py-6 sm:px-6">
           <BankingErrorState message={error} onRetry={loadDashboard} />
         </main>
@@ -219,7 +219,7 @@ export default function BankingPage() {
 
   if (!dashboard || (dashboard.connectedAccounts === 0 && !loading)) {
     return (
-      <div className="flex min-h-screen flex-col bg-black">
+      <div className="flex h-full flex-col bg-black">
         <BankingHeader
           onRefresh={handleRefresh}
           refreshing={refreshing}
@@ -245,7 +245,7 @@ export default function BankingPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-black">
+    <div className="flex h-full flex-col bg-black">
       {/* ─── Sticky Header ─────────────────────────────────────────────────── */}
       <BankingHeader
         onRefresh={handleRefresh}

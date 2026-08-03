@@ -141,6 +141,7 @@ import {
   formatCurrency,
   periodToLabel,
   getFinancialYear,
+  getFilingDueDate,
 } from '@/lib/gst-utils';
 import { AskOracleButton } from '@/components/oracle/AskOracleButton';
 import { cn } from '@/lib/utils';
@@ -389,22 +390,35 @@ function MonthYearPicker({
   onChange,
   disabled,
 }: {
-  value: string; // "MM-YYYY"
+  value: string; // canonical "YYYY-MM" (e.g. "2024-11")
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const now = new Date();
-  const initialMonth = value ? parseInt(value.split('-')[0], 10) - 1 : now.getMonth();
-  const initialYear = value ? parseInt(value.split('-')[1], 10) : now.getFullYear();
+  // Parse canonical "YYYY-MM". Fall back to legacy "MM-YYYY" if needed.
+  const parsed = value ? value.split('-').map((n) => parseInt(n, 10)) : [];
+  let initialMonth = now.getMonth();
+  let initialYear = now.getFullYear();
+  if (parsed.length === 2) {
+    if (parsed[0] > 31) {
+      // YYYY-MM
+      initialYear = parsed[0];
+      initialMonth = parsed[1] - 1;
+    } else {
+      // legacy MM-YYYY
+      initialMonth = parsed[0] - 1;
+      initialYear = parsed[1];
+    }
+  }
   const [viewYear, setViewYear] = useState(initialYear);
 
-  const selectedMonth = value ? parseInt(value.split('-')[0], 10) - 1 : -1;
-  const selectedYear = value ? parseInt(value.split('-')[1], 10) : -1;
+  const selectedMonth = initialMonth;
+  const selectedYear = initialYear;
 
   const handleSelect = (monthIdx: number) => {
     const mm = String(monthIdx + 1).padStart(2, '0');
-    onChange(`${mm}-${viewYear}`);
+    onChange(`${viewYear}-${mm}`);
     setOpen(false);
   };
 
@@ -1134,14 +1148,12 @@ const TableRow = memo(function TableRow({
 }: TableRowProps) {
   const risk = getRiskLevel(ret);
   const dueDate = useMemo(() => {
-    // GSTR-1: 11th of next month; GSTR-3B: 20th of next month
-    if (!ret.period) return '';
-    const [mm, yyyy] = ret.period.split('-').map((n) => parseInt(n, 10));
-    if (!mm || !yyyy) return '';
-    const nextMonth = mm === 12 ? 1 : mm + 1;
-    const nextYear = mm === 12 ? yyyy + 1 : yyyy;
-    const day = ret.returnType === 'GSTR-1' ? 11 : 20;
-    return `${String(nextMonth).padStart(2, '0')}/${String(day).padStart(2, '0')}/${nextYear}`;
+    // Use the canonical gst-utils helper (handles both YYYY-MM and legacy MM-YYYY).
+    const iso = getFilingDueDate(ret.returnType, ret.period);
+    if (!iso) return '';
+    // Format as MM/DD/YYYY for display.
+    const d = new Date(iso);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
   }, [ret.period, ret.returnType]);
 
   return (
@@ -1788,6 +1800,13 @@ export default function ReturnsPage() {
   const [filingAction, setFilingAction] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [fixing, setFixing] = useState(false);
+  // ── Honest demo filing modal ──
+  // When the active GSTN provider is the sandbox (no live credentials), the
+  // "File Return" button opens this modal instead of pretending to file.
+  // The modal explains the situation honestly and offers two real actions:
+  //   1. Download the prepared GSTR JSON (the user can file it manually on gst.gov.in)
+  //   2. Mark as "Ready to File" (status → submitted, awaiting manual filing)
+  const [demoFilingReturn, setDemoFilingReturn] = useState<ReturnItem | null>(null);
 
   // Debounced search
   useEffect(() => {
@@ -1834,13 +1853,13 @@ export default function ReturnsPage() {
           cmp = clientGstin(a.clientId).localeCompare(clientGstin(b.clientId));
           break;
         case 'returnType':
-          cmp = a.returnType.localeCompare(b.returnType);
+          cmp = (a.returnType ?? '').localeCompare(b.returnType ?? '');
           break;
         case 'period':
-          cmp = a.period.localeCompare(b.period);
+          cmp = (a.period ?? '').localeCompare(b.period ?? '');
           break;
         case 'status':
-          cmp = a.status.localeCompare(b.status);
+          cmp = (a.status ?? '').localeCompare(b.status ?? '');
           break;
         case 'taxAmount':
           cmp = (a.totalTax ?? 0) - (b.totalTax ?? 0);
@@ -2007,10 +2026,10 @@ export default function ReturnsPage() {
           });
           setRefreshKey((k) => k + 1);
         } else if (body?.code === 'MOCK_PROVIDER_CANNOT_FILE') {
-          toast.warning('Live GSTN integration required to file', {
-            description: 'Your return has been prepared. Configure GSTN credentials to file directly.',
-            duration: 6000,
-          });
+          // Honest demo: open the demo filing modal with real next actions.
+          setSheetOpen(false);
+          setSelectedReturn(null);
+          setDemoFilingReturn(ret);
         } else {
           throw new Error(body?.error ?? `HTTP ${res.status}`);
         }
@@ -2089,6 +2108,40 @@ export default function ReturnsPage() {
       }
     },
     [buildGstrJsonPayload, clientName],
+  );
+
+  // ── Mark as "Ready to File" (status → submitted) ──────────────────────────
+  // Honest action when live GSTN filing is unavailable: the return has been
+  // prepared and validated, and the user acknowledges they will file it
+  // manually on gst.gov.in. We update the status to 'submitted' (awaiting
+  // manual filing) so the dashboard reflects the real state.
+  const handleMarkReadyToFile = useCallback(
+    async (ret: ReturnItem) => {
+      try {
+        const res = await fetchWithTimeout(`/api/gstr-filing/${ret.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'submitted' }),
+          timeoutMs: 15_000,
+        });
+        if (res.ok) {
+          toast.success('Marked as Ready to File', {
+            description: `${ret.returnType} for ${periodToLabel(ret.period)} is prepared. File it on gst.gov.in using the downloaded JSON.`,
+            duration: 6000,
+          });
+          setDemoFilingReturn(null);
+          setRefreshKey((k) => k + 1);
+        } else {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? `HTTP ${res.status}`);
+        }
+      } catch (err) {
+        toast.error('Could not update status', {
+          description: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    },
+    [],
   );
 
   const handleDownloadPDF = useCallback(
@@ -2664,6 +2717,82 @@ export default function ReturnsPage() {
           onCreate={handleCreateReturn}
           estimatedTax={estimatedTax}
         />
+
+        {/* ── Honest Demo Filing Modal ───────────────────────────────────────
+            When the active GSTN provider is the sandbox (no live credentials),
+            the "File Return" button opens this modal instead of pretending to
+            file. The modal explains the situation honestly and offers two real
+            actions: download the GSTR JSON, or mark as "Ready to File". */}
+        <Dialog
+          open={!!demoFilingReturn}
+          onOpenChange={(v) => { if (!v) setDemoFilingReturn(null); }}
+        >
+          <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden bg-zinc-950/95 border border-white/10 backdrop-blur-2xl rounded-[24px] shadow-2xl">
+            <DialogHeader className="p-6 pb-4 border-b border-white/10 bg-gradient-to-b from-blue-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 border border-blue-500/25">
+                  <ShieldCheck className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-bold text-foreground">
+                    Live GSTN Filing Required
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    Your return is prepared and validated. File it directly on the GST portal.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="p-6 space-y-4">
+              {demoFilingReturn && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Return</span>
+                    <span className="font-semibold text-foreground">{demoFilingReturn.returnType}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Period</span>
+                    <span className="font-medium text-foreground">{periodToLabel(demoFilingReturn.period)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Client</span>
+                    <span className="font-medium text-foreground truncate ml-2">{clientName(demoFilingReturn.clientId)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Tax</span>
+                    <span className="font-semibold text-blue-300">{formatCurrency(demoFilingReturn.totalTax ?? 0)}</span>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                GSTPilot never simulates government filings. To file directly from this dashboard,
+                connect live GSTN API credentials in Settings. For now, you can:
+              </p>
+              <div className="space-y-2">
+                <Button
+                  className="w-full h-11 gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl"
+                  onClick={() => demoFilingReturn && handleDownloadJSON(demoFilingReturn)}
+                >
+                  <Download className="size-4" />
+                  Download GSTR JSON
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full h-11 gap-2 border-white/15 bg-white/5 hover:bg-white/10 rounded-xl"
+                  onClick={() => demoFilingReturn && handleMarkReadyToFile(demoFilingReturn)}
+                >
+                  <CheckCircle2 className="size-4" />
+                  Mark as Ready to File
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                Take the downloaded JSON to <span className="text-blue-400">gst.gov.in</span> →
+                Returns → Upload JSON to complete your filing. The return status will update to
+                "Ready to File" so you can track it here.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );

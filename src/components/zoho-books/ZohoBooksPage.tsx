@@ -486,7 +486,7 @@ function SyncPanel() {
               icon={<Building2 className="h-3.5 w-3.5" />}
               label="Organization"
               value={syncStatus?.organizationName ?? 'Not mapped'}
-              sub={syncStatus?.zohoOrgId ? `ID: ${syncStatus.zohoOrgId}` : undefined}
+              sub={syncStatus?.organizationName ? 'Connected' : undefined}
             />
             <SyncMetric
               icon={<Activity className="h-3.5 w-3.5" />}
@@ -712,17 +712,7 @@ function ConnectionDetails() {
               <span className="text-sm font-medium text-foreground">
                 {status.organizationName ?? 'Not mapped yet'}
               </span>
-              {status.zohoOrgId ? (
-                <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-mono text-muted-foreground">
-                  ID: {status.zohoOrgId}
-                </Badge>
-              ) : null}
             </div>
-            {status.dataCenter ? (
-              <span className="text-[10px] text-muted-foreground/70">
-                Data center: <span className="font-mono">{status.dataCenter}</span>
-              </span>
-            ) : null}
           </div>
 
           {/* Scopes */}
@@ -757,34 +747,22 @@ function ConnectionDetails() {
               valueClassName="text-muted-foreground"
             />
             <MetaItem
-              icon={<KeyRound className="h-3.5 w-3.5" />}
-              label="Access Token"
-              value="AES-256-GCM encrypted"
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Connected Since"
+              value={status.connectedAt ? new Date(status.connectedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+              valueClassName="text-muted-foreground"
+            />
+            <MetaItem
+              icon={<ShieldCheck className="h-3.5 w-3.5" />}
+              label="Security"
+              value="Bank-grade encryption"
               valueClassName="text-emerald-400"
             />
             <MetaItem
-              icon={<Database className="h-3.5 w-3.5" />}
-              label="Token Storage"
-              value="ZohoBooksToken (Prisma)"
-              valueClassName="text-muted-foreground font-mono"
-            />
-            <MetaItem
-              icon={<Server className="h-3.5 w-3.5" />}
-              label="Connected At"
-              value={status.connectedAt ? new Date(status.connectedAt).toLocaleString() : '—'}
-              valueClassName="text-muted-foreground"
-            />
-            <MetaItem
               icon={<Building2 className="h-3.5 w-3.5" />}
-              label="User Email"
+              label="Admin Email"
               value={status.userEmail ?? '—'}
               valueClassName="text-muted-foreground"
-            />
-            <MetaItem
-              icon={<Server className="h-3.5 w-3.5" />}
-              label="Zoho User ID"
-              value={status.zohoUserId ?? '—'}
-              valueClassName="text-muted-foreground font-mono"
             />
           </div>
         </div>
@@ -897,7 +875,7 @@ export default function ZohoBooksPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full flex-col gap-4 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">

@@ -34,22 +34,11 @@
  */
 
 import dynamic from 'next/dynamic';
-import { Zap } from 'lucide-react';
+import { PremiumGlobalLoading } from '@/components/ui/premium-loading';
 import { ProvidersLazy } from '@/components/providers-lazy';
 
-// ── Loading placeholder (matches the splash used by page.tsx) ──────────────────
-const PageLoader = () => (
-  <div className="flex min-h-screen items-center justify-center bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
-        <Zap className="h-5 w-5 accent-text" />
-      </div>
-      <span className="text-sm font-medium text-muted-foreground">
-        Loading GSTPilot…
-      </span>
-    </div>
-  </div>
-);
+// ── Loading placeholder (premium full-screen splash) ─────────────────────────
+const PageLoader = () => <PremiumGlobalLoading />;
 
 // ── AppRouter is loaded as its own chunk. It only renders after ProvidersLazy
 //    has mounted the Providers tree (ProvidersLazy gates children rendering),

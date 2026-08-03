@@ -15,13 +15,14 @@
 // tokens and redirects back here with ?google_connected=1.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mail, HardDrive, FileText, Table, Calendar,
   CheckCircle2, XCircle, Loader2, RefreshCw, Plug, Unplug,
   Send, FolderPlus, Upload, FilePlus, Download, CalendarPlus,
   ExternalLink, AlertCircle, ShieldCheck, Clock,
+  Zap, ArrowUpRight, Inbox, Paperclip, Activity,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -222,6 +223,390 @@ function NotConnectedGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Never';
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (seconds < 0) return 'just now';
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return d.toLocaleDateString();
+}
+
+// ─── Sync Status Pill ────────────────────────────────────────────────────────
+//
+// Three states mirror the spec:
+//   • Connected  → emerald pill with check icon
+//   • Syncing... → blue pill with breathing dot animation (CSS animate-pulse
+//                  on a small dot, plus Loader2 spinner for clarity)
+//   • Not connected → amber pill with x icon
+//
+// `syncing` is true while ANY Google Workspace action is in flight
+// (useGoogleWorkspace.pending).
+
+function SyncStatusPill({
+  connected,
+  syncing,
+}: {
+  connected: boolean;
+  syncing: boolean;
+}) {
+  if (syncing) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-blue-500/30 bg-blue-500/10 text-blue-400"
+      >
+        <span className="mr-1.5 inline-flex h-2 w-2 items-center justify-center">
+          <span className="absolute h-2 w-2 animate-ping rounded-full bg-blue-400/70" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-blue-400" />
+        </span>
+        Syncing…
+      </Badge>
+    );
+  }
+  if (connected) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+      >
+        <CheckCircle2 className="mr-1 h-3 w-3" /> Connected
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+      <XCircle className="mr-1 h-3 w-3" /> Not connected
+    </Badge>
+  );
+}
+
+// ─── Recent Activity ─────────────────────────────────────────────────────────
+//
+// Pulls the 5 most recent items across Gmail / Drive / Calendar and renders
+// them as a unified activity feed. Each item is tagged with its source so the
+// icon + label make sense to the user.
+//
+// IMPORTANT: no faked data. If the user has just connected and the API
+// returns empty arrays (or errors), we show an honest empty state asking them
+// to sync now to populate the feed.
+
+type ActivityKind = 'email' | 'file' | 'event';
+interface ActivityItem {
+  id: string;
+  kind: ActivityKind;
+  title: string;
+  subtitle: string;
+  timestamp: number | null; // epoch ms
+  link?: string;
+}
+
+function deriveEmailActivity(m: Record<string, unknown>): ActivityItem | null {
+  const headers = (m.payload as { headers?: Array<{ name: string; value: string }> } | undefined)?.headers ?? [];
+  const from = headers.find((h) => h.name === 'From')?.value ?? 'Unknown sender';
+  const subj = headers.find((h) => h.name === 'Subject')?.value ?? '(no subject)';
+  const ts = m.internalDate ? Number(m.internalDate) : null;
+  return {
+    id: `email-${String(m.id ?? '')}`,
+    kind: 'email',
+    title: subj,
+    subtitle: from,
+    timestamp: ts,
+  };
+}
+
+function deriveFileActivity(f: Record<string, unknown>): ActivityItem | null {
+  const ts = f.modifiedTime ? new Date(String(f.modifiedTime)).getTime() : null;
+  return {
+    id: `file-${String(f.id ?? '')}`,
+    kind: 'file',
+    title: String(f.name ?? 'Untitled file'),
+    subtitle: String(f.mimeType ?? 'file'),
+    timestamp: ts,
+    link: typeof f.webViewLink === 'string' ? f.webViewLink : undefined,
+  };
+}
+
+function deriveEventActivity(e: Record<string, unknown>): ActivityItem | null {
+  const startObj = e.start as { dateTime?: string; date?: string } | undefined;
+  const startStr = startObj?.dateTime ?? startObj?.date ?? '';
+  const ts = startStr ? new Date(startStr).getTime() : null;
+  return {
+    id: `event-${String(e.id ?? '')}`,
+    kind: 'event',
+    title: String(e.summary ?? '(no title)'),
+    subtitle: startStr ? new Date(startStr).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—',
+    timestamp: ts,
+    link: typeof e.htmlLink === 'string' ? e.htmlLink : undefined,
+  };
+}
+
+function activityIcon(kind: ActivityKind) {
+  if (kind === 'email') return <Inbox className="h-3.5 w-3.5 text-[#4285F4]" />;
+  if (kind === 'file') return <Paperclip className="h-3.5 w-3.5 text-emerald-400" />;
+  return <Calendar className="h-3.5 w-3.5 text-amber-400" />;
+}
+
+function activityKindLabel(kind: ActivityKind) {
+  if (kind === 'email') return 'Email';
+  if (kind === 'file') return 'Drive file';
+  return 'Calendar event';
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  const tsLabel = item.timestamp
+    ? new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    : '—';
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2 text-xs">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04] ring-1 ring-white/[0.06]">
+        {activityIcon(item.kind)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-foreground">{item.title}</div>
+        <div className="truncate text-muted-foreground">{item.subtitle}</div>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-0.5">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+          {activityKindLabel(item.kind)}
+        </span>
+        <span className="text-[10px] text-muted-foreground">{tsLabel}</span>
+      </div>
+      {item.link ? (
+        <a
+          href={item.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="Open in Google"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Sync Dashboard ──────────────────────────────────────────────────────────
+//
+// Premium "sync status" panel that surfaces the high-level sync health at a
+// glance. Only renders when Google is connected (the NotConnectedGate handles
+// the not-connected path).
+//
+// Layout:
+//   • Row 1: SyncStatusPill + Last sync + Next sync + Sync now button
+//   • Row 2: 4 quick-action buttons (Sync now / View emails / Upload to Drive / Create event)
+//   • Row 3: Recent activity feed (last 5 items across Gmail + Drive + Calendar)
+//
+// "Last sync" is derived from `status.connectedAt` (the OAuth grant timestamp)
+// — there is no scheduled background sync, so the most recent relevant
+// timestamp is when the user authorized the integration. If the user clicks
+// "Sync now" we re-fetch all three sources and refresh the activity feed.
+//
+// "Next sync" is always "Manual" — there is no scheduled sync.
+
+function SyncDashboard({ onJumpTab }: { onJumpTab: (tab: ServiceTab) => void }) {
+  const {
+    status,
+    pending,
+    refreshStatus,
+    gmailMessages,
+    driveFiles,
+    calendarEvents,
+  } = useGoogleWorkspace();
+
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+
+  const loadActivity = useCallback(async () => {
+    setLoadingActivity(true);
+    setActivityError(null);
+    try {
+      const [mailRes, driveRes, calRes] = await Promise.all([
+        gmailMessages(5),
+        driveFiles(),
+        calendarEvents(5),
+      ]);
+      const mailItems: ActivityItem[] = mailRes.ok && mailRes.data
+        ? ((mailRes.data as { messages: Array<Record<string, unknown>> }).messages ?? [])
+            .map(deriveEmailActivity)
+            .filter((x): x is ActivityItem => x !== null)
+        : [];
+      const fileItems: ActivityItem[] = driveRes.ok && driveRes.data
+        ? ((driveRes.data as { files: Array<Record<string, unknown>> }).files ?? [])
+            .map(deriveFileActivity)
+            .filter((x): x is ActivityItem => x !== null)
+        : [];
+      const eventItems: ActivityItem[] = calRes.ok && calRes.data
+        ? ((calRes.data as { events: Array<Record<string, unknown>> }).events ?? [])
+            .map(deriveEventActivity)
+            .filter((x): x is ActivityItem => x !== null)
+        : [];
+      const all = [...mailItems, ...fileItems, ...eventItems];
+      all.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+      setActivities(all.slice(0, 5));
+      if (mailRes.error && driveRes.error && calRes.error) {
+        setActivityError('Unable to load recent activity right now.');
+      }
+    } catch {
+      setActivityError('Unable to load recent activity right now.');
+    } finally {
+      setLoadingActivity(false);
+    }
+  }, [gmailMessages, driveFiles, calendarEvents]);
+
+  // Auto-load activity once on mount (when connected).
+  useEffect(() => {
+    if (status?.connected) {
+      void loadActivity();
+    }
+  }, [status?.connected, loadActivity]);
+
+  const handleSyncNow = useCallback(async () => {
+    await Promise.all([refreshStatus(), loadActivity()]);
+  }, [refreshStatus, loadActivity]);
+
+  const lastSync = status?.connectedAt ?? null;
+
+  return (
+    <Card className="border-border/60 bg-card/50 backdrop-blur">
+      <CardContent className="flex flex-col gap-5 p-6">
+        {/* Row 1 — status + last/next sync + sync-now */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold tracking-tight">Sync status</span>
+            <SyncStatusPill connected={!!status?.connected} syncing={pending} />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Last sync: <span className="font-medium text-foreground">{timeAgo(lastSync)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" />
+              Next sync: <span className="font-medium text-foreground">Manual</span>
+            </span>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => void handleSyncNow()}
+            disabled={pending || loadingActivity}
+            className="h-8 gap-1.5 bg-[#4285F4] text-white hover:bg-[#3367d6]"
+          >
+            {pending || loadingActivity ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Sync now
+          </Button>
+        </div>
+
+        {/* Row 2 — quick actions */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleSyncNow()}
+            disabled={pending || loadingActivity}
+            className="h-9 justify-start gap-2 text-xs"
+          >
+            <Zap className="h-3.5 w-3.5 text-[#4285F4]" />
+            Sync now
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onJumpTab('gmail')}
+            className="h-9 justify-start gap-2 text-xs"
+          >
+            <Mail className="h-3.5 w-3.5 text-[#EA4335]" />
+            View emails
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onJumpTab('drive')}
+            className="h-9 justify-start gap-2 text-xs"
+          >
+            <Upload className="h-3.5 w-3.5 text-emerald-400" />
+            Upload to Drive
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onJumpTab('calendar')}
+            className="h-9 justify-start gap-2 text-xs"
+          >
+            <CalendarPlus className="h-3.5 w-3.5 text-amber-400" />
+            Create event
+          </Button>
+        </div>
+
+        {/* Row 3 — recent activity */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Recent activity
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadActivity()}
+              className="text-[10px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {loadingActivity && activities.length === 0 ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : activityError && activities.length === 0 ? (
+            <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+              {activityError}{' '}
+              <button
+                type="button"
+                onClick={() => void loadActivity()}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+              No recent activity yet — click{' '}
+              <span className="font-medium text-foreground">Sync now</span>{' '}
+              to populate the feed.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {activities.map((a) => (
+                <ActivityRow key={a.id} item={a} />
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Result banner ───────────────────────────────────────────────────────────
 
 function ResultBanner({ result }: { result: ActionResult | null }) {
@@ -249,11 +634,16 @@ function ResultBanner({ result }: { result: ActionResult | null }) {
 // ─── Gmail Tab ───────────────────────────────────────────────────────────────
 
 function GmailTab() {
-  const { gmailProfile, gmailMessages, gmailSend, gmailDraft, pending } = useGoogleWorkspace();
+  const { gmailProfile, gmailMessages, gmailSend, gmailDraft, pending, status } = useGoogleWorkspace();
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [messages, setMessages] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
+  // Tracks whether the initial auto-load has been kicked off, so the empty
+  // state can distinguish "still fetching" from "truly empty inbox". The ref
+  // mirrors it as a non-reactive guard so the effect below fires at most once.
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Compose form
   const [to, setTo] = useState('');
@@ -274,6 +664,21 @@ function GmailTab() {
     setMessages(res.ok && res.data ? ((res.data as { messages: Array<Record<string, unknown>> }).messages ?? []) : []);
     setLoading(false);
   }, [gmailMessages]);
+
+  // Auto-load messages + profile the first time the Gmail tab is opened while
+  // Google is connected — no need to click "Refresh". The ref guard guarantees
+  // this runs at most once per mount (no refetch on every render or status
+  // re-resolution). The manual Refresh button above still works for explicit
+  // re-fetches.
+  useEffect(() => {
+    if (!status?.connected) return;
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasLoaded(true);
+    void loadMessages();
+    void loadProfile();
+  }, [status?.connected, loadMessages, loadProfile]);
 
   const handleSend = useCallback(async () => {
     if (!to || !subject) {
@@ -341,7 +746,7 @@ function GmailTab() {
             <CardTitle className="flex items-center gap-2 text-sm"><Mail className="h-4 w-4" /> Profile & History</CardTitle>
             <Button size="sm" variant="ghost" onClick={() => { void loadProfile(); void loadMessages(); }} disabled={loading} className="h-7 gap-1.5 text-xs">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Load
+              Refresh
             </Button>
           </div>
           <CardDescription className="text-xs">Your Gmail profile + recent messages.</CardDescription>
@@ -353,13 +758,43 @@ function GmailTab() {
               <div className="flex items-center justify-between"><span className="text-muted-foreground">Total messages</span><span className="font-medium">{Number(profile.messagesTotal ?? 0).toLocaleString()}</span></div>
               <div className="flex items-center justify-between"><span className="text-muted-foreground">Total threads</span><span className="font-medium">{Number(profile.threadsTotal ?? 0).toLocaleString()}</span></div>
             </div>
+          ) : loading || !hasLoaded ? (
+            <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <div className="flex items-center justify-between"><Skeleton className="h-3 w-20" /><Skeleton className="h-3 w-32" /></div>
+              <div className="flex items-center justify-between"><Skeleton className="h-3 w-24" /><Skeleton className="h-3 w-20" /></div>
+              <div className="flex items-center justify-between"><Skeleton className="h-3 w-20" /><Skeleton className="h-3 w-20" /></div>
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">Click “Load” to fetch your Gmail profile.</p>
+            <p className="text-xs text-muted-foreground">No Gmail profile available.</p>
           )}
           <Separator />
           <div className="max-h-64 space-y-1.5 overflow-y-auto">
             {messages.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No messages loaded.</p>
+              loading || !hasLoaded ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 px-1 pb-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Fetching your latest messages…</span>
+                  </div>
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="rounded-lg border border-border/40 bg-muted/20 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Skeleton className="h-3 w-40" />
+                        <Skeleton className="h-3 w-12" />
+                      </div>
+                      <Skeleton className="mt-2 h-3 w-24" />
+                      <Skeleton className="mt-1.5 h-2.5 w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-6 text-center">
+                  <Inbox className="h-5 w-5 text-muted-foreground/60" />
+                  <p className="text-xs text-muted-foreground">
+                    No messages in your inbox.
+                  </p>
+                </div>
+              )
             ) : (
               messages.slice(0, 10).map((m) => {
                 const headers = (m.payload as { headers?: Array<{ name: string; value: string }> } | undefined)?.headers ?? [];
@@ -469,7 +904,15 @@ function DriveTab() {
         <CardContent>
           <div className="max-h-72 space-y-1.5 overflow-y-auto">
             {files.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No files loaded. Click Refresh.</p>
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-6 text-center">
+                <HardDrive className="h-5 w-5 text-muted-foreground/60" />
+                <p className="text-xs text-muted-foreground">
+                  No files loaded yet.
+                </p>
+                <p className="text-[10px] text-muted-foreground/70">
+                  Click <span className="font-medium text-foreground">Refresh</span> above to list your recent Drive files.
+                </p>
+              </div>
             ) : (
               files.slice(0, 20).map((f) => (
                 <div key={String(f.id)} className="flex items-center gap-2.5 rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs">
@@ -740,7 +1183,7 @@ export default function GoogleWorkspacePage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full flex-col gap-4 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">

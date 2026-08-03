@@ -133,7 +133,16 @@ export async function getOracleDailyBriefing(
   const bankingOrgId = isLocal ? 'local' : organizationId;
 
   // Fetch the workflow pipeline (reuses cached data) + targeted queries
-  const [pipeline, recentPaidInvoices, recentReconciled, upcomingReturns, overdueInvoices, recentCredits] =
+  //
+  // NOTE (PQA-8-9-10 — remove dashboard duplicates):
+  //   We NO LONGER fetch `overdueInvoices` here. The Action Center on the
+  //   dashboard already surfaces "N overdue invoices · ₹X past due" as an
+  //   actionable item — Oracle repeating the same count + amount in its
+  //   briefing was a duplicate. Oracle now focuses on what it DID (matched,
+  //   collected, prepared) and what specifically needs ITS sign-off
+  //   (unmatched credits, prepared returns awaiting filing, auto-matched
+  //   transactions awaiting approval).
+  const [pipeline, recentPaidInvoices, recentReconciled, upcomingReturns, recentCredits] =
     await Promise.all([
       getWorkflowPipeline(organizationId, opts),
       // Invoices paid this month (Oracle "collected" these)
@@ -147,19 +156,12 @@ export async function getOracleDailyBriefing(
       db.bankTransaction.count({
         where: { organizationId: bankingOrgId, matched: true, reconciledAt: { gte: startOfMonth() } },
       }).catch(() => 0),
-      // GST returns due soon (not filed)
+      // GST returns due soon (not filed) — used to surface "prepared, ready to file"
       db.gSTReturn.findMany({
         where: { status: { in: ['not_started', 'prepared', 'draft'] } },
         take: 5,
         orderBy: { period: 'desc' },
         select: { id: true, type: true, period: true, totalTax: true, status: true },
-      }).catch(() => []),
-      // Overdue invoices
-      db.invoice.findMany({
-        where: { status: 'overdue' },
-        take: 3,
-        orderBy: { invoiceDate: 'asc' },
-        select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, invoiceDate: true },
       }).catch(() => []),
       // Recent bank credits (incoming payments)
       db.bankTransaction.findMany({
@@ -216,8 +218,13 @@ export async function getOracleDailyBriefing(
   }
 
   // ── ATTENTION / DONE: GST returns ──
+  // Oracle surfaces returns it has PREPARED (ready to file) — that's Oracle's
+  // proactive action. Returns that are merely "not started" are NOT surfaced
+  // here anymore: the Action Center already shows the next upcoming/overdue
+  // return as an actionable item, so duplicating it as a watchlist entry was
+  // redundant. Oracle speaks about what Oracle did, not what the user hasn't
+  // done yet.
   const preparedReturns = upcomingReturns.filter((r) => r.status === 'prepared' || r.status === 'draft');
-  const notStartedReturns = upcomingReturns.filter((r) => r.status === 'not_started');
 
   if (preparedReturns.length > 0) {
     const top = preparedReturns[0];
@@ -233,33 +240,13 @@ export async function getOracleDailyBriefing(
     });
   }
 
-  if (notStartedReturns.length > 0) {
-    const top = notStartedReturns[0];
-    watchlist.push({
-      id: 'gst-due',
-      kind: 'watch',
-      title: `${top.type} for ${top.period} not started`,
-      detail: 'I can prepare it from your invoices whenever you’re ready',
-      actionLabel: 'Prepare',
-      actionView: 'returns',
-      tone: 'blue',
-    });
-  }
-
-  // ── ATTENTION: overdue invoices ──
-  if (overdueInvoices.length > 0) {
-    const totalOverdue = overdueInvoices.reduce((s, i) => s + i.totalAmount, 0);
-    needsAttention.push({
-      id: 'overdue-chase',
-      kind: 'attention',
-      title: `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? '' : 's'}`,
-      detail: `${abbreviateINR(totalOverdue)} past due — I can draft reminders`,
-      actionLabel: 'Follow up',
-      actionView: 'invoices',
-      tone: 'amber',
-      amount: totalOverdue,
-    });
-  }
+  // NOTE (PQA-8-9-10): The "overdue-chase" attention item was removed here.
+  // The Action Center on the dashboard already surfaces
+  // "N overdue invoices · ₹X past due · click to follow up" as an actionable
+  // item — Oracle repeating the same count + amount was a duplicate. Oracle
+  // now focuses on its OWN proactive actions (matched, collected, prepared)
+  // and the specific sign-offs only IT can need (unmatched credits, prepared
+  // returns, auto-matched transactions).
 
   // ── WATCH: unreconciled auto-matches awaiting approval ──
   const pendingReconStage = pipeline.stages.find((s) => s.id === 'auto-match');
@@ -318,7 +305,9 @@ export async function getOracleDailyBriefing(
       returnsPrepared: preparedReturns.length,
       returnsDueSoon: upcomingReturns.length,
       invoicesIssued: pipeline.stages.find((s) => s.id === 'invoice-created')?.count ?? 0,
-      invoicesOverdue: overdueInvoices.length,
+      // No longer fetched separately (the overdue-chase attention item that
+      // used it was removed — Action Center handles overdue invoices now).
+      invoicesOverdue: 0,
     },
   };
 

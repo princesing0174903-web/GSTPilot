@@ -93,7 +93,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Plus,
   Search,
-  Building2,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -114,7 +113,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Download,
-  Sparkles,
   RefreshCw,
   Users,
   FileText,
@@ -123,12 +121,20 @@ import {
   Inbox,
   Filter,
   X,
+  IndianRupee,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { useClients, type ClientOption } from '@/hooks/useClients';
 import { INDIAN_STATES, ENTITY_TYPES as ENTITY_TYPE_OPTIONS } from '@/lib/constants';
-import { validateGSTIN, formatGSTIN } from '@/lib/gst-utils';
+import { validateGSTIN } from '@/lib/gst-utils';
+import {
+  displayGSTIN,
+  displayText,
+  displayNumber,
+  displayOwner,
+  displayOutstanding,
+} from '@/lib/clients/display-utils';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import { fetchWithTimeout } from '@/lib/async/fetchWithTimeout';
 import { toast } from 'sonner';
@@ -339,6 +345,20 @@ const SortHeader = React.memo(function SortHeader({
 });
 
 // ─── Desktop row (memoized) ───────────────────────────────────────────────────
+//
+// PQA-3 (Internal IDs Removal): The desktop row now displays ONLY the
+// 8 business-relevant fields the user asked for — no internal IDs, no UUIDs,
+// no synthetic keys, no database references. Raw IDs stay in `key=`/`onClick`
+// handlers (never rendered as text).
+//   1. Company (tradeName)            — sanitized via displayText
+//   2. GSTIN                          — sanitized via displayGSTIN (synthetic → —)
+//   3. State                          — sanitized via displayText
+//   4. Owner                          — derived from contactEmail/Phone via displayOwner
+//   5. Outstanding                    — placeholder until API exposes receivables
+//   6. Returns                        — count, sanitized via displayNumber
+//   7. Health                         — score badge
+//   8. Status                         — badge
+// ────────────────────────────────────────────────────────────────────────────────
 
 interface InvoiceRowProps {
   client: ClientDoc;
@@ -361,6 +381,19 @@ const ClientTableRow = React.memo(function ClientTableRow({
 }: InvoiceRowProps) {
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
+  // ── Sanitized display values (PQA-3) ──────────────────────────────────────
+  // These never contain internal IDs, UUIDs, or synthetic keys. If the raw
+  // field is missing/synthetic, the helper returns the em-dash placeholder.
+  const tradeNameDisplay = displayText(client.tradeName, 'Unnamed Client');
+  const gstinDisplay = displayGSTIN(client.gstin);
+  const stateDisplay = displayText(client.state);
+  const ownerDisplay = displayOwner(client);
+  const outstandingDisplay = displayOutstanding(null); // API doesn't return amount yet
+  const filedReturns = client.complianceProfile?.totalReturnsFiled ?? 0;
+  const overdueReturns = client.complianceProfile?.overdueReturns ?? 0;
+  const returnsDisplay = displayNumber(filedReturns, '—');
+  const healthDisplay = displayNumber(client.healthScore, '—');
+
   return (
     <div
       role="row"
@@ -374,74 +407,81 @@ const ClientTableRow = React.memo(function ClientTableRow({
         <Checkbox
           checked={selected}
           onCheckedChange={() => onToggleSelect(client.id)}
-          aria-label={`Select ${client.tradeName}`}
+          aria-label={`Select ${tradeNameDisplay}`}
           className="border-white/20 data-[state=checked]:bg-[#3B82F6] data-[state=checked]:border-[#3B82F6]"
         />
       </div>
 
-      {/* Name + GSTIN */}
+      {/* 1. Company (tradeName only — no GSTIN sub-label, no entityType chip) */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#3B82F6]/15 to-[#1E40AF]/10 text-[11px] font-bold text-[#60A5FA] ring-1 ring-[#3B82F6]/20">
-          {client.tradeName?.charAt(0)?.toUpperCase() || '?'}
+          {tradeNameDisplay?.charAt(0)?.toUpperCase() || '?'}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-[13.5px] font-medium text-white">
-              {client.tradeName}
-            </p>
-            {client.entityType && (
-              <span className="hidden items-center rounded-md bg-white/[0.04] px-1.5 py-[1px] text-[10px] font-medium text-[#A1A1AA] ring-1 ring-inset ring-white/5 md:inline-flex">
-                <Building2 className="mr-1 h-2.5 w-2.5" />
-                {client.entityType}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-[#71717A]">
-            {formatGSTIN(client.gstin)}
+          <p className="truncate text-[13.5px] font-medium text-white">
+            {tradeNameDisplay}
           </p>
         </div>
       </div>
 
-      {/* State / Contact (md+) */}
-      <div className="hidden w-44 md:block">
-        {client.state ? (
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5 text-[12px] text-[#D4D4D8]">
-              <MapPin className="h-3 w-3 shrink-0 text-[#52525B]" />
-              <span className="truncate">{client.state}</span>
-              {client.stateCode && (
-                <span className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[9px] text-[#A1A1AA]">
-                  {client.stateCode}
-                </span>
-              )}
-            </div>
-            {client.contactEmail && (
-              <div className="flex items-center gap-1.5 text-[11px] text-[#71717A]">
-                <Mail className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{client.contactEmail}</span>
-              </div>
-            )}
-          </div>
-        ) : (
+      {/* 2. GSTIN (sanitized — synthetic IDs render as em dash) */}
+      <div className="hidden w-36 md:block">
+        <span
+          className={`truncate font-mono text-[11.5px] ${
+            gstinDisplay === '—' ? 'italic text-[#52525B]' : 'text-[#A1A1AA]'
+          }`}
+          title={gstinDisplay === '—' ? 'No GSTIN on file' : gstinDisplay}
+        >
+          {gstinDisplay}
+        </span>
+      </div>
+
+      {/* 3. State (no stateCode chip — that's an internal code) */}
+      <div className="hidden w-36 md:block">
+        {stateDisplay === '—' ? (
           <span className="text-[11px] italic text-[#52525B]">—</span>
+        ) : (
+          <div className="flex items-center gap-1.5 text-[12px] text-[#D4D4D8]">
+            <MapPin className="h-3 w-3 shrink-0 text-[#52525B]" />
+            <span className="truncate">{stateDisplay}</span>
+          </div>
         )}
       </div>
 
-      {/* Compliance (lg+) */}
-      <div className="hidden w-32 lg:block">
+      {/* 4. Owner (contactEmail → contactPhone → —) */}
+      <div className="hidden w-44 lg:block">
+        {ownerDisplay === '—' ? (
+          <span className="text-[11px] italic text-[#52525B]">—</span>
+        ) : (
+          <div className="flex items-center gap-1.5 text-[11.5px] text-[#A1A1AA]">
+            {client.contactEmail ? (
+              <Mail className="h-3 w-3 shrink-0 text-[#52525B]" />
+            ) : (
+              <Phone className="h-3 w-3 shrink-0 text-[#52525B]" />
+            )}
+            <span className="truncate">{ownerDisplay}</span>
+          </div>
+        )}
+      </div>
+
+      {/* 5. Outstanding (API doesn't expose receivables yet — placeholder) */}
+      <div className="hidden w-28 lg:block">
+        <span className="text-[12px] italic text-[#52525B]">{outstandingDisplay}</span>
+      </div>
+
+      {/* 6. Returns (filed count + overdue indicator) */}
+      <div className="hidden w-28 lg:block">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
             <FileText className="h-3 w-3 text-[#52525B]" />
-            <span className="text-[11px] text-[#D4D4D8]">
-              {client.complianceProfile?.totalReturnsFiled ?? 0}
-            </span>
+            <span className="text-[11px] text-[#D4D4D8]">{returnsDisplay}</span>
           </div>
-          {(client.complianceProfile?.overdueReturns ?? 0) > 0 && (
+          {overdueReturns > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex items-center gap-1 text-[11px] text-red-400">
                   <AlertCircle className="h-3 w-3" />
-                  {client.complianceProfile?.overdueReturns}
+                  {overdueReturns}
                 </span>
               </TooltipTrigger>
               <TooltipContent>Overdue returns</TooltipContent>
@@ -450,7 +490,7 @@ const ClientTableRow = React.memo(function ClientTableRow({
         </div>
       </div>
 
-      {/* Health (lg+) */}
+      {/* 7. Health */}
       <div className="hidden w-20 lg:block">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${healthScoreBg(
@@ -458,11 +498,11 @@ const ClientTableRow = React.memo(function ClientTableRow({
           )} ${healthScoreColor(client.healthScore)}`}
         >
           {healthScoreIcon(client.healthScore)}
-          {client.healthScore}
+          {healthDisplay}
         </span>
       </div>
 
-      {/* Status */}
+      {/* 8. Status */}
       <div className="w-24">{statusBadge(client.status)}</div>
 
       {/* Actions */}
@@ -471,7 +511,7 @@ const ClientTableRow = React.memo(function ClientTableRow({
           <DropdownMenuTrigger asChild>
             <button
               className="flex h-7 w-7 items-center justify-center rounded-md text-[#71717A] opacity-0 transition-all hover:bg-white/[0.06] hover:text-white focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
-              aria-label={`Actions for ${client.tradeName}`}
+              aria-label={`Actions for ${tradeNameDisplay}`}
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
@@ -514,6 +554,16 @@ const ClientMobileCard = React.memo(function ClientMobileCard({
   onDelete,
   onGoToReturns,
 }: MobileCardProps) {
+  // ── Sanitized display values (PQA-3) ──────────────────────────────────────
+  const tradeNameDisplay = displayText(client.tradeName, 'Unnamed Client');
+  const gstinDisplay = displayGSTIN(client.gstin);
+  const stateDisplay = displayText(client.state);
+  const ownerDisplay = displayOwner(client);
+  const filedReturns = client.complianceProfile?.totalReturnsFiled ?? 0;
+  const overdueReturns = client.complianceProfile?.overdueReturns ?? 0;
+  const returnsDisplay = displayNumber(filedReturns, '—');
+  const healthDisplay = displayNumber(client.healthScore, '—');
+
   return (
     <div
       onClick={() => onClick(client.id)}
@@ -521,28 +571,28 @@ const ClientMobileCard = React.memo(function ClientMobileCard({
         selected ? 'border-[#3B82F6]/40 bg-[#3B82F6]/[0.04]' : ''
       }`}
     >
-      {/* Header row */}
+      {/* Header row — Company + Status badge */}
       <div className="flex items-start gap-3">
         <div onClick={(e) => e.stopPropagation()} className="pt-1">
           <Checkbox
             checked={selected}
             onCheckedChange={() => onToggleSelect(client.id)}
-            aria-label={`Select ${client.tradeName}`}
+            aria-label={`Select ${tradeNameDisplay}`}
             className="border-white/20 data-[state=checked]:bg-[#3B82F6] data-[state=checked]:border-[#3B82F6]"
           />
         </div>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#3B82F6]/15 to-[#1E40AF]/10 text-[13px] font-bold text-[#60A5FA] ring-1 ring-[#3B82F6]/20">
-          {client.tradeName?.charAt(0)?.toUpperCase() || '?'}
+          {tradeNameDisplay?.charAt(0)?.toUpperCase() || '?'}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-[14px] font-medium text-white">{client.tradeName}</h3>
+            <h3 className="truncate text-[14px] font-medium text-white">{tradeNameDisplay}</h3>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   onClick={(e) => e.stopPropagation()}
                   className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#71717A] hover:bg-white/[0.06] hover:text-white"
-                  aria-label={`Actions for ${client.tradeName}`}
+                  aria-label={`Actions for ${tradeNameDisplay}`}
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
@@ -579,13 +629,18 @@ const ClientMobileCard = React.memo(function ClientMobileCard({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-[#71717A]">
-            {formatGSTIN(client.gstin)}
+          {/* GSTIN — sanitized (synthetic IDs render as em dash) */}
+          <p
+            className={`mt-0.5 truncate font-mono text-[11px] ${
+              gstinDisplay === '—' ? 'italic text-[#52525B]' : 'text-[#71717A]'
+            }`}
+          >
+            {gstinDisplay}
           </p>
         </div>
       </div>
 
-      {/* Badges */}
+      {/* Badges — Health + Status only (no entityType chip) */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {statusBadge(client.status)}
         <span
@@ -594,44 +649,44 @@ const ClientMobileCard = React.memo(function ClientMobileCard({
           )} ${healthScoreColor(client.healthScore)}`}
         >
           {healthScoreIcon(client.healthScore)}
-          {client.healthScore}
+          {healthDisplay}
         </span>
-        {client.entityType && (
-          <span className="inline-flex items-center rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-[#A1A1AA] ring-1 ring-inset ring-white/5">
-            <Building2 className="mr-1 h-2.5 w-2.5" />
-            {client.entityType}
-          </span>
-        )}
       </div>
 
-      {/* Contact info */}
-      {(client.state || client.contactEmail || client.contactPhone) && (
-        <div className="mt-3 space-y-1 border-t border-white/[0.04] pt-3">
-          {client.state && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
-              <MapPin className="h-3 w-3 shrink-0 text-[#52525B]" />
-              <span className="truncate">{client.state}</span>
-              {client.stateCode && (
-                <span className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[9px] text-[#71717A]">
-                  {client.stateCode}
-                </span>
-              )}
-            </div>
-          )}
-          {client.contactEmail && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
-              <Mail className="h-3 w-3 shrink-0 text-[#52525B]" />
-              <span className="truncate">{client.contactEmail}</span>
-            </div>
-          )}
-          {client.contactPhone && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
-              <Phone className="h-3 w-3 shrink-0 text-[#52525B]" />
-              <span>{client.contactPhone}</span>
-            </div>
-          )}
+      {/* Business fields — State, Owner, Returns, Outstanding */}
+      <div className="mt-3 space-y-1 border-t border-white/[0.04] pt-3">
+        {/* State */}
+        <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <MapPin className="h-3 w-3 shrink-0 text-[#52525B]" />
+          <span className="truncate">{stateDisplay}</span>
         </div>
-      )}
+        {/* Owner */}
+        {ownerDisplay !== '—' && (
+          <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+            {client.contactEmail ? (
+              <Mail className="h-3 w-3 shrink-0 text-[#52525B]" />
+            ) : (
+              <Phone className="h-3 w-3 shrink-0 text-[#52525B]" />
+            )}
+            <span className="truncate">{ownerDisplay}</span>
+          </div>
+        )}
+        {/* Returns */}
+        <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <FileText className="h-3 w-3 shrink-0 text-[#52525B]" />
+          <span>
+            {returnsDisplay} return{filedReturns === 1 ? '' : 's'} filed
+            {overdueReturns > 0 && (
+              <span className="ml-1 text-red-400">· {overdueReturns} overdue</span>
+            )}
+          </span>
+        </div>
+        {/* Outstanding */}
+        <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <IndianRupee className="h-3 w-3 shrink-0 text-[#52525B]" />
+          <span className="italic text-[#52525B]">Outstanding: —</span>
+        </div>
+      </div>
     </div>
   );
 });
@@ -801,10 +856,16 @@ export default function ClientRegistryPage() {
 
   const openEdit = useCallback((client: ClientDoc) => {
     setEditingClient(client);
+    // PQA-3: Don't pre-fill the GSTIN input with a synthetic/internal ID
+    // (LOCAL-*, ZOHO-CONTACT-*, etc.). If the stored value is synthetic, leave
+    // the field blank so the user can enter a real GSTIN. The underlying db
+    // row keeps its synthetic key until the user saves a real one.
+    const rawGstin = client.gstin || '';
+    const gstinForForm = displayGSTIN(rawGstin, '') === '' ? '' : rawGstin;
     setForm({
       tradeName: client.tradeName || '',
       legalName: client.legalName || '',
-      gstin: client.gstin || '',
+      gstin: gstinForForm,
       state: client.state || '',
       stateCode: client.stateCode || '',
       entityType: client.entityType || 'Pvt Ltd',
@@ -918,7 +979,7 @@ export default function ClientRegistryPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Failed to delete client (HTTP ${res.status})`);
       }
-      toast.success(`${deleteTarget.tradeName} removed`);
+      toast.success(`${displayText(deleteTarget.tradeName, 'Client')} removed`);
       invalidateBusinessSnapshot();
       refetch();
     } catch (err) {
@@ -960,6 +1021,8 @@ export default function ClientRegistryPage() {
   }, [selectedIds, refetch]);
 
   // ── Bulk export (CSV, real data) ──────────────────────────────────────────
+  // PQA-3: Sanitize exported GSTINs too — synthetic IDs (LOCAL-*, ZOHO-CONTACT-*)
+  // are replaced with empty strings so the CSV never leaks internal keys.
   const handleBulkExport = useCallback(() => {
     const selected = clients.filter((c) => selectedIds.has(c.id));
     if (selected.length === 0) return;
@@ -980,14 +1043,14 @@ export default function ClientRegistryPage() {
     ];
     const rows = selected.map((c) =>
       [
-        c.tradeName,
-        c.legalName ?? '',
-        c.gstin,
-        c.state ?? '',
+        displayText(c.tradeName, ''),
+        displayText(c.legalName, ''),
+        displayGSTIN(c.gstin, ''),
+        displayText(c.state, ''),
         c.stateCode ?? '',
         c.entityType ?? '',
-        c.contactEmail ?? '',
-        c.contactPhone ?? '',
+        displayText(c.contactEmail, ''),
+        displayText(c.contactPhone, ''),
         c.status,
         String(c.healthScore ?? 0),
         String(c._aggregations?.totalInvoices ?? 0),
@@ -1385,7 +1448,7 @@ export default function ClientRegistryPage() {
         {!loading && !error && filtered.length > 0 && (
           <>
             <div className="hidden overflow-hidden rounded-xl border border-white/[0.06] bg-[#0A0A0A] md:block">
-              {/* Sticky header */}
+              {/* Sticky header — 8 business-relevant columns (PQA-3) */}
               <div className="sticky top-0 z-10 flex items-center gap-4 border-b border-white/[0.06] bg-[#0F0F0F]/95 px-4 py-2.5 backdrop-blur">
                 <Checkbox
                   checked={allOnPageSelected}
@@ -1393,29 +1456,55 @@ export default function ClientRegistryPage() {
                   aria-label="Select all on page"
                   className="border-white/20 data-[state=checked]:bg-[#3B82F6] data-[state=checked]:border-[#3B82F6]"
                 />
+                {/* 1. Company */}
                 <div className="flex-1">
                   <SortHeader
-                    label="Client"
+                    label="Company"
                     sortKey="tradeName"
                     currentSort={sortKey}
                     currentDir={sortDir}
                     onSort={onSort}
                   />
                 </div>
-                <div className="hidden w-44 md:block">
+                {/* 2. GSTIN */}
+                <div className="hidden w-36 md:block">
                   <SortHeader
-                    label="Location"
+                    label="GSTIN"
+                    sortKey="gstin"
+                    currentSort={sortKey}
+                    currentDir={sortDir}
+                    onSort={onSort}
+                  />
+                </div>
+                {/* 3. State */}
+                <div className="hidden w-36 md:block">
+                  <SortHeader
+                    label="State"
                     sortKey="state"
                     currentSort={sortKey}
                     currentDir={sortDir}
                     onSort={onSort}
                   />
                 </div>
-                <div className="hidden w-32 lg:block">
+                {/* 4. Owner */}
+                <div className="hidden w-44 lg:block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">
+                    Owner
+                  </span>
+                </div>
+                {/* 5. Outstanding */}
+                <div className="hidden w-28 lg:block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">
+                    Outstanding
+                  </span>
+                </div>
+                {/* 6. Returns */}
+                <div className="hidden w-28 lg:block">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">
                     Returns
                   </span>
                 </div>
+                {/* 7. Health */}
                 <div className="hidden w-20 lg:block">
                   <SortHeader
                     label="Health"
@@ -1425,6 +1514,7 @@ export default function ClientRegistryPage() {
                     onSort={onSort}
                   />
                 </div>
+                {/* 8. Status */}
                 <div className="w-24">
                   <SortHeader
                     label="Status"
@@ -1810,7 +1900,7 @@ export default function ClientRegistryPage() {
         <AlertDialogContent className="border-[#1F1F1F] bg-[#0F0F0F]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[15px] font-semibold text-white">
-              Delete {deleteTarget?.tradeName}?
+              Delete {deleteTarget ? displayText(deleteTarget.tradeName, 'this client') : 'this client'}?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[13px] text-[#A1A1AA]">
               This will permanently remove the client and all associated data. This action cannot

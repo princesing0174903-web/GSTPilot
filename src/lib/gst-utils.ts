@@ -224,25 +224,51 @@ export function generateMismatchExplanation(mismatches: string[]): string {
   return explanations.join(' ');
 }
 
+/**
+ * Parse a period string into { year, month }.
+ * Accepts both canonical "YYYY-MM" (e.g. "2024-11") and legacy "MM-YYYY"
+ * (e.g. "11-2024"). Returns { year: 0, month: 0 } for invalid input so
+ * downstream code never crashes on `undefined`.
+ */
+function parsePeriod(period: string): { year: number; month: number } {
+  if (!period || typeof period !== 'string') return { year: 0, month: 0 };
+  const parts = period.split('-').map((n) => parseInt(n, 10));
+  if (parts.length !== 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) {
+    return { year: 0, month: 0 };
+  }
+  // If the first part is > 31, it's a year → YYYY-MM.
+  if (parts[0] > 31) return { year: parts[0], month: parts[1] };
+  // Otherwise MM-YYYY (legacy).
+  return { year: parts[1], month: parts[0] };
+}
+
 export function getFilingDueDate(returnType: string, period: string): string {
-  const [year, month] = period.split('-').map(Number);
-  const dueDate = new Date(year, month, 11);
+  const { year, month } = parsePeriod(period);
+  if (!year || !month) return '';
+  // GSTR-1: 11th of next month; GSTR-3B: 20th of next month.
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const day = returnType === 'GSTR-1' ? 11 : 20;
+  const dueDate = new Date(nextYear, nextMonth - 1, day);
   return dueDate.toISOString().split('T')[0];
 }
 
 export function getFinancialYear(period: string): string {
-  const [year, month] = period.split('-').map(Number);
+  const { year, month } = parsePeriod(period);
+  if (!year || !month) return '';
   if (month >= 4) return `${year}-${(year + 1).toString().slice(2)}`;
   return `${year - 1}-${year.toString().slice(2)}`;
 }
 
 export function periodToLabel(period: string): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const [year, month] = period.split('-').map(Number);
+  const { year, month } = parsePeriod(period);
+  if (!year || !month) return period || '';
   return `${months[month - 1]} ${year}`;
 }
 
 export function isOverdue(period: string): boolean {
   const dueDate = getFilingDueDate('GSTR-1', period);
+  if (!dueDate) return false;
   return new Date() > new Date(dueDate);
 }

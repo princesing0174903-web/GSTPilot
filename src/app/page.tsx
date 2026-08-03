@@ -19,25 +19,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import dynamic from 'next/dynamic';
-import { Zap } from 'lucide-react';
 import { withRetry } from '@/lib/dynamic-retry';
+import { PremiumGlobalLoading } from '@/components/ui/premium-loading';
 
 const AppRoot = dynamic(
   withRetry(() => import('@/components/AppRoot').then((m) => m.AppRoot)),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl glass-surface motion-pulse">
-            <Zap className="h-5 w-5 accent-text" />
-          </div>
-          <span className="text-sm font-medium text-muted-foreground">
-            Loading GSTPilot…
-          </span>
-        </div>
-      </div>
-    ),
+    loading: () => <PremiumGlobalLoading />,
   },
 );
 

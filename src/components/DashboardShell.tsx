@@ -47,17 +47,14 @@ import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import CommandPalette from '@/components/command-palette/CommandPalette'
 import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
+import { PremiumPageLoader } from '@/components/ui/premium-loading'
 
 // DashboardViews is a lazy-loaded registry of ~21 real view components.
 // Keeping it dynamic means this shell file only compiles the layout chrome,
 // not every dashboard view. (Product Mode · Step 0: fakes are feature-flagged
 // off and no longer in the build graph.)
 const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
-  loading: () => (
-    <div className="flex h-full min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-    </div>
-  ),
+  loading: () => <PremiumPageLoader />,
   ssr: false,
 })
 
@@ -179,13 +176,18 @@ export function DashboardContent() {
 
       {/* ═══ TWO-COLUMN WORKSPACE ═══ */}
       <div className="relative z-10 flex min-h-0 flex-1">
-        {/* LEFT NAV */}
+        {/* LEFT NAV — LeftNav itself manages h-full; no extra scroll wrapper here.
+            The sidebar's own <nav> has overflow-hidden, and its primary-nav
+            <div> handles its own overflow-y-auto (see LeftNav.tsx). */}
         <div className="shrink-0">
           <LeftNav />
         </div>
 
-        {/* MAIN WORKSPACE */}
-        <main className="min-w-0 flex-1 overflow-y-auto pb-24 custom-scrollbar">
+        {/* MAIN WORKSPACE — own independent vertical scroll. No pb-24 (that was
+            compensating for body scroll, which we now prevent via
+            overflow-hidden on the root). The custom-scrollbar class keeps the
+            rail thin + dark. */}
+        <main className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
           <ViewErrorBoundary
             key={currentView}
             viewName={getViewMeta(currentView)?.label || currentView}

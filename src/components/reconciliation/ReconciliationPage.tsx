@@ -64,11 +64,13 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/gst-utils';
 import { toast } from 'sonner';
-import {
-  createReconciliation,
-  resolveMismatch,
-  dismissRecommendation,
-} from '@/lib/firestore-service';
+// NOTE: createReconciliation / resolveMismatch / dismissRecommendation were
+// previously imported from '@/lib/firestore-service' and wrote directly to
+// Firestore. That caused "Missing or insufficient permissions" because the
+// Firestore security rules require an organization_members/{orgId}_{uid} doc
+// to exist for every tenant-scoped write. The entire reconciliation pipeline
+// is now Prisma-backed via /api/reconciliation (POST action:'run', PUT, etc.)
+// and /api/banking/reconcile. No Firestore calls are made from this page.
 import type {
   FirestoreReconciliation,
   FirestoreClient,
@@ -181,7 +183,7 @@ function mapApiRunToRecon(run: ApiReconciliationRun, results: ApiReconciliationR
 }
 
 // Maps a ReconciliationResult row to the ReconMismatch shape used by the UI.
-function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
+function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch & { resultId: string } {
   // Parse the JSON mismatches string to extract booksAmount, portalAmount, difference.
   let booksAmount = r.invoice?.totalAmount ?? 0;
   let portalAmount = 0;
@@ -232,6 +234,7 @@ function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
     resolved: r.resolved ?? false,
     resolvedBy: r.resolvedBy ?? null,
     resolvedAt: r.resolvedAt ?? null,
+    resultId: r.id,
   };
 }
 
@@ -567,7 +570,7 @@ export default function ReconciliationPage() {
 
   // ── All mismatches from all reconciliations (flattened) ──
   const allMismatches = useMemo(() => {
-    const items: Array<ReconMismatch & { reconId: string; reconDocId: string; clientId: string; period: string }> = [];
+    const items: Array<ReconMismatch & { reconId: string; reconDocId: string; clientId: string; period: string; resultId: string }> = [];
     for (const r of reconciliations) {
       for (const m of r.mismatches) {
         items.push({ ...m, reconId: r.reconId, reconDocId: r.id, clientId: r.clientId, period: r.period });
@@ -606,12 +609,26 @@ export default function ReconciliationPage() {
     }
     setCreating(true);
     try {
-      await createReconciliation({
-        clientId: selectedClientId,
-        period: selectedPeriod,
-        sources: selectedSource,
+      // Prisma-backed: POST /api/reconciliation with action:'run' creates a
+      // ReconciliationRun, fetches the client's invoices, creates a
+      // ReconciliationResult for each, updates invoice match status, and
+      // writes an audit log — all in Prisma/SQLite, no Firestore.
+      const res = await fetch('/api/reconciliation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'run',
+          clientId: selectedClientId,
+          period: selectedPeriod,
+          sources: selectedSource,
+        }),
       });
-      toast.success('Reconciliation run started successfully');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      toast.success(data?.message || 'Reconciliation run started successfully');
       setDialogOpen(false);
       setSelectedClientId('');
       setSelectedPeriod('');
@@ -625,10 +642,21 @@ export default function ReconciliationPage() {
     }
   }, [selectedClientId, selectedPeriod, selectedSource, refetchClients]);
 
-  const handleResolveMismatch = useCallback(async (reconId: string, invoiceNumber: string) => {
+  const handleResolveMismatch = useCallback(async (resultId: string, invoiceNumber: string) => {
     setResolvingInvoice(invoiceNumber);
     try {
-      await resolveMismatch(reconId, invoiceNumber);
+      // Prisma-backed: PUT /api/reconciliation marks the ReconciliationResult
+      // as resolved, sets resolvedBy/resolvedAt, updates workflowStatus to
+      // 'resolved', and writes an audit log.
+      const res = await fetch('/api/reconciliation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: resultId, resolvedBy: 'user' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
       toast.success(`Mismatch for invoice ${invoiceNumber} resolved`);
       setRefreshKey(k => k + 1);
     } catch (err) {
@@ -641,7 +669,10 @@ export default function ReconciliationPage() {
   const handleDismissRecommendation = useCallback(async (recId: string) => {
     setDismissingRecId(recId);
     try {
-      await dismissRecommendation(recId);
+      // AI recommendations are currently derived client-side (no backing REST
+      // collection). Dismissal is a local filter — the recommendation is
+      // removed from the visible list for this session.
+      setAiRecommendations(prev => prev.filter(r => r.recId !== recId));
       toast.success('Recommendation dismissed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to dismiss recommendation');
@@ -1094,7 +1125,7 @@ export default function ReconciliationPage() {
                                     variant="outline"
                                     className="h-6 text-[10px] px-2 gap-1"
                                     disabled={resolvingInvoice === m.invoiceNumber}
-                                    onClick={() => handleResolveMismatch(m.reconId, m.invoiceNumber)}
+                                    onClick={() => handleResolveMismatch(m.resultId, m.invoiceNumber)}
                                   >
                                     {resolvingInvoice === m.invoiceNumber ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />

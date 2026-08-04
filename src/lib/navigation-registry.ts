@@ -29,6 +29,7 @@ import {
   Settings,
   Landmark,
   BarChart3,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import type { AppView } from '@/contexts/AppContext';
@@ -166,6 +167,14 @@ export const VIEW_REGISTRY: Record<string, NavEntry> = {
     icon: ClipboardCheck,
     description: 'Reconcile invoices, payments, and bank transactions.',
     category: 'finance',
+  },
+  'gst-reconciliation': {
+    view: 'gst-reconciliation',
+    label: 'GST Reconciliation',
+    icon: ShieldCheck,
+    description: 'GSTR-2B vs Books reconciliation with AI-powered mismatch analysis and ITC protection.',
+    category: 'finance',
+    inSidebar: true,
   },
   tasks: {
     view: 'tasks',

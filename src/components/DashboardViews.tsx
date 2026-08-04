@@ -50,6 +50,7 @@ const InvoiceWorkspacePage = dynamic(() => import('@/components/invoices/Invoice
 const ReturnsPage = dynamic(() => import('@/components/returns/ReturnsPage'), { loading: PageLoader, ssr: false })
 const ReturnPrepWorkspace = dynamic(() => import('@/components/returns/ReturnPrepWorkspace'), { loading: PageLoader, ssr: false })
 const ReconciliationPage = dynamic(() => import('@/components/reconciliation/ReconciliationPage'), { loading: PageLoader, ssr: false })
+const GSTReconciliationPage = dynamic(() => import('@/components/gst-reconciliation/GSTReconciliationPage'), { loading: PageLoader, ssr: false })
 const BankingPage = dynamic(() => import('@/components/banking/BankingPage'), { loading: PageLoader, ssr: false })
 const ReportsPage = dynamic(() => import('@/components/reports/ReportsPage'), { loading: PageLoader, ssr: false })
 const SettingsPage = dynamic(() => import('@/components/settings/SettingsPage'), { loading: PageLoader, ssr: false })
@@ -82,6 +83,7 @@ const VIEW_COMPONENTS: Record<string, ComponentType<any>> = {
   returns: ReturnsPage,
   'return-prep': ReturnPrepWorkspace,
   reconcile: ReconciliationPage,
+  'gst-reconciliation': GSTReconciliationPage,
   banking: BankingPage,
   reports: ReportsPage,
 

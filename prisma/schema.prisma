@@ -6425,3 +6425,107 @@ model CashFlowSnapshot {
   @@unique([organizationId, date, period])
   @@index([organizationId, date])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GST RECONCILIATION ENGINE — GSTR-2B vs Books (Purchase Invoices)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Production-grade reconciliation between purchase invoices (from GSTPilot/Zoho
+// Books) and GSTR-2B data (downloaded from GSTN via a configurable GSP).
+// Supports: perfect match, value/tax/date mismatch, missing in books,
+// missing in GSTR-2B, duplicate, fuzzy matching, ITC loss calculation.
+
+model GSTReconciliationRun {
+  id              String   @id @default(cuid())
+  organizationId  String
+  clientId        String?
+  gstin           String
+  period          String   // YYYY-MM
+  gspProvider     String   @default("mock") // mock | mastersindia | clarity | cleartax |gstsuvidha
+  status          String   @default("running") // running | completed | failed | partial
+  totalBooks      Int      @default(0)
+  total2B         Int      @default(0)
+  matched         Int      @default(0)
+  unmatched       Int      @default(0)
+  missingInBooks  Int      @default(0)
+  missingIn2B     Int      @default(0)
+  duplicates      Int      @default(0)
+  matchPercent    Float    @default(0)
+  potentialITCLoss Float   @default(0)
+  totalTaxableValue Float  @default(0)
+  totalMatchedTax  Float   @default(0)
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  durationMs      Int      @default(0)
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  matches         GSTReconciliationMatch[]
+
+  @@index([organizationId, period])
+  @@index([gstin, period])
+}
+
+model GSTReconciliationMatch {
+  id              String   @id @default(cuid())
+  runId           String
+  // Book-side (purchase invoice) — null when "missing in books"
+  booksInvoiceId  String?
+  booksInvoiceNo  String?
+  booksInvoiceDate String?
+  booksSupplierGSTIN String?
+  booksTaxableValue Float  @default(0)
+  booksCGST       Float    @default(0)
+  booksSGST       Float    @default(0)
+  booksIGST       Float    @default(0)
+  booksCESS       Float    @default(0)
+  booksTotal      Float    @default(0)
+  // GSTR-2B side — null when "missing in GSTR-2B"
+  gstr2bInvoiceId String?
+  gstr2bInvoiceNo String?
+  gstr2bInvoiceDate String?
+  gstr2bSupplierGSTIN String?
+  gstr2bTaxableValue Float  @default(0)
+  gstr2bCGST      Float    @default(0)
+  gstr2bSGST      Float    @default(0)
+  gstr2bIGST      Float    @default(0)
+  gstr2bCESS      Float    @default(0)
+  gstr2bTotal     Float    @default(0)
+  // Match result
+  status          String   @default("unmatched") // perfect_match | value_mismatch | tax_mismatch | date_mismatch | missing_in_books | missing_in_gstr2b | duplicate | gstin_mismatch
+  confidence      Float    @default(0) // 0-1 fuzzy match confidence
+  mismatchReasons String   @default("[]") // JSON array of {field, booksValue, gstr2bValue, delta}
+  itcAtRisk       Float    @default(0)
+  aiExplanation   String?  // Oracle AI explanation
+  aiRecommendation String? // Oracle AI recommended action
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNote  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  run             GSTReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([runId, resolved])
+}
+
+// GSP (GST Suvidha Provider) configuration — abstracted so any provider can be plugged in
+model GSPProviderConfig {
+  id              String   @id @default(cuid())
+  organizationId  String
+  providerKey     String   // mastersindia | clarity | cleartax | gstsuvidha | mock
+  displayName     String
+  clientId        String?
+  clientSecret    String?  // encrypted at rest
+  apikey          String?
+  authEndpoint    String?
+  apiEndpoint     String?
+  enabled         Boolean  @default(false)
+  lastConnectedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, providerKey])
+}

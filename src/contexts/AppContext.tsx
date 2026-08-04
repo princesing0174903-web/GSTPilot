@@ -218,7 +218,8 @@ export type AppView =
   // Phase Zoho Books — Accounting Integration (OAuth)
   | 'zoho-books'
   // Oracle Intelligence — The Financial Brain
-  | 'oracle-brain';
+  | 'oracle-brain'
+  | 'gst-reconciliation';
 
 export interface ReturnPrepContext {
   clientId: string | null;

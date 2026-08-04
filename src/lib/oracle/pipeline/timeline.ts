@@ -116,8 +116,10 @@ export async function buildTimeline(
   // Pull open notices with due dates.
   try {
     if (orgId) {
+      // dueDate is a String? column — query by ISO string, not Date object.
+      const nowIso = now.toISOString();
       const notices = await db.notice.findMany({
-        where: { client: { firmId: orgId }, status: 'open', dueDate: { gte: now } },
+        where: { client: { firmId: orgId }, status: 'open', dueDate: { gte: nowIso } },
         select: { subject: true, dueDate: true, priority: true },
         orderBy: { dueDate: 'asc' },
         take: 5,

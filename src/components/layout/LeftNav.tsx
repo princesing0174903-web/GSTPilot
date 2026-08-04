@@ -59,6 +59,7 @@ const NAV_GROUP_MAP: Partial<Record<string, AppView>> = {
   'gstr-filing': 'returns',
   calendar: 'returns',
   reconcile: 'returns',
+  'gst-reconciliation': 'gst-reconciliation',
   'google-workspace': 'google-workspace',
   'zoho-books': 'zoho-books',
   banking: 'banking',

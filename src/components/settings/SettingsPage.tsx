@@ -38,7 +38,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
@@ -57,8 +56,8 @@ import {
   Building2, Users, Bell, Lock, CreditCard, Save, Check, Loader2, Camera,
   AlertTriangle, Mail, Activity, Upload, Shield, Smartphone, Monitor, Globe,
   ChevronRight, Download, Database, Key, Plug, Power, RefreshCw, Trash2, Copy,
-  Eye, EyeOff, Plus, Clock, Sun, Moon, Laptop, LogOut, Sparkles, CheckCircle2,
-  XCircle, ShieldAlert, UserCog, History,
+  Eye, EyeOff, Plus, Clock, Sun, Moon, Laptop, LogOut, CheckCircle2,
+  XCircle, ShieldAlert, UserCog, Link as LinkIcon, ScrollText, Settings2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -84,23 +83,46 @@ interface NavSection {
   id: SectionId;
   label: string;
   icon: React.ReactNode;
-  group: 'Account' | 'Workspace' | 'System';
+  group: 'Workspace' | 'Account' | 'System';
 }
 
+// Settings sub-nav. Grouped into Workspace / Account / System so the nav reads
+// like an enterprise control panel (Vercel / Stripe / Linear inspired).
+// SectionIds are kept stable so the deep-link map in SettingsPage keeps working.
 const SECTIONS: NavSection[] = [
+  // ── Workspace ── (organization-level settings)
   { id: 'organization', label: 'Organization', icon: <Building2 className="h-4 w-4" />, group: 'Workspace' },
-  { id: 'appearance', label: 'Appearance', icon: <Sun className="h-4 w-4" />, group: 'Account' },
+  { id: 'team', label: 'Users', icon: <Users className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'integrations', label: 'OAuth', icon: <LinkIcon className="h-4 w-4" />, group: 'Workspace' },
+
+  // ── Account ── (user-level settings)
   { id: 'profile', label: 'Profile', icon: <UserCog className="h-4 w-4" />, group: 'Account' },
   { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" />, group: 'Account' },
-  { id: 'integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" />, group: 'Workspace' },
   { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" />, group: 'Account' },
-  { id: 'team', label: 'Team', icon: <Users className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'appearance', label: 'Appearance', icon: <Sun className="h-4 w-4" />, group: 'Account' },
+
+  // ── System ── (platform / billing / data)
   { id: 'apikeys', label: 'API Keys', icon: <Key className="h-4 w-4" />, group: 'System' },
-  { id: 'audit', label: 'Audit Log', icon: <History className="h-4 w-4" />, group: 'System' },
   { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" />, group: 'System' },
+  { id: 'audit', label: 'Audit Logs', icon: <ScrollText className="h-4 w-4" />, group: 'System' },
   { id: 'data', label: 'Data & Backup', icon: <Database className="h-4 w-4" />, group: 'System' },
   { id: 'danger', label: 'Danger Zone', icon: <ShieldAlert className="h-4 w-4" />, group: 'System' },
 ];
+
+const SECTION_META: Record<SectionId, { title: string; subtitle: string }> = {
+  organization: { title: 'Organization', subtitle: 'Your firm\u2019s identity, tax registration, and contact details.' },
+  appearance: { title: 'Appearance', subtitle: 'Choose how GSTPilot looks. Synced across devices.' },
+  profile: { title: 'Profile', subtitle: 'Your personal account information.' },
+  security: { title: 'Security', subtitle: 'Manage your password, active sessions, and account security.' },
+  integrations: { title: 'OAuth Connections', subtitle: 'Connect external services to sync data into GSTPilot.' },
+  notifications: { title: 'Notifications', subtitle: 'Choose what updates you want to receive and how.' },
+  team: { title: 'Users & Team', subtitle: 'Manage who has access to your organization.' },
+  apikeys: { title: 'API Keys', subtitle: 'Generate keys to access the GSTPilot API programmatically.' },
+  audit: { title: 'Audit Logs', subtitle: 'A chronological record of actions taken in your account.' },
+  billing: { title: 'Billing', subtitle: 'Manage your subscription, usage, and payment method.' },
+  data: { title: 'Data & Backup', subtitle: 'Export, back up, or permanently delete your workspace data.' },
+  danger: { title: 'Danger Zone', subtitle: 'Irreversible and destructive account actions.' },
+};
 
 // ─── Headers helper (mirrors useZohoBooks) ────────────────────────────────────
 function useSettingsHeaders() {
@@ -145,73 +167,115 @@ export function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SectionId>('organization');
 
   // Deep-link: if the dashboard asked for a specific section, land on it.
+  // We consume the one-shot `pendingSettingsSection` signal DURING RENDER
+  // (the documented "adjusting state during render" pattern) rather than in an
+  // effect — calling setActiveSection synchronously inside useEffect triggers
+  // cascading renders and is flagged by react-hooks/set-state-in-effect.
+  // The map translates the legacy AppContext SettingsSection ids to SectionId.
+  const [consumedPending, setConsumedPending] = useState<string | null>(null);
+  if (pendingSettingsSection && pendingSettingsSection !== consumedPending) {
+    setConsumedPending(pendingSettingsSection);
+    const map: Record<string, SectionId> = {
+      firm: 'organization', gst: 'organization', team: 'team',
+      integrations: 'integrations', notifications: 'notifications',
+      security: 'security', billing: 'billing', audit: 'audit',
+      ai: 'appearance', data: 'data', apikeys: 'apikeys',
+    };
+    setActiveSection(map[pendingSettingsSection] ?? 'organization');
+  }
+  // Clear the external one-shot signal (legitimate effect — syncs back to the
+  // AppContext store so the deep-link doesn't re-fire on next mount).
   useEffect(() => {
-    if (pendingSettingsSection) {
-      // Map the old AppContext SettingsSection ids to the new SectionId set.
-      const map: Record<string, SectionId> = {
-        firm: 'organization', gst: 'organization', team: 'team',
-        integrations: 'integrations', notifications: 'notifications',
-        security: 'security', billing: 'billing', audit: 'audit',
-        ai: 'appearance', data: 'data', apikeys: 'apikeys',
-      };
-      const target = map[pendingSettingsSection] ?? 'organization';
-      setActiveSection(target);
-      setPendingSettingsSection(null);
-    }
+    if (pendingSettingsSection) setPendingSettingsSection(null);
   }, [pendingSettingsSection, setPendingSettingsSection]);
 
+  // Scroll the content panel back to top whenever the active section changes —
+  // otherwise switching from a long section (Audit Log) to a short one keeps
+  // the scroll position mid-page.
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [activeSection]);
+
+  const meta = SECTION_META[activeSection];
+
   return (
-    // Fixed-layout Settings shell (Stripe-style):
-    //   • Root fills the viewport height of its parent <main> and clips overflow.
-    //   • The settings sub-nav (left) is shrink-0 with its own vertical scroll.
-    //   • The content panel (right) is flex-1 with its own vertical scroll.
-    //   • The application header, sidebar, and this nav never move — only the
-    //     content panel scrolls.
-    <div className="flex h-full flex-col lg:flex-row overflow-hidden bg-black text-white">
-      {/* ── Sidebar Nav ── */}
-      <SettingsSidebar
-        activeSection={activeSection}
-        onSelect={setActiveSection}
-        isMobile={isMobile}
-      />
-
-      {/* ── Main Content (only this region scrolls) ── */}
-      <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12">
-          {/* ── Header ── */}
-          <div className="mb-8 md:mb-12">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
-              Settings
-            </h1>
-            <p className="text-sm md:text-base text-zinc-400 mt-2">
-              Manage your organization, account, and system preferences.
-            </p>
+    // ═══ FIXED-LAYOUT SETTINGS SHELL (enterprise / Stripe-style) ═══
+    // The DashboardShell top header is h-14 (3.5rem). We use an explicit
+    // viewport-relative height (calc(100vh - 3.5rem)) instead of h-full so the
+    // height chain NEVER collapses — regardless of intermediate wrappers
+    // (ViewErrorBoundary, DashboardViews) or percentage-resolution quirks.
+    //
+    // Architecture:
+    //   root (fixed height, overflow-hidden)
+    //     ├─ page header  (shrink-0, NEVER scrolls)  — "Settings" + Save
+    //     └─ body row (flex-1, min-h-0)
+    //          ├─ sidebar  (shrink-0, own overflow-y-auto)  — NEVER scrolls with content
+    //          └─ content  (flex-1, overflow-y-auto)        — ONLY this scrolls
+    <div
+      className="flex flex-col overflow-hidden bg-black text-white"
+      style={{ height: 'calc(100vh - 3.5rem)' }}
+    >
+      {/* ── PAGE HEADER (fixed, never scrolls) ── */}
+      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[#1F1F1F] bg-black/80 px-5 py-4 backdrop-blur md:px-8">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <Settings2 className="h-5 w-5 text-[#3B82F6] shrink-0" />
+            <h1 className="gst-page-title truncate text-white">Settings</h1>
           </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeSection}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              {activeSection === 'organization' && <OrganizationSection />}
-              {activeSection === 'appearance' && <AppearanceSection />}
-              {activeSection === 'profile' && <ProfileSection />}
-              {activeSection === 'security' && <SecuritySection />}
-              {activeSection === 'integrations' && <IntegrationsSection />}
-              {activeSection === 'notifications' && <NotificationsSection />}
-              {activeSection === 'team' && <TeamSection />}
-              {activeSection === 'apikeys' && <ApiKeysSection />}
-              {activeSection === 'audit' && <AuditLogSection />}
-              {activeSection === 'billing' && <BillingSection />}
-              {activeSection === 'data' && <DataSection />}
-              {activeSection === 'danger' && <DangerZoneSection />}
-            </motion.div>
-          </AnimatePresence>
+          <p className="gst-description mt-0.5 truncate text-zinc-400">
+            Manage your organization, account, and system preferences.
+          </p>
         </div>
-      </main>
+        {/* The Save button is intentionally a no-op placeholder here at the
+            page level — each section has its own contextual Save with the
+            real API call. This top-right button surfaces the active section's
+            label so the user always knows what they'd be saving. */}
+        <div className="hidden items-center gap-2 sm:flex">
+          <span className="gst-status gst-status-neutral">{meta.title}</span>
+        </div>
+      </header>
+
+      {/* ── BODY ROW: sidebar + scrollable content ── */}
+      <div className="flex min-h-0 flex-1">
+        {/* ── SIDEBAR NAV (sticky / fixed, own vertical scroll if list overflows) ── */}
+        <SettingsSidebar
+          activeSection={activeSection}
+          onSelect={setActiveSection}
+          isMobile={isMobile}
+        />
+
+        {/* ── CONTENT PANEL (ONLY this region scrolls) ── */}
+        <main
+          ref={contentRef}
+          className="min-w-0 flex-1 overflow-y-auto custom-scrollbar"
+        >
+          <div className="mx-auto w-full max-w-4xl px-5 py-8 md:px-8 md:py-10">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                {activeSection === 'organization' && <OrganizationSection />}
+                {activeSection === 'appearance' && <AppearanceSection />}
+                {activeSection === 'profile' && <ProfileSection />}
+                {activeSection === 'security' && <SecuritySection />}
+                {activeSection === 'integrations' && <IntegrationsSection />}
+                {activeSection === 'notifications' && <NotificationsSection />}
+                {activeSection === 'team' && <TeamSection />}
+                {activeSection === 'apikeys' && <ApiKeysSection />}
+                {activeSection === 'audit' && <AuditLogSection />}
+                {activeSection === 'billing' && <BillingSection />}
+                {activeSection === 'data' && <DataSection />}
+                {activeSection === 'danger' && <DangerZoneSection />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -228,26 +292,39 @@ function SettingsSidebar({
   isMobile: boolean;
 }) {
   const groups = useMemo(() => {
-    const g: Record<string, NavSection[]> = { Account: [], Workspace: [], System: [] };
+    // Render in the order: Workspace → Account → System (matches SECTIONS order).
+    const g: Record<string, NavSection[]> = { Workspace: [], Account: [], System: [] };
     for (const s of SECTIONS) g[s.group].push(s);
     return g;
   }, []);
 
+  // ── MOBILE: compact Select dropdown in place of the vertical nav ──
   if (isMobile) {
     return (
-      <div className="shrink-0 px-4 pt-6 pb-2">
+      <div className="shrink-0 border-b border-[#1F1F1F] bg-black px-4 py-3">
         <Select value={activeSection} onValueChange={(v) => onSelect(v as SectionId)}>
-          <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white">
+          <SelectTrigger className="h-9 border-[#2A2A2A] bg-[#0A0A0A] text-white">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
-            {SECTIONS.map((s) => (
-              <SelectItem key={s.id} value={s.id} className="text-white focus:bg-zinc-800">
-                <div className="flex items-center gap-2">
-                  {s.icon}
-                  <span>{s.label}</span>
-                </div>
-              </SelectItem>
+          <SelectContent className="max-h-80 border-[#2A2A2A] bg-[#0A0A0A]">
+            {(['Workspace', 'Account', 'System'] as const).map((gn) => (
+              <div key={gn}>
+                <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                  {gn}
+                </p>
+                {groups[gn].map((s) => (
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    className="text-white focus:bg-[#181818] focus:text-white"
+                  >
+                    <div className="flex items-center gap-2">
+                      {s.icon}
+                      <span>{s.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </div>
             ))}
           </SelectContent>
         </Select>
@@ -255,45 +332,82 @@ function SettingsSidebar({
     );
   }
 
-  // Desktop: fixed sub-nav panel with its own vertical scroll. The parent
-  // <main> already clips overflow, so this panel never causes the whole app
-  // to scroll — only this nav (if it ever overflows) and the content panel
-  // scroll independently.
+  // ── DESKTOP: sticky sub-nav panel ──
+  // The parent body row is `flex min-h-0 flex-1` with the root `overflow-hidden`,
+  // so this <nav> never causes the whole page to scroll. It is `shrink-0` with
+  // its own `overflow-y-auto` in case the nav list ever exceeds the viewport
+  // (12 sections fits comfortably, but future additions won't break layout).
+  // Active item: blue LEFT border + blue-tinted bg (Stripe / Linear style)
+  // rather than a solid blue pill — feels more enterprise / less playful.
   return (
-    <nav className="w-64 shrink-0 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-zinc-900/70 bg-zinc-950/30 px-4 py-8">
-      <div className="space-y-6">
-        {Object.entries(groups).map(([groupName, items]) => (
-          <div key={groupName}>
-            <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              {groupName}
-            </p>
-            <div className="space-y-0.5">
-              {items.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => onSelect(s.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-                    activeSection === s.id
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                  }`}
-                >
-                  <span className={activeSection === s.id ? 'text-white' : 'text-zinc-500'}>
-                    {s.icon}
-                  </span>
-                  <span>{s.label}</span>
-                </button>
-              ))}
+    <nav className="sticky top-0 flex h-full w-60 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-[#1F1F1F] bg-[#070707] px-3 py-5 custom-scrollbar">
+      {/* Tiny brand label at the top of the nav */}
+      <div className="mb-5 px-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          Settings
+        </p>
+      </div>
+
+      <div className="space-y-5">
+        {(['Workspace', 'Account', 'System'] as const).map((groupName) => {
+          const items = groups[groupName];
+          if (!items?.length) return null;
+          return (
+            <div key={groupName}>
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                {groupName}
+              </p>
+              <div className="space-y-0.5">
+                {items.map((s) => {
+                  const active = activeSection === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => onSelect(s.id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`group relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                        active
+                          ? 'bg-[#2563EB]/10 text-white'
+                          : 'text-zinc-400 hover:bg-[#141414] hover:text-white'
+                      }`}
+                    >
+                      {/* Blue left accent bar for the active item */}
+                      <span
+                        className={`absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full transition-all duration-150 ${
+                          active ? 'bg-[#3B82F6]' : 'bg-transparent'
+                        }`}
+                      />
+                      <span className={active ? 'text-[#60A5FA]' : 'text-zinc-500 group-hover:text-zinc-300'}>
+                        {s.icon}
+                      </span>
+                      <span className="truncate">{s.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* Footer hint inside the sidebar */}
+      <div className="mt-auto pt-6">
+        <div className="rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] px-3 py-2.5">
+          <p className="text-[11px] leading-relaxed text-zinc-500">
+            Changes are saved per-section. Use the Save button inside each card.
+          </p>
+        </div>
       </div>
     </nav>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SHARED UI PRIMITIVES (premium dark enterprise)
+// SHARED UI PRIMITIVES (premium dark enterprise — aligned to GSTPilot design system)
+//   • Cards:        .gst-card base  → bg #0A0A0A, border #1F1F1F, p-6, rounded-xl
+//   • Buttons:      .gst-btn base   → h-9, blue accent #2563EB
+//   • Status pills: .gst-status     → success / neutral variants
+//   • Inputs:       #0A0A0A bg, #2A2A2A border, blue focus ring
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function SettingsCard({
@@ -305,30 +419,32 @@ function SettingsCard({
   action?: React.ReactNode;
 }) {
   return (
-    <Card className="bg-zinc-950 border-zinc-800 shadow-xl">
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
-          <CardTitle className="text-white text-lg font-semibold">{title}</CardTitle>
+    <Card className="gst-card border-[#1F1F1F] bg-[#0A0A0A] p-0 shadow-[0_1px_0_0_rgba(255,255,255,0.02)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)]">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[#1F1F1F] px-6 py-5">
+        <div className="min-w-0">
+          <CardTitle className="gst-card-title text-white">{title}</CardTitle>
           {description && (
-            <CardDescription className="text-zinc-400 mt-1">{description}</CardDescription>
+            <CardDescription className="gst-description mt-1 text-zinc-400">
+              {description}
+            </CardDescription>
           )}
         </div>
-        {action}
+        {action && <div className="shrink-0">{action}</div>}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="p-6">{children}</CardContent>
     </Card>
   );
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <Label className="text-sm font-medium text-zinc-300">{children}</Label>;
+  return <Label className="gst-label text-zinc-300">{children}</Label>;
 }
 
 function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <Input
       {...props}
-      className={`bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-blue-500 focus-visible:ring-blue-500/20 ${props.className ?? ''}`}
+      className={`h-9 rounded-md border-[#2A2A2A] bg-[#0A0A0A] text-white placeholder:text-zinc-600 focus:border-[#2563EB] focus-visible:ring-[#2563EB]/20 ${props.className ?? ''}`}
     />
   );
 }
@@ -337,7 +453,7 @@ function FieldTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>)
   return (
     <Textarea
       {...props}
-      className={`bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-blue-500 focus-visible:ring-blue-500/20 ${props.className ?? ''}`}
+      className={`rounded-md border-[#2A2A2A] bg-[#0A0A0A] text-white placeholder:text-zinc-600 focus:border-[#2563EB] focus-visible:ring-[#2563EB]/20 ${props.className ?? ''}`}
     />
   );
 }
@@ -349,9 +465,9 @@ function PrimaryButton({
     <Button
       {...props}
       disabled={loading || props.disabled}
-      className="bg-blue-600 hover:bg-blue-500 text-white border-0 shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="gst-btn gst-btn-primary h-9 gap-2 border-0 disabled:cursor-not-allowed"
     >
-      {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </Button>
   );
@@ -364,7 +480,7 @@ function GhostButton({
     <Button
       {...props}
       variant="outline"
-      className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900 hover:text-white"
+      className="gst-btn gst-btn-outline h-9 gap-2"
     >
       {children}
     </Button>
@@ -378,26 +494,31 @@ function DangerButton({
     <Button
       {...props}
       disabled={loading || props.disabled}
-      className="bg-red-600/90 hover:bg-red-600 text-white border-0 disabled:opacity-50"
+      className="gst-btn gst-btn-danger h-9 gap-2 border-0 disabled:cursor-not-allowed"
     >
-      {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </Button>
   );
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  // Slim in-content section header. The page header (sticky top) carries the
+  // big "Settings" wordmark; this reinforces the active section's context.
   return (
-    <div className="mb-6">
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
-      <p className="text-sm text-zinc-400 mt-1">{subtitle}</p>
+    <div className="mb-6 flex items-start gap-3">
+      <div className="h-8 w-1 rounded-full bg-[#2563EB]" aria-hidden />
+      <div>
+        <h2 className="gst-section-title text-white">{title}</h2>
+        <p className="gst-description mt-1 text-zinc-400">{subtitle}</p>
+      </div>
     </div>
   );
 }
 
 function ComingSoonBadge() {
   return (
-    <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/10">
+    <Badge className="gst-status gst-status-info border-[#8B5CF6]/25 bg-[#8B5CF6]/15 text-[#A78BFA] hover:bg-[#8B5CF6]/15">
       Coming Soon
     </Badge>
   );
@@ -405,13 +526,7 @@ function ComingSoonBadge() {
 
 function StatusPill({ ok, label }: { ok: boolean; label?: string }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-        ok
-          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-          : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-      }`}
-    >
+    <span className={`gst-status ${ok ? 'gst-status-success' : 'gst-status-neutral'}`}>
       {ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
       {label ?? (ok ? 'Connected' : 'Not Connected')}
     </span>
@@ -540,23 +655,25 @@ function OrganizationSection() {
         title="Logo"
         description="PNG, JPG, or WebP. Max 2 MB. Displayed across the app and on invoices."
       >
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <Avatar className="h-20 w-20 rounded-xl border border-zinc-800 bg-zinc-900">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          {/* Circular 64×64 preview with overlay upload button */}
+          <div className="relative shrink-0">
+            <Avatar className="h-16 w-16 rounded-full border border-[#2A2A2A] bg-[#0A0A0A] shadow-[0_0_0_4px_rgba(37,99,235,0.08)]">
               {data?.logoUrl ? (
-                <AvatarImage src={data.logoUrl} alt="Logo" />
+                <AvatarImage src={data.logoUrl} alt="Firm logo" />
               ) : null}
-              <AvatarFallback className="rounded-xl bg-zinc-900 text-zinc-500">
-                <Building2 className="h-8 w-8" />
+              <AvatarFallback className="rounded-full bg-[#0A0A0A] text-zinc-600">
+                <Building2 className="h-6 w-6" />
               </AvatarFallback>
             </Avatar>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingLogo}
-              className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-500 transition-colors shadow-lg"
+              className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0A0A0A] bg-[#2563EB] text-white shadow-lg transition-colors hover:bg-[#1D4ED8] disabled:opacity-60"
               aria-label="Upload logo"
+              title="Upload logo"
             >
-              {uploadingLogo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+              {uploadingLogo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
             </button>
             <input
               ref={fileInputRef}
@@ -566,13 +683,30 @@ function OrganizationSection() {
               className="hidden"
             />
           </div>
+
           <div className="flex-1">
-            <p className="text-sm text-zinc-300">
-              {data?.logoUrl ? 'Logo uploaded' : 'No logo uploaded yet'}
-            </p>
-            <p className="text-xs text-zinc-500 mt-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-white">
+                {data?.logoUrl ? 'Logo uploaded' : 'No logo uploaded yet'}
+              </p>
+              {data?.logoUrl && (
+                <span className="gst-status gst-status-success">
+                  <CheckCircle2 className="h-3 w-3" /> Active
+                </span>
+              )}
+            </div>
+            <p className="gst-caption mt-1 text-zinc-500">
               Recommended: 512×512px square. Used in the sidebar, invoices, and reports.
             </p>
+            <div className="mt-3">
+              <GhostButton
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingLogo}
+              >
+                {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {data?.logoUrl ? 'Replace Logo' : 'Upload Logo'}
+              </GhostButton>
+            </div>
           </div>
         </div>
       </SettingsCard>
@@ -1700,6 +1834,9 @@ function ApiKeysSection() {
   const [creating, setCreating] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
+  // Per-row cosmetic show/hide of the key prefix in the list (independent of
+  // the one-shot "reveal on creation" dialog state above).
+  const [shownRowId, setShownRowId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -1792,52 +1929,94 @@ function ApiKeysSection() {
         }
       >
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[#3B82F6]" /></div>
         ) : keys.length === 0 ? (
-          <p className="text-sm text-zinc-500 py-8 text-center">No API keys yet. Generate one to get started.</p>
+          <p className="gst-description py-10 text-center text-zinc-500">No API keys yet. Generate one to get started.</p>
         ) : (
-          <div className="space-y-2">
-            {keys.map((k) => (
-              <div key={k.id} className="flex items-center justify-between py-3 px-3 rounded-lg bg-zinc-900 border border-zinc-800">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-white">{k.name}</p>
-                    <Badge variant="outline" className={`${
-                      k.status === 'active' ? 'border-emerald-500/30 text-emerald-400' : 'border-red-500/30 text-red-400'
-                    }`}>{k.status}</Badge>
+          <div className="space-y-3">
+            {keys.map((k) => {
+              const isActive = k.status === 'active';
+              const revealed = shownRowId === k.id;
+              const maskedValue = revealed
+                ? `${k.keyPrefix}────────`
+                : `${k.keyPrefix.slice(0, 4)}${'•'.repeat(12)}`;
+              return (
+                <div
+                  key={k.id}
+                  className="rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] p-4 transition-colors hover:border-[#2A2A2A]"
+                >
+                  {/* Row 1: label + status + metadata */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4 text-zinc-500" />
+                      <p className="text-sm font-medium text-white">{k.name}</p>
+                      <span className={`gst-status ${isActive ? 'gst-status-success' : 'gst-status-danger'}`}>
+                        {isActive ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {k.status}
+                      </span>
+                    </div>
+                    <p className="gst-caption text-zinc-600">
+                      Created {new Date(k.createdAt).toLocaleDateString()}
+                      {k.lastUsedAt && ` · last used ${new Date(k.lastUsedAt).toLocaleDateString()}`}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="text-xs text-zinc-500 font-mono">{k.keyPrefix}••••••••</code>
-                    {k.scopes?.length > 0 && (
-                      <span className="text-xs text-zinc-600">· scopes: {k.scopes.join(', ')}</span>
-                    )}
+
+                  {/* Row 2: masked key field + actions */}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                      <input
+                        readOnly
+                        value={maskedValue}
+                        aria-label={`API key ${k.name}`}
+                        className="h-9 w-full rounded-md border border-[#2A2A2A] bg-[#070707] pr-10 font-mono text-[13px] text-zinc-300 focus:border-[#2563EB] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShownRowId(revealed ? null : k.id)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 transition-colors hover:text-zinc-200"
+                        aria-label={revealed ? 'Hide key' : 'Show key'}
+                        title={revealed ? 'Hide' : 'Show'}
+                      >
+                        {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopy(`${k.keyPrefix}••••••`, k.id)}
+                        className="gst-btn gst-btn-ghost h-9 gap-1.5 px-2.5"
+                        aria-label="Copy key prefix"
+                        title="Copy"
+                      >
+                        {copiedId === k.id ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                      {isActive && (
+                        <button
+                          onClick={() => handleRevoke(k.id)}
+                          disabled={revokingId === k.id}
+                          className="gst-btn gst-btn-ghost h-9 gap-1.5 px-2.5 text-zinc-400 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40 disabled:pointer-events-none"
+                          aria-label="Revoke key"
+                          title="Revoke"
+                        >
+                          {revokingId === k.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-600 mt-0.5">
-                    Created {new Date(k.createdAt).toLocaleDateString()}
-                    {k.lastUsedAt && ` · last used ${new Date(k.lastUsedAt).toLocaleDateString()}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => handleCopy(`${k.keyPrefix}••••••`, k.id)}
-                    className="p-1.5 rounded-md text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    aria-label="Copy key prefix"
-                  >
-                    {copiedId === k.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                  {k.status === 'active' && (
-                    <button
-                      onClick={() => handleRevoke(k.id)}
-                      disabled={revokingId === k.id}
-                      className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                      aria-label="Revoke key"
-                    >
-                      {revokingId === k.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </button>
+
+                  {/* Row 3: scopes (if any) */}
+                  {k.scopes?.length > 0 && (
+                    <div className="mt-2.5 flex items-center gap-1.5">
+                      <span className="gst-caption text-zinc-600">Scopes:</span>
+                      {k.scopes.map((sc) => (
+                        <span key={sc} className="rounded bg-[#181818] px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
+                          {sc}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </SettingsCard>
@@ -1917,32 +2096,71 @@ function AuditLogSection() {
     })();
   }, [buildHeaders]);
 
+  const formatAction = (a: string) =>
+    a.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // Map an action string to a status color for the row badge.
+  const actionTone = (a: string): 'success' | 'info' | 'warning' | 'danger' | 'neutral' => {
+    const lower = a.toLowerCase();
+    if (/delete|remove|revoke|disconnect|sign.?out|fail|error/.test(lower)) return 'danger';
+    if (/create|generate|connect|invite|activate|enable/.test(lower)) return 'success';
+    if (/update|change|edit|rename|transfer|sync/.test(lower)) return 'info';
+    if (/login|sign.?in|auth/.test(lower)) return 'warning';
+    return 'neutral';
+  };
+
   return (
     <div className="space-y-6">
-      <SectionHeader title="Audit Log" subtitle="A chronological record of actions taken in your account." />
+      <SectionHeader title="Audit Logs" subtitle="A chronological record of actions taken in your account." />
 
       <SettingsCard title="Recent Events" description="Last 50 actions recorded by the system.">
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-[#3B82F6]" /></div>
         ) : events.length === 0 ? (
-          <p className="text-sm text-zinc-500 py-8 text-center">No audit events recorded yet.</p>
+          <p className="gst-description py-10 text-center text-zinc-500">No audit events recorded yet.</p>
         ) : (
-          <div className="space-y-1 max-h-[600px] overflow-y-auto pr-2">
-            {events.map((e) => (
-              <div key={e.id} className="flex items-start gap-3 py-2.5 px-3 rounded-lg hover:bg-zinc-900 transition-colors">
-                <div className="mt-0.5">
-                  <Activity className="h-4 w-4 text-zinc-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-white">{e.action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</p>
-                    {e.entity && <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs">{e.entity}</Badge>}
-                  </div>
-                  {e.details && <p className="text-xs text-zinc-500 mt-0.5">{e.details}</p>}
-                  <p className="text-xs text-zinc-600 mt-0.5">{new Date(e.timestamp).toLocaleString()}</p>
-                </div>
-              </div>
-            ))}
+          <div className="gst-table-wrap max-h-[600px] overflow-auto">
+            <table className="gst-table">
+              <thead>
+                <tr>
+                  <th className="w-[160px]">Timestamp</th>
+                  <th className="w-[180px]">Resource</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((e) => {
+                  const tone = actionTone(e.action);
+                  return (
+                    <tr key={e.id}>
+                      <td className="whitespace-nowrap font-mono text-[12px] text-zinc-400">
+                        {new Date(e.timestamp).toLocaleString()}
+                      </td>
+                      <td>
+                        {e.entity ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Activity className="h-3.5 w-3.5 text-zinc-600" />
+                            <code className="font-mono text-[12px] text-zinc-400">{e.entity}</code>
+                          </span>
+                        ) : (
+                          <span className="text-zinc-600">&mdash;</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`gst-status gst-status-${tone}`}>{formatAction(e.action)}</span>
+                          </div>
+                          {e.details && (
+                            <p className="gst-caption text-zinc-500">{e.details}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </SettingsCard>

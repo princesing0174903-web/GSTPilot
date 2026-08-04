@@ -1,28 +1,20 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { OracleChat } from '@/components/oracle/OracleChat';
-import { Toaster } from 'sonner';
+// ═══════════════════════════════════════════════════════════════════════════════
+// /oracle → redirect to the main app's Oracle Brain view.
+//
+// The standalone /oracle route previously rendered <OracleChat /> directly
+// WITHOUT the AuthContext / OrgContext providers. This caused every
+// /api/business/snapshot call to return 401 AUTH_REQUIRED (no x-gstpilot-actor
+// header was injected because the session wasn't in localStorage).
+//
+// The canonical Oracle experience now lives inside the main app shell at
+// view=oracle-brain (rendered by DashboardViews.tsx). It has full provider
+// access (AuthContext, OrgContext, AppContext) so all API calls are properly
+// authenticated. Redirecting here ensures a single, premium, authenticated
+// Oracle surface.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export default function OraclePage() {
-  return (
-    <div className="min-h-screen bg-[#070707]">
-      <OracleChat />
-      {/* Toast notifications for Oracle errors / upload status. Mounted here so
-          the dark theme of Oracle is preserved without touching the global
-          layout. */}
-      <Toaster
-        position="top-center"
-        theme="dark"
-        richColors
-        closeButton
-        toastOptions={{
-          style: {
-            background: 'rgba(15, 15, 15, 0.95)',
-            border: '1px solid rgba(245, 158, 11, 0.25)',
-            color: '#fff',
-          },
-        }}
-      />
-    </div>
-  );
+  redirect('/?view=oracle-brain');
 }

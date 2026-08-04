@@ -1734,3 +1734,371 @@
   background-color: rgba(96, 165, 250, 0.55);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — PREMIUM TYPOGRAPHY SCALE
+   ───────────────────────────────────────────────────────────────────────────────
+   A single, app-wide type system inspired by Stripe, Linear, and Vercel.
+   Every text element uses one of these classes. No ad-hoc text sizes.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ── Page Title — the H1 of every page (32px / 40px line) ── */
+  .gst-page-title {
+    @apply text-[28px] leading-[1.2] font-bold tracking-[-0.02em];
+  }
+  @media (min-width: 1280px) {
+    .gst-page-title { @apply text-[32px]; }
+  }
+
+  /* ── Section Title — card group headers (20px / 28px) ── */
+  .gst-section-title {
+    @apply text-lg leading-7 font-semibold tracking-[-0.01em];
+  }
+  @media (min-width: 1280px) {
+    .gst-section-title { @apply text-xl leading-8; }
+  }
+
+  /* ── Card Title — individual card headers (16px / 24px) ── */
+  .gst-card-title {
+    @apply text-base leading-6 font-semibold;
+  }
+
+  /* ── Description — sub-text under titles (14px / 20px) ── */
+  .gst-description {
+    @apply text-sm leading-5 text-muted-foreground;
+  }
+
+  /* ── Label — form labels, table headers (13px / 18px) ── */
+  .gst-label {
+    @apply text-[13px] leading-[18px] font-medium text-muted-foreground;
+  }
+
+  /* ── Input — form input text (14px / 20px) ── */
+  .gst-input {
+    @apply text-sm leading-5;
+  }
+
+  /* ── Badge — status pills (11px / 16px uppercase) ── */
+  .gst-badge {
+    @apply text-[11px] leading-4 font-semibold uppercase tracking-wider;
+  }
+
+  /* ── Caption — smallest text, metadata (12px / 16px) ── */
+  .gst-caption {
+    @apply text-xs leading-4 text-muted-foreground;
+  }
+
+  /* ── Metric Number — big KPI numbers (28px / 32px) ── */
+  .gst-metric {
+    @apply text-2xl leading-8 font-bold tracking-[-0.02em] tabular-nums;
+  }
+  @media (min-width: 1280px) {
+    .gst-metric { @apply text-[28px] leading-8; }
+  }
+
+  /* ── Body Text — default paragraph (14px / 22px) ── */
+  .gst-body {
+    @apply text-sm leading-[1.6];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — UNIVERSAL BUTTON SYSTEM
+   ───────────────────────────────────────────────────────────────────────────────
+   One button component with consistent height, padding, radius, and font.
+   Variants: primary, secondary, ghost, danger, success, outline.
+   States: loading, disabled.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+    /* Height + padding are variant-specific (see below) but the base is h-9 */
+    @apply h-9 px-4 text-sm;
+  }
+  .gst-btn-sm { @apply h-8 px-3 text-[13px] rounded-md; }
+  .gst-btn-lg { @apply h-11 px-6 text-base rounded-lg; }
+  .gst-btn-xl { @apply h-12 px-8 text-base rounded-xl; }
+
+  /* Primary — blue solid */
+  .gst-btn-primary {
+    @apply bg-[#2563EB] text-white hover:bg-[#1D4ED8] active:bg-[#1E40AF] shadow-sm;
+  }
+
+  /* Secondary — subtle surface */
+  .gst-btn-secondary {
+    @apply bg-[#181818] text-white border border-[#2A2A2A] hover:bg-[#222222] hover:border-[#333333] dark:bg-[#181818] dark:text-white dark:border-[#2A2A2A];
+  }
+  :root:not(.dark) .gst-btn-secondary {
+    @apply bg-[#F4F4F5] text-[#0A0A0A] border-[#E4E4E7] hover:bg-[#E4E4E7];
+  }
+
+  /* Ghost — transparent, hover surface */
+  .gst-btn-ghost {
+    @apply bg-transparent text-muted-foreground hover:bg-[#181818] hover:text-foreground;
+  }
+  :root:not(.dark) .gst-btn-ghost {
+    @apply hover:bg-[#F4F4F5];
+  }
+
+  /* Danger — red solid */
+  .gst-btn-danger {
+    @apply bg-[#EF4444] text-white hover:bg-[#DC2626] active:bg-[#B91C1C];
+  }
+
+  /* Success — emerald → blue (brand-aligned) */
+  .gst-btn-success {
+    @apply bg-[#2563EB] text-white hover:bg-[#1D4ED8];
+  }
+
+  /* Outline — border only */
+  .gst-btn-outline {
+    @apply bg-transparent text-foreground border border-[#2A2A2A] hover:bg-[#181818] hover:border-[#3A3A3A];
+  }
+  :root:not(.dark) .gst-btn-outline {
+    @apply border-[#E4E4E7] hover:bg-[#F4F4F5] hover:border-[#D4D4D8];
+  }
+
+  /* Loading state — spinner replaces text */
+  .gst-btn-loading {
+    @apply pointer-events-none opacity-80;
+  }
+  .gst-btn-loading::after {
+    content: '';
+    @apply inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — RESPONSIVE CONTAINER SYSTEM
+   ───────────────────────────────────────────────────────────────────────────────
+   Prevents content from becoming tiny or stretched. Every page wraps its
+   content in .gst-container. Breakpoints: 1024 / 1280 / 1440 / 1600 / 1920.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-container {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: 100%;
+  }
+  /* Standard content width — most pages */
+  .gst-container-narrow {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: 1200px;
+  }
+  /* Wide dashboard width */
+  .gst-container-wide {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: 1600px;
+  }
+  /* Full-bleed (tables, charts) */
+  .gst-container-full {
+    @apply w-full px-4 sm:px-6 lg:px-8;
+    max-width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — PREMIUM CARD SYSTEM
+   ───────────────────────────────────────────────────────────────────────────────
+   Consistent card padding, border, and shadow. No ad-hoc card styles.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-card {
+    @apply rounded-xl border border-[#1F1F1F] bg-[#0A0A0A] p-6 transition-colors;
+  }
+  :root:not(.dark) .gst-card {
+    @apply border-[#E4E4E7] bg-white;
+  }
+  .gst-card-compact { @apply p-4; }
+  .gst-card-hover {
+    @apply hover:border-[#2A2A2A] hover:bg-[#111111] cursor-pointer;
+  }
+  :root:not(.dark) .gst-card-hover {
+    @apply hover:border-[#D4D4D8] hover:bg-[#FAFAFA];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — PREMIUM TABLE SYSTEM
+   ───────────────────────────────────────────────────────────────────────────────
+   Enterprise-grade tables with sticky headers, hover, proper spacing.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-table-wrap {
+    @apply w-full overflow-auto rounded-xl border border-[#1F1F1F] bg-[#0A0A0A];
+  }
+  :root:not(.dark) .gst-table-wrap {
+    @apply border-[#E4E4E7] bg-white;
+  }
+  .gst-table {
+    @apply w-full text-sm;
+  }
+  .gst-table thead th {
+    @apply sticky top-0 z-10 bg-[#0A0A0A] px-4 py-3 text-left text-[13px] font-semibold text-muted-foreground border-b border-[#1F1F1F];
+    @apply backdrop-blur-sm;
+  }
+  :root:not(.dark) .gst-table thead th {
+    @apply bg-white border-[#E4E4E7];
+  }
+  .gst-table tbody td {
+    @apply px-4 py-3 text-sm border-b border-[#161616] text-foreground;
+  }
+  :root:not(.dark) .gst-table tbody td {
+    @apply border-[#F4F4F5];
+  }
+  .gst-table tbody tr {
+    @apply transition-colors;
+  }
+  .gst-table tbody tr:hover {
+    @apply bg-[#0F0F0F];
+  }
+  :root:not(.dark) .gst-table tbody tr:hover {
+    @apply bg-[#FAFAFA];
+  }
+  .gst-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — STATUS BADGE SYSTEM
+   ───────────────────────────────────────────────────────────────────────────────
+   Consistent colored badges. success/warning/danger/info/neutral.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-status {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider;
+  }
+  .gst-status-success {
+    @apply bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/25;
+  }
+  .gst-status-warning {
+    @apply bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/25;
+  }
+  .gst-status-danger {
+    @apply bg-[#EF4444]/15 text-[#F87171] border border-[#EF4444]/25;
+  }
+  .gst-status-info {
+    @apply bg-[#8B5CF6]/15 text-[#A78BFA] border border-[#8B5CF6]/25;
+  }
+  .gst-status-neutral {
+    @apply bg-[#A1A1AA]/15 text-[#A1A1AA] border border-[#A1A1AA]/25;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — METRIC COUNT-UP ANIMATION
+   ───────────────────────────────────────────────────────────────────────────────
+   Numbers animate from 0 to their target on mount. Used by KPI cards.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes gst-count-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.gst-animate-count {
+  animation: gst-count-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — CARD ENTRANCE ANIMATION
+   ───────────────────────────────────────────────────────────────────────────────
+   Staggered fade-up for card grids. Apply .gst-animate-in to each card.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes gst-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.gst-animate-in {
+  animation: gst-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — MIN-WIDTH GUARDS
+   ───────────────────────────────────────────────────────────────────────────────
+   Prevent interactive elements from collapsing on small screens.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.gst-min-touch {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — PREMIUM EMPTY STATE
+   ───────────────────────────────────────────────────────────────────────────────
+   Large illustration, meaningful description, CTAs. Never blank.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .gst-empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-6 text-center;
+  }
+  .gst-empty-state-icon {
+    @apply flex h-16 w-16 items-center justify-center rounded-2xl bg-[#181818] border border-[#222222] mb-5;
+  }
+  :root:not(.dark) .gst-empty-state-icon {
+    @apply bg-[#F4F4F5] border-[#E4E4E7];
+  }
+  .gst-empty-state-title {
+    @apply text-lg font-semibold text-foreground mb-2;
+  }
+  .gst-empty-state-desc {
+    @apply text-sm text-muted-foreground max-w-md mb-6;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — SCROLLBAR POLISH (global)
+   ───────────────────────────────────────────────────────────────────────────────
+   Thin, dark, premium scrollbars everywhere. Matches .custom-scrollbar.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+:root:not(.dark) *::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+:root:not(.dark) *::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GSTPILOT INFINITY™ — ZOOM-RESISTANT TYPOGRAPHY
+   ───────────────────────────────────────────────────────────────────────────────
+   Ensures text remains readable at 80% / 90% / 110% browser zoom.
+   Uses rem-based sizes that scale with the root font, but sets a floor.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+html {
+  font-size: 16px;
+}
+@media (max-width: 1024px) {
+  html { font-size: 15px; }
+}
+/* Never let body text go below 13px effective */
+.gst-body, .gst-input, .gst-label {
+  min-font-size: 13px;
+}

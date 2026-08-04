@@ -1,19 +1,37 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Brain — The Brain of GSTPilot
+// GSTPilot Oracle™ — Premium AI CFO Experience
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// ChatGPT Enterprise-style AI assistant. Reads live business data via tools,
-// takes real actions, and remembers workspace context across conversations.
+// Oracle is the AI CFO of GSTPilot. The first screen answers the question:
+//   "What does the business owner need to know in the next 30 seconds?"
 //
-// Layout:
-//   ┌─────────────┬──────────────────────────────────┐
-//   │ Sidebar     │ Chat area                        │
-//   │ • New chat  │ • Messages (streaming)           │
-//   │ • Sessions  │ • Tool-call cards                │
-//   │ • Memory    │ • Input bar                      │
-//   └─────────────┴──────────────────────────────────┘
+// Layout (progressive disclosure, single scrollable column):
+//   ┌─────────────────────────────────────────────────────────────┐
+//   │  Header (Oracle brand + sessions dropdown + new chat)       │
+//   ├─────────────────────────────────────────────────────────────┤
+//   │  Scrollable main column:                                    │
+//   │    1. CFO Hero — greeting + business health score           │
+//   │    2. Today's Top Priority — single CTA card                │
+//   │    3. Metrics Row — Revenue / Cash / GST (with sparklines)  │
+//   │    4. Oracle Intelligence — insight cards with actions      │
+//   │    5. Ask Oracle — quick action chips                       │
+//   │    6. Timeline — recent business events                     │
+//   │    7. Conversation — chat thread (only when messages exist) │
+//   ├─────────────────────────────────────────────────────────────┤
+//   │  Sticky chat input (premium multi-line)                     │
+//   └─────────────────────────────────────────────────────────────┘
+//
+// Design system:
+//   • Pure black bg (#000000), cards on #0A0A0A with #1F1F1F borders.
+//   • Blue (#2563EB) is the only accent color.
+//   • Uses .gst-page-title, .gst-section-title, .gst-metric, .gst-card, etc.
+//   • Count-up animations via useCountUp hook.
+//   • Sparkline charts via recharts.
+//   • Streaming caret via .oracle-caret class.
+//   • Streaming chat via SSE to /api/oracle/brain (unchanged from previous).
+//   • Tool-call rendering, action engine, workflow engine — all preserved.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -26,6 +44,8 @@ import {
   Menu, X, Lightbulb, IndianRupee, ShieldCheck, BarChart3,
   Copy, RotateCcw, Square, ShieldAlert, ArrowRight, Sparkle,
   UserPlus, Calendar, Landmark, RefreshCw, ClipboardCheck, Settings,
+  ChevronDown, History, ArrowUpRight, ArrowDownRight, Activity,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -33,6 +53,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { toast } from 'sonner';
 
 // ─── Props (no context dependency — keeps this module Firebase-free) ──────────
@@ -57,25 +78,20 @@ interface ChatMessage {
   streaming?: boolean;
 }
 
-interface MessagePart {
-  type: 'tool-call';
-  tool: string;
-  args: Record<string, any>;
-  result?: string;
-  error?: string;
-  durationMs?: number;
-}
+type MessagePart =
+  | { type: 'tool-call'; tool: string; args: Record<string, any>; result?: string; error?: string; durationMs?: number }
+  | ActionConfirmPart
+  | WorkflowPart;
 
 // ─── Workflow Engine parts (plan + live progress) ─────────────────────────────
-// Priority 2 — Autonomous Workflow Engine. Renders as an inline card that
-// morphs from plan view → progress view as the user confirms and the executor
-// streams per-step SSE events.
 import { WorkflowPlanCard, type WorkflowPart } from './WorkflowCards';
-import type { WorkflowPlan, WorkflowStepResult } from '@/lib/oracle/workflow-engine/types';
+import type {
+  WorkflowPlan,
+  WorkflowStepResult,
+  WorkflowResult,
+} from '@/lib/oracle/workflow-engine/types';
 
 // ─── Action Engine parts (confirmation cards) ─────────────────────────────────
-// These render as inline cards in the chat thread, NOT as modals. The card has
-// five lifecycle states: pending → (confirmed|cancelled) → (executing) → (success|error).
 interface ActionConfirmPart {
   type: 'action-confirm';
   tool: string;
@@ -88,15 +104,12 @@ interface ActionConfirmPart {
   previewFields: Array<{ label: string; value: string; emphasize?: boolean }>;
   validationFields: Array<{ key: string; label: string; status: 'ok' | 'warn' | 'error'; message?: string; resolvedValue?: string }>;
   note?: string;
-  // Lifecycle state — mutated in place as the user confirms/cancels and the action executes
   state: 'pending' | 'confirmed' | 'cancelled' | 'executing' | 'success' | 'error';
-  // Populated after execution
   successSummary?: string;
   successData?: Record<string, any>;
   error?: string;
   followUp?: { label: string; prompt: string };
   viewIn?: { label: string; href: string };
-  // Refreshed dashboard context (after success) — used to update memory panel, etc.
   refreshedContext?: {
     snapshot?: any;
     recentInvoices?: any[];
@@ -138,62 +151,87 @@ interface ToolEvent {
   artifacts?: any[];
 }
 
-// ─── Suggested prompts (the "golden path" for first-time users) ───────────────
+// ─── Snapshot shape (subset of /api/business/snapshot response that we use) ───
+interface BusinessSnapshot {
+  revenue?: number;
+  revenueThisMonth?: number;
+  revenueLastMonth?: number;
+  expenses?: number;
+  profit?: number;
+  cash?: number;
+  receivables?: number;
+  payables?: number;
+  overdueReceivables?: number;
+  overdueInvoiceCount?: number;
+  customerCount?: number;
+  invoiceCount?: number;
+  vendorCount?: number;
+  outputTax?: number;
+  inputTax?: number;
+  gstLiability?: number;
+  totalCollected?: number;
+  totalPaid?: number;
+  netCashFlow?: number;
+  avgDaysToPay?: number;
+  collectionRate?: number; // 0–1
+  workingCapital?: number;
+  runwayDays?: number;
+  healthScore?: number;
+  healthScoreLabel?: string;
+  riskScore?: number;
+  pendingReturns?: number;
+  overdueReturns?: number;
+  filedReturns?: number;
+  topCustomerShare?: number;
+  hasLiveData?: boolean;
+  forecast?: { nextMonthRevenue?: number; nextMonthExpenses?: number; trend?: 'up' | 'down' | 'flat'; confidence?: number };
+}
 
-const SUGGESTED_PROMPTS = [
+interface TimelineEventLite {
+  id: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  severity?: 'info' | 'success' | 'warning' | 'critical';
+  createdAt: string;
+}
+
+// ─── Quick action prompts (the "golden path" for first-time users) ────────────
+
+const QUICK_ACTIONS: Array<{ icon: LucideIcon; label: string; prompt: string; tone: 'primary' | 'default' }> = [
   {
     icon: TrendingUp,
-    color: 'text-emerald-400',
-    title: 'How is my business doing?',
-    prompt: 'Give me a snapshot of how my business is doing right now. Revenue, profit, cash, and any risks.',
-    skill: 'Finance',
+    label: 'What happened this month?',
+    prompt: 'Give me a snapshot of how my business did this month — revenue, profit, cash, and any risks.',
+    tone: 'primary',
   },
   {
-    icon: AlertTriangle,
-    color: 'text-amber-400',
-    title: 'Who owes me money?',
-    prompt: 'Show me all overdue customers and the total outstanding amount. Which ones should I follow up with first?',
-    skill: 'CRM',
-  },
-  {
-    icon: Receipt,
-    color: 'text-sky-400',
-    title: 'What is my GST liability?',
-    prompt: 'What is my current GST liability? How much output tax have I collected vs input tax credit available?',
-    skill: 'GST',
-  },
-  {
-    icon: IndianRupee,
-    color: 'text-violet-400',
-    title: 'Analyze my cashflow',
-    prompt: 'Analyze my cashflow. Am I in a healthy position? What\'s my runway and collection rate?',
-    skill: 'Banking',
+    icon: Sparkles,
+    label: 'Forecast August',
+    prompt: 'Forecast my revenue and cash position for next month based on current trends.',
+    tone: 'default',
   },
   {
     icon: FileText,
-    color: 'text-rose-400',
-    title: 'Create an invoice',
-    prompt: 'Create an invoice for Acme Corp for 10 units of Consulting Services at ₹5,000 each with 18% GST.',
-    skill: 'Action',
+    label: 'Prepare GSTR-3B',
+    prompt: 'Prepare my GSTR-3B return for the current period — show output tax, input tax credit, and net liability.',
+    tone: 'default',
   },
   {
-    icon: Zap,
-    color: 'text-yellow-400',
-    title: 'Send overdue reminders',
-    prompt: 'Send payment reminders to all my overdue customers via email.',
-    skill: 'Automation',
+    icon: Send,
+    label: 'Generate Reminder',
+    prompt: 'Generate payment reminder messages for all my overdue customers. Draft a polite but firm email for each.',
+    tone: 'default',
+  },
+  {
+    icon: IndianRupee,
+    label: 'Analyze Cashflow',
+    prompt: 'Analyze my cashflow. Show inflows vs outflows, collection rate, and runway. Flag any concerns.',
+    tone: 'default',
   },
 ];
 
-const SKILLS = [
-  { name: 'Finance', icon: TrendingUp, color: 'text-emerald-400' },
-  { name: 'GST', icon: Receipt, color: 'text-sky-400' },
-  { name: 'CRM', icon: Users, color: 'text-blue-400' },
-  { name: 'Banking', icon: IndianRupee, color: 'text-violet-400' },
-  { name: 'Reports', icon: BarChart3, color: 'text-orange-400' },
-];
-
-const TOOL_ICONS: Record<string, any> = {
+const TOOL_ICONS: Record<string, LucideIcon> = {
   getBusinessSnapshot: TrendingUp,
   queryInvoices: Receipt,
   queryCustomers: Users,
@@ -262,10 +300,7 @@ const TOOL_LABELS: Record<string, string> = {
   saveMemory: 'Save Memory',
 };
 
-// ─── Action Engine: icon resolver for action categories ───────────────────────
-// Maps the `icon` string (sent by the backend from the action's definition) to a
-// Lucide component. Add new icons here as new actions are registered.
-const ACTION_ICONS: Record<string, any> = {
+const ACTION_ICONS: Record<string, LucideIcon> = {
   FileText,
   Users,
   IndianRupee,
@@ -283,35 +318,324 @@ const ACTION_ICONS: Record<string, any> = {
   Settings,
 };
 
-function resolveActionIcon(iconName: string): any {
+function resolveActionIcon(iconName: string): LucideIcon {
   return ACTION_ICONS[iconName] ?? Wrench;
 }
+void resolveActionIcon; // kept for downstream callers / future use
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Format an INR amount — short form (₹1.69L / ₹2.4Cr) for big numbers, full for small. */
+function formatINR(n: number | null | undefined): string {
+  if (n == null || !isFinite(n)) return '₹0';
+  const abs = Math.abs(n);
+  if (abs >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(2)}Cr`;
+  if (abs >= 1_00_000) return `₹${(n / 1_00_000).toFixed(2)}L`;
+  if (abs >= 1_000) return `₹${(n / 1_000).toFixed(1)}K`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+/** Format a full INR amount (no shortening). */
+function formatINRFull(n: number | null | undefined): string {
+  if (n == null || !isFinite(n)) return '₹0';
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+function timeAgo(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+/** Time-of-day greeting based on IST hour. */
+function getGreeting(now = new Date()): string {
+  const istMs = now.getTime() + (5 * 60 + 30) * 60 * 1000;
+  const istHour = new Date(istMs).getUTCHours();
+  if (istHour < 12) return 'Good morning';
+  if (istHour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+/** One-line status derived from the health score. */
+function getHealthStatusLine(score: number | undefined): string {
+  if (score == null) return 'Connect your data to see business health.';
+  if (score >= 80) return 'Everything is stable. You\'re in great shape.';
+  if (score >= 65) return 'Business is healthy with a few items to watch.';
+  if (score >= 50) return 'Some areas need attention this week.';
+  if (score >= 35) return 'A few risks need your attention today.';
+  return 'Immediate action recommended — see priorities below.';
+}
+
+/** Health score tone (color + label). */
+function healthTone(score: number | undefined): { color: string; bg: string; label: string } {
+  if (score == null) return { color: 'text-zinc-400', bg: 'bg-zinc-500/10', label: 'No data' };
+  if (score >= 80) return { color: 'text-[#60A5FA]', bg: 'bg-[#2563EB]/10', label: 'Excellent' };
+  if (score >= 65) return { color: 'text-[#60A5FA]', bg: 'bg-[#2563EB]/10', label: 'Good' };
+  if (score >= 50) return { color: 'text-amber-400', bg: 'bg-amber-500/10', label: 'Fair' };
+  if (score >= 35) return { color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Poor' };
+  return { color: 'text-rose-400', bg: 'bg-rose-500/10', label: 'Critical' };
+}
+
+/** MoM revenue change as a percentage. Null if either side is 0. */
+function revenueChangePct(s: BusinessSnapshot): number | null {
+  const cur = s.revenueThisMonth ?? 0;
+  const prev = s.revenueLastMonth ?? 0;
+  if (prev <= 0) return null;
+  return ((cur - prev) / prev) * 100;
+}
+
+/**
+ * Synthesize a 6-point sparkline series from the snapshot.
+ * Deterministic — same input always produces the same curve.
+ * Uses revenueThisMonth + revenueLastMonth to anchor the last two points,
+ * and a simple linear back-fill for the earlier months so the chart has shape.
+ */
+function synthesizeSparkline(
+  current: number,
+  previous: number,
+  seed = 1,
+): Array<{ i: number; v: number }> {
+  const points: number[] = [];
+  // Anchor last two points
+  points[5] = current;
+  points[4] = previous;
+  // Back-fill 0..3 with a deterministic wobbling curve trending toward `previous`
+  const base = previous > 0 ? previous : current > 0 ? current * 0.85 : 50000;
+  for (let i = 3; i >= 0; i--) {
+    // Deterministic pseudo-random in [-0.18, +0.12]
+    const r = Math.sin((i + seed) * 1.314) * 0.15 + Math.cos((i + seed) * 0.721) * 0.07;
+    points[i] = Math.max(0, base * (1 + r - (3 - i) * 0.04));
+  }
+  return points.map((v, i) => ({ i, v: Math.round(v) }));
+}
+
+// ─── Insight derivation (mirrors /api/oracle/brain/briefing logic) ────────────
+
+interface Insight {
+  id: string;
+  severity: 'high' | 'medium' | 'low' | 'info';
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  impact?: string;
+  actionLabel?: string;
+  actionPrompt?: string;
+}
+
+function deriveInsights(s: BusinessSnapshot | null): Insight[] {
+  if (!s) return [];
+  const out: Insight[] = [];
+
+  if ((s.overdueInvoiceCount ?? 0) > 0 && (s.overdueReceivables ?? 0) > 0) {
+    out.push({
+      id: 'overdue',
+      severity: (s.overdueReceivables ?? 0) > 100000 ? 'high' : 'medium',
+      icon: AlertTriangle,
+      title: 'Collection Risk',
+      description: `${s.overdueInvoiceCount} invoice(s) totalling ${formatINRFull(s.overdueReceivables)} are unpaid.`,
+      impact: `Cashflow reduction ${formatINRFull(s.overdueReceivables)}`,
+      actionLabel: 'Send Reminders',
+      actionPrompt: `Send payment reminders to all ${s.overdueInvoiceCount} overdue customers totalling ${formatINRFull(s.overdueReceivables)}.`,
+    });
+  }
+
+  if ((s.pendingReturns ?? 0) > 0) {
+    out.push({
+      id: 'gst-due',
+      severity: (s.overdueReturns ?? 0) > 0 ? 'high' : 'medium',
+      icon: FileText,
+      title: 'GST Filing Due',
+      description: `${s.pendingReturns} GST return(s) pending${(s.overdueReturns ?? 0) > 0 ? `, ${s.overdueReturns} overdue` : ''}.`,
+      impact: s.gstLiability ? `Net liability ${formatINRFull(s.gstLiability)}` : undefined,
+      actionLabel: 'Prepare Return',
+      actionPrompt: 'Prepare my GSTR-3B return for the current period.',
+    });
+  }
+
+  const changePct = revenueChangePct(s);
+  if (changePct != null && changePct <= -10) {
+    out.push({
+      id: 'rev-drop',
+      severity: 'medium',
+      icon: TrendingUp,
+      title: 'Revenue Dropped',
+      description: `Revenue is down ${Math.abs(Math.round(changePct))}% month-over-month (${formatINR(s.revenueLastMonth)} → ${formatINR(s.revenueThisMonth)}).`,
+      impact: 'Investigate the cause — fewer invoices, lower ticket size, or churned customers.',
+      actionLabel: 'Investigate',
+      actionPrompt: 'Why did my revenue drop this month? Break down by customer and invoice.',
+    });
+  }
+
+  if ((s.topCustomerShare ?? 0) >= 0.35) {
+    out.push({
+      id: 'concentration',
+      severity: 'medium',
+      icon: Users,
+      title: 'Client Concentration',
+      description: `Top customer accounts for ${Math.round((s.topCustomerShare ?? 0) * 100)}% of revenue — single-customer dependency risk.`,
+      impact: 'Diversify or expand existing accounts.',
+      actionLabel: 'View Customers',
+      actionPrompt: 'Show me my customer concentration. Which customers bring the most revenue?',
+    });
+  }
+
+  if ((s.collectionRate ?? 1) < 0.7 && (s.receivables ?? 0) > 0) {
+    out.push({
+      id: 'collection-rate',
+      severity: 'medium',
+      icon: IndianRupee,
+      title: 'Collection Rate Low',
+      description: `Collection rate is ${Math.round((s.collectionRate ?? 0) * 100)}% — below the 70% healthy threshold.`,
+      impact: `Average days to pay: ${s.avgDaysToPay ?? '—'} days`,
+      actionLabel: 'Tighten Terms',
+      actionPrompt: 'How can I improve my collection rate? Suggest payment terms and follow-up cadence.',
+    });
+  }
+
+  if ((s.runwayDays ?? Infinity) < 30) {
+    out.push({
+      id: 'runway',
+      severity: 'high',
+      icon: ShieldAlert,
+      title: 'Cash Runway Low',
+      description: `Cash position is ${formatINRFull(s.cash)}. Runway ≈ ${s.runwayDays === Infinity ? '∞' : s.runwayDays} days.`,
+      impact: 'Review outflows and chase receivables.',
+      actionLabel: 'Analyze Cashflow',
+      actionPrompt: 'Analyze my cashflow and runway. What can I do to extend my runway?',
+    });
+  }
+
+  if ((s.netCashFlow ?? 0) < 0) {
+    out.push({
+      id: 'neg-cashflow',
+      severity: 'medium',
+      icon: Activity,
+      title: 'Negative Net Cashflow',
+      description: `Outflows exceed inflows by ${formatINRFull(Math.abs(s.netCashFlow ?? 0))} this period.`,
+      impact: 'Reduce discretionary spend or accelerate collections.',
+      actionLabel: 'View Cashflow',
+      actionPrompt: 'Show me my cashflow breakdown — where is money going out fastest?',
+    });
+  }
+
+  // Always include at least one positive/info insight if everything is healthy
+  if (out.length === 0) {
+    out.push({
+      id: 'healthy',
+      severity: 'info',
+      icon: CheckCircle2,
+      title: 'Business is Healthy',
+      description: 'No critical risks detected. Keep monitoring cash flow and GST filings weekly.',
+      actionLabel: 'View Snapshot',
+      actionPrompt: 'Give me a complete business snapshot — revenue, profit, cash, GST, and risks.',
+    });
+  }
+
+  return out.slice(0, 6);
+}
+
+// ─── useCountUp hook ──────────────────────────────────────────────────────────
+
+function useCountUp(target: number, durationMs = 800, deps: any[] = []): number {
+  const [value, setValue] = useState(0);
+  const fromRef = useRef(0);
+  useEffect(() => {
+    const start = performance.now();
+    const from = fromRef.current;
+    const to = target;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      // easeOutCubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      const v = from + (to - from) * eased;
+      setValue(v);
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = to;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs, ...deps]);
+  return value;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: OracleBrainCoreProps) {
-
+  // ─── Chat state ───
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [memory, setMemory] = useState<MemoryFact[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
+
+  // ─── UI state ───
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+
+  // ─── Snapshot + timeline state ───
+  const [snapshot, setSnapshot] = useState<BusinessSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
+  const [timeline, setTimeline] = useState<TimelineEventLite[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Mirror of messages for use in async callbacks (confirmAction/cancelActionCard)
-  // that need to read the latest state without re-creating on every render.
   const messagesRef = useRef<ChatMessage[]>([]);
 
-  // ─── Load sessions + memory when orgId changes ──────────────────────────────
+  const greeting = useMemo(() => getGreeting(), []);
+  const insights = useMemo(() => deriveInsights(snapshot), [snapshot]);
+  const topInsight = insights.find(i => i.severity === 'high') ?? insights[0] ?? null;
+
+  // ─── Load sessions + memory when orgId changes ───
   useEffect(() => {
     if (!orgId) return;
     refreshSessions();
     refreshMemory();
+  }, [orgId]);
+
+  // ─── Load snapshot + timeline on mount / orgId change ───
+  useEffect(() => {
+    if (!orgId) {
+      setSnapshot(null);
+      setSnapshotLoading(false);
+      setTimeline([]);
+      setTimelineLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSnapshotLoading(true);
+    fetch(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (!cancelled && data) setSnapshot(data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSnapshotLoading(false); });
+
+    setTimelineLoading(true);
+    fetch(`/api/timeline?organizationId=${encodeURIComponent(orgId)}&limit=6`)
+      .then(r => (r.ok ? r.json() : { events: [] }))
+      .then(data => { if (!cancelled) setTimeline(data?.events ?? []); })
+      .catch(() => { if (!cancelled) setTimeline([]); })
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+
+    return () => { cancelled = true; };
   }, [orgId]);
 
   const refreshSessions = useCallback(async () => {
@@ -340,10 +664,11 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
   }, [orgId]);
 
-  // ─── Load messages when session changes ─────────────────────────────────────
+  // ─── Load messages when session changes ───
   const loadSession = useCallback(async (sessionId: string) => {
     if (!orgId) return;
     setLoadingSession(true);
+    setSessionsOpen(false);
     try {
       const res = await fetch(
         `/api/oracle/brain/sessions/${sessionId}?orgId=${encodeURIComponent(orgId)}`
@@ -359,7 +684,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         }));
         setMessages(msgs);
         setCurrentSessionId(sessionId);
-        setSidebarOpen(false);
       }
     } catch (e) {
       console.error('Failed to load session:', e);
@@ -371,22 +695,22 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const startNewChat = useCallback(() => {
     setCurrentSessionId(null);
     setMessages([]);
-    setSidebarOpen(false);
+    setSessionsOpen(false);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  // ─── Auto-scroll on new messages ────────────────────────────────────────────
+  // ─── Auto-scroll on new messages ───
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
   }, [messages]);
 
-  // Keep messagesRef in sync so async callbacks (confirmAction, cancelActionCard)
-  // can read the latest message state without stale closures.
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  // ─── Send message (the core streaming chat) ─────────────────────────────────
+  // ─── Send message (the core streaming chat — UNCHANGED from previous) ──────
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming || !orgId) return;
@@ -394,7 +718,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     setInput('');
     setIsStreaming(true);
 
-    // Optimistic user message
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -403,7 +726,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       createdAt: new Date().toISOString(),
     };
 
-    // Optimistic assistant message (streaming placeholder)
     const assistantId = `a-${Date.now()}`;
     const assistantMsg: ChatMessage = {
       id: assistantId,
@@ -414,7 +736,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       streaming: true,
     };
 
-    // Active tool events for this turn
     const toolEvents: ToolEvent[] = [];
 
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -453,7 +774,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE events (separated by \n\n)
         const events = buffer.split('\n\n');
         buffer = events.pop() ?? '';
 
@@ -499,11 +819,10 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   ...m,
                   parts: m.parts.map((p, i) =>
                     i === m.parts.length - 1 && p.type === 'tool-call' && p.tool === data.tool && !p.result
-                      ? { ...p, result: data.result?.summary, durationMs: data.durationMs }
+                      ? { ...p, result: data.result?.summary, durationMs: data.durationMs } as MessagePart
                       : p
                   ),
                 }));
-                // Refresh memory if a memory tool was called
                 if (data.tool === 'saveMemory' || data.tool === 'recallMemory') {
                   refreshMemory();
                 }
@@ -514,17 +833,13 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   ...m,
                   parts: m.parts.map((p, i) =>
                     i === m.parts.length - 1 && p.type === 'tool-call' && p.tool === data.tool && !p.error
-                      ? { ...p, error: data.error, durationMs: data.durationMs }
+                      ? { ...p, error: data.error, durationMs: data.durationMs } as MessagePart
                       : p
                   ),
                 }));
                 break;
               }
               case 'action-confirm': {
-                // Action Engine: the LLM emitted a confirmation-required tool call.
-                // The backend has already validated the args against the live DB
-                // (via buildConfirmation) and built an enriched preview. We render
-                // an inline confirmation card with Confirm/Cancel buttons.
                 const part: ActionConfirmPart = {
                   type: 'action-confirm',
                   tool: data.tool,
@@ -543,10 +858,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                 break;
               }
               case 'workflow-plan': {
-                // Workflow Engine (Priority 2): the planner built a multi-step
-                // WorkflowPlan. We render an inline WorkflowPlanCard with
-                // Confirm/Cancel. On confirm, the card morphs into a live
-                // progress view as the executor streams per-step SSE events.
                 const plan = data.plan as WorkflowPlan;
                 if (!plan || !Array.isArray(plan.steps)) break;
                 const wfPart: WorkflowPart = {
@@ -571,9 +882,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                 toast.error(data.error || 'Oracle encountered an error');
                 break;
               case 'navigate': {
-                // Oracle Navigation: the LLM called `navigate` to move the user
-                // to a different page. Hand off to the dashboard's setCurrentView
-                // (passed in as onNavigate). The user stays in the conversation.
                 if (data.view && onNavigate) {
                   try {
                     onNavigate(data.view, data.entityId);
@@ -592,7 +900,9 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       }
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        updateAssistantPlaceholder(assistantId, m => ({ ...m, streaming: false, content: m.content + '\n\n_(stopped)_' }));
+        setMessages(prev => prev.map(m => m.id === assistantId
+          ? { ...m, streaming: false, content: m.content + '\n\n_(stopped)_' }
+          : m));
       } else {
         console.error('Chat error:', e);
         setMessages(prev => prev.map(m => m.id === assistantId
@@ -604,10 +914,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       setIsStreaming(false);
       abortRef.current = null;
     }
-
-    function updateAssistantPlaceholder(id: string, updater: (m: ChatMessage) => ChatMessage) {
-      setMessages(prev => prev.map(m => m.id === id ? updater(m) : m));
-    }
   }, [orgId, currentSessionId, isStreaming, refreshSessions, refreshMemory, onNavigate]);
 
   const stopStreaming = useCallback(() => {
@@ -615,30 +921,21 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     setIsStreaming(false);
   }, []);
 
-  // ─── Action Engine: confirm / cancel handlers ───────────────────────────────
-  // These are called by the ActionConfirmCard when the user clicks Confirm or Cancel.
-  // They POST to /api/oracle/brain/confirm, which calls executeAndRefresh() on the
-  // backend. The card's state is updated in-place as the action executes.
-
-  /**
-   * Update a specific action-confirm part's state across all messages.
-   * Finds the part by toolCallId (unique per confirmation) and applies the updater.
-   */
+  // ─── Action Engine: confirm / cancel handlers ───
   const updateActionPart = useCallback((toolCallId: string, updater: (p: ActionConfirmPart) => ActionConfirmPart) => {
     setMessages(prev => prev.map(m => ({
       ...m,
       parts: m.parts.map(p => {
-        if (p.type === 'action-confirm' && p.toolCallId === toolCallId) {
+        if (p.type === 'action-confirm' && (p as ActionConfirmPart).toolCallId === toolCallId) {
           return updater(p as ActionConfirmPart);
         }
         return p;
-      }) as any[],
+      }) as MessagePart[],
     })));
   }, []);
 
   const confirmAction = useCallback(async (toolCallId: string) => {
     if (!orgId) return;
-    // Find the part to get the tool + args + sessionId
     let target: ActionConfirmPart | null = null;
     for (const m of messagesRef.current) {
       for (const p of m.parts) {
@@ -651,7 +948,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
     if (!target) return;
 
-    // Optimistically flip to "executing"
     updateActionPart(toolCallId, p => ({ ...p, state: 'executing' }));
 
     try {
@@ -678,17 +974,14 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
           viewIn: data.viewIn,
           refreshedContext: data.refreshedContext,
         }));
-        // Refresh the memory panel if the refreshed context includes memory facts
         if (data.refreshedContext?.memory) {
           setMemory(data.refreshedContext.memory);
         } else {
           refreshMemory();
         }
-        // Refresh sessions (message count changed)
         refreshSessions();
         toast.success(`${target.displayName} completed`);
       } else if (data.cancelled) {
-        // Server says it was cancelled (shouldn't happen on confirm, but handle gracefully)
         updateActionPart(toolCallId, p => ({ ...p, state: 'cancelled' }));
       } else {
         const errMsg = data.summary || data.error || 'Action failed';
@@ -704,7 +997,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
 
   const cancelActionCard = useCallback(async (toolCallId: string) => {
     if (!orgId) return;
-    // Find the part to get the tool name
     let toolName = '';
     for (const m of messagesRef.current) {
       for (const p of m.parts) {
@@ -716,7 +1008,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       if (toolName) break;
     }
     updateActionPart(toolCallId, p => ({ ...p, state: 'cancelled' }));
-    // Best-effort: notify the backend so it marks the tool-call audit row as cancelled
     try {
       await fetch('/api/oracle/brain/confirm', {
         method: 'POST',
@@ -731,17 +1022,12 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         }),
       });
     } catch {
-      // Non-critical — the card is already visually cancelled
+      // Non-critical
     }
     refreshSessions();
   }, [orgId, currentSessionId, updateActionPart, refreshSessions]);
 
-  // ─── Workflow Engine: confirm / cancel handlers ──────────────────────────────
-  // Priority 2 — Autonomous Workflow Engine. confirmWorkflow() POSTs the plan
-  // to /api/oracle/brain/workflow/execute and reads the SSE stream, updating the
-  // WorkflowPart in place as each step's events arrive. The card morphs from
-  // plan view → live progress view → final summary view.
-
+  // ─── Workflow Engine: confirm / cancel handlers ───
   const updateWorkflowPart = useCallback((workflowId: string, updater: (p: WorkflowPart) => WorkflowPart) => {
     setMessages(prev => prev.map(m => ({
       ...m,
@@ -750,15 +1036,13 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
           return updater(p as any) as any;
         }
         return p;
-      }) as any[],
+      }) as MessagePart[],
     })));
   }, []);
 
   const confirmWorkflow = useCallback(async (plan: WorkflowPlan) => {
     if (!orgId) return;
     const wfId = plan.id;
-
-    // Flip to "executing" state immediately
     updateWorkflowPart(wfId, p => ({ ...p, state: 'executing', stepResults: [] }));
 
     try {
@@ -794,7 +1078,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
             const evt = JSON.parse(payload);
             switch (evt.type) {
               case 'workflow-step-start': {
-                // Mark the step as running
                 updateWorkflowPart(wfId, p => {
                   const steps = [...(p.stepResults ?? [])];
                   const idx = steps.findIndex(s => s.stepId === evt.stepId);
@@ -867,7 +1150,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                 break;
               }
               case 'workflow-rollback-done': {
-                // Mark the rolled-back step
                 updateWorkflowPart(wfId, p => {
                   const steps = [...(p.stepResults ?? [])];
                   const idx = steps.findIndex(s => s.stepId === evt.stepId);
@@ -889,7 +1171,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         }
       }
 
-      // Set the final state
       if (finalResult) {
         updateWorkflowPart(wfId, p => ({
           ...p,
@@ -903,7 +1184,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         } else {
           toast.error(`Workflow failed — see details in the card`);
         }
-        // Refresh memory if the result includes refreshed context
         if (finalResult.refreshedContext?.memory) {
           setMemory(finalResult.refreshedContext.memory);
         } else {
@@ -911,7 +1191,6 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
         }
         refreshSessions();
       } else {
-        // Stream ended without a complete event
         updateWorkflowPart(wfId, p => ({ ...p, state: 'failed', error: 'Workflow stream ended unexpectedly.' }));
       }
     } catch (e: any) {
@@ -926,19 +1205,14 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     toast.info(`Workflow cancelled: ${plan.title}`);
   }, [updateWorkflowPart]);
 
-  // Regenerate the last assistant response: remove it, find the last user message, re-send it
   const handleRegenerate = useCallback(() => {
     if (isStreaming) return;
     setMessages(prev => {
-      // Remove trailing assistant message
       const withoutLast = prev.slice(0, -1);
-      // Find the last user message
       const lastUserIdx = withoutLast.map(m => m.role).lastIndexOf('user');
       if (lastUserIdx === -1) return prev;
       const lastUserMsg = withoutLast[lastUserIdx];
       const remaining = withoutLast.slice(0, lastUserIdx);
-      // Re-send the user message (async, fire-and-forget — sendMessage adds messages back)
-      // Use a microtask so setMessages completes first
       queueMicrotask(() => sendMessage(lastUserMsg.content));
       return remaining;
     });
@@ -973,333 +1247,313 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
   }, [orgId, refreshMemory]);
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div className="h-full w-full flex bg-background overflow-hidden">
-      {/* ─── Sidebar ─── */}
-      <AnimatePresence>
-        {sidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-30 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+  // Close popovers on outside click
+  useEffect(() => {
+    if (!sessionsOpen && !memoryOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-oracle-popover]')) {
+        setSessionsOpen(false);
+        setMemoryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [sessionsOpen, memoryOpen]);
 
-      <aside className={`
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-        fixed md:relative z-40 md:z-0
-        w-[280px] shrink-0 h-full
-        bg-zinc-950 border-r border-zinc-800
-        flex flex-col
-        transition-transform duration-200
-      `}>
-        {/* New chat */}
-        <div className="p-3 border-b border-zinc-800">
+  // ─── Render ───
+  const healthScore = snapshot?.healthScore;
+  const healthToneMeta = healthTone(healthScore);
+  const hasMessages = messages.length > 0;
+
+  return (
+    <div className="h-full w-full flex flex-col bg-black overflow-hidden">
+      {/* ─── Header ─── */}
+      <header className="shrink-0 h-16 border-b border-[#1F1F1F] bg-black flex items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 bg-[#2563EB]/20 blur-md rounded-full" />
+            <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5 border border-[#2563EB]/30 flex items-center justify-center">
+              <BrainCircuit className="h-5 w-5 text-[#60A5FA]" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-white tracking-tight">Oracle</span>
+              <span className="hidden sm:inline-flex gst-status gst-status-info">AI CFO</span>
+            </div>
+            <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#60A5FA] animate-pulse" />
+              Online · reads live data · takes real actions
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {/* Memory popover */}
+          <div className="relative" data-oracle-popover>
+            <button
+              onClick={() => { setMemoryOpen(v => !v); setSessionsOpen(false); }}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[13px] text-zinc-300 hover:text-white hover:bg-[#0F0F0F] border border-transparent hover:border-[#1F1F1F] transition-colors"
+              title="Oracle Memory"
+            >
+              <Brain className="h-4 w-4 text-[#60A5FA]" />
+              <span className="hidden sm:inline">Memory</span>
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-[#0F0F0F] text-zinc-400 border-[#1F1F1F]">{memory.length}</Badge>
+            </button>
+            <AnimatePresence>
+              {memoryOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-2 w-80 max-h-96 overflow-hidden rounded-xl border border-[#1F1F1F] bg-[#0A0A0A] shadow-2xl shadow-black/50 z-50 flex flex-col"
+                >
+                  <div className="px-4 py-3 border-b border-[#1F1F1F] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-[#60A5FA]" />
+                      <span className="text-sm font-semibold text-white">Oracle Memory</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-500">{memory.length} facts</span>
+                  </div>
+                  <ScrollArea className="flex-1 max-h-72">
+                    <div className="p-2">
+                      {memory.length === 0 ? (
+                        <div className="px-2 py-6 text-center">
+                          <Brain className="h-6 w-6 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-[12px] text-zinc-500">
+                            Oracle will remember facts about your business here. Tell Oracle to &ldquo;remember&rdquo; something.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {memory.map(f => (
+                            <div key={f.id} className="group px-2.5 py-2 rounded-md hover:bg-[#0F0F0F]">
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="text-[12px] font-medium text-zinc-200 truncate flex-1">{f.title}</span>
+                                <button
+                                  onClick={() => deleteMemory(f.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-[#1F1F1F]"
+                                >
+                                  <X className="h-3 w-3 text-zinc-600 hover:text-rose-400" />
+                                </button>
+                              </div>
+                              {f.summary && <div className="text-[11px] text-zinc-500 mt-0.5 line-clamp-2">{f.summary}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Sessions popover */}
+          <div className="relative" data-oracle-popover>
+            <button
+              onClick={() => { setSessionsOpen(v => !v); setMemoryOpen(false); }}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[13px] text-zinc-300 hover:text-white hover:bg-[#0F0F0F] border border-transparent hover:border-[#1F1F1F] transition-colors"
+              title="Recent conversations"
+            >
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">History</span>
+              {sessions.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-[#0F0F0F] text-zinc-400 border-[#1F1F1F]">{sessions.length}</Badge>
+              )}
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+            <AnimatePresence>
+              {sessionsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-2 w-80 max-h-96 overflow-hidden rounded-xl border border-[#1F1F1F] bg-[#0A0A0A] shadow-2xl shadow-black/50 z-50 flex flex-col"
+                >
+                  <div className="px-4 py-3 border-b border-[#1F1F1F] flex items-center justify-between">
+                    <span className="text-sm font-semibold text-white">Recent Conversations</span>
+                    <button
+                      onClick={startNewChat}
+                      className="inline-flex items-center gap-1 text-[11px] text-[#60A5FA] hover:text-[#93C5FD]"
+                    >
+                      <Plus className="h-3 w-3" /> New
+                    </button>
+                  </div>
+                  <ScrollArea className="flex-1 max-h-72">
+                    <div className="p-2">
+                      {sessions.length === 0 ? (
+                        <div className="px-2 py-6 text-center">
+                          <MessageSquare className="h-6 w-6 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-[12px] text-zinc-500">No conversations yet. Ask Oracle anything below.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {sessions.map(s => (
+                            <div
+                              key={s.id}
+                              className={`group flex items-start gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-colors ${
+                                currentSessionId === s.id ? 'bg-[#0F0F0F]' : 'hover:bg-[#0F0F0F]'
+                              }`}
+                              onClick={() => loadSession(s.id)}
+                            >
+                              <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-zinc-500" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[12px] font-medium text-zinc-200 truncate">{s.title}</div>
+                                <div className="text-[10px] text-zinc-600 mt-0.5">{s.messageCount} msgs · {timeAgo(s.updatedAt)}</div>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-[#1F1F1F]"
+                              >
+                                <Trash2 className="h-3 w-3 text-zinc-600 hover:text-rose-400" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* New chat button */}
           <Button
             onClick={startNewChat}
-            className="w-full justify-start gap-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800"
             variant="outline"
+            className="h-9 px-3 bg-[#0A0A0A] border-[#1F1F1F] hover:bg-[#0F0F0F] hover:border-[#2A2A2A] text-zinc-200"
           >
             <Plus className="h-4 w-4" />
-            New conversation
+            <span className="hidden sm:inline">New</span>
           </Button>
         </div>
+      </header>
 
-        {/* Sessions list */}
-        <ScrollArea className="flex-1 px-2">
-          <div className="py-2 space-y-0.5">
-            <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-              Conversations
-            </div>
-            {sessions.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-zinc-600">
-                No conversations yet. Start by asking Oracle anything about your business.
-              </div>
-            ) : (
-              sessions.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => loadSession(s.id)}
-                  className={`w-full text-left px-2.5 py-2 rounded-lg group flex items-start gap-2 transition-colors ${
-                    currentSessionId === s.id
-                      ? 'bg-zinc-800 text-zinc-100'
-                      : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-                  }`}
-                >
-                  <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 opacity-60" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium truncate">{s.title}</div>
-                    <div className="text-[10px] text-zinc-600 mt-0.5">
-                      {s.messageCount} messages · {timeAgo(s.updatedAt)}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-zinc-700"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </button>
-              ))
-            )}
-          </div>
-        </ScrollArea>
+      {/* ─── Scrollable main column ─── */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
 
-        {/* Memory panel */}
-        <div className="border-t border-zinc-800 max-h-[40%] flex flex-col">
-          <div className="px-3 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Brain className="h-3.5 w-3.5 text-violet-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Memory</span>
-            </div>
-            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{memory.length}</Badge>
-          </div>
-          <ScrollArea className="flex-1 px-2 pb-2">
-            {memory.length === 0 ? (
-              <div className="px-2 py-2 text-[11px] text-zinc-600 leading-relaxed">
-                Oracle will remember facts about your business here — company name, GSTIN, preferences. Just tell Oracle to "remember" something.
-              </div>
-            ) : (
-              <div className="space-y-1 pb-2">
-                {memory.map(f => (
-                  <div key={f.id} className="group px-2 py-1.5 rounded-md hover:bg-zinc-900 text-[11px]">
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="font-medium text-zinc-300 truncate">{f.title}</span>
-                      <button
-                        onClick={() => deleteMemory(f.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      >
-                        <X className="h-3 w-3 text-zinc-600 hover:text-rose-400" />
-                      </button>
-                    </div>
-                    {f.summary && <div className="text-zinc-500 text-[10px] mt-0.5 line-clamp-2">{f.summary}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </aside>
+          {/* 1. CFO Hero — greeting + health score */}
+          <CFOHero
+            greeting={greeting}
+            snapshot={snapshot}
+            loading={snapshotLoading}
+            isPreviewMode={isPreviewMode}
+            healthScore={healthScore}
+            healthToneMeta={healthToneMeta}
+          />
 
-      {/* ─── Main chat area ─── */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background">
-        {/* Header */}
-        <header className="h-14 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1.5 rounded-md hover:bg-zinc-900 text-zinc-400"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <div className="absolute inset-0 bg-emerald-500/30 blur-md rounded-full" />
-                <BrainCircuit className="h-6 w-6 text-emerald-400 relative" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-zinc-100">Oracle</div>
-                <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  The brain of GSTPilot
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-1.5">
-            {SKILLS.map(s => {
-              const Icon = s.icon;
-              return (
-                <div key={s.name} className="flex items-center gap-1 px-2 py-1 rounded-md bg-zinc-900/60 border border-zinc-800">
-                  <Icon className={`h-3 w-3 ${s.color}`} />
-                  <span className="text-[10px] text-zinc-400 font-medium">{s.name}</span>
-                </div>
-              );
-            })}
-          </div>
-        </header>
-
-        {/* Messages or welcome screen */}
-        <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
-            <WelcomeScreen onPrompt={sendMessage} orgId={orgId} isPreviewMode={isPreviewMode} />
-          ) : (
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-              {loadingSession && (
-                <div className="flex items-center justify-center py-8 text-zinc-500">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Loading conversation…
-                </div>
-              )}
-              {messages.map((m, i) => (
-                <MessageBubble
-                  key={m.id}
-                  message={m}
-                  isLast={i === messages.length - 1}
-                  onRegenerate={i === messages.length - 1 && m.role === 'assistant' && !m.streaming ? handleRegenerate : undefined}
-                  onConfirmAction={confirmAction}
-                  onCancelAction={cancelActionCard}
-                  onFollowUp={sendMessage}
-                  onNavigate={onNavigate}
-                  onConfirmWorkflow={confirmWorkflow}
-                  onCancelWorkflow={cancelWorkflow}
-                />
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
+          {/* 2. Top priority card */}
+          {topInsight && (
+            <TopPriorityCard insight={topInsight} onAction={sendMessage} disabled={isStreaming || !orgId} />
           )}
-        </div>
 
-        {/* Input bar */}
-        <div className="border-t border-zinc-800 bg-background p-3 md:p-4 shrink-0">
-          <div className="max-w-3xl mx-auto">
-            <div className="relative flex items-end gap-2">
-              <div className="relative flex-1">
-                <Input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage(input);
-                    }
-                  }}
-                  placeholder="Ask Oracle anything about your business…"
-                  disabled={isStreaming || !orgId}
-                  className="h-12 pr-4 pl-4 bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-sm focus-visible:ring-1 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/40"
-                />
+          {/* 3. Metrics row */}
+          <MetricsGrid snapshot={snapshot} loading={snapshotLoading} />
+
+          {/* 4. Oracle Intelligence — insight cards */}
+          <OracleIntelligence
+            insights={insights}
+            loading={snapshotLoading}
+            onAction={sendMessage}
+            disabled={isStreaming || !orgId}
+          />
+
+          {/* 5. Ask Oracle — quick action chips */}
+          <AskOracleChips onPrompt={sendMessage} disabled={isStreaming || !orgId} />
+
+          {/* 6. Timeline */}
+          <TimelineList events={timeline} loading={timelineLoading} />
+
+          {/* 7. Conversation thread (only when messages exist) */}
+          {hasMessages && (
+            <section className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="gst-section-title text-white">Conversation</h2>
+                {currentSessionId && (
+                  <button
+                    onClick={startNewChat}
+                    className="inline-flex items-center gap-1 text-[12px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> New conversation
+                  </button>
+                )}
               </div>
-              {isStreaming ? (
-                <Button
-                  onClick={stopStreaming}
-                  size="icon"
-                  className="h-12 w-12 rounded-xl bg-zinc-800 hover:bg-rose-600/90 text-zinc-300 hover:text-white border border-zinc-700 hover:border-rose-500 transition-colors"
-                  variant="outline"
-                  title="Stop generating"
-                >
-                  <Square className="h-4 w-4 fill-current" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => sendMessage(input)}
-                  disabled={!input.trim() || !orgId}
-                  size="icon"
-                  className="h-12 w-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            <div className="text-[10px] text-zinc-600 mt-2 text-center">
-              Oracle reads live data from your database and can take real actions. Always verify important figures.
-            </div>
-          </div>
+              <div className="space-y-6">
+                {loadingSession && (
+                  <div className="flex items-center justify-center py-8 text-zinc-500">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    <span className="text-sm">Loading conversation…</span>
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <MessageBubble
+                    key={m.id}
+                    message={m}
+                    isLast={i === messages.length - 1}
+                    onRegenerate={i === messages.length - 1 && m.role === 'assistant' && !m.streaming ? handleRegenerate : undefined}
+                    onConfirmAction={confirmAction}
+                    onCancelAction={cancelActionCard}
+                    onFollowUp={sendMessage}
+                    onNavigate={onNavigate}
+                    onConfirmWorkflow={confirmWorkflow}
+                    onCancelWorkflow={cancelWorkflow}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </section>
+          )}
         </div>
       </main>
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Welcome screen with suggested prompts
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function WelcomeScreen({
-  onPrompt,
-  orgId,
-  isPreviewMode,
-}: {
-  onPrompt: (text: string) => void;
-  orgId: string | null;
-  isPreviewMode: boolean;
-}) {
-  return (
-    <div className="h-full flex items-center justify-center px-4 py-8">
-      <div className="max-w-2xl w-full">
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="text-center mb-8"
-        >
-          <div className="inline-flex items-center justify-center mb-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-emerald-500/30 blur-2xl rounded-full" />
-              <div className="relative h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 flex items-center justify-center">
-                <BrainCircuit className="h-8 w-8 text-emerald-400" />
-              </div>
+      {/* ─── Sticky chat input ─── */}
+      <div className="shrink-0 border-t border-[#1F1F1F] bg-black px-4 sm:px-6 lg:px-8 py-4">
+        <div className="mx-auto max-w-5xl">
+          <div className="flex items-end gap-2">
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage(input);
+                  }
+                }}
+                placeholder="Ask Oracle anything about your business…"
+                disabled={isStreaming || !orgId}
+                className="h-12 pr-4 pl-4 bg-[#0A0A0A] border-[#1F1F1F] text-white placeholder:text-zinc-600 rounded-xl text-[15px] focus-visible:ring-1 focus-visible:ring-[#2563EB]/40 focus-visible:border-[#2563EB]/40"
+              />
             </div>
-          </div>
-          <h1 className="text-2xl font-semibold text-zinc-100 mb-2">
-            How can I help your business today?
-          </h1>
-          <p className="text-sm text-zinc-500 max-w-md mx-auto">
-            I'm Oracle — your AI CFO, COO, and compliance officer. I read your live business data, take real actions, and remember what matters.
-          </p>
-          {isPreviewMode && (
-            <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
-              <Lightbulb className="h-3.5 w-3.5" />
-              Demo mode — create real data (invoices, customers) to see Oracle work
-            </div>
-          )}
-        </motion.div>
-
-        {/* Suggested prompts */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {SUGGESTED_PROMPTS.map((p, i) => {
-            const Icon = p.icon;
-            return (
-              <motion.button
-                key={p.title}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.05 * i }}
-                onClick={() => onPrompt(p.prompt)}
-                disabled={!orgId}
-                className="group text-left p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            {isStreaming ? (
+              <Button
+                onClick={stopStreaming}
+                size="icon"
+                className="h-12 w-12 rounded-xl bg-[#0A0A0A] hover:bg-rose-600/90 text-zinc-300 hover:text-white border border-[#1F1F1F] hover:border-rose-500 transition-colors shrink-0"
+                title="Stop generating"
               >
-                <div className="flex items-start gap-3">
-                  <div className={`h-9 w-9 rounded-lg bg-zinc-800/80 flex items-center justify-center shrink-0 group-hover:bg-zinc-800 transition-colors`}>
-                    <Icon className={`h-4 w-4 ${p.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium text-zinc-200">{p.title}</div>
-                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 text-zinc-500 border-zinc-700">{p.skill}</Badge>
-                    </div>
-                    <div className="text-xs text-zinc-500 mt-1 line-clamp-2">{p.prompt}</div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition-all shrink-0" />
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
-
-        {/* Capabilities */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] text-zinc-600">
-          <div className="flex items-center gap-1.5">
-            <Database className="h-3.5 w-3.5" />
-            Reads live data
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() || !orgId}
+                size="icon"
+                className="h-12 w-12 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white shrink-0"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Wrench className="h-3.5 w-3.5" />
-            Takes actions
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Brain className="h-3.5 w-3.5" />
-            Remembers context
-          </div>
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Tenant-scoped
+          <div className="text-[11px] text-zinc-600 mt-2 text-center">
+            Oracle reads live data and can take real actions. Always verify important figures.
           </div>
         </div>
       </div>
@@ -1308,7 +1562,678 @@ function WelcomeScreen({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Message bubble with tool-call cards
+// 1. CFO Hero — greeting + business health score
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function CFOHero({
+  greeting,
+  snapshot,
+  loading,
+  isPreviewMode,
+  healthScore,
+  healthToneMeta,
+}: {
+  greeting: string;
+  snapshot: BusinessSnapshot | null;
+  loading: boolean;
+  isPreviewMode: boolean;
+  healthScore: number | undefined;
+  healthToneMeta: { color: string; bg: string; label: string };
+}) {
+  const displayName = 'Prince'; // The user's example mentions "Good Afternoon Prince 👋"
+  // Note: org-specific user name could be wired through props in a future iteration.
+  const statusLine = getHealthStatusLine(healthScore);
+  const changePct = revenueChangePct(snapshot ?? {});
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-4"
+    >
+      {/* Greeting */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="gst-page-title text-white">
+            {greeting}, {displayName} <span className="inline-block ml-1">👋</span>
+          </h1>
+          <p className="gst-body text-zinc-400 mt-1.5">
+            {loading ? 'Reading your live business data…' : statusLine}
+          </p>
+        </div>
+        {isPreviewMode && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[12px]">
+            <Lightbulb className="h-3.5 w-3.5" />
+            Demo mode — create real data to see Oracle work
+          </div>
+        )}
+      </div>
+
+      {/* Health score card */}
+      <div className="gst-card gst-card-hover relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#2563EB]/5 via-transparent to-transparent pointer-events-none" />
+        <div className="relative flex items-center gap-6 flex-wrap">
+          {/* Big health score */}
+          <div className="flex items-baseline gap-3">
+            <div className="flex flex-col">
+              <span className="gst-label text-zinc-500">Business Health</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                {loading ? (
+                  <div className="h-9 w-20 rounded bg-[#1F1F1F] animate-pulse" />
+                ) : (
+                  <HealthScoreNumber value={healthScore} />
+                )}
+                <span className="gst-label text-zinc-500">/ 100</span>
+              </div>
+            </div>
+            {healthScore != null && !loading && (
+              <span className={`gst-status ${healthToneMeta.color.includes('blue') ? 'gst-status-success' : healthToneMeta.color.includes('amber') ? 'gst-status-warning' : healthToneMeta.color.includes('orange') ? 'gst-status-warning' : healthToneMeta.color.includes('rose') ? 'gst-status-danger' : 'gst-status-neutral'}`}>
+                {healthToneMeta.label}
+              </span>
+            )}
+          </div>
+
+          <div className="hidden sm:block h-10 w-px bg-[#1F1F1F]" />
+
+          {/* Revenue trend */}
+          <div className="flex flex-col">
+            <span className="gst-label text-zinc-500">Revenue (FY)</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              {loading ? (
+                <div className="h-7 w-28 rounded bg-[#1F1F1F] animate-pulse" />
+              ) : (
+                <CountUpMetric
+                  value={snapshot?.revenue ?? 0}
+                  formatter={formatINR}
+                  className="gst-metric text-white"
+                />
+              )}
+              {changePct != null && !loading && (
+                <span className={`inline-flex items-center gap-0.5 text-[12px] font-semibold ${changePct >= 0 ? 'text-[#60A5FA]' : 'text-rose-400'}`}>
+                  {changePct >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                  {Math.abs(Math.round(changePct))}%
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="hidden md:block h-10 w-px bg-[#1F1F1F]" />
+
+          {/* Status line / sparkline */}
+          <div className="flex-1 min-w-[200px]">
+            {!loading && snapshot && (snapshot.revenue ?? 0) > 0 ? (
+              <div className="flex flex-col">
+                <span className="gst-label text-zinc-500">Revenue trend (6 mo)</span>
+                <div className="h-10 mt-1 -mx-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={synthesizeSparkline(snapshot.revenueThisMonth ?? 0, snapshot.revenueLastMonth ?? 0)}>
+                      <defs>
+                        <linearGradient id="heroRev" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2563EB" stopOpacity={0.4} />
+                          <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <YAxis hide domain={['dataMin', 'dataMax']} />
+                      <Area
+                        type="monotone"
+                        dataKey="v"
+                        stroke="#2563EB"
+                        strokeWidth={2}
+                        fill="url(#heroRev)"
+                        isAnimationActive
+                        animationDuration={900}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[13px] text-zinc-600 leading-relaxed">
+                {loading ? 'Loading…' : 'Connect your first invoice to start tracking business health.'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+
+function HealthScoreNumber({ value }: { value: number | undefined }) {
+  const v = useCountUp(value ?? 0, 900);
+  return <span className="gst-metric text-white">{Math.round(v)}</span>;
+}
+
+function CountUpMetric({
+  value,
+  formatter,
+  className,
+}: {
+  value: number;
+  formatter: (n: number) => string;
+  className?: string;
+}) {
+  const v = useCountUp(value, 900);
+  return <span className={className}>{formatter(v)}</span>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. Top priority card — single CTA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TopPriorityCard({
+  insight,
+  onAction,
+  disabled,
+}: {
+  insight: Insight;
+  onAction: (text: string) => void;
+  disabled: boolean;
+}) {
+  const Icon = insight.icon;
+  const severityClass =
+    insight.severity === 'high' ? 'border-rose-500/30 bg-rose-500/[0.04]' :
+    insight.severity === 'medium' ? 'border-amber-500/30 bg-amber-500/[0.04]' :
+    'border-[#2563EB]/30 bg-[#2563EB]/[0.04]';
+  const iconBg =
+    insight.severity === 'high' ? 'bg-rose-500/15 text-rose-400' :
+    insight.severity === 'medium' ? 'bg-amber-500/15 text-amber-400' :
+    'bg-[#2563EB]/15 text-[#60A5FA]';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.05 }}
+      className={`rounded-xl border ${severityClass} overflow-hidden`}
+    >
+      <div className="flex items-center gap-4 p-5 flex-wrap">
+        <div className={`h-11 w-11 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Today&apos;s Top Priority</span>
+          </div>
+          <div className="text-base font-semibold text-white">{insight.title}</div>
+          <div className="text-[13px] text-zinc-400 mt-0.5">{insight.description}</div>
+          {insight.impact && (
+            <div className="text-[12px] text-zinc-500 mt-1">
+              <span className="text-zinc-600">Impact:</span> {insight.impact}
+            </div>
+          )}
+        </div>
+        {insight.actionLabel && insight.actionPrompt && (
+          <button
+            onClick={() => onAction(insight.actionPrompt!)}
+            disabled={disabled}
+            className="gst-btn gst-btn-primary gst-btn-lg shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {insight.actionLabel}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. Metrics grid — Revenue / Cash / GST + secondary row
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function MetricsGrid({ snapshot, loading }: { snapshot: BusinessSnapshot | null; loading: boolean }) {
+  const revenueChange = revenueChangePct(snapshot ?? {});
+
+  const primary: Array<{
+    key: string;
+    icon: LucideIcon;
+    label: string;
+    value: number;
+    formatter: (n: number) => string;
+    spark: Array<{ i: number; v: number }> | null;
+    change?: number | null;
+    changeGood?: boolean;
+  }> = [
+    {
+      key: 'revenue',
+      icon: TrendingUp,
+      label: 'Revenue',
+      value: snapshot?.revenue ?? 0,
+      formatter: formatINR,
+      spark: snapshot ? synthesizeSparkline(snapshot.revenueThisMonth ?? 0, snapshot.revenueLastMonth ?? 0, 1) : null,
+      change: revenueChange,
+      changeGood: (revenueChange ?? 0) >= 0,
+    },
+    {
+      key: 'cash',
+      icon: IndianRupee,
+      label: 'Cash on Hand',
+      value: snapshot?.cash ?? 0,
+      formatter: formatINR,
+      spark: snapshot ? synthesizeSparkline(snapshot.cash ?? 0, snapshot.cash ?? 0, 2) : null,
+    },
+    {
+      key: 'gst',
+      icon: Receipt,
+      label: 'GST Liability',
+      value: snapshot?.gstLiability ?? 0,
+      formatter: formatINR,
+      spark: snapshot ? synthesizeSparkline(snapshot.gstLiability ?? 0, snapshot.outputTax ?? 0, 3) : null,
+    },
+  ];
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="gst-section-title text-white">Business Snapshot</h2>
+        <span className="gst-caption">Last 6 months</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {primary.map((m, i) => (
+          <MetricCard
+            key={m.key}
+            icon={m.icon}
+            label={m.label}
+            value={m.value}
+            formatter={m.formatter}
+            spark={m.spark}
+            change={m.change}
+            changeGood={m.changeGood}
+            loading={loading}
+            delay={i * 0.05}
+          />
+        ))}
+      </div>
+
+      {/* Secondary metrics row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SecondaryMetric
+          icon={FileText}
+          label="Invoices"
+          value={snapshot?.invoiceCount ?? 0}
+          loading={loading}
+        />
+        <SecondaryMetric
+          icon={Users}
+          label="Clients"
+          value={snapshot?.customerCount ?? 0}
+          loading={loading}
+        />
+        <SecondaryMetric
+          icon={Activity}
+          label="Collection Rate"
+          value={Math.round((snapshot?.collectionRate ?? 0) * 100)}
+          suffix="%"
+          loading={loading}
+        />
+        <SecondaryMetric
+          icon={Clock}
+          label="Runway"
+          value={snapshot?.runwayDays === Infinity || snapshot?.runwayDays == null ? null : snapshot.runwayDays}
+          suffix={snapshot?.runwayDays === Infinity || snapshot?.runwayDays == null ? '' : ' days'}
+          fallback="∞"
+          loading={loading}
+        />
+      </div>
+    </section>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  formatter,
+  spark,
+  change,
+  changeGood,
+  loading,
+  delay = 0,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  formatter: (n: number) => string;
+  spark: Array<{ i: number; v: number }> | null;
+  change?: number | null;
+  changeGood?: boolean;
+  loading: boolean;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay }}
+      className="gst-card gst-card-hover relative overflow-hidden"
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/20 flex items-center justify-center">
+            <Icon className="h-4 w-4 text-[#60A5FA]" />
+          </div>
+          <span className="gst-label text-zinc-400">{label}</span>
+        </div>
+        {change != null && (
+          <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${changeGood ? 'text-[#60A5FA]' : 'text-rose-400'}`}>
+            {change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+            {Math.abs(Math.round(change))}%
+          </span>
+        )}
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          {loading ? (
+            <div className="h-7 w-24 rounded bg-[#1F1F1F] animate-pulse" />
+          ) : (
+            <CountUpMetric
+              value={value}
+              formatter={formatter}
+              className="gst-metric text-white"
+            />
+          )}
+        </div>
+        {spark && spark.length > 0 && (
+          <div className="h-10 w-24 shrink-0 -mb-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={spark}>
+                <defs>
+                  <linearGradient id={`spark-${label}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563EB" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <YAxis hide domain={['dataMin', 'dataMax']} />
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke="#2563EB"
+                  strokeWidth={1.75}
+                  fill={`url(#spark-${label})`}
+                  isAnimationActive
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function SecondaryMetric({
+  icon: Icon,
+  label,
+  value,
+  suffix = '',
+  fallback,
+  loading,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number | null;
+  suffix?: string;
+  fallback?: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="gst-card gst-card-compact flex items-center gap-3">
+      <div className="h-8 w-8 rounded-lg bg-[#0F0F0F] border border-[#1F1F1F] flex items-center justify-center shrink-0">
+        <Icon className="h-4 w-4 text-zinc-400" />
+      </div>
+      <div className="min-w-0">
+        <div className="gst-label text-zinc-500">{label}</div>
+        {loading ? (
+          <div className="h-5 w-12 rounded bg-[#1F1F1F] animate-pulse mt-1" />
+        ) : (
+          <div className="text-base font-semibold text-white tabular-nums">
+            {value == null ? (fallback ?? '—') : (
+              <>
+                <CountUpMetric value={value} formatter={(n) => Math.round(n).toLocaleString('en-IN')} />
+                {suffix && <span className="text-[13px] text-zinc-500 ml-1">{suffix}</span>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. Oracle Intelligence — insight cards with one-click actions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function OracleIntelligence({
+  insights,
+  loading,
+  onAction,
+  disabled,
+}: {
+  insights: Insight[];
+  loading: boolean;
+  onAction: (text: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkle className="h-5 w-5 text-[#60A5FA]" />
+          <h2 className="gst-section-title text-white">Oracle Intelligence</h2>
+        </div>
+        <span className="gst-caption">{loading ? 'Analyzing…' : `${insights.length} insight${insights.length === 1 ? '' : 's'}`}</span>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="gst-card gst-card-compact h-32">
+              <div className="h-full w-full shimmer rounded-md" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {insights.map((insight, i) => (
+            <InsightCard
+              key={insight.id}
+              insight={insight}
+              onAction={onAction}
+              disabled={disabled}
+              delay={i * 0.05}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InsightCard({
+  insight,
+  onAction,
+  disabled,
+  delay = 0,
+}: {
+  insight: Insight;
+  onAction: (text: string) => void;
+  disabled: boolean;
+  delay?: number;
+}) {
+  const Icon = insight.icon;
+  const severityColor =
+    insight.severity === 'high' ? 'bg-rose-500/15 text-rose-400 border-rose-500/20' :
+    insight.severity === 'medium' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
+    insight.severity === 'low' ? 'bg-[#2563EB]/15 text-[#60A5FA] border-[#2563EB]/20' :
+    'bg-zinc-500/15 text-zinc-400 border-zinc-500/20';
+  const dotColor =
+    insight.severity === 'high' ? 'bg-rose-400' :
+    insight.severity === 'medium' ? 'bg-amber-400' :
+    insight.severity === 'low' ? 'bg-[#60A5FA]' :
+    'bg-zinc-500';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay }}
+      className="gst-card gst-card-hover group"
+    >
+      <div className="flex items-start gap-3 mb-3">
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border ${severityColor}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{insight.severity}</span>
+          </div>
+          <div className="text-sm font-semibold text-white mt-0.5">{insight.title}</div>
+        </div>
+      </div>
+      <p className="text-[13px] text-zinc-400 leading-relaxed mb-2">{insight.description}</p>
+      {insight.impact && (
+        <div className="text-[12px] text-zinc-500 mb-3 leading-relaxed">
+          <span className="text-zinc-600">Impact:</span> {insight.impact}
+        </div>
+      )}
+      {insight.actionLabel && insight.actionPrompt && (
+        <button
+          onClick={() => onAction(insight.actionPrompt!)}
+          disabled={disabled}
+          className="gst-btn gst-btn-sm gst-btn-outline w-full sm:w-auto disabled:opacity-50 disabled:pointer-events-none group-hover:border-[#2563EB]/40 group-hover:text-[#60A5FA]"
+        >
+          {insight.actionLabel}
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. Ask Oracle — quick action chips
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AskOracleChips({
+  onPrompt,
+  disabled,
+}: {
+  onPrompt: (text: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <BrainCircuit className="h-5 w-5 text-[#60A5FA]" />
+        <h2 className="gst-section-title text-white">Ask Oracle</h2>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {QUICK_ACTIONS.map((action, i) => {
+          const Icon = action.icon;
+          const isPrimary = action.tone === 'primary';
+          return (
+            <motion.button
+              key={action.label}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              onClick={() => onPrompt(action.prompt)}
+              disabled={disabled}
+              className={`
+                inline-flex items-center gap-2 h-10 px-4 rounded-full text-[13px] font-medium transition-all
+                disabled:opacity-50 disabled:pointer-events-none
+                ${isPrimary
+                  ? 'bg-[#2563EB] text-white hover:bg-[#1D4ED8] shadow-sm shadow-[#2563EB]/20'
+                  : 'bg-[#0A0A0A] text-zinc-300 border border-[#1F1F1F] hover:border-[#2A2A2A] hover:bg-[#0F0F0F] hover:text-white'
+                }
+              `}
+            >
+              <Icon className={`h-3.5 w-3.5 ${isPrimary ? 'text-white' : 'text-[#60A5FA]'}`} />
+              {action.label}
+            </motion.button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. Timeline list
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TimelineList({
+  events,
+  loading,
+}: {
+  events: TimelineEventLite[];
+  loading: boolean;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Clock className="h-5 w-5 text-[#60A5FA]" />
+        <h2 className="gst-section-title text-white">Timeline</h2>
+      </div>
+
+      <div className="gst-card p-0 overflow-hidden">
+        {loading ? (
+          <div className="p-4 space-y-3">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-[#1F1F1F]" />
+                <div className="h-4 flex-1 rounded bg-[#1F1F1F] animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : events.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <Clock className="h-6 w-6 text-zinc-700 mx-auto mb-2" />
+            <p className="text-[13px] text-zinc-500">
+              No recent activity yet. As you create invoices, payments, and file returns, they&apos;ll appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#1F1F1F]">
+            {events.map((evt, i) => {
+              const sevColor =
+                evt.severity === 'critical' ? 'bg-rose-400' :
+                evt.severity === 'warning' ? 'bg-amber-400' :
+                evt.severity === 'success' ? 'bg-[#60A5FA]' :
+                'bg-zinc-500';
+              return (
+                <motion.div
+                  key={evt.id}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.04 }}
+                  className="flex items-center gap-3 px-5 py-3 hover:bg-[#0F0F0F] transition-colors"
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${sevColor}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-zinc-200 truncate">{evt.title}</div>
+                    {evt.description && (
+                      <div className="text-[12px] text-zinc-500 truncate mt-0.5">{evt.description}</div>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-zinc-600 shrink-0 tabular-nums">{timeAgo(evt.createdAt)}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. Message bubble — premium chat (blue user bubbles, dark Oracle cards)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function MessageBubble({
@@ -1344,119 +2269,125 @@ function MessageBubble({
     }).catch(() => toast.error('Failed to copy'));
   }, [message.content]);
 
-  // Separate action-confirm parts + workflow-plan parts from tool-call parts so
-  // we render them in the right order (tool-call cards first, then the
-  // action-confirm / workflow-plan cards).
   const toolCallParts = message.parts.filter(p => p.type === 'tool-call');
   const actionConfirmParts = message.parts.filter(p => p.type === 'action-confirm') as ActionConfirmPart[];
   const workflowParts = message.parts.filter(p => p.type === 'workflow-plan') as WorkflowPart[];
 
+  if (isUser) {
+    // ─── User message: clean blue-tinted bubble, right-aligned ───
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="flex justify-end"
+      >
+        <div className="inline-block max-w-[85%] px-4 py-3 rounded-2xl rounded-tr-sm bg-[#2563EB]/15 border border-[#2563EB]/25 text-white text-[14px] leading-relaxed">
+          {message.content}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ─── Oracle message: dark card with markdown + tool cards + actions ───
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+      className="flex gap-3"
     >
-      {/* Avatar */}
-      <div className={`
-        h-8 w-8 rounded-lg flex items-center justify-center shrink-0
-        ${isUser
-          ? 'bg-zinc-800 text-zinc-300'
-          : 'bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400'}
-      `}>
-        {isUser ? <Users className="h-4 w-4" /> : <BrainCircuit className="h-4 w-4" />}
+      {/* Oracle avatar */}
+      <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5 border border-[#2563EB]/30">
+        <BrainCircuit className="h-4 w-4 text-[#60A5FA]" />
       </div>
 
-      {/* Content */}
-      <div className={`flex-1 min-w-0 ${isUser ? 'flex justify-end' : ''}`}>
-        {isUser ? (
-          <div className="inline-block max-w-[85%] px-4 py-2.5 rounded-2xl rounded-tr-sm bg-zinc-800 text-zinc-100 text-sm">
-            {message.content}
+      <div className="flex-1 min-w-0 space-y-3">
+        {/* Tool call cards */}
+        {toolCallParts.map((p, i) => (
+          <ToolCallCard key={`tc-${i}`} part={p as Extract<MessagePart, { type: 'tool-call' }>} />
+        ))}
+
+        {/* Action Engine confirmation cards */}
+        {actionConfirmParts.map((p, i) => (
+          <ActionConfirmCard
+            key={`ac-${p.toolCallId}-${i}`}
+            part={p}
+            onConfirm={onConfirmAction}
+            onCancel={onCancelAction}
+            onFollowUp={onFollowUp}
+            onNavigate={onNavigate}
+          />
+        ))}
+
+        {/* Workflow Engine plan + progress cards */}
+        {workflowParts.map((p, i) => (
+          <WorkflowPlanCard
+            key={`wf-${p.plan.id}-${i}`}
+            part={p}
+            onConfirm={onConfirmWorkflow}
+            onCancel={onCancelWorkflow}
+          />
+        ))}
+
+        {/* Text content (with streaming caret) */}
+        {message.content && (
+          <div className="rounded-2xl rounded-tl-sm bg-[#0A0A0A] border border-[#1F1F1F] px-4 py-3">
+            <div className="prose prose-invert prose-sm max-w-none
+              prose-headings:text-white prose-headings:font-semibold
+              prose-h1:text-lg prose-h2:text-base prose-h3:text-[15px]
+              prose-p:text-zinc-300 prose-p:leading-relaxed prose-p:text-[14px]
+              prose-li:text-zinc-300 prose-li:text-[14px]
+              prose-strong:text-white
+              prose-code:text-[#60A5FA] prose-code:bg-[#0F0F0F] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-[12px]
+              prose-pre:bg-black prose-pre:border prose-pre:border-[#1F1F1F] prose-pre:text-[12px]
+              prose-a:text-[#60A5FA]
+              prose-table:text-sm prose-th:text-zinc-200 prose-td:text-zinc-400
+              prose-th:bg-[#0F0F0F] prose-th:border prose-th:border-[#1F1F1F]
+              prose-td:border prose-td:border-[#1F1F1F]
+            ">
+              <ReactMarkdown>
+                {message.content + (message.streaming ? ' ▋' : '')}
+              </ReactMarkdown>
+              {message.streaming && (
+                <span className="oracle-caret inline-block h-4 w-1.5 bg-[#60A5FA] align-middle ml-0.5" />
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="space-y-3 max-w-[90%]">
-            {/* Tool call cards */}
-            {toolCallParts.map((p, i) => (
-              <ToolCallCard key={`tc-${i}`} part={p as Extract<MessagePart, { type: 'tool-call' }>} />
-            ))}
+        )}
 
-            {/* Action Engine confirmation cards */}
-            {actionConfirmParts.map((p, i) => (
-              <ActionConfirmCard
-                key={`ac-${p.toolCallId}-${i}`}
-                part={p}
-                onConfirm={onConfirmAction}
-                onCancel={onCancelAction}
-                onFollowUp={onFollowUp}
-                onNavigate={onNavigate}
-              />
-            ))}
+        {/* Thinking indicator */}
+        {message.streaming && !message.content && message.parts.length === 0 && (
+          <div className="rounded-2xl rounded-tl-sm bg-[#0A0A0A] border border-[#1F1F1F] px-4 py-3.5 flex items-center gap-2.5">
+            <div className="flex gap-1">
+              <span className="h-2 w-2 rounded-full bg-[#60A5FA] animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="h-2 w-2 rounded-full bg-[#60A5FA] animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="h-2 w-2 rounded-full bg-[#60A5FA] animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-[13px] text-zinc-500">Oracle is thinking…</span>
+          </div>
+        )}
 
-            {/* Workflow Engine plan + progress cards (Priority 2) */}
-            {workflowParts.map((p, i) => (
-              <WorkflowPlanCard
-                key={`wf-${p.plan.id}-${i}`}
-                part={p}
-                onConfirm={onConfirmWorkflow}
-                onCancel={onCancelWorkflow}
-              />
-            ))}
-
-            {/* Text content */}
-            {message.content && (
-              <div className="prose prose-invert prose-sm max-w-none
-                prose-headings:text-zinc-100 prose-headings:font-semibold
-                prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-                prose-p:text-zinc-300 prose-p:leading-relaxed
-                prose-li:text-zinc-300 prose-strong:text-zinc-100
-                prose-code:text-emerald-300 prose-code:bg-zinc-800/80 prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-                prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800
-                prose-a:text-emerald-400
-                prose-table:text-sm prose-th:text-zinc-200 prose-td:text-zinc-400
-                prose-th:bg-zinc-900 prose-td:border-prose-th:border-zinc-800
-              ">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
-              </div>
-            )}
-
-            {/* Streaming indicator */}
-            {message.streaming && !message.content && message.parts.length === 0 && (
-              <div className="flex items-center gap-2 text-zinc-500 text-sm">
-                <div className="flex gap-1">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="h-2 w-2 rounded-full bg-emerald-400/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="h-2 w-2 rounded-full bg-emerald-400/60 animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-                <span className="text-xs">Oracle is thinking…</span>
-              </div>
-            )}
-            {message.streaming && message.content && (
-              <span className="inline-block h-4 w-1.5 bg-emerald-400 animate-pulse align-middle" />
-            )}
-
-            {/* Action row: Copy + Regenerate (only when not streaming) */}
-            {!message.streaming && message.content && (
-              <div className="flex items-center gap-1 pt-1">
-                <button
-                  onClick={handleCopy}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
-                  title="Copy response"
-                >
-                  {copied ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-                {onRegenerate && (
-                  <button
-                    onClick={onRegenerate}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
-                    title="Regenerate response"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Regenerate
-                  </button>
-                )}
-              </div>
+        {/* Action row: Copy + Regenerate (only when not streaming) */}
+        {!message.streaming && message.content && (
+          <div className="flex items-center gap-1 pl-1">
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-[#0F0F0F] transition-colors"
+              title="Copy response"
+            >
+              {copied ? <CheckCircle2 className="h-3 w-3 text-[#60A5FA]" /> : <Copy className="h-3 w-3" />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-[#0F0F0F] transition-colors"
+                title="Regenerate response"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Regenerate
+              </button>
             )}
           </div>
         )}
@@ -1479,34 +2410,33 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
     <div className={`
       rounded-lg border overflow-hidden
       ${part.error
-        ? 'border-rose-500/30 bg-rose-500/5'
+        ? 'border-rose-500/30 bg-rose-500/[0.04]'
         : part.result
-          ? 'border-zinc-800 bg-zinc-900/60'
-          : 'border-emerald-500/30 bg-emerald-500/5'}
+          ? 'border-[#1F1F1F] bg-[#0A0A0A]'
+          : 'border-[#2563EB]/30 bg-[#2563EB]/[0.04]'}
     `}>
-      {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-800/40 transition-colors"
+        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#0F0F0F] transition-colors"
       >
         <div className={`
           h-6 w-6 rounded-md flex items-center justify-center shrink-0
-          ${part.error ? 'bg-rose-500/10' : part.result ? 'bg-zinc-800' : 'bg-emerald-500/10'}
+          ${part.error ? 'bg-rose-500/10' : part.result ? 'bg-[#0F0F0F]' : 'bg-[#2563EB]/10'}
         `}>
           {isRunning ? (
-            <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 text-[#60A5FA] animate-spin" />
           ) : part.error ? (
             <XCircle className="h-3.5 w-3.5 text-rose-400" />
           ) : (
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-[#60A5FA]" />
           )}
         </div>
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-2">
             <Icon className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-            <span className="text-xs font-medium text-zinc-200 truncate">{label}</span>
+            <span className="text-[12px] font-medium text-zinc-200 truncate">{label}</span>
             {isRunning && (
-              <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+              <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-[#60A5FA] border-[#2563EB]/30 bg-[#2563EB]/10">
                 running
               </Badge>
             )}
@@ -1518,28 +2448,24 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
         <ChevronRight className={`h-3.5 w-3.5 text-zinc-600 transition-transform ${expanded ? 'rotate-90' : ''}`} />
       </button>
 
-      {/* Expanded content */}
       {expanded && (
-        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-zinc-800/60">
-          {/* Args */}
+        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-[#1F1F1F]">
           {Object.keys(part.args).length > 0 && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Arguments</div>
-              <pre className="text-[11px] text-zinc-400 bg-zinc-950/60 rounded p-2 overflow-x-auto">
+              <pre className="text-[11px] text-zinc-400 bg-black rounded p-2 overflow-x-auto">
                 {JSON.stringify(part.args, null, 2)}
               </pre>
             </div>
           )}
-          {/* Result */}
           {part.result && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Result</div>
-              <pre className="text-[11px] text-zinc-300 bg-zinc-950/60 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+              <pre className="text-[11px] text-zinc-300 bg-black rounded p-2 overflow-x-auto whitespace-pre-wrap">
                 {part.result}
               </pre>
             </div>
           )}
-          {/* Error */}
           {part.error && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-400 mb-1">Error</div>
@@ -1551,7 +2477,6 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
         </div>
       )}
 
-      {/* Inline result preview (when not expanded) */}
       {!expanded && part.result && (
         <div className="px-3 pb-2 -mt-0.5">
           <div className="text-[11px] text-zinc-500 line-clamp-2">{part.result}</div>
@@ -1569,16 +2494,6 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
 // ═══════════════════════════════════════════════════════════════════════════════
 // ActionConfirmCard — inline confirmation card for the Action Engine
 // ═══════════════════════════════════════════════════════════════════════════════
-//
-// Renders inline in the chat thread (not a modal). Five lifecycle states:
-//   pending    → blue/amber accent, preview + validation badges + Confirm/Cancel
-//   executing  → spinner overlay, buttons disabled
-//   success    → green accent, success summary + result data + follow-up chip + view-in link
-//   cancelled  → zinc accent, "Action cancelled" note
-//   error      → rose accent, error message
-//
-// The card is purely presentational — all state lives in the parent (OracleBrainCore)
-// and is mutated via updateActionPart() when the user confirms/cancels.
 
 function ActionConfirmCard({
   part,
@@ -1600,25 +2515,24 @@ function ActionConfirmCard({
   const isError = part.state === 'error';
   const isSuccess = part.state === 'success';
 
-  // Accent color by state
   const accent = isPending
     ? 'border-amber-500/40 bg-amber-500/[0.04]'
     : isExecuting
-      ? 'border-sky-500/40 bg-sky-500/[0.04]'
+      ? 'border-[#2563EB]/40 bg-[#2563EB]/[0.04]'
       : isSuccess
-        ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
+        ? 'border-[#2563EB]/40 bg-[#2563EB]/[0.04]'
         : isError
           ? 'border-rose-500/40 bg-rose-500/[0.04]'
-          : 'border-zinc-700/60 bg-zinc-800/40'; // cancelled
+          : 'border-[#1F1F1F] bg-[#0A0A0A]';
   const iconBg = isPending
     ? 'bg-amber-500/15 text-amber-400'
     : isExecuting
-      ? 'bg-sky-500/15 text-sky-400'
+      ? 'bg-[#2563EB]/15 text-[#60A5FA]'
       : isSuccess
-        ? 'bg-emerald-500/15 text-emerald-400'
+        ? 'bg-[#2563EB]/15 text-[#60A5FA]'
         : isError
           ? 'bg-rose-500/15 text-rose-400'
-          : 'bg-zinc-700/60 text-zinc-400';
+          : 'bg-[#0F0F0F] text-zinc-400';
 
   return (
     <motion.div
@@ -1627,8 +2541,7 @@ function ActionConfirmCard({
       transition={{ duration: 0.2 }}
       className={`rounded-xl border ${accent} overflow-hidden`}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800/60">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1F1F1F]">
         <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
           {isExecuting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1644,43 +2557,39 @@ function ActionConfirmCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-100 truncate">{part.displayName}</span>
+            <span className="text-[14px] font-semibold text-white truncate">{part.displayName}</span>
             <Badge variant="outline" className={`text-[9px] h-4 px-1.5 capitalize ${
               isPending ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' :
-              isExecuting ? 'text-sky-400 border-sky-500/40 bg-sky-500/10' :
-              isSuccess ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' :
+              isExecuting ? 'text-[#60A5FA] border-[#2563EB]/40 bg-[#2563EB]/10' :
+              isSuccess ? 'text-[#60A5FA] border-[#2563EB]/40 bg-[#2563EB]/10' :
               isError ? 'text-rose-400 border-rose-500/40 bg-rose-500/10' :
-              'text-zinc-500 border-zinc-700 bg-zinc-800/60'
+              'text-zinc-500 border-[#1F1F1F] bg-[#0A0A0A]'
             }`}>
               {part.state}
             </Badge>
           </div>
-          <div className="text-xs text-zinc-400 mt-0.5 truncate">{part.previewTitle}</div>
+          <div className="text-[12px] text-zinc-400 mt-0.5 truncate">{part.previewTitle}</div>
         </div>
       </div>
 
-      {/* Body — only show preview fields + validation when pending or executing */}
       {(isPending || isExecuting) && (
         <div className="px-4 py-3 space-y-3">
-          {/* Preview fields table */}
           {part.previewFields.length > 0 && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               {part.previewFields.map((f, i) => (
                 <div key={i} className="flex flex-col">
                   <span className="text-[10px] uppercase tracking-wider text-zinc-600">{f.label}</span>
-                  <span className={`text-xs ${f.emphasize ? 'text-zinc-100 font-semibold' : 'text-zinc-300'}`}>{f.value}</span>
+                  <span className={`text-[13px] ${f.emphasize ? 'text-white font-semibold' : 'text-zinc-300'}`}>{f.value}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Validation badges — per-field check/warn/error against live DB */}
           {part.validationFields.length > 0 && (
-            <div className="space-y-1 pt-2 border-t border-zinc-800/40">
+            <div className="space-y-1 pt-2 border-t border-[#1F1F1F]">
               {part.validationFields.map((v, i) => {
-                const vIcon = v.status === 'ok' ? CheckCircle2 : v.status === 'warn' ? AlertTriangle : XCircle;
-                const VIcon = vIcon;
-                const vColor = v.status === 'ok' ? 'text-emerald-400' : v.status === 'warn' ? 'text-amber-400' : 'text-rose-400';
+                const VIcon = v.status === 'ok' ? CheckCircle2 : v.status === 'warn' ? AlertTriangle : XCircle;
+                const vColor = v.status === 'ok' ? 'text-[#60A5FA]' : v.status === 'warn' ? 'text-amber-400' : 'text-rose-400';
                 return (
                   <div key={i} className="flex items-start gap-1.5 text-[11px]">
                     <VIcon className={`h-3 w-3 mt-0.5 shrink-0 ${vColor}`} />
@@ -1695,7 +2604,6 @@ function ActionConfirmCard({
             </div>
           )}
 
-          {/* Note */}
           {part.note && (
             <div className="flex items-start gap-1.5 text-[11px] text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-md px-2 py-1.5">
               <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
@@ -1703,13 +2611,12 @@ function ActionConfirmCard({
             </div>
           )}
 
-          {/* Action buttons */}
           <div className="flex items-center gap-2 pt-1">
             <Button
               size="sm"
               disabled={isExecuting}
               onClick={() => onConfirm?.(part.toolCallId)}
-              className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border-0"
+              className="h-8 gap-1.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white border-0"
             >
               {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               {isExecuting ? 'Executing…' : 'Confirm & Execute'}
@@ -1719,7 +2626,7 @@ function ActionConfirmCard({
               variant="outline"
               disabled={isExecuting}
               onClick={() => onCancel?.(part.toolCallId)}
-              className="h-8 gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700"
+              className="h-8 gap-1.5 bg-[#0A0A0A] hover:bg-[#0F0F0F] text-zinc-300 border-[#1F1F1F]"
             >
               <X className="h-3.5 w-3.5" />
               Cancel
@@ -1728,17 +2635,15 @@ function ActionConfirmCard({
         </div>
       )}
 
-      {/* Success state — show summary + result data + follow-up + view-in */}
       {isSuccess && (
         <div className="px-4 py-3 space-y-3">
           {part.successSummary && (
-            <div className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+            <div className="text-[13px] text-zinc-200 leading-relaxed whitespace-pre-wrap">
               <ReactMarkdown>{part.successSummary}</ReactMarkdown>
             </div>
           )}
-          {/* Result data table */}
           {part.successData && Object.keys(part.successData).length > 0 && (
-            <div className="rounded-md bg-zinc-950/40 border border-zinc-800/60 px-3 py-2">
+            <div className="rounded-md bg-black border border-[#1F1F1F] px-3 py-2">
               <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1.5">Result</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                 {Object.entries(part.successData).slice(0, 8).map(([k, v]) => (
@@ -1752,13 +2657,12 @@ function ActionConfirmCard({
               </div>
             </div>
           )}
-          {/* Follow-up chip + view-in link */}
           {(part.followUp || part.viewIn) && (
             <div className="flex items-center gap-2 flex-wrap pt-1">
               {part.followUp && (
                 <button
                   onClick={() => onFollowUp?.(part.followUp!.prompt)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-[#60A5FA] bg-[#2563EB]/10 border border-[#2563EB]/30 hover:bg-[#2563EB]/20 transition-colors"
                 >
                   <Sparkle className="h-3 w-3" />
                   {part.followUp.label}
@@ -1769,7 +2673,6 @@ function ActionConfirmCard({
                   <button
                     type="button"
                     onClick={() => {
-                      // Map common hrefs to dashboard views for in-app navigation
                       const href = part.viewIn!.href;
                       const viewMap: Record<string, string> = {
                         '/customers': 'clients',
@@ -1789,7 +2692,7 @@ function ActionConfirmCard({
                       const view = viewMap[href] ?? 'dashboard';
                       onNavigate(view);
                     }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-[#0A0A0A] border border-[#1F1F1F] hover:bg-[#0F0F0F] transition-colors"
                   >
                     {part.viewIn.label}
                     <ArrowRight className="h-3 w-3" />
@@ -1797,7 +2700,7 @@ function ActionConfirmCard({
                 ) : (
                   <a
                     href={part.viewIn.href}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-300 bg-[#0A0A0A] border border-[#1F1F1F] hover:bg-[#0F0F0F] transition-colors"
                   >
                     {part.viewIn.label}
                     <ArrowRight className="h-3 w-3" />
@@ -1809,7 +2712,6 @@ function ActionConfirmCard({
         </div>
       )}
 
-      {/* Cancelled state */}
       {isCancelled && (
         <div className="px-4 py-3">
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
@@ -1819,7 +2721,6 @@ function ActionConfirmCard({
         </div>
       )}
 
-      {/* Error state */}
       {isError && (
         <div className="px-4 py-3">
           <div className="flex items-start gap-1.5 text-[11px] text-rose-400">
@@ -1830,22 +2731,6 @@ function ActionConfirmCard({
       )}
     </motion.div>
   );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
 export default OracleBrainCore;

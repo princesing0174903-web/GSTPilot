@@ -4,16 +4,23 @@
 // Oracle AI explains a single mismatch and recommends the best action.
 //
 // Body: { matchId }
-// Returns: { explanation, recommendation, action }
+// Returns: {
+//   explanation,           // CFO-grade narrative
+//   recommendation,        // short action text
+//   action: { label, type },
+//   suggestion: AISuggestion,         // primary suggestion (label, reason, detail, priority, icon, estimatedResolutionDays)
+//   alternatives: AISuggestion[],     // context-aware alternative actions
+//   fixes: FixSuggestion[],           // auto-fix suggestions with preview + severity
+//   scoreBreakdown: ScoreBreakdown,   // per-field 0-1 confidence
+// }
 //
-// Uses rule-based AI (deterministic, no external LLM call) so it's instant
-// and free. Each status + mismatch combination produces a CFO-grade
-// explanation and a specific recommended action.
+// Uses rule-based AI (deterministic, instant, free).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { suggestAction, suggestAllActions, generateFixes } from '@/lib/gst-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,22 +61,73 @@ export async function POST(
       return NextResponse.json({ error: 'Match not found', code: 'NOT_FOUND' }, { status: 404 });
     }
 
-    // ── Oracle AI: rule-based explanation + recommendation ──
     const mismatches: MismatchField[] = safeParse(match.mismatchReasons, []);
+    const scoreBreakdown = safeParse(match.scoreBreakdown, {});
+
     const explanation = buildExplanation(match, mismatches);
     const recommendation = buildRecommendation(match, mismatches);
     const action = buildAction(match);
 
-    // Persist the AI explanation so we don't regenerate on every view
+    // ── Generate full Oracle AI suggestion set (primary + alternatives) ──
+    const suggestionContext = {
+      status: match.status as never,
+      confidence: match.confidence,
+      itcAtRisk: match.itcAtRisk,
+      booksInvoiceNo: match.booksInvoiceNo,
+      gstr2bInvoiceNo: match.gstr2bInvoiceNo,
+      booksSupplierGSTIN: match.booksSupplierGSTIN,
+      gstr2bSupplierGSTIN: match.gstr2bSupplierGSTIN,
+      booksTaxableValue: match.booksTaxableValue,
+      gstr2bTaxableValue: match.gstr2bTaxableValue,
+    };
+    const suggestion = suggestAction(suggestionContext);
+    const alternatives = suggestAllActions(suggestionContext).filter((s) => s.key !== suggestion.key);
+
+    // ── Generate auto-fix suggestions ──
+    const fixContext = {
+      status: match.status as never,
+      confidence: match.confidence,
+      booksInvoiceId: match.booksInvoiceId,
+      booksInvoiceNo: match.booksInvoiceNo,
+      booksInvoiceDate: match.booksInvoiceDate,
+      gstr2bInvoiceNo: match.gstr2bInvoiceNo,
+      gstr2bInvoiceDate: match.gstr2bInvoiceDate,
+      booksSupplierGSTIN: match.booksSupplierGSTIN,
+      gstr2bSupplierGSTIN: match.gstr2bSupplierGSTIN,
+      booksTaxableValue: match.booksTaxableValue,
+      gstr2bTaxableValue: match.gstr2bTaxableValue,
+      booksCGST: match.booksCGST,
+      gstr2bCGST: match.gstr2bCGST,
+      booksSGST: match.booksSGST,
+      gstr2bSGST: match.gstr2bSGST,
+      booksIGST: match.booksIGST,
+      gstr2bIGST: match.gstr2bIGST,
+      booksCESS: match.booksCESS,
+      gstr2bCESS: match.gstr2bCESS,
+      itcAtRisk: match.itcAtRisk,
+    };
+    const fixes = generateFixes(fixContext);
+
+    // Persist the AI explanation + suggestion key so we don't regenerate on every view
     await db.gSTReconciliationMatch.update({
       where: { id: matchId },
       data: {
         aiExplanation: explanation,
         aiRecommendation: recommendation,
+        aiSuggestion: suggestion.key,
+        fixSuggestions: fixes.length > 0 ? JSON.stringify(fixes) : null,
       },
     });
 
-    return NextResponse.json({ explanation, recommendation, action });
+    return NextResponse.json({
+      explanation,
+      recommendation,
+      action,
+      suggestion,
+      alternatives,
+      fixes,
+      scoreBreakdown,
+    });
   } catch (error) {
     return friendlyApiError(error, 'Oracle could not analyze this mismatch.');
   }
@@ -105,20 +163,22 @@ function buildExplanation(
     booksIGST: number;
     gstr2bIGST: number;
     itcAtRisk: number;
+    confidence: number;
   },
   mismatches: MismatchField[],
 ): string {
   const invNo = match.booksInvoiceNo || match.gstr2bInvoiceNo || 'Unknown';
   const supplier = match.booksSupplierGSTIN || match.gstr2bSupplierGSTIN || 'Unknown';
+  const confPct = Math.round(match.confidence * 100);
 
   switch (match.status) {
     case 'perfect_match':
-      return `Invoice ${invNo} from ${supplier} reconciled perfectly between your Books and GSTR-2B. All fields (GSTIN, invoice number, date, taxable value, and tax components) match exactly. ITC of ${fmtINR(match.itcAtRisk === 0 ? match.gstr2bCGST + match.gstr2bSGST + match.gstr2bIGST : 0)} is fully eligible and safe to claim.`;
+      return `Invoice ${invNo} from ${supplier} reconciled perfectly between your Books and GSTR-2B. All 8 comparison fields (GSTIN, invoice number, date, taxable value, CGST, SGST, IGST, CESS) match exactly. Confidence: ${confPct}%. ITC is fully eligible and safe to claim.`;
 
     case 'value_mismatch': {
       const taxableDelta = match.booksTaxableValue - match.gstr2bTaxableValue;
       const direction = taxableDelta > 0 ? 'higher in your Books' : 'lower in your Books';
-      return `Invoice ${invNo} from ${supplier} has a taxable value mismatch. Your Books show ${fmtINR(match.booksTaxableValue)} but GSTR-2B shows ${fmtINR(match.gstr2bTaxableValue)} — a difference of ${fmtINR(taxableDelta)} ${direction}. This is the most common reconciliation issue and usually stems from a discount or rounding adjustment not reflected in the supplier's GSTR-1 filing. ITC of ${fmtINR(match.itcAtRisk)} is at risk until reconciled.`;
+      return `Invoice ${invNo} from ${supplier} has a taxable value mismatch (confidence ${confPct}%). Your Books show ${fmtINR(match.booksTaxableValue)} but GSTR-2B shows ${fmtINR(match.gstr2bTaxableValue)} — a difference of ${fmtINR(taxableDelta)} ${direction}. This is the most common reconciliation issue and usually stems from a discount or rounding adjustment not reflected in the supplier's GSTR-1 filing. ITC of ${fmtINR(match.itcAtRisk)} is at risk until reconciled.`;
     }
 
     case 'tax_mismatch': {
@@ -126,14 +186,14 @@ function buildExplanation(
       const details = taxFields
         .map((m) => `${m.field.toUpperCase()} ${fmtINR(m.booksValue as number)} vs ${fmtINR(m.gstr2bValue as number)}`)
         .join(', ');
-      return `Invoice ${invNo} from ${supplier} has a tax component mismatch. ${details}. This typically occurs when the supplier applied a different GST rate (e.g. 18% vs 12%) or split CGST/SGST incorrectly vs IGST. The taxable values match, so the invoice is correctly identified — only the tax treatment differs. ITC of ${fmtINR(match.itcAtRisk)} may be partially blocked.`;
+      return `Invoice ${invNo} from ${supplier} has a tax component mismatch (confidence ${confPct}%). ${details}. This typically occurs when the supplier applied a different GST rate (e.g. 18% vs 12%) or split CGST/SGST incorrectly vs IGST. The taxable values match, so the invoice is correctly identified — only the tax treatment differs. ITC of ${fmtINR(match.itcAtRisk)} may be partially blocked.`;
     }
 
     case 'date_mismatch':
-      return `Invoice ${invNo} from ${supplier} has a date mismatch. Your Books record ${mismatches.find((m) => m.field === 'invoiceDate')?.booksValue || 'no date'} but GSTR-2B shows ${mismatches.find((m) => m.field === 'invoiceDate')?.gstr2bValue || 'no date'}. This matters for ITC timing — the invoice must appear in GSTR-2B for the period in which you're claiming ITC. If the dates differ by more than a financial year, ITC may be time-barred under Section 16(4).`;
+      return `Invoice ${invNo} from ${supplier} has a date mismatch (confidence ${confPct}%). Your Books record ${mismatches.find((m) => m.field === 'invoiceDate')?.booksValue || 'no date'} but GSTR-2B shows ${mismatches.find((m) => m.field === 'invoiceDate')?.gstr2bValue || 'no date'}. This matters for ITC timing — the invoice must appear in GSTR-2B for the period in which you're claiming ITC. If the dates differ by more than a financial year, ITC may be time-barred under Section 16(4).`;
 
     case 'gstin_mismatch':
-      return `Invoice ${invNo} appears in both Books and GSTR-2B, but the supplier GSTIN differs. Your Books show ${match.booksSupplierGSTIN} while GSTR-2B shows ${match.gstr2bSupplierGSTIN}. This is a serious discrepancy — it may indicate the supplier has multiple GSTINs (common for large businesses with branches) and the invoice was filed under a different branch GSTIN. Verify with the supplier which GSTIN is correct for this invoice.`;
+      return `Invoice ${invNo} appears in both Books and GSTR-2B, but the supplier GSTIN differs (confidence ${confPct}%). Your Books show ${match.booksSupplierGSTIN} while GSTR-2B shows ${match.gstr2bSupplierGSTIN}. This is a serious discrepancy — it may indicate the supplier has multiple GSTINs (common for large businesses with branches) and the invoice was filed under a different branch GSTIN, or worse, a fraudulent GSTIN. Verify with the supplier which GSTIN is correct for this invoice.`;
 
     case 'missing_in_books':
       return `Invoice ${match.gstr2bInvoiceNo} from ${match.gstr2bSupplierGSTIN} appears in GSTR-2B (filed by the supplier) but is NOT in your purchase register. This means a supplier invoice was not recorded in your Books. Potential ITC of ${fmtINR(match.itcAtRisk)} is available but unclaimed. Common causes: invoice received but not yet entered, expense recorded without the GST breakdown, or the invoice went to a different branch/location.`;
@@ -157,7 +217,7 @@ function buildRecommendation(
     case 'perfect_match':
       return 'No action needed. ITC is safe to claim.';
     case 'value_mismatch':
-      return `Verify the discount/adjustment with the supplier. If your Books value is correct, request the supplier to amend their GSTR-1. If GSTR-2B is correct, update your Books. Until resolved, claim ITC only on the lower of the two values (₹${Math.min(match.itcAtRisk, match.itcAtRisk).toFixed(2)} at risk).`;
+      return `Verify the discount/adjustment with the supplier. If your Books value is correct, request the supplier to amend their GSTR-1. If GSTR-2B is correct, update your Books. Until resolved, claim ITC only on the lower of the two values (${fmtINR(match.itcAtRisk)} at risk).`;
     case 'tax_mismatch':
       return 'Confirm the correct GST rate with the supplier. If the supplier applied the wrong rate, they must amend GSTR-1. Claim ITC at the rate shown in GSTR-2B to avoid a notice.';
     case 'date_mismatch':

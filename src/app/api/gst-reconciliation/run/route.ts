@@ -11,7 +11,15 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
-import { getGSPProvider, reconcile, type BooksInvoice } from '@/lib/gst-reconciliation';
+import {
+  getGSPProvider,
+  reconcile,
+  generateAISummary,
+  computeVendorScores,
+  suggestAction,
+  generateFixes,
+  type BooksInvoice,
+} from '@/lib/gst-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,37 +161,76 @@ export async function POST(request: Request) {
     });
 
     // Persist matches in batches (Prisma createMany)
-    const matchRows = results.map((r) => ({
-      runId: run.id,
-      booksInvoiceId: r.booksInvoice?.id || null,
-      booksInvoiceNo: r.booksInvoice?.invoiceNo || null,
-      booksInvoiceDate: r.booksInvoice?.invoiceDate || null,
-      booksSupplierGSTIN: r.booksInvoice?.supplierGSTIN || null,
-      booksTaxableValue: r.booksInvoice?.taxableValue || 0,
-      booksCGST: r.booksInvoice?.cgst || 0,
-      booksSGST: r.booksInvoice?.sgst || 0,
-      booksIGST: r.booksInvoice?.igst || 0,
-      booksCESS: r.booksInvoice?.cess || 0,
-      booksTotal: r.booksInvoice?.total || 0,
-      gstr2bInvoiceNo: r.gstr2bRecord?.invoiceNo || null,
-      gstr2bInvoiceDate: r.gstr2bRecord?.invoiceDate || null,
-      gstr2bSupplierGSTIN: r.gstr2bRecord?.supplierGSTIN || null,
-      gstr2bTaxableValue: r.gstr2bRecord?.taxableValue || 0,
-      gstr2bCGST: r.gstr2bRecord?.cgst || 0,
-      gstr2bSGST: r.gstr2bRecord?.sgst || 0,
-      gstr2bIGST: r.gstr2bRecord?.igst || 0,
-      gstr2bCESS: r.gstr2bRecord?.cess || 0,
-      gstr2bTotal:
-        (r.gstr2bRecord?.taxableValue || 0) +
-        (r.gstr2bRecord?.cgst || 0) +
-        (r.gstr2bRecord?.sgst || 0) +
-        (r.gstr2bRecord?.igst || 0) +
-        (r.gstr2bRecord?.cess || 0),
-      status: r.status,
-      confidence: r.confidence,
-      mismatchReasons: JSON.stringify(r.mismatchReasons),
-      itcAtRisk: r.itcAtRisk,
-    }));
+    const matchRows = results.map((r) => {
+      // Generate Oracle AI suggestion + fixes for each match (rule-based, instant)
+      const suggestion = suggestAction({
+        status: r.status,
+        confidence: r.confidence,
+        itcAtRisk: r.itcAtRisk,
+        booksInvoiceNo: r.booksInvoice?.invoiceNo || null,
+        gstr2bInvoiceNo: r.gstr2bRecord?.invoiceNo || null,
+        booksSupplierGSTIN: r.booksInvoice?.supplierGSTIN || null,
+        gstr2bSupplierGSTIN: r.gstr2bRecord?.supplierGSTIN || null,
+        booksTaxableValue: r.booksInvoice?.taxableValue || 0,
+        gstr2bTaxableValue: r.gstr2bRecord?.taxableValue || 0,
+      });
+      const fixes = generateFixes({
+        status: r.status,
+        confidence: r.confidence,
+        booksInvoiceId: r.booksInvoice?.id || null,
+        booksInvoiceNo: r.booksInvoice?.invoiceNo || null,
+        booksInvoiceDate: r.booksInvoice?.invoiceDate || null,
+        gstr2bInvoiceNo: r.gstr2bRecord?.invoiceNo || null,
+        gstr2bInvoiceDate: r.gstr2bRecord?.invoiceDate || null,
+        booksSupplierGSTIN: r.booksInvoice?.supplierGSTIN || null,
+        gstr2bSupplierGSTIN: r.gstr2bRecord?.supplierGSTIN || null,
+        booksTaxableValue: r.booksInvoice?.taxableValue || 0,
+        gstr2bTaxableValue: r.gstr2bRecord?.taxableValue || 0,
+        booksCGST: r.booksInvoice?.cgst || 0,
+        gstr2bCGST: r.gstr2bRecord?.cgst || 0,
+        booksSGST: r.booksInvoice?.sgst || 0,
+        gstr2bSGST: r.gstr2bRecord?.sgst || 0,
+        booksIGST: r.booksInvoice?.igst || 0,
+        gstr2bIGST: r.gstr2bRecord?.igst || 0,
+        booksCESS: r.booksInvoice?.cess || 0,
+        gstr2bCESS: r.gstr2bRecord?.cess || 0,
+        itcAtRisk: r.itcAtRisk,
+      });
+      return {
+        runId: run.id,
+        booksInvoiceId: r.booksInvoice?.id || null,
+        booksInvoiceNo: r.booksInvoice?.invoiceNo || null,
+        booksInvoiceDate: r.booksInvoice?.invoiceDate || null,
+        booksSupplierGSTIN: r.booksInvoice?.supplierGSTIN || null,
+        booksTaxableValue: r.booksInvoice?.taxableValue || 0,
+        booksCGST: r.booksInvoice?.cgst || 0,
+        booksSGST: r.booksInvoice?.sgst || 0,
+        booksIGST: r.booksInvoice?.igst || 0,
+        booksCESS: r.booksInvoice?.cess || 0,
+        booksTotal: r.booksInvoice?.total || 0,
+        gstr2bInvoiceNo: r.gstr2bRecord?.invoiceNo || null,
+        gstr2bInvoiceDate: r.gstr2bRecord?.invoiceDate || null,
+        gstr2bSupplierGSTIN: r.gstr2bRecord?.supplierGSTIN || null,
+        gstr2bTaxableValue: r.gstr2bRecord?.taxableValue || 0,
+        gstr2bCGST: r.gstr2bRecord?.cgst || 0,
+        gstr2bSGST: r.gstr2bRecord?.sgst || 0,
+        gstr2bIGST: r.gstr2bRecord?.igst || 0,
+        gstr2bCESS: r.gstr2bRecord?.cess || 0,
+        gstr2bTotal:
+          (r.gstr2bRecord?.taxableValue || 0) +
+          (r.gstr2bRecord?.cgst || 0) +
+          (r.gstr2bRecord?.sgst || 0) +
+          (r.gstr2bRecord?.igst || 0) +
+          (r.gstr2bRecord?.cess || 0),
+        status: r.status,
+        confidence: r.confidence,
+        scoreBreakdown: JSON.stringify(r.scoreBreakdown),
+        mismatchReasons: JSON.stringify(r.mismatchReasons),
+        itcAtRisk: r.itcAtRisk,
+        aiSuggestion: suggestion.key,
+        fixSuggestions: fixes.length > 0 ? JSON.stringify(fixes) : null,
+      };
+    });
 
     // Insert in chunks of 100 to avoid SQLite parameter limits
     for (let i = 0; i < matchRows.length; i += 100) {
@@ -191,6 +238,50 @@ export async function POST(request: Request) {
         data: matchRows.slice(i, i + 100),
       });
     }
+
+    // ── 5. Generate + persist the AI CFO summary + vendor scores ──
+    const aiSummary = generateAISummary(
+      {
+        totalBooks: summary.totalBooks,
+        total2B: summary.total2B,
+        matched: summary.matched,
+        unmatched: summary.unmatched,
+        missingInBooks: summary.missingInBooks,
+        missingIn2B: summary.missingIn2B,
+        duplicates: summary.duplicates,
+        matchPercent: summary.matchPercent,
+        potentialITCLoss: summary.potentialITCLoss,
+        totalTaxableValue: summary.totalTaxableValue,
+        totalMatchedTax: summary.totalMatchedTax,
+        avgConfidence: summary.avgConfidence,
+      },
+      results.map((r) => ({
+        status: r.status,
+        itcAtRisk: r.itcAtRisk,
+        booksTaxableValue: r.booksInvoice?.taxableValue || 0,
+        gstr2bTaxableValue: r.gstr2bRecord?.taxableValue || 0,
+        confidence: r.confidence,
+      })),
+    );
+
+    const vendorScores = computeVendorScores(
+      results.map((r) => ({
+        status: r.status,
+        booksSupplierGSTIN: r.booksInvoice?.supplierGSTIN || null,
+        gstr2bSupplierGSTIN: r.gstr2bRecord?.supplierGSTIN || null,
+        itcAtRisk: r.itcAtRisk,
+        booksSupplierName: r.booksInvoice?.supplierName || null,
+        gstr2bSupplierName: r.gstr2bRecord?.supplierName || null,
+      })),
+    );
+
+    await db.gSTReconciliationRun.update({
+      where: { id: run.id },
+      data: {
+        aiSummary: JSON.stringify(aiSummary),
+        vendorScores: JSON.stringify(vendorScores),
+      },
+    });
 
     return NextResponse.json({
       runId: run.id,

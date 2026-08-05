@@ -6453,6 +6453,9 @@ model GSTReconciliationRun {
   potentialITCLoss Float   @default(0)
   totalTaxableValue Float  @default(0)
   totalMatchedTax  Float   @default(0)
+  // ── AI CFO Report (computed post-reconciliation) ──
+  aiSummary       String?  // JSON: {missingInvoices, duplicateInvoices, wrongGST, itcBlocked, expectedRecovery, riskLevel, topIssues[]}
+  vendorScores    String?  // JSON: [{gstin, name, score, reasons[], invoiceCount, matched, mismatched, missing}]
   startedAt       DateTime @default(now())
   completedAt     DateTime?
   durationMs      Int      @default(0)
@@ -6464,6 +6467,7 @@ model GSTReconciliationRun {
 
   @@index([organizationId, period])
   @@index([gstin, period])
+  @@index([organizationId, createdAt])
 }
 
 model GSTReconciliationMatch {
@@ -6493,15 +6497,23 @@ model GSTReconciliationMatch {
   gstr2bTotal     Float    @default(0)
   // Match result
   status          String   @default("unmatched") // perfect_match | value_mismatch | tax_mismatch | date_mismatch | missing_in_books | missing_in_gstr2b | duplicate | gstin_mismatch
-  confidence      Float    @default(0) // 0-1 fuzzy match confidence
+  confidence      Float    @default(0) // 0-1 weighted confidence score (v2 engine)
+  scoreBreakdown  String   @default("{}") // JSON: per-field 0-1 scores (gstin, invoiceNo, date, taxable, cgst, sgst, igst, cess)
   mismatchReasons String   @default("[]") // JSON array of {field, booksValue, gstr2bValue, delta}
   itcAtRisk       Float    @default(0)
   aiExplanation   String?  // Oracle AI explanation
   aiRecommendation String? // Oracle AI recommended action
+  aiSuggestion    String?  // Oracle suggested action key: contact_supplier | wait_for_gstr1 | raise_dispute | claim_later | ignore_mismatch
+  fixSuggestions  String?  // JSON array of {type, label, field, from, to, preview, severity}
+  fixApplied      Boolean  @default(false)
+  fixAppliedAt    DateTime?
+  fixAppliedBy    String?
   resolved        Boolean  @default(false)
   resolvedAt      DateTime?
   resolvedBy      String?
   resolutionNote  String?
+  reviewedAt      DateTime?
+  reviewedBy      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -6509,6 +6521,9 @@ model GSTReconciliationMatch {
 
   @@index([runId, status])
   @@index([runId, resolved])
+  @@index([runId, confidence])
+  @@index([booksSupplierGSTIN])
+  @@index([gstr2bSupplierGSTIN])
 }
 
 // GSP (GST Suvidha Provider) configuration — abstracted so any provider can be plugged in

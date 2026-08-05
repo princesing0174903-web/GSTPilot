@@ -1,17 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// POST /api/gst-reconciliation/[id]/resolve
+// GET /api/gst-reconciliation/[id]/vendors
 // ═══════════════════════════════════════════════════════════════════════════════
-// Mark a reconciliation match as resolved (or reopen it).
-// Body: { matchId, resolved: true|false, note? }
+// Fetch the vendor (supplier) compliance scores for a run.
+// Returns an array of {gstin, name, score, grade, reasons[], ...stats} sorted
+// worst-first.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { computeVendorScores } from '@/lib/gst-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(
+export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -21,12 +23,6 @@ export async function POST(
     const { uid } = authResult;
 
     const { id: runId } = await params;
-    const body = await request.json();
-    const { matchId, resolved, note } = body;
-
-    if (!matchId || typeof resolved !== 'boolean') {
-      return NextResponse.json({ error: 'matchId and resolved are required', code: 'MISSING_PARAMS' }, { status: 400 });
-    }
 
     const run = await db.gSTReconciliationRun.findUnique({ where: { id: runId } });
     if (!run) {
@@ -36,18 +32,41 @@ export async function POST(
     const memberResult = await requireOrgMembership(uid, run.organizationId);
     if (memberResult instanceof NextResponse) return memberResult;
 
-    const updated = await db.gSTReconciliationMatch.update({
-      where: { id: matchId },
-      data: {
-        resolved,
-        resolvedAt: resolved ? new Date() : null,
-        resolvedBy: resolved ? uid : null,
-        resolutionNote: note || null,
+    if (run.vendorScores) {
+      try {
+        const vendors = JSON.parse(run.vendorScores);
+        return NextResponse.json({ vendors, cached: true });
+      } catch {
+        // fall through to regenerate
+      }
+    }
+
+    const matches = await db.gSTReconciliationMatch.findMany({
+      where: { runId },
+      select: {
+        status: true,
+        booksSupplierGSTIN: true,
+        gstr2bSupplierGSTIN: true,
+        itcAtRisk: true,
       },
     });
 
-    return NextResponse.json({ ok: true, match: updated });
+    const vendors = computeVendorScores(
+      matches.map((m) => ({
+        status: m.status as never,
+        booksSupplierGSTIN: m.booksSupplierGSTIN,
+        gstr2bSupplierGSTIN: m.gstr2bSupplierGSTIN,
+        itcAtRisk: m.itcAtRisk,
+      })),
+    );
+
+    await db.gSTReconciliationRun.update({
+      where: { id: runId },
+      data: { vendorScores: JSON.stringify(vendors) },
+    });
+
+    return NextResponse.json({ vendors, cached: false });
   } catch (error) {
-    return friendlyApiError(error, 'Could not update reconciliation status.');
+    return friendlyApiError(error, 'Could not load vendor scores.');
   }
 }

@@ -1,31 +1,34 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Reconciliation Match Engine
+// GSTPilot — GST Reconciliation Match Engine v2
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Pure functions that compare purchase invoices (from Books) against GSTR-2B
-// records (from a GSP). Classifies every record into one of:
+// Smart Match Engine v2 — Weighted Confidence Scoring
 //
-//   • perfect_match      — GSTIN + invoice no + date + all values match
-//   • value_mismatch     — GSTIN + invoice no match, taxable value differs
-//   • tax_mismatch       — GSTIN + invoice no match, tax components differ
-//   • date_mismatch      — GSTIN + invoice no match, date differs
-//   • gstin_mismatch     — invoice no matches but supplier GSTIN differs
-//   • missing_in_books   — exists in GSTR-2B, not in Books
-//   • missing_in_gstr2b  — exists in Books, not in GSTR-2B
-//   • duplicate          — same invoice appears 2+ times on one side
+// Instead of binary matched/unmatched, every comparison now produces a 0-100
+// confidence score across 8 dimensions:
 //
-// Includes fuzzy matching for invoice number formatting differences (e.g.
-// "INV/2026/001" vs "INV-2026-001") and small rounding differences (₹0.50).
+//   • GSTIN match          (weight: 25) — exact / normalized / mismatch
+//   • Invoice # similarity (weight: 20) — Levenshtein-based fuzzy match
+//   • Invoice date diff    (weight: 15) — 0 days = 1.0, decays to 0 at 30+ days
+//   • Taxable value diff   (weight: 15) — within ₹1 = 1.0, decays with delta
+//   • CGST tolerance       (weight:  6)
+//   • SGST tolerance       (weight:  6)
+//   • IGST tolerance       (weight:  6)
+//   • CESS tolerance       (weight:  7)
 //
-// This module is PURE — no Prisma, no Firebase, no side effects. The API
-// route is responsible for persistence.
+// Final confidence = Σ (score × weight) / Σ weights
+//
+// Classifications remain the same 8-way system, but now they carry a real
+// confidence number that drives UI color (green ≥85%, yellow 60-84%, red <60%).
+//
+// This module is PURE — no Prisma, no Firebase, no side effects.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { GSTR2BRecord } from './types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-/** A purchase invoice from Books (GSTPilot or Zoho). Normalized shape. */
+/** A purchase invoice from Books (GSTpilot or Zoho). Normalized shape. */
 export interface BooksInvoice {
   id: string;
   invoiceNo: string;
@@ -57,12 +60,29 @@ export interface MismatchField {
   delta?: number;
 }
 
+/**
+ * Per-field confidence breakdown (0-1 each).
+ * Drives the confidence bars + AI explanations.
+ */
+export interface ScoreBreakdown {
+  gstin: number;
+  invoiceNo: number;
+  date: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+}
+
 export interface MatchResult {
   booksInvoice: BooksInvoice | null;
   gstr2bRecord: GSTR2BRecord | null;
   status: MatchStatus;
-  /** 0-1 fuzzy match confidence. */
+  /** 0-1 weighted confidence (v2). */
   confidence: number;
+  /** Per-field 0-1 scores (v2). */
+  scoreBreakdown: ScoreBreakdown;
   mismatchReasons: MismatchField[];
   /** ITC at risk if this invoice is not reconciled. */
   itcAtRisk: number;
@@ -81,71 +101,124 @@ export interface ReconciliationSummary {
   totalTaxableValue: number;
   totalMatchedTax: number;
   byStatus: Record<MatchStatus, number>;
+  /** v2 — confidence distribution */
+  confidenceBuckets: { high: number; medium: number; low: number };
+  /** v2 — average confidence across matched pairs */
+  avgConfidence: number;
 }
+
+// ─── Weights ─────────────────────────────────────────────────────────────────
+
+const WEIGHTS = {
+  gstin: 25,
+  invoiceNo: 20,
+  date: 15,
+  taxable: 15,
+  cgst: 6,
+  sgst: 6,
+  igst: 6,
+  cess: 7,
+} as const;
+
+const TOTAL_WEIGHT =
+  WEIGHTS.gstin + WEIGHTS.invoiceNo + WEIGHTS.date + WEIGHTS.taxable +
+  WEIGHTS.cgst + WEIGHTS.sgst + WEIGHTS.igst + WEIGHTS.cess; // = 100
 
 // ─── Normalization + Fuzzy helpers ────────────────────────────────────────────
 
-/**
- * Normalize an invoice number for fuzzy comparison.
- * Strips punctuation, lowercases, removes common prefixes/suffixes.
- * "INV/2026/001" → "inv2026001"
- * "INV-2026-001" → "inv2026001"
- * "Invoice #2026-001" → "invoice2026001"
- */
 export function normalizeInvoiceNo(raw: string): string {
   if (!raw) return '';
   return raw
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
-    .replace(/^(inv|invoice|bill|po|grn)+/, (m) => m) // keep one prefix
     .trim();
 }
 
-/**
- * Levenshtein distance for very short strings (invoice numbers).
- * Used to catch OCR / manual-entry typos like "INV-2026-001" vs "INV-2026-010".
- */
+/** Levenshtein distance (iterative DP, O(m*n)). */
 function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
   if (m === 0) return n;
   if (n === 0) return m;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
   for (let i = 1; i <= m; i++) {
+    curr[0] = i;
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
     }
+    [prev, curr] = [curr, prev];
   }
-  return dp[m][n];
+  return prev[n];
 }
 
 /**
- * Fuzzy invoice number match — returns 0-1 confidence.
- * 1.0 = exact, 0.95 = normalized match, 0.85+ = 1-char typo, <0.7 = different.
+ * Fuzzy invoice-number similarity — returns 0-1.
+ * 1.00 = exact match
+ * 0.97 = normalized match (punctuation differs)
+ * 0.85+ = 1-char typo
+ * <0.70 = different invoice
  */
 export function fuzzyInvoiceMatch(a: string, b: string): number {
   if (!a || !b) return 0;
   if (a === b) return 1;
   const na = normalizeInvoiceNo(a);
   const nb = normalizeInvoiceNo(b);
-  if (na === nb) return 0.95;
+  if (na === nb) return 0.97;
+  if (!na || !nb) return 0;
   const dist = levenshtein(na, nb);
   const maxLen = Math.max(na.length, nb.length);
   if (maxLen === 0) return 0;
   const similarity = 1 - dist / maxLen;
-  // Require at least 85% similarity to consider it a fuzzy match
-  if (similarity >= 0.85) return similarity;
+  return similarity;
+}
+
+/** GSTIN similarity — 1.0 if identical, 0.5 if same PAN (chars 2-7) but different state+entity, 0 otherwise. */
+function gstinSimilarity(a: string, b: string): number {
+  const na = normalizeGSTIN(a);
+  const nb = normalizeGSTIN(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  // Same PAN (chars 2-7) — different branch of the same legal entity
+  if (na.length >= 7 && nb.length >= 7 && na.slice(2, 7) === nb.slice(2, 7)) {
+    return 0.5;
+  }
   return 0;
 }
 
-/** Allow ₹1 rounding difference per field. */
-const VALUE_TOLERANCE = 1.0;
+/** Date similarity — 1.0 if same day, decays linearly to 0 at 30+ day gap. */
+function dateSimilarity(a?: string, b?: string): number {
+  const da = normalizeDate(a);
+  const db = normalizeDate(b);
+  if (!da || !db) return 0;
+  if (da === db) return 1;
+  try {
+    const diffDays = Math.abs(
+      Math.round((new Date(da).getTime() - new Date(db).getTime()) / 86400000),
+    );
+    if (diffDays <= 0) return 1;
+    if (diffDays >= 30) return 0;
+    return 1 - diffDays / 30;
+  } catch {
+    return 0;
+  }
+}
 
-function valuesClose(a: number, b: number, tolerance = VALUE_TOLERANCE): boolean {
-  return Math.abs(a - b) <= tolerance;
+/**
+ * Value similarity — 1.0 if equal (within ₹1), decays based on % difference.
+ * For small amounts (₹1000), allow 1% tolerance. For large amounts (₹10L), allow 0.1%.
+ */
+function valueSimilarity(a: number, b: number): number {
+  if (a === b) return 1;
+  const delta = Math.abs(a - b);
+  if (delta <= 1) return 1; // ₹1 rounding tolerance
+  const maxVal = Math.max(Math.abs(a), Math.abs(b), 1);
+  const pct = delta / maxVal;
+  // 1% diff = 0.7, 5% diff = 0.3, 10%+ diff = 0
+  if (pct >= 0.1) return 0;
+  return Math.max(0, 1 - pct * 7);
 }
 
 /** Parse a date string (YYYY-MM-DD or ISO) to YYYY-MM-DD. */
@@ -160,18 +233,19 @@ function normalizeDate(d?: string): string {
   }
 }
 
-/** GSTIN comparison — case-insensitive, no whitespace. */
+/** GSTIN normalization — case-insensitive, no whitespace. */
 function normalizeGSTIN(g?: string): string {
   if (!g) return '';
   return g.toUpperCase().replace(/\s+/g, '').trim();
 }
 
+/** Round to 2 decimals. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 // ─── Duplicate detection ─────────────────────────────────────────────────────
 
-/**
- * Detect duplicate invoices within a single side (Books or GSTR-2B).
- * Returns a Set of invoice keys that appear 2+ times.
- */
 function findDuplicates(
   items: Array<{ invoiceNo: string; supplierGSTIN: string }>,
 ): Set<string> {
@@ -186,111 +260,123 @@ function findDuplicates(
   return dupes;
 }
 
-// ─── Core match function ─────────────────────────────────────────────────────
+// ─── Empty breakdown (used for unmatched records) ────────────────────────────
 
-/**
- * Compare a single Books invoice against a single GSTR-2B record.
- * Assumes the caller has already determined these are candidate matches
- * (same supplier GSTIN + similar invoice number).
- */
-function comparePair(
-  book: BooksInvoice,
-  rec: GSTR2BRecord,
-): MatchResult {
+const EMPTY_BREAKDOWN: ScoreBreakdown = {
+  gstin: 0, invoiceNo: 0, date: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0,
+};
+
+// ─── Core compare function (v2 — weighted scoring) ───────────────────────────
+
+function comparePair(book: BooksInvoice, rec: GSTR2BRecord): MatchResult {
   const mismatchReasons: MismatchField[] = [];
   let status: MatchStatus = 'perfect_match';
-  let confidence = 1;
 
-  // ── GSTIN ──
-  const bookGstin = normalizeGSTIN(book.supplierGSTIN);
-  const recGstin = normalizeGSTIN(rec.supplierGSTIN);
-  if (bookGstin !== recGstin) {
-    status = 'gstin_mismatch';
+  // ── Per-field scores (0-1) ──
+  const gstinScore = gstinSimilarity(book.supplierGSTIN, rec.supplierGSTIN);
+  const invoiceScore = fuzzyInvoiceMatch(book.invoiceNo, rec.invoiceNo);
+  const dateScore = dateSimilarity(book.invoiceDate, rec.invoiceDate);
+  const taxableScore = valueSimilarity(book.taxableValue, rec.taxableValue);
+  const cgstScore = valueSimilarity(book.cgst, rec.cgst);
+  const sgstScore = valueSimilarity(book.sgst, rec.sgst);
+  const igstScore = valueSimilarity(book.igst, rec.igst);
+  const cessScore = valueSimilarity(book.cess, rec.cess);
+
+  // ── Build mismatch reasons for each field that doesn't match ──
+  if (gstinScore < 1) {
     mismatchReasons.push({
       field: 'supplierGSTIN',
       booksValue: book.supplierGSTIN,
       gstr2bValue: rec.supplierGSTIN,
     });
-    confidence = 0.5;
   }
-
-  // ── Invoice number (fuzzy) ──
-  const invoiceConf = fuzzyInvoiceMatch(book.invoiceNo, rec.invoiceNo);
-  if (invoiceConf < 0.95) {
-    // Different invoice number — not the same invoice
-    return {
-      booksInvoice: book,
-      gstr2bRecord: rec,
-      status: 'missing_in_books', // placeholder; caller decides
-      confidence: 0,
-      mismatchReasons: [],
-      itcAtRisk: 0,
-    };
+  if (invoiceScore < 0.95) {
+    mismatchReasons.push({
+      field: 'invoiceNo',
+      booksValue: book.invoiceNo,
+      gstr2bValue: rec.invoiceNo,
+    });
   }
-  confidence = Math.min(confidence, invoiceConf);
-
-  // ── Date ──
-  const bookDate = normalizeDate(book.invoiceDate);
-  const recDate = normalizeDate(rec.invoiceDate);
-  if (bookDate !== recDate) {
-    if (status === 'perfect_match') status = 'date_mismatch';
+  if (dateScore < 1) {
     mismatchReasons.push({
       field: 'invoiceDate',
       booksValue: book.invoiceDate,
       gstr2bValue: rec.invoiceDate,
     });
-    confidence = Math.min(confidence, 0.85);
   }
-
-  // ── Taxable value ──
-  if (!valuesClose(book.taxableValue, rec.taxableValue)) {
-    if (status === 'perfect_match') status = 'value_mismatch';
+  if (taxableScore < 1) {
     mismatchReasons.push({
       field: 'taxableValue',
       booksValue: book.taxableValue,
       gstr2bValue: rec.taxableValue,
-      delta: Math.round((book.taxableValue - rec.taxableValue) * 100) / 100,
+      delta: round2(book.taxableValue - rec.taxableValue),
     });
-    confidence = Math.min(confidence, 0.7);
   }
-
-  // ── Tax components ──
-  const taxFields: Array<{ field: string; book: number; rec: number }> = [
-    { field: 'cgst', book: book.cgst, rec: rec.cgst },
-    { field: 'sgst', book: book.sgst, rec: rec.sgst },
-    { field: 'igst', book: book.igst, rec: rec.igst },
-    { field: 'cess', book: book.cess, rec: rec.cess },
+  const taxFields: Array<{ field: string; score: number; book: number; rec: number }> = [
+    { field: 'cgst', score: cgstScore, book: book.cgst, rec: rec.cgst },
+    { field: 'sgst', score: sgstScore, book: book.sgst, rec: rec.sgst },
+    { field: 'igst', score: igstScore, book: book.igst, rec: rec.igst },
+    { field: 'cess', score: cessScore, book: book.cess, rec: rec.cess },
   ];
-  let taxMismatch = false;
   for (const t of taxFields) {
-    if (!valuesClose(t.book, t.rec)) {
-      taxMismatch = true;
+    if (t.score < 1) {
       mismatchReasons.push({
         field: t.field,
         booksValue: t.book,
         gstr2bValue: t.rec,
-        delta: Math.round((t.book - t.rec) * 100) / 100,
+        delta: round2(t.book - t.rec),
       });
     }
   }
-  if (taxMismatch && status === 'perfect_match') {
+
+  // ── Classification (priority order matters) ──
+  // 1. GSTIN mismatch is the most serious — different supplier entirely
+  if (gstinScore < 0.5 && invoiceScore >= 0.85) {
+    status = 'gstin_mismatch';
+  } else if (mismatchReasons.some((m) => ['cgst', 'sgst', 'igst', 'cess'].includes(m.field))) {
     status = 'tax_mismatch';
-    confidence = Math.min(confidence, 0.75);
+  } else if (mismatchReasons.some((m) => m.field === 'taxableValue')) {
+    status = 'value_mismatch';
+  } else if (mismatchReasons.some((m) => m.field === 'invoiceDate')) {
+    status = 'date_mismatch';
+  } else if (gstinScore < 1) {
+    status = 'gstin_mismatch';
+  } else {
+    status = 'perfect_match';
   }
 
+  // ── Weighted confidence ──
+  const confidence =
+    (gstinScore * WEIGHTS.gstin +
+      invoiceScore * WEIGHTS.invoiceNo +
+      dateScore * WEIGHTS.date +
+      taxableScore * WEIGHTS.taxable +
+      cgstScore * WEIGHTS.cgst +
+      sgstScore * WEIGHTS.sgst +
+      igstScore * WEIGHTS.igst +
+      cessScore * WEIGHTS.cess) / TOTAL_WEIGHT;
+
   // ── ITC at risk ──
-  // For mismatches, the ITC claimed in books may be reversed by GSTN.
-  // We estimate ITC at risk as the tax declared in Books (what we claimed).
   const itcAtRisk =
     status === 'perfect_match'
       ? 0
-      : Math.round((book.cgst + book.sgst + book.igst + book.cess) * 100) / 100;
+      : round2(book.cgst + book.sgst + book.igst + book.cess);
 
   return {
     booksInvoice: book,
     gstr2bRecord: rec,
     status,
-    confidence: Math.round(confidence * 100) / 100,
+    confidence: round2(confidence),
+    scoreBreakdown: {
+      gstin: round2(gstinScore),
+      invoiceNo: round2(invoiceScore),
+      date: round2(dateScore),
+      taxable: round2(taxableScore),
+      cgst: round2(cgstScore),
+      sgst: round2(sgstScore),
+      igst: round2(igstScore),
+      cess: round2(cessScore),
+    },
     mismatchReasons,
     itcAtRisk,
   };
@@ -299,13 +385,14 @@ function comparePair(
 // ─── Main reconciliation function ────────────────────────────────────────────
 
 /**
- * Reconcile Books invoices against GSTR-2B records.
+ * Reconcile Books invoices against GSTR-2B records (v2 — weighted scoring).
  *
  * Algorithm:
  *   1. Detect duplicates on each side.
- *   2. Build a candidate map: for each Books invoice, find the best-matching
- *      GSTR-2B record (same GSTIN + fuzzy invoice number).
- *   3. Compare each matched pair.
+ *   2. For each Books invoice, find the best-matching GSTR-2B record (highest
+ *      weighted confidence among candidates with same/related GSTIN + invoice
+ *      number similarity ≥ 0.85).
+ *   3. Compare each matched pair with weighted scoring.
  *   4. Anything unmatched on Books side → missing_in_gstr2b.
  *   5. Anything unmatched on GSTR-2B side → missing_in_books.
  *   6. Duplicates are flagged.
@@ -340,15 +427,36 @@ export function reconcile(
 
     const candidates = gstr2bByGstin.get(normalizeGSTIN(book.supplierGSTIN)) || [];
 
-    // Find the best candidate by fuzzy invoice number
+    // Find the best candidate by weighted confidence (v2 — no longer just invoice # fuzzy)
     let best: { rec: GSTR2BRecord; conf: number } | null = null;
     for (const rec of candidates) {
-      // Skip records already matched to another book invoice
       const recKey = `${normalizeGSTIN(rec.supplierGSTIN)}|${normalizeInvoiceNo(rec.invoiceNo)}`;
       if (matchedGstr2bIds.has(recKey) && !gstr2bDupes.has(recKey)) continue;
 
-      const conf = fuzzyInvoiceMatch(book.invoiceNo, rec.invoiceNo);
-      if (conf >= 0.85 && (!best || conf > best.conf)) {
+      // Quick pre-filter: invoice number similarity must clear 0.70 to be a candidate
+      const invSim = fuzzyInvoiceMatch(book.invoiceNo, rec.invoiceNo);
+      if (invSim < 0.70) continue;
+
+      // Compute full weighted confidence for ranking
+      const gstinScore = gstinSimilarity(book.supplierGSTIN, rec.supplierGSTIN);
+      const dateScore = dateSimilarity(book.invoiceDate, rec.invoiceDate);
+      const taxableScore = valueSimilarity(book.taxableValue, rec.taxableValue);
+      const cgstScore = valueSimilarity(book.cgst, rec.cgst);
+      const sgstScore = valueSimilarity(book.sgst, rec.sgst);
+      const igstScore = valueSimilarity(book.igst, rec.igst);
+      const cessScore = valueSimilarity(book.cess, rec.cess);
+
+      const conf =
+        (gstinScore * WEIGHTS.gstin +
+          invSim * WEIGHTS.invoiceNo +
+          dateScore * WEIGHTS.date +
+          taxableScore * WEIGHTS.taxable +
+          cgstScore * WEIGHTS.cgst +
+          sgstScore * WEIGHTS.sgst +
+          igstScore * WEIGHTS.igst +
+          cessScore * WEIGHTS.cess) / TOTAL_WEIGHT;
+
+      if (conf >= 0.55 && (!best || conf > best.conf)) {
         best = { rec, conf };
       }
     }
@@ -359,25 +467,26 @@ export function reconcile(
 
       const result = comparePair(book, best.rec);
 
-      // Override confidence with the fuzzy match confidence
-      result.confidence = Math.max(result.confidence, best.conf);
-
       // If it's a duplicate, override status
       if (isDuplicate || gstr2bDupes.has(recKey)) {
         result.status = 'duplicate';
+        result.itcAtRisk = 0; // duplicate ITC isn't lost, just at risk of double-claim
       }
 
       results.push(result);
     } else {
       // No GSTR-2B match — missing in GSTR-2B
-      const isDuplicateOnBooks = isDuplicate;
+      const itcAtRisk = isDuplicate
+        ? 0
+        : round2(book.cgst + book.sgst + book.igst + book.cess);
       results.push({
         booksInvoice: book,
         gstr2bRecord: null,
-        status: isDuplicateOnBooks ? 'duplicate' : 'missing_in_gstr2b',
+        status: isDuplicate ? 'duplicate' : 'missing_in_gstr2b',
         confidence: 0,
+        scoreBreakdown: EMPTY_BREAKDOWN,
         mismatchReasons: [],
-        itcAtRisk: isDuplicateOnBooks ? 0 : Math.round((book.cgst + book.sgst + book.igst + book.cess) * 100) / 100,
+        itcAtRisk,
       });
     }
   }
@@ -393,6 +502,7 @@ export function reconcile(
       gstr2bRecord: rec,
       status: isDuplicate ? 'duplicate' : 'missing_in_books',
       confidence: 0,
+      scoreBreakdown: EMPTY_BREAKDOWN,
       mismatchReasons: isDuplicate
         ? []
         : [{
@@ -430,13 +540,27 @@ function buildSummary(
   let potentialITCLoss = 0;
   let totalTaxableValue = 0;
   let totalMatchedTax = 0;
+  let confidenceSum = 0;
+  let confidenceCount = 0;
+  let high = 0; // ≥0.85
+  let medium = 0; // 0.60 - 0.84
+  let low = 0; // < 0.60
 
   for (const r of results) {
     byStatus[r.status]++;
     if (r.itcAtRisk > 0) potentialITCLoss += r.itcAtRisk;
     if (r.booksInvoice) totalTaxableValue += r.booksInvoice.taxableValue;
     if (r.status === 'perfect_match' && r.booksInvoice) {
-      totalMatchedTax += r.booksInvoice.cgst + r.booksInvoice.sgst + r.booksInvoice.igst + r.booksInvoice.cess;
+      totalMatchedTax +=
+        r.booksInvoice.cgst + r.booksInvoice.sgst + r.booksInvoice.igst + r.booksInvoice.cess;
+    }
+    // Only count confidence for matched pairs (not missing/duplicate placeholders)
+    if (r.status !== 'missing_in_books' && r.status !== 'missing_in_gstr2b' && r.status !== 'duplicate') {
+      confidenceSum += r.confidence;
+      confidenceCount++;
+      if (r.confidence >= 0.85) high++;
+      else if (r.confidence >= 0.6) medium++;
+      else low++;
     }
   }
 
@@ -452,6 +576,7 @@ function buildSummary(
 
   const totalConsidered = matched + unmatched + missingInBooks + missingIn2B + duplicates;
   const matchPercent = totalConsidered > 0 ? (matched / totalConsidered) * 100 : 0;
+  const avgConfidence = confidenceCount > 0 ? confidenceSum / confidenceCount : 0;
 
   return {
     totalBooks: books.length,
@@ -461,10 +586,12 @@ function buildSummary(
     missingInBooks,
     missingIn2B,
     duplicates,
-    matchPercent: Math.round(matchPercent * 100) / 100,
-    potentialITCLoss: Math.round(potentialITCLoss * 100) / 100,
-    totalTaxableValue: Math.round(totalTaxableValue * 100) / 100,
-    totalMatchedTax: Math.round(totalMatchedTax * 100) / 100,
+    matchPercent: round2(matchPercent),
+    potentialITCLoss: round2(potentialITCLoss),
+    totalTaxableValue: round2(totalTaxableValue),
+    totalMatchedTax: round2(totalMatchedTax),
     byStatus,
+    confidenceBuckets: { high, medium, low },
+    avgConfidence: round2(avgConfidence),
   };
 }

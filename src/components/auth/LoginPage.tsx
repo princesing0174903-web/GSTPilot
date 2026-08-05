@@ -92,7 +92,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         setLocalLoading(false);
         return;
       }
-      console.log('[LoginPage] Login successful — Redirecting to Dashboard');
       setSuccessMessage('Login successful! Redirecting...');
       setShowSuccess(true);
       // Clear localLoading — AppRouter will switch to 'app' immediately
@@ -123,7 +122,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         setLocalLoading(false);
         return;
       }
-      console.log('[LoginPage] Sign up successful — Redirecting to Dashboard');
       setSuccessMessage('Account created! Please check your email to verify your account.');
       setShowSuccess(true);
       setLocalLoading(false);
@@ -151,7 +149,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         setLocalError(googleError);
         setLocalLoading(false);
       } else {
-        console.log('[LoginPage] Google sign-in initiated — waiting for onAuthStateChanged');
         setLocalLoading(false);
       }
     } catch {

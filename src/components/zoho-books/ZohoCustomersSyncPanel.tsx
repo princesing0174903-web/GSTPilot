@@ -590,59 +590,21 @@ export function ZohoCustomersSyncPanel() {
 
   const handleCreate = useCallback(
     async (input: ZohoCustomerInput) => {
-      // ── Full-flow trace logging (per the user's 11-step debug directive) ──
-      console.group('%c[ZohoCustomers] Create Customer — flow trace', 'color:#3b82f6;font-weight:bold');
-      console.log('Step 1: Button clicked → handleSubmit invoked');
-      console.log('Step 2: Form validation passed');
-      console.log('Payload:', {
-        contact_name: input.contactName,
-        contact_type: 'customer',
-        company_name: input.companyName,
-        gstin: input.gstNumber,
-        email: input.email,
-        phone: input.phone,
-        currency_code: input.currency,
-        payment_terms: input.paymentTerms,
-      });
-      console.log('Step 3: Calling POST /api/integrations/zoho/customers...');
-      const startedAt = Date.now();
       try {
         const res = await createCustomer(input);
-        const elapsed = Date.now() - startedAt;
-        console.log(`Step 4-8: Backend responded in ${elapsed}ms`, {
-          ok: res.ok,
-          httpStatus: res.httpStatus,
-          zohoCode: res.zohoCode,
-          zohoMessage: res.zohoMessage,
-          error: res.error,
-          customer: res.customer
-            ? {
-                id: res.customer.id,
-                zohoContactId: res.customer.zohoContactId,
-                contactName: res.customer.contactName,
-              }
-            : null,
-        });
         if (!res.ok) {
           // Surface the EXACT Zoho error — never silently fail.
           const detail = res.zohoCode != null || res.zohoMessage != null
             ? `Zoho error ${res.zohoCode ?? '?'}: ${res.zohoMessage ?? 'No message.'}`
             : (res.error ?? 'Failed to create customer in Zoho Books.');
-          console.error('Step 8 FAILED: Customer not created.', detail);
           toast.error('Unable to create customer', { description: detail });
           throw new Error(detail);
         }
-        console.log('Step 9: Customer list refreshed by hook (listCustomers).');
-        console.log('Step 10: Dialog closing.');
-        console.log('Step 11: ✅ Success — customer created in Zoho + saved locally.');
         toast.success('Customer created', {
           description: `${res.customer?.contactName ?? input.contactName} has been added to Zoho Books.`,
         });
       } catch (err) {
-        console.error('Create Customer flow threw:', err);
         throw err;
-      } finally {
-        console.groupEnd();
       }
     },
     [createCustomer],
@@ -650,36 +612,20 @@ export function ZohoCustomersSyncPanel() {
 
   const handleEdit = useCallback(
     (customerId: string) => async (input: ZohoCustomerInput) => {
-      console.group('%c[ZohoCustomers] Edit Customer — flow trace', 'color:#3b82f6;font-weight:bold');
-      console.log('Editing customer:', customerId, 'with payload:', input);
-      const startedAt = Date.now();
       try {
         const res = await updateCustomer(customerId, input);
-        const elapsed = Date.now() - startedAt;
-        console.log(`Update responded in ${elapsed}ms`, {
-          ok: res.ok,
-          httpStatus: res.httpStatus,
-          zohoCode: res.zohoCode,
-          zohoMessage: res.zohoMessage,
-          error: res.error,
-        });
         if (!res.ok) {
           const detail = res.zohoCode != null || res.zohoMessage != null
             ? `Zoho error ${res.zohoCode ?? '?'}: ${res.zohoMessage ?? 'No message.'}`
             : (res.error ?? 'Failed to update customer in Zoho Books.');
-          console.error('Update FAILED:', detail);
           toast.error('Unable to update customer', { description: detail });
           throw new Error(detail);
         }
-        console.log('✅ Customer updated in Zoho + locally.');
         toast.success('Customer updated', {
           description: `${res.customer?.contactName ?? input.contactName} has been updated in Zoho Books.`,
         });
       } catch (err) {
-        console.error('Edit Customer flow threw:', err);
         throw err;
-      } finally {
-        console.groupEnd();
       }
     },
     [updateCustomer],

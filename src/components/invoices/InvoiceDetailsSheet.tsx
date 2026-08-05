@@ -1103,18 +1103,27 @@ export function InvoiceDetailsSheet({
                   {detailedInvoice.invoiceNumber || 'Invoice'}
                 </span>
               </SheetTitle>
-              <SheetDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                <span className="inline-flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {clientName}
-                </span>
-                <Separator orientation="vertical" className="h-3 bg-white/10" />
-                <span className="inline-flex items-center gap-1">
-                  <CalendarDays className="h-3 w-3" />
-                  {formatDate(detailedInvoice.invoiceDate)}
-                </span>
-                <Separator orientation="vertical" className="h-3 bg-white/10" />
-                <StatusPill status={detailedInvoice.status} />
+              {/* NOTE: SheetDescription renders a <p> by default, but we put
+                  <Separator> (a <div>) and <StatusPill> inside it, which is
+                  invalid HTML (<div> cannot descend from <p>) and triggers
+                  React hydration warnings. Render as a <div> instead. */}
+              <SheetDescription
+                asChild
+                className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400"
+              >
+                <div>
+                  <span className="inline-flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />
+                    {clientName}
+                  </span>
+                  <Separator orientation="vertical" className="h-3 bg-white/10" />
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    {formatDate(detailedInvoice.invoiceDate)}
+                  </span>
+                  <Separator orientation="vertical" className="h-3 bg-white/10" />
+                  <StatusPill status={detailedInvoice.status} />
+                </div>
               </SheetDescription>
             </div>
             <div className="flex items-center gap-2">

@@ -163,7 +163,15 @@ export function LeftNav() {
                 onFocus={() => setHovered(item.view)}
                 onBlur={() => setHovered(null)}
                 onClick={() => {
-                  if (item.href) {
+                  // Oracle AI sidebar item has href:'/oracle' which redirects
+                  // to /?view=oracle-brain. But if we're already on /, the
+                  // router.push('/oracle') → redirect → /?view=oracle-brain
+                  // chain doesn't trigger AppContext's lazy initializer
+                  // (which only runs on FIRST mount). So the view never
+                  // actually switches. Fix: call setCurrentView directly so
+                  // the in-app state updates immediately. The href is kept in
+                  // the registry for deep-linking from external pages.
+                  if (item.href && item.view !== 'oracle-brain') {
                     router.push(item.href);
                   } else {
                     setCurrentView(item.view);

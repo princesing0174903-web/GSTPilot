@@ -75,19 +75,27 @@ export function GSTReconciliationPage() {
   const loadRuns = useCallback(async () => {
     if (!organizationId) return;
     setLoadingRuns(true);
-    try {
-      const res = await fetchWithTimeout(`/api/gst-reconciliation/runs?organizationId=${encodeURIComponent(organizationId)}`);
-      const data = await res.json();
-      if (data.runs) {
-        setRuns(data.runs);
-        if (data.runs.length > 0 && !activeRunId) {
-          setActiveRunId(data.runs[0].id);
+    // Retry up to 3 times — dev server may be compiling the route on first hit.
+    for (let i = 0; i < 3; i++) {
+      try {
+        const res = await fetchWithTimeout(`/api/gst-reconciliation/runs?organizationId=${encodeURIComponent(organizationId)}`);
+        const data = await res.json();
+        if (data.runs) {
+          setRuns(data.runs);
+          if (data.runs.length > 0 && !activeRunId) {
+            setActiveRunId(data.runs[0].id);
+          }
         }
+        setLoadingRuns(false);
+        return;
+      } catch (err) {
+        if (i < 2) {
+          await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+          continue;
+        }
+        console.warn('Runs list unavailable:', err);
+        setLoadingRuns(false);
       }
-    } catch (err) {
-      console.error('Failed to load runs:', err);
-    } finally {
-      setLoadingRuns(false);
     }
   }, [organizationId, activeRunId]);
 
@@ -307,7 +315,7 @@ function RunDetail({ runId, organizationId }: { runId: string; organizationId: s
       }
       if (data.pagination) setTotal(data.pagination.total);
     } catch (err) {
-      console.error('Failed to load run detail:', err);
+      console.warn('Run detail unavailable:', err);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -323,44 +331,76 @@ function RunDetail({ runId, organizationId }: { runId: string; organizationId: s
   // Load AI summary + vendors + timeline (separate, less frequent)
   useEffect(() => {
     if (!summary) return;
+    let cancelled = false;
     void (async () => {
-      try {
-        const [sumRes, vendRes] = await Promise.all([
-          fetchWithTimeout(`/api/gst-reconciliation/${runId}/summary`),
-          fetchWithTimeout(`/api/gst-reconciliation/${runId}/vendors`),
-        ]);
-        if (sumRes.ok) {
-          const sd = await sumRes.json();
-          if (sd.summary) setAiSummary(sd.summary);
+      // Retry up to 3 times with backoff — in dev, the first request often
+      // fails because Next.js is still compiling the route on-demand.
+      const attempts = 3;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const [sumRes, vendRes] = await Promise.all([
+            fetchWithTimeout(`/api/gst-reconciliation/${runId}/summary`),
+            fetchWithTimeout(`/api/gst-reconciliation/${runId}/vendors`),
+          ]);
+          if (cancelled) return;
+          if (sumRes.ok) {
+            const sd = await sumRes.json();
+            if (sd.summary) setAiSummary(sd.summary);
+          }
+          if (vendRes.ok) {
+            const vd = await vendRes.json();
+            if (vd.vendors) setVendors(vd.vendors);
+          }
+          return; // success — stop retrying
+        } catch (err) {
+          if (cancelled) return;
+          if (i < attempts - 1) {
+            await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+            continue;
+          }
+          // Final failure — log as warning (not error) since this is non-blocking
+          // and the user can still use the table without AI summary.
+          console.warn('AI summary / vendors unavailable:', err);
         }
-        if (vendRes.ok) {
-          const vd = await vendRes.json();
-          if (vd.vendors) setVendors(vd.vendors);
-        }
-      } catch (err) {
-        console.error('Failed to load AI summary / vendors:', err);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [runId, summary]);
 
   // Load timeline
   useEffect(() => {
     if (!organizationId || !summary) return;
+    let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetchWithTimeout(
-          `/api/gst-reconciliation/timeline?organizationId=${encodeURIComponent(organizationId)}&gstin=${encodeURIComponent(summary.gstin)}&months=6`,
-        );
-        const data = await res.json();
-        if (data.timeline) {
-          setTimeline(data.timeline);
-          setTimelineTrend(data.trend);
-          setTimelineAvg(data.avgMatchPercent);
+      // Retry up to 3 times — dev server may be compiling the route.
+      for (let i = 0; i < 3; i++) {
+        try {
+          const res = await fetchWithTimeout(
+            `/api/gst-reconciliation/timeline?organizationId=${encodeURIComponent(organizationId)}&gstin=${encodeURIComponent(summary.gstin)}&months=6`,
+          );
+          if (cancelled) return;
+          const data = await res.json();
+          if (data.timeline) {
+            setTimeline(data.timeline);
+            setTimelineTrend(data.trend);
+            setTimelineAvg(data.avgMatchPercent);
+          }
+          return;
+        } catch (err) {
+          if (cancelled) return;
+          if (i < 2) {
+            await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+            continue;
+          }
+          console.warn('Timeline unavailable:', err);
         }
-      } catch (err) {
-        console.error('Failed to load timeline:', err);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [organizationId, summary]);
 
   // ── Handlers ──

@@ -339,7 +339,6 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   }, [orgLoading, organization, isPreviewMode, reload]);
 
   const handleRetry = useCallback(() => {
-    console.log('[Dashboard] Retry clicked — reloading org context');
     setTimedOut(false);
     setElapsed(0);
     autoRetriedRef.current = false;
@@ -495,7 +494,6 @@ export function AppRouter() {
   useEffect(() => {
     if (isInitializing) return;
     if (isAuthenticated && !needsOnboarding && currentScreen !== 'app') {
-      console.log('[AppRouter] Authenticated → switching to app screen immediately');
       setCurrentScreen('app');
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen, needsOnboarding]);
@@ -504,7 +502,6 @@ export function AppRouter() {
   useEffect(() => {
     if (isInitializing) return;
     if (!isAuthenticated && currentScreen === 'app') {
-      console.log('[AppRouter] Not authenticated → switching to landing');
       setCurrentScreen('landing');
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen]);
@@ -513,7 +510,6 @@ export function AppRouter() {
   const handleBookDemo = () => setCurrentScreen('login');
   const handleBackToLanding = () => setCurrentScreen('landing');
   const handleRetryLogin = useCallback(async () => {
-    console.log('[AppRouter] Retry login — logging out and returning to login screen');
     await logout();
     setCurrentScreen('login');
   }, [logout, setCurrentScreen]);

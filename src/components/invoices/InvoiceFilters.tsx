@@ -1,10 +1,17 @@
 'use client';
 
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -198,16 +205,20 @@ export const InvoiceFilters = memo(function InvoiceFilters({
     onFiltersChange({ ...DEFAULT_FILTERS, search: filters.search });
   };
 
+  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
+  const [presetName, setPresetName] = useState('');
+
   const handleSavePreset = () => {
-    const name = window.prompt('Name this filter preset:');
-    if (!name) return;
+    if (!presetName.trim()) return;
     const presets = loadPresets();
     const newPreset: FilterPreset = {
       id: `preset-${Date.now()}`,
-      name,
+      name: presetName.trim(),
       filters: { ...filters },
     };
     savePresets([...presets, newPreset]);
+    setPresetName('');
+    setPresetDialogOpen(false);
   };
 
   const clientOptions = useMemo(
@@ -400,12 +411,37 @@ export const InvoiceFilters = memo(function InvoiceFilters({
           variant="ghost"
           size="sm"
           className="h-9 text-xs text-muted-foreground hover:text-foreground"
-          onClick={handleSavePreset}
+          onClick={() => setPresetDialogOpen(true)}
           disabled={activeFilterCount === 0}
         >
           <Save className="h-3.5 w-3.5 mr-1" />
           <span className="hidden md:inline">Save</span>
         </Button>
+
+        <Dialog open={presetDialogOpen} onOpenChange={setPresetDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save filter preset</DialogTitle>
+            </DialogHeader>
+            <Input
+              autoFocus
+              placeholder="Preset name…"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSavePreset();
+              }}
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPresetDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSavePreset} disabled={!presetName.trim()}>
+                Save preset
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Reset */}
         {activeFilterCount > 0 && (

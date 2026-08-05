@@ -313,6 +313,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const handleSetCurrentView = useCallback((view: AppView) => {
     setCurrentView(view);
+    // Sync the URL ?view= param so refresh / deep-linking works and so the
+    // browser back button behaves intuitively. Uses replaceState to avoid
+    // polluting browser history with one entry per view switch.
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        if (view === 'dashboard') {
+          url.searchParams.delete('view');
+        } else {
+          url.searchParams.set('view', view);
+        }
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        /* ignore malformed URL */
+      }
+    }
   }, []);
 
   const handleSetSelectedClientId = useCallback((id: string | null) => {

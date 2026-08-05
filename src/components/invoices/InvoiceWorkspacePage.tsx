@@ -31,6 +31,16 @@ import React, {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Plus,
   Sparkles,
   RefreshCw,
@@ -288,6 +298,9 @@ export default function InvoiceWorkspacePage() {
   const [detailsInvoice, setDetailsInvoice] = useState<ApiInvoice | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
+  // ── Delete confirmation dialog (replaces window.confirm) ──
+  const [deleteTarget, setDeleteTarget] = useState<ApiInvoice | null>(null);
+
   const handleRowClick = useCallback((inv: ApiInvoice) => {
     setDetailsInvoice(inv);
     setDetailsOpen(true);
@@ -453,19 +466,8 @@ export default function InvoiceWorkspacePage() {
           break;
         }
         case 'delete': {
-          if (!window.confirm(`Delete invoice ${inv.invoiceNumber}? This cannot be undone.`)) {
-            break;
-          }
-          const ok = await deleteInvoice(inv.id);
-          if (ok) {
-            toast.success('Invoice deleted');
-            if (detailsInvoice?.id === inv.id) {
-              setDetailsOpen(false);
-            }
-            refetchInvoices();
-          } else {
-            toast.error('Unable to delete invoice');
-          }
+          // Defer to the AlertDialog — actual deletion runs in onConfirmDelete.
+          setDeleteTarget(inv);
           break;
         }
         default:
@@ -474,6 +476,22 @@ export default function InvoiceWorkspacePage() {
     },
     [sendInvoice, markPaid, duplicateInvoice, generatePdf, updateInvoice, deleteInvoice, refetchInvoices, detailsInvoice, handleOpenEdit],
   );
+
+  // ── Delete confirmation handler (drives the AlertDialog) ──
+  const onConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const ok = await deleteInvoice(deleteTarget.id);
+    if (ok) {
+      toast.success('Invoice deleted');
+      if (detailsInvoice?.id === deleteTarget.id) {
+        setDetailsOpen(false);
+      }
+      refetchInvoices();
+    } else {
+      toast.error('Unable to delete invoice');
+    }
+    setDeleteTarget(null);
+  }, [deleteTarget, deleteInvoice, detailsInvoice, refetchInvoices]);
 
   // ── Bulk actions ──
   const handleBulkAction = useCallback(
@@ -864,6 +882,27 @@ export default function InvoiceWorkspacePage() {
           setCurrentView('clients');
         }}
       />
+
+      {/* Delete confirmation dialog (replaces window.confirm) */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete invoice {deleteTarget?.invoiceNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The invoice and all its line items will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirmDelete}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

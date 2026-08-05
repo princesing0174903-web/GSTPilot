@@ -10,7 +10,7 @@
 // x-gstpilot-actor header (uid/email) so requireAuth succeeds in sandbox mode.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
 import type {
@@ -137,100 +137,108 @@ export function useBankingApi(): UseBankingApi {
     [orgId, actorHeader],
   );
 
-  return {
-    fetchDashboard: () => call<BankingDashboardSummary>('/api/banking/dashboard'),
-    fetchAccounts: () => call<BankingAccountListResult>('/api/banking/accounts'),
-    fetchAccount: (id) => call<BankingAccount | null>(`/api/banking/accounts/${id}`),
-    createAccount: (input) =>
-      call<BankingAccount>('/api/banking/accounts', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
-    updateAccount: (id, patch) =>
-      call<BankingAccount | null>(`/api/banking/accounts/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      }),
-    deleteAccount: (id) =>
-      call<void>(`/api/banking/accounts/${id}`, { method: 'DELETE' }),
-    syncAccount: (id) =>
-      call<{ synced: boolean; newTransactions: number; balance: number }>(
-        `/api/banking/accounts/${id}/sync`,
-        { method: 'POST' },
-      ),
-    fetchTransactions: (query = {}) => {
-      const params = new URLSearchParams();
-      Object.entries(query).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
-      });
-      return call<BankingTransactionListResult>(`/api/banking/transactions?${params.toString()}`);
-    },
-    createTransaction: (input) =>
-      call<BankingTransaction>('/api/banking/transactions', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
-    updateTransaction: (id, patch) =>
-      call<BankingTransaction | null>(`/api/banking/transactions/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      }),
-    deleteTransaction: (id) =>
-      call<void>(`/api/banking/transactions/${id}`, { method: 'DELETE' }),
-    bulkUpdateTransactions: (ids, patch) =>
-      call<{ updated: number }>('/api/banking/transactions/bulk', {
-        method: 'POST',
-        body: JSON.stringify({ ids, patch }),
-      }),
-    fetchReconciliationSummary: () =>
-      call<{ summary: ReconciliationSummary; records: BankReconciliationRecord[] }>(
-        '/api/banking/reconcile',
-      ),
-    runReconciliation: () =>
-      call<{ summary: ReconciliationSummary; matched: BankReconciliationRecord[] }>(
-        '/api/banking/reconcile',
-        { method: 'POST' },
-      ),
-    manualMatch: (transactionId, invoiceId) =>
-      call<BankReconciliationRecord | null>('/api/banking/reconcile/manual', {
-        method: 'POST',
-        body: JSON.stringify({ transactionId, invoiceId }),
-      }),
-    approveReconciliation: (id) =>
-      call<BankReconciliationRecord | null>(`/api/banking/reconcile/${id}/approve`, {
-        method: 'POST',
-      }),
-    rejectReconciliation: (id, reason) =>
-      call<BankReconciliationRecord | null>(`/api/banking/reconcile/${id}/reject`, {
-        method: 'POST',
-        body: JSON.stringify({ reason }),
-      }),
-    fetchCashFlow: (period = '30d') =>
-      call<CashFlowResult>(`/api/banking/cashflow?period=${period}`),
-    fetchOracleInsights: () => call<BankingOracleInsights>('/api/banking/oracle'),
-    importStatement: async (file, accountId, confirm = false) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('accountId', accountId);
-      if (confirm) formData.append('confirm', 'true');
-      const sep = '?';
-      const fullUrl = `/api/banking/import${sep}organizationId=${encodeURIComponent(orgId)}`;
-      const res = await fetchWithTimeout(fullUrl, {
-        method: 'POST',
-        body: formData,
-        headers: { 'x-gstpilot-actor': actorHeader },
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `Import failed (${res.status})`);
-      }
-      return res.json();
-    },
-    fetchImports: () => call<unknown[]>('/api/banking/imports'),
-    fetchReport: (period) =>
-      call<BankingReport>(`/api/banking/reports?period=${period}`),
-    fetchProviderInfo: () => call<ProviderInfo>('/api/banking/provider'),
-  };
+  // Memoize the returned API object so consumers can safely use it as a
+  // useEffect / useCallback dependency. Previously the hook returned a fresh
+  // object literal on every render, which caused dependent effects
+  // (e.g. BankingPage's loadDashboard useEffect) to re-fire every render,
+  // producing "Maximum update depth exceeded" crashes.
+  return useMemo<UseBankingApi>(
+    () => ({
+      fetchDashboard: () => call<BankingDashboardSummary>('/api/banking/dashboard'),
+      fetchAccounts: () => call<BankingAccountListResult>('/api/banking/accounts'),
+      fetchAccount: (id) => call<BankingAccount | null>(`/api/banking/accounts/${id}`),
+      createAccount: (input) =>
+        call<BankingAccount>('/api/banking/accounts', {
+          method: 'POST',
+          body: JSON.stringify(input),
+        }),
+      updateAccount: (id, patch) =>
+        call<BankingAccount | null>(`/api/banking/accounts/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        }),
+      deleteAccount: (id) => call<void>(`/api/banking/accounts/${id}`, { method: 'DELETE' }),
+      syncAccount: (id) =>
+        call<{ synced: boolean; newTransactions: number; balance: number }>(
+          `/api/banking/accounts/${id}/sync`,
+          { method: 'POST' },
+        ),
+      fetchTransactions: (query = {}) => {
+        const params = new URLSearchParams();
+        Object.entries(query).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+        });
+        return call<BankingTransactionListResult>(
+          `/api/banking/transactions?${params.toString()}`,
+        );
+      },
+      createTransaction: (input) =>
+        call<BankingTransaction>('/api/banking/transactions', {
+          method: 'POST',
+          body: JSON.stringify(input),
+        }),
+      updateTransaction: (id, patch) =>
+        call<BankingTransaction | null>(`/api/banking/transactions/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        }),
+      deleteTransaction: (id) => call<void>(`/api/banking/transactions/${id}`, { method: 'DELETE' }),
+      bulkUpdateTransactions: (ids, patch) =>
+        call<{ updated: number }>('/api/banking/transactions/bulk', {
+          method: 'POST',
+          body: JSON.stringify({ ids, patch }),
+        }),
+      fetchReconciliationSummary: () =>
+        call<{ summary: ReconciliationSummary; records: BankReconciliationRecord[] }>(
+          '/api/banking/reconcile',
+        ),
+      runReconciliation: () =>
+        call<{ summary: ReconciliationSummary; matched: BankReconciliationRecord[] }>(
+          '/api/banking/reconcile',
+          { method: 'POST' },
+        ),
+      manualMatch: (transactionId, invoiceId) =>
+        call<BankReconciliationRecord | null>('/api/banking/reconcile/manual', {
+          method: 'POST',
+          body: JSON.stringify({ transactionId, invoiceId }),
+        }),
+      approveReconciliation: (id) =>
+        call<BankReconciliationRecord | null>(`/api/banking/reconcile/${id}/approve`, {
+          method: 'POST',
+        }),
+      rejectReconciliation: (id, reason) =>
+        call<BankReconciliationRecord | null>(`/api/banking/reconcile/${id}/reject`, {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        }),
+      fetchCashFlow: (period = '30d') =>
+        call<CashFlowResult>(`/api/banking/cashflow?period=${period}`),
+      fetchOracleInsights: () => call<BankingOracleInsights>('/api/banking/oracle'),
+      importStatement: async (file, accountId, confirm = false) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('accountId', accountId);
+        if (confirm) formData.append('confirm', 'true');
+        const fullUrl = `/api/banking/import?organizationId=${encodeURIComponent(orgId)}`;
+        const res = await fetchWithTimeout(fullUrl, {
+          method: 'POST',
+          body: formData,
+          headers: { 'x-gstpilot-actor': actorHeader },
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(
+            (body as { error?: string }).error || `Import failed (${res.status})`,
+          );
+        }
+        return res.json();
+      },
+      fetchImports: () => call<unknown[]>('/api/banking/imports'),
+      fetchReport: (period) => call<BankingReport>(`/api/banking/reports?period=${period}`),
+      fetchProviderInfo: () => call<ProviderInfo>('/api/banking/provider'),
+    }),
+    [call, orgId, actorHeader],
+  );
 }
 
 // ─── Async state helper (mirrors useInvoicesApi pattern) ──────────────────────

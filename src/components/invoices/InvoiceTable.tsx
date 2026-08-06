@@ -113,8 +113,8 @@ function SortHeader({ label, sortKey, current, onChange, className = '', align =
       <span className="opacity-0 group-hover:opacity-50 transition-opacity">
         {!isActive && <ChevronsUpDown className="h-3 w-3" />}
       </span>
-      {isAsc && <ChevronUp className="h-3 w-3 text-emerald-400 opacity-100" />}
-      {isDesc && <ChevronDown className="h-3 w-3 text-emerald-400 opacity-100" />}
+      {isAsc && <ChevronUp className="h-3 w-3 text-blue-400 opacity-100" />}
+      {isDesc && <ChevronDown className="h-3 w-3 text-blue-400 opacity-100" />}
     </button>
   );
 }
@@ -130,7 +130,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-emerald-500/30 text-emerald-200 rounded px-0.5">
+      <mark className="bg-blue-500/30 text-blue-100 rounded px-0.5">
         {text.slice(idx, idx + q.length)}
       </mark>
       {text.slice(idx + q.length)}
@@ -172,8 +172,8 @@ const InvoiceRow = memo(function InvoiceRow({
     <TableRow
       data-invoice-id={invoice.id}
       onClick={onClick}
-      className={`cursor-pointer transition-colors group ${
-        isSelected ? 'bg-emerald-500/[0.04]' : 'hover:bg-white/[0.025]'
+      className={`gst-table-row cursor-pointer transition-colors group ${
+        isSelected ? 'gst-table-row-selected' : ''
       } ${isOverdue ? 'border-l-2 border-l-red-500/50' : ''}`}
     >
       <TableCell className="w-10 pl-4" onClick={(e) => e.stopPropagation()}>
@@ -185,8 +185,8 @@ const InvoiceRow = memo(function InvoiceRow({
       </TableCell>
       <TableCell className="py-3">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center h-7 w-7 rounded-md bg-white/[0.04] group-hover:bg-emerald-500/10 transition-colors">
-            <FileText className="h-3.5 w-3.5 text-muted-foreground group-hover:text-emerald-400" />
+          <div className="flex items-center justify-center h-7 w-7 rounded-md bg-white/[0.04] group-hover:bg-blue-500/10 transition-colors">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-400" />
           </div>
           <div>
             <div className="text-sm font-medium text-foreground">
@@ -218,18 +218,18 @@ const InvoiceRow = memo(function InvoiceRow({
           <span className="text-muted-foreground">—</span>
         )}
       </TableCell>
-      <TableCell className="py-3 hidden xl:table-cell text-right text-sm text-muted-foreground tabular-nums">
+      <TableCell className="py-3 hidden xl:table-cell text-right text-sm text-muted-foreground gst-text-tabular">
         {formatCurrency(invoice.taxableValue ?? 0)}
       </TableCell>
-      <TableCell className="py-3 hidden xl:table-cell text-right text-sm text-muted-foreground tabular-nums">
+      <TableCell className="py-3 hidden xl:table-cell text-right text-sm text-muted-foreground gst-text-tabular">
         {formatCurrency(invoice.gstAmount ?? 0)}
       </TableCell>
       <TableCell className="py-3 text-right">
-        <div className="text-sm font-semibold text-foreground tabular-nums">
+        <div className="text-sm font-semibold text-foreground gst-text-tabular">
           {formatCurrency(invoice.totalAmount ?? 0)}
         </div>
         {invoice.balanceAmount > 0 && (
-          <div className="text-[10px] text-amber-400 tabular-nums">
+          <div className="text-[10px] text-amber-400 gst-text-tabular">
             Bal: {formatCurrency(invoice.balanceAmount)}
           </div>
         )}
@@ -389,7 +389,7 @@ const MobileInvoiceCard = memo(function MobileInvoiceCard({
       onClick={onClick}
       className={`glass-surface rounded-xl border p-3 cursor-pointer transition-all ${
         isSelected
-          ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
+          ? 'border-blue-500/40 bg-blue-500/[0.04]'
           : 'border-white/[0.06] hover:border-white/[0.12]'
       } ${isOverdue ? 'border-l-2 border-l-red-500/60' : ''}`}
     >
@@ -418,7 +418,7 @@ const MobileInvoiceCard = memo(function MobileInvoiceCard({
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Total
           </div>
-          <div className="text-base font-bold text-foreground tabular-nums">
+          <div className="text-base font-bold text-foreground gst-text-tabular">
             {formatCurrency(invoice.totalAmount ?? 0)}
           </div>
           {invoice.balanceAmount > 0 && (
@@ -497,7 +497,7 @@ function BulkActionBar({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="glass-surface rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 flex flex-wrap items-center gap-2 mb-3"
+      className="glass-surface rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-3 flex flex-wrap items-center gap-2 mb-3"
     >
       <div className="flex items-center gap-2 mr-2">
         <Checkbox
@@ -833,7 +833,7 @@ export function InvoicePagination({
         <select
           value={pageSize}
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          className="h-8 bg-white/[0.03] border border-white/[0.08] rounded-md text-xs text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+          className="h-8 bg-white/[0.03] border border-white/[0.08] rounded-md text-xs text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-blue-500/40"
         >
           {[10, 25, 50, 100].map((s) => (
             <option key={s} value={s} className="bg-zinc-950">

@@ -69,7 +69,7 @@ import { CHART_COLORS } from '@/lib/chart-theme';
 const COLORS = {
   emerald: CHART_COLORS.primary,        // blue-600   (was '#2563EB' — already blue)
   emeraldDark: CHART_COLORS.primary,    // blue-600   (was '#1D4ED8')
-  emeraldLight: 'rgba(16, 185, 129, 0.15)', // emerald tint (was '#d1fae5' light-green)
+  emeraldLight: 'rgba(37, 99, 235, 0.15)', // blue tint (was emerald)
   teal: CHART_COLORS.primarySoft,       // blue-400   (was '#14b8a6' teal)
   tealDark: CHART_COLORS.primary,       // blue-600   (was '#2563EB' — already blue)
   purple: CHART_COLORS.secondary,       // violet-500 (was '#8b5cf6' — kept)

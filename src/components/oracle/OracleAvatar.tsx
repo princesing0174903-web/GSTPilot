@@ -275,9 +275,9 @@ export function OracleAvatar({
         <defs>
           {/* Face fill: emerald → cyan → blue gradient */}
           <radialGradient id={gid} cx="0.35" cy="0.3" r="0.9">
-            <stop offset="0%" stopColor="#10B981" />
-            <stop offset="55%" stopColor="#34D399" />
-            <stop offset="100%" stopColor="#34d399" />
+            <stop offset="0%" stopColor="#2563EB" />
+            <stop offset="55%" stopColor="#60A5FA" />
+            <stop offset="100%" stopColor="#60A5FA" />
           </radialGradient>
           <linearGradient id={sid} x1="0" y1="0" x2="80" y2="80">
             <stop offset="0%" stopColor="#ffffff" />

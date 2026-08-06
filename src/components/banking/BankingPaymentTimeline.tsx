@@ -238,13 +238,13 @@ interface StatusStyle {
 
 const STATUS_STYLES: Record<StageStatus, StatusStyle> = {
   done: {
-    dot: 'bg-emerald-400',
-    ring: 'ring-emerald-500/30',
-    iconColor: 'text-emerald-300',
-    iconBg: 'bg-emerald-500/10 border-emerald-500/25',
+    dot: 'bg-blue-400',
+    ring: 'ring-blue-500/30',
+    iconColor: 'text-blue-300',
+    iconBg: 'bg-blue-500/10 border-blue-500/25',
     label: 'Done',
-    labelText: 'text-emerald-300',
-    line: 'bg-emerald-500/40',
+    labelText: 'text-blue-300',
+    line: 'bg-blue-500/40',
     pulse: false,
   },
   current: {
@@ -301,7 +301,7 @@ function VerticalTimeline({ stages }: VerticalTimelineProps) {
       />
       {/* Animated emerald progress fill */}
       <motion.div
-        className="absolute left-[19px] top-3 w-px bg-gradient-to-b from-emerald-400 to-emerald-500"
+        className="absolute left-[19px] top-3 w-px bg-gradient-to-b from-blue-400 to-blue-500"
         initial={{ height: 0 }}
         animate={{ height: `${progressPct}%` }}
         transition={{ duration: 0.8, ease: 'easeOut', delay: 0.15 }}
@@ -394,7 +394,7 @@ function CompactTimeline({ stages }: VerticalTimelineProps) {
         <div className="absolute left-0 right-0 top-[11px] h-px bg-white/[0.08]" aria-hidden />
         {/* Progress fill */}
         <motion.div
-          className="absolute left-0 top-[11px] h-px bg-gradient-to-r from-emerald-400 to-emerald-500"
+          className="absolute left-0 top-[11px] h-px bg-gradient-to-r from-blue-400 to-blue-500"
           initial={{ width: 0 }}
           animate={{ width: `${progressPct}%` }}
           transition={{ duration: 0.8, ease: 'easeOut', delay: 0.15 }}
@@ -451,8 +451,8 @@ function BankingPaymentTimelineImpl({ transaction, compact = false }: BankingPay
     <div className="glass-surface rounded-2xl border border-white/[0.06] p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-            <Banknote className="h-3.5 w-3.5 text-emerald-300" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <Banknote className="h-3.5 w-3.5 text-blue-300" />
           </div>
           <h3 className="text-sm font-semibold tracking-tight text-foreground">
             Payment Lifecycle

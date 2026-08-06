@@ -29,8 +29,8 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
         transition={{ duration: 0.4 }}
         className="glass-surface flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] p-12 text-center"
       >
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-          <Landmark className="h-7 w-7 text-emerald-400" />
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10">
+          <Landmark className="h-7 w-7 text-blue-400" />
         </div>
         <h3 className="mb-1.5 text-base font-semibold text-foreground">No bank accounts connected</h3>
         <p className="mb-4 max-w-sm text-sm text-muted-foreground">
@@ -38,7 +38,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           unlocking Oracle AI insights.
         </p>
         {onConnect && (
-          <Button onClick={onConnect} className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950">
+          <Button onClick={onConnect} className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950">
             <Landmark className="h-4 w-4" />
             Connect Bank Account
           </Button>
@@ -55,7 +55,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
       className="glass-surface relative overflow-hidden rounded-2xl border border-white/[0.06] p-12"
     >
       {/* Background glow */}
-      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/[0.08] blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-500/[0.08] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-cyan-500/[0.06] blur-3xl" />
 
       <div className="relative flex flex-col items-center text-center">
@@ -63,9 +63,9 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 border border-emerald-500/20"
+          className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/20"
         >
-          <Landmark className="h-10 w-10 text-emerald-400" />
+          <Landmark className="h-10 w-10 text-blue-400" />
         </motion.div>
 
         <h2 className="mb-2 text-2xl font-bold tracking-tight text-foreground">
@@ -90,7 +90,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
               transition={{ duration: 0.4, delay: 0.2 + i * 0.08 }}
               className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-left"
             >
-              <feature.icon className="mb-2 h-5 w-5 text-emerald-400" />
+              <feature.icon className="mb-2 h-5 w-5 text-blue-400" />
               <p className="mb-0.5 text-sm font-semibold text-foreground">{feature.title}</p>
               <p className="text-xs text-muted-foreground">{feature.desc}</p>
             </motion.div>
@@ -101,7 +101,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           {onConnect && (
             <Button
               onClick={onConnect}
-              className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-lg shadow-emerald-500/20"
+              className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950 shadow-lg shadow-blue-500/20"
             >
               <Landmark className="h-4 w-4" />
               Connect Your First Bank
@@ -176,7 +176,7 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
           {onRetry && (
             <Button
               onClick={onRetry}
-              className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950"
+              className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950"
             >
               <RefreshCw className="h-4 w-4" />
               Try Again

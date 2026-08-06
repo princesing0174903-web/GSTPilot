@@ -64,11 +64,11 @@ const SUGGESTION_ICONS: Record<string, typeof Mail> = {
 const PRIORITY_COLORS: Record<string, string> = {
   high: '#EF4444',
   medium: '#F59E0B',
-  low: '#10B981',
+  low: '#3B82F6',
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
-  safe: '#10B981',
+  safe: '#3B82F6',
   moderate: '#F59E0B',
   risky: '#EF4444',
 };
@@ -224,8 +224,8 @@ export function OracleDrawer({
         <div className="sticky top-0 z-10 border-b border-[#2A2E36] bg-[#0F1115]/95 p-5 backdrop-blur">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5">
-                <Sparkles className="h-5 w-5 text-[#34D399]" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5">
+                <Sparkles className="h-5 w-5 text-[#60A5FA]" />
               </div>
               <div>
                 <h2 className="gst-card-title">Oracle AI Analysis</h2>
@@ -261,7 +261,7 @@ export function OracleDrawer({
               </div>
             )}
             {match.fixApplied && (
-              <Badge variant="outline" className="border-[#10B981]/40 bg-[#10B981]/10 text-[#34D399]">
+              <Badge variant="outline" className="border-[#3B82F6]/40 bg-[#3B82F6]/10 text-[#60A5FA]">
                 <Zap className="mr-1 h-3 w-3" /> Auto-fixed
               </Badge>
             )}
@@ -302,7 +302,7 @@ export function OracleDrawer({
                     <div className="flex items-center gap-2">
                       <span className="tabular-nums text-foreground">{String(m.booksValue ?? '—')}</span>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <span className="tabular-nums text-[#34D399]">{String(m.gstr2bValue ?? '—')}</span>
+                      <span className="tabular-nums text-[#60A5FA]">{String(m.gstr2bValue ?? '—')}</span>
                       {m.delta != null && m.delta !== 0 && (
                         <Badge variant="outline" className="text-[9px]">
                           Δ {fmtINR(Math.abs(m.delta))}
@@ -344,10 +344,10 @@ export function OracleDrawer({
           )}
 
           {/* Oracle Explanation */}
-          <div className="rounded-xl border border-[#10B981]/20 bg-gradient-to-br from-[#10B981]/[0.08] to-[#10B981]/[0.02] p-4">
+          <div className="rounded-xl border border-[#3B82F6]/20 bg-gradient-to-br from-[#3B82F6]/[0.08] to-[#3B82F6]/[0.02] p-4">
             <div className="mb-2 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[#34D399]" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#34D399]">Oracle Explanation</span>
+              <Sparkles className="h-4 w-4 text-[#60A5FA]" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#60A5FA]">Oracle Explanation</span>
             </div>
             {loading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -378,7 +378,7 @@ export function OracleDrawer({
               <div className="mb-2 flex items-center gap-2">
                 {(() => {
                   const SuggIcon = SUGGESTION_ICONS[suggestion.key] || Info;
-                  return <SuggIcon className="h-4 w-4 text-[#34D399]" />;
+                  return <SuggIcon className="h-4 w-4 text-[#60A5FA]" />;
                 })()}
                 <span className="text-sm font-semibold text-foreground">{suggestion.label}</span>
                 <span className="text-[10px] text-muted-foreground">· ~{suggestion.estimatedResolutionDays}d</span>
@@ -390,7 +390,7 @@ export function OracleDrawer({
                 <div className="mt-3">
                   <button
                     onClick={() => setShowAlternatives(!showAlternatives)}
-                    className="flex items-center gap-1 text-xs text-[#34D399] hover:underline"
+                    className="flex items-center gap-1 text-xs text-[#60A5FA] hover:underline"
                   >
                     {showAlternatives ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     {showAlternatives ? 'Hide' : 'Show'} {alternatives.length} alternative actions
@@ -432,7 +432,7 @@ export function OracleDrawer({
           {fixes.length > 0 && !loading && (
             <div>
               <div className="gst-label mb-2 flex items-center gap-1.5">
-                <Wand2 className="h-3.5 w-3.5 text-[#A78BFA]" />
+                <Wand2 className="h-3.5 w-3.5 text-[#60A5FA]" />
                 Auto-Fix Suggestions ({fixes.length})
               </div>
               <div className="space-y-2">
@@ -446,7 +446,7 @@ export function OracleDrawer({
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <Wand2 className="h-3.5 w-3.5 text-[#A78BFA]" />
+                            <Wand2 className="h-3.5 w-3.5 text-[#60A5FA]" />
                             <span className="text-sm font-medium text-foreground">{fix.label}</span>
                             <Badge
                               variant="outline"
@@ -456,7 +456,7 @@ export function OracleDrawer({
                               {fix.severity}
                             </Badge>
                             {fix.canAutoApply && (
-                              <Badge variant="outline" className="border-[#10B981]/40 bg-[#10B981]/10 text-[9px] text-[#34D399]">
+                              <Badge variant="outline" className="border-[#3B82F6]/40 bg-[#3B82F6]/10 text-[9px] text-[#60A5FA]">
                                 auto-apply
                               </Badge>
                             )}
@@ -464,7 +464,7 @@ export function OracleDrawer({
                           <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
                             <span className="tabular-nums">{fix.from}</span>
                             <ArrowRight className="h-3 w-3" />
-                            <span className="tabular-nums text-[#34D399]">{fix.to}</span>
+                            <span className="tabular-nums text-[#60A5FA]">{fix.to}</span>
                             {fix.itcImpact != null && fix.itcImpact > 0 && (
                               <span className="text-[#F87171]">· ITC impact: {fmtINR(fix.itcImpact)}</span>
                             )}

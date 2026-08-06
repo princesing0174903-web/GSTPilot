@@ -315,7 +315,7 @@ function getRiskLevel(ret: ReturnItem): { label: string; cls: string; dot: strin
   if (ret.warnings > 0) {
     return { label: 'Medium', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/25', dot: 'bg-amber-400' };
   }
-  return { label: 'Low', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', dot: 'bg-emerald-400' };
+  return { label: 'Low', cls: 'bg-blue-500/10 text-blue-300 border-blue-500/25', dot: 'bg-blue-400' };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -457,12 +457,12 @@ function MonthYearPicker({
           disabled={disabled}
           className={cn(
             'w-full h-12 justify-between font-medium bg-white/5 border-white/10 hover:bg-white/10 rounded-lg',
-            'focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-0',
+            'focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0',
             !value && 'text-muted-foreground',
           )}
         >
           <span className="flex items-center gap-2">
-            <CalendarDays className="size-4 text-emerald-400" />
+            <CalendarDays className="size-4 text-blue-400" />
             {triggerLabel}
           </span>
           <ChevronDown className="size-4 opacity-50" />
@@ -507,9 +507,9 @@ function MonthYearPicker({
                 onClick={() => handleSelect(idx)}
                 className={cn(
                   'h-10 rounded-lg text-xs font-semibold transition-all',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50',
                   isSelected
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                     : 'bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white',
                 )}
               >
@@ -552,7 +552,7 @@ function StepIndicator({
       {/* Top row: progress meter + step count */}
       <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-[#1F1F1F]">
         <div className="flex items-center gap-2 min-w-0">
-          <ListChecks className="size-4 text-[#34D399] shrink-0" />
+          <ListChecks className="size-4 text-[#60A5FA] shrink-0" />
           <span className="gst-card-title text-foreground truncate">
             Filing Wizard
           </span>
@@ -564,18 +564,18 @@ function StepIndicator({
           <div className="hidden md:flex items-center gap-2 min-w-[160px]">
             <div className="flex-1 h-1.5 rounded-full bg-[#1F1F1F] overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
+                className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${percent}%` }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
               />
             </div>
-            <span className="text-xs font-semibold text-[#34D399] tabular-nums w-10 text-right">
+            <span className="text-xs font-semibold text-[#60A5FA] tabular-nums w-10 text-right">
               {percent}%
             </span>
           </div>
           <span className="gst-caption hidden lg:inline">
-            <span className="text-[#34D399] font-semibold tabular-nums">{completedCount}</span>
+            <span className="text-[#60A5FA] font-semibold tabular-nums">{completedCount}</span>
             <span className="text-muted-foreground">/{WIZARD_STEPS.length} done</span>
           </span>
         </div>
@@ -610,8 +610,8 @@ function StepIndicator({
                 <span
                   className={cn(
                     'relative size-11 rounded-full flex items-center justify-center border-2 transition-all',
-                    isCompleted && 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30',
-                    isCurrent && 'bg-[#0A0A0A] border-emerald-500 text-emerald-300 ring-4 ring-emerald-500/15',
+                    isCompleted && 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30',
+                    isCurrent && 'bg-[#0A0A0A] border-blue-500 text-blue-300 ring-4 ring-blue-500/15',
                     isUpcoming && 'bg-[#0A0A0A] border-[#2A2A2A] text-[#525252] group-hover:border-[#3A3A3A]',
                   )}
                 >
@@ -622,7 +622,7 @@ function StepIndicator({
                   )}
                   {isCurrent && (
                     <motion.span
-                      className="absolute -inset-1 rounded-full border-2 border-[#10B981]/40"
+                      className="absolute -inset-1 rounded-full border-2 border-[#3B82F6]/40"
                       animate={{ opacity: [0.6, 0, 0.6], scale: [1, 1.12, 1] }}
                       transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                     />
@@ -631,7 +631,7 @@ function StepIndicator({
                 <span
                   className={cn(
                     'text-[11px] font-semibold text-center leading-tight transition-colors',
-                    (isCompleted || isCurrent) && 'text-[#34D399]',
+                    (isCompleted || isCurrent) && 'text-[#60A5FA]',
                     isUpcoming && 'text-[#525252]',
                   )}
                 >
@@ -643,7 +643,7 @@ function StepIndicator({
                 <span
                   className={cn(
                     'flex-1 h-0.5 mx-2 rounded-full min-w-[20px] mt-5 transition-colors',
-                    isCompleted ? 'bg-[#10B981]' : 'bg-[#1F1F1F]',
+                    isCompleted ? 'bg-[#3B82F6]' : 'bg-[#1F1F1F]',
                   )}
                   aria-hidden="true"
                 />
@@ -672,8 +672,8 @@ function StepIndicator({
                 <span
                   className={cn(
                     'size-9 rounded-full flex items-center justify-center border-2 transition-all',
-                    isCompleted && 'bg-[#10B981] border-[#10B981] text-white',
-                    isCurrent && 'bg-[#0A0A0A] border-[#10B981] text-[#34D399] ring-2 ring-[#10B981]/20',
+                    isCompleted && 'bg-[#3B82F6] border-[#3B82F6] text-white',
+                    isCurrent && 'bg-[#0A0A0A] border-[#3B82F6] text-[#60A5FA] ring-2 ring-[#3B82F6]/20',
                     isUpcoming && 'bg-[#0A0A0A] border-[#2A2A2A] text-[#525252]',
                   )}
                 >
@@ -682,7 +682,7 @@ function StepIndicator({
                 <span
                   className={cn(
                     'text-[10px] font-semibold whitespace-nowrap',
-                    (isCompleted || isCurrent) ? 'text-[#34D399]' : 'text-[#525252]',
+                    (isCompleted || isCurrent) ? 'text-[#60A5FA]' : 'text-[#525252]',
                   )}
                 >
                   {step.label}
@@ -692,7 +692,7 @@ function StepIndicator({
                 <span
                   className={cn(
                     'h-0.5 w-4 rounded-full shrink-0 mb-4',
-                    isCompleted ? 'bg-[#10B981]' : 'bg-[#1F1F1F]',
+                    isCompleted ? 'bg-[#3B82F6]' : 'bg-[#1F1F1F]',
                   )}
                 />
               )}
@@ -705,13 +705,13 @@ function StepIndicator({
       <div className="lg:hidden mt-3 flex items-center gap-2">
         <div className="flex-1 h-1.5 rounded-full bg-[#1F1F1F] overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-[#10B981] to-[#34D399] rounded-full"
+            className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${percent}%` }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
           />
         </div>
-        <span className="text-xs font-semibold text-[#34D399] tabular-nums w-10 text-right">
+        <span className="text-xs font-semibold text-[#60A5FA] tabular-nums w-10 text-right">
           {percent}%
         </span>
       </div>
@@ -729,10 +729,10 @@ function StepHeader({ step }: { step: WizardStepDef }) {
   return (
     <div className="flex items-start gap-4 mb-6">
       <div className="relative shrink-0">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-          <Icon className="size-7 text-[#34D399]" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/30 flex items-center justify-center shadow-lg shadow-blue-500/10">
+          <Icon className="size-7 text-[#60A5FA]" />
         </div>
-        <span className="absolute -top-2 -right-2 size-6 rounded-full bg-[#10B981] border-2 border-[#0A0A0A] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+        <span className="absolute -top-2 -right-2 size-6 rounded-full bg-[#3B82F6] border-2 border-[#0A0A0A] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
           {step.id}
         </span>
       </div>
@@ -811,9 +811,9 @@ function ReturnsEmptyState({ onCreate }: { onCreate: () => void }) {
       className="gst-empty-state"
     >
       <div className="relative mb-6">
-        <div className="absolute inset-0 blur-3xl bg-emerald-500/20 rounded-full" />
-        <div className="relative size-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-transparent border border-[#1F1F1F] flex items-center justify-center shadow-2xl">
-          <FileOutput className="size-10 text-emerald-300" />
+        <div className="absolute inset-0 blur-3xl bg-blue-500/20 rounded-full" />
+        <div className="relative size-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-transparent border border-[#1F1F1F] flex items-center justify-center shadow-2xl">
+          <FileOutput className="size-10 text-blue-300" />
         </div>
       </div>
       <h2 className="gst-empty-state-title">No GST Returns Yet</h2>
@@ -913,8 +913,8 @@ interface KpiCardProps {
 }
 
 const KPI_ACCENT: Record<KpiCardProps['accent'], { iconBg: string; iconColor: string }> = {
-  blue: { iconBg: 'bg-[#10B981]/15', iconColor: 'text-[#34D399]' },
-  emerald: { iconBg: 'bg-emerald-500/15', iconColor: 'text-emerald-300' },
+  blue: { iconBg: 'bg-[#3B82F6]/15', iconColor: 'text-[#60A5FA]' },
+  emerald: { iconBg: 'bg-blue-500/15', iconColor: 'text-blue-300' },
   amber: { iconBg: 'bg-amber-500/15', iconColor: 'text-amber-300' },
   rose: { iconBg: 'bg-rose-500/15', iconColor: 'text-rose-300' },
 };
@@ -1087,11 +1087,11 @@ function DetailSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0 bg-zinc-950/95 border-white/10 backdrop-blur-xl">
-        <SheetHeader className="p-6 pb-4 border-b border-white/10 bg-gradient-to-b from-emerald-500/10 to-transparent">
+        <SheetHeader className="p-6 pb-4 border-b border-white/10 bg-gradient-to-b from-blue-500/10 to-transparent">
           <SheetTitle className="text-lg font-bold text-foreground">{clientName}</SheetTitle>
           <SheetDescription className="text-sm font-mono text-muted-foreground">{clientGstin || '—'}</SheetDescription>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <Badge variant="outline" className="text-xs font-semibold border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+            <Badge variant="outline" className="text-xs font-semibold border-blue-500/30 bg-blue-500/10 text-blue-300">
               {ret.returnType}
             </Badge>
             <PremiumStatusBadge status={ret.status} />
@@ -1105,13 +1105,13 @@ function DetailSheet({
               <p className="text-[10px] text-muted-foreground">Invoices</p>
               <p className="text-lg font-bold text-foreground tabular-nums">{ret.totalInvoices}</p>
             </div>
-            <div className="rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20 p-3 text-center">
+            <div className="rounded-xl bg-blue-500/[0.08] border border-blue-500/20 p-3 text-center">
               <p className="text-[10px] text-muted-foreground">Taxable</p>
-              <p className="text-sm font-bold text-emerald-300 tabular-nums">{formatCurrency(ret.totalTaxableValue)}</p>
+              <p className="text-sm font-bold text-blue-300 gst-text-tabular">{formatCurrency(ret.totalTaxableValue)}</p>
             </div>
-            <div className="rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20 p-3 text-center">
+            <div className="rounded-xl bg-blue-500/[0.08] border border-blue-500/20 p-3 text-center">
               <p className="text-[10px] text-muted-foreground">Total Tax</p>
-              <p className="text-sm font-bold text-emerald-300 tabular-nums">{formatCurrency(ret.totalTax)}</p>
+              <p className="text-sm font-bold text-blue-300 gst-text-tabular">{formatCurrency(ret.totalTax)}</p>
             </div>
           </div>
 
@@ -1122,9 +1122,9 @@ function DetailSheet({
               <AlertTriangle className="size-3" /> Issues
             </h4>
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Critical Errors</span><span className={ret.criticalErrors > 0 ? 'text-rose-400 font-semibold' : 'text-emerald-400 font-semibold'}>{ret.criticalErrors}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Warnings</span><span className={ret.warnings > 0 ? 'text-amber-400 font-semibold' : 'text-emerald-400 font-semibold'}>{ret.warnings}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Issues</span><span className={ret.issuesFound > 0 ? 'text-amber-400 font-semibold' : 'text-emerald-400 font-semibold'}>{ret.issuesFound}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Critical Errors</span><span className={ret.criticalErrors > 0 ? 'text-rose-400 font-semibold' : 'text-blue-400 font-semibold'}>{ret.criticalErrors}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Warnings</span><span className={ret.warnings > 0 ? 'text-amber-400 font-semibold' : 'text-blue-400 font-semibold'}>{ret.warnings}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Total Issues</span><span className={ret.issuesFound > 0 ? 'text-amber-400 font-semibold' : 'text-blue-400 font-semibold'}>{ret.issuesFound}</span></div>
             </div>
           </div>
 
@@ -1146,7 +1146,7 @@ function DetailSheet({
                     <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="font-medium tabular-nums">{formatCurrency(sgst)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">IGST</span><span className="font-medium tabular-nums">{formatCurrency(igst)}</span></div>
                     <Separator className="bg-white/10 my-1" />
-                    <div className="flex justify-between font-bold"><span>Total Tax</span><span className="text-emerald-300 tabular-nums">{formatCurrency(total)}</span></div>
+                    <div className="flex justify-between font-bold"><span>Total Tax</span><span className="text-blue-300 gst-text-tabular">{formatCurrency(total)}</span></div>
                   </>
                 );
               })()}
@@ -1160,8 +1160,8 @@ function DetailSheet({
                 <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <ShieldCheck className="size-3" /> Filing Details
                 </h4>
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3.5 space-y-2 text-xs">
-                  <div className="flex justify-between"><span className="text-muted-foreground">ARN</span><span className="font-mono font-semibold text-emerald-300">{ret.acknowledgmentNumber}</span></div>
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">ARN</span><span className="font-mono font-semibold text-blue-300">{ret.acknowledgmentNumber}</span></div>
                   {ret.filedDate && (
                     <div className="flex justify-between"><span className="text-muted-foreground">Filed Date</span><span className="font-medium">{new Date(ret.filedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
                   )}
@@ -1257,8 +1257,8 @@ function StepSelectClient({
             aria-pressed={isSelected}
             className={cn(
               'gst-card gst-card-hover gst-animate-in text-left',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50',
-              isSelected && '!border-emerald-500/50 !bg-emerald-500/[0.06] shadow-lg shadow-emerald-500/10',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50',
+              isSelected && '!border-blue-500/50 !bg-blue-500/[0.06] shadow-lg shadow-blue-500/10',
             )}
             style={{ animationDelay: `${idx * 40}ms` }}
           >
@@ -1270,7 +1270,7 @@ function StepSelectClient({
               <span
                 className={cn(
                   'size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
-                  isSelected ? 'bg-[#10B981] border-[#10B981]' : 'border-[#2A2A2A]',
+                  isSelected ? 'bg-[#3B82F6] border-[#3B82F6]' : 'border-[#2A2A2A]',
                 )}
               >
                 {isSelected && <Check className="size-3 text-white" strokeWidth={3} />}
@@ -1316,7 +1316,7 @@ function StepSelectPeriod({
     <div className="space-y-5">
       <div className="space-y-2">
         <label className="gst-label flex items-center gap-1.5">
-          <CalendarDays className="size-3.5 text-[#34D399]" />
+          <CalendarDays className="size-3.5 text-[#60A5FA]" />
           Filing Period
         </label>
         <MonthYearPicker value={period} onChange={onPeriodChange} />
@@ -1335,7 +1335,7 @@ function StepSelectPeriod({
 
       <div className="space-y-2">
         <label className="gst-label flex items-center gap-1.5">
-          <FileText className="size-3.5 text-[#34D399]" />
+          <FileText className="size-3.5 text-[#60A5FA]" />
           Return Type
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -1349,11 +1349,11 @@ function StepSelectPeriod({
                 aria-pressed={active}
                 className={cn(
                   'gst-card gst-card-hover gst-animate-in flex flex-col items-start gap-1 text-left',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50',
-                  active && '!border-emerald-500/50 !bg-emerald-500/[0.06] shadow-lg shadow-emerald-500/10',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50',
+                  active && '!border-blue-500/50 !bg-blue-500/[0.06] shadow-lg shadow-blue-500/10',
                 )}
               >
-                <span className={cn('text-base font-bold', active ? 'text-[#34D399]' : 'text-foreground')}>{rt}</span>
+                <span className={cn('text-base font-bold', active ? 'text-[#60A5FA]' : 'text-foreground')}>{rt}</span>
                 <span className="gst-caption leading-tight">
                   {rt === 'GSTR-1' ? 'Outward supplies (monthly/quarterly)' : 'Summary return (tax liability)'}
                 </span>
@@ -1384,8 +1384,8 @@ function StepImportInvoices({
   return (
     <div className="space-y-5">
       <div className="gst-card text-center">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5 border border-[#10B981]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
-          <CloudUpload className="size-7 text-[#34D399]" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5 border border-[#3B82F6]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
+          <CloudUpload className="size-7 text-[#60A5FA]" />
         </div>
         <h3 className="gst-card-title text-foreground mb-1">Pull invoices from the register</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
@@ -1408,13 +1408,13 @@ function StepImportInvoices({
             <p className="gst-caption mb-1">Invoices</p>
             <p className="gst-metric text-xl text-foreground">{importedCount}</p>
           </div>
-          <div className="gst-card gst-card-compact gst-animate-in text-center !border-emerald-500/25 !bg-emerald-500/[0.04]">
+          <div className="gst-card gst-card-compact gst-animate-in text-center !border-blue-500/25 !bg-blue-500/[0.04]">
             <p className="gst-caption mb-1">Taxable Value</p>
-            <p className="gst-metric text-xl text-emerald-300">{formatCurrency(taxableValue)}</p>
+            <p className="gst-metric text-xl text-blue-300">{formatCurrency(taxableValue)}</p>
           </div>
-          <div className="gst-card gst-card-compact gst-animate-in text-center !border-[#10B981]/25 !bg-[#10B981]/[0.04]">
+          <div className="gst-card gst-card-compact gst-animate-in text-center !border-[#3B82F6]/25 !bg-[#3B82F6]/[0.04]">
             <p className="gst-caption mb-1">Total Tax</p>
-            <p className="gst-metric text-xl text-[#34D399]">{formatCurrency(totalTax)}</p>
+            <p className="gst-metric text-xl text-[#60A5FA]">{formatCurrency(totalTax)}</p>
           </div>
         </div>
       )}
@@ -1438,8 +1438,8 @@ function StepAIValidation({
   return (
     <div className="space-y-5">
       <div className="gst-card text-center">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5 border border-[#10B981]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
-          <Bot className="size-7 text-[#34D399]" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5 border border-[#3B82F6]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
+          <Bot className="size-7 text-[#60A5FA]" />
         </div>
         <h3 className="gst-card-title text-foreground mb-1">Oracle AI validation</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
@@ -1463,7 +1463,7 @@ function StepAIValidation({
               <AlertTriangle className="size-4 text-rose-400" />
               <span className="gst-caption">Critical</span>
             </div>
-            <p className={cn('gst-metric text-xl', issues.critical > 0 ? 'text-rose-300' : 'text-emerald-300')}>
+            <p className={cn('gst-metric text-xl', issues.critical > 0 ? 'text-rose-300' : 'text-blue-300')}>
               {issues.critical}
             </p>
           </div>
@@ -1472,16 +1472,16 @@ function StepAIValidation({
               <AlertCircle className="size-4 text-amber-400" />
               <span className="gst-caption">Warnings</span>
             </div>
-            <p className={cn('gst-metric text-xl', issues.warnings > 0 ? 'text-amber-300' : 'text-emerald-300')}>
+            <p className={cn('gst-metric text-xl', issues.warnings > 0 ? 'text-amber-300' : 'text-blue-300')}>
               {issues.warnings}
             </p>
           </div>
           <div className="gst-card gst-card-compact gst-animate-in" style={{ animationDelay: '120ms' }}>
             <div className="flex items-center gap-2 mb-1">
-              <CheckCircle2 className="size-4 text-emerald-400" />
+              <CheckCircle2 className="size-4 text-blue-400" />
               <span className="gst-caption">Passed</span>
             </div>
-            <p className="gst-metric text-xl text-emerald-300">{issues.info}</p>
+            <p className="gst-metric text-xl text-blue-300">{issues.info}</p>
           </div>
         </div>
       )}
@@ -1513,7 +1513,7 @@ function StepGSTCalculation({
       <div className="gst-card !p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-[#1F1F1F] bg-white/[0.02] flex items-center justify-between">
           <h3 className="gst-card-title text-foreground flex items-center gap-2">
-            <Calculator className="size-4 text-[#34D399]" />
+            <Calculator className="size-4 text-[#60A5FA]" />
             Tax Slab Breakdown
           </h3>
           <span className="gst-caption">{slabRows.length} slab{slabRows.length !== 1 ? 's' : ''}</span>
@@ -1551,7 +1551,7 @@ function StepGSTCalculation({
                 <tr className="border-t-2 border-[#1F1F1F]">
                   <td className="font-bold">Total</td>
                   <td className="text-right font-bold tabular-nums">{formatCurrency(taxableValue)}</td>
-                  <td className="text-right font-bold tabular-nums text-[#34D399]">{formatCurrency(totalTax)}</td>
+                  <td className="text-right font-bold tabular-nums text-[#60A5FA]">{formatCurrency(totalTax)}</td>
                 </tr>
               </tfoot>
             )}
@@ -1562,15 +1562,15 @@ function StepGSTCalculation({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="gst-card gst-card-compact gst-animate-in">
           <p className="gst-caption mb-1">CGST</p>
-          <p className="gst-metric text-xl text-[#34D399]">{formatCurrency(cgst)}</p>
+          <p className="gst-metric text-xl text-[#60A5FA]">{formatCurrency(cgst)}</p>
         </div>
         <div className="gst-card gst-card-compact gst-animate-in" style={{ animationDelay: '60ms' }}>
           <p className="gst-caption mb-1">SGST</p>
-          <p className="gst-metric text-xl text-[#34D399]">{formatCurrency(sgst)}</p>
+          <p className="gst-metric text-xl text-[#60A5FA]">{formatCurrency(sgst)}</p>
         </div>
         <div className="gst-card gst-card-compact gst-animate-in" style={{ animationDelay: '120ms' }}>
           <p className="gst-caption mb-1">IGST</p>
-          <p className="gst-metric text-xl text-[#34D399]">{formatCurrency(igst)}</p>
+          <p className="gst-metric text-xl text-[#60A5FA]">{formatCurrency(igst)}</p>
         </div>
         <div className="gst-card gst-card-compact gst-animate-in" style={{ animationDelay: '180ms' }}>
           <p className="gst-caption mb-1">CESS</p>
@@ -1620,7 +1620,7 @@ function StepReview({
         </div>
         <div className="gst-card gst-card-compact gst-animate-in" style={{ animationDelay: '60ms' }}>
           <p className="gst-caption mb-1">Return</p>
-          <p className="text-sm font-bold text-[#34D399]">{returnType}</p>
+          <p className="text-sm font-bold text-[#60A5FA]">{returnType}</p>
           <p className="text-xs text-muted-foreground">{periodLabel} · FY {financialYear}</p>
         </div>
       </div>
@@ -1632,15 +1632,15 @@ function StepReview({
         </div>
         <div className="gst-card gst-card-compact gst-animate-in text-center" style={{ animationDelay: '60ms' }}>
           <p className="gst-caption mb-1">Taxable</p>
-          <p className="gst-metric text-xl text-emerald-300">{formatCurrency(taxableValue)}</p>
+          <p className="gst-metric text-xl text-blue-300">{formatCurrency(taxableValue)}</p>
         </div>
         <div className="gst-card gst-card-compact gst-animate-in text-center" style={{ animationDelay: '120ms' }}>
           <p className="gst-caption mb-1">Total Tax</p>
-          <p className="gst-metric text-xl text-[#34D399]">{formatCurrency(totalTax)}</p>
+          <p className="gst-metric text-xl text-[#60A5FA]">{formatCurrency(totalTax)}</p>
         </div>
         <div className="gst-card gst-card-compact gst-animate-in text-center" style={{ animationDelay: '180ms' }}>
           <p className="gst-caption mb-1">Issues</p>
-          <p className={cn('gst-metric text-xl', issues.critical > 0 ? 'text-rose-300' : issues.warnings > 0 ? 'text-amber-300' : 'text-emerald-300')}>
+          <p className={cn('gst-metric text-xl', issues.critical > 0 ? 'text-rose-300' : issues.warnings > 0 ? 'text-amber-300' : 'text-blue-300')}>
             {issues.critical + issues.warnings}
           </p>
         </div>
@@ -1648,7 +1648,7 @@ function StepReview({
 
       <div className="gst-card">
         <h4 className="gst-card-title text-foreground mb-3 flex items-center gap-2">
-          <Eye className="size-4 text-[#34D399]" />
+          <Eye className="size-4 text-[#60A5FA]" />
           Final Tax Liability
         </h4>
         <div className="space-y-2 text-sm">
@@ -1658,7 +1658,7 @@ function StepReview({
           <Separator className="bg-[#1F1F1F] my-2" />
           <div className="flex justify-between font-bold text-base">
             <span>Total Payable</span>
-            <span className="text-[#34D399] tabular-nums">{formatCurrency(totalTax)}</span>
+            <span className="text-[#60A5FA] tabular-nums">{formatCurrency(totalTax)}</span>
           </div>
         </div>
       </div>
@@ -1709,8 +1709,8 @@ function StepGenerateJSON({
   return (
     <div className="space-y-5">
       <div className="gst-card text-center">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5 border border-[#10B981]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
-          <FileJson className="size-7 text-[#34D399]" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5 border border-[#3B82F6]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
+          <FileJson className="size-7 text-[#60A5FA]" />
         </div>
         <h3 className="gst-card-title text-foreground mb-1">GSTN-compliant JSON</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
@@ -1742,7 +1742,7 @@ function StepGenerateJSON({
         <div className="gst-card !p-0 overflow-hidden gst-animate-in">
           <div className="px-4 py-3 border-b border-[#1F1F1F] bg-white/[0.02] flex items-center justify-between">
             <h4 className="gst-card-title text-foreground flex items-center gap-2">
-              <FileJson className="size-4 text-[#34D399]" />
+              <FileJson className="size-4 text-[#60A5FA]" />
               JSON Preview
               <span className="gst-badge text-[#525252]">
                 {preview.length.toLocaleString()} chars
@@ -1757,7 +1757,7 @@ function StepGenerateJSON({
               <Download className="size-3.5" /> Download
             </Button>
           </div>
-          <pre className="max-h-[420px] min-h-[180px] overflow-auto p-4 text-xs font-mono text-emerald-200/90 leading-relaxed returns-scroll bg-[#070707]">
+          <pre className="max-h-[420px] min-h-[180px] overflow-auto p-4 text-xs font-mono text-blue-200/90 leading-relaxed returns-scroll bg-[#070707]">
             <code>{preview}</code>
           </pre>
         </div>
@@ -1786,8 +1786,8 @@ function StepFileReturn({
   return (
     <div className="space-y-5">
       <div className="gst-card text-center">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5 border border-[#10B981]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
-          <Send className="size-7 text-[#34D399]" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5 border border-[#3B82F6]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
+          <Send className="size-7 text-[#60A5FA]" />
         </div>
         <h3 className="gst-card-title text-foreground mb-1">Ready to file</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
@@ -1813,14 +1813,14 @@ function StepFileReturn({
         <Separator className="bg-[#1F1F1F] my-2" />
         <div className="flex justify-between font-bold text-base">
           <span>Total Tax Liability</span>
-          <span className="text-[#34D399] tabular-nums">{formatCurrency(totalTax)}</span>
+          <span className="text-[#60A5FA] tabular-nums">{formatCurrency(totalTax)}</span>
         </div>
       </div>
 
-      <div className="gst-card !border-[#10B981]/25 !bg-[#10B981]/[0.04] flex items-start gap-3">
-        <ShieldCheck className="size-5 text-[#34D399] shrink-0 mt-0.5" />
+      <div className="gst-card !border-[#3B82F6]/25 !bg-[#3B82F6]/[0.04] flex items-start gap-3">
+        <ShieldCheck className="size-5 text-[#60A5FA] shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-[#34D399]">Honest filing guarantee</p>
+          <p className="text-sm font-semibold text-[#60A5FA]">Honest filing guarantee</p>
           <p className="gst-description">
             GSTPilot never simulates government filings. If a live GSTN API
             provider is not configured, you&apos;ll be shown the JSON download
@@ -2432,8 +2432,8 @@ export default function ReturnsPage() {
         <header className="border-b border-[#1F1F1F] bg-black sticky top-0 z-30">
           <div className="gst-container-wide py-4 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="size-10 rounded-xl bg-[#10B981]/15 border border-[#10B981]/25 flex items-center justify-center shrink-0">
-                <FileOutput className="size-5 text-[#34D399]" />
+              <div className="size-10 rounded-xl bg-[#3B82F6]/15 border border-[#3B82F6]/25 flex items-center justify-center shrink-0">
+                <FileOutput className="size-5 text-[#60A5FA]" />
               </div>
               <div className="min-w-0">
                 <h1 className="gst-page-title text-foreground truncate">GST Returns</h1>
@@ -2460,7 +2460,7 @@ export default function ReturnsPage() {
               >
                 <ListChecks className="size-3.5" />
                 {showReturnsList ? 'Hide Returns' : 'View All Returns'}
-                <Badge className="bg-[#10B981]/15 text-[#34D399] border-[#10B981]/25 text-[10px] px-1.5 h-4 ml-1">
+                <Badge className="bg-[#3B82F6]/15 text-[#60A5FA] border-[#3B82F6]/25 text-[10px] px-1.5 h-4 ml-1">
                   {returns.length}
                 </Badge>
               </Button>
@@ -2778,10 +2778,10 @@ export default function ReturnsPage() {
           onOpenChange={(v) => { if (!v) setDemoFilingReturn(null); }}
         >
           <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden bg-zinc-950/95 border border-white/10 backdrop-blur-2xl rounded-[24px] shadow-2xl">
-            <DialogHeader className="p-6 pb-4 border-b border-white/10 bg-gradient-to-b from-emerald-500/10 to-transparent">
+            <DialogHeader className="p-6 pb-4 border-b border-white/10 bg-gradient-to-b from-blue-500/10 to-transparent">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/25">
-                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 border border-blue-500/25">
+                  <ShieldCheck className="h-5 w-5 text-blue-400" />
                 </div>
                 <div>
                   <DialogTitle className="text-base font-bold text-foreground">
@@ -2836,7 +2836,7 @@ export default function ReturnsPage() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                Take the downloaded JSON to <span className="text-emerald-400">gst.gov.in</span> →
+                Take the downloaded JSON to <span className="text-blue-400">gst.gov.in</span> →
                 Returns → Upload JSON to complete your filing. The return status will update to
                 &quot;Ready to File&quot; so you can track it here.
               </p>

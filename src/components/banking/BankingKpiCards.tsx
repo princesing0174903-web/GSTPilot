@@ -25,8 +25,8 @@ import type { BankingDashboardSummary, CashFlowPoint } from '@/lib/banking-prism
 //   • Gauge bar (card 8 — bank health score)
 //   • Subtitle text (cards 2, 5, 6)
 //
-// Tone system mirrors the design-system tokens: emerald=success, amber=warning,
-// red=danger, cyan=info, zinc=neutral. No indigo / blue.
+// Tone system mirrors the design-system tokens: blue=success, amber=warning,
+// red=danger, blue-light=info, zinc=neutral. Emerald/cyan neutralized.
 //
 // `computeBankingKpis(summary)` builds the 8 card configs from the dashboard
 // summary so the parent can choose to render the cards via this component or
@@ -62,10 +62,10 @@ interface ToneConfig {
 
 const TONES: Record<Tone, ToneConfig> = {
   success: {
-    iconColor: 'text-emerald-400',
-    iconBg: 'bg-emerald-500/10',
-    sparkHex: '#34d399',
-    barColor: '#34d399',
+    iconColor: 'text-blue-400',
+    iconBg: 'bg-blue-500/10',
+    sparkHex: '#60A5FA',
+    barColor: '#3B82F6',
   },
   warning: {
     iconColor: 'text-amber-400',
@@ -80,10 +80,10 @@ const TONES: Record<Tone, ToneConfig> = {
     barColor: '#f87171',
   },
   info: {
-    iconColor: 'text-cyan-400',
-    iconBg: 'bg-cyan-500/10',
-    sparkHex: '#22d3ee',
-    barColor: '#22d3ee',
+    iconColor: 'text-blue-300',
+    iconBg: 'bg-blue-500/10',
+    sparkHex: '#60A5FA',
+    barColor: '#60A5FA',
   },
   neutral: {
     iconColor: 'text-zinc-300',
@@ -375,14 +375,14 @@ const BankingKpiCard = memo(function BankingKpiCard({
       whileHover={{ y: -2 }}
       className="h-full"
     >
-      <div className="glass-surface group h-full rounded-2xl border border-white/[0.06] p-4 transition-colors duration-300 hover:border-white/[0.12]">
+      <div className="glass-surface gst-card-hover group h-full rounded-2xl border border-white/[0.06] p-4 transition-colors duration-300 hover:border-white/[0.12]">
         {/* Top row: label + value (left) and icon chip (right) */}
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="gst-text-label">
               {config.label}
             </div>
-            <div className="truncate text-xl font-bold tabular-nums text-foreground md:text-2xl">
+            <div className="gst-text-metric gst-text-tabular !text-xl md:!text-2xl truncate">
               {config.value}
             </div>
           </div>
@@ -417,13 +417,13 @@ const BankingKpiCard = memo(function BankingKpiCard({
         {config.trend && (
           <div className="mt-2 flex items-center gap-1">
             {config.trend.value >= 0 ? (
-              <TrendingUp className="h-3 w-3 text-emerald-400" />
+              <TrendingUp className="h-3 w-3 text-blue-400" />
             ) : (
               <TrendingDown className="h-3 w-3 text-red-400" />
             )}
             <span
               className={`text-[11px] font-medium tabular-nums ${
-                config.trend.value >= 0 ? 'text-emerald-400' : 'text-red-400'
+                config.trend.value >= 0 ? 'text-blue-400' : 'text-red-400'
               }`}
             >
               {config.trend.value >= 0 ? '+' : ''}

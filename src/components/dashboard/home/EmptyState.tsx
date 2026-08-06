@@ -56,14 +56,14 @@ export interface EmptyStateProps {
  */
 const toneIconChip: Record<NonNullable<EmptyStateProps['tone']>, string> = {
   default: '',
-  emerald: 'bg-emerald-500/10 border-emerald-500/20',
+  emerald: 'bg-blue-500/10 border-blue-500/20',
   amber: 'bg-amber-500/10 border-amber-500/20',
   cyan: 'bg-cyan-500/10 border-cyan-500/20',
 };
 
 const toneIconColor: Record<NonNullable<EmptyStateProps['tone']>, string> = {
   default: '',
-  emerald: 'text-emerald-400',
+  emerald: 'text-blue-400',
   amber: 'text-amber-400',
   cyan: 'text-cyan-400',
 };

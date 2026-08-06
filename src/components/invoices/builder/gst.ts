@@ -209,7 +209,7 @@ export function lineItemFromApiItem(
 
 /** Risk pill color logic from a numeric health score (0-100). */
 export function healthTone(score: number): { label: string; className: string } {
-  if (score >= 80) return { label: 'Healthy', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
+  if (score >= 80) return { label: 'Healthy', className: 'bg-blue-500/15 text-blue-300 border-blue-500/30' };
   if (score >= 60) return { label: 'Fair', className: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
   if (score >= 40) return { label: 'Watch', className: 'bg-orange-500/15 text-orange-300 border-orange-500/30' };
   return { label: 'Risk', className: 'bg-red-500/15 text-red-300 border-red-500/30' };

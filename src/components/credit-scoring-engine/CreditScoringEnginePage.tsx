@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -1053,7 +1054,7 @@ function ScoreDashboardTab() {
             rating, and recommended credit limit. Real scores are computed from
             your live GST returns, collections, and compliance history.
           </p>
-          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => toast.info('Business picker coming soon', { description: 'Select clients from your books to compute live credit scores.' })}>
             <Building2 className="w-4 h-4 mr-1.5" /> Select a business
           </Button>
         </CardContent>
@@ -1329,7 +1330,7 @@ function ScoreBreakdownTab() {
             breakdowns for each of its 5 composite credit scores — including
             factor weights, weighted contributions, and industry comparisons.
           </p>
-          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => toast.info('Business picker coming soon', { description: 'Select clients from your books to drill into per-factor credit score breakdowns.' })}>
             <Building2 className="w-4 h-4 mr-1.5" /> Select a business
           </Button>
         </CardContent>

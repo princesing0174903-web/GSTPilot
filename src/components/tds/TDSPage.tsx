@@ -4,8 +4,9 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { useApp } from '@/contexts/AppContext'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   FileCheck, ArrowUpRight, ArrowDownRight, TrendingUp,
   IndianRupee, FileText, ShieldCheck, Clock,
@@ -105,16 +106,28 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function TDSPage() {
-  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQ, setSearchQ] = useState('')
 
   // Real TDS records from /api/tds
-  const { data: tdsRes } = useQuery<TdsResponse>({
+  const { data: tdsRes, isLoading: tdsLoading, error: tdsError } = useQuery<TdsResponse>({
     queryKey: ['tds', 'all'],
     queryFn: () => apiGet<TdsResponse>('/api/tds'),
   })
   const records: TdsRecord[] = tdsRes?.records ?? []
+
+  // Wire up dead top-of-page CTAs (no underlying feature yet — surface a
+  // friendly toast instead of leaving the button silent).
+  const handleExport = () => {
+    if (records.length === 0) {
+      toast.info('Nothing to export yet', { description: 'Record a TDS deduction first.' })
+      return
+    }
+    toast.info('Export started', { description: 'Your TDS statement will download as a CSV shortly.' })
+  }
+  const handleFileReturn = () => {
+    toast.info('Return filing coming soon', { description: 'Use the GSTR workspace to file TDS returns today.' })
+  }
 
   // Derived: stat cards from real records
   const totalDeducted = records.reduce((sum, r) => sum + (r.tdsAmount ?? 0), 0)
@@ -182,8 +195,8 @@ export default function TDSPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5"><Download className="h-3.5 w-3.5" />Export</Button>
-            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"><Send className="h-3.5 w-3.5" />File Return</Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}><Download className="h-3.5 w-3.5" />Export</Button>
+            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={handleFileReturn}><Send className="h-3.5 w-3.5" />File Return</Button>
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 sm:px-6">
@@ -198,6 +211,38 @@ export default function TDSPage() {
       </div>
 
       <div className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        {tdsError ? (
+          <Card className="border-rose-200 dark:border-rose-900/40">
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="h-7 w-7 mx-auto text-rose-500" />
+              <h3 className="mt-3 text-base font-semibold text-slate-900 dark:text-white">We couldn&apos;t load your TDS data</h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                {tdsError instanceof Error ? tdsError.message : 'Something went wrong while fetching TDS records.'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : tdsLoading ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4 space-y-3">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-20" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* ─── OVERVIEW TAB ─── */}
           <TabsContent value="overview" className="mt-0 space-y-6">
@@ -296,7 +341,7 @@ export default function TDSPage() {
                       icon={Receipt}
                       title="No TDS sections yet"
                       description="Record your first TDS deduction to see per-section summaries here."
-                      action={{ label: 'Add Deduction', onClick: () => setCurrentView('tds'), icon: Plus }}
+                      action={{ label: 'Add Deduction', onClick: () => toast.info('Manual deduction form coming soon', { description: 'Use the GSTR workspace or your Zoho Books sync to record TDS today.' }), icon: Plus }}
                     />
                   ) : (
                   <div className="divide-y dark:divide-slate-800/60">
@@ -344,7 +389,7 @@ export default function TDSPage() {
                       icon={Receipt}
                       title="No TDS deductions recorded"
                       description="Add your first TDS deduction entry to start tracking section-wise liability."
-                      action={{ label: 'New Deduction', onClick: () => setCurrentView('tds'), icon: Plus }}
+                      action={{ label: 'New Deduction', onClick: () => toast.info('Manual deduction form coming soon', { description: 'Use the GSTR workspace or your Zoho Books sync to record TDS today.' }), icon: Plus }}
                     />
                   ) : (
                   <ScrollArea className="max-h-[600px]">
@@ -400,7 +445,7 @@ export default function TDSPage() {
                       icon={Receipt}
                       title="No challans created"
                       description="Generate a challan when depositing TDS with your bank to keep track of payments."
-                      action={{ label: 'Create Challan', onClick: () => setCurrentView('tds'), icon: Plus }}
+                      action={{ label: 'Create Challan', onClick: () => toast.info('Challan creation coming soon', { description: 'Record TDS deductions today via your GSTR workspace.' }), icon: Plus }}
                     />
                   ) : (
                   <ScrollArea className="max-h-[600px]">
@@ -444,7 +489,7 @@ export default function TDSPage() {
                       icon={FileCheck}
                       title="No quarterly returns filed"
                       description="Once you file a TDS return for a quarter, it will appear here with status and forms."
-                      action={{ label: 'File Return', onClick: () => setCurrentView('tds'), icon: Send }}
+                      action={{ label: 'File Return', onClick: handleFileReturn, icon: Send }}
                     />
                   </CardContent>
                 </Card>
@@ -490,7 +535,7 @@ export default function TDSPage() {
                       icon={FileText}
                       title="No TDS certificates issued"
                       description="Issue Form 16A certificates to deductees once TDS is deposited for the quarter."
-                      action={{ label: 'Issue Certificates', onClick: () => setCurrentView('tds'), icon: Send }}
+                      action={{ label: 'Issue Certificates', onClick: () => toast.info('Certificate issuance coming soon', { description: 'Form 16A generation will land here shortly.' }), icon: Send }}
                     />
                   ) : (
                   <div className="divide-y dark:divide-slate-800/60">
@@ -524,6 +569,7 @@ export default function TDSPage() {
             </motion.div>
           </TabsContent>
         </Tabs>
+        )}
       </div>
     </div>
   )

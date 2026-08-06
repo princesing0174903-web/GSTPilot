@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -554,7 +555,7 @@ function AgentGalleryTab({ onBuildCustom }: { onBuildCustom: () => void }) {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-800">Pre-built Agent Templates</h2>
-          <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 border-slate-200">
+          <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 border-slate-200" onClick={() => toast.info('Filter coming soon', { description: 'Filter agent templates by category, status, or tags.' })}>
             <Settings className="h-3.5 w-3.5" /> Filter
           </Button>
         </div>
@@ -1555,7 +1556,7 @@ function MarketplaceTab() {
           <h2 className="text-lg font-semibold text-slate-800">Agent Marketplace</h2>
           <p className="text-sm text-slate-500">Community-built agents you can install and customize</p>
         </div>
-        <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+        <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" onClick={() => toast.info('Agent sharing coming soon', { description: 'Publish your agent to the GSTPilot marketplace.' })}>
           <Share2 className="h-4 w-4" /> Share Your Agent
         </Button>
       </div>

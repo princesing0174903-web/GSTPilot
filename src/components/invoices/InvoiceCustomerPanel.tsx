@@ -162,7 +162,7 @@ export function InvoiceCustomerPanel({
               {buyerStateCode ? `${buyerStateName} (${buyerStateCode})` : '— No state detected'}
             </Badge>
             {buyerGstin && buyerGstin.length === 15 ? (
-              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[12px] text-emerald-300">
+              <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-[12px] text-blue-300">
                 <Landmark className="h-3 w-3" />
                 15 chars · valid length
               </Badge>

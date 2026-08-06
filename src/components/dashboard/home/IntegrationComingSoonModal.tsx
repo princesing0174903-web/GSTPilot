@@ -106,9 +106,9 @@ export function IntegrationComingSoonModal({
                   return (
                     <div
                       key={item.name}
-                      className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5 py-1.5"
+                      className="flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/[0.06] px-2.5 py-1.5"
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                       <span className="text-xs font-medium text-foreground truncate">
                         {item.name}
                       </span>
@@ -142,8 +142,8 @@ export function IntegrationComingSoonModal({
 
           {/* Suggested alternatives */}
           {(onConnectGoogle || onConnectZoho) && (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2.5">
-              <p className="text-[11px] text-emerald-300/90 leading-relaxed mb-2">
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.04] px-3 py-2.5">
+              <p className="text-[11px] text-blue-300/90 leading-relaxed mb-2">
                 <Sparkles className="inline h-3 w-3 mr-1 -mt-0.5" />
                 In the meantime, connect an available integration to start
                 syncing real business data.

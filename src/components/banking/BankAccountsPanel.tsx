@@ -263,12 +263,12 @@ const AccountCard = React.memo(function AccountCard({
 
         {/* Monthly inflow / outflow */}
         <div className="mb-3 grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-emerald-500/[0.06] p-2">
-            <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-400">
+          <div className="rounded-lg bg-blue-500/[0.06] p-2">
+            <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-blue-400">
               <ArrowDownLeft className="h-3 w-3" />
               Inflow
             </p>
-            <p className="text-sm font-semibold tabular-nums text-emerald-300">
+            <p className="text-sm font-semibold tabular-nums text-blue-300">
               {formatINR(account.monthlyInflow)}
             </p>
           </div>
@@ -436,7 +436,7 @@ function AccountSheet({ open, onOpenChange, initial, onSave, saving }: AccountSh
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 text-base">
-            <Building2 className="h-4 w-4 text-emerald-400" />
+            <Building2 className="h-4 w-4 text-blue-400" />
             {initial ? 'Edit Account' : 'Add Bank Account'}
           </SheetTitle>
           <SheetDescription>
@@ -577,7 +577,7 @@ function AccountSheet({ open, onOpenChange, initial, onSave, saving }: AccountSh
               type="submit"
               size="sm"
               loading={saving}
-              className="bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+              className="bg-blue-500 text-zinc-950 hover:bg-blue-400"
             >
               {initial ? 'Save Changes' : 'Add Account'}
             </Button>
@@ -664,7 +664,7 @@ function PanelHeader({ count, onAdd }: { count: number; onAdd: () => void }) {
       <Button
         size="sm"
         onClick={onAdd}
-        className="gap-1.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+        className="gap-1.5 bg-blue-500 text-zinc-950 hover:bg-blue-400"
       >
         <Plus className="h-4 w-4" />
         Add Account

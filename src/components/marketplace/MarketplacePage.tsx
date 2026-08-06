@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Store, Search, Star, Download, FileText, Workflow,
   BarChart3, Check, ChevronRight, Shield, Clock,
@@ -690,10 +691,10 @@ function ProductDetailDialog({ item, open, onClose, onInstall }: { item: Marketp
                   <><Download size={16} className="mr-2" /> Install {item.price !== 'Free' ? `— ${formatINRFull(item.subscriptionPrice)}/mo` : ''}</>
                 )}
               </Button>
-              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200">
+              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200" onClick={() => toast.info('Added to favorites', { description: `${item.name} saved to your watchlist.` })} aria-label="Add to favorites">
                 <Heart size={16} />
               </Button>
-              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200">
+              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200" onClick={() => toast.info('Share link copied', { description: `Share ${item.name} with your team.` })} aria-label="Share">
                 <Share2 size={16} />
               </Button>
             </div>
@@ -1010,10 +1011,10 @@ function MyAppsTab({ items, onProductClick, onInstall }: { items: MarketplaceIte
                         <span className="text-[10px] text-slate-400">Next billing: 01/04/2026</span>
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-emerald-600">
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-emerald-600" onClick={() => toast.info('Manage coming soon', { description: 'Open the integration’s settings panel from here.' })}>
                           Manage
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-rose-600">
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-rose-600" onClick={() => toast.info('Cancel subscription?', { description: 'Subscription cancellation flow will land here shortly.' })}>
                           Cancel
                         </Button>
                       </div>

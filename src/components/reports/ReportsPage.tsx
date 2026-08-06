@@ -103,14 +103,14 @@ interface ClientOption {
 const SECTION_KEYS: GSTR1Section[] = ['b2b', 'b2cl', 'b2cs', 'cdnr', 'cdnur', 'exp'];
 
 const EXPORT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bgColor: string }> = {
-  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
   'GSTR-1 Excel': { label: 'GSTR-1 Excel', icon: <FileSpreadsheet className="size-5" />, color: 'text-amber-700', bgColor: 'bg-amber-50' },
   'Filing Summary PDF': { label: 'Filing Summary PDF', icon: <FileText className="size-5" />, color: 'text-red-700', bgColor: 'bg-red-50' },
-  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
-  'GST Summary PDF': { label: 'GST Summary PDF', icon: <FileText className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
-  'Compliance Report PDF': { label: 'Compliance Report PDF', icon: <FileText className="size-5" />, color: 'text-cyan-700', bgColor: 'bg-cyan-50' },
-  'Financial Report PDF': { label: 'Financial Report PDF', icon: <FileText className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
-  'Cash Flow Report PDF': { label: 'Cash Flow Report PDF', icon: <FileText className="size-5" />, color: 'text-teal-700', bgColor: 'bg-teal-50' },
+  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'GST Summary PDF': { label: 'GST Summary PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'Compliance Report PDF': { label: 'Compliance Report PDF', icon: <FileText className="size-5" />, color: 'text-sky-700', bgColor: 'bg-sky-50' },
+  'Financial Report PDF': { label: 'Financial Report PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'Cash Flow Report PDF': { label: 'Cash Flow Report PDF', icon: <FileText className="size-5" />, color: 'text-sky-700', bgColor: 'bg-sky-50' },
 };
 
 const MONTHS = [
@@ -439,21 +439,21 @@ const CONFIGURED_REPORTS = REPORT_CATALOG.reduce(
 );
 
 const ACCENT_BG: Record<ReportCardConfig['accent'], string> = {
-  blue: 'bg-[#06B6D4]/10 border-[#06B6D4]/25',
-  emerald: 'bg-[#10B981]/10 border-[#10B981]/25',
+  blue: 'bg-[#2563EB]/10 border-[#2563EB]/25',
+  emerald: 'bg-[#3B82F6]/10 border-[#3B82F6]/25',
   amber: 'bg-[#F59E0B]/10 border-[#F59E0B]/25',
-  purple: 'bg-[#10B981]/10 border-[#10B981]/25',
-  teal: 'bg-[#14B8A6]/10 border-[#14B8A6]/25',
+  purple: 'bg-[#60A5FA]/10 border-[#60A5FA]/25',
+  teal: 'bg-[#60A5FA]/10 border-[#60A5FA]/25',
   rose: 'bg-[#F43F5E]/10 border-[#F43F5E]/25',
   slate: 'bg-[#181818] border-[#222222]',
 };
 
 const ACCENT_TEXT: Record<ReportCardConfig['accent'], string> = {
-  blue: 'text-[#22D3EE]',
-  emerald: 'text-[#34D399]',
+  blue: 'text-[#60A5FA]',
+  emerald: 'text-[#60A5FA]',
   amber: 'text-[#FBBF24]',
-  purple: 'text-[#34D399]',
-  teal: 'text-[#2DD4BF]',
+  purple: 'text-[#60A5FA]',
+  teal: 'text-[#60A5FA]',
   rose: 'text-[#FB7185]',
   slate: 'text-muted-foreground',
 };

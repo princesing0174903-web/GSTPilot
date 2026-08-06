@@ -179,7 +179,7 @@ export function LeftNav() {
                 }}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'group relative flex h-10 items-center rounded-lg text-[13px] font-medium outline-none',
+                  'gst-nav-item group relative flex h-10 items-center rounded-lg text-[13px] font-medium outline-none',
                   'transition-all duration-[180ms] ease-out',
                   'focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40',
                   // Collapsed rail (below xl)
@@ -275,7 +275,7 @@ export function LeftNav() {
                     onClick={() => setCurrentView(item.view)}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'group relative flex h-10 items-center rounded-lg text-[13px] font-medium outline-none',
+                      'gst-nav-item group relative flex h-10 items-center rounded-lg text-[13px] font-medium outline-none',
                       'transition-all duration-[180ms] ease-out',
                       'focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40',
                       'justify-center w-10',
@@ -327,7 +327,7 @@ export function LeftNav() {
               v2.0 · Infinity
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500/80 shadow-[0_0_6px_rgba(37,99,235,0.6)]" />
               <span className="text-[10px] font-medium text-[#71717A]">Live</span>
             </span>
           </div>

@@ -270,7 +270,7 @@ export default function BankingPage() {
                 <TabsTrigger
                   key={tab.key}
                   value={tab.key}
-                  className="rounded-none border-b-2 border-transparent bg-transparent px-4 text-xs font-medium text-muted-foreground data-[state=active]:border-emerald-400 data-[state=active]:bg-transparent data-[state=active]:text-emerald-300 data-[state=active]:shadow-none"
+                  className="rounded-none border-b-2 border-transparent bg-transparent px-4 text-xs font-medium text-muted-foreground data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-blue-300 data-[state=active]:shadow-none"
                 >
                   {tab.label}
                 </TabsTrigger>
@@ -424,8 +424,8 @@ function BankingHeader({
     <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-black/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 border border-emerald-500/20">
-            <Landmark className="h-5 w-5 text-emerald-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/10 border border-blue-500/20">
+            <Landmark className="h-5 w-5 text-blue-400" />
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight text-foreground sm:text-lg">
@@ -478,7 +478,7 @@ function BankingFooter({
     <footer className="mt-auto border-t border-white/[0.06] bg-black/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-between gap-2 px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:px-6">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
           <span>Banking data is encrypted at rest · Audit-logged</span>
         </div>
         <div className="flex items-center gap-3">
@@ -522,11 +522,11 @@ function RecentTransactionsCard({ transactions }: { transactions: BankingTransac
           >
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                txn.type === 'credit' ? 'bg-emerald-500/10' : 'bg-red-500/10'
+                txn.type === 'credit' ? 'bg-blue-500/10' : 'bg-red-500/10'
               }`}
             >
               {txn.type === 'credit' ? (
-                <ArrowLeft className="h-4 w-4 rotate-45 text-emerald-400" />
+                <ArrowLeft className="h-4 w-4 rotate-45 text-blue-400" />
               ) : (
                 <ArrowLeft className="h-4 w-4 -rotate-45 text-red-400" />
               )}
@@ -539,7 +539,7 @@ function RecentTransactionsCard({ transactions }: { transactions: BankingTransac
             </div>
             <span
               className={`text-sm font-semibold tabular-nums ${
-                txn.type === 'credit' ? 'text-emerald-400' : 'text-red-400'
+                txn.type === 'credit' ? 'text-blue-400' : 'text-red-400'
               }`}
             >
               {txn.type === 'credit' ? '+' : '−'}₹{fmt.format(txn.amount)}

@@ -247,7 +247,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
             value={filters.search}
             onChange={(e) => update({ search: e.target.value })}
             placeholder="Search invoice #, client, GSTIN, amount…"
-            className="pl-9 pr-9 h-9 bg-white/[0.03] border-white/[0.08] text-foreground placeholder:text-muted-foreground text-sm focus-visible:ring-1 focus-visible:ring-emerald-500/40"
+            className="pl-9 pr-9 h-9 bg-white/[0.03] border-white/[0.08] text-foreground placeholder:text-muted-foreground text-sm focus-visible:ring-1 focus-visible:ring-blue-500/40"
           />
           {filters.search && (
             <button
@@ -313,14 +313,14 @@ export const InvoiceFilters = memo(function InvoiceFilters({
               size="sm"
               className={`h-9 border-white/[0.08] text-xs font-medium ${
                 hasAdvanced
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/15'
+                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/15'
                   : 'bg-white/[0.03] hover:bg-white/[0.06] text-foreground'
               }`}
             >
               <Calendar className="h-3.5 w-3.5 mr-1.5" />
               Advanced
               {hasAdvanced && (
-                <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-emerald-500 text-emerald-950 text-[10px] font-bold">
+                <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">
                   •
                 </span>
               )}
@@ -456,7 +456,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
             {activeFilterCount > 0 && (
               <Badge
                 variant="secondary"
-                className="ml-1.5 h-4 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-300"
+                className="ml-1.5 h-4 px-1.5 text-[10px] bg-blue-500/20 text-blue-300"
               >
                 {activeFilterCount}
               </Badge>
@@ -467,7 +467,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
         {/* Count */}
         <div className="ml-auto text-xs text-muted-foreground hidden md:block">
           {selectedCount > 0 ? (
-            <span className="text-emerald-300 font-medium">
+            <span className="text-blue-300 font-medium">
               {selectedCount} selected
             </span>
           ) : (

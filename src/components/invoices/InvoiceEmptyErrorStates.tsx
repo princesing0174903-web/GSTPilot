@@ -46,9 +46,9 @@ export function InvoiceEmptyState({
         className="flex flex-col items-center justify-center py-16 px-6 text-center"
       >
         <div className="relative mb-6">
-          <div className="absolute inset-0 bg-emerald-500/10 blur-3xl rounded-full" />
-          <div className="relative h-20 w-20 rounded-3xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 ring-1 ring-emerald-400/20 flex items-center justify-center">
-            <FileText className="h-9 w-9 text-emerald-300" />
+          <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
+          <div className="relative h-20 w-20 rounded-3xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 ring-1 ring-blue-400/20 flex items-center justify-center">
+            <FileText className="h-9 w-9 text-blue-300" />
           </div>
         </div>
         <h3 className="text-xl font-semibold text-foreground mb-2">
@@ -61,7 +61,7 @@ export function InvoiceEmptyState({
         <div className="flex flex-wrap gap-3 justify-center">
           <Button
             onClick={onClearFilters}
-            className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-500/20"
+            className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Clear All Filters
@@ -87,21 +87,21 @@ export function InvoiceEmptyState({
       className="flex flex-col items-center justify-center py-20 px-6 text-center"
     >
       <div className="relative mb-8">
-        <div className="absolute inset-0 bg-emerald-500/10 blur-3xl rounded-full" />
+        <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
         <motion.div
           initial={{ scale: 0.9, rotate: -5 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="relative h-24 w-24 rounded-3xl bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 ring-1 ring-emerald-400/25 flex items-center justify-center shadow-2xl shadow-emerald-500/20"
+          className="relative h-24 w-24 rounded-3xl bg-gradient-to-br from-blue-500/25 to-blue-500/5 ring-1 ring-blue-400/25 flex items-center justify-center shadow-2xl shadow-blue-500/20"
         >
-          <FileText className="h-11 w-11 text-emerald-300" strokeWidth={1.5} />
+          <FileText className="h-11 w-11 text-blue-300" strokeWidth={1.5} />
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.4 }}
-            className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-emerald-500 ring-4 ring-black flex items-center justify-center"
+            className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-blue-600 ring-4 ring-black flex items-center justify-center"
           >
-            <Plus className="h-4 w-4 text-emerald-950" strokeWidth={3} />
+            <Plus className="h-4 w-4 text-white" strokeWidth={3} />
           </motion.div>
         </motion.div>
       </div>
@@ -119,7 +119,7 @@ export function InvoiceEmptyState({
         <Button
           onClick={onCreate}
           size="lg"
-          className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-500/25 font-semibold"
+          className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 font-semibold"
         >
           <Plus className="h-4 w-4 mr-2" />
           Create Invoice

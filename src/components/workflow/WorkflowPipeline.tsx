@@ -111,7 +111,7 @@ const STATUS_STYLES: Record<StageStatus, StatusStyle> = {
     countColor: 'text-emerald-300',
     borderHover: 'hover:border-emerald-500/40',
     ring: 'ring-emerald-500/20',
-    shadow: 'shadow-[0_0_24px_-6px_rgba(16,185,129,0.25)]',
+    shadow: 'shadow-[0_0_24px_-6px_rgba(37,99,235,0.25)]',
   },
   warning: {
     dot: 'bg-amber-500',

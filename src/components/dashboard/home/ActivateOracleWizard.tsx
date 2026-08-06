@@ -208,7 +208,7 @@ export function ActivateOracleWizard({
                   <div
                     className={`flex items-center justify-center h-5 w-5 rounded-full text-[10px] font-bold ${
                       isDone
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-blue-500 text-white'
                         : isActive
                           ? 'accent-gradient text-white'
                           : 'bg-white/[0.06] text-muted-foreground'
@@ -226,7 +226,7 @@ export function ActivateOracleWizard({
                 </div>
                 {i < stepLabels.length - 1 && (
                   <div
-                    className={`h-px flex-1 ${isDone ? 'bg-emerald-500/40' : 'bg-white/[0.06]'}`}
+                    className={`h-px flex-1 ${isDone ? 'bg-blue-500/40' : 'bg-white/[0.06]'}`}
                   />
                 )}
               </React.Fragment>
@@ -263,7 +263,7 @@ export function ActivateOracleWizard({
                     >
                       <div className="flex items-center gap-2">
                         {item.done ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          <CheckCircle2 className="h-4 w-4 text-blue-400" />
                         ) : (
                           <Circle className="h-4 w-4 text-muted-foreground/50" />
                         )}
@@ -273,7 +273,7 @@ export function ActivateOracleWizard({
                         variant="outline"
                         className={`text-[9px] h-4 px-1.5 ${
                           item.done
-                            ? 'border-emerald-500/30 text-emerald-400'
+                            ? 'border-blue-500/30 text-blue-400'
                             : 'border-amber-500/30 text-amber-400'
                         }`}
                       >
@@ -316,7 +316,7 @@ export function ActivateOracleWizard({
                     >
                       <div className="flex items-center gap-2">
                         {item.done ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          <CheckCircle2 className="h-4 w-4 text-blue-400" />
                         ) : (
                           <AlertTriangle className="h-4 w-4 text-amber-400" />
                         )}

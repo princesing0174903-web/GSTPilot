@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -225,10 +226,10 @@ export default function ROCCompliancePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => toast.info('Export coming soon', { description: 'ROC filing register will export to CSV shortly.' })}>
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => toast.info('Filing intake coming soon', { description: 'Track ROC filings via your firm operations workspace today.' })}>
               <Plus className="h-3.5 w-3.5" /> Add Filing
             </Button>
           </div>
@@ -323,7 +324,7 @@ export default function ROCCompliancePage() {
                       </div>
                       <span className="text-[11px] text-red-600">Due: {f.dueDate} · {f.period}</span>
                     </div>
-                    <Button size="sm" className="h-7 text-[10px] bg-red-600 hover:bg-red-700 gap-1">
+                    <Button size="sm" className="h-7 text-[10px] bg-red-600 hover:bg-red-700 gap-1" onClick={() => toast.info('Filing portal coming soon', { description: 'File ROC forms via the MCA portal today — link coming to this page shortly.' })}>
                       <FileText className="h-3 w-3" /> File Now
                     </Button>
                   </motion.div>

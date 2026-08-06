@@ -58,12 +58,37 @@ export interface UseAIRecommendationsResult {
 const REFRESH_INTERVAL_MS = 60_000; // 60 seconds — matches snapshot cache TTL
 const FETCH_TIMEOUT_MS = 30_000;
 
+// ── Module-level request deduplication ─────────────────────────────────────
+// Multiple components (DashboardPage + OracleDailyBrief) mount this hook
+// concurrently. Without dedup, each instance fires its own fetch → duplicate
+// /api/recommendations calls on every dashboard mount (confirmed in dev.log:
+// pairs of identical requests within ~10ms of each other). Mirrors the
+// `useBusinessSnapshot` pattern: concurrent callers share the same in-flight
+// promise; second instance hydrates instantly from the module-level cache.
+interface CacheEntry {
+  promise: Promise<Recommendation[]>;
+  timestamp: number;
+}
+const inflightCache = new Map<string, CacheEntry>();
+const latestRecommendations = new Map<string, Recommendation[]>();
+
 export function useAIRecommendations(): UseAIRecommendationsResult {
   const { organization } = useOrg();
   const orgId = organization?.id ?? null;
 
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(() => {
+    // Hydrate from module-level cache so a second instance (e.g.
+    // OracleDailyBrief) shows data instantly without a duplicate fetch.
+    if (orgId && latestRecommendations.has(orgId)) {
+      return latestRecommendations.get(orgId)!;
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have cached data, don't show a loading state.
+    if (orgId && latestRecommendations.has(orgId)) return false;
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -82,7 +107,8 @@ export function useAIRecommendations(): UseAIRecommendationsResult {
   }, []);
 
   const fetchRecommendations = useCallback(async () => {
-    // Single-flight: skip if a previous fetch is still pending.
+    // Per-instance single-flight: skip if a previous fetch is still pending
+    // on THIS hook instance (e.g. rapid refresh clicks).
     if (inFlightRef.current) return;
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId) {
@@ -94,46 +120,70 @@ export function useAIRecommendations(): UseAIRecommendationsResult {
       return;
     }
 
+    // ── Module-level deduplication ──
+    // If a fetch for this org is already in-flight (e.g. another component
+    // mounted this hook), share its promise instead of firing a second request.
+    const existing = inflightCache.get(currentOrgId);
+    let promise: Promise<Recommendation[]>;
+    if (existing && Date.now() - existing.timestamp < FETCH_TIMEOUT_MS) {
+      promise = existing.promise;
+    } else {
+      const url = `/api/recommendations?organizationId=${encodeURIComponent(currentOrgId)}`;
+      promise = (async () => {
+        const res = await fetchWithTimeout(url, {
+          cache: 'no-store',
+          timeoutMs: FETCH_TIMEOUT_MS,
+        });
+        const data = (await res.json()) as {
+          recommendations?: Recommendation[];
+          error?: string;
+        };
+        const recs = data.recommendations ?? [];
+        latestRecommendations.set(currentOrgId, recs);
+        return recs;
+      })();
+      inflightCache.set(currentOrgId, { promise, timestamp: Date.now() });
+      promise.finally(() => inflightCache.delete(currentOrgId));
+    }
+
     inFlightRef.current = true;
     if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+    // Note: we don't pass our own AbortController to fetchWithTimeout here
+    // because the promise is shared across hook instances — aborting one
+    // instance's request would abort it for all. The shared fetch relies on
+    // the 30s timeout inside fetchWithTimeout for cancellation.
 
     try {
-      const url = `/api/recommendations?organizationId=${encodeURIComponent(currentOrgId)}`;
-      const res = await fetchWithTimeout(url, {
-        cache: 'no-store',
-        signal: controller.signal,
-        timeoutMs: FETCH_TIMEOUT_MS,
-      });
-      const data = (await res.json()) as {
-        recommendations?: Recommendation[];
-        error?: string;
-      };
-      if (mountedRef.current && !controller.signal.aborted) {
-        setRecommendations(data.recommendations ?? []);
+      const recs = await promise;
+      if (mountedRef.current) {
+        setRecommendations(recs);
         setError(null);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load recommendations.';
-      if (mountedRef.current && !controller.signal.aborted) {
+      if (mountedRef.current) {
         setError(msg);
         // Degrade gracefully — keep showing the previous list rather than
         // flashing an empty state on transient network errors.
       }
     } finally {
       inFlightRef.current = false;
-      if (mountedRef.current && !controller.signal.aborted) {
+      if (mountedRef.current) {
         setLoading(false);
       }
     }
   }, []);
 
   // ── Initial fetch + refetch when org changes or refresh() is called ──
+  // Only show loading state if we don't have cached data — avoids a brief
+  // loading flicker when a second hook instance (e.g. OracleDailyBrief)
+  // mounts and hydrates from the module-level cache.
   useEffect(() => {
-    setLoading(true);
+    if (mountedRef.current && !latestRecommendations.has(orgId ?? '')) {
+      setLoading(true);
+    }
     void fetchRecommendations();
   }, [orgId, refreshTick, fetchRecommendations]);
 

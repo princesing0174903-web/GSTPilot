@@ -72,7 +72,7 @@ function timeAgo(iso: string | null): string {
 }
 
 const healthConfig = {
-  healthy: { label: 'Healthy', color: 'text-emerald-400', dot: 'bg-emerald-400' },
+  healthy: { label: 'Healthy', color: 'text-blue-400', dot: 'bg-blue-400' },
   unknown: { label: 'Unknown', color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
 } as const;
 
@@ -142,7 +142,7 @@ export function ConnectedServicesCard({
                     {service.name}
                   </p>
                   {service.connected ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                   ) : (
                     <AlertCircle className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
                   )}

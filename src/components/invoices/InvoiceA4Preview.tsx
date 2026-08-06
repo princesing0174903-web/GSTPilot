@@ -201,9 +201,9 @@ interface WatermarkSpec {
 
 const WATERMARK_TONES: Record<WatermarkTone, { ring: string; text: string; bg: string }> = {
   paid: {
-    ring: 'border-emerald-600',
+    ring: 'border-blue-600',
     text: 'text-emerald-700',
-    bg: 'bg-emerald-50/80',
+    bg: 'bg-blue-50/80',
   },
   overdue: {
     ring: 'border-red-600',
@@ -477,7 +477,7 @@ export function InvoiceA4Preview({
       <div className="sticky top-0 z-30 border-b border-white/10 bg-black/90 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1024px] flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
           <div className="mr-auto flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-500/30">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 text-sm font-black text-white shadow-lg shadow-blue-500/30">
               G
             </div>
             <div className="leading-tight">
@@ -519,7 +519,7 @@ export function InvoiceA4Preview({
               onClick={onMarkPaid}
               disabled={loadingAction}
               loading={loadingAction}
-              className="bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-400"
+              className="bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-400"
             >
               <CheckCircle2 className="h-4 w-4" />
               <span className="hidden sm:inline">Mark Paid</span>
@@ -531,7 +531,7 @@ export function InvoiceA4Preview({
               size="sm"
               onClick={onDownloadPdf}
               disabled={loadingAction}
-              className="bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-400"
+              className="bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-400"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Download PDF</span>
@@ -593,10 +593,10 @@ export function InvoiceA4Preview({
             {/* ── A4 content ─────────────────────────────────────────────── */}
             <div className="relative z-10 flex flex-col gap-8 p-6 sm:p-10 lg:p-12">
               {/* ── 1. Header ──────────────────────────────────────────── */}
-              <header className="flex flex-col gap-6 border-b-2 border-emerald-600/80 pb-6 sm:flex-row sm:items-start sm:justify-between">
+              <header className="flex flex-col gap-6 border-b-2 border-blue-600/80 pb-6 sm:flex-row sm:items-start sm:justify-between">
                 {/* Branding (left) */}
                 <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-2xl font-black text-white shadow-lg shadow-emerald-500/30">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 text-2xl font-black text-white shadow-lg shadow-blue-500/30">
                     G
                   </div>
                   <div className="space-y-1">
@@ -645,7 +645,7 @@ export function InvoiceA4Preview({
                 {/* Bill To */}
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <Building2 className="h-3.5 w-3.5 text-blue-600" />
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                       Bill To
                     </h3>
@@ -674,7 +674,7 @@ export function InvoiceA4Preview({
                 {/* Invoice details */}
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                    <Receipt className="h-3.5 w-3.5 text-blue-600" />
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                       Invoice Details
                     </h3>
@@ -699,7 +699,7 @@ export function InvoiceA4Preview({
               {/* ── 4. Items table ─────────────────────────────────────── */}
               <section>
                 <div className="mb-3 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-600" />
+                  <FileText className="h-4 w-4 text-blue-600" />
                   <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-700">
                     Invoice Items
                   </h3>
@@ -774,7 +774,7 @@ export function InvoiceA4Preview({
                 {/* Bank & UPI (left ~55-60%) */}
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4">
                   <div className="mb-3 flex items-center gap-2">
-                    <Landmark className="h-3.5 w-3.5 text-emerald-600" />
+                    <Landmark className="h-3.5 w-3.5 text-blue-600" />
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                       Bank &amp; Payment Details
                     </h3>
@@ -792,7 +792,7 @@ export function InvoiceA4Preview({
                     <UpiQrPlaceholder size={88} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <QrCode className="h-3.5 w-3.5 text-emerald-600" />
+                        <QrCode className="h-3.5 w-3.5 text-blue-600" />
                         <p className="text-xs font-bold text-zinc-900">Scan to pay via UPI</p>
                       </div>
                       <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
@@ -807,7 +807,7 @@ export function InvoiceA4Preview({
                           href={invoice.paymentLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-400"
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-blue-400"
                         >
                           <LinkIcon className="h-3 w-3" />
                           Open Payment Link
@@ -863,7 +863,7 @@ export function InvoiceA4Preview({
                         'flex items-center justify-between rounded-md px-2 py-1.5',
                         totals.balance > 0
                           ? 'bg-amber-50 ring-1 ring-amber-300'
-                          : 'bg-emerald-50 ring-1 ring-emerald-300',
+                          : 'bg-blue-50 ring-1 ring-blue-300',
                       )}
                     >
                       <span
@@ -906,7 +906,7 @@ export function InvoiceA4Preview({
                     This is a computer-generated invoice and does not require a physical signature.
                   </p>
                   <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-emerald-400 to-emerald-600 text-[10px] font-black text-white">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-blue-400 to-blue-600 text-[10px] font-black text-white">
                       G
                     </div>
                     <span>
@@ -956,7 +956,7 @@ function DetailRow({
   return (
     <div className="flex items-center justify-between gap-2 border-b border-zinc-200/60 py-1 last:border-0">
       <dt className="flex items-center gap-1.5 text-zinc-500">
-        <span className="text-emerald-600">{icon}</span>
+        <span className="text-blue-600">{icon}</span>
         {label}
       </dt>
       <dd className="font-semibold text-zinc-900">{value}</dd>

@@ -33,7 +33,7 @@ import type { LucideIcon } from 'lucide-react';
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'gold';
 
 const TONE_CLASSES: Record<Tone, string> = {
-  success: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+  success: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
   warning: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
   danger: 'bg-red-500/10 text-red-300 border-red-500/25',
   info: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25',
@@ -42,7 +42,7 @@ const TONE_CLASSES: Record<Tone, string> = {
 };
 
 const TONE_DOTS: Record<Tone, string> = {
-  success: 'bg-emerald-400',
+  success: 'bg-blue-400',
   warning: 'bg-amber-400',
   danger: 'bg-red-400',
   info: 'bg-cyan-400',

@@ -219,7 +219,7 @@ export function InvoiceHeaderPanel({
               'flex h-12 w-full items-center justify-between gap-2 rounded-lg border px-3.5 text-[15px] transition-colors',
               interState
                 ? 'border-[#F59E0B]/40 bg-[#F59E0B]/[0.06] text-[#FBBF24]'
-                : 'border-[#10B981]/40 bg-[#10B981]/[0.06] text-[#34D399]',
+                : 'border-[#3B82F6]/40 bg-[#3B82F6]/[0.06] text-[#60A5FA]',
             )}
           >
             <span className="flex items-center gap-2">

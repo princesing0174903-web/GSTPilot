@@ -54,8 +54,8 @@ const Row = function Row({
   return (
     <div
       style={style}
-      className={`flex items-center border-b border-[#1F1F1F] px-2 transition-colors hover:bg-[#171A21] ${
-        isSelected ? 'bg-[#10B981]/[0.04]' : ''
+      className={`gst-table-row flex items-center border-b border-[#1F1F1F] px-2 ${
+        isSelected ? 'gst-table-row-selected' : ''
       } ${m.resolved ? 'opacity-50' : ''}`}
     >
       {/* Checkbox */}
@@ -63,8 +63,8 @@ const Row = function Row({
         onClick={(e) => { e.stopPropagation(); onToggleRow(m.id); }}
         className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
         style={{
-          borderColor: isSelected ? '#10B981' : '#3A3E46',
-          backgroundColor: isSelected ? '#10B981' : 'transparent',
+          borderColor: isSelected ? '#2563EB' : '#3A3E46',
+          backgroundColor: isSelected ? '#2563EB' : 'transparent',
         }}
         aria-label={isSelected ? 'Deselect row' : 'Select row'}
       >
@@ -82,7 +82,7 @@ const Row = function Row({
       {/* Invoice # + confidence */}
       <button
         onClick={() => onOpenMatch(m)}
-        className="flex w-28 shrink-0 flex-col items-start text-left hover:text-[#34D399]"
+        className="flex w-28 shrink-0 flex-col items-start text-left hover:text-[#60A5FA]"
       >
         <span className="truncate font-mono text-xs text-foreground">{m.booksInvoiceNo || m.gstr2bInvoiceNo || '—'}</span>
         {m.confidence > 0 && (
@@ -101,17 +101,17 @@ const Row = function Row({
       </div>
 
       {/* Books taxable */}
-      <div className="w-24 shrink-0 text-right tabular-nums text-xs text-foreground">
+      <div className="w-24 shrink-0 text-right gst-text-tabular text-xs text-foreground">
         {fmtINR(m.booksTaxableValue)}
       </div>
 
       {/* 2B taxable */}
-      <div className="hidden w-24 shrink-0 text-right tabular-nums text-xs text-muted-foreground sm:block">
+      <div className="hidden w-24 shrink-0 text-right gst-text-tabular text-xs text-muted-foreground sm:block">
         {fmtINR(m.gstr2bTaxableValue)}
       </div>
 
       {/* ITC at risk */}
-      <div className="w-24 shrink-0 text-right tabular-nums">
+      <div className="w-24 shrink-0 text-right gst-text-tabular">
         {m.itcAtRisk > 0 ? (
           <span className="text-xs font-semibold text-[#F87171]">{fmtINR(m.itcAtRisk)}</span>
         ) : (
@@ -122,7 +122,7 @@ const Row = function Row({
       {/* Quick actions */}
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
         {m.fixApplied && (
-          <span title="Auto-fix applied" className="text-[#10B981]">
+          <span title="Auto-fix applied" className="text-[#3B82F6]">
             <Zap className="h-3 w-3" />
           </span>
         )}
@@ -131,7 +131,7 @@ const Row = function Row({
           className="gst-btn gst-btn-ghost gst-btn-sm !h-7 !px-2"
           title="Oracle AI analysis"
         >
-          <Sparkles className="h-3.5 w-3.5 text-[#34D399]" />
+          <Sparkles className="h-3.5 w-3.5 text-[#60A5FA]" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onResolve(m.id, !m.resolved); }}
@@ -233,13 +233,13 @@ export function VirtualizedReconciliationTable({
   return (
     <div className="gst-card !p-0 overflow-hidden">
       {/* Sticky header */}
-      <div className="flex items-center border-b border-[#2A2E36] bg-[#171A21] px-2 py-2.5">
+      <div className="gst-table-sticky-header flex items-center border-b border-[#2A2E36] bg-[#171A21] px-2 py-2.5">
         <button
           onClick={onToggleAll}
           className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
           style={{
-            borderColor: allSelected ? '#10B981' : '#3A3E46',
-            backgroundColor: allSelected ? '#10B981' : someSelected ? '#10B981]/40' : 'transparent',
+            borderColor: allSelected ? '#2563EB' : '#3A3E46',
+            backgroundColor: allSelected ? '#2563EB' : someSelected ? 'rgba(37,99,235,0.4)' : 'transparent',
           }}
           aria-label={allSelected ? 'Deselect all' : 'Select all'}
         >
@@ -275,7 +275,7 @@ export function VirtualizedReconciliationTable({
           Showing <span className="font-semibold text-foreground">{rowCount}</span> of{' '}
           <span className="font-semibold text-foreground">{total}</span> matches
           {selectedIds.size > 0 && (
-            <span className="ml-2 text-[#34D399]">· {selectedIds.size} selected</span>
+            <span className="ml-2 text-[#60A5FA]">· {selectedIds.size} selected</span>
           )}
         </span>
         <div className="flex items-center gap-2">

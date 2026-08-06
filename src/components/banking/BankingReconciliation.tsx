@@ -67,7 +67,7 @@ interface MatchCfg {
 }
 
 const MATCH_CFG: Record<string, MatchCfg> = {
-  exact: { label: 'Exact Match', icon: ShieldCheck, tone: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25', bar: 'bg-emerald-400' },
+  exact: { label: 'Exact Match', icon: ShieldCheck, tone: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/25', bar: 'bg-blue-400' },
   partial: { label: 'Partial', icon: Clock, tone: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/25', bar: 'bg-amber-400' },
   duplicate: { label: 'Duplicate', icon: Copy, tone: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/25', bar: 'bg-red-400' },
   overpayment: { label: 'Overpayment', icon: TrendingUp, tone: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/25', bar: 'bg-cyan-400' },
@@ -191,8 +191,8 @@ export function BankingReconciliation({
   }, [records.length, summary]);
 
   const reconRate = summary.reconciliationRate;
-  const rateTone = reconRate >= 80 ? 'text-emerald-400' : reconRate >= 50 ? 'text-amber-400' : 'text-red-400';
-  const rateBg = reconRate >= 80 ? 'bg-emerald-500/10 border-emerald-500/25' : reconRate >= 50 ? 'bg-amber-500/10 border-amber-500/25' : 'bg-red-500/10 border-red-500/25';
+  const rateTone = reconRate >= 80 ? 'text-blue-400' : reconRate >= 50 ? 'text-amber-400' : 'text-red-400';
+  const rateBg = reconRate >= 80 ? 'bg-blue-500/10 border-blue-500/25' : reconRate >= 50 ? 'bg-amber-500/10 border-amber-500/25' : 'bg-red-500/10 border-red-500/25';
 
   if (loading) return <BankingReconciliationSkeleton />;
 
@@ -201,8 +201,8 @@ export function BankingReconciliation({
       {/* ─── Header ─────────────────────────────────────────────────────────── */}
       <div className="glass-surface flex flex-col gap-4 rounded-2xl border border-white/[0.06] p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
-            <RefreshCw className="h-5 w-5 text-emerald-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+            <RefreshCw className="h-5 w-5 text-blue-400" />
           </div>
           <div>
             <h3 className="text-base font-semibold text-foreground">Bank Reconciliation</h3>
@@ -217,7 +217,7 @@ export function BankingReconciliation({
           <Button
             onClick={handleRun}
             disabled={running}
-            className="gap-2 bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+            className="gap-2 bg-blue-500 text-zinc-950 hover:bg-blue-400"
           >
             {running ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {running ? 'Running...' : 'Run Reconciliation'}
@@ -247,13 +247,13 @@ export function BankingReconciliation({
                   <div
                     className={`relative flex h-12 w-12 items-center justify-center rounded-xl border ${
                       isDone
-                        ? 'border-emerald-500/30 bg-emerald-500/10'
+                        ? 'border-blue-500/30 bg-blue-500/10'
                         : isActive
                         ? 'border-amber-500/30 bg-amber-500/10'
                         : 'border-white/[0.08] bg-white/[0.02]'
                     }`}
                   >
-                    <stage.icon className={`h-5 w-5 ${isDone ? 'text-emerald-400' : isActive ? 'text-amber-400' : 'text-zinc-500'}`} />
+                    <stage.icon className={`h-5 w-5 ${isDone ? 'text-blue-400' : isActive ? 'text-amber-400' : 'text-zinc-500'}`} />
                     {isActive && !isDone && (
                       <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
@@ -261,7 +261,7 @@ export function BankingReconciliation({
                       </span>
                     )}
                   </div>
-                  <span className={`text-xs font-medium ${isDone ? 'text-emerald-300' : isActive ? 'text-amber-300' : 'text-zinc-500'}`}>
+                  <span className={`text-xs font-medium ${isDone ? 'text-blue-300' : isActive ? 'text-amber-300' : 'text-zinc-500'}`}>
                     {stage.label}
                   </span>
                   <span className="text-[10px] text-muted-foreground">{counts[i]} txns</span>
@@ -272,7 +272,7 @@ export function BankingReconciliation({
                       initial={{ width: 0 }}
                       animate={{ width: isDone ? '100%' : '0%' }}
                       transition={{ delay: i * 0.15, duration: 0.5 }}
-                      className="absolute left-0 top-0 h-px bg-emerald-400"
+                      className="absolute left-0 top-0 h-px bg-blue-400"
                     />
                     <ArrowRight className="absolute -right-1 -top-1.5 h-3 w-3 text-muted-foreground" />
                   </div>
@@ -312,12 +312,12 @@ export function BankingReconciliation({
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
               activeTab === tab.key
-                ? 'border-emerald-400 text-emerald-300'
+                ? 'border-blue-400 text-blue-300'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             {tab.label}
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${activeTab === tab.key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/[0.06] text-muted-foreground'}`}>
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${activeTab === tab.key ? 'bg-blue-500/20 text-blue-300' : 'bg-white/[0.06] text-muted-foreground'}`}>
               {tab.count}
             </span>
           </button>
@@ -395,11 +395,11 @@ const ReconciliationRecordCard = React.memo(function ReconciliationRecordCard({
   const cfg = MATCH_CFG[record.matchType] || MATCH_CFG.partial;
   const Icon = cfg.icon;
   const diff = record.difference;
-  const diffTone = diff > 0 ? 'text-cyan-400' : diff < 0 ? 'text-amber-400' : 'text-emerald-400';
+  const diffTone = diff > 0 ? 'text-cyan-400' : diff < 0 ? 'text-amber-400' : 'text-blue-400';
   const isRejecting = rejectingId === record.id;
   const statusTone =
     record.status === 'approved'
-      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
+      ? 'bg-blue-500/10 text-blue-300 border-blue-500/25'
       : record.status === 'rejected'
       ? 'bg-red-500/10 text-red-300 border-red-500/25'
       : 'bg-amber-500/10 text-amber-300 border-amber-500/25';
@@ -491,7 +491,7 @@ const ReconciliationRecordCard = React.memo(function ReconciliationRecordCard({
               <Button
                 size="sm"
                 onClick={() => onApprove(record.id)}
-                className="gap-1.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                className="gap-1.5 bg-blue-500 text-zinc-950 hover:bg-blue-400"
               >
                 <Check className="h-3.5 w-3.5" />
                 Approve

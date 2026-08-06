@@ -137,16 +137,16 @@ interface HealthCfg {
 const HEALTH_CFG: Record<CashHealth, HealthCfg> = {
   excellent: {
     label: 'Excellent',
-    text: 'text-emerald-400',
-    chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-    bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
-    dot: 'bg-emerald-400',
+    text: 'text-blue-400',
+    chip: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    bar: 'bg-gradient-to-r from-blue-500 to-blue-400',
+    dot: 'bg-blue-400',
   },
   good: {
     label: 'Good',
     text: 'text-amber-400',
     chip: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
-    bar: 'bg-gradient-to-r from-emerald-500 to-amber-400',
+    bar: 'bg-gradient-to-r from-blue-500 to-amber-400',
     dot: 'bg-amber-400',
   },
   fair: {
@@ -186,8 +186,8 @@ const PRIORITY_CFG: Record<Priority, PriorityCfg> = {
   },
   low: {
     label: 'Low',
-    badge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-    dot: 'bg-emerald-400',
+    badge: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    dot: 'bg-blue-400',
   },
 };
 
@@ -279,8 +279,8 @@ function OracleHeader() {
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
           </span>
           <p className="text-[11px] text-zinc-400">Banking intelligence</p>
         </div>
@@ -361,7 +361,7 @@ function CashFlowAnalysisCard({
             value={`${data.runwayDays}d`}
             tone={
               data.runwayDays >= 60
-                ? 'text-emerald-400'
+                ? 'text-blue-400'
                 : data.runwayDays >= 30
                   ? 'text-amber-400'
                   : 'text-red-400'
@@ -404,7 +404,7 @@ function NextMonthPredictionCard({
             <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               Confidence
             </p>
-            <p className="text-xl font-bold text-emerald-400 tabular-nums">
+            <p className="text-xl font-bold text-blue-400 tabular-nums">
               {confidence}%
             </p>
           </div>
@@ -413,7 +413,7 @@ function NextMonthPredictionCard({
         {/* Confidence bar */}
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400"
             initial={{ width: 0 }}
             animate={{ width: `${confidence}%` }}
             transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
@@ -424,7 +424,7 @@ function NextMonthPredictionCard({
           <MiniStat
             label="Expected Inflow"
             value={formatINR(data.expectedInflow)}
-            tone="text-emerald-400"
+            tone="text-blue-400"
           />
           <MiniStat
             label="Expected Outflow"
@@ -438,7 +438,7 @@ function NextMonthPredictionCard({
           <span
             className={cn(
               'font-semibold tabular-nums',
-              isPositive ? 'text-emerald-400' : 'text-red-400',
+              isPositive ? 'text-blue-400' : 'text-red-400',
             )}
           >
             {isPositive ? '+' : '−'}
@@ -517,9 +517,9 @@ function LargeWithdrawalsCard({
             })}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            <p className="text-xs font-medium text-emerald-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No large withdrawals detected
             </p>
           </div>
@@ -617,13 +617,13 @@ function GstPaymentReadinessCard({
         className={cn(
           'glass-surface rounded-2xl p-4',
           ready
-            ? 'border border-emerald-500/25 bg-emerald-500/[0.04]'
+            ? 'border border-blue-500/25 bg-blue-500/[0.04]'
             : 'border border-red-500/25 bg-red-500/[0.04]',
         )}
       >
         <CardLabel
           icon={ShieldCheck}
-          tone={ready ? 'text-emerald-400' : 'text-red-400'}
+          tone={ready ? 'text-blue-400' : 'text-red-400'}
         >
           GST Payment Readiness
         </CardLabel>
@@ -633,12 +633,12 @@ function GstPaymentReadinessCard({
           className={cn(
             'flex items-center gap-2.5 rounded-lg p-3 ring-1',
             ready
-              ? 'bg-emerald-500/[0.08] ring-emerald-500/20'
+              ? 'bg-blue-500/[0.08] ring-blue-500/20'
               : 'bg-red-500/[0.08] ring-red-500/20',
           )}
         >
           {ready ? (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-blue-400" />
           ) : (
             <AlertOctagon className="h-5 w-5 shrink-0 text-red-400" />
           )}
@@ -646,7 +646,7 @@ function GstPaymentReadinessCard({
             <p
               className={cn(
                 'text-xs font-semibold',
-                ready ? 'text-emerald-300' : 'text-red-300',
+                ready ? 'text-blue-300' : 'text-red-300',
               )}
             >
               {ready ? 'Ready to file GST' : 'Insufficient balance for GST'}
@@ -673,7 +673,7 @@ function GstPaymentReadinessCard({
           <MiniStat
             label="Available Balance"
             value={formatINR(data.availableBalance)}
-            tone="text-emerald-400"
+            tone="text-blue-400"
           />
           <MiniStat
             label="Shortfall"
@@ -700,7 +700,7 @@ function CollectionEfficiencyCard({
   return (
     <motion.div {...stagger(index)}>
       <OracleCard>
-        <CardLabel icon={TrendingUp} tone="text-emerald-300">
+        <CardLabel icon={TrendingUp} tone="text-blue-300">
           Collection Efficiency
         </CardLabel>
 
@@ -709,7 +709,7 @@ function CollectionEfficiencyCard({
             <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               Collection Rate
             </p>
-            <p className="mt-0.5 text-2xl font-bold text-emerald-400 tabular-nums">
+            <p className="mt-0.5 text-2xl font-bold text-blue-400 tabular-nums">
               {rate}%
             </p>
           </div>
@@ -727,7 +727,7 @@ function CollectionEfficiencyCard({
         {/* Rate gauge bar */}
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400"
             initial={{ width: 0 }}
             animate={{ width: `${rate}%` }}
             transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
@@ -793,7 +793,7 @@ function UnmatchedTransactionsCard({
         {/* Credit / Debit breakdown */}
         <div className="mt-3">
           <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-            <span className="flex items-center gap-1 text-emerald-400">
+            <span className="flex items-center gap-1 text-blue-400">
               <ArrowDownRight className="h-3 w-3" />
               Credit
             </span>
@@ -806,7 +806,7 @@ function UnmatchedTransactionsCard({
             {total > 0 && (
               <>
                 <motion.div
-                  className="h-full bg-emerald-500"
+                  className="h-full bg-blue-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${(data.byType.credit / total) * 100}%` }}
                   transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
@@ -821,7 +821,7 @@ function UnmatchedTransactionsCard({
             )}
           </div>
           <div className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums">
-            <span className="font-semibold text-emerald-400">
+            <span className="font-semibold text-blue-400">
               {data.byType.credit} credit
             </span>
             <span className="font-semibold text-red-400">
@@ -835,7 +835,7 @@ function UnmatchedTransactionsCard({
             type="button"
             size="sm"
             onClick={onRunReconciliation}
-            className="mt-3 w-full gap-1.5 rounded-xl bg-emerald-500 text-xs font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-400"
+            className="mt-3 w-full gap-1.5 rounded-xl bg-blue-500 text-xs font-semibold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-400"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Run Reconciliation
@@ -889,9 +889,9 @@ function LateCollectionsCard({
             ))}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            <p className="text-xs font-medium text-emerald-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No late collections
             </p>
           </div>
@@ -964,9 +964,9 @@ function FraudIndicatorsCard({
             })}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            <p className="text-xs font-medium text-emerald-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No fraud indicators detected
             </p>
           </div>
@@ -1027,7 +1027,7 @@ function RecommendationsCard({
                         {r.action}
                       </p>
                       {r.impact && (
-                        <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-400/80">
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-blue-400/80">
                           Impact: {r.impact}
                         </p>
                       )}
@@ -1038,9 +1038,9 @@ function RecommendationsCard({
             })}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            <p className="text-xs font-medium text-emerald-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No recommendations — banking looks healthy.
             </p>
           </div>

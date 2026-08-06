@@ -133,7 +133,7 @@ function ChartHeader({
               aria-pressed={active}
               className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 active
-                  ? 'bg-emerald-500/15 text-emerald-300'
+                  ? 'bg-blue-500/15 text-blue-300'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -227,7 +227,7 @@ function Tooltip({ point, leftPx, chartWidth }: TooltipProps) {
         <div className="space-y-1">
           <TooltipRow
             icon={ArrowDownLeft}
-            color="text-emerald-400"
+            color="text-blue-400"
             label="Inflow"
             value={formatINR(point.inflow)}
           />
@@ -239,7 +239,7 @@ function Tooltip({ point, leftPx, chartWidth }: TooltipProps) {
           />
           <TooltipRow
             icon={isNetPositive ? TrendingUp : TrendingDown}
-            color={isNetPositive ? 'text-emerald-400' : 'text-red-400'}
+            color={isNetPositive ? 'text-blue-400' : 'text-red-400'}
             label="Net"
             value={formatINR(point.net)}
           />

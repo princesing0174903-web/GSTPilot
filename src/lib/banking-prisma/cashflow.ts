@@ -270,18 +270,22 @@ async function persistDailySnapshots(
   daily: CashFlowPoint[],
 ): Promise<void> {
   try {
-    let prevClosing = openingBalance;
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
+    // Pre-compute all upsert payloads in a single pass — `open` for day `i` is
+    // just `daily[i-1].closingBalance` (or `openingBalance` for i=0), since the
+    // closing balances are already finalized in the `daily` array. This lets us
+    // fire all upserts in parallel chunks instead of sequentially awaiting each
+    // one (was N sequential round-trips — 30 for a 30-day window, 365 for 1y).
+    const UPSERT_CHUNK_SIZE = 10; // SQLite write-lock friendly batch size
+    const payloads = points.map((p, i) => {
       const d = daily[i];
-      const open = i === 0 ? openingBalance : prevClosing;
+      const open = i === 0 ? openingBalance : daily[i - 1].closingBalance;
       const close = d.closingBalance;
-      await db.cashFlowSnapshot.upsert({
+      return {
         where: {
           organizationId_date_period: {
             organizationId,
             date: p.date,
-            period: 'daily',
+            period: 'daily' as const,
           },
         },
         update: {
@@ -296,7 +300,7 @@ async function persistDailySnapshots(
         create: {
           organizationId,
           date: p.date,
-          period: 'daily',
+          period: 'daily' as const,
           openingBalance: open,
           closingBalance: close,
           totalInflow: round2(p.inflow),
@@ -305,8 +309,19 @@ async function persistDailySnapshots(
           creditCount: p.credits,
           debitCount: p.debits,
         },
-      });
-      prevClosing = close;
+      };
+    });
+
+    // Execute upserts in chunked parallel batches. Each chunk runs concurrently;
+    // chunks run sequentially. This balances throughput vs. SQLite's
+    // single-writer lock (parallel writes within a chunk are still serialized
+    // at the DB level by Prisma's connection, but we avoid the per-query await
+    // overhead of the old sequential loop).
+    for (let i = 0; i < payloads.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = payloads.slice(i, i + UPSERT_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((payload) => db.cashFlowSnapshot.upsert(payload)),
+      );
     }
   } catch {
     // Non-fatal — snapshots are a cache, not authoritative.

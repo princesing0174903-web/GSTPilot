@@ -148,7 +148,7 @@ export function OracleHeroInput() {
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-200',
               hasText
-                ? 'accent-gradient text-white shadow-lg shadow-emerald-500/30 hover:scale-[1.04]'
+                ? 'accent-gradient text-white shadow-lg shadow-blue-500/30 hover:scale-[1.04]'
                 : 'bg-white/[0.05] text-muted-foreground/40',
             )}
           >
@@ -192,9 +192,9 @@ export function OracleHeroInput() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.25 + i * 0.05 }}
                 onClick={() => handleChipClick(prompt)}
-                className="group flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-all duration-200 hover:border-emerald-400/30 hover:bg-white/[0.06] hover:text-foreground hover-lift"
+                className="group flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-[12px] font-medium text-muted-foreground transition-all duration-200 hover:border-blue-400/30 hover:bg-white/[0.06] hover:text-foreground hover-lift"
               >
-                <span className="h-1 w-1 rounded-full bg-cyan-400/60 transition-colors group-hover:bg-emerald-400" />
+                <span className="h-1 w-1 rounded-full bg-cyan-400/60 transition-colors group-hover:bg-blue-400" />
                 {prompt}
               </motion.button>
             ))}

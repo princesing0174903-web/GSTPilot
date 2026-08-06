@@ -42,7 +42,7 @@ interface SparklineProps {
 }
 
 const TREND_COLORS: Record<SparklineTrend, { stroke: string; fillTop: string; fillBottom: string }> = {
-  up: { stroke: '#10B981', fillTop: 'rgba(16,185,129,0.28)', fillBottom: 'rgba(16,185,129,0)' },
+  up: { stroke: '#2563EB', fillTop: 'rgba(16,185,129,0.28)', fillBottom: 'rgba(16,185,129,0)' },
   down: { stroke: '#F43F5E', fillTop: 'rgba(244,63,94,0.28)', fillBottom: 'rgba(244,63,94,0)' },
   flat: { stroke: '#9CA3AF', fillTop: 'rgba(156,163,175,0.22)', fillBottom: 'rgba(156,163,175,0)' },
 };

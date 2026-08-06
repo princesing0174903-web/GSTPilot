@@ -178,7 +178,7 @@ export function ConnectBankModal({
                 onClick={() => setSelectedBank(bank)}
                 className={`flex items-center gap-2.5 rounded-xl border px-3 py-3 text-left transition-all ${
                   selectedBank?.id === bank.id
-                    ? 'border-emerald-500/40 bg-emerald-500/[0.06]'
+                    ? 'border-blue-500/40 bg-blue-500/[0.06]'
                     : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
                 }`}
               >
@@ -192,7 +192,7 @@ export function ConnectBankModal({
                   {bank.name}
                 </span>
                 {selectedBank?.id === bank.id && (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                 )}
               </button>
             ))}

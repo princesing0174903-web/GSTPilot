@@ -661,8 +661,8 @@ export default function InvoiceWorkspacePage() {
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-black/70 border-b border-white/[0.06]">
         <div className="px-4 md:px-6 py-3 flex items-center gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center justify-center h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 ring-1 ring-emerald-400/20">
-              <FileText className="h-4 w-4 text-emerald-300" />
+            <div className="flex items-center justify-center h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 ring-1 ring-blue-400/20">
+              <FileText className="h-4 w-4 text-blue-300" />
             </div>
             <div className="min-w-0">
               <h1 className="text-base md:text-lg font-semibold tracking-tight text-foreground truncate">
@@ -692,7 +692,7 @@ export default function InvoiceWorkspacePage() {
             <Button
               size="sm"
               onClick={handleOpenCreate}
-              className="h-9 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-500/20 font-semibold"
+              className="h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 font-semibold"
             >
               <Plus className="h-4 w-4 mr-1.5" />
               <span className="hidden sm:inline">New Invoice</span>
@@ -808,7 +808,7 @@ export default function InvoiceWorkspacePage() {
       <footer className="mt-auto border-t border-white/[0.06] bg-black/70 backdrop-blur-xl">
         <div className="px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-3 w-3 text-emerald-400" />
+            <Sparkles className="h-3 w-3 text-blue-400" />
             <span>Powered by GSTPilot Infinity™ · Oracle AI™ insights</span>
           </div>
           <div className="flex items-center gap-3">

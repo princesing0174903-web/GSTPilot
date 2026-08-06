@@ -153,7 +153,7 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
         const isDone = step > idx;
         const isCurrent = step === idx;
         const tone = isDone
-          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+          ? 'border-blue-500/40 bg-blue-500/10 text-blue-300'
           : isCurrent
             ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
             : 'border-white/[0.08] bg-white/[0.02] text-zinc-500';
@@ -167,7 +167,7 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
               </div>
               <span
                 className={`text-[11px] font-medium uppercase tracking-wider ${
-                  isCurrent ? 'text-foreground' : isDone ? 'text-emerald-300' : 'text-zinc-500'
+                  isCurrent ? 'text-foreground' : isDone ? 'text-blue-300' : 'text-zinc-500'
                 }`}
               >
                 {label}
@@ -175,7 +175,7 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
             </div>
             {idx < STEPS.length && (
               <div
-                className={`h-px w-6 ${step > idx ? 'bg-emerald-500/40' : 'bg-white/[0.08]'}`}
+                className={`h-px w-6 ${step > idx ? 'bg-blue-500/40' : 'bg-white/[0.08]'}`}
               />
             )}
           </React.Fragment>
@@ -196,7 +196,7 @@ interface SummaryCardProps {
 }
 
 const SUMMARY_TONES: Record<SummaryCardProps['tone'], { chip: string; text: string }> = {
-  success: { chip: 'bg-emerald-500/10 border-emerald-500/20', text: 'text-emerald-300' },
+  success: { chip: 'bg-blue-500/10 border-blue-500/20', text: 'text-blue-300' },
   danger: { chip: 'bg-red-500/10 border-red-500/20', text: 'text-red-300' },
   warning: { chip: 'bg-amber-500/10 border-amber-500/20', text: 'text-amber-300' },
   neutral: { chip: 'bg-white/[0.04] border-white/[0.08]', text: 'text-zinc-200' },
@@ -294,7 +294,7 @@ function UploadStep({
             {accounts.map((acc) => (
               <SelectItem key={acc.id} value={acc.id}>
                 <span className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 text-emerald-300" />
+                  <Building2 className="h-3.5 w-3.5 text-blue-300" />
                   <span>{acc.bankName}</span>
                   <span className="text-muted-foreground">· {acc.accountMasked}</span>
                 </span>
@@ -323,8 +323,8 @@ function UploadStep({
         onDrop={onDrop}
         className={`group relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors cursor-pointer ${
           dragOver
-            ? 'border-emerald-500/50 bg-emerald-500/[0.04]'
-            : 'border-white/[0.08] bg-white/[0.02] hover:border-emerald-500/30 hover:bg-emerald-500/[0.02]'
+            ? 'border-blue-500/50 bg-blue-500/[0.04]'
+            : 'border-white/[0.08] bg-white/[0.02] hover:border-blue-500/30 hover:bg-blue-500/[0.02]'
         }`}
       >
         <input
@@ -339,13 +339,13 @@ function UploadStep({
           animate={{ scale: dragOver ? 1.08 : 1 }}
           className={`flex h-12 w-12 items-center justify-center rounded-full border ${
             dragOver
-              ? 'border-emerald-500/40 bg-emerald-500/10'
+              ? 'border-blue-500/40 bg-blue-500/10'
               : 'border-white/[0.08] bg-white/[0.04]'
           }`}
         >
           <UploadCloud
             className={`h-5 w-5 ${
-              dragOver ? 'text-emerald-300' : 'text-zinc-400 group-hover:text-emerald-300'
+              dragOver ? 'text-blue-300' : 'text-zinc-400 group-hover:text-blue-300'
             }`}
           />
         </motion.div>
@@ -383,8 +383,8 @@ function UploadStep({
             className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <FileIcon className="h-4 w-4 text-emerald-300" />
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <FileIcon className="h-4 w-4 text-blue-300" />
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
@@ -396,7 +396,7 @@ function UploadStep({
             <div className="flex items-center gap-2">
               <Badge
                 variant="outline"
-                className="border-emerald-500/20 bg-emerald-500/10 text-emerald-300 text-[10px]"
+                className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]"
               >
                 {fileExtension(file.name)}
               </Badge>
@@ -571,7 +571,7 @@ function PreviewStep({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-            <Hash className="h-3.5 w-3.5 text-emerald-400" />
+            <Hash className="h-3.5 w-3.5 text-blue-400" />
             Parsed Rows Preview
             <span className="text-[10px] text-muted-foreground">
               (first {Math.min(MAX_PREVIEW_ROWS, previewRows.length)})
@@ -621,7 +621,7 @@ function PreviewStep({
                       </TableCell>
                       <TableCell
                         className={`py-2 text-xs font-medium tabular-nums text-right ${
-                          row.type === 'credit' ? 'text-emerald-300' : 'text-red-300'
+                          row.type === 'credit' ? 'text-blue-300' : 'text-red-300'
                         }`}
                       >
                         {row.type === 'credit' ? '+' : '−'}
@@ -632,7 +632,7 @@ function PreviewStep({
                           variant="outline"
                           className={
                             row.type === 'credit'
-                              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300 text-[10px]'
+                              ? 'border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]'
                               : 'border-red-500/20 bg-red-500/10 text-red-300 text-[10px]'
                           }
                         >
@@ -728,13 +728,13 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
   const Icon = cfg.icon;
   const bannerTone =
     cfg.tone === 'success'
-      ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+      ? 'border-blue-500/30 bg-blue-500/[0.06]'
       : cfg.tone === 'warning'
         ? 'border-amber-500/30 bg-amber-500/[0.06]'
         : 'border-red-500/30 bg-red-500/[0.06]';
   const iconTone =
     cfg.tone === 'success'
-      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+      ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
       : cfg.tone === 'warning'
         ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
         : 'bg-red-500/15 text-red-300 border-red-500/30';
@@ -762,8 +762,8 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
       {/* Final counts */}
       <div className="grid grid-cols-3 gap-2.5">
         <div className="glass-surface rounded-xl border border-white/[0.06] p-3 text-center">
-          <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-300" />
-          <p className="mt-1.5 text-xl font-bold text-emerald-300 tabular-nums">
+          <CheckCircle2 className="mx-auto h-4 w-4 text-blue-300" />
+          <p className="mt-1.5 text-xl font-bold text-blue-300 tabular-nums">
             {result.importedRows}
           </p>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Imported</p>
@@ -790,7 +790,7 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Import ID
           </span>
-          <code className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-mono text-emerald-300">
+          <code className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-mono text-blue-300">
             {result.importId}
           </code>
         </div>
@@ -970,8 +970,8 @@ export function BankingImportModal({
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <UploadCloud className="h-4.5 w-4.5 text-emerald-300" style={{ width: 18, height: 18 }} />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <UploadCloud className="h-4.5 w-4.5 text-blue-300" style={{ width: 18, height: 18 }} />
               </div>
               <div>
                 <DialogTitle className="text-base">{titleMap[step]}</DialogTitle>

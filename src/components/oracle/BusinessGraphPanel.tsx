@@ -77,11 +77,11 @@ interface BusinessGraph {
 // ─── Node visual config ────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<GraphNodeType, string> = {
-  business: '#10B981', // emerald
-  client: '#06B6D4',   // cyan
+  business: '#3B82F6', // emerald
+  client: '#3B82F6',   // cyan
   invoice: '#F59E0B',  // amber
-  payment: '#22C55E',  // green
-  employee: '#10B981', // emerald
+  payment: '#3B82F6',  // green
+  employee: '#3B82F6', // emerald
   task: '#F97316',     // orange
   gst: '#EAB308',      // yellow
   document: '#9CA3AF', // gray
@@ -124,7 +124,7 @@ function formatINR(n: number): string {
 function riskColor(level: 'low' | 'medium' | 'high' | undefined): string {
   if (level === 'high') return '#F43F5E';
   if (level === 'medium') return '#EAB308';
-  return '#22C55E';
+  return '#3B82F6';
 }
 
 // ─── Simulation types ──────────────────────────────────────────────────────────
@@ -966,7 +966,7 @@ function EmptyGraphState({
 }
 
 function HealthBar({ metric }: { metric: HealthMetric }) {
-  const color = metric.level === 'high' ? '#F43F5E' : metric.level === 'medium' ? '#EAB308' : '#22C55E';
+  const color = metric.level === 'high' ? '#F43F5E' : metric.level === 'medium' ? '#EAB308' : '#3B82F6';
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">

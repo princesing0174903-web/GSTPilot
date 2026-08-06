@@ -13,9 +13,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { ensureSeeded, getBankingOracleInsights } from '@/lib/banking-prisma';
+import { swrCache } from '@/lib/cache/swr';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+// 30s SWR cache — Oracle insights run 8+ Prisma queries in parallel (unmatched
+// txns, large withdrawals, duplicate payments, GST readiness, collection
+// efficiency, late collections, fraud indicators, next-month prediction) +
+// cash flow + recommendations. The insights are analytical (not real-time) —
+// 30s staleness is invisible to the user.
+const BANKING_ORACLE_CACHE_TTL_MS = 30_000;
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,11 +32,18 @@ export async function GET(req: NextRequest) {
     const { uid } = auth;
     const url = new URL(req.url);
     const orgId = url.searchParams.get('organizationId') || 'local';
+    const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
     const org = await requireOrgMembership(uid, orgId);
     if (org instanceof NextResponse) return org;
 
     await ensureSeeded(orgId);
-    const insights = await getBankingOracleInsights(orgId);
+    const insights = await swrCache(
+      '/api/banking/oracle',
+      orgId,
+      BANKING_ORACLE_CACHE_TTL_MS,
+      () => getBankingOracleInsights(orgId),
+      { forceRefresh },
+    );
     return NextResponse.json(insights);
   } catch (err) {
     return friendlyApiError(err, 'Failed to load banking oracle insights.');

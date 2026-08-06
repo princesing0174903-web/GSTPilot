@@ -36,8 +36,8 @@ export const ORACLE_MODES: Record<OracleModeId, OracleMode> = {
     id: 'gst-expert',
     name: 'GST Expert',
     description: 'GST returns, ITC, reconciliation, e-invoicing.',
-    tint: 'rgba(16,185,129,0.12)',
-    color: '#10B981',
+    tint: 'rgba(37,99,235,0.12)',
+    color: '#2563EB',
     keywords: [
       'gst', 'gstr', 'itc', 'input tax', '2a', '2b', 'reconcile',
       'return', 'filing', 'e-invoice', 'e-way bill', 'irn',

@@ -75,7 +75,7 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-controls="setup-progress-body"
-        className="w-full flex items-center justify-between gap-4 p-4 md:p-5 text-left transition-colors hover:bg-white/[0.02] rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        className="w-full flex items-center justify-between gap-4 p-4 md:p-5 text-left transition-colors hover:bg-white/[0.02] rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
@@ -107,7 +107,7 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
 
         <div className="flex items-center gap-2 shrink-0">
           {isComplete ? (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Ready
             </span>
@@ -197,19 +197,19 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
                           }`}
                         >
                           {task.done ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0" />
                           ) : (
                             <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                           )}
                           <Icon
                             className={`h-3.5 w-3.5 shrink-0 ${
-                              task.done ? 'text-emerald-400/80' : 'text-muted-foreground'
+                              task.done ? 'text-blue-400/80' : 'text-muted-foreground'
                             }`}
                           />
                           <span
                             className={`text-[12px] truncate ${
                               task.done
-                                ? 'text-muted-foreground line-through decoration-emerald-400/40'
+                                ? 'text-muted-foreground line-through decoration-blue-400/40'
                                 : 'text-foreground/90'
                             }`}
                           >

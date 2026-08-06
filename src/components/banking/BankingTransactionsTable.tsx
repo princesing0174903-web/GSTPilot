@@ -88,19 +88,19 @@ import { toast } from 'sonner';
 // ─── Category Badge Config ────────────────────────────────────────────────────
 
 const CATEGORY_CONFIG: Record<TransactionCategory, { label: string; className: string }> = {
-  sales:           { label: 'Sales',     className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' },
-  purchase:        { label: 'Purchase',  className: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25' },
+  sales:           { label: 'Sales',     className: 'bg-blue-500/10 text-blue-300 border-blue-500/25' },
+  purchase:        { label: 'Purchase',  className: 'bg-sky-500/10 text-sky-300 border-sky-500/25' },
   gst:             { label: 'GST',       className: 'bg-amber-500/10 text-amber-300 border-amber-500/25' },
   salary:          { label: 'Salary',    className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25' },
   rent:            { label: 'Rent',      className: 'bg-amber-500/10 text-amber-300 border-amber-500/25' },
-  utilities:       { label: 'Utilities', className: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25' },
+  utilities:       { label: 'Utilities', className: 'bg-sky-500/10 text-sky-300 border-sky-500/25' },
   loan:            { label: 'Loan',      className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25' },
-  interest:        { label: 'Interest',  className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' },
+  interest:        { label: 'Interest',  className: 'bg-blue-500/10 text-blue-300 border-blue-500/25' },
   transfer:        { label: 'Transfer',  className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25' },
-  investment:      { label: 'Investment',className: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25' },
+  investment:      { label: 'Investment',className: 'bg-sky-500/10 text-sky-300 border-sky-500/25' },
   cash_withdrawal: { label: 'Cash',      className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25' },
   fee:             { label: 'Fee',       className: 'bg-red-500/10 text-red-300 border-red-500/25' },
-  refund:          { label: 'Refund',    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' },
+  refund:          { label: 'Refund',    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25' },
   other:           { label: 'Other',     className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25' },
 };
 
@@ -164,8 +164,8 @@ function SortHeader({ label, sortKey, current, onChange, className = '', align =
       <span className="opacity-0 group-hover:opacity-50 transition-opacity">
         {!isActive && <ChevronsUpDown className="h-3 w-3" />}
       </span>
-      {isAsc && <ChevronUp className="h-3 w-3 text-emerald-400 opacity-100" />}
-      {isDesc && <ChevronDown className="h-3 w-3 text-emerald-400 opacity-100" />}
+      {isAsc && <ChevronUp className="h-3 w-3 text-blue-400 opacity-100" />}
+      {isDesc && <ChevronDown className="h-3 w-3 text-blue-400 opacity-100" />}
     </button>
   );
 }
@@ -182,7 +182,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-emerald-500/20 text-emerald-200 rounded px-0.5">
+      <mark className="bg-blue-500/20 text-blue-100 rounded px-0.5">
         {text.slice(idx, idx + q.length)}
       </mark>
       {text.slice(idx + q.length)}
@@ -277,9 +277,9 @@ const TransactionRow = memo(function TransactionRow({
   return (
     <TableRow
       data-txn-id={txn.id}
-      className={`group transition-colors ${
-        isSelected ? 'bg-emerald-500/[0.04]' : 'hover:bg-white/[0.025]'
-      } ${isCredit ? 'border-l-2 border-l-emerald-500/40' : ''} ${
+      className={`gst-table-row group transition-colors ${
+        isSelected ? 'gst-table-row-selected' : ''
+      } ${isCredit ? 'border-l-2 border-l-blue-500/40' : ''} ${
         isDebit ? 'border-l-2 border-l-red-500/40' : ''
       }`}
     >
@@ -291,11 +291,11 @@ const TransactionRow = memo(function TransactionRow({
         />
       </TableCell>
       <TableCell className="py-3">
-        <div className="text-sm font-medium text-foreground tabular-nums">
+        <div className="text-sm font-medium text-foreground gst-text-tabular">
           {formatDate(txn.date)}
         </div>
         {txn.valueDate && (
-          <div className="text-[10px] text-muted-foreground tabular-nums">
+          <div className="text-[10px] text-muted-foreground gst-text-tabular">
             Val: {formatDate(txn.valueDate)}
           </div>
         )}
@@ -323,7 +323,7 @@ const TransactionRow = memo(function TransactionRow({
       </TableCell>
       <TableCell className="py-3 text-right">
         {isCredit ? (
-          <span className="text-sm font-semibold text-emerald-400 tabular-nums">
+          <span className="text-sm font-semibold text-blue-400 gst-text-tabular">
             +{formatCurrency(txn.amount)}
           </span>
         ) : (
@@ -332,7 +332,7 @@ const TransactionRow = memo(function TransactionRow({
       </TableCell>
       <TableCell className="py-3 text-right">
         {isDebit ? (
-          <span className="text-sm font-semibold text-red-400 tabular-nums">
+          <span className="text-sm font-semibold text-red-400 gst-text-tabular">
             −{formatCurrency(txn.amount)}
           </span>
         ) : (
@@ -450,9 +450,9 @@ const MobileCard = memo(function MobileCard({
       <div
         className={`glass-surface rounded-xl border p-3 transition-all ${
           isSelected
-            ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
+            ? 'border-blue-500/40 bg-blue-500/[0.04]'
             : 'border-white/[0.06] hover:border-white/[0.12]'
-        } ${isCredit ? 'border-l-2 border-l-emerald-500/50' : 'border-l-2 border-l-red-500/50'}`}
+        } ${isCredit ? 'border-l-2 border-l-blue-500/50' : 'border-l-2 border-l-red-500/50'}`}
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -475,8 +475,8 @@ const MobileCard = memo(function MobileCard({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span
-              className={`text-sm font-bold tabular-nums ${
-                isCredit ? 'text-emerald-400' : 'text-red-400'
+              className={`text-sm font-bold gst-text-tabular ${
+                isCredit ? 'text-blue-400' : 'text-red-400'
               }`}
             >
               {isCredit ? '+' : '−'}
@@ -562,7 +562,7 @@ const BulkActionBar = memo(function BulkActionBar({
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
     >
-      <div className="glass-surface-strong flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-500/30 bg-zinc-950/95 backdrop-blur-xl px-3 py-2 shadow-2xl shadow-emerald-500/10">
+      <div className="glass-surface-strong flex flex-wrap items-center gap-2 rounded-2xl border border-blue-500/30 bg-zinc-950/95 backdrop-blur-xl px-3 py-2 shadow-2xl shadow-blue-500/10">
         <div className="flex items-center gap-2 mr-1">
           <Checkbox
             checked={allSelected}
@@ -651,7 +651,7 @@ interface FilterBarProps {
 }
 
 const selectTriggerClass =
-  'h-9 bg-white/[0.02] border-white/[0.08] text-foreground text-xs hover:bg-white/[0.04] focus:ring-emerald-500/30 w-full';
+  'h-9 bg-white/[0.02] border-white/[0.08] text-foreground text-xs hover:bg-white/[0.04] focus:ring-blue-500/30 w-full';
 const selectContentClass = 'bg-zinc-950 border-white/10';
 
 function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: FilterBarProps) {
@@ -673,7 +673,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                 value={filters.search}
                 onChange={(e) => onChange({ search: e.target.value })}
                 placeholder="Search description, counterparty, reference, narration…"
-                className="pl-9 h-9 bg-white/[0.02] border-white/[0.08] text-sm placeholder:text-muted-foreground/60 focus:ring-emerald-500/30"
+                className="pl-9 h-9 bg-white/[0.02] border-white/[0.08] text-sm placeholder:text-muted-foreground/60 focus:ring-blue-500/30"
               />
             </div>
 
@@ -756,7 +756,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                   type="date"
                   value={filters.dateFrom}
                   onChange={(e) => onChange({ dateFrom: e.target.value })}
-                  className="h-9 bg-white/[0.02] border-white/[0.08] text-sm text-foreground focus:ring-emerald-500/30 [color-scheme:dark]"
+                  className="h-9 bg-white/[0.02] border-white/[0.08] text-sm text-foreground focus:ring-blue-500/30 [color-scheme:dark]"
                 />
               </div>
               <div className="space-y-1">
@@ -767,7 +767,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                   type="date"
                   value={filters.dateTo}
                   onChange={(e) => onChange({ dateTo: e.target.value })}
-                  className="h-9 bg-white/[0.02] border-white/[0.08] text-sm text-foreground focus:ring-emerald-500/30 [color-scheme:dark]"
+                  className="h-9 bg-white/[0.02] border-white/[0.08] text-sm text-foreground focus:ring-blue-500/30 [color-scheme:dark]"
                 />
               </div>
               <div className="flex justify-end">
@@ -783,7 +783,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                   {activeCount > 0 && (
                     <Badge
                       variant="outline"
-                      className="ml-1 h-5 min-w-5 px-1.5 text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      className="ml-1 h-5 min-w-5 px-1.5 text-[10px] border-blue-500/30 bg-blue-500/10 text-blue-300"
                     >
                       {activeCount}
                     </Badge>
@@ -872,7 +872,7 @@ function Pagination({ page, pageSize, total, onPageChange, onPageSizeChange }: P
                   onClick={() => onPageChange(p)}
                   className={`h-8 min-w-8 px-2 rounded-md text-xs font-medium transition-colors ${
                     p === page
-                      ? 'bg-emerald-500 text-zinc-950'
+                      ? 'bg-blue-600 text-white'
                       : 'border border-white/[0.08] bg-white/[0.03] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground'
                   }`}
                   aria-current={p === page ? 'page' : undefined}
@@ -911,11 +911,11 @@ function SummaryStats({ totalInflow, totalOutflow }: SummaryStatsProps) {
   return (
     <div className="hidden md:flex items-center gap-4">
       <div className="flex items-center gap-1.5">
-        <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" />
+        <ArrowDownLeft className="h-3.5 w-3.5 text-blue-400" />
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           In
         </span>
-        <span className="text-sm font-semibold text-emerald-400 tabular-nums">
+        <span className="text-sm font-semibold text-blue-400 gst-text-tabular">
           {formatCurrency(totalInflow)}
         </span>
       </div>
@@ -935,8 +935,8 @@ function SummaryStats({ totalInflow, totalOutflow }: SummaryStatsProps) {
           Net
         </span>
         <span
-          className={`text-sm font-semibold tabular-nums ${
-            net >= 0 ? 'text-emerald-400' : 'text-red-400'
+          className={`text-sm font-semibold gst-text-tabular ${
+            net >= 0 ? 'text-blue-400' : 'text-red-400'
           }`}
         >
           {net >= 0 ? '+' : '−'}
@@ -1357,8 +1357,8 @@ export function BankingTransactionsTable({
       {/* ─── Header ─── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <Receipt className="h-4.5 w-4.5 text-emerald-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
+            <Receipt className="h-4.5 w-4.5 text-blue-400" />
           </div>
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
@@ -1391,7 +1391,7 @@ export function BankingTransactionsTable({
             <Button
               size="sm"
               onClick={handleAdd}
-              className="gap-2 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 text-xs"
+              className="gap-2 bg-blue-600 text-white hover:bg-blue-500 text-xs"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Transaction
@@ -1413,7 +1413,7 @@ export function BankingTransactionsTable({
           {activeFilterCount > 0 && (
             <Badge
               variant="outline"
-              className="h-5 min-w-5 px-1.5 text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              className="h-5 min-w-5 px-1.5 text-[10px] border-blue-500/30 bg-blue-500/10 text-blue-300"
             >
               {activeFilterCount}
             </Badge>
@@ -1448,8 +1448,8 @@ export function BankingTransactionsTable({
           transition={{ duration: 0.4 }}
           className="glass-surface flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] p-12 text-center"
         >
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-            <Receipt className="h-7 w-7 text-emerald-400" />
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10">
+            <Receipt className="h-7 w-7 text-blue-400" />
           </div>
           <h3 className="mb-1.5 text-base font-semibold text-foreground">No transactions yet</h3>
           <p className="mb-4 max-w-sm text-sm text-muted-foreground">
@@ -1457,7 +1457,7 @@ export function BankingTransactionsTable({
           </p>
           <Button
             onClick={handleAdd}
-            className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950"
+            className="gap-2 bg-blue-600 hover:bg-blue-500 text-white"
           >
             <Plus className="h-4 w-4" />
             Add Transaction

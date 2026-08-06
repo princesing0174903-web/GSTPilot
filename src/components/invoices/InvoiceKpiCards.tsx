@@ -120,13 +120,13 @@ const KpiCard = memo(function KpiCard({
       transition={{ duration: 0.4, delay, ease: 'easeOut' }}
       whileHover={{ y: -2 }}
     >
-      <Card className="glass-surface rounded-2xl border border-white/[0.06] p-4 hover:border-white/[0.12] transition-all duration-300 group">
+      <Card className="glass-surface gst-card-hover rounded-2xl border border-white/[0.06] p-4 hover:border-white/[0.12] transition-all duration-300 group">
         <div className="flex items-start justify-between mb-3">
           <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="gst-text-label">
               {label}
             </div>
-            <div className="text-xl font-bold tracking-tight text-foreground tabular-nums">
+            <div className="gst-text-metric gst-text-tabular !text-xl">
               {value}
             </div>
           </div>
@@ -142,13 +142,13 @@ const KpiCard = memo(function KpiCard({
             {trend && (
               <div className="flex items-center gap-1">
                 {trend.value >= 0 ? (
-                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                  <TrendingUp className="h-3 w-3 text-blue-400" />
                 ) : (
                   <TrendingDown className="h-3 w-3 text-red-400" />
                 )}
                 <span
                   className={`text-[11px] font-medium ${
-                    trend.value >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    trend.value >= 0 ? 'text-blue-400' : 'text-red-400'
                   }`}
                 >
                   {trend.value >= 0 ? '+' : ''}
@@ -275,10 +275,10 @@ export function InvoiceKpiCards({ kpis }: InvoiceKpiCardsProps) {
       label: 'Paid',
       value: formatNumber(kpis.paid),
       icon: CheckCircle2,
-      iconColor: 'text-emerald-400',
-      iconBg: 'bg-emerald-500/15',
+      iconColor: 'text-blue-400',
+      iconBg: 'bg-blue-500/15',
       sparkline: kpis.paidSpark,
-      sparkColor: 'text-emerald-400',
+      sparkColor: 'text-blue-400',
       delay: 0.05,
       subtitle: `${kpis.total > 0 ? Math.round((kpis.paid / kpis.total) * 100) : 0}% collected`,
     },
@@ -286,10 +286,10 @@ export function InvoiceKpiCards({ kpis }: InvoiceKpiCardsProps) {
       label: 'Pending',
       value: formatNumber(kpis.pending),
       icon: Clock,
-      iconColor: 'text-cyan-400',
-      iconBg: 'bg-cyan-500/15',
+      iconColor: 'text-sky-300',
+      iconBg: 'bg-sky-500/15',
       sparkline: kpis.pendingSpark,
-      sparkColor: 'text-cyan-400',
+      sparkColor: 'text-sky-300',
       delay: 0.1,
       subtitle: 'Awaiting payment',
     },
@@ -308,10 +308,10 @@ export function InvoiceKpiCards({ kpis }: InvoiceKpiCardsProps) {
       label: 'Total Value',
       value: formatCurrency(kpis.totalValue),
       icon: IndianRupee,
-      iconColor: 'text-emerald-400',
-      iconBg: 'bg-emerald-500/15',
+      iconColor: 'text-blue-400',
+      iconBg: 'bg-blue-500/15',
       sparkline: kpis.valueSpark,
-      sparkColor: 'text-emerald-400',
+      sparkColor: 'text-blue-400',
       delay: 0.2,
       subtitle: 'Lifetime billed',
     },
@@ -330,10 +330,10 @@ export function InvoiceKpiCards({ kpis }: InvoiceKpiCardsProps) {
       label: 'Avg Invoice',
       value: formatCurrency(kpis.avgValue),
       icon: TrendingUp,
-      iconColor: 'text-teal-400',
-      iconBg: 'bg-teal-500/15',
+      iconColor: 'text-blue-300',
+      iconBg: 'bg-blue-500/15',
       sparkline: kpis.avgSpark,
-      sparkColor: 'text-teal-400',
+      sparkColor: 'text-blue-300',
       delay: 0.3,
       subtitle: 'Per invoice',
     },

@@ -215,14 +215,14 @@ function mapApiToDoc(c: ClientOption): ClientDoc {
 }
 
 function healthScoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-400';
+  if (score >= 80) return 'text-blue-400';
   if (score >= 60) return 'text-yellow-400';
   if (score >= 40) return 'text-orange-400';
   return 'text-red-400';
 }
 
 function healthScoreBg(score: number): string {
-  if (score >= 80) return 'bg-emerald-500/10 ring-emerald-500/20';
+  if (score >= 80) return 'bg-blue-500/10 ring-blue-500/20';
   if (score >= 60) return 'bg-yellow-500/10 ring-yellow-500/20';
   if (score >= 40) return 'bg-orange-500/10 ring-orange-500/20';
   return 'bg-red-500/10 ring-red-500/20';
@@ -241,9 +241,9 @@ const STATUS_CONFIG: Record<
 > = {
   active: {
     label: 'Active',
-    dot: 'bg-emerald-400',
-    chip: 'bg-emerald-500/10 ring-emerald-500/20',
-    text: 'text-emerald-300',
+    dot: 'bg-blue-400',
+    chip: 'bg-blue-500/10 ring-blue-500/20',
+    text: 'text-blue-300',
   },
   inactive: {
     label: 'Inactive',
@@ -1139,7 +1139,7 @@ export default function ClientRegistryPage() {
                   {clients.length} total
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
                   {clients.filter((c) => c.status === 'active').length} active
                 </span>
                 {clients.some((c) => (c.complianceProfile?.overdueReturns ?? 0) > 0) && (
@@ -1224,7 +1224,7 @@ export default function ClientRegistryPage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">
                   <span className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
                     Active
                   </span>
                 </SelectItem>
@@ -1420,7 +1420,7 @@ export default function ClientRegistryPage() {
               <Button
                 variant="link"
                 onClick={() => setCurrentView('invoices')}
-                className="text-[12px] font-medium text-emerald-400 underline-offset-4 hover:text-emerald-300 hover:underline"
+                className="text-[12px] font-medium text-blue-400 underline-offset-4 hover:text-blue-300 hover:underline"
               >
                 Go to invoices instead
               </Button>

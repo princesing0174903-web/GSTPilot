@@ -12,11 +12,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { ensureSeeded, getCashFlow } from '@/lib/banking-prisma';
+import { swrCache } from '@/lib/cache/swr';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const ALLOWED_PERIODS = new Set(['7d', '30d', '90d', '1y']);
+
+// 30s SWR cache — cashflow involves a findMany for the entire period window
+// + N upserts for daily snapshots (now batched, but still N writes). The user
+// re-visits the banking tab frequently; the cache avoids re-running the
+// aggregation + re-persisting the same snapshots on every visit.
+const CASHFLOW_CACHE_TTL_MS = 30_000;
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,6 +32,7 @@ export async function GET(req: NextRequest) {
     const { uid } = auth;
     const url = new URL(req.url);
     const orgId = url.searchParams.get('organizationId') || 'local';
+    const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
     const org = await requireOrgMembership(uid, orgId);
     if (org instanceof NextResponse) return org;
 
@@ -35,7 +43,14 @@ export async function GET(req: NextRequest) {
       ? (periodParam as '7d' | '30d' | '90d' | '1y')
       : '30d';
 
-    const result = await getCashFlow(orgId, period);
+    // Cache key includes period — different periods produce different results.
+    const result = await swrCache(
+      '/api/banking/cashflow',
+      `${orgId}:${period}`,
+      CASHFLOW_CACHE_TTL_MS,
+      () => getCashFlow(orgId, period),
+      { forceRefresh },
+    );
     return NextResponse.json(result);
   } catch (err) {
     return friendlyApiError(err, 'Failed to load cash flow data.');

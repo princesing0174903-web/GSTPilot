@@ -109,9 +109,9 @@ interface SummaryCardConfig {
 
 const SUMMARY_TONES: Record<SummaryTone, { chip: string; text: string; bar: string }> = {
   success: {
-    chip: 'bg-emerald-500/10 border-emerald-500/20',
-    text: 'text-emerald-300',
-    bar: 'bg-emerald-500',
+    chip: 'bg-blue-500/10 border-blue-500/20',
+    text: 'text-blue-300',
+    bar: 'bg-blue-500',
   },
   danger: {
     chip: 'bg-red-500/10 border-red-500/20',
@@ -174,7 +174,7 @@ interface BarChartProps {
 }
 
 const BAR_TONES: Record<BarChartProps['tone'], string> = {
-  success: 'from-emerald-500 to-emerald-400',
+  success: 'from-blue-500 to-blue-400',
   danger: 'from-red-500 to-red-400',
   info: 'from-cyan-500 to-cyan-400',
   neutral: 'from-white/40 to-white/30',
@@ -242,7 +242,7 @@ function HorizontalBarChart({ items, tone, emptyMessage, valueFormatter }: BarCh
 function CollectionGauge({ rate }: { rate: number }) {
   const tone = rate >= 80 ? 'success' : rate >= 60 ? 'warning' : 'danger';
   const toneClasses = {
-    success: { stroke: '#34d399', text: 'text-emerald-300' },
+    success: { stroke: '#34d399', text: 'text-blue-300' },
     warning: { stroke: '#fbbf24', text: 'text-amber-300' },
     danger: { stroke: '#f87171', text: 'text-red-300' },
   }[tone];
@@ -305,8 +305,8 @@ function SectionCard({
     <div className={`glass-surface rounded-2xl border border-white/[0.06] p-4 ${className ?? ''}`}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-            <Icon className="h-3.5 w-3.5 text-emerald-300" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <Icon className="h-3.5 w-3.5 text-blue-300" />
           </div>
           <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
         </div>
@@ -486,7 +486,7 @@ function BankingReportsImpl({
               <TabsTrigger
                 key={p.value}
                 value={p.value}
-                className="text-xs data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300"
+                className="text-xs data-[state=active]:bg-blue-500/15 data-[state=active]:text-blue-300"
               >
                 {p.label}
               </TabsTrigger>
@@ -561,7 +561,7 @@ function BankingReportsImpl({
               badge={
                 <Badge
                   variant="outline"
-                  className="border-emerald-500/20 bg-emerald-500/10 text-emerald-300 text-[10px]"
+                  className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]"
                 >
                   Top 5
                 </Badge>
@@ -614,7 +614,7 @@ function BankingReportsImpl({
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Inflow
                   </span>
-                  <span className="text-sm font-semibold text-emerald-300 tabular-nums">
+                  <span className="text-sm font-semibold text-blue-300 tabular-nums">
                     {formatINR(report.totalInflow)}
                   </span>
                 </div>
@@ -633,7 +633,7 @@ function BankingReportsImpl({
                   </span>
                   <span
                     className={`text-sm font-semibold tabular-nums ${
-                      report.netFlow >= 0 ? 'text-emerald-300' : 'text-red-300'
+                      report.netFlow >= 0 ? 'text-blue-300' : 'text-red-300'
                     }`}
                   >
                     {report.netFlow >= 0 ? '+' : '−'}
@@ -647,7 +647,7 @@ function BankingReportsImpl({
                   <span
                     className={`text-sm font-semibold tabular-nums ${
                       report.closingBalance >= report.openingBalance
-                        ? 'text-emerald-300'
+                        ? 'text-blue-300'
                         : 'text-red-300'
                     }`}
                   >
@@ -713,7 +713,7 @@ function BankingReportsImpl({
                           <TableCell className="py-2.5 text-xs font-medium text-foreground capitalize">
                             {row.category.replace(/_/g, ' ')}
                           </TableCell>
-                          <TableCell className="py-2.5 text-xs text-emerald-300 tabular-nums text-right">
+                          <TableCell className="py-2.5 text-xs text-blue-300 tabular-nums text-right">
                             {row.inflow > 0 ? formatINR(row.inflow) : '—'}
                           </TableCell>
                           <TableCell className="py-2.5 text-xs text-red-300 tabular-nums text-right">
@@ -724,7 +724,7 @@ function BankingReportsImpl({
                           </TableCell>
                           <TableCell
                             className={`py-2.5 text-xs font-semibold tabular-nums text-right ${
-                              row.net >= 0 ? 'text-emerald-300' : 'text-red-300'
+                              row.net >= 0 ? 'text-blue-300' : 'text-red-300'
                             }`}
                           >
                             {row.net >= 0 ? '+' : '−'}

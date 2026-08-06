@@ -90,7 +90,7 @@ interface InsightLine {
 }
 
 const TONE_CLASSES: Record<InsightLine['tone'], string> = {
-  positive: 'text-emerald-400',
+  positive: 'text-blue-400',
   warning: 'text-amber-400',
   negative: 'text-red-400',
   neutral: 'text-muted-foreground',
@@ -396,7 +396,7 @@ export function OracleDailyBrief() {
             ) : insightLines.length === 0 ? (
               hasAnyData ? (
                 <div className="flex items-start gap-2.5 py-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
                   <p className="text-[12.5px] text-muted-foreground leading-relaxed">
                     All clear — nothing needs your attention right now. Open Oracle to dig deeper.
                   </p>

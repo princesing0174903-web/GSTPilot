@@ -53,7 +53,7 @@ const COLORS = {
   emerald50: '#ecfdf5',
   emerald100: '#d1fae5',
   emerald200: '#a7f3d0',
-  emerald400: '#34d399',
+  emerald400: '#60a5fa',
   emerald500: '#2563EB',
   emerald600: '#1D4ED8',
   emerald700: '#047857',

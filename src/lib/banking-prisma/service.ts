@@ -106,11 +106,22 @@ type AccountRow = {
   createdAt: Date;
   updatedAt: Date;
   transactions: Array<{ amount: number; date: Date; type: string }>;
+  // Optional — present when the query uses `_count` instead of loading all
+  // transactions (see `listAccounts`). When present, `transactionCount` is
+  // taken from `_count.transactions` (the true total) instead of
+  // `transactions.length` (which would only reflect the filtered subset).
+  _count?: { transactions: number };
 };
 
 function toAccountDTO(row: AccountRow): BankingAccount {
   const monthStart = startOfMonth();
-  const monthTxns = row.transactions.filter((t) => new Date(t.date) >= monthStart);
+  // When `_count` is present, the `transactions` array is already filtered to
+  // the current month (see `listAccounts`), so no need to re-filter here.
+  // Otherwise (getAccount / createAccount), `transactions` is the full list —
+  // filter it as before for backward compatibility.
+  const monthTxns = row._count
+    ? row.transactions
+    : row.transactions.filter((t) => new Date(t.date) >= monthStart);
   const monthlyInflow = monthTxns
     .filter((t) => t.type === 'credit')
     .reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -140,7 +151,7 @@ function toAccountDTO(row: AccountRow): BankingAccount {
     status: (row.status as BankAccountStatus) || 'active',
     lastSyncAt: row.lastSyncAt ? row.lastSyncAt.toISOString() : null,
     lastSyncAgo: timeAgo(row.lastSyncAt),
-    transactionCount: row.transactions.length,
+    transactionCount: row._count?.transactions ?? row.transactions.length,
     monthlyInflow,
     monthlyOutflow,
     createdAt: row.createdAt.toISOString(),
@@ -218,13 +229,28 @@ function toTransactionDTO(row: TxnRow): BankingTransaction {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function listAccounts(organizationId: string): Promise<BankingAccountListResult> {
+  // PERF: Previously loaded ALL transactions for every account (selecting only
+  // amount/date/type). For accounts with thousands of historical transactions,
+  // this loaded the entire history on every banking-page mount just to compute
+  // `transactionCount` and current-month inflow/outflow.
+  //
+  // Now we use:
+  //   • `_count` — Prisma's relation count, computed server-side as a single
+  //     aggregate (no row transfer).
+  //   • A `where`-filtered `transactions` include limited to the current month
+  //     + a safety `take: 1000` cap. This is exactly the slice `toAccountDTO`
+  //     needs for monthlyInflow/monthlyOutflow.
+  const monthStart = startOfMonth();
   const rows = await db.bankAccount.findMany({
     where: { organizationId },
     include: {
       transactions: {
+        where: { date: { gte: monthStart } },
         select: { amount: true, date: true, type: true },
         orderBy: { date: 'desc' },
+        take: 1000,
       },
+      _count: { select: { transactions: true } },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -708,6 +734,12 @@ export async function bulkUpdateTransactions(
 
 export async function getDashboardSummary(organizationId: string): Promise<BankingDashboardSummary> {
   const [accounts, todayTxns, monthTxns, unmatchedCount, recentTxns] = await Promise.all([
+    // NOTE: `transactions` include was REMOVED — the DTO only uses `balance`,
+    // `availableBalance`, `status`, `lastSyncAt`, and `id` from this query.
+    // Including transactions was loading the ENTIRE transaction history for
+    // every account on every dashboard load (thousands of rows for active
+    // orgs) and discarding it. Monthly inflow/outflow is computed from
+    // `monthTxns` below, not from per-account transactions.
     db.bankAccount.findMany({
       where: { organizationId },
       select: {
@@ -716,7 +748,6 @@ export async function getDashboardSummary(organizationId: string): Promise<Banki
         availableBalance: true,
         status: true,
         lastSyncAt: true,
-        transactions: { select: { amount: true, date: true, type: true } },
       },
     }),
     db.bankTransaction.findMany({

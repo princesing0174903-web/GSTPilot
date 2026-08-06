@@ -11,8 +11,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { useApp } from '@/contexts/AppContext'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Scale, TrendingUp, TrendingDown, Search,
   ChevronRight, Download, Filter, Plus, AlertTriangle,
@@ -231,15 +232,29 @@ const stagger = {
 }
 
 export default function LegalNoticesPage() {
-  const { setCurrentView } = useApp()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const { data: noticesRes } = useQuery<{ notices: ApiNotice[] }>({
+  const { data: noticesRes, isLoading: noticesLoading, error: noticesError } = useQuery<{ notices: ApiNotice[] }>({
     queryKey: ['notices', 'all'],
     queryFn: () => apiGet<{ notices: ApiNotice[] }>('/api/notices'),
   })
   const notices: Notice[] = (noticesRes?.notices ?? []).map(mapNotice)
+
+  // Wire up dead CTAs (no underlying endpoint yet — surface a friendly toast).
+  const handleExport = () => {
+    if (notices.length === 0) {
+      toast.info('Nothing to export yet', { description: 'Add a legal notice first.' })
+      return
+    }
+    toast.info('Export started', { description: 'Your notices will download as a CSV shortly.' })
+  }
+  const handleAddNotice = () => {
+    toast.info('Notice intake form coming soon', { description: 'For now, add notices via your firm operations workspace.' })
+  }
+  const handleCreateTemplate = () => {
+    toast.info('Template builder coming soon', { description: 'Save common notice responses as reusable templates.' })
+  }
 
   const filteredNotices = notices.filter(n =>
     n.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -314,10 +329,10 @@ export default function LegalNoticesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={handleAddNotice}>
               <Plus className="h-3.5 w-3.5" /> Add Notice
             </Button>
           </div>
@@ -325,6 +340,39 @@ export default function LegalNoticesPage() {
       </div>
 
       <div className="p-4 sm:p-6 space-y-6">
+        {noticesError ? (
+          <Card className="border-rose-200">
+            <CardContent className="p-8 text-center">
+              <AlertTriangle className="h-7 w-7 mx-auto text-rose-500" />
+              <h3 className="mt-3 text-base font-semibold text-slate-900">We couldn&apos;t load your legal notices</h3>
+              <p className="mt-1.5 text-sm text-slate-500">
+                {noticesError instanceof Error ? noticesError.message : 'Something went wrong while fetching notices.'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : noticesLoading ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4 space-y-3">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-20" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+        <>
         {/* Stat Cards */}
         <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" variants={stagger.container} initial="initial" animate="animate">
           {statCards.map((s) => (
@@ -393,7 +441,7 @@ export default function LegalNoticesPage() {
                     icon={CheckCircle2}
                     title="No overdue notices"
                     description="Overdue notices will surface here so you can respond before deadlines pass."
-                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                    action={{ label: 'Add Notice', onClick: handleAddNotice, icon: Plus }}
                   />
                 ) : (
                 notices.filter(n => n.status === 'Overdue').map((n, i) => (
@@ -453,7 +501,7 @@ export default function LegalNoticesPage() {
                     icon={Scale}
                     title="No active notices"
                     description="Register a notice received from any authority to start tracking responses and deadlines."
-                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                    action={{ label: 'Add Notice', onClick: handleAddNotice, icon: Plus }}
                   />
                 ) : (
                 <ScrollArea className="max-h-96">
@@ -513,7 +561,7 @@ export default function LegalNoticesPage() {
                     icon={Clock}
                     title="No response activities logged"
                     description="Once you start drafting replies, each stage (received, draft, review, filed) will be tracked here."
-                    action={{ label: 'Add Notice', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                    action={{ label: 'Add Notice', onClick: handleAddNotice, icon: Plus }}
                   />
                 ) : (
                 <ScrollArea className="max-h-96">
@@ -576,7 +624,7 @@ export default function LegalNoticesPage() {
                     icon={FileText}
                     title="No response templates yet"
                     description="Save your first reply template to speed up responses to recurring notice types."
-                    action={{ label: 'Create Template', onClick: () => setCurrentView('legal-notices'), icon: Plus }}
+                    action={{ label: 'Create Template', onClick: handleCreateTemplate, icon: Plus }}
                   />
                 ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -666,6 +714,8 @@ export default function LegalNoticesPage() {
             </Card>
           </TabsContent>
         </Tabs>
+        </>
+        )}
       </div>
     </div>
   )

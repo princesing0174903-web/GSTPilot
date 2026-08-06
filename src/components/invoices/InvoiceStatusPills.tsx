@@ -58,25 +58,25 @@ export const INVOICE_STATUS_CONFIG: Record<string, StatusConfig> = {
   sent: {
     label: 'Sent',
     icon: Send,
-    className: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25',
-    dot: 'bg-cyan-400',
-    iconColor: 'text-cyan-400',
+    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    dot: 'bg-blue-400',
+    iconColor: 'text-blue-400',
     group: 'pending',
   },
   viewed: {
     label: 'Viewed',
     icon: Eye,
-    className: 'bg-teal-500/10 text-teal-300 border-teal-500/25',
-    dot: 'bg-teal-400',
-    iconColor: 'text-teal-400',
+    className: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+    dot: 'bg-sky-400',
+    iconColor: 'text-sky-400',
     group: 'pending',
   },
   issued: {
     label: 'Sent',
     icon: Send,
-    className: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25',
-    dot: 'bg-cyan-400',
-    iconColor: 'text-cyan-400',
+    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    dot: 'bg-blue-400',
+    iconColor: 'text-blue-400',
     group: 'pending',
   },
   partially_paid: {
@@ -91,25 +91,25 @@ export const INVOICE_STATUS_CONFIG: Record<string, StatusConfig> = {
   paid: {
     label: 'Paid',
     icon: CheckCircle2,
-    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-    dot: 'bg-emerald-400',
-    iconColor: 'text-emerald-400',
+    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    dot: 'bg-blue-400',
+    iconColor: 'text-blue-400',
     group: 'paid',
   },
   approved: {
     label: 'Approved',
     icon: CheckCircle2,
-    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-    dot: 'bg-emerald-400',
-    iconColor: 'text-emerald-400',
+    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    dot: 'bg-blue-400',
+    iconColor: 'text-blue-400',
     group: 'paid',
   },
   filed: {
     label: 'Filed',
     icon: CheckCircle2,
-    className: 'bg-teal-500/10 text-teal-300 border-teal-500/25',
-    dot: 'bg-teal-400',
-    iconColor: 'text-teal-400',
+    className: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+    dot: 'bg-sky-400',
+    iconColor: 'text-sky-400',
     group: 'paid',
   },
   overdue: {
@@ -166,7 +166,7 @@ export interface PaymentStatusConfig {
 }
 
 const PAYMENT_STATUS_CONFIG: Record<string, PaymentStatusConfig> = {
-  paid: { label: 'Paid', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', dot: 'bg-emerald-400' },
+  paid: { label: 'Paid', className: 'bg-blue-500/10 text-blue-300 border-blue-500/25', dot: 'bg-blue-400' },
   unpaid: { label: 'Unpaid', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25', dot: 'bg-zinc-400' },
   partially_paid: { label: 'Partial', className: 'bg-amber-500/10 text-amber-300 border-amber-500/25', dot: 'bg-amber-400' },
   overdue: { label: 'Overdue', className: 'bg-red-500/10 text-red-300 border-red-500/25', dot: 'bg-red-400' },
@@ -246,7 +246,7 @@ const RISK_BADGE_CONFIG: Record<
   RiskLevel,
   { label: string; className: string; dot: string }
 > = {
-  low: { label: 'Low', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', dot: 'bg-emerald-400' },
+  low: { label: 'Low', className: 'bg-blue-500/10 text-blue-300 border-blue-500/25', dot: 'bg-blue-400' },
   medium: { label: 'Medium', className: 'bg-amber-500/10 text-amber-300 border-amber-500/25', dot: 'bg-amber-400' },
   high: { label: 'High', className: 'bg-orange-500/10 text-orange-300 border-orange-500/25', dot: 'bg-orange-400' },
   critical: { label: 'Critical', className: 'bg-red-500/10 text-red-300 border-red-500/25', dot: 'bg-red-400' },

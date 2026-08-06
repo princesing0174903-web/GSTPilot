@@ -126,9 +126,9 @@ export function ConnectGstnModal({
 
         <div className="space-y-4 py-2">
           {isAlreadyConnected && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span className="text-xs text-emerald-300">
+            <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/[0.06] px-3 py-2">
+              <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0" />
+              <span className="text-xs text-blue-300">
                 GSTN is already connected. You can update the GSTIN below.
               </span>
             </div>
@@ -158,7 +158,7 @@ export function ConnectGstnModal({
                   variant="outline"
                   className={`text-[9px] h-4 px-1.5 ${
                     formatValid
-                      ? 'border-emerald-500/30 text-emerald-400'
+                      ? 'border-blue-500/30 text-blue-400'
                       : 'border-amber-500/30 text-amber-400'
                   }`}
                 >

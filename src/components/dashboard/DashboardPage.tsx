@@ -251,9 +251,9 @@ interface HeroStatProps {
 
 const HERO_ACCENT: Record<HeroStatProps['accent'], { bar: string; chip: string; glow: string }> = {
   emerald: {
-    bar: 'bg-gradient-to-b from-emerald-400 to-emerald-600',
-    chip: 'bg-emerald-500/10 border border-emerald-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.22)]',
+    bar: 'bg-gradient-to-b from-blue-400 to-blue-600',
+    chip: 'bg-blue-500/10 border border-blue-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.22)]',
   },
   amber: {
     bar: 'bg-gradient-to-b from-amber-400 to-amber-600',
@@ -261,14 +261,14 @@ const HERO_ACCENT: Record<HeroStatProps['accent'], { bar: string; chip: string; 
     glow: 'hover:shadow-[0_0_32px_-8px_rgba(245,158,11,0.22)]',
   },
   blue: {
-    bar: 'bg-gradient-to-b from-cyan-400 to-cyan-600',
-    chip: 'bg-cyan-500/10 border border-cyan-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(34,211,238,0.22)]',
+    bar: 'bg-gradient-to-b from-sky-400 to-sky-600',
+    chip: 'bg-sky-500/10 border border-sky-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(14,165,233,0.22)]',
   },
 };
 
 const BADGE_TONE: Record<NonNullable<HeroStatProps['badge']>['tone'], string> = {
-  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  emerald: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
   amber: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
   rose: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
 };
@@ -353,7 +353,7 @@ interface SnapshotTileProps {
 }
 
 const MOM_STYLE: Record<'up' | 'down' | 'flat', { icon: LucideIcon; cls: string; verb: string }> = {
-  up: { icon: TrendingUp, cls: 'text-emerald-400', verb: 'vs last month' },
+  up: { icon: TrendingUp, cls: 'text-blue-400', verb: 'vs last month' },
   down: { icon: TrendingDown, cls: 'text-rose-400', verb: 'vs last month' },
   flat: { icon: Minus, cls: 'text-muted-foreground', verb: 'no change' },
 };
@@ -428,12 +428,12 @@ function RevenueExpenseBar({ revenue, expenses }: { revenue: number; expenses: n
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="h-2 w-2 rounded-full bg-blue-400" />
           Revenue
-          <span className="font-semibold text-foreground tabular-nums">{abbreviateINR(revenue)}</span>
+          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(revenue)}</span>
         </span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="font-semibold text-foreground tabular-nums">{abbreviateINR(expenses)}</span>
+          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(expenses)}</span>
           Expenses
           <span className="h-2 w-2 rounded-full bg-rose-400" />
         </span>
@@ -443,7 +443,7 @@ function RevenueExpenseBar({ revenue, expenses }: { revenue: number; expenses: n
           initial={{ width: 0 }}
           animate={{ width: `${revPct}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' as const }}
-          className="bg-gradient-to-r from-emerald-400 to-emerald-600"
+          className="bg-gradient-to-r from-blue-400 to-blue-600"
         />
         <motion.div
           initial={{ width: 0 }}
@@ -510,14 +510,14 @@ function activityIconFor(type: string, source: string): { icon: LucideIcon; tone
   const s = source.toLowerCase();
   if (t.includes('oracle') || t.includes('brain')) return { icon: Sparkles, tone: 'text-amber-400' };
   if (t.includes('zoho') || s.includes('zoho')) return { icon: BookOpen, tone: 'text-rose-400' };
-  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-cyan-400' };
-  if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-cyan-400' };
-  if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-emerald-400' };
-  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-emerald-400' };
+  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-blue-300' };
+  if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-blue-300' };
+  if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-blue-400' };
+  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-blue-400' };
   if (t.includes('return') || t.includes('gst') || t.includes('filing')) return { icon: Receipt, tone: 'text-amber-400' };
-  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-cyan-400' };
+  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-blue-300' };
   if (t.includes('reconcil')) return { icon: AlertTriangle, tone: 'text-amber-400' };
-  if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-emerald-400' };
+  if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-blue-400' };
   return { icon: Activity, tone: 'text-muted-foreground' };
 }
 
@@ -537,8 +537,8 @@ interface ActionItem {
 const ACTION_TONE: Record<ActionItem['tone'], { chip: string; bar: string }> = {
   rose: { chip: 'bg-rose-500/10 border-rose-500/20 text-rose-400', bar: 'bg-rose-400' },
   amber: { chip: 'bg-amber-500/10 border-amber-500/20 text-amber-400', bar: 'bg-amber-400' },
-  blue: { chip: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400', bar: 'bg-cyan-400' },
-  emerald: { chip: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400', bar: 'bg-emerald-400' },
+  blue: { chip: 'bg-sky-500/10 border-sky-500/20 text-sky-400', bar: 'bg-sky-400' },
+  emerald: { chip: 'bg-blue-500/10 border-blue-500/20 text-blue-400', bar: 'bg-blue-400' },
 };
 
 function ActionRow({ item, index }: { item: ActionItem; index: number }) {
@@ -864,9 +864,9 @@ export default function DashboardPage() {
                 shows a *pipeline* status badge, not a business health score). */}
             {hasHealthScore && healthTier && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-surface shrink-0">
-                <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-emerald-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
+                <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-blue-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
                 <span className="text-xs font-medium text-muted-foreground">Health</span>
-                <span className="text-sm font-bold text-foreground tabular-nums">{snapshot.healthScore}</span>
+                <span className="text-sm font-bold text-foreground gst-text-tabular">{snapshot.healthScore}</span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
                   {healthTier.label}
                 </span>
@@ -891,7 +891,7 @@ export default function DashboardPage() {
                   ? `Bank balance · ${snapshot.netCashFlow >= 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net flow this FY`
                   : 'Connect your bank account to see live cash position'
               }
-              icon={<Wallet className="h-4 w-4 text-emerald-400" />}
+              icon={<Wallet className="h-4 w-4 text-blue-400" />}
               accent="emerald"
             />
 
@@ -906,11 +906,11 @@ export default function DashboardPage() {
                   ? `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} issued · FY total ${abbreviateINR(snapshot.revenue)}`
                   : 'No invoices issued this month yet'
               }
-              icon={<IndianRupee className="h-4 w-4 text-emerald-400" />}
+              icon={<IndianRupee className="h-4 w-4 text-blue-400" />}
               accent="blue"
             >
               {todaysRevenue > 0 && revenueMom.direction !== 'flat' && (
-                <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${revenueMom.direction === 'up' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${revenueMom.direction === 'up' ? 'text-blue-400' : 'text-rose-400'}`}>
                   {revenueMom.direction === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                   {revenueMom.pct}% vs last month
                 </div>
@@ -1028,7 +1028,7 @@ export default function DashboardPage() {
               numericValue={snapshot.revenue}
               numericFormat="currencyCompact"
               subtitle="FY-to-date invoiced sales"
-              icon={<IndianRupee className="h-3.5 w-3.5 text-emerald-400" />}
+              icon={<IndianRupee className="h-3.5 w-3.5 text-blue-400" />}
               mom={revenueMom}
               onClick={() => setCurrentView('invoices')}
             />
@@ -1038,7 +1038,7 @@ export default function DashboardPage() {
               numericValue={snapshot.profit}
               numericFormat="currencyCompact"
               subtitle={`${snapshot.profitMargin > 0 ? `${(snapshot.profitMargin * 100).toFixed(0)}% margin` : 'revenue − expenses'}`}
-              icon={<TrendingUp className="h-3.5 w-3.5 text-emerald-400" />}
+              icon={<TrendingUp className="h-3.5 w-3.5 text-blue-400" />}
               onClick={() => setCurrentView('analytics')}
             />
             <SnapshotTile
@@ -1056,7 +1056,7 @@ export default function DashboardPage() {
               numericValue={snapshot.netCashFlow}
               numericFormat="currencyCompact"
               subtitle={`Collected − paid · bank ${abbreviateINR(snapshot.bankBalance)}`}
-              icon={<Wallet className="h-3.5 w-3.5 text-cyan-400" />}
+              icon={<Wallet className="h-3.5 w-3.5 text-blue-300" />}
               onClick={() => setCurrentView('banking')}
             />
             <SnapshotTile
@@ -1065,7 +1065,7 @@ export default function DashboardPage() {
               numericValue={snapshot.invoices.count}
               numericFormat="integer"
               subtitle={`${snapshot.invoices.overdue > 0 ? `${snapshot.invoices.overdue} overdue` : 'none overdue'}`}
-              icon={<FileText className="h-3.5 w-3.5 text-emerald-400" />}
+              icon={<FileText className="h-3.5 w-3.5 text-blue-400" />}
               onClick={() => setCurrentView('invoices')}
             />
             <SnapshotTile
@@ -1074,7 +1074,7 @@ export default function DashboardPage() {
               numericValue={snapshot.customers}
               numericFormat="integer"
               subtitle={`${snapshot.customers === 1 ? '1 active client' : `${snapshot.customers} active clients`}`}
-              icon={<Users className="h-3.5 w-3.5 text-cyan-400" />}
+              icon={<Users className="h-3.5 w-3.5 text-blue-300" />}
               onClick={() => setCurrentView('clients')}
             />
             <SnapshotTile
@@ -1114,8 +1114,8 @@ export default function DashboardPage() {
             />
             {actionItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
-                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-3">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-3">
+                  <CheckCircle2 className="h-6 w-6 text-blue-400" />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground">You&apos;re all caught up</h3>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
@@ -1309,7 +1309,7 @@ export default function DashboardPage() {
                               <span className={`text-[9px] font-semibold uppercase tracking-wider ${
                                 ev.severity === 'critical' ? 'text-rose-400'
                                 : ev.severity === 'warning' ? 'text-amber-400'
-                                : 'text-emerald-400'
+                                : 'text-blue-400'
                               }`}>
                                 · {ev.severity}
                               </span>

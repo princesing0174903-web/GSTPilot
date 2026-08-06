@@ -97,10 +97,10 @@ const RISK_LEVEL_CFG: Record<
 > = {
   low: {
     label: 'Low',
-    bar: 'bg-emerald-500',
-    text: 'text-emerald-400',
-    chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-    glow: 'from-emerald-500/20',
+    bar: 'bg-blue-500',
+    text: 'text-blue-400',
+    chip: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    glow: 'from-blue-500/20',
   },
   medium: {
     label: 'Medium',
@@ -129,7 +129,7 @@ const ANOMALY_CFG: Record<
   InvoiceInsights['anomalies'][number]['severity'],
   { icon: React.ComponentType<{ className?: string }>; tone: string }
 > = {
-  info: { icon: Info, tone: 'text-cyan-400' },
+  info: { icon: Info, tone: 'text-blue-400' },
   warning: { icon: AlertTriangle, tone: 'text-amber-400' },
   critical: { icon: AlertOctagon, tone: 'text-red-400' },
 };
@@ -138,8 +138,8 @@ const CHANNEL_CFG: Record<
   InvoiceInsights['collectionSuggestion']['channel'],
   { icon: React.ComponentType<{ className?: string }>; label: string; tone: string }
 > = {
-  email: { icon: Mail, label: 'Email', tone: 'text-cyan-400' },
-  whatsapp: { icon: MessageSquare, label: 'WhatsApp', tone: 'text-emerald-400' },
+  email: { icon: Mail, label: 'Email', tone: 'text-blue-400' },
+  whatsapp: { icon: MessageSquare, label: 'WhatsApp', tone: 'text-blue-300' },
   call: { icon: Phone, label: 'Phone', tone: 'text-amber-400' },
 };
 
@@ -240,7 +240,7 @@ function PaymentPredictionCard({
             <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               Confidence
             </p>
-            <p className="text-xl font-bold text-emerald-400 tabular-nums">
+            <p className="text-xl font-bold text-blue-400 gst-text-tabular">
               {confidencePct}%
             </p>
           </div>
@@ -249,7 +249,7 @@ function PaymentPredictionCard({
         {/* Confidence bar */}
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400"
             initial={{ width: 0 }}
             animate={{ width: `${confidencePct}%` }}
             transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
@@ -387,9 +387,9 @@ function AnomaliesCard({
             })}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            <p className="text-xs font-medium text-emerald-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No anomalies detected — all good! ✓
             </p>
           </div>
@@ -411,7 +411,7 @@ function DuplicateDetectionCard({
   return (
     <motion.div {...stagger(index)}>
       <OracleCard>
-        <CardLabel icon={Copy} tone="text-cyan-300">
+        <CardLabel icon={Copy} tone="text-blue-300">
           Duplicate Detection
         </CardLabel>
 
@@ -438,7 +438,7 @@ function DuplicateDetectionCard({
                     </span>
                     <a
                       href={`/invoices/${encodeURIComponent(d.invoiceId)}`}
-                      className="inline-flex items-center gap-1 rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-300 transition-colors hover:bg-cyan-500/20"
+                      className="inline-flex items-center gap-1 rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-300 transition-colors hover:bg-blue-500/20"
                     >
                       Open
                     </a>
@@ -448,9 +448,9 @@ function DuplicateDetectionCard({
             })}
           </ul>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg bg-cyan-500/[0.05] p-3 ring-1 ring-cyan-500/15">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-cyan-400" />
-            <p className="text-xs font-medium text-cyan-300">
+          <div className="flex items-center gap-2 rounded-lg bg-blue-500/[0.05] p-3 ring-1 ring-blue-500/15">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
+            <p className="text-xs font-medium text-blue-300">
               No duplicates found
             </p>
           </div>
@@ -489,17 +489,17 @@ function GstMismatchCard({
 
   return (
     <motion.div {...stagger(index)}>
-      <div className="glass-surface rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
-        <CardLabel icon={CheckCheck} tone="text-emerald-400">
+      <div className="glass-surface rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] p-4">
+        <CardLabel icon={CheckCheck} tone="text-blue-400">
           GST Verification
         </CardLabel>
-        <div className="flex items-center gap-2.5 rounded-lg bg-emerald-500/[0.08] p-3 ring-1 ring-emerald-500/20">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+        <div className="flex items-center gap-2.5 rounded-lg bg-blue-500/[0.08] p-3 ring-1 ring-blue-500/20">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-blue-400" />
           <div>
-            <p className="text-xs font-semibold text-emerald-300">
+            <p className="text-xs font-semibold text-blue-300">
               GST calculations verified
             </p>
-            <p className="mt-0.5 text-[11px] text-emerald-400/80">
+            <p className="mt-0.5 text-[11px] text-blue-400/80">
               Tax breakdown reconciles with the invoice total.
             </p>
           </div>
@@ -585,11 +585,11 @@ function OneClickFixesCard({
     return (
       <motion.div {...stagger(index)}>
         <OracleCard>
-          <CardLabel icon={Zap} tone="text-emerald-300">
+          <CardLabel icon={Zap} tone="text-blue-300">
             One-Click Fixes
           </CardLabel>
           <div className="flex items-center gap-2 rounded-lg bg-white/[0.02] p-3 ring-1 ring-white/[0.04]">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-400" />
             <p className="text-xs text-zinc-400">
               No fixes needed — this invoice is in great shape.
             </p>
@@ -602,7 +602,7 @@ function OneClickFixesCard({
   return (
     <motion.div {...stagger(index)}>
       <OracleCard>
-        <CardLabel icon={Zap} tone="text-emerald-300">
+        <CardLabel icon={Zap} tone="text-blue-300">
           One-Click Fixes
         </CardLabel>
 
@@ -636,8 +636,8 @@ function OneClickFixesCard({
                   className={cn(
                     'mt-2.5 w-full gap-1.5 rounded-xl text-xs font-semibold shadow-lg',
                     isApplied
-                      ? 'bg-emerald-600 text-white shadow-emerald-600/20'
-                      : 'bg-emerald-500 text-white shadow-emerald-500/25 hover:bg-emerald-400',
+                      ? 'bg-blue-600 text-white shadow-blue-600/20'
+                      : 'bg-blue-500 text-white shadow-blue-500/25 hover:bg-blue-400',
                   )}
                 >
                   {isApplied ? (
@@ -862,8 +862,8 @@ function OracleHeader() {
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
           </span>
           <p className="text-[11px] text-zinc-400">Live insights</p>
         </div>

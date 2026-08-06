@@ -394,17 +394,48 @@
 
 /* Green hex via arbitrary classes → neutral */
 .dark .bg-\[\#10b981\], .dark .bg-\[\#059669\], .dark .bg-\[\#047857\],
-.dark .bg-\[\#065f46\], .dark .bg-\[\#0d9488\], .dark .bg-\[\#0891b2\] {
+.dark .bg-\[\#065f46\], .dark .bg-\[\#0d9488\], .dark .bg-\[\#0891b2\],
+.dark .bg-\[\#22c55e\], .dark .bg-\[\#22C55E\], .dark .bg-\[\#34d399\], .dark .bg-\[\#34D399\],
+.dark .bg-\[\#14b8a6\], .dark .bg-\[\#14B8A6\], .dark .bg-\[\#06b6d4\], .dark .bg-\[\#06B6D4\] {
   background-color: #181818 !important;
 }
 
 .dark .text-\[\#10b981\], .dark .text-\[\#059669\], .dark .text-\[\#047857\],
-.dark .text-\[\#0d9488\], .dark .text-\[\#0891b2\] {
+.dark .text-\[\#0d9488\], .dark .text-\[\#0891b2\],
+.dark .text-\[\#22c55e\], .dark .text-\[\#22C55E\], .dark .text-\[\#34d399\], .dark .text-\[\#34D399\],
+.dark .text-\[\#14b8a6\], .dark .text-\[\#14B8A6\], .dark .text-\[\#06b6d4\], .dark .text-\[\#06B6D4\] {
   color: #3B82F6 !important;
 }
 
-.dark .border-\[\#10b981\], .dark .border-\[\#059669\], .dark .border-\[\#0d9488\] {
+.dark .border-\[\#10b981\], .dark .border-\[\#059669\], .dark .border-\[\#0d9488\],
+.dark .border-\[\#22c55e\], .dark .border-\[\#22C55E\], .dark .border-\[\#34d399\], .dark .border-\[\#34D399\],
+.dark .border-\[\#14b8a6\], .dark .border-\[\#14B8A6\], .dark .border-\[\#06b6d4\], .dark .border-\[\#06B6D4\] {
   border-color: #222222 !important;
+}
+
+/* Arbitrary Tailwind classes with opacity (bg-[#10B981]/10, text-[#34D399], etc.) */
+.dark [class*="bg-\[\#10B981\]"], .dark [class*="bg-\[\#10b981\]"],
+.dark [class*="bg-\[\#22C55E\]"], .dark [class*="bg-\[\#22c55e\]"],
+.dark [class*="bg-\[\#34D399\]"], .dark [class*="bg-\[\#34d399\]"],
+.dark [class*="bg-\[\#14b8a6\]"], .dark [class*="bg-\[\#14B8A6\]"],
+.dark [class*="bg-\[\#06b6d4\]"], .dark [class*="bg-\[\#06B6D4\]"],
+.dark [class*="bg-\[\#059669\]"], .dark [class*="bg-\[\#047857\]"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+.dark [class*="text-\[\#10B981\]"], .dark [class*="text-\[\#10b981\]"],
+.dark [class*="text-\[\#22C55E\]"], .dark [class*="text-\[\#22c55e\]"],
+.dark [class*="text-\[\#34D399\]"], .dark [class*="text-\[\#34d399\]"],
+.dark [class*="text-\[\#14b8a6\]"], .dark [class*="text-\[\#14B8A6\]"],
+.dark [class*="text-\[\#06b6d4\]"], .dark [class*="text-\[\#06B6D4\]"] {
+  color: #60A5FA !important;
+}
+
+.dark [class*="border-\[\#10B981\]"], .dark [class*="border-\[\#10b981\]"],
+.dark [class*="border-\[\#22C55E\]"], .dark [class*="border-\[\#22c55e\]"],
+.dark [class*="border-\[\#34D399\]"], .dark [class*="border-\[\#34d399\]"],
+.dark [class*="border-\[\#14b8a6\]"], .dark [class*="border-\[\#14B8A6\]"] {
+  border-color: rgba(37, 99, 235, 0.3) !important;
 }
 
 /* Inline style green hex → neutral (covers React style objects) */
@@ -412,7 +443,13 @@
 .dark [style*="#059669"], .dark [style*="#047857"],
 .dark [style*="#0d9488"], .dark [style*="#0891b2"],
 .dark [style*="#06b6d4"], .dark [style*="#06B6D4"],
+.dark [style*="#22c55e"], .dark [style*="#22C55E"],
+.dark [style*="#34d399"], .dark [style*="#34D399"],
+.dark [style*="#14b8a6"], .dark [style*="#14B8A6"],
 .dark [style*="rgb(16, 185, 129)"], .dark [style*="rgb(16,185,129)"],
+.dark [style*="rgb(34, 197, 94)"], .dark [style*="rgb(34,197,94)"],
+.dark [style*="rgb(52, 211, 153)"], .dark [style*="rgb(52,211,153)"],
+.dark [style*="rgb(20, 184, 166)"], .dark [style*="rgb(20,184,166)"],
 .dark [style*="rgb(5, 150, 105)"], .dark [style*="rgb(5,150,105)"],
 .dark [style*="rgb(13, 148, 136)"], .dark [style*="rgb(13,148,136)"],
 .dark [style*="rgb(6, 182, 212)"], .dark [style*="rgb(6,182,212)"] {
@@ -421,7 +458,10 @@
 }
 
 .dark [style*="rgba(16, 185, 129"], .dark [style*="rgba(16,185,129"],
-.dark [style*="rgba(6, 182, 212"], .dark [style*="rgba(6,182,212"] {
+.dark [style*="rgba(6, 182, 212"], .dark [style*="rgba(6,182,212"],
+.dark [style*="rgba(34, 197, 94"], .dark [style*="rgba(34,197,94"],
+.dark [style*="rgba(52, 211, 153"], .dark [style*="rgba(52,211,153"],
+.dark [style*="rgba(20, 184, 166"], .dark [style*="rgba(20,184,166"] {
   background-color: rgba(37, 99, 235, 0.1) !important;
   background-image: none !important;
 }
@@ -429,13 +469,18 @@
 /* SVG fill/stroke green → blue (charts) */
 .dark [fill="#10b981"], .dark [fill="#10B981"],
 .dark [fill="#059669"], .dark [fill="#047857"],
-.dark [fill="#0d9488"], .dark [fill="#06b6d4"] {
+.dark [fill="#0d9488"], .dark [fill="#06b6d4"],
+.dark [fill="#22c55e"], .dark [fill="#22C55E"],
+.dark [fill="#34d399"], .dark [fill="#34D399"],
+.dark [fill="#14b8a6"], .dark [fill="#14B8A6"] {
   fill: #2563EB !important;
 }
 
 .dark [stroke="#10b981"], .dark [stroke="#10B981"],
 .dark [stroke="#059669"], .dark [stroke="#0d9488"],
-.dark [stroke="#06b6d4"] {
+.dark [stroke="#06b6d4"], .dark [stroke="#22c55e"], .dark [stroke="#22C55E"],
+.dark [stroke="#34d399"], .dark [stroke="#34D399"],
+.dark [stroke="#14b8a6"], .dark [stroke="#14B8A6"] {
   stroke: #2563EB !important;
 }
 
@@ -2101,4 +2146,413 @@ html {
 /* Never let body text go below 13px effective */
 .gst-body, .gst-input, .gst-label {
   min-font-size: 13px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   ═══════════════════════════════════════════════════════════════════════════════
+   ENTERPRISE POLISH LAYER (FINAL PASS)
+   ═══════════════════════════════════════════════════════════════════════════════
+   Reference: Stripe · Linear · Vercel · Notion · Apple
+   Micro-interactions, hover lift, press feedback, focus rings, premium surfaces.
+   ═══════════════════════════════════════════════════════════════════════════════
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── 1. PREMIUM BUTTON MICRO-INTERACTIONS ─────────────────────────────────── */
+.gst-btn-press {
+  transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.15s ease,
+              border-color 0.15s ease,
+              box-shadow 0.15s ease,
+              opacity 0.15s ease;
+}
+.gst-btn-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.gst-btn-press:disabled {
+  cursor: not-allowed;
+}
+
+/* Ripple container */
+.gst-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.gst-ripple-ink {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: scale(0);
+  animation: gst-ripple-expand 0.5s ease-out;
+  background: rgba(255, 255, 255, 0.25);
+}
+.dark .gst-ripple-ink {
+  background: rgba(255, 255, 255, 0.15);
+}
+@keyframes gst-ripple-expand {
+  to {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* ─── 2. PREMIUM CARD HOVER ────────────────────────────────────────────────── */
+.gst-card-hover {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              background-color 0.2s ease;
+}
+.gst-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5),
+              0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+:root:not(.dark) .gst-card-hover:hover {
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.12),
+              0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+/* ─── 3. PREMIUM FOCUS RINGS ───────────────────────────────────────────────── */
+.gst-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px rgba(37, 99, 235, 0.5);
+}
+
+/* ─── 4. PREMIUM TABLE ROW TRANSITIONS ─────────────────────────────────────── */
+.gst-table-row {
+  transition: background-color 0.12s ease, opacity 0.12s ease;
+}
+.gst-table-row:hover {
+  background-color: rgba(37, 99, 235, 0.04);
+}
+.gst-table-row-selected {
+  background-color: rgba(37, 99, 235, 0.08);
+}
+.gst-table-row-selected:hover {
+  background-color: rgba(37, 99, 235, 0.12);
+}
+
+/* Sticky header shadow */
+.gst-table-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--card);
+  backdrop-filter: blur(8px);
+}
+.gst-table-sticky-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ─── 5. PREMIUM SKELETON SHIMMER (enhanced) ───────────────────────────────── */
+.gst-shimmer-premium {
+  position: relative;
+  overflow: hidden;
+  background: #181818;
+}
+:root:not(.dark) .gst-shimmer-premium {
+  background: #E4E4E7;
+}
+.gst-shimmer-premium::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+  animation: gst-shimmer-sweep 1.6s ease-in-out infinite;
+}
+:root:not(.dark) .gst-shimmer-premium::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+}
+@keyframes gst-shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ─── 6. PREMIUM BADGE ─────────────────────────────────────────────────────── */
+.gst-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  transition: all 0.15s ease;
+}
+.gst-badge-success {
+  background: rgba(37, 99, 235, 0.12);
+  color: #60A5FA;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+.gst-badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #FBBF24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+.gst-badge-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.gst-badge-neutral {
+  background: rgba(161, 161, 170, 0.12);
+  color: #A1A1AA;
+  border: 1px solid rgba(161, 161, 170, 0.2);
+}
+
+/* ─── 7. PREMIUM TOOLTIP ───────────────────────────────────────────────────── */
+.gst-tooltip-content {
+  animation: gst-tooltip-in 0.12s ease-out;
+}
+@keyframes gst-tooltip-in {
+  from { opacity: 0; transform: translateY(2px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── 8. PREMIUM MODAL/DRAWER TRANSITIONS ──────────────────────────────────── */
+.gst-modal-overlay {
+  animation: gst-overlay-in 0.18s ease-out;
+}
+@keyframes gst-overlay-in {
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to { opacity: 1; backdrop-filter: blur(4px); }
+}
+.gst-modal-content {
+  animation: gst-modal-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes gst-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.gst-drawer-content {
+  animation: gst-drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes gst-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ─── 9. PREMIUM CHART ANIMATIONS ──────────────────────────────────────────── */
+.gst-chart-enter {
+  animation: gst-chart-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes gst-chart-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── 10. PREMIUM NAV ITEM ─────────────────────────────────────────────────── */
+.gst-nav-item {
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+.gst-nav-item:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ─── 11. PREMIUM INPUT ─────────────────────────────────────────────────────── */
+.gst-input-premium {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.gst-input-premium:focus-visible {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ─── 12. PREMIUM DIVIDER ───────────────────────────────────────────────────── */
+.gst-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border) 20%,
+    var(--border) 80%,
+    transparent
+  );
+}
+
+/* ─── 13. PREMIUM PROGRESS BAR ──────────────────────────────────────────────── */
+.gst-progress-track {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+}
+:root:not(.dark) .gst-progress-track {
+  background: rgba(0, 0, 0, 0.06);
+}
+.gst-progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 9999px;
+  background: #2563EB;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+.gst-progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: gst-progress-shine 1.8s ease-in-out infinite;
+}
+@keyframes gst-progress-shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ─── 14. PREMIUM METRIC CARD ───────────────────────────────────────────────── */
+.gst-metric-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease,
+              box-shadow 0.2s ease;
+}
+.gst-metric-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at top right,
+    rgba(37, 99, 235, 0.06),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.gst-metric-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.25);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.5);
+}
+.gst-metric-card:hover::before {
+  opacity: 1;
+}
+
+/* ─── 15. STAGGERED LIST ENTRANCE ───────────────────────────────────────────── */
+.gst-stagger-item {
+  animation: gst-stagger-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes gst-stagger-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── 16. PREMIUM TAB INDICATOR ─────────────────────────────────────────────── */
+.gst-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: #2563EB;
+  border-radius: 2px 2px 0 0;
+  transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── 17. PREMIUM DROPDOWN ──────────────────────────────────────────────────── */
+.gst-dropdown-content {
+  animation: gst-dropdown-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top center;
+}
+@keyframes gst-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── 18. PREMIUM TOAST ─────────────────────────────────────────────────────── */
+.gst-toast-enter {
+  animation: gst-toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes gst-toast-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── 19. RESPECT REDUCED MOTION ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── 20. PREMIUM SELECTION RING (clickable cards/rows) ─────────────────────── */
+.gst-selectable {
+  position: relative;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.gst-selectable:hover {
+  background-color: rgba(37, 99, 235, 0.03);
+}
+.gst-selectable[data-selected="true"] {
+  background-color: rgba(37, 99, 235, 0.06);
+  box-shadow: inset 2px 0 0 #2563EB;
+}
+
+/* ─── 21. COMPACT LAYOUT (reduce vertical whitespace) ───────────────────────── */
+.gst-compact-section {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+.gst-compact-card {
+  padding: 1rem;
+}
+.gst-compact-grid {
+  gap: 0.875rem;
+}
+
+/* ─── 22. PREMIUM TYPOGRAPHY HELPERS ────────────────────────────────────────── */
+.gst-text-metric {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.gst-text-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.gst-text-caption {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.gst-text-tabular {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }

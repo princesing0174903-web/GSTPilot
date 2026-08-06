@@ -328,7 +328,7 @@ function deriveHistory(invoice: DetailedInvoice): HistoryEvent[] {
       label: `Status → ${status.replace(/_/g, ' ')}`,
       timestamp: invoice.updatedAt,
       icon: CheckCircle,
-      tone: 'text-cyan-400',
+      tone: 'text-blue-400',
     });
   }
   if (invoice.dueDate) {
@@ -348,7 +348,7 @@ function deriveHistory(invoice: DetailedInvoice): HistoryEvent[] {
           : 'Payment received',
       timestamp: paymentDate ?? invoice.updatedAt ?? '',
       icon: Banknote,
-      tone: 'text-emerald-400',
+      tone: 'text-blue-400',
     });
   }
   if (invoice.updatedAt && invoice.updatedAt !== created) {
@@ -448,13 +448,13 @@ function OverviewTab({
           <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             Payment Timeline
           </p>
-          <span className="text-[11px] font-semibold text-emerald-400">
+          <span className="text-[11px] font-semibold text-blue-400">
             {paymentProgress}% paid
           </span>
         </div>
         <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400"
             initial={{ width: 0 }}
             animate={{ width: `${paymentProgress}%` }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
@@ -469,11 +469,11 @@ function OverviewTab({
               {formatCurrency(total)}
             </p>
           </div>
-          <div className="rounded-lg bg-emerald-500/[0.06] p-2">
-            <p className="text-[10px] uppercase tracking-wider text-emerald-400">
+          <div className="rounded-lg bg-blue-500/[0.06] p-2">
+            <p className="text-[10px] uppercase tracking-wider text-blue-400">
               Paid
             </p>
-            <p className="mt-0.5 text-xs font-bold text-emerald-300">
+            <p className="mt-0.5 text-xs font-bold text-blue-300">
               {formatCurrency(paid)}
             </p>
           </div>
@@ -695,8 +695,8 @@ function PaymentsTab({
 
   const details: Array<{ icon: React.ComponentType<{ className?: string }>; label: string; value: string; tone?: string }> = [
     { icon: Receipt, label: 'Total Amount', value: formatCurrency(total) },
-    { icon: CheckCircle2, label: 'Paid Amount', value: formatCurrency(paid), tone: 'text-emerald-300' },
-    { icon: Wallet, label: 'Balance Due', value: formatCurrency(balance), tone: balance > 0 ? 'text-amber-300' : 'text-emerald-300' },
+    { icon: CheckCircle2, label: 'Paid Amount', value: formatCurrency(paid), tone: 'text-blue-300' },
+    { icon: Wallet, label: 'Balance Due', value: formatCurrency(balance), tone: balance > 0 ? 'text-amber-300' : 'text-blue-300' },
     { icon: Circle, label: 'Payment Status', value: (invoice.paymentStatus || 'unpaid').replace(/_/g, ' ') },
     { icon: CreditCard, label: 'Payment Mode', value: invoice.paymentMode ?? '—' },
     { icon: CalendarDays, label: 'Payment Date', value: formatDate(invoice.paymentDate) },
@@ -741,7 +741,7 @@ function PaymentsTab({
         className={cn(
           'glass-surface rounded-2xl border p-4',
           isPaid
-            ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
+            ? 'border-blue-500/20 bg-blue-500/[0.04]'
             : 'border-amber-500/20 bg-amber-500/[0.04]',
         )}
       >
@@ -749,11 +749,11 @@ function PaymentsTab({
           <div
             className={cn(
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
-              isPaid ? 'bg-emerald-500/15' : 'bg-amber-500/15',
+              isPaid ? 'bg-blue-500/15' : 'bg-amber-500/15',
             )}
           >
             {isPaid ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 text-blue-400" />
             ) : (
               <Clock className="h-4 w-4 text-amber-400" />
             )}
@@ -762,7 +762,7 @@ function PaymentsTab({
             <p
               className={cn(
                 'text-sm font-semibold',
-                isPaid ? 'text-emerald-300' : 'text-amber-300',
+                isPaid ? 'text-blue-300' : 'text-amber-300',
               )}
             >
               {isPaid
@@ -785,7 +785,7 @@ function PaymentsTab({
           onClick={onMarkPaid}
           disabled={saving || isPaid}
           loading={saving}
-          className="w-full gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-400"
+          className="w-full gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500"
         >
           <CheckCircle2 className="h-4 w-4" />
           {isPaid ? 'Already Paid' : 'Record Payment'}
@@ -952,7 +952,7 @@ function ActionBar({
             onClick={onMarkPaid}
             disabled={saving}
             loading={saving}
-            className="gap-1.5 rounded-lg bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-400"
+            className="gap-1.5 rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Mark Paid</span>
@@ -1131,7 +1131,7 @@ export function InvoiceDetailsSheet({
                 <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
                   Total
                 </p>
-                <p className="text-sm font-bold text-emerald-300">
+                <p className="text-sm font-bold text-blue-300">
                   {formatCurrency(NUMBER(detailedInvoice.totalAmount))}
                 </p>
               </div>

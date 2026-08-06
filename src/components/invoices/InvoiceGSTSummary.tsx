@@ -309,7 +309,7 @@ function MetricCard({
     neutral: 'border-[#2A2E36] bg-[#0F1115] text-foreground',
     info: 'border-[#2563EB]/30 bg-[#2563EB]/[0.06] text-[#60A5FA]',
     warning: 'border-[#F59E0B]/30 bg-[#F59E0B]/[0.06] text-[#FBBF24]',
-    success: 'border-[#10B981]/30 bg-[#10B981]/[0.06] text-[#34D399]',
+    success: 'border-[#2563EB]/30 bg-[#2563EB]/[0.06] text-[#34D399]',
     danger: 'border-[#EF4444]/30 bg-[#EF4444]/[0.06] text-[#F87171]',
   };
   return (
@@ -382,7 +382,7 @@ function SlabBreakdownBars({
   const SLAB_COLORS: Record<number, string> = {
     0: 'bg-zinc-500',
     5: 'bg-sky-500',
-    12: 'bg-emerald-500',
+    12: 'bg-blue-500',
     18: 'bg-cyan-500',
     28: 'bg-amber-500',
   };

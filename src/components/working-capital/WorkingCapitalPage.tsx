@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   TrendingUp, TrendingDown, Shield, Wallet, CreditCard as CreditScore, BarChart3,
   IndianRupee, ArrowUpRight, ArrowDownRight, Clock, CheckCircle,
@@ -793,7 +794,7 @@ function InvoiceFinancingTab({ scores, invoices }: { scores: ReturnType<typeof c
                     <span className="font-bold text-emerald-700 text-lg">{formatINR(selectedData.netDisbursement)}</span>
                   </div>
                 </div>
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => toast.info('Application coming soon', { description: 'We’re onboarding financing partners — your working-capital advance will be available here shortly.' })}>
                   <Zap className="h-4 w-4 mr-2" />
                   Get Instant Advance
                 </Button>
@@ -1186,7 +1187,7 @@ function WorkingCapitalLoansTab() {
                 </select>
               </div>
             </div>
-            <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => toast.info('Application submitted', { description: 'Your financing application has been queued. We’ll reach out once partner onboarding is complete.' })}>
               Submit Application
             </Button>
             <p className="text-[10px] text-slate-400 text-center">

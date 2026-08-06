@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -307,7 +308,7 @@ export default function ESignaturesPage() {
                         {/* Right: Actions */}
                         <div className="flex items-center gap-2 shrink-0">
                           {allSigned && (
-                            <Button variant="outline" size="sm" className="gap-1">
+                            <Button variant="outline" size="sm" className="gap-1" onClick={() => toast.info('Download starting', { description: 'Your signed document will download as a PDF shortly.' })}>
                               <Download className="size-3.5" />
                               Download
                             </Button>

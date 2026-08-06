@@ -984,15 +984,38 @@ const getConnectedIntegrationsTool: OracleTool = {
   async execute(orgId): Promise<ToolResult> {
     const integrations: Array<{ provider: string; connected: boolean; detail: string }> = [];
 
-    // Google Workspace tokens
-    const googleCount = await db.googleWorkspaceToken.count({
-      where: { organizationId: orgId, revokedAt: null },
-    }).catch(() => 0);
-    const googleLatest = await db.googleWorkspaceToken.findFirst({
-      where: { organizationId: orgId, revokedAt: null },
-      orderBy: { connectedAt: 'desc' },
-      select: { userEmail: true, connectedAt: true, expiryDate: true },
-    }).catch(() => null);
+    // (Was 5 sequential awaits — now a single Promise.all so all 5 token
+    // queries run in parallel.)
+    const [
+      googleCount, googleLatest,
+      zohoCount, zohoLatest, zohoLastSync,
+    ] = await Promise.all([
+      // Google Workspace tokens
+      db.googleWorkspaceToken.count({
+        where: { organizationId: orgId, revokedAt: null },
+      }).catch(() => 0),
+      db.googleWorkspaceToken.findFirst({
+        where: { organizationId: orgId, revokedAt: null },
+        orderBy: { connectedAt: 'desc' },
+        select: { userEmail: true, connectedAt: true, expiryDate: true },
+      }).catch(() => null),
+      // Zoho Books tokens
+      db.zohoBooksToken.count({
+        where: { organizationId: orgId, revokedAt: null },
+      }).catch(() => 0),
+      db.zohoBooksToken.findFirst({
+        where: { organizationId: orgId, revokedAt: null },
+        orderBy: { connectedAt: 'desc' },
+        select: { zohoOrgName: true, connectedAt: true },
+      }).catch(() => null),
+      // Last Zoho sync log
+      db.zohoSyncLog.findFirst({
+        where: { organizationId: orgId },
+        orderBy: { startedAt: 'desc' },
+        select: { startedAt: true, status: true },
+      }).catch(() => null),
+    ]);
+
     integrations.push({
       provider: 'Google Workspace',
       connected: googleCount > 0,
@@ -1001,21 +1024,6 @@ const getConnectedIntegrationsTool: OracleTool = {
         : 'Not connected',
     });
 
-    // Zoho Books tokens
-    const zohoCount = await db.zohoBooksToken.count({
-      where: { organizationId: orgId, revokedAt: null },
-    }).catch(() => 0);
-    const zohoLatest = await db.zohoBooksToken.findFirst({
-      where: { organizationId: orgId, revokedAt: null },
-      orderBy: { connectedAt: 'desc' },
-      select: { zohoOrgName: true, connectedAt: true },
-    }).catch(() => null);
-    // Last sync from ZohoSyncLog (if available)
-    const zohoLastSync = await db.zohoSyncLog.findFirst({
-      where: { organizationId: orgId },
-      orderBy: { startedAt: 'desc' },
-      select: { startedAt: true, status: true },
-    }).catch(() => null);
     integrations.push({
       provider: 'Zoho Books',
       connected: zohoCount > 0,

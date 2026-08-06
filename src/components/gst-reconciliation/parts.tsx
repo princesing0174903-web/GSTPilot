@@ -311,12 +311,12 @@ export function AISummaryCard({
       }}
     >
       {/* Glass effect top border */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#2563EB]/40 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#10B981]/40 to-transparent" />
 
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#2563EB]/10">
-            <Sparkles className="h-5 w-5 text-[#60A5FA]" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#10B981]/10">
+            <Sparkles className="h-5 w-5 text-[#34D399]" />
           </div>
           <div>
             <h3 className="gst-card-title">Oracle CFO™ Report</h3>
@@ -468,12 +468,12 @@ export function TimelineChart({
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height: 160 }} preserveAspectRatio="none">
           <defs>
             <linearGradient id="timelineArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
+              <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="timelineLine" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#60A5FA" />
-              <stop offset="100%" stopColor="#2563EB" />
+              <stop offset="0%" stopColor="#34D399" />
+              <stop offset="100%" stopColor="#10B981" />
             </linearGradient>
           </defs>
 
@@ -602,7 +602,7 @@ export function VendorScoreboard({
               onClick={() => onSelectVendor(isSelected ? null : v.gstin)}
               className={`w-full rounded-xl border p-3 text-left transition-all hover:scale-[1.01] ${
                 isSelected
-                  ? 'border-[#2563EB] bg-[#2563EB]/[0.06]'
+                  ? 'border-[#10B981] bg-[#10B981]/[0.06]'
                   : 'border-[#2A2E36] bg-[#0F1115] hover:border-[#3A3E46]'
               }`}
             >
@@ -680,10 +680,10 @@ export function BulkActionsBar({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="gst-card flex flex-wrap items-center gap-2 border-[#2563EB]/40 bg-[#2563EB]/[0.04] !p-3"
+      className="gst-card flex flex-wrap items-center gap-2 border-[#10B981]/40 bg-[#10B981]/[0.04] !p-3"
     >
       <div className="flex items-center gap-2">
-        <Badge variant="outline" className="border-[#2563EB]/40 bg-[#2563EB]/10 text-[#60A5FA]">
+        <Badge variant="outline" className="border-[#10B981]/40 bg-[#10B981]/10 text-[#34D399]">
           {selectedCount} selected
         </Badge>
         <button onClick={onClear} className="gst-btn gst-btn-ghost gst-btn-sm">
@@ -748,13 +748,13 @@ export function AdvancedFilters({
             value={filters.search}
             onChange={(e) => update({ search: e.target.value })}
             placeholder="Search invoice / GSTIN..."
-            className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0F1115] pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/40"
+            className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0F1115] pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#10B981] focus:outline-none focus:ring-1 focus:ring-[#10B981]/40"
           />
         </div>
         <select
           value={filters.status}
           onChange={(e) => update({ status: e.target.value })}
-          className="h-9 rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-foreground focus:border-[#2563EB] focus:outline-none"
+          className="h-9 rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-foreground focus:border-[#10B981] focus:outline-none"
         >
           <option value="all">All Status</option>
           <option value="perfect_match">Perfect Match</option>
@@ -769,7 +769,7 @@ export function AdvancedFilters({
         <select
           value={filters.resolved}
           onChange={(e) => update({ resolved: e.target.value })}
-          className="h-9 rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-foreground focus:border-[#2563EB] focus:outline-none"
+          className="h-9 rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-foreground focus:border-[#10B981] focus:outline-none"
         >
           <option value="all">All</option>
           <option value="false">Unresolved</option>
@@ -780,7 +780,7 @@ export function AdvancedFilters({
           className={`gst-btn gst-btn-sm ${hasAdvanced || expanded ? 'gst-btn-primary' : 'gst-btn-secondary'}`}
         >
           <Filter className="h-3.5 w-3.5" /> Advanced
-          {hasAdvanced && <Badge variant="outline" className="ml-1 bg-[#2563EB]/20 text-[10px] text-white">{hasAdvanced ? '•' : ''}</Badge>}
+          {hasAdvanced && <Badge variant="outline" className="ml-1 bg-[#10B981]/20 text-[10px] text-white">{hasAdvanced ? '•' : ''}</Badge>}
           <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </button>
       </div>
@@ -797,7 +797,7 @@ export function AdvancedFilters({
             <select
               value={filters.vendor}
               onChange={(e) => update({ vendor: e.target.value })}
-              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground focus:border-[#2563EB] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground focus:border-[#10B981] focus:outline-none"
             >
               <option value="">All Vendors</option>
               {vendorOptions.map((v) => (
@@ -814,7 +814,7 @@ export function AdvancedFilters({
               value={filters.minAmount}
               onChange={(e) => update({ minAmount: e.target.value })}
               placeholder="0"
-              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#2563EB] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#10B981] focus:outline-none"
             />
           </div>
           <div>
@@ -824,7 +824,7 @@ export function AdvancedFilters({
               value={filters.maxAmount}
               onChange={(e) => update({ maxAmount: e.target.value })}
               placeholder="1000000"
-              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#2563EB] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#10B981] focus:outline-none"
             />
           </div>
           <div>
@@ -832,7 +832,7 @@ export function AdvancedFilters({
             <select
               value={filters.confidence}
               onChange={(e) => update({ confidence: e.target.value })}
-              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground focus:border-[#2563EB] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[#2A2E36] bg-[#0A0A0A] px-3 text-sm text-foreground focus:border-[#10B981] focus:outline-none"
             >
               <option value="">All Confidence</option>
               <option value="high">High (≥85%)</option>
@@ -850,10 +850,10 @@ export function AdvancedFilters({
 
 export function MatchDistributionCard({ summary }: { summary: RunSummary }) {
   const data = useMemo(() => [
-    { label: 'Perfect Match', value: summary.matched, color: '#2563EB' },
+    { label: 'Perfect Match', value: summary.matched, color: '#10B981' },
     { label: 'Mismatches', value: summary.unmatched, color: '#F59E0B' },
     { label: 'Missing in Books', value: summary.missingInBooks, color: '#EF4444' },
-    { label: 'Missing in 2B', value: summary.missingIn2B, color: '#8B5CF6' },
+    { label: 'Missing in 2B', value: summary.missingIn2B, color: '#06B6D4' },
     { label: 'Duplicates', value: summary.duplicates, color: '#64748B' },
   ], [summary]);
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
@@ -950,7 +950,7 @@ export function ITCRiskCard({ summary }: { summary: RunSummary }) {
         </div>
         <div className="rounded-lg border border-[#1F1F1F] bg-[#0F1115] p-3 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
-            <ShieldCheck className="h-4 w-4 text-[#60A5FA]" />
+            <ShieldCheck className="h-4 w-4 text-[#34D399]" />
             Total Taxable Value Reconciled
           </div>
           <div className="gst-metric mt-1">{fmtINR(summary.totalTaxableValue)}</div>

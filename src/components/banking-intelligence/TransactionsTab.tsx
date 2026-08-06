@@ -614,7 +614,7 @@ function CategorizeDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Tags className="h-4 w-4 text-violet-500" />
+            <Tags className="h-4 w-4 text-cyan-500" />
             Categorize Transaction
           </DialogTitle>
           <DialogDescription>Pick the most appropriate category.</DialogDescription>

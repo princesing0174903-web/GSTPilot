@@ -463,7 +463,7 @@ export function ReconciliationTab() {
             </div>
           </div>
           <Button onClick={runAuto} loading={resultsLoading}>
-            {!resultsLoading && <Sparkles className="h-4 w-4 text-violet-300" />}
+            {!resultsLoading && <Sparkles className="h-4 w-4 text-cyan-300" />}
             Run Auto-Reconciliation
           </Button>
         </CardContent>

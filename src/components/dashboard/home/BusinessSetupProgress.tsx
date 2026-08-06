@@ -75,7 +75,7 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-controls="setup-progress-body"
-        className="w-full flex items-center justify-between gap-4 p-4 md:p-5 text-left transition-colors hover:bg-white/[0.02] rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/40"
+        className="w-full flex items-center justify-between gap-4 p-4 md:p-5 text-left transition-colors hover:bg-white/[0.02] rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">

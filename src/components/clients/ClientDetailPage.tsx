@@ -99,7 +99,7 @@ function getFileIcon(ft: string) {
     case 'pdf': return <FileText className="h-4 w-4 text-red-500" />;
     case 'excel': case 'xlsx': case 'xls': case 'csv': return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
     case 'json': return <FileJson className="h-4 w-4 text-amber-500" />;
-    case 'image': case 'png': case 'jpg': case 'jpeg': return <ImageIcon className="h-4 w-4 text-purple-500" />;
+    case 'image': case 'png': case 'jpg': case 'jpeg': return <ImageIcon className="h-4 w-4 text-cyan-500" />;
     default: return <FileIcon className="h-4 w-4 text-slate-400" />;
   }
 }
@@ -117,13 +117,13 @@ function getActivityIcon(action: string) {
 function getActivityColor(action: string) {
   if (action.includes('add') || action.includes('creat') || action.includes('filed') || action.includes('resolved') || action.includes('processed')) return 'text-emerald-600 bg-emerald-50';
   if (action.includes('delete') || action.includes('fail')) return 'text-red-600 bg-red-50';
-  if (action.includes('update') || action.includes('upload')) return 'text-blue-600 bg-blue-50';
+  if (action.includes('update') || action.includes('upload')) return 'text-emerald-600 bg-emerald-50';
   return 'text-slate-600 bg-slate-50';
 }
 
 // ─── Document status config (for display) ──────────────────────────────────
 const DOC_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  processing: { label: 'Processing', color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  processing: { label: 'Processing', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   extracted: { label: 'Validated', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   validated: { label: 'Validated', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   uploaded: { label: 'Uploaded', color: 'text-slate-700', bgColor: 'bg-slate-100' },
@@ -616,7 +616,7 @@ export default function ClientDetailPage() {
             <Card className="border-border/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-blue-50"><FileText className="h-4 w-4 text-blue-600" /></div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50"><FileText className="h-4 w-4 text-emerald-600" /></div>
                   <span className="text-xs text-muted-foreground">Documents</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">{docs.length > 0 ? docs.length : '—'}</p>
@@ -661,7 +661,7 @@ export default function ClientDetailPage() {
                   <div className="space-y-2 max-h-32 overflow-y-auto">
                     {clientNotifications.map((n: any) => (
                       <div key={n.id} className="flex items-center gap-2 text-xs">
-                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-cyan-500'}`} />
                         <span className={`text-foreground truncate ${n.isRead ? 'opacity-60' : 'font-medium'}`}>{displayText(n.title, 'Notification')}{n.message ? `: ${displayText(n.message, '')}` : ''}</span>
                       </div>
                     ))}
@@ -903,7 +903,7 @@ export default function ClientDetailPage() {
                           <Badge className="bg-emerald-50 text-emerald-700 text-xs">{run.sources ?? 'GSTR-1'}</Badge>
                           <span className="text-sm font-medium">{run.period || '—'}</span>
                         </div>
-                        <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}>
+                        <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}>
                           {run.status === 'running' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
                           {run.status?.charAt(0).toUpperCase() + run.status?.slice(1) ?? 'Unknown'}
                         </Badge>

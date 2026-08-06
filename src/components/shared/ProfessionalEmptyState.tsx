@@ -86,12 +86,12 @@ const ACCENT_MAP: Record<
     text: 'text-cyan-300 hover:text-cyan-200',
   },
   violet: {
-    badge: 'from-violet-500/20 to-violet-500/5',
-    icon: 'text-violet-300',
-    ring: 'ring-violet-400/20',
-    button: 'bg-violet-500 hover:bg-violet-400 text-violet-950 shadow-lg shadow-violet-500/20',
-    glow: 'bg-violet-500/10',
-    text: 'text-violet-300 hover:text-violet-200',
+    badge: 'from-emerald-500/20 to-emerald-500/5',
+    icon: 'text-emerald-300',
+    ring: 'ring-emerald-400/20',
+    button: 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-500/20',
+    glow: 'bg-emerald-500/10',
+    text: 'text-emerald-300 hover:text-emerald-200',
   },
   amber: {
     badge: 'from-amber-500/20 to-amber-500/5',

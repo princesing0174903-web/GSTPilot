@@ -48,7 +48,7 @@ import type {
 const CATEGORY_META: Record<WorkflowCategory, { icon: any; color: string; label: string }> = {
   sales:     { icon: Receipt,      color: 'text-emerald-400',  label: 'Sales' },
   payment:   { icon: IndianRupee,  color: 'text-sky-400',      label: 'Payment' },
-  gst:       { icon: ShieldCheck,  color: 'text-violet-400',   label: 'GST' },
+  gst:       { icon: ShieldCheck,  color: 'text-emerald-400',   label: 'GST' },
   crm:       { icon: Users,        color: 'text-amber-400',    label: 'CRM' },
   reports:   { icon: BarChart3,    color: 'text-rose-400',     label: 'Reports' },
   operations:{ icon: Zap,          color: 'text-zinc-400',     label: 'Operations' },
@@ -125,7 +125,7 @@ export function WorkflowPlanCard({
   const accent = isPending
     ? 'border-sky-500/40 bg-sky-500/[0.04]'
     : isExecuting
-      ? 'border-violet-500/40 bg-violet-500/[0.04]'
+      ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
       : state === 'success'
         ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
         : state === 'partial'
@@ -170,7 +170,7 @@ export function WorkflowPlanCard({
               </Badge>
             )}
             {isExecuting && (
-              <Badge variant="outline" className="text-[9px] h-4 px-1.5 text-violet-400 border-violet-500/40 bg-violet-500/10">
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 text-emerald-400 border-emerald-500/40 bg-emerald-500/10">
                 <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
                 Running
               </Badge>
@@ -221,7 +221,7 @@ export function WorkflowPlanCard({
               <div
                 key={step.id}
                 className={`flex items-start gap-2.5 rounded-md px-2.5 py-2 ${
-                  isCurrent ? 'bg-violet-500/10 border border-violet-500/30' : 'bg-zinc-950/30 border border-transparent'
+                  isCurrent ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-zinc-950/30 border border-transparent'
                 }`}
               >
                 <div className="flex flex-col items-center pt-0.5">

@@ -15,24 +15,29 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const clientId = url.searchParams.get('clientId') ?? undefined
-    const source = url.searchParams.get('source') ?? undefined
-    const direction = url.searchParams.get('direction') ?? undefined
+    const paymentMode = url.searchParams.get('source') ?? undefined
+    const partyType = url.searchParams.get('direction') ?? undefined
     const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200)
     const offset = Number(url.searchParams.get('offset') ?? 0)
 
+    // Map legacy query params to actual Payment model fields:
+    //   ?source=...     → paymentMode (upi|bank|cash|cheque|card)
+    //   ?direction=...  → partyType (customer|vendor) — 'in' = vendor, 'out' = customer
     const where: {
       clientId?: string
-      source?: string
-      direction?: string
+      paymentMode?: string
+      partyType?: string
     } = {}
     if (clientId) where.clientId = clientId
-    if (source) where.source = source
-    if (direction) where.direction = direction
+    if (paymentMode) where.paymentMode = paymentMode
+    if (partyType) {
+      where.partyType = partyType === 'in' ? 'vendor' : partyType === 'out' ? 'customer' : partyType
+    }
 
     const [payments, total] = await Promise.all([
       db.payment.findMany({
         where,
-        orderBy: { paidAt: 'desc' },
+        orderBy: { paymentDate: 'desc' },
         take: limit,
         skip: offset,
       }),

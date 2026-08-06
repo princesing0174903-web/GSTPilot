@@ -47,63 +47,91 @@ export async function GET(request: Request) {
       },
     })
 
-    // Enrich each client with aggregated metrics
-    const enriched = await Promise.all(
-      clients.map(async (client) => {
-        const invoiceCount = client._count.invoices
-        const filingCount = client._count.gstrFilings
+    // ── Batch the per-client aggregations (was N+1: 4 queries × N clients) ──
+    // Now 2 groupBy queries total, regardless of client count.
+    const clientIds = clients.map((c) => c.id)
 
-        const filedReturns = await db.gSTRFiling.count({
-          where: { clientId: client.id, status: 'filed' },
-        })
+    // Group GSTRFiling by clientId + status (filed vs non-filed).
+    const [filingGroups, matchGroups] = await Promise.all([
+      db.gSTRFiling.groupBy({
+        by: ['clientId', 'status'],
+        where: { clientId: { in: clientIds } },
+        _count: true,
+      }),
+      db.invoice.groupBy({
+        by: ['clientId', 'matchStatus'],
+        where: {
+          clientId: { in: clientIds },
+          matchStatus: { in: ['perfect_match', 'partial_match', 'mismatch'] },
+        },
+        _count: true,
+      }),
+    ])
 
-        const pendingReturns = await db.gSTRFiling.count({
-          where: { clientId: client.id, status: { not: 'filed' } },
-        })
+    // Build per-client lookup maps for O(1) enrichment.
+    const filedByClient = new Map<string, number>()
+    const pendingByClient = new Map<string, number>()
+    for (const g of filingGroups) {
+      const cid = g.clientId
+      if (g.status === 'filed') {
+        filedByClient.set(cid, (filedByClient.get(cid) ?? 0) + g._count)
+      } else {
+        pendingByClient.set(cid, (pendingByClient.get(cid) ?? 0) + g._count)
+      }
+    }
+    const matchedByClient = new Map<string, number>()
+    const perfectByClient = new Map<string, number>()
+    for (const g of matchGroups) {
+      const cid = g.clientId
+      matchedByClient.set(cid, (matchedByClient.get(cid) ?? 0) + g._count)
+      if (g.matchStatus === 'perfect_match') {
+        perfectByClient.set(cid, (perfectByClient.get(cid) ?? 0) + g._count)
+      }
+    }
 
-        const totalMatchedInvoices = await db.invoice.count({
-          where: {
-            clientId: client.id,
-            matchStatus: { in: ['perfect_match', 'partial_match', 'mismatch'] },
-          },
-        })
-        const perfectMatchInvoices = await db.invoice.count({
-          where: { clientId: client.id, matchStatus: 'perfect_match' },
-        })
+    // Enrich each client with aggregated metrics (lookups are O(1) per client).
+    const enriched = clients.map((client) => {
+      const invoiceCount = client._count.invoices
+      const filingCount = client._count.gstrFilings
 
-        const matchPercentage =
-          totalMatchedInvoices > 0
-            ? Math.round((perfectMatchInvoices / totalMatchedInvoices) * 100)
-            : 0
+      const filedReturns = filedByClient.get(client.id) ?? 0
+      const pendingReturns = pendingByClient.get(client.id) ?? 0
 
-        const latestHealthScore = client.healthScores[0]?.score ?? client.healthScore
+      const totalMatchedInvoices = matchedByClient.get(client.id) ?? 0
+      const perfectMatchInvoices = perfectByClient.get(client.id) ?? 0
 
-        return {
-          id: client.id,
-          gstin: client.gstin,
-          tradeName: client.tradeName,
-          legalName: client.legalName,
-          address: client.address,
-          state: client.state,
-          stateCode: client.stateCode,
-          contactEmail: client.contactEmail,
-          contactPhone: client.contactPhone,
-          entityType: client.entityType,
-          returnPeriod: client.returnPeriod,
-          lastFilingDate: client.lastFilingDate,
-          status: client.status,
-          healthScore: latestHealthScore,
-          createdAt: client.createdAt,
-          updatedAt: client.updatedAt,
-          _aggregations: {
-            totalInvoices: invoiceCount,
-            filedReturns,
-            pendingReturns,
-            matchPercentage,
-          },
-        }
-      })
-    )
+      const matchPercentage =
+        totalMatchedInvoices > 0
+          ? Math.round((perfectMatchInvoices / totalMatchedInvoices) * 100)
+          : 0
+
+      const latestHealthScore = client.healthScores[0]?.score ?? client.healthScore
+
+      return {
+        id: client.id,
+        gstin: client.gstin,
+        tradeName: client.tradeName,
+        legalName: client.legalName,
+        address: client.address,
+        state: client.state,
+        stateCode: client.stateCode,
+        contactEmail: client.contactEmail,
+        contactPhone: client.contactPhone,
+        entityType: client.entityType,
+        returnPeriod: client.returnPeriod,
+        lastFilingDate: client.lastFilingDate,
+        status: client.status,
+        healthScore: latestHealthScore,
+        createdAt: client.createdAt,
+        updatedAt: client.updatedAt,
+        _aggregations: {
+          totalInvoices: invoiceCount,
+          filedReturns,
+          pendingReturns,
+          matchPercentage,
+        },
+      }
+    })
 
     return NextResponse.json({ clients: enriched })
   } catch (error) {

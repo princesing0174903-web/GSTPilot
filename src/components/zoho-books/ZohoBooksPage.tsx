@@ -76,6 +76,7 @@ import {
 import { useZohoBooks, type ZohoSyncEntity } from '@/hooks/useZohoBooks';
 import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import { useOrg } from '@/contexts/OrgContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1260,6 +1261,7 @@ function useFetchJson<T>(url: string | null): { data: T | null; loading: boolean
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!url) return;
@@ -1268,7 +1270,16 @@ function useFetchJson<T>(url: string | null): { data: T | null; loading: boolean
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(url, { cache: 'no-store' });
+        // Inject the x-gstpilot-actor header so requireAuth() succeeds in
+        // sandbox/preview mode (no Firebase Admin SDK to verify a bearer token).
+        const actor = JSON.stringify({
+          uid: user?.uid ?? 'local-user',
+          email: user?.email ?? 'local@gstpilot.dev',
+        });
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: { 'x-gstpilot-actor': actor },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as T;
         if (!cancelled) {
@@ -1286,7 +1297,7 @@ function useFetchJson<T>(url: string | null): { data: T | null; loading: boolean
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, user]);
 
   return { data, loading, error };
 }

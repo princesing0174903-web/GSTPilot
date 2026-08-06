@@ -177,7 +177,7 @@ export function FinancialIntelligencePage() {
                     { label: 'Revenue', value: report.summary.revenueTrend.value, unit: 'INR', trend: report.summary.revenueTrend.trend, accent: 'text-emerald-300' },
                     { label: 'Expenses', value: report.summary.expenseTrend.value, unit: 'INR', trend: report.summary.expenseTrend.trend, accent: 'text-rose-300' },
                     { label: 'Cash Flow 30d', value: report.summary.cashflowForecast.value, unit: 'INR', accent: 'text-cyan-300' },
-                    { label: 'Working Capital', value: report.summary.workingCapital.value, unit: 'INR', accent: 'text-violet-300' },
+                    { label: 'Working Capital', value: report.summary.workingCapital.value, unit: 'INR', accent: 'text-cyan-300' },
                     { label: 'Tax Exposure', value: report.summary.taxExposure.value, unit: 'INR', accent: 'text-amber-300' },
                     { label: 'Profit Margin', value: report.summary.profitabilityMargin.value, unit: '%', accent: 'text-teal-300' },
                   ].map((s) => (

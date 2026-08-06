@@ -410,8 +410,8 @@ export default function PaymentsView() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-white/10 bg-white/[0.03]">
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20">
-              <Receipt className="h-5 w-5 text-violet-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+              <Receipt className="h-5 w-5 text-cyan-400" />
             </div>
             <div>
               <p className="text-xs uppercase tracking-wider text-white/40">Total Payments</p>

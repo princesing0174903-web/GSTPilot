@@ -26,6 +26,18 @@ import { onBusinessSnapshotInvalidated } from '@/lib/business-snapshot-events';
 const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
 const FETCH_TIMEOUT_MS = 30_000;
 
+// ── Module-level request deduplication ─────────────────────────────────────
+// Multiple components (DashboardPage + OracleDailyBrief) mount this hook
+// concurrently. Without dedup, each instance fires its own fetch → duplicate
+// API calls. This module-level cache ensures only ONE fetch is in-flight per
+// orgId at a time; concurrent callers share the same promise.
+interface CacheEntry {
+  promise: Promise<BusinessSnapshot>;
+  timestamp: number;
+}
+const inflightCache = new Map<string, CacheEntry>();
+const latestSnapshot = new Map<string, BusinessSnapshot>();
+
 export interface UseBusinessSnapshotResult {
   snapshot: BusinessSnapshot;
   loading: boolean;
@@ -38,8 +50,19 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
   const { organization } = useOrg();
   const orgId = organization?.id ?? null;
 
-  const [snapshot, setSnapshot] = useState<BusinessSnapshot>(emptySnapshot());
-  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<BusinessSnapshot>(() => {
+    // Hydrate from module-level cache so a second instance (e.g.
+    // OracleDailyBrief) shows data instantly without a duplicate fetch.
+    if (orgId && latestSnapshot.has(orgId)) {
+      return latestSnapshot.get(orgId)!;
+    }
+    return emptySnapshot();
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have cached data, don't show a loading state.
+    if (orgId && latestSnapshot.has(orgId)) return false;
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -60,8 +83,6 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
   }, []);
 
   const fetchSnapshot = useCallback(async (forceRefresh = false) => {
-    // Single-flight: skip if a previous fetch is still pending.
-    if (inFlightRef.current) return;
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId) {
       if (mountedRef.current) {
@@ -72,37 +93,53 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
       return;
     }
 
-    inFlightRef.current = true;
-    // Abort any previous fetch (e.g. rapid refresh clicks).
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
+    // ── Module-level deduplication ──
+    // If a fetch for this org is already in-flight (e.g. another component
+    // mounted this hook), share its promise instead of firing a second request.
+    const cacheKey = `${currentOrgId}:${forceRefresh ? 'force' : 'normal'}`;
+    const existing = inflightCache.get(cacheKey);
+    let promise: Promise<BusinessSnapshot>;
+    if (existing && Date.now() - existing.timestamp < FETCH_TIMEOUT_MS) {
+      promise = existing.promise;
+    } else {
       const url = forceRefresh
         ? `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}&forceRefresh=true`
         : `/api/business/snapshot?organizationId=${encodeURIComponent(currentOrgId)}`;
-      const res = await fetchWithTimeout(url, {
-        cache: 'no-store',
-        signal: controller.signal,
-        timeoutMs: FETCH_TIMEOUT_MS,
-      });
-      const data: BusinessSnapshot = await res.json();
-      if (mountedRef.current && !controller.signal.aborted) {
+      promise = (async () => {
+        const res = await fetchWithTimeout(url, {
+          cache: 'no-store',
+          timeoutMs: FETCH_TIMEOUT_MS,
+        });
+        const data: BusinessSnapshot = await res.json();
+        latestSnapshot.set(currentOrgId, data);
+        return data;
+      })();
+      inflightCache.set(cacheKey, { promise, timestamp: Date.now() });
+      // Clean up the inflight entry once it settles (keep latestSnapshot).
+      promise.finally(() => inflightCache.delete(cacheKey));
+    }
+
+    // Per-instance single-flight: don't stack a second concurrent fetch on
+    // the SAME hook instance (e.g. rapid refresh clicks).
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    try {
+      const data = await promise;
+      if (mountedRef.current) {
         setSnapshot(data);
         setError(null);
       }
     } catch (err) {
-      // AbortError (from a superseding fetch or unmount) — silently ignore.
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load business data.';
-      if (mountedRef.current && !controller.signal.aborted) {
+      if (mountedRef.current) {
         setError(msg);
       }
     } finally {
       inFlightRef.current = false;
-      if (mountedRef.current && !controller.signal.aborted) {
+      if (mountedRef.current) {
         setLoading(false);
       }
     }
@@ -112,7 +149,6 @@ export function useBusinessSnapshot(): UseBusinessSnapshotResult {
   useEffect(() => {
     if (mountedRef.current) setLoading(true);
     void fetchSnapshot();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, refreshTick]);
 
   // ── Auto-refresh every 60 seconds (single-flight, no stacking) ──

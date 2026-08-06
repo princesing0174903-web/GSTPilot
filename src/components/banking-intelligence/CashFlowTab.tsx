@@ -139,7 +139,7 @@ function FlowChart({ series }: { series: CashFlowPoint[] }) {
       {/* outflow area */}
       <path d={buildAreaPath(outPts, H - PAD)} fill="url(#outflowArea)" />
       {/* balance line */}
-      <path d={buildSmoothPath(balPts)} fill="none" stroke="#8b5cf6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={buildSmoothPath(balPts)} fill="none" stroke="#06b6d4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       {/* x-axis */}
       <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="currentColor" className="text-muted-foreground/30" />
       {labelIdxs.map((i) =>
@@ -153,8 +153,8 @@ function FlowChart({ series }: { series: CashFlowPoint[] }) {
       <text x={4} y={PAD + 4} className="fill-muted-foreground text-[9px]">{fmtINR(maxFlow)}</text>
       <text x={4} y={H - PAD} className="fill-muted-foreground text-[9px]">0</text>
       <text x={4} y={PAD + 12} className="fill-muted-foreground text-[9px]" />
-      <text x={W - 28} y={PAD + 4} className="fill-violet-500 text-[9px]">{fmtINR(maxBal)}</text>
-      <text x={W - 28} y={H - PAD} className="fill-violet-500 text-[9px]">{fmtINR(minBal)}</text>
+      <text x={W - 28} y={PAD + 4} className="fill-cyan-500 text-[9px]">{fmtINR(maxBal)}</text>
+      <text x={W - 28} y={H - PAD} className="fill-cyan-500 text-[9px]">{fmtINR(minBal)}</text>
       {/* hover markers */}
       {inPts.map((p, i) => (
         <title key={`i-${i}`}>{`${fmtDate(series[i].date)}: In ${fmtINR(series[i].inflow)} · Out ${fmtINR(series[i].outflow)} · Bal ${fmtINR(series[i].balance)}`}</title>
@@ -266,7 +266,7 @@ function MiniStat({
   const toneClass = {
     emerald: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
     rose: 'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300',
-    violet: 'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300',
+    violet: 'bg-cyan-100 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-300',
     sky: 'bg-sky-100 dark:bg-sky-500/15 text-sky-600 dark:text-sky-300',
     muted: 'bg-muted text-muted-foreground',
   }[tone];
@@ -430,7 +430,7 @@ export function CashFlowTab() {
             <div className="flex items-center gap-3 text-[10px] font-normal text-muted-foreground">
               <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Inflow</span>
               <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Outflow</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-violet-500" /> Balance</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-cyan-500" /> Balance</span>
             </div>
           </CardTitle>
         </CardHeader>

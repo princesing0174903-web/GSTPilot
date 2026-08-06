@@ -70,7 +70,7 @@ function StatCard({
     emerald: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
     rose: 'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300',
     amber: 'bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-300',
-    violet: 'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300',
+    violet: 'bg-cyan-100 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-300',
     muted: 'bg-muted text-muted-foreground',
   }[tone];
   return (
@@ -141,8 +141,8 @@ function ForecastChart({
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Forecast chart">
       <defs>
         <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.05" />
+          <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.05" />
         </linearGradient>
       </defs>
       {/* confidence band */}
@@ -152,7 +152,7 @@ function ForecastChart({
         <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="currentColor" strokeDasharray="3 3" className="text-muted-foreground/40" />
       )}
       {/* projected balance line */}
-      <path d={buildSmoothPath(balPts)} fill="none" stroke="#8b5cf6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={buildSmoothPath(balPts)} fill="none" stroke="#06b6d4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       {/* min marker */}
       {minPt && (
         <g>
@@ -256,7 +256,7 @@ export function ForecastTab() {
                 onClick={() => setHorizon(h)}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   horizon === h
-                    ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -305,8 +305,8 @@ export function ForecastTab() {
           <CardTitle className="flex items-center justify-between text-base">
             <span>Projected Balance &amp; Confidence Band</span>
             <div className="flex items-center gap-3 text-[10px] font-normal text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-violet-500" /> Projected</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-violet-500/30" /> Band</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-cyan-500" /> Projected</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-cyan-500/30" /> Band</span>
               <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Min</span>
             </div>
           </CardTitle>
@@ -321,15 +321,15 @@ export function ForecastTab() {
       </Card>
 
       {/* ─── Narrative ─── */}
-      <Card className="border-violet-200 bg-violet-50 dark:border-violet-500/30 dark:bg-violet-500/5">
+      <Card className="border-cyan-200 bg-cyan-50 dark:border-cyan-500/30 dark:bg-cyan-500/5">
         <CardContent className="flex items-start gap-3 py-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-100 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-300">
             <Sparkles className="h-4 w-4" />
           </span>
           <div className="flex-1">
             <div className="mb-1 flex items-center gap-2">
               <p className="text-sm font-medium">AI Narrative</p>
-              <Badge variant="outline" className="border-violet-200 bg-violet-100 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-300">
+              <Badge variant="outline" className="border-cyan-200 bg-cyan-100 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-300">
                 {confidencePct}% confidence
               </Badge>
             </div>

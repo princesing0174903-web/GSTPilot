@@ -70,7 +70,7 @@ const TONE_CLASS: Record<KpiDef['tone'], { bg: string; text: string }> = {
   emerald: { bg: 'bg-emerald-100 dark:bg-emerald-500/15', text: 'text-emerald-600 dark:text-emerald-300' },
   rose: { bg: 'bg-rose-100 dark:bg-rose-500/15', text: 'text-rose-600 dark:text-rose-300' },
   amber: { bg: 'bg-amber-100 dark:bg-amber-500/15', text: 'text-amber-600 dark:text-amber-300' },
-  violet: { bg: 'bg-violet-100 dark:bg-violet-500/15', text: 'text-violet-600 dark:text-violet-300' },
+  violet: { bg: 'bg-cyan-100 dark:bg-cyan-500/15', text: 'text-cyan-600 dark:text-cyan-300' },
   sky: { bg: 'bg-sky-100 dark:bg-sky-500/15', text: 'text-sky-600 dark:text-sky-300' },
   muted: { bg: 'bg-muted', text: 'text-muted-foreground' },
 };
@@ -131,7 +131,7 @@ function CashFlowChart({ series }: { series: BankingDashboard['cashFlowSeries'] 
       <path
         d={buildSmoothPath(balPts)}
         fill="none"
-        stroke="#8b5cf6"
+        stroke="#06b6d4"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -384,7 +384,7 @@ export function DashboardTab({ onNavigateToTransactions }: DashboardTabProps) {
               <span>Cash Flow (last 30 days)</span>
               <div className="flex items-center gap-3 text-[10px] font-normal text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Net Flow</span>
-                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-violet-500" /> Balance</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-cyan-500" /> Balance</span>
               </div>
             </CardTitle>
           </CardHeader>

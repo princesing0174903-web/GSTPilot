@@ -59,10 +59,13 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
     const anchorName = firm?.name || 'GSTPilot Demo Firm';
     const anchorDomain = firm?.website || 'gstpilot.ai';
 
-    const realClientCount = await db.client.count();
-    const realInvoiceCount = await db.invoice.count();
-    const realUserCount = await db.user.count();
-    const realTeamMembers = await db.teamMember.count();
+    // ── Real-platform anchor counts (was 4 sequential counts — now parallel) ──
+    const [realClientCount, realInvoiceCount, realUserCount, realTeamMembers] = await Promise.all([
+      db.client.count(),
+      db.invoice.count(),
+      db.user.count(),
+      db.teamMember.count(),
+    ]);
 
     // ── Org 1: the host firm (Enterprise plan) ──
     const hostOrg = await db.platformOrganization.create({

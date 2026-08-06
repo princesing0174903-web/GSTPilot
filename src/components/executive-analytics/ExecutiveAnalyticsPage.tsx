@@ -69,11 +69,11 @@ import { CHART_COLORS } from '@/lib/chart-theme';
 const COLORS = {
   emerald: CHART_COLORS.primary,        // blue-600   (was '#2563EB' — already blue)
   emeraldDark: CHART_COLORS.primary,    // blue-600   (was '#1D4ED8')
-  emeraldLight: 'rgba(37, 99, 235, 0.15)', // blue tint (was '#d1fae5' light-green)
+  emeraldLight: 'rgba(16, 185, 129, 0.15)', // emerald tint (was '#d1fae5' light-green)
   teal: CHART_COLORS.primarySoft,       // blue-400   (was '#14b8a6' teal)
   tealDark: CHART_COLORS.primary,       // blue-600   (was '#2563EB' — already blue)
   purple: CHART_COLORS.secondary,       // violet-500 (was '#8b5cf6' — kept)
-  purpleLight: 'rgba(139, 92, 246, 0.15)', // violet tint (was '#ede9fe')
+  purpleLight: 'rgba(6, 182, 212, 0.15)', // cyan tint (was '#ede9fe')
   amber: CHART_COLORS.warning,          // amber-500  (was '#f59e0b')
   red: CHART_COLORS.danger,             // red-500    (was '#ef4444')
   slate: CHART_COLORS.neutral,          // slate-500  (was '#64748b')
@@ -211,7 +211,7 @@ function InsightIcon({ icon, color }: { icon: string; color: string }) {
     emerald: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
     amber: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
     red: 'text-red-500 bg-red-50 dark:bg-red-950/40',
-    purple: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40',
+    purple: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-950/40',
   };
   const cls = colorMap[color] || colorMap.emerald;
 
@@ -492,8 +492,8 @@ export default function ExecutiveAnalyticsPage() {
             ) : (
               <>
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
-                    <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-100 dark:border-cyan-900/50">
+                    <BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -505,7 +505,7 @@ export default function ExecutiveAnalyticsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Activity className="h-3.5 w-3.5 text-purple-500" />
+                  <Activity className="h-3.5 w-3.5 text-cyan-500" />
                   <span className="text-[10px] text-muted-foreground">
                     This fiscal year
                   </span>
@@ -682,7 +682,7 @@ export default function ExecutiveAnalyticsPage() {
         <AnimatedCard delay={0.4}>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="h-5 w-5 text-purple-500" />
+              <BarChart3 className="h-5 w-5 text-cyan-500" />
               GST Processed
             </CardTitle>
             <CardDescription>CGST, SGST & IGST breakdown</CardDescription>
@@ -800,7 +800,7 @@ export default function ExecutiveAnalyticsPage() {
         {/* ─── AI INSIGHTS PANEL ─── */}
         <AnimatedCard delay={0.5} className="relative overflow-hidden">
           {/* Gradient border effect */}
-          <div className="absolute inset-0 rounded-lg p-[1px] bg-gradient-to-br from-emerald-400 via-teal-400 to-purple-500 opacity-60" />
+          <div className="absolute inset-0 rounded-lg p-[1px] bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-500 opacity-60" />
           <div className="relative bg-card rounded-lg">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -810,7 +810,7 @@ export default function ExecutiveAnalyticsPage() {
                 </CardTitle>
                 <Badge
                   variant="outline"
-                  className="text-[10px] px-2 py-0.5 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40"
+                  className="text-[10px] px-2 py-0.5 border-cyan-200 text-cyan-700 bg-cyan-50/80 dark:border-cyan-800 dark:text-cyan-400 dark:bg-cyan-950/40"
                 >
                   <Zap className="h-2.5 w-2.5 mr-0.5" />
                   AI Generated
@@ -981,12 +981,12 @@ export default function ExecutiveAnalyticsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.7 }}
-                  className="p-4 rounded-xl border border-border/30 hover:border-purple-200/50 dark:hover:border-purple-800/50 transition-colors"
+                  className="p-4 rounded-xl border border-border/30 hover:border-cyan-200/50 dark:hover:border-cyan-800/50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-purple-50 dark:bg-purple-950/30">
-                        <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                        <Shield className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                       </div>
                       <span className="text-sm font-medium text-foreground">Filing Efficiency</span>
                     </div>
@@ -1005,7 +1005,7 @@ export default function ExecutiveAnalyticsPage() {
                     <motion.div
                       className={`h-full rounded-full ${
                         filingEfficiencyChange >= 0
-                          ? 'bg-gradient-to-r from-purple-400 to-purple-500'
+                          ? 'bg-gradient-to-r from-cyan-400 to-cyan-500'
                           : 'bg-gradient-to-r from-amber-400 to-amber-500'
                       }`}
                       initial={{ width: 0 }}

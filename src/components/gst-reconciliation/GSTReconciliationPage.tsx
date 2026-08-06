@@ -130,8 +130,8 @@ export function GSTReconciliationPage() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5">
-              <ShieldCheck className="h-5 w-5 text-[#60A5FA]" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#10B981]/20 to-[#10B981]/5">
+              <ShieldCheck className="h-5 w-5 text-[#34D399]" />
             </div>
             <h1 className="gst-page-title">GST Reconciliation</h1>
           </div>
@@ -173,7 +173,7 @@ export function GSTReconciliationPage() {
           <div>
             <label className="gst-label mb-1.5 block">GSP Provider</label>
             <div className="flex h-10 items-center rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-muted-foreground">
-              <Zap className="mr-2 h-4 w-4 text-[#60A5FA]" />
+              <Zap className="mr-2 h-4 w-4 text-[#34D399]" />
               Mock GSP (Sandbox)
               <Badge variant="outline" className="ml-auto text-[10px]">Default</Badge>
             </div>
@@ -194,7 +194,7 @@ export function GSTReconciliationPage() {
                 transition={{ delay: i * 0.04 }}
                 onClick={() => setActiveRunId(r.id)}
                 className={`gst-card gst-card-compact gst-card-hover text-left transition-all ${
-                  activeRunId === r.id ? 'border-[#2563EB] bg-[#2563EB]/[0.04]' : ''
+                  activeRunId === r.id ? 'border-[#10B981] bg-[#10B981]/[0.04]' : ''
                 }`}
                 style={{ padding: '12px 16px' }}
               >
@@ -245,7 +245,7 @@ export function GSTReconciliationPage() {
             <ul className="space-y-1.5">
               {['GSTIN', 'Invoice Number', 'Invoice Date', 'Taxable Value', 'CGST / SGST / IGST / CESS', 'Total Amount'].map((f) => (
                 <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-[#60A5FA]" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#34D399]" />
                   {f}
                 </li>
               ))}

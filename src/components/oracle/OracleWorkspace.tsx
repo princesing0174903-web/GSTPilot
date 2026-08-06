@@ -877,7 +877,7 @@ export function OracleWorkspace({
                     <Icon
                       className={cn(
                         'h-5 w-5 shrink-0 transition-colors',
-                        isActive ? 'text-blue-400' : 'text-white/60 group-hover:text-white',
+                        isActive ? 'text-emerald-400' : 'text-white/60 group-hover:text-white',
                       )}
                     />
                     <span className="hidden truncate lg:inline">{item.label}</span>
@@ -917,7 +917,7 @@ export function OracleWorkspace({
                 className="flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.05] disabled:opacity-40"
                 style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#111111' }}
               >
-                <Plus className="h-4 w-4 text-blue-400" />
+                <Plus className="h-4 w-4 text-emerald-400" />
                 New Chat
               </button>
             </div>
@@ -1009,7 +1009,7 @@ export function OracleWorkspace({
                 <span
                   className={cn(
                     'inline-flex h-1.5 w-1.5 rounded-full',
-                    isStreaming ? 'bg-amber-400' : 'bg-blue-400',
+                    isStreaming ? 'bg-amber-400' : 'bg-emerald-400',
                   )}
                 />
                 <span className="text-white/60">
@@ -1032,7 +1032,7 @@ export function OracleWorkspace({
               <button
                 type="button"
                 onClick={() => setEvolutionOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-blue-400/80 transition-colors hover:bg-blue-500/10 hover:text-blue-400"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-emerald-400/80 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
                 title="Oracle AI Evolution — Forecasting, Specialists, Diagnostics, Accuracy"
               >
                 <Sparkles className="h-3.5 w-3.5" />
@@ -1161,9 +1161,9 @@ export function OracleWorkspace({
                       type="button"
                       onClick={() => sendMessage(input)}
                       disabled={!input.trim()}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-blue-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
                       style={{
-                        background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                        background: 'linear-gradient(135deg, #10B981 0%, #047857 100%)',
                       }}
                       aria-label="Send"
                     >
@@ -1293,8 +1293,8 @@ function OracleAvatar({
       : state === 'warning'
         ? 'bg-rose-400'
         : state === 'success'
-          ? 'bg-blue-400'
-          : 'bg-blue-400';
+          ? 'bg-emerald-400'
+          : 'bg-emerald-400';
   return (
     <div className="relative shrink-0">
       <OracleLogo size={size} state={logoState} withGlow withOrbit withEnergyRing label="Oracle AI" />
@@ -1410,7 +1410,7 @@ function MessageBubble({
             <ReactMarkdown
               components={{
                 a: ({ children, href }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline underline-offset-2">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline underline-offset-2">
                     {children}
                   </a>
                 ),
@@ -1465,10 +1465,10 @@ function MessageBubble({
             answer into a real, audited business action. */}
         {!message.streaming && cfoAnalyzing && (
           <div className="mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-white/50"
-            style={{ borderColor: 'rgba(37,99,235,0.2)', background: 'rgba(37,99,235,0.03)' }}>
+            style={{ borderColor: 'rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.03)' }}>
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-400" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
             </span>
             <span className="animate-pulse">Oracle CFO is analyzing your request…</span>
           </div>
@@ -1547,7 +1547,7 @@ function MessageBubble({
 function PulsingCursor() {
   return (
     <span
-      className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse rounded-full bg-blue-400 align-middle"
+      className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse rounded-full bg-emerald-400 align-middle"
       aria-hidden
     />
   );

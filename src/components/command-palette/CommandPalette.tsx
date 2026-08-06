@@ -61,6 +61,9 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
+import { useOrg } from '@/contexts/OrgContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 import {
   useFireClients,
   useFireInvoices,
@@ -181,6 +184,38 @@ export default function CommandPalette() {
   const { data: returns } = useFireReturns();
   const { data: documents } = useFireDocuments();
   const { data: activities } = useFireRecentActivities(20);
+
+  // ─── Local-mode fallback (Prisma API) ─────────────────────────────────────
+  // In local/preview mode the Firestore hooks return empty (no Firebase org).
+  // To keep the command palette useful in the sandbox/preview, we fetch from
+  // the Prisma-backed REST endpoints instead. In production (real Firebase
+  // org), these stay empty and the Firestore data above is used.
+  const { organization } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? null;
+  const isLocal = isLocalOrgId(orgId);
+  const [localClients, setLocalClients] = useState<Array<{ id: string; tradeName: string; gstin?: string; legalName?: string }>>([]);
+  const [localInvoices, setLocalInvoices] = useState<Array<{ id: string; invoiceNumber?: string; buyerName?: string; sellerGstin?: string }>>([]);
+
+  useEffect(() => {
+    if (!isLocal || !commandPaletteOpen) return;
+    let cancelled = false;
+    const actor = JSON.stringify({ uid: user?.uid ?? 'local-user', email: user?.email ?? 'local@gstpilot.dev' });
+    const headers = { 'x-gstpilot-actor': actor };
+    Promise.all([
+      fetch(`/api/clients?organizationId=${encodeURIComponent(orgId ?? '')}`, { headers }).then((r) => r.ok ? r.json() : { clients: [] }).catch(() => ({ clients: [] })),
+      fetch(`/api/invoices?organizationId=${encodeURIComponent(orgId ?? '')}`, { headers }).then((r) => r.ok ? r.json() : { invoices: [] }).catch(() => ({ invoices: [] })),
+    ]).then(([c, inv]) => {
+      if (cancelled) return;
+      setLocalClients((c.clients ?? []).map((x: Record<string, unknown>) => ({ id: String(x.id), tradeName: String(x.tradeName ?? ''), gstin: String(x.gstin ?? ''), legalName: String(x.legalName ?? '') })));
+      setLocalInvoices((inv.invoices ?? []).map((x: Record<string, unknown>) => ({ id: String(x.id), invoiceNumber: String(x.invoiceNumber ?? ''), buyerName: String(x.buyerName ?? x.client?.tradeName ?? ''), sellerGstin: String(x.sellerGstin ?? '') })));
+    });
+    return () => { cancelled = true; };
+  }, [isLocal, commandPaletteOpen, orgId, user]);
+
+  // Merge: prefer Firestore data when available, fall back to local API data.
+  const effectiveClients = clients.length > 0 ? clients : localClients;
+  const effectiveInvoices = invoices.length > 0 ? invoices : localInvoices;
 
   // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
   const { customers: gstCustomers } = useGSTpilotCustomers();
@@ -945,7 +980,7 @@ export default function CommandPalette() {
 
     const q = query.toLowerCase();
 
-    const matchedClients = clients
+    const matchedClients = effectiveClients
       .filter(
         (c) =>
           c.tradeName?.toLowerCase().includes(q) ||
@@ -954,7 +989,7 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
-    const matchedInvoices = invoices
+    const matchedInvoices = effectiveInvoices
       .filter(
         (inv) =>
           inv.invoiceNumber?.toLowerCase().includes(q) ||
@@ -1067,7 +1102,7 @@ export default function CommandPalette() {
       gstExpenses: matchedGstExpenses,
       gstPayments: matchedGstPayments,
     };
-  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices, gstVendors, gstExpenses, gstPayments]);
+  }, [query, effectiveClients, effectiveInvoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices, gstVendors, gstExpenses, gstPayments]);
 
   const hasSearchResults =
     searchResults.clients.length > 0 ||

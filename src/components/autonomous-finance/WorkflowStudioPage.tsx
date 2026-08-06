@@ -111,7 +111,7 @@ export function WorkflowStudioPage() {
             <StatCard icon={WorkflowIcon} label="Active Workflows" value={stats.running} accent="bg-emerald-500/15 text-emerald-300" />
             <StatCard icon={Play} label="Runs Total" value={stats.total} accent="bg-cyan-500/15 text-cyan-300" />
             <StatCard icon={CheckCircle2} label="Success Rate" value={`${stats.successRate}%`} accent="bg-teal-500/15 text-teal-300" />
-            <StatCard icon={Clock} label="Avg Duration" value="1.2s" accent="bg-violet-500/15 text-violet-300" />
+            <StatCard icon={Clock} label="Avg Duration" value="1.2s" accent="bg-cyan-500/15 text-cyan-300" />
           </div>
 
           {/* Templates */}
@@ -206,7 +206,7 @@ export function WorkflowStudioPage() {
                               const Icon = STEP_ICON[s.type] ?? Zap;
                               const stColor = s.status === 'completed' ? 'text-emerald-400' :
                                 s.status === 'running' ? 'text-amber-400' :
-                                s.status === 'waiting_approval' ? 'text-violet-400' :
+                                s.status === 'waiting_approval' ? 'text-cyan-400' :
                                 'text-muted-foreground';
                               return (
                                 <div key={i} className="flex items-center gap-2.5 text-sm">

@@ -191,7 +191,7 @@ export function useGoogleWorkspace() {
   const driveFiles = useCallback(
     (parentId?: string) =>
       call<{ ok: boolean; files: unknown[] }>(
-        `/api/integrations/google/drive/files${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ''}`,
+        `/api/integrations/google/drive${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ''}`,
       ),
     [call],
   );

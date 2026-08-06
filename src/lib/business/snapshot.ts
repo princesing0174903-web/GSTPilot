@@ -37,7 +37,8 @@ import {
   computeGstLiability,
   type FinancialEngineResult,
 } from './financial-engine';
-import { emitTimelineEvent, isLocalOrgId } from '@/lib/timeline/emit';
+import { emitTimelineEvent } from '@/lib/timeline/emit';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

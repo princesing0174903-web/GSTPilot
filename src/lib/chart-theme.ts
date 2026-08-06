@@ -3,17 +3,20 @@
 // Use these constants when defining recharts <Line>/<Area>/<Bar> components
 // for consistent brand-aligned colors across every chart.
 //
-// Brand spec (per THEME-VISUAL-REFACTOR):
-//   · Pure black bg + #2563EB blue accent
+// Brand spec (per project rules):
+//   · Pure black bg + emerald (#10B981) brand accent
 //   · Semantic colors (amber for warning, red for danger) preserved
 //   · Green is reserved for "success" only (CHART_COLORS.success = #22C55E)
-//     and should NOT be used as a generic chart series color.
+//     and should NOT be used as a generic chart series color. The brand
+//     emerald (#10B981) is used for the primary brand series — it visually
+//     overlaps with green but represents the brand identity, distinct from
+//     the semantic-success green (#22C55E).
 // ---------------------------------------------------------------------------
 
 export const CHART_COLORS = {
-  primary: '#2563EB',    // blue-600 — main brand accent
-  primarySoft: '#60A5FA', // blue-400 — secondary series
-  secondary: '#8B5CF6',   // violet-500 — tertiary series (semantic accent)
+  primary: '#10B981',    // emerald-500 — main brand accent
+  primarySoft: '#34D399', // emerald-400 — secondary series
+  secondary: '#06B6D4',   // cyan-500 — tertiary series (semantic accent)
   warning: '#F59E0B',     // amber-500 — warnings / at-risk series
   danger: '#EF4444',      // red-500 — errors / overdue series
   success: '#22C55E',     // green-500 (intentional — semantic success)
@@ -39,13 +42,13 @@ export const CHART_PALETTE = [
 export const CHART_GRADIENTS = {
   blueArea: {
     id: 'grad-blue',
-    from: 'rgba(37, 99, 235, 0.25)',
-    to: 'rgba(37, 99, 235, 0)',
+    from: 'rgba(16, 185, 129, 0.25)',
+    to: 'rgba(16, 185, 129, 0)',
   },
   violetArea: {
     id: 'grad-violet',
-    from: 'rgba(139, 92, 246, 0.25)',
-    to: 'rgba(139, 92, 246, 0)',
+    from: 'rgba(6, 182, 212, 0.25)',
+    to: 'rgba(6, 182, 212, 0)',
   },
 } as const;
 

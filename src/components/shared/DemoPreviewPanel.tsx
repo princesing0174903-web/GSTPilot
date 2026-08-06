@@ -77,7 +77,7 @@ function KpiCard({ kpi, index }: { kpi: DemoKpi; index: number }) {
         <span
           className={cn(
             'inline-flex items-center gap-0.5 text-[11px] font-semibold',
-            kpi.trend === 'up' ? 'text-blue-400' : kpi.trend === 'down' ? 'text-amber-400' : 'text-muted-foreground',
+            kpi.trend === 'up' ? 'text-emerald-400' : kpi.trend === 'down' ? 'text-amber-400' : 'text-muted-foreground',
           )}
         >
           {kpi.trend === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -94,7 +94,7 @@ function StatusPill({ status }: { status: 'current' | 'pending' | 'overdue' | 'f
     current: { label: 'Current', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
     filed: { label: 'Filed', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
     pending: { label: 'Pending', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
-    draft: { label: 'Draft', cls: 'bg-blue-500/15 text-blue-300 border-blue-500/25' },
+    draft: { label: 'Draft', cls: 'bg-slate-500/15 text-slate-300 border-slate-500/25' },
     overdue: { label: 'Overdue', cls: 'bg-red-500/15 text-red-300 border-red-500/25' },
     due: { label: 'Due', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
   } as const;
@@ -150,7 +150,7 @@ export function DemoPreviewPanel({ userName }: { userName?: string }) {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex items-center gap-2.5 rounded-2xl brand-gradient-soft border border-blue-500/20 px-4 py-2.5"
+        className="flex items-center gap-2.5 rounded-2xl brand-gradient-soft border border-emerald-500/20 px-4 py-2.5"
       >
         <span className="flex h-6 w-6 items-center justify-center rounded-lg brand-gradient">
           <Sparkles className="h-3.5 w-3.5 text-white" />
@@ -189,8 +189,8 @@ export function DemoPreviewPanel({ userName }: { userName?: string }) {
             <h3 className="text-sm font-semibold text-foreground">Live Activity</h3>
             <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
               </span>
               Live
             </span>

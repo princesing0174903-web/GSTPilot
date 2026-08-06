@@ -313,7 +313,7 @@ export function OracleVoiceOverlay({
               'relative flex h-20 w-20 items-center justify-center rounded-full shadow-2xl transition-all disabled:cursor-not-allowed disabled:opacity-50',
               mode === 'listening'
                 ? 'bg-red-500 text-white shadow-red-500/30'
-                : 'accent-gradient text-white shadow-blue-500/30',
+                : 'accent-gradient text-white shadow-emerald-500/30',
             )}
           >
             {mode === 'listening' && (

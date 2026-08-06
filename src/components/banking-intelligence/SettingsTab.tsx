@@ -229,7 +229,7 @@ export function SettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Bell className="h-4 w-4 text-violet-500" />
+            <Bell className="h-4 w-4 text-cyan-500" />
             Notifications
           </CardTitle>
           <CardDescription>Choose what banking alerts you want to receive.</CardDescription>

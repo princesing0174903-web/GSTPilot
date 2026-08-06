@@ -655,7 +655,7 @@ export function ZohoCustomersSyncPanel() {
         : lastSync.status === 'partial'
         ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
         : lastSync.status === 'running'
-        ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
         : 'border-red-500/30 bg-red-500/10 text-red-400';
     const label =
       lastSync.status === 'completed'
@@ -773,7 +773,7 @@ export function ZohoCustomersSyncPanel() {
                 {' · '}
                 <span className="font-medium text-emerald-400">{lastSync.imported}</span> new
                 {' · '}
-                <span className="font-medium text-blue-400">{lastSync.updated}</span> updated
+                <span className="font-medium text-cyan-400">{lastSync.updated}</span> updated
                 {lastSync.failed > 0 ? (
                   <>
                     {' · '}

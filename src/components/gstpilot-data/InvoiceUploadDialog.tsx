@@ -929,7 +929,7 @@ function ReviewStep(props: {
       </Section>
 
       {/* Vendor (seller) */}
-      <Section title="Vendor / Seller" icon={<Package className="h-4 w-4 text-violet-400" />}>
+      <Section title="Vendor / Seller" icon={<Package className="h-4 w-4 text-cyan-400" />}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Vendor Name">
             <Input

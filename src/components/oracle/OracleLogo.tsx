@@ -380,7 +380,7 @@ export function OracleThinkingIndicator({
 
       {/* Blinking cursor */}
       <motion.span
-        className="inline-block h-3.5 w-[2px] rounded-full bg-blue-400 align-middle"
+        className="inline-block h-3.5 w-[2px] rounded-full bg-emerald-400 align-middle"
         animate={{ opacity: [1, 0.2, 1] }}
         transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
         aria-hidden

@@ -163,8 +163,8 @@ export const CATEGORY_COLORS: Record<TransactionCategory, string> = {
   salary: '#fb923c',
   rent: '#f97316',
   utilities: '#eab308',
-  tax: '#8b5cf6',
-  fees: '#a855f7',
+  tax: '#ec4899',
+  fees: '#0ea5e9',
   refund: '#06b6d4',
   transfer: '#64748b',
   interest: '#14b8a6',
@@ -204,9 +204,9 @@ export function categoryBadgeClass(category?: TransactionCategory): string {
     utilities:
       'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300 border-yellow-200 dark:border-yellow-500/30',
     tax:
-      'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300 border-violet-200 dark:border-violet-500/30',
+      'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300 border-pink-200 dark:border-pink-500/30',
     fees:
-      'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300 border-purple-200 dark:border-purple-500/30',
+      'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 border-sky-200 dark:border-sky-500/30',
     refund:
       'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30',
     transfer:

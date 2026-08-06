@@ -121,26 +121,32 @@ export async function POST(
       }
 
       // Store synced emails
-      const records = emailsToRecords(emails, id, userId);
-      if (records.length > 0) {
+      // (Was N+1: sequential create per record. Now batched via createMany
+      // with chunking to stay under SQLite parameter limits.)
+      const emailRecords = emailsToRecords(emails, id, userId);
+      if (emailRecords.length > 0) {
         await db.syncedRecord.deleteMany({
           where: { connectionId: id, sourceType: 'email' },
         }).catch(() => {});
-        for (const rec of records) {
-          await db.syncedRecord.create({
-            data: {
-              connectionId: rec.connectionId,
-              userId: rec.userId,
-              sourceType: rec.sourceType,
-              externalId: rec.externalId,
-              title: rec.title,
-              amount: rec.amount,
-              date: rec.date,
-              rawData: JSON.stringify(rec.rawData),
-              category: rec.category,
-              processed: rec.processed,
-            },
-          }).catch(() => {});
+        const rows = emailRecords.map((rec) => ({
+          connectionId: rec.connectionId,
+          userId: rec.userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < rows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: rows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal per-row errors swallowed */ }
         }
       }
 
@@ -168,28 +174,35 @@ export async function POST(
         if (validation.valid) {
           const profile = deriveGstProfile(gstin);
           // Generate stub GSTR records
-          const stubs = gstnStubRecords(gstin);
+          // (Batched via createMany — was N+1 sequential create.)
+          const gstnStubs = gstnStubRecords(gstin);
           await db.syncedRecord.deleteMany({
             where: { connectionId: id, sourceType: 'gst_return' },
           }).catch(() => {});
-          for (const rec of stubs) {
-            await db.syncedRecord.create({
-              data: {
-                connectionId: id,
-                userId,
-                sourceType: rec.sourceType,
-                externalId: rec.externalId,
-                title: rec.title,
-                amount: rec.amount,
-                date: rec.date,
-                rawData: JSON.stringify(rec.rawData),
-                category: rec.category,
-                processed: rec.processed,
-              },
-            }).catch(() => {});
+          if (gstnStubs.length > 0) {
+            const gstnRows = gstnStubs.map((rec) => ({
+              connectionId: id,
+              userId,
+              sourceType: rec.sourceType,
+              externalId: rec.externalId,
+              title: rec.title,
+              amount: rec.amount,
+              date: rec.date,
+              rawData: JSON.stringify(rec.rawData),
+              category: rec.category,
+              processed: rec.processed,
+            }));
+            for (let i = 0; i < gstnRows.length; i += 100) {
+              try {
+                await db.syncedRecord.createMany({
+                  data: gstnRows.slice(i, i + 100),
+                  skipDuplicates: true,
+                });
+              } catch { /* non-fatal */ }
+            }
           }
-          recordsSynced = stubs.length;
-          summary = `GSTIN ${gstin} synced — discovered ${stubs.length} GSTR filings`;
+          recordsSynced = gstnStubs.length;
+          summary = `GSTIN ${gstin} synced — discovered ${gstnStubs.length} GSTR filings`;
 
           await db.dataConnection.update({
             where: { id },
@@ -212,28 +225,34 @@ export async function POST(
       const meta = conn.metadata ? JSON.parse(conn.metadata) : {};
       const bankName = meta.bankName ?? 'Bank';
       const accountLast4 = meta.accountNumberMasked?.slice(-4) ?? '0000';
-      const stubs = bankStubRecords(bankName, accountLast4);
+      const bankStubs = bankStubRecords(bankName, accountLast4);
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'bank_tx' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      if (bankStubs.length > 0) {
+        const bankRows = bankStubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < bankRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: bankRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
-      recordsSynced = stubs.length;
-      summary = `${bankName} •••${accountLast4} synced — imported ${stubs.length} transactions`;
+      recordsSynced = bankStubs.length;
+      summary = `${bankName} •••${accountLast4} synced — imported ${bankStubs.length} transactions`;
 
       await db.dataConnection.update({
         where: { id },
@@ -249,28 +268,34 @@ export async function POST(
     } else if (conn.type === 'whatsapp') {
       const meta = conn.metadata ? JSON.parse(conn.metadata) : {};
       const phone = meta.phoneNumber ?? conn.identifier ?? '';
-      const stubs = whatsappStubRecords(phone);
+      const waStubs = whatsappStubRecords(phone);
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'whatsapp_msg' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      if (waStubs.length > 0) {
+        const waRows = waStubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < waRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: waRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
-      recordsSynced = stubs.length;
-      summary = `WhatsApp ${phone} synced — imported ${stubs.length} messages`;
+      recordsSynced = waStubs.length;
+      summary = `WhatsApp ${phone} synced — imported ${waStubs.length} messages`;
 
       await db.dataConnection.update({
         where: { id },
@@ -287,21 +312,28 @@ export async function POST(
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'accounting_invoice' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      // (Batched via createMany — was N+1 sequential create.)
+      if (stubs.length > 0) {
+        const acctRows = stubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < acctRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: acctRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
       recordsSynced = stubs.length;
       summary = `${conn.type.toUpperCase()} (${companyName}) synced — imported ${stubs.length} invoices`;

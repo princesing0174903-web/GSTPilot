@@ -990,24 +990,28 @@ export default function ClientRegistryPage() {
   }, [deleteTarget, refetch]);
 
   // ── Bulk delete ───────────────────────────────────────────────────────────
+  // (Was N+1: sequential DELETE per id. Now parallelized via Promise.all so
+  // all deletes fire at once — 10-row bulk delete goes from 10 round-trips
+  // to 1.)
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    let ok = 0;
-    let fail = 0;
-    for (const id of ids) {
-      try {
-        const res = await fetchWithTimeout(
-          `/api/clients?id=${encodeURIComponent(id)}`,
-          { method: 'DELETE' },
-          { timeoutMs: 20_000, retries: 0 },
-        );
-        if (res.ok) ok++;
-        else fail++;
-      } catch {
-        fail++;
-      }
-    }
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const res = await fetchWithTimeout(
+            `/api/clients?id=${encodeURIComponent(id)}`,
+            { method: 'DELETE' },
+            { timeoutMs: 20_000, retries: 0 },
+          );
+          return res.ok;
+        } catch {
+          return false;
+        }
+      }),
+    );
+    const ok = results.filter(Boolean).length;
+    const fail = results.length - ok;
     if (ok > 0) {
       toast.success(`${ok} client${ok !== 1 ? 's' : ''} removed`);
       invalidateBusinessSnapshot();
@@ -1413,12 +1417,13 @@ export default function ClientRegistryPage() {
                 <Plus className="h-4 w-4" />
                 Create your first client
               </Button>
-              <button
+              <Button
+                variant="link"
                 onClick={() => setCurrentView('invoices')}
-                className="text-[12px] font-medium text-[#60A5FA] underline-offset-4 transition-colors hover:text-[#93C5FD] hover:underline"
+                className="text-[12px] font-medium text-emerald-400 underline-offset-4 hover:text-emerald-300 hover:underline"
               >
                 Go to invoices instead
-              </button>
+              </Button>
             </div>
           </div>
         )}

@@ -26,6 +26,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import type { TimelineEvent } from '@/lib/timeline/emit';
+import { onBusinessSnapshotInvalidated } from '@/lib/business-snapshot-events';
 
 const REFRESH_INTERVAL_MS = 30_000; // 30 seconds
 
@@ -116,16 +117,15 @@ export function useTimelineEvents(limit: number = 20): UseTimelineEventsResult {
   // mutation happens (invoice created, payment recorded, Zoho sync, etc.),
   // the mutation fires `invalidateBusinessSnapshot()` and this hook re-fetches
   // the timeline immediately so the new event appears without waiting 30s.
+  // (Was dynamic-imported in a .then() — caused a microtask delay before the
+  // listener attached. Now uses a static import for synchronous registration.)
   useEffect(() => {
     const handler = () => {
       if (orgIdRef.current) fetchEvents();
     };
-    let cleanup: (() => void) | null = null;
-    import('@/lib/business-snapshot-events').then(({ onBusinessSnapshotInvalidated }) => {
-      cleanup = onBusinessSnapshotInvalidated(handler);
-    });
+    const cleanup = onBusinessSnapshotInvalidated(handler);
     return () => {
-      if (cleanup) cleanup();
+      cleanup();
     };
   }, [fetchEvents]);
 

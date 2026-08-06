@@ -106,7 +106,7 @@ export function PredictiveCompliancePage() {
                     { label: 'GST Mismatch Prob', value: `${Math.round(report.summary.gstMismatchProb * 100)}%`, accent: 'text-amber-300', icon: TrendingDown },
                     { label: 'Predicted Penalty', value: `₹${report.summary.predictedPenalty.toLocaleString('en-IN')}`, accent: 'text-rose-300', icon: AlertTriangle },
                     { label: 'Cash Shortage Risk', value: `${Math.round(report.summary.cashShortageRisk * 100)}%`, accent: 'text-amber-300', icon: ShieldAlert },
-                    { label: 'Filing Overload Risk', value: `${Math.round(report.summary.filingOverloadRisk * 100)}%`, accent: 'text-violet-300', icon: Calendar },
+                    { label: 'Filing Overload Risk', value: `${Math.round(report.summary.filingOverloadRisk * 100)}%`, accent: 'text-cyan-300', icon: Calendar },
                     { label: 'Missing Docs Risk', value: `${Math.round(report.summary.missingDocsRisk * 100)}%`, accent: 'text-amber-300', icon: AlertTriangle },
                   ].map((s) => (
                     <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">

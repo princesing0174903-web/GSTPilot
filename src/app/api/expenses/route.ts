@@ -60,7 +60,9 @@ export async function GET(request: NextRequest) {
     if (clientId) {
       where.clientId = clientId
     } else if (organizationId) {
-      where.client = { organizationId }
+      // Tenant scoping is via the client relation's firmId (same model as
+      // /api/invoices). The organizationId/firmId are the same tenant id.
+      where.client = { firmId: organizationId }
     } else {
       // No tenant scope — return empty rather than leak cross-tenant data
       return NextResponse.json({ expenses: [] })

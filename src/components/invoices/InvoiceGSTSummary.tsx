@@ -382,8 +382,8 @@ function SlabBreakdownBars({
   const SLAB_COLORS: Record<number, string> = {
     0: 'bg-zinc-500',
     5: 'bg-sky-500',
-    12: 'bg-violet-500',
-    18: 'bg-[#2563EB]',
+    12: 'bg-emerald-500',
+    18: 'bg-cyan-500',
     28: 'bg-amber-500',
   };
 

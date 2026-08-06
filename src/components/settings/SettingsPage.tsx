@@ -367,17 +367,17 @@ function SettingsSidebar({
                       aria-current={active ? 'page' : undefined}
                       className={`group relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
                         active
-                          ? 'bg-[#2563EB]/10 text-white'
+                          ? 'bg-emerald-500/10 text-white'
                           : 'text-zinc-400 hover:bg-[#141414] hover:text-white'
                       }`}
                     >
                       {/* Blue left accent bar for the active item */}
                       <span
                         className={`absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full transition-all duration-150 ${
-                          active ? 'bg-[#3B82F6]' : 'bg-transparent'
+                          active ? 'bg-emerald-400' : 'bg-transparent'
                         }`}
                       />
-                      <span className={active ? 'text-[#60A5FA]' : 'text-zinc-500 group-hover:text-zinc-300'}>
+                      <span className={active ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'}>
                         {s.icon}
                       </span>
                       <span className="truncate">{s.label}</span>
@@ -639,7 +639,7 @@ function OrganizationSection() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
       </div>
     );
   }
@@ -658,7 +658,7 @@ function OrganizationSection() {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
           {/* Circular 64×64 preview with overlay upload button */}
           <div className="relative shrink-0">
-            <Avatar className="h-16 w-16 rounded-full border border-[#2A2A2A] bg-[#0A0A0A] shadow-[0_0_0_4px_rgba(37,99,235,0.08)]">
+            <Avatar className="h-16 w-16 rounded-full border border-[#2A2A2A] bg-[#0A0A0A] shadow-[0_0_0_4px_rgba(16,185,129,0.08)]">
               {data?.logoUrl ? (
                 <AvatarImage src={data.logoUrl} alt="Firm logo" />
               ) : null}
@@ -669,7 +669,7 @@ function OrganizationSection() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingLogo}
-              className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0A0A0A] bg-[#2563EB] text-white shadow-lg transition-colors hover:bg-[#1D4ED8] disabled:opacity-60"
+              className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0A0A0A] bg-emerald-500 text-white shadow-lg transition-colors hover:bg-emerald-600 disabled:opacity-60"
               aria-label="Upload logo"
               title="Upload logo"
             >
@@ -863,18 +863,18 @@ function AppearanceSection() {
                 onClick={() => apply(opt.value)}
                 className={`relative p-5 rounded-xl border text-left transition-all duration-200 ${
                   active
-                    ? 'border-blue-500 bg-blue-600/10 shadow-lg shadow-blue-600/10'
+                    ? 'border-emerald-500 bg-emerald-600/10 shadow-lg shadow-emerald-600/10'
                     : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800/50'
                 }`}
               >
-                <div className={`mb-3 ${active ? 'text-blue-400' : 'text-zinc-400'}`}>
+                <div className={`mb-3 ${active ? 'text-emerald-400' : 'text-zinc-400'}`}>
                   {opt.icon}
                 </div>
                 <p className="text-sm font-semibold text-white">{opt.label}</p>
                 <p className="text-xs text-zinc-500 mt-1">{opt.desc}</p>
                 {active && (
                   <div className="absolute top-3 right-3">
-                    <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                   </div>
                 )}
               </button>
@@ -969,7 +969,7 @@ function ProfileSection() {
       <SettingsCard title="Account" description="Update your name and professional details.">
         <div className="flex items-center gap-5 mb-6">
           <Avatar className="h-16 w-16 rounded-full bg-zinc-900 border border-zinc-800">
-            <AvatarFallback className="bg-zinc-900 text-blue-400 font-semibold">
+            <AvatarFallback className="bg-zinc-900 text-emerald-400 font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -980,7 +980,7 @@ function ProfileSection() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-2">
@@ -1182,7 +1182,7 @@ function SecuritySection() {
         }
       >
         {sessionsLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
         ) : sessions.length === 0 ? (
           <p className="text-sm text-zinc-500 py-8 text-center">No active sessions found.</p>
         ) : (
@@ -1233,7 +1233,7 @@ function LoginHistory() {
     })();
   }, [buildHeaders]);
 
-  if (loading) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>;
+  if (loading) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>;
   if (events.length === 0) return <p className="text-sm text-zinc-500 py-6 text-center">No login events recorded yet.</p>;
 
   return (
@@ -1358,7 +1358,7 @@ function IntegrationsSection() {
       <SectionHeader title="Integrations" subtitle="Connect external services to sync data into GSTPilot." />
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>
       ) : (
         <>
           {/* Google Workspace */}
@@ -1520,7 +1520,7 @@ function NotificationsSection() {
 
       <SettingsCard title="Preferences" description="Saved to your account and applied across all devices.">
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
         ) : (
           <>
             <div className="space-y-1">
@@ -1674,7 +1674,7 @@ function TeamSection() {
         }
       >
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
         ) : members.length === 0 ? (
           <p className="text-sm text-zinc-500 py-8 text-center">No members found.</p>
         ) : (
@@ -1683,7 +1683,7 @@ function TeamSection() {
               <div key={m.userId} className="flex items-center justify-between py-3 px-3 rounded-lg hover:bg-zinc-900 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar className="h-9 w-9 bg-zinc-800">
-                    <AvatarFallback className="bg-zinc-800 text-blue-400 text-xs font-medium">
+                    <AvatarFallback className="bg-zinc-800 text-emerald-400 text-xs font-medium">
                       {getInitials(m.userDisplayName ?? '', m.userEmail)}
                     </AvatarFallback>
                   </Avatar>
@@ -1797,7 +1797,7 @@ function TeamSection() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleTransfer} disabled={!transferTo || transferring} className="bg-blue-600 hover:bg-blue-500 text-white">
+            <AlertDialogAction onClick={handleTransfer} disabled={!transferTo || transferring} className="bg-emerald-600 hover:bg-emerald-500 text-white">
               {transferring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               Transfer Ownership
             </AlertDialogAction>
@@ -2057,17 +2057,17 @@ function ApiKeysSection() {
           </AlertDialogHeader>
           <div className="py-2">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-900 border border-zinc-800">
-              <code className="text-sm text-blue-400 font-mono flex-1 break-all">{revealedKey}</code>
+              <code className="text-sm text-emerald-400 font-mono flex-1 break-all">{revealedKey}</code>
               <button
                 onClick={() => revealedKey && handleCopy(revealedKey, revealedId ?? 'new')}
-                className="p-1.5 rounded-md text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors shrink-0"
+                className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors shrink-0"
               >
                 {copiedId === (revealedId ?? 'new') ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogAction className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => { setRevealedKey(null); setRevealedId(null); }}>
+            <AlertDialogAction className="bg-emerald-600 hover:bg-emerald-500 text-white" onClick={() => { setRevealedKey(null); setRevealedId(null); }}>
               I've copied it
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -2206,11 +2206,11 @@ function BillingSection() {
       <SectionHeader title="Billing" subtitle="Manage your subscription, usage, and payment method." />
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>
       ) : info ? (
         <>
           <SettingsCard title="Current Plan" description="Your active subscription tier.">
-            <div className="flex items-center justify-between p-5 rounded-xl bg-gradient-to-br from-blue-600/10 to-zinc-900 border border-blue-500/20">
+            <div className="flex items-center justify-between p-5 rounded-xl bg-gradient-to-br from-emerald-600/10 to-zinc-900 border border-emerald-500/20">
               <div>
                 <p className="text-2xl font-bold text-white">{info.plan.label}</p>
                 <p className="text-sm text-zinc-400 mt-1">
@@ -2228,7 +2228,7 @@ function BillingSection() {
                   <span className="text-zinc-300">Clients</span>
                   <span className="text-white font-medium">{info.usage.clients} / {info.usage.maxClients}</span>
                 </div>
-                <Progress value={usagePercent} className="h-2 bg-zinc-800 [&>div]:bg-blue-500" />
+                <Progress value={usagePercent} className="h-2 bg-zinc-800 [&>div]:bg-emerald-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
@@ -2247,7 +2247,7 @@ function BillingSection() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {info.availablePlans.map((p) => (
                 <div key={p.id} className={`p-5 rounded-xl border ${
-                  p.current ? 'border-blue-500 bg-blue-600/5' : 'border-zinc-800 bg-zinc-900'
+                  p.current ? 'border-emerald-500 bg-emerald-600/5' : 'border-zinc-800 bg-zinc-900'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-lg font-semibold text-white">{p.label}</p>
@@ -2610,7 +2610,7 @@ function DangerZoneSection() {
         <AlertDialogContent className="bg-zinc-950 border-zinc-800">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white flex items-center gap-2">
-              <LogOut className="h-5 w-5 text-blue-400" />
+              <LogOut className="h-5 w-5 text-emerald-400" />
               Sign Out
             </AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400">

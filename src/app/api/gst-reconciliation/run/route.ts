@@ -89,29 +89,61 @@ export async function POST(request: Request) {
     });
     const gstr2bResult = await provider.fetchGSTR2B(gspSession, gstin, period);
 
-    // Persist GSTR-2B records (upsert) for audit + future runs
-    for (const rec of gstr2bResult.records) {
-      const existing = await db.gSTR2BInvoice.findFirst({
-        where: { gstin, period, supplierGSTIN: rec.supplierGSTIN, invoiceNo: rec.invoiceNo },
+    // Persist GSTR-2B records (upsert) for audit + future runs.
+    // (Was N+1: for each record, a findFirst + update/create. Now batched:
+    //   1. One findMany for ALL existing records matching (gstin, period).
+    //   2. Partition records into updates vs creates based on the existing map.
+    //   3. Bulk updates via Promise.all + bulk create via createMany.)
+    const records = gstr2bResult.records;
+    if (records.length > 0) {
+      const compositeKeys = records.map((r) => `${r.supplierGSTIN}||${r.invoiceNo}`);
+      const existingRows = await db.gSTR2BInvoice.findMany({
+        where: {
+          gstin,
+          period,
+          OR: records.map((r) => ({
+            supplierGSTIN: r.supplierGSTIN,
+            invoiceNo: r.invoiceNo,
+          })),
+        },
+        select: { id: true, supplierGSTIN: true, invoiceNo: true },
       });
-      if (existing) {
-        await db.gSTR2BInvoice.update({
-          where: { id: existing.id },
-          data: {
-            invoiceDate: rec.invoiceDate,
-            taxableValue: rec.taxableValue,
-            igst: rec.igst,
-            cgst: rec.cgst,
-            sgst: rec.sgst,
-            cess: rec.cess,
-            itcAvailable: rec.itcAvailable,
-            itcEligible: rec.itcEligible,
-            supplierName: rec.supplierName,
-          },
-        });
-      } else {
-        await db.gSTR2BInvoice.create({
-          data: {
+      const existingMap = new Map<string, string>();
+      for (const e of existingRows) {
+        existingMap.set(`${e.supplierGSTIN}||${e.invoiceNo}`, e.id);
+      }
+
+      const toCreate: Array<{
+        gstin: string; period: string; supplierGSTIN: string; supplierName: string | null;
+        invoiceNo: string; invoiceDate: string | null; taxableValue: number;
+        igst: number; cgst: number; sgst: number; cess: number;
+        itcAvailable: number; itcEligible: number;
+        matched: boolean; matchStatus: string;
+      }> = [];
+      const updateOps: Promise<unknown>[] = [];
+      for (let i = 0; i < records.length; i++) {
+        const rec = records[i];
+        const key = compositeKeys[i];
+        const existingId = existingMap.get(key);
+        if (existingId) {
+          updateOps.push(
+            db.gSTR2BInvoice.update({
+              where: { id: existingId },
+              data: {
+                invoiceDate: rec.invoiceDate,
+                taxableValue: rec.taxableValue,
+                igst: rec.igst,
+                cgst: rec.cgst,
+                sgst: rec.sgst,
+                cess: rec.cess,
+                itcAvailable: rec.itcAvailable,
+                itcEligible: rec.itcEligible,
+                supplierName: rec.supplierName,
+              },
+            }),
+          );
+        } else {
+          toCreate.push({
             gstin,
             period,
             supplierGSTIN: rec.supplierGSTIN,
@@ -127,9 +159,16 @@ export async function POST(request: Request) {
             itcEligible: rec.itcEligible,
             matched: false,
             matchStatus: 'unmatched',
-          },
-        });
+          });
+        }
       }
+      // Run all updates in parallel + a single bulk create.
+      await Promise.all([
+        ...updateOps,
+        toCreate.length > 0
+          ? db.gSTR2BInvoice.createMany({ data: toCreate })
+          : Promise.resolve(),
+      ]);
     }
 
     // ── 3. Run the match engine ──

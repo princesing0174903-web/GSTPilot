@@ -15,7 +15,7 @@
 //   (organizationId) and is the production data layer for GSTPilot.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import { fetchWithTimeout } from '@/lib/async';
@@ -463,20 +463,42 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     [orgId],
   );
 
-  return {
-    invoices,
-    loading,
-    error,
-    refetch,
-    createInvoice,
-    updateInvoice,
-    deleteInvoice,
-    approveInvoice,
-    markPaid,
-    duplicateInvoice,
-    fetchInsights,
-    sendInvoice,
-    generatePdf,
-    saving,
-  };
+  // ── Memoize the returned object so consumers that destructure multiple
+  // values don't re-render every time the parent re-renders. (Was returning a
+  // fresh object literal on every render — caused downstream effects to
+  // re-fire whenever any sibling state changed.)
+  return useMemo<UseInvoicesApiResult>(
+    () => ({
+      invoices,
+      loading,
+      error,
+      refetch,
+      createInvoice,
+      updateInvoice,
+      deleteInvoice,
+      approveInvoice,
+      markPaid,
+      duplicateInvoice,
+      fetchInsights,
+      sendInvoice,
+      generatePdf,
+      saving,
+    }),
+    [
+      invoices,
+      loading,
+      error,
+      refetch,
+      createInvoice,
+      updateInvoice,
+      deleteInvoice,
+      approveInvoice,
+      markPaid,
+      duplicateInvoice,
+      fetchInsights,
+      sendInvoice,
+      generatePdf,
+      saving,
+    ],
+  );
 }

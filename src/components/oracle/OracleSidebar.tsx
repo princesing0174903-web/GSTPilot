@@ -86,7 +86,7 @@ export function OracleSidebar({
       <div className="p-3">
         <button
           onClick={onNew}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl accent-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl accent-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         >
           <Plus className="h-4 w-4" />
           New chat

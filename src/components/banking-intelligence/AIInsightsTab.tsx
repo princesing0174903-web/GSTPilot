@@ -80,7 +80,7 @@ function AnswerCard({ answer }: { answer: BankingInsightAnswer }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Badge variant="outline" className="border-violet-200 bg-violet-100 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-300">
+        <Badge variant="outline" className="border-cyan-200 bg-cyan-100 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-300">
           <Sparkles className="h-3 w-3" />
           {answer.label}
         </Badge>
@@ -149,7 +149,7 @@ function ChatMessage({ item }: { item: ChatItem }) {
         <div className="w-full max-w-[95%] rounded-lg border bg-card p-3">
           {item.loading ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 animate-pulse text-violet-500" />
+              <Sparkles className="h-3.5 w-3.5 animate-pulse text-cyan-500" />
               Thinking…
             </div>
           ) : item.error ? (
@@ -221,9 +221,9 @@ export function AIInsightsTab() {
   return (
     <div className="space-y-4">
       {/* ─── Header note ─── */}
-      <Card className="border-violet-200 bg-violet-50 dark:border-violet-500/30 dark:bg-violet-500/5">
+      <Card className="border-cyan-200 bg-cyan-50 dark:border-cyan-500/30 dark:bg-cyan-500/5">
         <CardContent className="flex items-start gap-3 py-4">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-100 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-300">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
@@ -247,7 +247,7 @@ export function AIInsightsTab() {
               onClick={() => ask(s.question)}
               className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1.5 text-xs transition-colors hover:bg-muted/70 disabled:opacity-50"
             >
-              <Icon className="h-3.5 w-3.5 text-violet-500" />
+              <Icon className="h-3.5 w-3.5 text-cyan-500" />
               {s.label}
             </button>
           );

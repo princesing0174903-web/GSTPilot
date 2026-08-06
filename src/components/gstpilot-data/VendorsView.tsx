@@ -139,7 +139,7 @@ const CATEGORY_STYLES: Record<VendorCategory, string> = {
   Supplier: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300',
   Contractor: 'border-amber-500/30 bg-amber-500/5 text-amber-300',
   'Service Provider': 'border-teal-500/30 bg-teal-500/5 text-teal-300',
-  Freelancer: 'border-violet-500/30 bg-violet-500/5 text-violet-300',
+  Freelancer: 'border-cyan-500/30 bg-cyan-500/5 text-cyan-300',
   Utility: 'border-cyan-500/30 bg-cyan-500/5 text-cyan-300',
   Other: 'border-rose-500/30 bg-rose-500/5 text-rose-300',
 };
@@ -274,7 +274,7 @@ export default function VendorsView() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Store className="h-6 w-6 text-violet-400" />
+            <Store className="h-6 w-6 text-cyan-400" />
             Vendors
           </h1>
           <p className="mt-1 text-sm text-white/50">
@@ -283,7 +283,7 @@ export default function VendorsView() {
         </div>
         <Button
           onClick={openCreate}
-          className="bg-violet-500 text-black hover:bg-violet-400"
+          className="bg-cyan-500 text-black hover:bg-cyan-400"
         >
           <Plus className="mr-2 h-4 w-4" />
           Create Vendor
@@ -294,8 +294,8 @@ export default function VendorsView() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="border-white/10 bg-white/[0.03]">
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20">
-              <Store className="h-5 w-5 text-violet-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+              <Store className="h-5 w-5 text-cyan-400" />
             </div>
             <div>
               <p className="text-xs uppercase tracking-wider text-white/40">Total Vendors</p>
@@ -393,7 +393,7 @@ export default function VendorsView() {
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04] border border-white/10">
                             {v.type === 'business' ? (
-                              <Building2 className="h-4 w-4 text-violet-400" />
+                              <Building2 className="h-4 w-4 text-cyan-400" />
                             ) : (
                               <UserIcon className="h-4 w-4 text-teal-400" />
                             )}
@@ -648,7 +648,7 @@ export default function VendorsView() {
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-violet-500 text-black hover:bg-violet-400"
+              className="bg-cyan-500 text-black hover:bg-cyan-400"
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save Changes' : 'Create Vendor'}
@@ -700,7 +700,7 @@ function EmptyState({ onCreate, hasSearch }: { onCreate: () => void; hasSearch: 
         </p>
       </div>
       {!hasSearch && (
-        <Button onClick={onCreate} className="bg-violet-500 text-black hover:bg-violet-400">
+        <Button onClick={onCreate} className="bg-cyan-500 text-black hover:bg-cyan-400">
           <Plus className="mr-2 h-4 w-4" />
           Create Vendor
         </Button>

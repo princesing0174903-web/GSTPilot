@@ -201,7 +201,7 @@ function IconButton({
       onClick={onClick}
       className={cn(
         'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-all hover:bg-white/[0.06] hover:text-white',
-        active && 'bg-[#2563EB]/10 text-[#3B82F6]',
+        active && 'bg-emerald-500/10 text-emerald-400',
       )}
     >
       {children}

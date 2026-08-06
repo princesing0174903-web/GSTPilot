@@ -384,8 +384,17 @@ export async function generateRecommendations(
   const snapshot = await getBusinessSnapshot(organizationId);
   const recs = generateRecommendationsFromSnapshot(snapshot);
 
+  // ── Enrichment: 4 independent Prisma fetches run in parallel ──
+  // (Was 4 sequential awaits — each ran only after the previous resolved.
+  // Now they all fire at once via Promise.all, cutting 4 round-trips to 1.)
+  const [overdueTomorrow, trend, slowCustomers, topCustomer] = await Promise.all([
+    getOverdueTomorrowInvoices(organizationId),
+    getRevenueTrend(organizationId),
+    getCustomersWithPaymentDelays(organizationId),
+    getTopCustomerByRevenue(organizationId),
+  ]);
+
   // Enrichment: overdue-tomorrow
-  const overdueTomorrow = await getOverdueTomorrowInvoices(organizationId);
   if (overdueTomorrow.count > 0) {
     recs.push({
       id: `rec-receivables-${hashId('overdue-tomorrow')}`,
@@ -401,7 +410,6 @@ export async function generateRecommendations(
   }
 
   // Enrichment: revenue dropped
-  const trend = await getRevenueTrend(organizationId);
   if (trend.lastMonth > 0 && trend.changePct < -10) {
     recs.push({
       id: `rec-growth-${hashId('revenue-drop')}`,
@@ -416,7 +424,6 @@ export async function generateRecommendations(
   }
 
   // Enrichment: customer payment delays
-  const slowCustomers = await getCustomersWithPaymentDelays(organizationId);
   for (const c of slowCustomers) {
     recs.push({
       id: `rec-customer-${hashId(c.name + c.clientId)}`,
@@ -431,7 +438,6 @@ export async function generateRecommendations(
   }
 
   // Enrichment: top customer concentration
-  const topCustomer = await getTopCustomerByRevenue(organizationId);
   if (topCustomer) {
     recs.push({
       id: `rec-customer-${hashId('concentration')}`,

@@ -46,16 +46,16 @@ function statusDef(status: OracleAgentStatus): StatusDef {
     case 'thinking':
       return {
         label: 'Oracle thinking',
-        dotClass: 'bg-blue-400',
+        dotClass: 'bg-cyan-400',
         textClass: 'text-foreground',
-        bgClass: 'bg-blue-500/[0.08] border-blue-500/20',
+        bgClass: 'bg-cyan-500/[0.08] border-cyan-500/20',
       };
     case 'working':
       return {
         label: 'Oracle working',
-        dotClass: 'bg-blue-400',
+        dotClass: 'bg-cyan-400',
         textClass: 'text-foreground',
-        bgClass: 'bg-blue-500/[0.08] border-blue-500/20',
+        bgClass: 'bg-cyan-500/[0.08] border-cyan-500/20',
       };
     case 'waiting':
       return {
@@ -67,9 +67,9 @@ function statusDef(status: OracleAgentStatus): StatusDef {
     case 'completed':
       return {
         label: 'Oracle completed',
-        dotClass: 'bg-blue-400',
-        textClass: 'text-blue-600 dark:text-blue-400',
-        bgClass: 'bg-blue-500/[0.06] border-blue-500/15',
+        dotClass: 'bg-cyan-400',
+        textClass: 'text-cyan-600 dark:text-cyan-400',
+        bgClass: 'bg-cyan-500/[0.06] border-cyan-500/15',
       };
     case 'idle':
     default:
@@ -151,7 +151,7 @@ export function OracleStatusBar({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="flex items-center gap-1 text-blue-600 dark:text-blue-400"
+                className="flex items-center gap-1 text-cyan-600 dark:text-cyan-400"
               >
                 <Loader2 className="h-2.5 w-2.5 animate-spin" />
                 {counts.running}
@@ -175,7 +175,7 @@ export function OracleStatusBar({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="flex items-center gap-1 text-blue-600 dark:text-blue-400"
+                className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"
               >
                 <CheckCircle2 className="h-2.5 w-2.5" />
                 {counts.completed}

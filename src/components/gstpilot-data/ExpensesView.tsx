@@ -160,7 +160,7 @@ function statusBadgeClass(status: ExpenseStatus): string {
 }
 
 function categoryBadgeClass(): string {
-  return 'border-violet-500/30 bg-violet-500/10 text-violet-300';
+  return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300';
 }
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ export default function ExpensesView() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-violet-400" />
+            <Receipt className="h-6 w-6 text-cyan-400" />
             Expenses
           </h1>
           <p className="mt-1 text-sm text-white/50">
@@ -475,7 +475,7 @@ export default function ExpensesView() {
                       <TableCell>
                         {e.vendorId && e.vendorName ? (
                           <span className="flex items-center gap-2 text-white/70">
-                            <Building2 className="h-3.5 w-3.5 text-violet-300" />
+                            <Building2 className="h-3.5 w-3.5 text-cyan-300" />
                             <span className="truncate">{e.vendorName}</span>
                           </span>
                         ) : (

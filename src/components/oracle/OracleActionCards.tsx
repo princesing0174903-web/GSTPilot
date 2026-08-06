@@ -82,9 +82,9 @@ function ActionCard({
 }) {
   const meta = ACTION_LIBRARY[card.kind];
   const Icon = meta?.icon ?? Sparkles;
-  const colorClass = meta?.colorClass ?? 'text-blue-500';
-  const tintClass = meta?.tintClass ?? 'bg-blue-500/[0.10]';
-  const borderClass = meta?.borderClass ?? 'border-blue-500/25';
+  const colorClass = meta?.colorClass ?? 'text-emerald-500';
+  const tintClass = meta?.tintClass ?? 'bg-emerald-500/[0.10]';
+  const borderClass = meta?.borderClass ?? 'border-emerald-500/25';
 
   return (
     <motion.button

@@ -433,9 +433,9 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
           <button
             type="button"
             onClick={() => setWorkspaceOpen(true)}
-            className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-[#2563EB]/30 hover:bg-[#2563EB]/[0.04]"
+            className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-emerald-500/30 hover:bg-emerald-500/[0.04]"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-[#2563EB]/20">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient shadow-lg shadow-emerald-500/20">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0 flex-1">

@@ -32,7 +32,7 @@ const CATEGORY_ACCENT: Record<string, string> = {
   gst: 'bg-amber-500/15 text-amber-300',
   banking: 'bg-cyan-500/15 text-cyan-300',
   collections: 'bg-rose-500/15 text-rose-300',
-  communication: 'bg-violet-500/15 text-violet-300',
+  communication: 'bg-cyan-500/15 text-cyan-300',
   reporting: 'bg-teal-500/15 text-teal-300',
   tasks: 'bg-cyan-500/15 text-cyan-300',
 };

@@ -163,7 +163,7 @@ function RuleDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Tags className="h-4 w-4 text-violet-500" />
+            <Tags className="h-4 w-4 text-cyan-500" />
             {ruleId ? 'Edit Rule' : 'New Categorization Rule'}
           </DialogTitle>
           <DialogDescription>
@@ -433,7 +433,7 @@ export function RulesTab() {
                       <TableCell className="font-mono">{r.pattern}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={r.isRegex
-                          ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300 border-violet-200 dark:border-violet-500/30 gap-1'
+                          ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30 gap-1'
                           : 'bg-muted text-muted-foreground gap-1'}>
                           {r.isRegex ? <Code className="h-3 w-3" /> : <Type className="h-3 w-3" />}
                           {r.isRegex ? 'regex' : 'substring'}

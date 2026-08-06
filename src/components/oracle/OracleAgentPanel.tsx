@@ -49,9 +49,9 @@ interface StatusGroupDef {
 }
 
 const STATUS_GROUPS: StatusGroupDef[] = [
-  { key: 'running', label: 'Running', icon: Loader2, iconClass: 'text-blue-500 animate-spin', emptyHint: 'Oracle is idle.' },
+  { key: 'running', label: 'Running', icon: Loader2, iconClass: 'text-cyan-500 animate-spin', emptyHint: 'Oracle is idle.' },
   { key: 'scheduled', label: 'Scheduled', icon: CalendarClock, iconClass: 'text-amber-500', emptyHint: 'No scheduled tasks.' },
-  { key: 'completed', label: 'Completed', icon: CheckCircle2, iconClass: 'text-blue-500', emptyHint: 'Nothing completed yet.' },
+  { key: 'completed', label: 'Completed', icon: CheckCircle2, iconClass: 'text-emerald-500', emptyHint: 'Nothing completed yet.' },
   { key: 'failed', label: 'Failed', icon: AlertTriangle, iconClass: 'text-red-500', emptyHint: 'No failures. Good.' },
 ];
 
@@ -223,7 +223,7 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
           {/* Active step */}
           {task.steps.find((s) => s.state === 'active') && (
             <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-              <Loader2 className="h-2 w-2 animate-spin text-blue-500" />
+              <Loader2 className="h-2 w-2 animate-spin text-cyan-500" />
               <span className="truncate">
                 {task.steps.find((s) => s.state === 'active')?.label}
               </span>
@@ -241,9 +241,9 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
               className={cn(
                 'h-1 flex-1 rounded-full transition-colors',
                 step.state === 'done'
-                  ? 'bg-blue-400'
+                  ? 'bg-emerald-400'
                   : step.state === 'active'
-                    ? 'bg-blue-400'
+                    ? 'bg-cyan-400'
                     : 'bg-border',
               )}
               title={step.label}
@@ -254,8 +254,8 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
 
       {/* Result (completed) */}
       {task.status === 'completed' && task.result && (
-        <div className="flex items-start gap-1.5 rounded-md bg-blue-500/[0.06] p-1.5">
-          <CheckCircle2 className="mt-0.5 h-2.5 w-2.5 shrink-0 text-blue-500" />
+        <div className="flex items-start gap-1.5 rounded-md bg-emerald-500/[0.06] p-1.5">
+          <CheckCircle2 className="mt-0.5 h-2.5 w-2.5 shrink-0 text-emerald-500" />
           <p className="text-[10px] leading-relaxed text-foreground/80">{task.result}</p>
         </div>
       )}
@@ -298,9 +298,9 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
 
 function StatusBadge({ status }: { status: OracleTaskStatus }) {
   const map: Record<OracleTaskStatus, { label: string; cls: string }> = {
-    running: { label: 'Running', cls: 'bg-blue-500/[0.12] text-blue-600 dark:text-blue-400' },
+    running: { label: 'Running', cls: 'bg-cyan-500/[0.12] text-cyan-600 dark:text-cyan-400' },
     scheduled: { label: 'Scheduled', cls: 'bg-amber-500/[0.12] text-amber-600 dark:text-amber-400' },
-    completed: { label: 'Done', cls: 'bg-blue-500/[0.12] text-blue-600 dark:text-blue-400' },
+    completed: { label: 'Done', cls: 'bg-emerald-500/[0.12] text-emerald-600 dark:text-emerald-400' },
     failed: { label: 'Failed', cls: 'bg-red-500/[0.12] text-red-600 dark:text-red-400' },
     pending: { label: 'Pending', cls: 'bg-slate-500/[0.12] text-slate-600 dark:text-slate-400' },
   };

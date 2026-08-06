@@ -55,7 +55,7 @@ const Row = function Row({
     <div
       style={style}
       className={`flex items-center border-b border-[#1F1F1F] px-2 transition-colors hover:bg-[#171A21] ${
-        isSelected ? 'bg-[#2563EB]/[0.04]' : ''
+        isSelected ? 'bg-[#10B981]/[0.04]' : ''
       } ${m.resolved ? 'opacity-50' : ''}`}
     >
       {/* Checkbox */}
@@ -63,8 +63,8 @@ const Row = function Row({
         onClick={(e) => { e.stopPropagation(); onToggleRow(m.id); }}
         className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
         style={{
-          borderColor: isSelected ? '#2563EB' : '#3A3E46',
-          backgroundColor: isSelected ? '#2563EB' : 'transparent',
+          borderColor: isSelected ? '#10B981' : '#3A3E46',
+          backgroundColor: isSelected ? '#10B981' : 'transparent',
         }}
         aria-label={isSelected ? 'Deselect row' : 'Select row'}
       >
@@ -82,7 +82,7 @@ const Row = function Row({
       {/* Invoice # + confidence */}
       <button
         onClick={() => onOpenMatch(m)}
-        className="flex w-28 shrink-0 flex-col items-start text-left hover:text-[#60A5FA]"
+        className="flex w-28 shrink-0 flex-col items-start text-left hover:text-[#34D399]"
       >
         <span className="truncate font-mono text-xs text-foreground">{m.booksInvoiceNo || m.gstr2bInvoiceNo || '—'}</span>
         {m.confidence > 0 && (
@@ -131,7 +131,7 @@ const Row = function Row({
           className="gst-btn gst-btn-ghost gst-btn-sm !h-7 !px-2"
           title="Oracle AI analysis"
         >
-          <Sparkles className="h-3.5 w-3.5 text-[#60A5FA]" />
+          <Sparkles className="h-3.5 w-3.5 text-[#34D399]" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onResolve(m.id, !m.resolved); }}
@@ -238,8 +238,8 @@ export function VirtualizedReconciliationTable({
           onClick={onToggleAll}
           className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
           style={{
-            borderColor: allSelected ? '#2563EB' : '#3A3E46',
-            backgroundColor: allSelected ? '#2563EB' : someSelected ? '#2563EB]/40' : 'transparent',
+            borderColor: allSelected ? '#10B981' : '#3A3E46',
+            backgroundColor: allSelected ? '#10B981' : someSelected ? '#10B981]/40' : 'transparent',
           }}
           aria-label={allSelected ? 'Deselect all' : 'Select all'}
         >
@@ -275,7 +275,7 @@ export function VirtualizedReconciliationTable({
           Showing <span className="font-semibold text-foreground">{rowCount}</span> of{' '}
           <span className="font-semibold text-foreground">{total}</span> matches
           {selectedIds.size > 0 && (
-            <span className="ml-2 text-[#60A5FA]">· {selectedIds.size} selected</span>
+            <span className="ml-2 text-[#34D399]">· {selectedIds.size} selected</span>
           )}
         </span>
         <div className="flex items-center gap-2">

@@ -88,7 +88,7 @@ function getReturnStatusBadge(status: string) {
 function getDocStatusBadge(status: string) {
   switch (status) {
     case 'extracted': case 'reviewed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Processed</Badge>;
-    case 'processing': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Processing</Badge>;
+    case 'processing': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Processing</Badge>;
     case 'uploading': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">Uploading</Badge>;
     case 'failed': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Error</Badge>;
     default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
@@ -108,8 +108,8 @@ function getActivityIcon(type: string) {
 
 function getActivityColor(type: string) {
   switch (type) {
-    case 'document_uploaded': case 'document_processed': return 'bg-blue-50 text-blue-600';
-    case 'return_prepared': case 'return_reviewed': return 'bg-purple-50 text-purple-600';
+    case 'document_uploaded': case 'document_processed': return 'bg-cyan-50 text-cyan-600';
+    case 'return_prepared': case 'return_reviewed': return 'bg-emerald-50 text-emerald-600';
     case 'return_filed': return 'bg-emerald-50 text-emerald-600';
     case 'reconciliation_run': case 'mismatch_resolved': return 'bg-teal-50 text-teal-600';
     default: return 'bg-slate-100 text-slate-500';

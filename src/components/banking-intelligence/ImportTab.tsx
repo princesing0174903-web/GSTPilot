@@ -399,7 +399,7 @@ function Step2({
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
             <Button onClick={onCategorize}>
-              <Sparkles className="h-4 w-4 text-violet-300" /> Categorize with AI
+              <Sparkles className="h-4 w-4 text-cyan-300" /> Categorize with AI
             </Button>
           </div>
         </CardContent>
@@ -457,7 +457,7 @@ function Step3({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="h-4 w-4 text-violet-500" />
+          <Sparkles className="h-4 w-4 text-cyan-500" />
           Categorize
         </CardTitle>
         <CardDescription>
@@ -612,7 +612,7 @@ function Stat({ label, value, tone = 'muted' }: { label: string; value: string; 
     emerald: 'text-emerald-600 dark:text-emerald-300',
     rose: 'text-rose-600 dark:text-rose-300',
     amber: 'text-amber-600 dark:text-amber-300',
-    violet: 'text-violet-600 dark:text-violet-300',
+    violet: 'text-cyan-600 dark:text-cyan-300',
     muted: 'text-foreground',
   }[tone];
   return (

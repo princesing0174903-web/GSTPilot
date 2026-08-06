@@ -434,7 +434,7 @@ export default function InvoicesView() {
         <StatCard icon={<Receipt className="h-5 w-5 text-emerald-400" />} label="Total Invoiced" value={inr(stats.totalInvoiced)} tint="emerald" />
         <StatCard icon={<CheckCircle2 className="h-5 w-5 text-teal-400" />} label="Total Paid" value={inr(stats.totalPaid)} tint="teal" />
         <StatCard icon={<Wallet className="h-5 w-5 text-amber-400" />} label="Outstanding" value={inr(stats.totalOutstanding)} tint="amber" />
-        <StatCard icon={<TrendingUp className="h-5 w-5 text-violet-400" />} label="Tax Collected" value={inr(stats.totalTaxCollected)} tint="violet" />
+        <StatCard icon={<TrendingUp className="h-5 w-5 text-cyan-400" />} label="Tax Collected" value={inr(stats.totalTaxCollected)} tint="violet" />
       </div>
 
       {/* Search */}
@@ -1010,7 +1010,7 @@ function StatCard({
     emerald: 'bg-emerald-500/10 border-emerald-500/20',
     teal: 'bg-teal-500/10 border-teal-500/20',
     amber: 'bg-amber-500/10 border-amber-500/20',
-    violet: 'bg-violet-500/10 border-violet-500/20',
+    violet: 'bg-cyan-500/10 border-cyan-500/20',
   };
   return (
     <Card className="border-white/10 bg-white/[0.03]">

@@ -23,7 +23,7 @@ const ACTIONS: ActionDef[] = [
   { icon: FilePlus, label: 'Create Invoice', prompt: 'Create a new invoice', color: 'text-amber-400' },
   { icon: IndianRupee, label: 'Collect Payment', prompt: 'Show me outstanding payments to collect', color: 'text-emerald-400' },
   { icon: Bell, label: 'Send Reminder', prompt: 'Send payment reminders to overdue customers', color: 'text-cyan-400' },
-  { icon: FileCheck, label: 'Generate GST Return', prompt: 'Generate my GST return for this period', color: 'text-violet-400' },
+  { icon: FileCheck, label: 'Generate GST Return', prompt: 'Generate my GST return for this period', color: 'text-emerald-400' },
   { icon: Mail, label: 'Email Client', prompt: 'Draft an email to my top customer', color: 'text-amber-400' },
   { icon: TrendingUp, label: 'Forecast Cashflow', prompt: 'Forecast my cash flow for the next 30 days', color: 'text-emerald-400' },
 ];

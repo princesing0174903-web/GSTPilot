@@ -261,9 +261,9 @@ const HERO_ACCENT: Record<HeroStatProps['accent'], { bar: string; chip: string; 
     glow: 'hover:shadow-[0_0_32px_-8px_rgba(245,158,11,0.22)]',
   },
   blue: {
-    bar: 'bg-gradient-to-b from-blue-400 to-blue-600',
-    chip: 'bg-blue-500/10 border border-blue-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.22)]',
+    bar: 'bg-gradient-to-b from-cyan-400 to-cyan-600',
+    chip: 'bg-cyan-500/10 border border-cyan-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(34,211,238,0.22)]',
   },
 };
 
@@ -510,12 +510,12 @@ function activityIconFor(type: string, source: string): { icon: LucideIcon; tone
   const s = source.toLowerCase();
   if (t.includes('oracle') || t.includes('brain')) return { icon: Sparkles, tone: 'text-amber-400' };
   if (t.includes('zoho') || s.includes('zoho')) return { icon: BookOpen, tone: 'text-rose-400' };
-  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-blue-400' };
+  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-cyan-400' };
   if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-cyan-400' };
   if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-emerald-400' };
-  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-violet-400' };
+  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-emerald-400' };
   if (t.includes('return') || t.includes('gst') || t.includes('filing')) return { icon: Receipt, tone: 'text-amber-400' };
-  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-blue-400' };
+  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-cyan-400' };
   if (t.includes('reconcil')) return { icon: AlertTriangle, tone: 'text-amber-400' };
   if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-emerald-400' };
   return { icon: Activity, tone: 'text-muted-foreground' };
@@ -537,7 +537,7 @@ interface ActionItem {
 const ACTION_TONE: Record<ActionItem['tone'], { chip: string; bar: string }> = {
   rose: { chip: 'bg-rose-500/10 border-rose-500/20 text-rose-400', bar: 'bg-rose-400' },
   amber: { chip: 'bg-amber-500/10 border-amber-500/20 text-amber-400', bar: 'bg-amber-400' },
-  blue: { chip: 'bg-blue-500/10 border-blue-500/20 text-blue-400', bar: 'bg-blue-400' },
+  blue: { chip: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400', bar: 'bg-cyan-400' },
   emerald: { chip: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400', bar: 'bg-emerald-400' },
 };
 
@@ -906,7 +906,7 @@ export default function DashboardPage() {
                   ? `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} issued · FY total ${abbreviateINR(snapshot.revenue)}`
                   : 'No invoices issued this month yet'
               }
-              icon={<IndianRupee className="h-4 w-4 text-blue-400" />}
+              icon={<IndianRupee className="h-4 w-4 text-emerald-400" />}
               accent="blue"
             >
               {todaysRevenue > 0 && revenueMom.direction !== 'flat' && (
@@ -1065,7 +1065,7 @@ export default function DashboardPage() {
               numericValue={snapshot.invoices.count}
               numericFormat="integer"
               subtitle={`${snapshot.invoices.overdue > 0 ? `${snapshot.invoices.overdue} overdue` : 'none overdue'}`}
-              icon={<FileText className="h-3.5 w-3.5 text-violet-400" />}
+              icon={<FileText className="h-3.5 w-3.5 text-emerald-400" />}
               onClick={() => setCurrentView('invoices')}
             />
             <SnapshotTile
@@ -1074,7 +1074,7 @@ export default function DashboardPage() {
               numericValue={snapshot.customers}
               numericFormat="integer"
               subtitle={`${snapshot.customers === 1 ? '1 active client' : `${snapshot.customers} active clients`}`}
-              icon={<Users className="h-3.5 w-3.5 text-blue-400" />}
+              icon={<Users className="h-3.5 w-3.5 text-cyan-400" />}
               onClick={() => setCurrentView('clients')}
             />
             <SnapshotTile

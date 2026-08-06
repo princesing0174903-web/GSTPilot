@@ -77,11 +77,11 @@ interface BusinessGraph {
 // ─── Node visual config ────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<GraphNodeType, string> = {
-  business: '#2563EB', // emerald
-  client: '#3B82F6',   // blue
-  invoice: '#3B82F6',  // cyan
+  business: '#10B981', // emerald
+  client: '#06B6D4',   // cyan
+  invoice: '#F59E0B',  // amber
   payment: '#22C55E',  // green
-  employee: '#A855F7', // purple
+  employee: '#10B981', // emerald
   task: '#F97316',     // orange
   gst: '#EAB308',      // yellow
   document: '#9CA3AF', // gray
@@ -947,7 +947,7 @@ function EmptyGraphState({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[13px] font-semibold text-foreground">{b.label}</span>
-                  {b.done && <CheckCircle2 className="h-3 w-3 text-blue-400" />}
+                  {b.done && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}}
                 </div>
                 <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{b.desc}</p>
               </div>

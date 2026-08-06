@@ -176,7 +176,7 @@ export function AutonomousFinanceDashboard() {
               </div>
             </div>
             <div className="flex items-center justify-around rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 backdrop-blur-sm">
-              <Gauge value={autopilotPct} label="Operations Autopilot" sublabel={`${autoActions.length} of ${activities.length} actions auto-handled`} color="text-violet-400" />
+              <Gauge value={autopilotPct} label="Operations Autopilot" sublabel={`${autoActions.length} of ${activities.length} actions auto-handled`} color="text-cyan-400" />
               <div className="space-y-1 text-right">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">Last 24h</p>
                 <p className="text-2xl font-semibold text-foreground">{autoActions.length}</p>
@@ -242,7 +242,7 @@ export function AutonomousFinanceDashboard() {
               )}
             </SectionCard>
 
-            <SectionCard icon={Clock} title="Pending Approvals" accent="bg-violet-500/15 text-violet-300" delay={0.15}>
+            <SectionCard icon={Clock} title="Pending Approvals" accent="bg-cyan-500/15 text-cyan-300" delay={0.15}>
               {pendingApprovals.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <CheckCircle2 className="h-8 w-8 text-emerald-400" />

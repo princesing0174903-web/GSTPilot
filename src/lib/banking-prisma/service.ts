@@ -759,8 +759,11 @@ export async function getDashboardSummary(organizationId: string): Promise<Banki
 
   // Bank health score: weighted blend of active accounts ratio, reconciliation
   // rate, and cash-flow positive momentum. 0-100.
-  const totalTxns = await db.bankTransaction.count({ where: { organizationId } });
-  const matchedTxns = await db.bankTransaction.count({ where: { organizationId, matched: true } });
+  // (Was 2 sequential counts — now a single Promise.all.)
+  const [totalTxns, matchedTxns] = await Promise.all([
+    db.bankTransaction.count({ where: { organizationId } }),
+    db.bankTransaction.count({ where: { organizationId, matched: true } }),
+  ]);
   const reconciliationRate = totalTxns > 0 ? matchedTxns / totalTxns : 0;
   const activeRatio = connectedAccounts > 0 ? activeAccounts / connectedAccounts : 0;
   const cashFlowPositive = monthlyInflow >= monthlyOutflow ? 1 : 0.5;
@@ -769,24 +772,44 @@ export async function getDashboardSummary(organizationId: string): Promise<Banki
   ) / 100;
 
   // Cash flow trend (last 14 days).
+  // (Was N+1: 14 sequential findMany calls — now a single findMany for the
+  // entire 14-day window, then bucketized in JS.)
+  const trendWindowStart = new Date(startOfDay().getTime() - 13 * 86_400_000);
+  const trendTxns = await db.bankTransaction.findMany({
+    where: {
+      organizationId,
+      date: { gte: trendWindowStart },
+    },
+    select: { amount: true, type: true, date: true },
+  });
+
+  // Pre-build a per-day inflow/outflow map.
+  const dayBuckets = new Map<string, { inflow: number; outflow: number }>();
+  for (let i = 13; i >= 0; i--) {
+    const dayStart = new Date(startOfDay().getTime() - i * 86_400_000);
+    const key = dayStart.toISOString().slice(0, 10);
+    dayBuckets.set(key, { inflow: 0, outflow: 0 });
+  }
+  for (const t of trendTxns) {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    const key = d.toISOString().slice(0, 10);
+    const bucket = dayBuckets.get(key);
+    if (!bucket) continue; // txn outside the 14-day window
+    const amt = Math.abs(t.amount);
+    if (t.type === 'credit') bucket.inflow += amt;
+    else bucket.outflow += amt;
+  }
+
   const trend: BankingDashboardSummary['cashFlowTrend'] = [];
   for (let i = 13; i >= 0; i--) {
     const dayStart = new Date(startOfDay().getTime() - i * 86_400_000);
-    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
-    const dayTxns = await db.bankTransaction.findMany({
-      where: {
-        organizationId,
-        date: { gte: dayStart, lt: dayEnd },
-      },
-      select: { amount: true, type: true },
-    });
-    const inflow = dayTxns.filter((t) => t.type === 'credit').reduce((s, t) => s + Math.abs(t.amount), 0);
-    const outflow = dayTxns.filter((t) => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
+    const key = dayStart.toISOString().slice(0, 10);
+    const bucket = dayBuckets.get(key) ?? { inflow: 0, outflow: 0 };
     trend.push({
       date: dayStart.toISOString(),
-      inflow,
-      outflow,
-      net: inflow - outflow,
+      inflow: bucket.inflow,
+      outflow: bucket.outflow,
+      net: bucket.inflow - bucket.outflow,
       closingBalance: 0, // filled below
     });
   }

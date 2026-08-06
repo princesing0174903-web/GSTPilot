@@ -76,7 +76,7 @@ const MATCH_TYPE_COLOR: Record<string, string> = {
   duplicate: 'border-rose-400/30 text-rose-300',
   overpayment: 'border-amber-400/30 text-amber-300',
   underpayment: 'border-amber-400/30 text-amber-300',
-  missing: 'border-violet-400/30 text-violet-300',
+  missing: 'border-cyan-400/30 text-cyan-300',
   suspicious: 'border-rose-400/30 text-rose-300',
 };
 
@@ -495,7 +495,7 @@ export function SmartReconciliationPage() {
                 </Badge>
               )}
               {stats.missing > 0 && (
-                <Badge variant="outline" className="border-violet-400/30 text-violet-300">
+                <Badge variant="outline" className="border-cyan-400/30 text-cyan-300">
                   {stats.missing} missing invoices
                 </Badge>
               )}

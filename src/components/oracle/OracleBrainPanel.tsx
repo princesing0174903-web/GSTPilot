@@ -119,7 +119,7 @@ function formatRelative(iso: string): string {
 const TYPE_COLORS: Record<string, string> = {
   conversation: 'text-sky-400 bg-sky-500/10',
   business: 'text-emerald-400 bg-emerald-500/10',
-  user: 'text-purple-400 bg-purple-500/10',
+  user: 'text-emerald-400 bg-emerald-500/10',
   task: 'text-amber-400 bg-amber-500/10',
   decision: 'text-rose-400 bg-rose-500/10',
   reminder: 'text-orange-400 bg-orange-500/10',

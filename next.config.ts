@@ -23,6 +23,19 @@ const nextConfig: NextConfig = {
   // The app is huge (Firebase + 50+ Radix components + recharts + framer-motion)
   // and the sandbox has tight memory; source maps were the main OOM driver.
   productionBrowserSourceMaps: false,
+  // ─── Webpack dev memory tuning (prevents OOM on the 4GB sandbox) ──────────
+  // The dev compile graph is enormous (3000+ modules). These flags keep
+  // webpack's in-memory caches bounded so the next-server process stays under
+  // its --max-old-space-size budget.
+  webpack: (config, { dev }) => {
+    if (dev) {
+      // Disable the persistent filesystem cache in dev — it causes large
+      // gz pack files in .next/dev/cache and the rename-ENOENT errors that
+      // crash compile-on-demand. In-memory caching is enough for dev.
+      config.cache = false;
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

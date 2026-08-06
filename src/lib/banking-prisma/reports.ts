@@ -210,14 +210,45 @@ export async function generateReport(
 
   // outstanding invoices — open invoices with positive balance.
   // Invoice is scoped via `client.firmId === organizationId` (no direct orgId).
-  const outstandingInvoices = await db.invoice.findMany({
-    where: {
-      client: { firmId: organizationId },
-      status: { notIn: ['paid', 'cancelled', 'archived'] },
-      balanceAmount: { gt: 0 },
-    },
-    select: { balanceAmount: true },
-  });
+  //
+  // (Was 4 sequential queries — now parallelized via Promise.all. The four
+  // queries have no data dependency between them, so they can all run in
+  // parallel.)
+  const startISO = toISODate(start);
+  const endISO = toISODate(end);
+  const [outstandingInvoices, invoicesInPeriod, accounts, sinceStartTxns] = await Promise.all([
+    // outstanding invoices — open invoices with positive balance.
+    db.invoice.findMany({
+      where: {
+        client: { firmId: organizationId },
+        status: { notIn: ['paid', 'cancelled', 'archived'] },
+        balanceAmount: { gt: 0 },
+      },
+      select: { balanceAmount: true },
+    }),
+    // Invoices issued within the report period (for collectionRate).
+    db.invoice.findMany({
+      where: {
+        client: { firmId: organizationId },
+        invoiceDate: { gte: startISO, lte: endISO },
+      },
+      select: { totalAmount: true },
+    }),
+    // Current bank balances (for openingBalance derivation).
+    db.bankAccount.findMany({
+      where: { organizationId },
+      select: { balance: true },
+    }),
+    // Transactions since the start of the period (for openingBalance).
+    db.bankTransaction.findMany({
+      where: {
+        organizationId,
+        date: { gte: start },
+      },
+      select: { amount: true, type: true },
+    }),
+  ]);
+
   const outstanding = {
     total: round2(outstandingInvoices.reduce((s, i) => s + (i.balanceAmount || 0), 0)),
     count: outstandingInvoices.length,
@@ -226,15 +257,6 @@ export async function generateReport(
   // collectionRate = (matched credits in period) / (invoices issued in period).
   // Invoices issued = invoices whose invoiceDate falls within [start, end].
   // invoiceDate is a String (YYYY-MM-DD), so we compare lexicographically.
-  const startISO = toISODate(start);
-  const endISO = toISODate(end);
-  const invoicesInPeriod = await db.invoice.findMany({
-    where: {
-      client: { firmId: organizationId },
-      invoiceDate: { gte: startISO, lte: endISO },
-    },
-    select: { totalAmount: true },
-  });
   const totalInvoiceAmount = invoicesInPeriod.reduce(
     (s, i) => s + (i.totalAmount || 0),
     0,
@@ -255,18 +277,7 @@ export async function generateReport(
   // opening(at start) = today - Σ since. Approximates the balance at the
   // start of the period (assuming no future-dated txns, which holds because
   // NOW is the wall-clock present).
-  const accounts = await db.bankAccount.findMany({
-    where: { organizationId },
-    select: { balance: true },
-  });
   const currentTotalBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0);
-  const sinceStartTxns = await db.bankTransaction.findMany({
-    where: {
-      organizationId,
-      date: { gte: start },
-    },
-    select: { amount: true, type: true },
-  });
   const netSinceStart = sinceStartTxns.reduce(
     (s, t) => s + (t.type === 'credit' ? Math.abs(t.amount) : -Math.abs(t.amount)),
     0,
@@ -304,28 +315,24 @@ export async function listAvailableReports(
 > {
   const periods: ReportPeriod[] = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
   const now = new Date();
-  const out: Array<{
-    period: ReportPeriod;
-    startDate: string;
-    endDate: string;
-    available: boolean;
-  }> = [];
 
-  for (const period of periods) {
-    const { start, end } = getPeriodRange(period, now);
-    const count = await db.bankTransaction.count({
-      where: {
-        organizationId,
-        date: { gte: start, lte: end },
-      },
-    });
-    out.push({
-      period,
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
-      available: count > 0,
-    });
-  }
+  // (Was N+1: 5 sequential count queries — now 5 parallel counts via Promise.all.)
+  const ranges = periods.map((p) => ({ period: p, ...getPeriodRange(p, now) }));
+  const counts = await Promise.all(
+    ranges.map(({ start, end }) =>
+      db.bankTransaction.count({
+        where: {
+          organizationId,
+          date: { gte: start, lte: end },
+        },
+      }),
+    ),
+  );
 
-  return out;
+  return ranges.map(({ period, start, end }, i) => ({
+    period,
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+    available: counts[i] > 0,
+  }));
 }

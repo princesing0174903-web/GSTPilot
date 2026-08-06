@@ -1185,22 +1185,34 @@ function BankingOraclePanelAuto({
 
   useEffect(() => {
     let cancelled = false;
-    api.fetchOracleInsights()
-      .then((data) => {
-        if (cancelled) return;
-        setInsights(data);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('[BankingOraclePanel] fetchOracleInsights failed:', err);
-        setError(
-          'We couldn\'t load Oracle insights for your banking data. Please retry.',
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    let attempt = 0;
+    const maxAttempts = 3;
+
+    const run = () => {
+      api.fetchOracleInsights()
+        .then((data) => {
+          if (cancelled) return;
+          setInsights(data);
+          setError(null);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          attempt += 1;
+          // Transient errors (route still compiling, network blip) → retry with
+          // backoff. Only surface an error to the user after the final attempt.
+          if (attempt < maxAttempts) {
+            setTimeout(run, 800 * attempt);
+            return;
+          }
+          console.warn('[BankingOraclePanel] fetchOracleInsights failed after retries:', err?.message ?? err);
+          setError(
+            'We couldn\'t load Oracle insights for your banking data. Please retry.',
+          );
+          setLoading(false);
+        });
+    };
+    run();
     return () => {
       cancelled = true;
     };
@@ -1215,7 +1227,7 @@ function BankingOraclePanelAuto({
         setError(null);
       })
       .catch((err) => {
-        console.error('[BankingOraclePanel] retry failed:', err);
+        console.warn('[BankingOraclePanel] retry failed:', err?.message ?? err);
         setError(
           'We couldn\'t load Oracle insights for your banking data. Please retry.',
         );

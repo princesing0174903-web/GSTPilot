@@ -12,7 +12,7 @@
 // independently (e.g. extra fields for invoice creation).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
 import { fetchWithTimeout } from '@/lib/async';
 
@@ -90,5 +90,10 @@ export function useClientsApi(): UseClientsApiResult {
     setRetryTick((t) => t + 1);
   }, []);
 
-  return { clients, loading, error, refetch };
+  // Memoize the returned object so consumers don't re-render on every parent
+  // render. (Was returning a fresh object literal on every render.)
+  return useMemo<UseClientsApiResult>(
+    () => ({ clients, loading, error, refetch }),
+    [clients, loading, error, refetch],
+  );
 }

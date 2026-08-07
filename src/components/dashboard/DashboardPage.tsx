@@ -382,7 +382,8 @@ function SnapshotTile({
         type="button"
         onClick={onClick}
         disabled={!interactive}
-        className={`group relative w-full text-left glass-surface rounded-2xl p-4 h-full overflow-hidden transition-all ${interactive ? 'hover-lift cursor-pointer hover:border-white/10' : 'cursor-default'}`}
+        aria-label={`${label}${valueString ? `: ${valueString}` : ''}${mom ? `, ${mom.direction === 'up' ? 'up' : mom.direction === 'down' ? 'down' : 'flat'} ${mom.pct}% vs last month` : ''}`}
+        className={`group relative w-full text-left glass-surface rounded-2xl p-4 h-full overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 ${interactive ? 'hover-lift cursor-pointer hover:border-white/10' : 'cursor-default'}`}
       >
         <div className="flex items-center justify-between gap-2 mb-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.08em] truncate">

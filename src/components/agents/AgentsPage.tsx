@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
+import { PremiumPageLoader } from '@/components/ui/premium-loading'
 import { motion } from 'framer-motion'
 import {
   FileText,
@@ -672,14 +673,7 @@ export default function AIWorkforcePage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-          <span className="text-sm text-muted-foreground">Loading AI Workforce...</span>
-        </div>
-      </div>
-    )
+    return <PremiumPageLoader label="Loading AI Workforce…" />
   }
 
   return (

@@ -22,7 +22,7 @@ import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
 import { getViewMeta } from '@/lib/navigation-registry'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Menu } from 'lucide-react'
 import { sendVerificationEmail } from '@/lib/auth'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -38,6 +38,7 @@ import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
 import { FloatingDock } from '@/components/layout/FloatingDock'
 import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 // NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
 // experience at /oracle, launched by <OracleLauncher /> (mounted globally in
 // providers.tsx). No more docked sidebar popup.
@@ -71,6 +72,9 @@ export function DashboardContent() {
   // ── Notifications sheet state ──────────────────────────────────────────────
   // Oracle is now a full page (/oracle), not a docked sidebar popup.
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  // ── Mobile sidebar (Sheet) state — visible only below the md breakpoint,
+  // where the persistent 64px rail would eat too much of the screen. ──
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const userInitials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -81,25 +85,44 @@ export function DashboardContent() {
       {/* ═══ Ambient Background — pure flat black (no decorations) ═══ */}
       <AmbientBackground />
 
+      {/* ═══ Skip-to-content link (a11y) — visible only when focused ═══ */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[#2563EB] focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* ═══ TOP BAR ═══ */}
       <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[#1F1F1F] bg-[#000000] px-4 md:px-6">
+        {/* Mobile sidebar toggle (visible below lg). The desktop rail is
+            rendered in the two-column workspace below. */}
+        <button
+          onClick={() => setMobileNavOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 lg:hidden"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
         {/* Breadcrumb — content area starts directly here.
             NOTE (Task 9): The duplicate GSTPilot brand mark that used to live
             in the top bar has been removed. Branding now appears ONLY inside
             the sidebar (LeftNav.tsx), so the content area begins cleanly with
             the breadcrumb. On the dashboard view the breadcrumb shows just
             "Home"; on sub-pages it shows "Home / {View Label}". */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground"
+            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            aria-label="Go to home"
           >
             Home
           </button>
           {currentView !== 'dashboard' && (
             <>
-              <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
-              <span className="rounded-md px-1.5 py-1 font-medium text-foreground">
+              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" aria-hidden="true" />
+              <span className="truncate rounded-md px-1.5 py-1 font-medium text-foreground">
                 {getViewMeta(currentView).label}
               </span>
             </>
@@ -111,9 +134,9 @@ export function DashboardContent() {
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
             className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
-            aria-label="Search"
+            aria-label="Search (Cmd+K)"
           >
-            <Search className="h-3.5 w-3.5" />
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Search</span>
             <kbd className="hidden rounded bg-[#1A1A1A] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
@@ -122,14 +145,17 @@ export function DashboardContent() {
             className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
             aria-label="Notifications"
           >
-            <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+            <Bell className="h-4 w-4" aria-hidden="true" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" aria-hidden="true" />
           </button>
           <ThemeToggle />
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818]">
+            <DropdownMenuTrigger
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818] focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+              aria-label="Account menu"
+            >
               <Avatar className="h-7 w-7">
-                <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+                <AvatarImage src={user?.picture} alt={user?.name || 'User avatar'} />
                 <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-[11px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
@@ -141,7 +167,7 @@ export function DashboardContent() {
             <DropdownMenuContent align="end" className="w-56">
               <div className="flex items-center gap-2 p-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
+                  <AvatarImage src={user?.picture} alt={user?.name || 'User avatar'} />
                   <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-xs font-semibold">
                     {userInitials}
                   </AvatarFallback>
@@ -153,16 +179,16 @@ export function DashboardContent() {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
-                <User className="h-4 w-4" />
+                <User className="h-4 w-4" aria-hidden="true" />
                 Profile
               </DropdownMenuItem>
               <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4" aria-hidden="true" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logout} className="gap-2 text-red-400 focus:text-red-300 focus:bg-red-500/10">
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -174,8 +200,9 @@ export function DashboardContent() {
       <div className="relative z-10 flex min-h-0 flex-1">
         {/* LEFT NAV — LeftNav itself manages h-full; no extra scroll wrapper here.
             The sidebar's own <nav> has overflow-hidden, and its primary-nav
-            <div> handles its own overflow-y-auto (see LeftNav.tsx). */}
-        <div className="shrink-0">
+            <div> handles its own overflow-y-auto (see LeftNav.tsx).
+            Hidden below lg — the mobile Sheet (rendered below) takes over. */}
+        <div className="hidden shrink-0 lg:block">
           <LeftNav />
         </div>
 
@@ -183,7 +210,7 @@ export function DashboardContent() {
             compensating for body scroll, which we now prevent via
             overflow-hidden on the root). The custom-scrollbar class keeps the
             rail thin + dark. */}
-        <main className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
+        <main id="main-content" role="main" className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
           <ViewErrorBoundary
             key={currentView}
             viewName={getViewMeta(currentView)?.label || currentView}
@@ -192,6 +219,21 @@ export function DashboardContent() {
           </ViewErrorBoundary>
         </main>
       </div>
+
+      {/* ═══ MOBILE NAV SHEET — renders the same LeftNav in expanded mode ═══ */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          className="w-[280px] max-w-[85vw] gap-0 border-r border-[#1A1A1A] bg-[#0A0A0A] p-0"
+        >
+          {/* SheetTitle is required by Radix Dialog for a11y — visually hidden
+              because the sidebar's own brand header serves as the visible label. */}
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <div className="h-full">
+            <LeftNav forceExpanded onNavigate={() => setMobileNavOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ═══ PREMIUM FLOATING DOCK (Notifications · Help) ═══ */}
       {/* Oracle button removed from dock — the canonical Oracle launcher is

@@ -28,6 +28,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, RotateCcw, LayoutDashboard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ViewErrorBoundaryProps {
   /** Display name of the crashed module, e.g. "Customers" or "Invoices". */
@@ -123,27 +124,18 @@ export class ViewErrorBoundary extends Component<
             the sidebar — the rest of the app is unaffected.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            <button
-              onClick={this.handleRetry}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
+            <Button onClick={this.handleRetry}>
               <RefreshCw className="h-4 w-4" />
               Try Again
-            </button>
-            <button
-              onClick={this.handleGoToDashboard}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-sm font-medium text-foreground transition hover:bg-white/[0.06]"
-            >
+            </Button>
+            <Button variant="outline" onClick={this.handleGoToDashboard}>
               <LayoutDashboard className="h-4 w-4" />
               Dashboard
-            </button>
-            <button
-              onClick={this.handleReload}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-sm font-medium text-foreground transition hover:bg-white/[0.06]"
-            >
+            </Button>
+            <Button variant="outline" onClick={this.handleReload}>
               <RotateCcw className="h-4 w-4" />
               Reload
-            </button>
+            </Button>
           </div>
         </div>
       </div>

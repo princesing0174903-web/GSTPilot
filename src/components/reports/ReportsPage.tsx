@@ -567,28 +567,27 @@ function ReportCard({
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={onGenerate}
           disabled={!isConfigured || anyGenerating}
-          className="gst-btn gst-btn-sm gst-btn-primary flex-1"
+          loading={isGenerating}
+          className="flex-1"
         >
-          {isGenerating ? (
-            <RefreshCw className="size-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="size-3.5" />
-          )}
+          {!isGenerating && <Sparkles className="size-3.5" />}
           {isGenerating ? 'Generating…' : isConfigured ? 'Generate' : 'Coming Soon'}
-        </button>
+        </Button>
         {hasDownload && (
-          <button
+          <Button
             type="button"
+            size="sm"
+            variant="outline"
             onClick={onDownload}
-            className="gst-btn gst-btn-sm gst-btn-outline"
             title="Download last generated file"
           >
             <Download className="size-3.5" />
-          </button>
+          </Button>
         )}
       </div>
     </div>

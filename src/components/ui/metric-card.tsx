@@ -201,7 +201,7 @@ export function MetricCard({
   const card = (
     <div
       className={cn(
-        'gst-metric-card relative rounded-xl border bg-card p-4',
+        'gst-metric-card relative rounded-xl border bg-card p-5',
         isClickable && 'cursor-pointer',
         className
       )}

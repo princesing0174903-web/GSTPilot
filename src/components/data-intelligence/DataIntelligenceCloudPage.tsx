@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { PremiumPageLoader } from '@/components/ui/premium-loading';
 import { Input } from '@/components/ui/input';
 import {
   Tabs, TabsList, TabsTrigger, TabsContent,
@@ -246,14 +247,7 @@ export default function DataIntelligenceCloudPage() {
 
   // ─── Loading ───────────────────────────────────────────────────────────────
   if (loading && !dashboard) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
-          <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
-          <p className="text-sm">Connecting enterprise data fabric…</p>
-        </div>
-      </div>
-    );
+    return <PremiumPageLoader label="Connecting enterprise data fabric…" />;
   }
 
   if (error && !dashboard) {

@@ -7,6 +7,7 @@ import type { StorageCategory } from '@/lib/firebase/storage-service'
 import type { DocumentMetadata } from '@/lib/firebase/documents-service'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PremiumEmptyState } from '@/components/ui/premium-empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -1734,29 +1735,24 @@ export default function DocumentsPage() {
           ) : mergedDocuments.length === 0 ? (
             // PT-1-a-retry: real empty state with CTA when no Document rows exist
             // in the DB (instead of falling back to fake Sharma & Co / Patel / HDFC / SBI summaries).
-            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-              <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-4">
-                <FileSearch className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">No documents yet</p>
-                <p className="text-xs text-muted-foreground max-w-sm">
-                  Upload your first invoice, sales register, GST notice, or bank statement
-                  to start AI-powered extraction and analysis.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => {
+            <PremiumEmptyState
+              icon={<FileSearch className="h-8 w-8" />}
+              title="No documents yet"
+              description="Upload your first invoice, sales register, GST notice, or bank statement to start AI-powered extraction and analysis."
+              primaryAction={{
+                label: 'Upload your first document',
+                onClick: () => {
                   const hub = document.getElementById('document-upload-hub')
                   if (hub) hub.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }}
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload your first document
-              </Button>
-            </div>
+                },
+                icon: <Upload className="h-4 w-4" />,
+              }}
+              quickTips={[
+                'Drag-and-drop multiple files at once to batch upload',
+                'AI auto-classifies invoices, notices, and statements',
+                'Ask Oracle to summarize any uploaded document',
+              ]}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <FileSearch className="h-12 w-12 text-muted-foreground/20 mb-3" />

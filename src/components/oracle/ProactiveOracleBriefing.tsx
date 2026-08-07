@@ -258,9 +258,10 @@ function ProactiveOracleBriefingImpl({
           size="sm"
           onClick={onRefresh}
           disabled={loading}
+          aria-label="Refresh briefing"
           className="shrink-0 h-8 w-8 p-0 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
         >
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
         </Button>
       </header>
 

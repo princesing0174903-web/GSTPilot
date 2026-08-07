@@ -634,7 +634,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   // ── Derived values ──
   const role: OrgRole | null = membership?.role ?? profile?.role ?? null;
-  const needsOrganization = isAuthenticated && !loading && !organization;
+  // Demo users never need onboarding — OrgContext's fast path creates a local
+  // workspace synchronously. Without this guard, a render-cycle race between
+  // AuthContext flipping `isAuthenticated=true` and OrgContext's fast-path
+  // effect running causes `needsOrganization` to briefly be `true`, which
+  // triggers `<AutoProvisionWorkspace />` to fire a wasted Firestore
+  // createOrganization call (harmless but noisy — logs 4 warnings per demo
+  // sign-in). Excluding demo users here eliminates the race entirely.
+  const needsOrganization =
+    isAuthenticated &&
+    !loading &&
+    !organization &&
+    user?.provider !== 'demo';
 
   const canPermission = useCallback(
     (permission: Permission) => can(role, permission),

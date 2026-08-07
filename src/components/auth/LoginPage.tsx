@@ -454,13 +454,15 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                         <p className="text-xs text-amber-100/70 mb-3 leading-relaxed">
                           The preview panel blocks Google's pop-up. Open the app in a new tab to complete sign-in securely.
                         </p>
-                        <button
+                        <Button
+                          type="button"
+                          size="sm"
                           onClick={handleOpenInNewTab}
-                          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 text-xs font-semibold transition-colors press-scale"
+                          className="gap-1.5 bg-amber-500 text-black hover:bg-amber-400"
                         >
                           <ArrowRight className="h-3.5 w-3.5" />
                           Open in new tab
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </motion.div>
@@ -588,12 +590,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 <p className="text-center text-xs text-white/35 mb-3">
                   Want to look around first? Start a local workspace.
                 </p>
-                <button
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={signInDemo}
-                  className="w-full h-10 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/[0.04] border border-white/[0.08] transition-all press-scale"
+                  className="w-full h-10 rounded-xl border-white/[0.08] bg-transparent text-white/60 hover:text-white hover:bg-white/[0.04]"
                 >
                   Explore the platform
-                </button>
+                </Button>
               </div>
             </>
           )}

@@ -45,6 +45,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PremiumPageLoader } from '@/components/ui/premium-loading';
 import { useToast } from '@/hooks/use-toast';
 import {
   AUTONOMOUS_TAGLINE, AUTONOMOUS_SUBTAGLINE, AUTONOMOUS_FOUNDER,
@@ -544,14 +545,7 @@ export default function AutonomousEnterprisePage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading || !data) {
-    return (
-      <div className="min-h-screen bg-background p-6 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
-          <p className="text-sm text-muted-foreground">Booting the Autonomous Enterprise OS…</p>
-        </div>
-      </div>
-    );
+    return <PremiumPageLoader label="Booting the Autonomous Enterprise OS…" />;
   }
 
   const cc = data.commandCenter;

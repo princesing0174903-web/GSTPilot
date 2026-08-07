@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PremiumEmptyState } from '@/components/ui/premium-empty-state';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -387,24 +388,16 @@ export default function ClientWorkspacePage() {
   // ─── Client not found — professional empty state ────────────────────
   if (!client) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-6xl mx-auto px-4 md:px-6 py-20 text-center space-y-5"
-      >
-        <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-2xl bg-slate-100">
-          <Building2 className="size-10 text-slate-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-foreground">Client Not Found</h2>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          The client you are looking for does not exist or has been removed.
-          Select another client from your portfolio to continue.
-        </p>
-        <Button variant="outline" onClick={handleBack} className="gap-2">
-          <ArrowLeft className="size-4" />
-          Back to Client Portfolio
-        </Button>
-      </motion.div>
+      <PremiumEmptyState
+        icon={<Building2 className="h-8 w-8" />}
+        title="Client Not Found"
+        description="The client you are looking for does not exist or has been removed. Select another client from your portfolio to continue."
+        primaryAction={{
+          label: 'Back to Client Portfolio',
+          onClick: handleBack,
+          icon: <ArrowLeft className="h-4 w-4" />,
+        }}
+      />
     );
   }
 

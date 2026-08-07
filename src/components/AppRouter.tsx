@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
 import { withRetry, installChunkErrorHandler } from '@/lib/dynamic-retry';
 import { PremiumPageLoader, PremiumGlobalLoading } from '@/components/ui/premium-loading';
+import { Button } from '@/components/ui/button';
 
 // Install the global chunk-error safety net once on the client.
 if (typeof window !== 'undefined') {
@@ -235,26 +236,17 @@ function AutoProvisionWorkspace() {
           <h2 className="text-xl font-bold text-foreground">We&apos;re having trouble</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">{error}</p>
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleRetry}
-              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
-            >
+            <Button onClick={handleRetry}>
               <RefreshCw className="h-4 w-4" />
               Retry
-            </button>
-            <button
-              onClick={handleContinueLocal}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-            >
+            </Button>
+            <Button variant="outline" onClick={handleContinueLocal}>
               Continue in local mode
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-            >
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>
               <RefreshCw className="h-4 w-4" />
               Reload page
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -384,26 +376,17 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
             Give it a moment, retry now, or continue in local mode.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={handleRetry}
-              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity press-scale"
-            >
+            <Button onClick={handleRetry}>
               <RefreshCw className="h-4 w-4" />
               Retry
-            </button>
-            <button
-              onClick={handleContinueLocal}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-            >
+            </Button>
+            <Button variant="outline" onClick={handleContinueLocal}>
               Continue in local mode
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-            >
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>
               <RefreshCw className="h-4 w-4" />
               Reload page
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -453,13 +436,10 @@ function AuthErrorScreen({ message, onRetry }: { message: string; onRetry: () =>
         </div>
         <h2 className="text-xl font-bold text-foreground">Authentication Error</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
-        <button
-          onClick={onRetry}
-          className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-semibold text-background hover:opacity-90 transition-opacity"
-        >
+        <Button onClick={onRetry}>
           <LogOut className="h-4 w-4" />
           Retry Login
-        </button>
+        </Button>
       </div>
     </div>
   );

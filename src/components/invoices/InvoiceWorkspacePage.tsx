@@ -709,11 +709,11 @@ export default function InvoiceWorkspacePage() {
           <div className="space-y-4 md:space-y-6 min-w-0">
             <AnimatePresence mode="wait">
               {isLoading ? (
-                <motion.div key="loading" {...fadeInUp}>
+                <motion.div key="loading" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
                   <InvoiceWorkspaceSkeleton />
                 </motion.div>
               ) : invoicesError ? (
-                <motion.div key="error" {...fadeInUp}>
+                <motion.div key="error" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
                   <InvoiceErrorState
                     message={invoicesError}
                     onRetry={() => {
@@ -724,7 +724,7 @@ export default function InvoiceWorkspacePage() {
                   />
                 </motion.div>
               ) : invoices.length === 0 ? (
-                <motion.div key="empty" {...fadeInUp}>
+                <motion.div key="empty" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
                   <InvoiceEmptyState
                     onCreate={handleOpenCreate}
                     onImport={() => toast.info('Import coming soon — use the Create dialog for now.')}
@@ -734,7 +734,10 @@ export default function InvoiceWorkspacePage() {
               ) : (
                 <motion.div
                   key="content"
-                  {...fadeInUp}
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                  variants={fadeInUp}
                   className="space-y-4 md:space-y-6 min-w-0"
                 >
                   {/* KPI Cards */}

@@ -2110,8 +2110,8 @@
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;

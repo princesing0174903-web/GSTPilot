@@ -641,7 +641,7 @@ export default function ClientDetailPage() {
                     </div>
                     <div>
                       <p className="text-sm text-foreground">{displayText((lastActivity as any).details, '') || displayText((lastActivity as any).action, 'Activity')}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime((lastActivity as any).timestamp)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatRelativeTime((lastActivity as any).timestamp)}</p>
                     </div>
                   </div>
                 ) : (
@@ -746,7 +746,7 @@ export default function ClientDetailPage() {
                         <TableCell className="text-xs text-muted-foreground uppercase">{d.fileType ?? 'other'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{formatRelativeTime(d.createdAt ?? d.uploadedAt ?? d.uploadTime)}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`${cfg.bgColor ?? ''} ${cfg.color ?? ''} text-[10px]`}>
+                          <Badge variant="outline" className={`${cfg.bgColor ?? ''} ${cfg.color ?? ''} text-[11px]`}>
                             {d.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
                             {cfg.label ?? d.status}
                           </Badge>
@@ -825,12 +825,12 @@ export default function ClientDetailPage() {
                       <TableRow key={r.id}>
                         <TableCell className="text-sm font-medium">{r.period || '—'}</TableCell>
                         <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType || '—'}</Badge></TableCell>
-                        <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[10px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[11px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
-                            {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => handleMarkReady(r.id)} disabled={updateFilingStatusMutation.isPending}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
-                            {r.status === 'ready' && <Button size="sm" className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)} disabled={fileReturnMutation.isPending}><Send className="h-3 w-3" /> File</Button>}
-                            {r.status === 'filed' && <span className="text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
+                            {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => handleMarkReady(r.id)} disabled={updateFilingStatusMutation.isPending}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
+                            {r.status === 'ready' && <Button size="sm" className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)} disabled={fileReturnMutation.isPending}><Send className="h-3 w-3" /> File</Button>}
+                            {r.status === 'filed' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -913,15 +913,15 @@ export default function ClientDetailPage() {
                         <div className="grid grid-cols-3 gap-3 mb-3">
                           <div className="bg-emerald-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-emerald-700">{run.matched}</p>
-                            <p className="text-[10px] text-emerald-600 uppercase font-medium">Matched</p>
+                            <p className="text-[11px] text-emerald-600 uppercase font-medium">Matched</p>
                           </div>
                           <div className="bg-red-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-red-700">{run.unmatched ?? run.partialMatches ?? 0}</p>
-                            <p className="text-[10px] text-red-600 uppercase font-medium">Mismatched</p>
+                            <p className="text-[11px] text-red-600 uppercase font-medium">Mismatched</p>
                           </div>
                           <div className="bg-orange-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-orange-700">{(run.unmatched ?? 0) - (run.partialMatches ?? 0) > 0 ? (run.unmatched ?? 0) - (run.partialMatches ?? 0) : run.highRisk ?? 0}</p>
-                            <p className="text-[10px] text-orange-600 uppercase font-medium">Missing</p>
+                            <p className="text-[11px] text-orange-600 uppercase font-medium">Missing</p>
                           </div>
                         </div>
                       )}
@@ -935,9 +935,9 @@ export default function ClientDetailPage() {
                                 <div className="flex items-center gap-2">
                                   <AlertTriangle className="h-3 w-3 text-amber-500" />
                                   <span className="font-mono">{displayText(mm.invoice?.invoiceNumber, mm.invoiceId ? '' : '—') || (mm.invoiceId ? displayText(mm.invoiceId, '—') : '—')}</span>
-                                  <Badge variant="outline" className="text-[10px]">{MATCH_STATUS_CONFIG[mm.matchStatus as keyof typeof MATCH_STATUS_CONFIG]?.label ?? mm.matchStatus}</Badge>
+                                  <Badge variant="outline" className="text-[11px]">{MATCH_STATUS_CONFIG[mm.matchStatus as keyof typeof MATCH_STATUS_CONFIG]?.label ?? mm.matchStatus}</Badge>
                                 </div>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => handleResolveMismatch(mm.id)} disabled={updateReconWorkflowMutation.isPending}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1" onClick={() => handleResolveMismatch(mm.id)} disabled={updateReconWorkflowMutation.isPending}>
                                   <CheckCircle2 className="h-3 w-3" /> Resolve
                                 </Button>
                               </div>
@@ -1008,7 +1008,7 @@ export default function ClientDetailPage() {
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <p className="text-sm text-foreground">{displayText(a.details, '') || displayText(a.action, 'Activity')}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
                     </div>
                   </motion.div>
                 ))}

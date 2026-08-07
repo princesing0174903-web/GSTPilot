@@ -224,7 +224,7 @@ function PaymentPredictionCard({
 
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Likely Pay Date
             </p>
             <p className="mt-0.5 text-xl font-bold text-white">
@@ -237,7 +237,7 @@ function PaymentPredictionCard({
             )}
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Confidence
             </p>
             <p className="text-xl font-bold text-blue-400 gst-text-tabular">
@@ -285,7 +285,7 @@ function LatePaymentRiskCard({
 
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Risk Level
             </p>
             <span
@@ -299,7 +299,7 @@ function LatePaymentRiskCard({
             </span>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Risk Score
             </p>
             <p className={cn('text-2xl font-bold tabular-nums', cfg.text)}>
@@ -321,7 +321,7 @@ function LatePaymentRiskCard({
 
         {data.factors.length > 0 && (
           <div className="mt-3 space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
               Contributing Factors
             </p>
             <ul className="space-y-1">
@@ -375,7 +375,7 @@ function AnomaliesCard({
                 >
                   <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', cfg.tone)} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                       {a.severity}
                     </p>
                     <p className="text-xs leading-relaxed text-zinc-300">
@@ -433,7 +433,7 @@ function DuplicateDetectionCard({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                    <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
                       {conf}% match
                     </span>
                     <a
@@ -539,7 +539,7 @@ function CollectionSuggestionCard({
               <p className="text-sm font-semibold text-white">{data.action}</p>
               <span
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider',
                   'border-white/10 bg-white/[0.04] text-zinc-300',
                 )}
               >
@@ -664,7 +664,7 @@ function OneClickFixesCard({
 function Footer() {
   return (
     <div className="px-1 pb-1 pt-2 text-center">
-      <p className="text-[10px] leading-relaxed text-zinc-600">
+      <p className="text-[11px] leading-relaxed text-zinc-600">
         Powered by <span className="font-semibold text-amber-300/80">Oracle AI™</span> —
         deterministic heuristics, not legal advice.
       </p>
@@ -856,7 +856,7 @@ function OracleHeader() {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-white">Oracle AI</h3>
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
             Live
           </span>
         </div>

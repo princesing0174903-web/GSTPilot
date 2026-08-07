@@ -17,7 +17,7 @@
  * this module is compiled on-demand AFTER the user authenticates.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
@@ -75,6 +75,19 @@ export function DashboardContent() {
   // ── Mobile sidebar (Sheet) state — visible only below the md breakpoint,
   // where the persistent 64px rail would eat too much of the screen. ──
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  // ── SCROLL LOCK (POLISH-04) ───────────────────────────────────────────────
+  // While the dashboard shell is mounted, lock the document scroll. Only the
+  // inner panels (LeftNav nav list, <main> workspace, sheets/dialogs) scroll —
+  // never the body. This prevents the "random page scroll" / "double scroll"
+  // bug where flung scroll inside a panel chains to the document.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.body.classList.add('gst-app-shell')
+    return () => {
+      document.body.classList.remove('gst-app-shell')
+    }
+  }, [])
 
   const userInitials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()

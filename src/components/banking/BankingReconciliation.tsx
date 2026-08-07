@@ -264,7 +264,7 @@ export function BankingReconciliation({
                   <span className={`text-xs font-medium ${isDone ? 'text-blue-300' : isActive ? 'text-amber-300' : 'text-zinc-500'}`}>
                     {stage.label}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">{counts[i]} txns</span>
+                  <span className="text-[11px] text-muted-foreground">{counts[i]} txns</span>
                 </motion.div>
                 {i < STAGES.length - 1 && (
                   <div className="relative mx-2 h-px flex-1 min-w-[40px] bg-white/[0.08]">
@@ -292,11 +292,11 @@ export function BankingReconciliation({
               <div className={`glass-surface rounded-xl border border-l-2 ${card.cfg.border} border-white/[0.06] p-3`}>
                 <div className="mb-2 flex items-center gap-2">
                   <Icon className={`h-3.5 w-3.5 ${card.cfg.tone}`} />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</span>
                 </div>
                 <p className={`text-xl font-bold tabular-nums ${card.cfg.tone}`}>{card.count}</p>
                 {card.amount > 0 && (
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatINR(card.amount)}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{formatINR(card.amount)}</p>
                 )}
               </div>
             </StaggeredItem>
@@ -317,7 +317,7 @@ export function BankingReconciliation({
             }`}
           >
             {tab.label}
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${activeTab === tab.key ? 'bg-blue-500/20 text-blue-300' : 'bg-white/[0.06] text-muted-foreground'}`}>
+            <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${activeTab === tab.key ? 'bg-blue-500/20 text-blue-300' : 'bg-white/[0.06] text-muted-foreground'}`}>
               {tab.count}
             </span>
           </button>
@@ -422,10 +422,10 @@ const ReconciliationRecordCard = React.memo(function ReconciliationRecordCard({
           <div className="min-w-0">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <MatchTypePill matchType={record.matchType} />
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusTone}`}>
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusTone}`}>
                 {record.status}
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 by {record.matchedBy} · {formatDate(record.matchedAt)}
               </span>
             </div>
@@ -444,27 +444,27 @@ const ReconciliationRecordCard = React.memo(function ReconciliationRecordCard({
         {/* Right: amounts + confidence */}
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Expected</p>
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Expected</p>
             <p className="text-sm font-semibold tabular-nums text-foreground">
               {record.expectedAmount != null ? formatINR(record.expectedAmount) : '—'}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Actual</p>
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Actual</p>
             <p className="text-sm font-semibold tabular-nums text-foreground">
               {record.actualAmount != null ? formatINR(record.actualAmount) : '—'}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Diff</p>
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Diff</p>
             <p className={`text-sm font-semibold tabular-nums ${diffTone}`}>
               {diff > 0 ? '+' : ''}{formatINR(diff)}
             </p>
           </div>
           <div className="w-16">
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">Conf.</span>
-              <span className="text-[10px] font-medium text-foreground">{Math.round(record.confidence * 100)}%</span>
+              <span className="text-[11px] text-muted-foreground">Conf.</span>
+              <span className="text-[11px] font-medium text-foreground">{Math.round(record.confidence * 100)}%</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
               <motion.div

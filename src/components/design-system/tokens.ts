@@ -9,8 +9,10 @@
  * DESIGN PRINCIPLES:
  *   1. One spacing scale (4 / 6 / 8 / 12 / 16 / 24 / 32 / 48 px)
  *   2. One typography scale (H1 / H2 / H3 / Body / Caption)
- *   3. One color system (Primary emerald, Success emerald, Warning amber,
- *      Danger red, Info cyan — NO random colors)
+ *   3. One color system (Primary blue, Success blue, Warning amber,
+ *      Danger red, Info blue — NO random colors. ZERO green/indigo/purple/pink
+ *      in the UI. The GREEN NEUTRALIZATION CASCADE in globals.css converts any
+ *      stray emerald/green/teal to blue at runtime.)
  *   4. One radius scale (sm 8, md 12, lg 16, xl 20, 2xl 24)
  *   5. One shadow scale (sm, md, lg, glow)
  *   6. One animation system (150ms micro, 250ms standard, 400ms section)
@@ -22,13 +24,16 @@
 
 // ── SEMANTIC STATUS COLORS ────────────────────────────────────────────────────
 // One color per meaning. Never use random Tailwind colors for status.
+// NOTE: emerald/cyan tokens below are remapped to blue at runtime by the
+// GREEN NEUTRALIZATION CASCADE in globals.css. They are kept here as semantic
+// hooks only — the rendered color is always blue.
 export const statusColors = {
   success: {
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    text: 'text-emerald-400',
-    dot: 'bg-emerald-400',
-    solid: 'bg-emerald-500',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+    text: 'text-blue-400',
+    dot: 'bg-blue-400',
+    solid: 'bg-blue-500',
   },
   warning: {
     bg: 'bg-amber-500/10',
@@ -45,11 +50,11 @@ export const statusColors = {
     solid: 'bg-red-500',
   },
   info: {
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-500/20',
-    text: 'text-cyan-400',
-    dot: 'bg-cyan-400',
-    solid: 'bg-cyan-500',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+    text: 'text-blue-400',
+    dot: 'bg-blue-400',
+    solid: 'bg-blue-500',
   },
   neutral: {
     bg: 'bg-white/[0.04]',

@@ -304,7 +304,7 @@ export function OracleDrawer({
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
                       <span className="tabular-nums text-[#60A5FA]">{String(m.gstr2bValue ?? '—')}</span>
                       {m.delta != null && m.delta !== 0 && (
-                        <Badge variant="outline" className="text-[9px]">
+                        <Badge variant="outline" className="text-[11px]">
                           Δ {fmtINR(Math.abs(m.delta))}
                         </Badge>
                       )}
@@ -322,7 +322,7 @@ export function OracleDrawer({
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(scoreBreakdown).map(([field, score]) => (
                   <div key={field} className="rounded-md border border-[#2A2E36] bg-[#171A21] px-2.5 py-1.5">
-                    <div className="flex items-center justify-between text-[10px]">
+                    <div className="flex items-center justify-between text-[11px]">
                       <span className="uppercase tracking-wider text-muted-foreground">{field}</span>
                       <span className="font-semibold" style={{ color: confidenceColor(score) }}>
                         {Math.round(score * 100)}%
@@ -369,7 +369,7 @@ export function OracleDrawer({
                 </div>
                 <Badge
                   variant="outline"
-                  className="text-[10px]"
+                  className="text-[11px]"
                   style={{ color: PRIORITY_COLORS[suggestion.priority], borderColor: `${PRIORITY_COLORS[suggestion.priority]}44` }}
                 >
                   {suggestion.priority}
@@ -381,7 +381,7 @@ export function OracleDrawer({
                   return <SuggIcon className="h-4 w-4 text-[#60A5FA]" />;
                 })()}
                 <span className="text-sm font-semibold text-foreground">{suggestion.label}</span>
-                <span className="text-[10px] text-muted-foreground">· ~{suggestion.estimatedResolutionDays}d</span>
+                <span className="text-[11px] text-muted-foreground">· ~{suggestion.estimatedResolutionDays}d</span>
               </div>
               <p className="mb-2 text-sm font-medium text-foreground">{suggestion.reason}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{suggestion.detail}</p>
@@ -412,7 +412,7 @@ export function OracleDrawer({
                                   <AltIcon className="h-3 w-3 text-muted-foreground" />
                                   <span className="text-xs font-medium text-foreground">{alt.label}</span>
                                 </div>
-                                <span className="text-[9px] uppercase tracking-wider" style={{ color: PRIORITY_COLORS[alt.priority] }}>
+                                <span className="text-[11px] uppercase tracking-wider" style={{ color: PRIORITY_COLORS[alt.priority] }}>
                                   {alt.priority}
                                 </span>
                               </div>
@@ -450,13 +450,13 @@ export function OracleDrawer({
                             <span className="text-sm font-medium text-foreground">{fix.label}</span>
                             <Badge
                               variant="outline"
-                              className="text-[9px]"
+                              className="text-[11px]"
                               style={{ color: sevColor, borderColor: `${sevColor}44` }}
                             >
                               {fix.severity}
                             </Badge>
                             {fix.canAutoApply && (
-                              <Badge variant="outline" className="border-[#3B82F6]/40 bg-[#3B82F6]/10 text-[9px] text-[#60A5FA]">
+                              <Badge variant="outline" className="border-[#3B82F6]/40 bg-[#3B82F6]/10 text-[11px] text-[#60A5FA]">
                                 auto-apply
                               </Badge>
                             )}
@@ -507,7 +507,7 @@ export function OracleDrawer({
                               </button>
                             </div>
                             {!fix.canAutoApply && (
-                              <p className="mt-2 flex items-center gap-1 text-[10px] text-[#FBBF24]">
+                              <p className="mt-2 flex items-center gap-1 text-[11px] text-[#FBBF24]">
                                 <AlertTriangle className="h-3 w-3" />
                                 This fix requires human review — applying will flag it for verification.
                               </p>

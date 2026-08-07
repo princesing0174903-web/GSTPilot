@@ -243,6 +243,38 @@ export function useBankingApi(): UseBankingApi {
 
 // ─── Async state helper (mirrors useInvoicesApi pattern) ──────────────────────
 
+/**
+ * Sanitize a raw error message so we NEVER leak Firebase / Firestore / Prisma /
+ * fetch internals to the UI. Mirrors the policy in ViewErrorBoundary and
+ * premium-error-state.tsx (POLISH-04).
+ */
+function sanitizeBankingError(err: unknown): string {
+  if (!err) return 'Something went wrong. Please try again.';
+  const msg =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+        ? err.message
+        : String(err);
+  if (!msg) return 'Something went wrong. Please try again.';
+  // Network / fetch errors → friendly message (no `TypeError: Failed to fetch`).
+  if (/failed to fetch|networkrequest failed|networkerror|econnrefused|load failed/i.test(msg)) {
+    return 'We couldn\'t reach the banking service. Please check your connection and try again.';
+  }
+  // Internal SDK names → fall back to a safe generic.
+  if (/firebase|firestore|prisma|admin\.auth|adminDb|node:internal/i.test(msg)) {
+    return 'Something went wrong on our end. Please try again.';
+  }
+  // Strip JSON fragments / file paths.
+  const cleaned = msg
+    .replace(/\{[^}]*\}/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\/[^\s]+\.(ts|js|tsx|jsx)/g, '')
+    .trim();
+  if (cleaned.length > 180) return `${cleaned.slice(0, 180)}…`;
+  return cleaned || 'Something went wrong. Please try again.';
+}
+
 export function useAsync<T>() {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -255,7 +287,8 @@ export function useAsync<T>() {
       setData(result);
       return result;
     } catch (err) {
-      setError((err as Error).message);
+      // POLISH-04: never expose raw error.message to the UI. Sanitize first.
+      setError(sanitizeBankingError(err));
       throw err;
     } finally {
       setLoading(false);

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { escapeHtml } from '@/lib/utils';
 import {
   Card,
   CardContent,
@@ -109,9 +110,13 @@ function SessionSkeleton() {
 }
 
 // ─── Format message with simple markdown ───────────────────────────────────
+// SECURITY (POLISH-06): escapeHtml before applying markdown so any HTML in
+// the AI / user content is rendered as text, not executed. Without this, a
+// model echoing user input like "<script>…</script>" would inject markup.
 function formatMessage(content: string) {
   return content.split('\n').map((line, i) => {
-    const formatted = line
+    const escaped = escapeHtml(line);
+    const formatted = escaped
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/⚠️/g, '<span class="text-amber-500">⚠️</span>');
     if (formatted.startsWith('•')) {

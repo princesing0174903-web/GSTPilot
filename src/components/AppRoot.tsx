@@ -36,6 +36,7 @@
 import dynamic from 'next/dynamic';
 import { PremiumGlobalLoading } from '@/components/ui/premium-loading';
 import { ProvidersLazy } from '@/components/providers-lazy';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ── Loading placeholder (premium full-screen splash) ─────────────────────────
 const PageLoader = () => <PremiumGlobalLoading />;
@@ -50,9 +51,14 @@ const AppRouter = dynamic(
 
 export function AppRoot() {
   return (
-    <ProvidersLazy>
-      <AppRouter />
-    </ProvidersLazy>
+    // POLISH-04: wrap the entire authenticated app in a top-level error
+    // boundary. Any uncaught render error in the React tree (after hydration)
+    // shows a premium full-page error card instead of a white screen.
+    <ErrorBoundary>
+      <ProvidersLazy>
+        <AppRouter />
+      </ProvidersLazy>
+    </ErrorBoundary>
   );
 }
 

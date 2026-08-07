@@ -9,55 +9,53 @@
 // Step 2 of the GST connect flow — verifies the OTP with GSTN, establishes a
 // session, encrypts it (AES-256-GCM), and returns the encrypted blob + initial
 // profile. The client writes both to Firestore (gst_connections + gst_profiles).
+//
+// SECURITY (POLISH-06):
+//   • requireAuth — must be signed in.
+//   • requireOrgMembership — must be an active member of `organizationId`.
+//   • zod validation via schemas.gstnVerifyOtp (no manual parsing).
+//   • Rate-limited via RATE_LIMIT_PRESETS.otp (5 req/min per uid+ip) to
+//     prevent OTP brute force.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
 import { completeConnection } from '@/lib/gstn-provider/server/orchestrator';
 import { GSTNError, friendlyGSTNError } from '@/lib/gstn-provider/errors';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
+import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
+import { parseBody, schemas } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { organizationId, gstin, username, otp } = body as {
-      organizationId?: string;
-      gstin?: string;
-      username?: string;
-      otp?: string;
-    };
+  // ── 1. Rate limit (tight — OTP brute force protection) ────────────────────
+  // Apply before auth so unauthenticated flooders still get throttled. The key
+  // is per-IP at this stage; after auth we'd add uid too.
+  const rl = rateLimit(req, RATE_LIMIT_PRESETS.otp, 'gstn-verify-otp');
+  if (rl.denied) {
+    return rateLimitedResponse(rl.retryAfterSec, 'Too many OTP attempts. Please wait a minute and try again.');
+  }
 
-    if (!organizationId) {
-      return NextResponse.json(
-        { ok: false, error: 'organizationId is required' },
-        { status: 400 },
-      );
-    }
-    if (!gstin || gstin.trim().length !== 15) {
-      return NextResponse.json(
-        { ok: false, error: 'A valid 15-character GSTIN is required.' },
-        { status: 400 },
-      );
-    }
-    if (!username || username.trim().length < 3) {
-      return NextResponse.json(
-        { ok: false, error: 'GST portal username is required.' },
-        { status: 400 },
-      );
-    }
-    if (!otp || otp.trim().length < 4) {
-      return NextResponse.json(
-        { ok: false, error: 'A valid OTP is required.' },
-        { status: 400 },
-      );
-    }
+  // ── 2. Authentication ─────────────────────────────────────────────────────
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
+  try {
+    // ── 3. Validate body via zod ────────────────────────────────────────────
+    const [body, validationErr] = await parseBody(req, schemas.gstnVerifyOtp);
+    if (validationErr) return validationErr;
+
+    // ── 4. Authorization — caller must be a member of organizationId ────────
+    const memberResult = await requireOrgMembership(uid, body.organizationId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     const result = await completeConnection(
-      organizationId,
-      gstin.trim(),
-      username.trim(),
-      otp.trim(),
+      body.organizationId,
+      body.gstin,
+      body.username,
+      body.otp,
     );
     return NextResponse.json({ ok: true, result });
   } catch (err) {

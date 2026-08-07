@@ -160,7 +160,7 @@ export function ConnectedServicesCard({
                   </span>
                 </div>
                 {service.connected && service.account && (
-                  <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                  <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
                     {service.account}
                   </p>
                 )}
@@ -171,7 +171,7 @@ export function ConnectedServicesCard({
                 {service.connected ? (
                   <Badge
                     variant="outline"
-                    className={`text-[10px] h-5 px-1.5 ${health.color} border-current/30`}
+                    className={`text-[11px] h-5 px-1.5 ${health.color} border-current/30`}
                   >
                     {service.health === 'healthy' ? 'Healthy' : 'Unknown'}
                   </Badge>

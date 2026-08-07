@@ -180,7 +180,7 @@ export function BusinessSetupProgress({ tasks }: BusinessSetupProgressProps) {
                           <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[8px] font-bold uppercase tracking-wider text-amber-400 shrink-0">
                             Core Feature
                           </span>
-                          <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-amber-400 to-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shrink-0 shadow-[0_0_16px_-4px_rgba(245,158,11,0.6)]">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-amber-400 to-amber-500 px-2 py-0.5 text-[11px] font-bold text-white shrink-0 shadow-[0_0_16px_-4px_rgba(245,158,11,0.6)]">
                             <Sparkles className="h-2.5 w-2.5" />
                             Activate
                           </span>

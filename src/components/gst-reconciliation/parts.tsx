@@ -225,7 +225,7 @@ export function ConfidenceBar({ confidence, size = 'md' }: { confidence: number;
   const pct = Math.round(confidence * 100);
   const color = confidenceColor(confidence);
   const heights = { sm: 'h-1', md: 'h-1.5', lg: 'h-2.5' };
-  const textSizes = { sm: 'text-[9px]', md: 'text-[10px]', lg: 'text-[11px]' };
+  const textSizes = { sm: 'text-[11px]', md: 'text-[11px]', lg: 'text-[11px]' };
 
   return (
     <div className="flex flex-col gap-1">
@@ -356,7 +356,7 @@ export function AISummaryCard({
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5" style={{ color: riskColor }} />
             <span className="gst-metric capitalize" style={{ color: riskColor }}>{summary.riskLevel}</span>
-            <Badge variant="outline" className="ml-auto text-[10px]" style={{ color: riskColor, borderColor: `${riskColor}44` }}>
+            <Badge variant="outline" className="ml-auto text-[11px]" style={{ color: riskColor, borderColor: `${riskColor}44` }}>
               {summary.riskScore}/100
             </Badge>
           </div>
@@ -375,7 +375,7 @@ export function AISummaryCard({
                   <div className="text-[11px] text-muted-foreground">{issue.recommendation}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-muted-foreground">{issue.count} inv</div>
+                  <div className="text-[11px] text-muted-foreground">{issue.count} inv</div>
                   <div className="font-semibold text-[#F87171]">{fmtINR(issue.itcAtRisk)}</div>
                 </div>
               </div>
@@ -460,7 +460,7 @@ export function TimelineChart({
         <div className="flex items-center gap-2">
           {trendIcon}
           <span className="text-xs capitalize text-muted-foreground">{trend.replace(/_/g, ' ')}</span>
-          <Badge variant="outline" className="text-[10px]">avg {avgMatchPercent}%</Badge>
+          <Badge variant="outline" className="text-[11px]">avg {avgMatchPercent}%</Badge>
         </div>
       </div>
 
@@ -530,7 +530,7 @@ export function TimelineChart({
         {timeline.map((t) => (
           <div
             key={t.period}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] ${
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] ${
               t.status === 'completed'
                 ? 'border-[#2A2E36] bg-[#0F1115]'
                 : 'border-dashed border-[#2A2E36] bg-transparent opacity-60'
@@ -623,7 +623,7 @@ export function VendorScoreboard({
                     {v.reasons.slice(0, 2).map((r, ri) => (
                       <span
                         key={ri}
-                        className="rounded-md border border-[#2A2E36] bg-[#171A21] px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                        className="rounded-md border border-[#2A2E36] bg-[#171A21] px-1.5 py-0.5 text-[11px] text-muted-foreground"
                       >
                         {r}
                       </span>
@@ -635,10 +635,10 @@ export function VendorScoreboard({
                     <Award className="h-3.5 w-3.5" style={{ color: vColor }} />
                     <span className="text-lg font-bold" style={{ color: vColor }}>{v.score}%</span>
                   </div>
-                  <Badge variant="outline" className="text-[9px]" style={{ color: vColor, borderColor: `${vColor}44` }}>
+                  <Badge variant="outline" className="text-[11px]" style={{ color: vColor, borderColor: `${vColor}44` }}>
                     Grade {v.grade}
                   </Badge>
-                  <div className="text-[9px] text-muted-foreground">{v.invoiceCount} inv · {fmtINR(v.totalITCAtRisk)}</div>
+                  <div className="text-[11px] text-muted-foreground">{v.invoiceCount} inv · {fmtINR(v.totalITCAtRisk)}</div>
                 </div>
               </div>
 
@@ -780,7 +780,7 @@ export function AdvancedFilters({
           className={`gst-btn gst-btn-sm ${hasAdvanced || expanded ? 'gst-btn-primary' : 'gst-btn-secondary'}`}
         >
           <Filter className="h-3.5 w-3.5" /> Advanced
-          {hasAdvanced && <Badge variant="outline" className="ml-1 bg-[#3B82F6]/20 text-[10px] text-white">{hasAdvanced ? '•' : ''}</Badge>}
+          {hasAdvanced && <Badge variant="outline" className="ml-1 bg-[#3B82F6]/20 text-[11px] text-white">{hasAdvanced ? '•' : ''}</Badge>}
           <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </button>
       </div>

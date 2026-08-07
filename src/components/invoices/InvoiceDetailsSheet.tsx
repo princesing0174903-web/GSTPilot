@@ -396,7 +396,7 @@ function OverviewTab({
     <motion.div {...tabEnter} className="space-y-4">
       {/* Status pills row */}
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Status
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -416,7 +416,7 @@ function OverviewTab({
 
       {/* Key metrics grid */}
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Key Metrics
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -429,7 +429,7 @@ function OverviewTab({
               >
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <Icon className="h-3 w-3 text-amber-300/80" />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                     {m.label}
                   </span>
                 </div>
@@ -445,7 +445,7 @@ function OverviewTab({
       {/* Payment timeline mini */}
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
             Payment Timeline
           </p>
           <span className="text-[11px] font-semibold text-blue-400">
@@ -462,7 +462,7 @@ function OverviewTab({
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-white/[0.02] p-2">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] uppercase tracking-wider text-zinc-500">
               Total
             </p>
             <p className="mt-0.5 text-xs font-bold text-zinc-200">
@@ -470,7 +470,7 @@ function OverviewTab({
             </p>
           </div>
           <div className="rounded-lg bg-blue-500/[0.06] p-2">
-            <p className="text-[10px] uppercase tracking-wider text-blue-400">
+            <p className="text-[11px] uppercase tracking-wider text-blue-400">
               Paid
             </p>
             <p className="mt-0.5 text-xs font-bold text-blue-300">
@@ -478,7 +478,7 @@ function OverviewTab({
             </p>
           </div>
           <div className="rounded-lg bg-amber-500/[0.06] p-2">
-            <p className="text-[10px] uppercase tracking-wider text-amber-400">
+            <p className="text-[11px] uppercase tracking-wider text-amber-400">
               Balance
             </p>
             <p className="mt-0.5 text-xs font-bold text-amber-300">
@@ -501,7 +501,7 @@ function ItemsTab({ invoice }: { invoice: DetailedInvoice }) {
         <div className="max-h-[60vh] overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur">
-              <tr className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              <tr className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
                 <th className="border-b border-white/[0.06] px-3 py-2.5 text-center">#</th>
                 <th className="border-b border-white/[0.06] px-3 py-2.5">Description</th>
                 <th className="border-b border-white/[0.06] px-3 py-2.5 text-center">HSN</th>
@@ -608,7 +608,7 @@ function GstTab({ invoice }: { invoice: DetailedInvoice }) {
     <motion.div {...tabEnter} className="space-y-4">
       {/* Tax breakdown */}
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Tax Breakdown
         </p>
         <dl className="space-y-2">
@@ -643,7 +643,7 @@ function GstTab({ invoice }: { invoice: DetailedInvoice }) {
 
       {/* GST slab breakdown chart */}
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Taxable Value by GST Slab
         </p>
         <div className="space-y-2.5">
@@ -705,7 +705,7 @@ function PaymentsTab({
   return (
     <motion.div {...tabEnter} className="space-y-4">
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Payment Details
         </p>
         <dl className="grid grid-cols-2 gap-3">
@@ -718,7 +718,7 @@ function PaymentsTab({
               >
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <Icon className="h-3 w-3 text-amber-300/80" />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                     {d.label}
                   </span>
                 </div>
@@ -861,7 +861,7 @@ function HistoryTab({ invoice }: { invoice: DetailedInvoice }) {
   return (
     <motion.div {...tabEnter}>
       <div className="glass-surface rounded-2xl border border-white/[0.06] p-4">
-        <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           Status Timeline
         </p>
         <ol className="relative space-y-4 border-l border-white/[0.08] pl-5">
@@ -877,7 +877,7 @@ function HistoryTab({ invoice }: { invoice: DetailedInvoice }) {
                     <p className="text-xs font-semibold capitalize text-zinc-200">
                       {ev.label}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-zinc-500">
+                    <p className="mt-0.5 text-[11px] text-zinc-500">
                       {formatDateTime(ev.timestamp)}
                     </p>
                   </div>
@@ -1128,7 +1128,7 @@ export function InvoiceDetailsSheet({
             </div>
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-white/[0.04] px-3 py-1.5 text-right ring-1 ring-white/[0.06]">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                   Total
                 </p>
                 <p className="text-sm font-bold text-blue-300">

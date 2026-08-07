@@ -141,7 +141,7 @@ function SummaryCardImpl({ cfg, index }: { cfg: SummaryCardConfig; index: number
       className="glass-surface rounded-2xl border border-white/[0.06] p-4"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {cfg.label}
         </span>
         <div className={`flex h-7 w-7 items-center justify-center rounded-lg border ${tone.chip}`}>
@@ -151,7 +151,7 @@ function SummaryCardImpl({ cfg, index }: { cfg: SummaryCardConfig; index: number
       <p className="mt-2 text-xl font-bold tracking-tight text-foreground tabular-nums">
         {cfg.value}
       </p>
-      {cfg.hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{cfg.hint}</p>}
+      {cfg.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{cfg.hint}</p>}
     </motion.div>
   );
 }
@@ -213,7 +213,7 @@ function HorizontalBarChart({ items, tone, emptyMessage, valueFormatter }: BarCh
                 <span className="truncate text-xs font-medium text-foreground">{item.label}</span>
                 <Badge
                   variant="outline"
-                  className="border-white/[0.08] bg-white/[0.03] text-[10px] text-muted-foreground"
+                  className="border-white/[0.08] bg-white/[0.03] text-[11px] text-muted-foreground"
                 >
                   {formatCount(item.count)}
                 </Badge>
@@ -278,7 +278,7 @@ function CollectionGauge({ rate }: { rate: number }) {
         <span className={`text-xl font-bold tabular-nums ${toneClasses.text}`}>
           {formatPct(rate)}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
           Collection Rate
         </span>
       </div>
@@ -497,7 +497,7 @@ function BankingReportsImpl({
           {report && (
             <Badge
               variant="outline"
-              className="border-white/[0.08] bg-white/[0.02] text-[10px] text-muted-foreground"
+              className="border-white/[0.08] bg-white/[0.02] text-[11px] text-muted-foreground"
             >
               {formatDateRange(report.startDate, report.endDate)}
             </Badge>
@@ -542,7 +542,7 @@ function BankingReportsImpl({
               badge={
                 <Badge
                   variant="outline"
-                  className="border-red-500/20 bg-red-500/10 text-red-300 text-[10px]"
+                  className="border-red-500/20 bg-red-500/10 text-red-300 text-[11px]"
                 >
                   Top 5
                 </Badge>
@@ -561,7 +561,7 @@ function BankingReportsImpl({
               badge={
                 <Badge
                   variant="outline"
-                  className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]"
+                  className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[11px]"
                 >
                   Top 5
                 </Badge>
@@ -584,7 +584,7 @@ function BankingReportsImpl({
               badge={
                 <Badge
                   variant="outline"
-                  className="border-amber-500/20 bg-amber-500/10 text-amber-300 text-[10px]"
+                  className="border-amber-500/20 bg-amber-500/10 text-amber-300 text-[11px]"
                 >
                   {formatCount(report.outstanding.count)} invoices
                 </Badge>
@@ -592,7 +592,7 @@ function BankingReportsImpl({
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Total Outstanding
                   </p>
                   <p className="mt-1 text-2xl font-bold text-amber-300 tabular-nums">
@@ -611,7 +611,7 @@ function BankingReportsImpl({
             <SectionCard icon={Gauge} title="Period Snapshot">
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Inflow
                   </span>
                   <span className="text-sm font-semibold text-blue-300 tabular-nums">
@@ -619,7 +619,7 @@ function BankingReportsImpl({
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Outflow
                   </span>
                   <span className="text-sm font-semibold text-red-300 tabular-nums">
@@ -628,7 +628,7 @@ function BankingReportsImpl({
                 </div>
                 <div className="h-px bg-white/[0.06]" />
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Net Flow
                   </span>
                   <span
@@ -641,7 +641,7 @@ function BankingReportsImpl({
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Net Change
                   </span>
                   <span
@@ -666,7 +666,7 @@ function BankingReportsImpl({
             badge={
               <Badge
                 variant="outline"
-                className="border-white/[0.08] bg-white/[0.02] text-[10px] text-muted-foreground"
+                className="border-white/[0.08] bg-white/[0.02] text-[11px] text-muted-foreground"
               >
                 {formatCount(categoryRows.length)} categories
               </Badge>
@@ -677,19 +677,19 @@ function BankingReportsImpl({
                 <Table>
                   <TableHeader>
                     <TableRow className="border-white/[0.06] hover:bg-transparent">
-                      <TableHead className="h-9 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <TableHead className="h-9 text-[11px] uppercase tracking-wider text-muted-foreground">
                         Category
                       </TableHead>
-                      <TableHead className="h-9 text-[10px] uppercase tracking-wider text-muted-foreground text-right">
+                      <TableHead className="h-9 text-[11px] uppercase tracking-wider text-muted-foreground text-right">
                         Inflow
                       </TableHead>
-                      <TableHead className="h-9 text-[10px] uppercase tracking-wider text-muted-foreground text-right">
+                      <TableHead className="h-9 text-[11px] uppercase tracking-wider text-muted-foreground text-right">
                         Outflow
                       </TableHead>
-                      <TableHead className="h-9 text-[10px] uppercase tracking-wider text-muted-foreground text-right">
+                      <TableHead className="h-9 text-[11px] uppercase tracking-wider text-muted-foreground text-right">
                         Count
                       </TableHead>
-                      <TableHead className="h-9 text-[10px] uppercase tracking-wider text-muted-foreground text-right">
+                      <TableHead className="h-9 text-[11px] uppercase tracking-wider text-muted-foreground text-right">
                         Net
                       </TableHead>
                     </TableRow>

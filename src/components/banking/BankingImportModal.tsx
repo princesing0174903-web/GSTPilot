@@ -208,7 +208,7 @@ function SummaryCard({ label, value, icon: Icon, tone, hint }: SummaryCardProps)
   return (
     <div className="glass-surface rounded-xl border border-white/[0.06] p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
         <div className={`flex h-6 w-6 items-center justify-center rounded-md border ${cfg.chip}`}>
@@ -216,7 +216,7 @@ function SummaryCard({ label, value, icon: Icon, tone, hint }: SummaryCardProps)
         </div>
       </div>
       <p className="mt-1.5 text-base font-semibold text-foreground tabular-nums">{value}</p>
-      {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -388,7 +388,7 @@ function UploadStep({
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {formatFileSize(file.size)} · {fileExtension(file.name)}
                 </p>
               </div>
@@ -396,7 +396,7 @@ function UploadStep({
             <div className="flex items-center gap-2">
               <Badge
                 variant="outline"
-                className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]"
+                className="border-blue-500/20 bg-blue-500/10 text-blue-300 text-[11px]"
               >
                 {fileExtension(file.name)}
               </Badge>
@@ -527,7 +527,7 @@ function PreviewStep({
               Error Report
               <Badge
                 variant="outline"
-                className="border-red-500/20 bg-red-500/10 text-red-300 text-[10px]"
+                className="border-red-500/20 bg-red-500/10 text-red-300 text-[11px]"
               >
                 {errors.length}
               </Badge>
@@ -538,10 +538,10 @@ function PreviewStep({
               <Table>
                 <TableHeader>
                   <TableRow className="border-red-500/15 hover:bg-transparent">
-                    <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground w-16">
+                    <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground w-16">
                       Row
                     </TableHead>
-                    <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground">
                       Error
                     </TableHead>
                   </TableRow>
@@ -573,7 +573,7 @@ function PreviewStep({
           <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <Hash className="h-3.5 w-3.5 text-blue-400" />
             Parsed Rows Preview
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               (first {Math.min(MAX_PREVIEW_ROWS, previewRows.length)})
             </span>
           </h4>
@@ -583,19 +583,19 @@ function PreviewStep({
             <Table>
               <TableHeader>
                 <TableRow className="border-white/[0.06] hover:bg-transparent">
-                  <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground">
                     Date
                   </TableHead>
-                  <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground">
                     Description
                   </TableHead>
-                  <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground text-right">
+                  <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground text-right">
                     Amount
                   </TableHead>
-                  <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground">
                     Type
                   </TableHead>
-                  <TableHead className="h-8 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="h-8 text-[11px] uppercase tracking-wider text-muted-foreground">
                     Reference
                   </TableHead>
                 </TableRow>
@@ -632,8 +632,8 @@ function PreviewStep({
                           variant="outline"
                           className={
                             row.type === 'credit'
-                              ? 'border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px]'
-                              : 'border-red-500/20 bg-red-500/10 text-red-300 text-[10px]'
+                              ? 'border-blue-500/20 bg-blue-500/10 text-blue-300 text-[11px]'
+                              : 'border-red-500/20 bg-red-500/10 text-red-300 text-[11px]'
                           }
                         >
                           {row.type === 'credit' ? (
@@ -654,7 +654,7 @@ function PreviewStep({
             </Table>
           </ScrollArea>
         </div>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground">
           File: <span className="text-foreground">{fileName}</span>
         </p>
       </div>
@@ -674,7 +674,7 @@ function PreviewStep({
           ) : (
             <>
               Confirm Import
-              <span className="ml-2 flex items-center gap-1 text-[10px] font-normal opacity-80">
+              <span className="ml-2 flex items-center gap-1 text-[11px] font-normal opacity-80">
                 <span className="text-emerald-200">{preview.validRows} new</span>
                 <span>·</span>
                 <span className="text-amber-200">{preview.duplicateRows} dup</span>
@@ -766,28 +766,28 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
           <p className="mt-1.5 text-xl font-bold text-blue-300 tabular-nums">
             {result.importedRows}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Imported</p>
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Imported</p>
         </div>
         <div className="glass-surface rounded-xl border border-white/[0.06] p-3 text-center">
           <Copy className="mx-auto h-4 w-4 text-amber-300" />
           <p className="mt-1.5 text-xl font-bold text-amber-300 tabular-nums">
             {result.duplicateRows}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Duplicates</p>
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Duplicates</p>
         </div>
         <div className="glass-surface rounded-xl border border-white/[0.06] p-3 text-center">
           <XCircle className="mx-auto h-4 w-4 text-red-300" />
           <p className="mt-1.5 text-xl font-bold text-red-300 tabular-nums">
             {result.errorRows}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Errors</p>
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Errors</p>
         </div>
       </div>
 
       {/* Import metadata */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             Import ID
           </span>
           <code className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-mono text-blue-300">
@@ -795,13 +795,13 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
           </code>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             File
           </span>
           <span className="text-xs text-foreground">{result.fileName}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             Total Rows
           </span>
           <span className="text-xs text-foreground tabular-nums">{result.totalRows}</span>
@@ -816,7 +816,7 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
             Error Details
             <Badge
               variant="outline"
-              className="border-red-500/20 bg-red-500/10 text-red-300 text-[10px]"
+              className="border-red-500/20 bg-red-500/10 text-red-300 text-[11px]"
             >
               {result.errors.length}
             </Badge>
@@ -826,10 +826,10 @@ function ResultStep({ result, onDone, onImportAnother }: ResultStepProps) {
               <Table>
                 <TableHeader>
                   <TableRow className="border-red-500/15 hover:bg-transparent">
-                    <TableHead className="h-7 text-[10px] uppercase tracking-wider text-muted-foreground w-16">
+                    <TableHead className="h-7 text-[11px] uppercase tracking-wider text-muted-foreground w-16">
                       Row
                     </TableHead>
-                    <TableHead className="h-7 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <TableHead className="h-7 text-[11px] uppercase tracking-wider text-muted-foreground">
                       Error
                     </TableHead>
                   </TableRow>

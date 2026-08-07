@@ -134,7 +134,7 @@ export function OracleHeroInput() {
         {/* Right cluster: ⌘K hint + Arrow submit */}
         <div className="flex shrink-0 items-center gap-2">
           <kbd
-            className="hidden items-center gap-0.5 rounded-lg border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-muted-foreground sm:flex"
+            className="hidden items-center gap-0.5 rounded-lg border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-muted-foreground sm:flex"
             aria-hidden
           >
             <span>⌘</span>

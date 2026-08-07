@@ -313,7 +313,7 @@ function HeroStat({
             <span className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{valueString ?? '—'}</span>
           )}
           {badge && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${BADGE_TONE[badge.tone]}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${BADGE_TONE[badge.tone]}`}>
               {badge.label}
             </span>
           )}
@@ -386,7 +386,7 @@ function SnapshotTile({
         className={`group relative w-full text-left glass-surface rounded-2xl p-4 h-full overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 ${interactive ? 'hover-lift cursor-pointer hover:border-white/10' : 'cursor-default'}`}
       >
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.08em] truncate">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] truncate">
             {label}
           </p>
           <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] shrink-0">
@@ -403,14 +403,14 @@ function SnapshotTile({
         {mom && MomIcon && (
           <div className={`flex items-center gap-1 mt-1 ${MOM_STYLE[mom.direction].cls}`}>
             <MomIcon className="h-3 w-3" />
-            <span className="text-[10px] font-semibold tabular-nums">
+            <span className="text-[11px] font-semibold tabular-nums">
               {mom.direction === 'flat' ? '—' : `${mom.pct > 0 ? '+' : ''}${mom.pct}%`}
             </span>
-            <span className="text-[10px] text-muted-foreground">{MOM_STYLE[mom.direction].verb}</span>
+            <span className="text-[11px] text-muted-foreground">{MOM_STYLE[mom.direction].verb}</span>
           </div>
         )}
         {!mom && (
-          <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed truncate">{subtitle}</p>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed truncate">{subtitle}</p>
         )}
       </button>
     </motion.div>
@@ -453,7 +453,7 @@ function RevenueExpenseBar({ revenue, expenses }: { revenue: number; expenses: n
           className="bg-gradient-to-r from-rose-400 to-rose-600"
         />
       </div>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-[11px] text-muted-foreground">
         {total > 0
           ? `${revPct.toFixed(0)}% revenue · ${expPct.toFixed(0)}% expenses (FY-to-date)`
           : 'No revenue or expenses recorded yet for this financial year.'}
@@ -868,7 +868,7 @@ export default function DashboardPage() {
                 <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-blue-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
                 <span className="text-xs font-medium text-muted-foreground">Health</span>
                 <span className="text-sm font-bold text-foreground gst-text-tabular">{snapshot.healthScore}</span>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
+                <span className={`text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
                   {healthTier.label}
                 </span>
               </div>
@@ -1195,7 +1195,7 @@ export default function DashboardPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap mb-0.5">
                             <p className="text-[13px] font-medium text-foreground leading-snug">{rec.title}</p>
-                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${actionCfg.chip} capitalize`}>
+                            <Badge variant="outline" className={`text-[11px] px-1.5 py-0 h-4 ${actionCfg.chip} capitalize`}>
                               {rec.priority}
                             </Badge>
                           </div>
@@ -1293,7 +1293,7 @@ export default function DashboardPage() {
                             <p className="text-[13px] font-medium text-foreground leading-snug">
                               {ev.title}
                             </p>
-                            <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums">
+                            <span className="text-[11px] text-muted-foreground/70 shrink-0 tabular-nums">
                               {ev.createdAt ? timeAgo(ev.createdAt) : ''}
                             </span>
                           </div>
@@ -1303,11 +1303,11 @@ export default function DashboardPage() {
                             </p>
                           )}
                           <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                               {ev.source}
                             </span>
                             {ev.severity && ev.severity !== 'info' && (
-                              <span className={`text-[9px] font-semibold uppercase tracking-wider ${
+                              <span className={`text-[11px] font-semibold uppercase tracking-wider ${
                                 ev.severity === 'critical' ? 'text-rose-400'
                                 : ev.severity === 'warning' ? 'text-amber-400'
                                 : 'text-blue-400'

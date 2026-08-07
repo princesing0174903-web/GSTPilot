@@ -154,7 +154,7 @@ const KpiCard = memo(function KpiCard({
                   {trend.value >= 0 ? '+' : ''}
                   {trend.value}%
                 </span>
-                <span className="text-[10px] text-muted-foreground">{trend.label}</span>
+                <span className="text-[11px] text-muted-foreground">{trend.label}</span>
               </div>
             )}
             {subtitle && !trend && (

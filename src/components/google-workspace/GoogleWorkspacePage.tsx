@@ -674,7 +674,7 @@ function PremiumTabs({
               <span className="hidden sm:inline">{meta.label}</span>
               {typeof badge === 'number' && badge > 0 ? (
                 <span
-                  className={`relative inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                  className={`relative inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[11px] font-bold ${
                     active ? 'bg-white/20 text-white' : 'bg-[#2563EB]/15 text-[#60A5FA]'
                   }`}
                 >
@@ -915,7 +915,7 @@ function GmailTab() {
                           {senderName}
                         </span>
                         {starred ? <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" /> : null}
-                        {unread ? <span className="gst-status gst-status-info !px-1.5 !py-0 !text-[9px]">New</span> : null}
+                        {unread ? <span className="gst-status gst-status-info !px-1.5 !py-0 !text-[11px]">New</span> : null}
                       </div>
                       <div className={`truncate text-xs ${unread ? 'text-foreground/80' : 'text-muted-foreground'}`}>
                         {subj}

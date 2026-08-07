@@ -4,6 +4,7 @@ import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 import { assertInvoiceTenantAccess } from '../_helpers';
 import { derivePaymentStatus } from '@/lib/invoices/invoices';
 import { invalidateGraph } from '@/lib/graph/live-update';
+import { parseBody, schemas } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,24 +19,16 @@ export const dynamic = 'force-dynamic';
 //
 // Auth + tenant-scoped via assertInvoiceTenantAccess. Writes an AuditLog row
 // and invalidates the graph cache so live dashboards reflect the change.
+//
+// SECURITY (POLISH-06): zod validation via schemas.invoiceMarkPaid.
 export async function POST(req: Request) {
   try {
     const authResult = await requireAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     const { uid } = authResult;
 
-    const body = (await req.json()) as {
-      id: string;
-      paidAmount?: number;
-      paymentMode?: string;
-      paymentDate?: string;
-    };
-    if (!body.id) {
-      return NextResponse.json(
-        { error: 'Invoice id is required.' },
-        { status: 400 },
-      );
-    }
+    const [body, validationErr] = await parseBody(req, schemas.invoiceMarkPaid);
+    if (validationErr) return validationErr;
 
     const existing = await db.invoice.findUnique({
       where: { id: body.id },

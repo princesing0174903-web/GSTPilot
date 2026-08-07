@@ -309,7 +309,7 @@ function SettingsSidebar({
           <SelectContent className="max-h-80 border-[#2A2A2A] bg-[#0A0A0A]">
             {(['Workspace', 'Account', 'System'] as const).map((gn) => (
               <div key={gn}>
-                <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-600">
                   {gn}
                 </p>
                 {groups[gn].map((s) => (
@@ -343,7 +343,7 @@ function SettingsSidebar({
     <nav className="sticky top-0 flex h-full w-60 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-[#1F1F1F] bg-[#070707] px-3 py-5 custom-scrollbar">
       {/* Tiny brand label at the top of the nav */}
       <div className="mb-5 px-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
           Settings
         </p>
       </div>
@@ -354,7 +354,7 @@ function SettingsSidebar({
           if (!items?.length) return null;
           return (
             <div key={groupName}>
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
                 {groupName}
               </p>
               <div className="space-y-0.5">
@@ -1182,7 +1182,21 @@ function SecuritySection() {
         }
       >
         {sessionsLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+          // POLISH-04: premium skeleton instead of bare spinner.
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800"
+              >
+                <div className="h-9 w-9 rounded-md bg-white/[0.04] gst-shimmer-premium" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-1/3 rounded bg-white/[0.05] gst-shimmer-premium" />
+                  <div className="h-2.5 w-2/3 rounded bg-white/[0.04] gst-shimmer-premium" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : sessions.length === 0 ? (
           <p className="text-sm text-zinc-500 py-8 text-center">No active sessions found.</p>
         ) : (

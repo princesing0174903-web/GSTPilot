@@ -76,23 +76,23 @@ function getHealthColor(score: number) {
 
 function getReturnStatusBadge(status: string) {
   switch (status) {
-    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
-    case 'pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
-    case 'overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
-    case 'draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
+    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
+    case 'pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
+    case 'overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
+    case 'draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[11px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
     case 'validated': case 'reviewed': case 'generated':
-      return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+      return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[11px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
 function getDocStatusBadge(status: string) {
   switch (status) {
-    case 'extracted': case 'reviewed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Processed</Badge>;
-    case 'processing': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Processing</Badge>;
-    case 'uploading': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">Uploading</Badge>;
-    case 'failed': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Error</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    case 'extracted': case 'reviewed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0">Processed</Badge>;
+    case 'processing': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] px-1.5 py-0">Processing</Badge>;
+    case 'uploading': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[11px] px-1.5 py-0">Uploading</Badge>;
+    case 'failed': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0">Error</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
@@ -433,7 +433,7 @@ export default function ClientWorkspacePage() {
                   <h1 className="text-xl font-semibold text-foreground tracking-tight">
                     {displayText(client.tradeName, 'Unnamed Client')}
                   </h1>
-                  <Badge className={`gap-1 text-[10px] px-2 py-0.5 ${
+                  <Badge className={`gap-1 text-[11px] px-2 py-0.5 ${
                     riskLevel === 'Low' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : riskLevel === 'Medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : riskLevel === 'High' ? 'bg-orange-50 text-orange-700 border-orange-200'
@@ -651,7 +651,7 @@ export default function ClientWorkspacePage() {
                     <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
                     <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceType || '—'}</div>
                     <div className="col-span-2">
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                      <Badge variant="outline" className={`text-[11px] px-1.5 py-0 ${
                         inv.matchStatus === 'matched' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : inv.matchStatus === 'mismatch' ? 'bg-red-50 text-red-700 border-red-200'
                         : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -660,7 +660,7 @@ export default function ClientWorkspacePage() {
                       </Badge>
                     </div>
                     <div className="col-span-2">
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                      <Badge variant="outline" className={`text-[11px] px-1.5 py-0 ${
                         inv.riskLevel === 'low' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : inv.riskLevel === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
                         : inv.riskLevel === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200'

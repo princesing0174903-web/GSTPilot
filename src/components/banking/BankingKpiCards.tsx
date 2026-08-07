@@ -204,10 +204,10 @@ const GaugeBar = memo(function GaugeBar({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
           Score
         </span>
-        <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+        <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
           {Math.round(value)}/{max}
         </span>
       </div>
@@ -429,7 +429,7 @@ const BankingKpiCard = memo(function BankingKpiCard({
               {config.trend.value >= 0 ? '+' : ''}
               {config.trend.value.toFixed(1)}%
             </span>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               {config.trend.label}
             </span>
           </div>

@@ -550,7 +550,7 @@ function ReportCard({
       {/* Metadata row */}
       <div className="grid grid-cols-2 gap-3 py-3 border-t border-b border-[#1F1F1F] mb-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Last Generated
           </p>
           <p className="text-xs text-foreground font-medium truncate">
@@ -558,7 +558,7 @@ function ReportCard({
           </p>
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Est. Size
           </p>
           <p className="text-xs text-foreground font-medium truncate">{report.estimatedSize}</p>
@@ -2123,7 +2123,7 @@ export default function ReportsPage() {
                 <Clock className="size-3.5 text-[#60A5FA]" />
               </div>
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Last Activity
                 </p>
                 <p className="text-xs text-foreground font-semibold">
@@ -2142,7 +2142,7 @@ export default function ReportsPage() {
                 <Package className="size-4 text-muted-foreground" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Total Reports
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-foreground">{TOTAL_REPORTS}</p>
@@ -2155,7 +2155,7 @@ export default function ReportsPage() {
                 <CheckCircle2 className="size-4 text-[#60A5FA]" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Ready
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-[#60A5FA]">
@@ -2170,7 +2170,7 @@ export default function ReportsPage() {
                 <Database className="size-4 text-muted-foreground" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Saved Reports
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-foreground">
@@ -2185,7 +2185,7 @@ export default function ReportsPage() {
                 <History className="size-4 text-muted-foreground" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Local History
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-foreground">
@@ -2272,7 +2272,7 @@ export default function ReportsPage() {
           <div className="mt-5 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Client
                 </label>
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
@@ -2290,7 +2290,7 @@ export default function ReportsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Month
                 </label>
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -2307,7 +2307,7 @@ export default function ReportsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Year
                 </label>
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -2324,7 +2324,7 @@ export default function ReportsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Return Type
                 </label>
                 <Select value={returnType} onValueChange={setReturnType}>
@@ -2342,7 +2342,7 @@ export default function ReportsPage() {
             <Separator className="bg-[#1F1F1F]" />
 
             <div className="space-y-2">
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 Include Sections
               </label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -2369,7 +2369,7 @@ export default function ReportsPage() {
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Total Invoices
                 </p>
                 <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
@@ -2377,7 +2377,7 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Taxable Value
                 </p>
                 <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
@@ -2385,7 +2385,7 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Total Tax
                 </p>
                 <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
@@ -2439,7 +2439,7 @@ export default function ReportsPage() {
                 </div>
                 <Badge
                   variant="outline"
-                  className="shrink-0 text-[10px] uppercase tracking-wider"
+                  className="shrink-0 text-[11px] uppercase tracking-wider"
                 >
                   {category.reports.length}{' '}
                   {category.reports.length === 1 ? 'report' : 'reports'}
@@ -2490,14 +2490,14 @@ export default function ReportsPage() {
             <TabsTrigger value="saved" className="gap-1.5">
               <Database className="size-3.5" />
               Saved Reports
-              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[11px]">
                 {savedReports.length}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="local" className="gap-1.5">
               <Clock className="size-3.5" />
               Local History
-              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[11px]">
                 {recentExports.length}
               </Badge>
             </TabsTrigger>
@@ -2575,7 +2575,7 @@ export default function ReportsPage() {
                                 <div
                                   className={cn(
                                     'flex size-7 items-center justify-center rounded',
-                                    config?.bgColor ?? 'bg-slate-50',
+                                    config?.bgColor ?? 'bg-white/[0.03]',
                                   )}
                                 >
                                   {config?.icon ?? <FileText className="size-3.5" />}
@@ -2689,7 +2689,7 @@ export default function ReportsPage() {
                                 <div
                                   className={cn(
                                     'flex size-7 items-center justify-center rounded',
-                                    config?.bgColor ?? 'bg-slate-50',
+                                    config?.bgColor ?? 'bg-white/[0.03]',
                                   )}
                                 >
                                   {config?.icon ?? <FileText className="size-3.5" />}

@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { safeAudit } from '@/lib/audit/safe-write';
 import { requireAuth, friendlyApiError } from '@/lib/auth/session';
+import { parseBody, schemas } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
         { status: 401 },
       );
     }
+    void uid;
 
     const profile = await db.userProfile.findUnique({ where: { userEmail } });
     return NextResponse.json({ profile });
@@ -70,14 +72,16 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const allowed: Record<string, unknown> = {};
-    for (const k of [
-      'name', 'role', 'designation', 'firmName', 'industry', 'city',
-      'timezone', 'preferredLanguage',
-    ]) {
-      if (body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '') {
-        allowed[k] = String(body[k]).trim();
+    // ── SECURITY (POLISH-06): zod validation via schemas.profileUpdate.
+    // Caps every field at 200 chars and rejects unknown fields (so a caller
+    // can't smuggle `id` or `userEmail` overrides into the Prisma upsert).
+    const [body, validationErr] = await parseBody(request, schemas.profileUpdate);
+    if (validationErr) return validationErr;
+
+    const allowed: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (typeof v === 'string' && v.trim() !== '') {
+        allowed[k] = v.trim();
       }
     }
 

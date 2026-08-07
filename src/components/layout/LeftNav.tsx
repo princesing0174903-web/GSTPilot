@@ -160,11 +160,11 @@ export function LeftNav({
               <span className="text-[14px] font-semibold tracking-tight text-white">
                 GSTPilot
               </span>
-              <span className="rounded-[5px] bg-[#3B82F6]/12 px-1.5 py-[2px] text-[9px] font-bold uppercase tracking-[0.08em] text-[#60A5FA] ring-1 ring-[#3B82F6]/20">
+              <span className="rounded-[5px] bg-[#3B82F6]/12 px-1.5 py-[2px] text-[11px] font-bold uppercase tracking-[0.08em] text-[#60A5FA] ring-1 ring-[#3B82F6]/20">
                 Infinity
               </span>
             </div>
-            <span className="mt-[3px] text-[10px] font-medium text-[#71717A]">
+            <span className="mt-[3px] text-[11px] font-medium text-[#71717A]">
               Financial Brain of India
             </span>
           </div>
@@ -177,7 +177,7 @@ export function LeftNav({
             region, so they never move. */}
         <div className="custom-scrollbar flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
           {/* Section label — visible only on expanded sidebar */}
-          <div className={cn('px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#52525B]', labelBlock)}>
+          <div className={cn('px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#52525B]', labelBlock)}>
             Workspace
           </div>
 
@@ -250,7 +250,7 @@ export function LeftNav({
 
                 {/* Badge — hidden when collapsed */}
                 {item.badge && (
-                  <span className={cn('ml-auto items-center rounded-[5px] border border-[#3B82F6]/25 bg-[#3B82F6]/10 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#60A5FA]', labelInlineFlex)}>
+                  <span className={cn('ml-auto items-center rounded-[5px] border border-[#3B82F6]/25 bg-[#3B82F6]/10 px-1.5 py-[1px] text-[11px] font-semibold uppercase tracking-[0.08em] text-[#60A5FA]', labelInlineFlex)}>
                     {item.badge}
                   </span>
                 )}
@@ -282,7 +282,7 @@ export function LeftNav({
           {/* ─── Integrations (secondary section) ─────────────────────── */}
           {INTEGRATION_ITEMS.length > 0 && (
             <>
-              <div className={cn('px-2.5 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#52525B]', labelBlock)}>
+              <div className={cn('px-2.5 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#52525B]', labelBlock)}>
                 Integrations
               </div>
               {INTEGRATION_ITEMS.map((item, i) => {
@@ -351,15 +351,15 @@ export function LeftNav({
         {/* ─── Footer ──────────────────────────────────────────────────── */}
         <div className={cn('mt-3 shrink-0 border-t border-[#1A1A1A] pt-3', labelBlock)}>
           <div className="flex items-center justify-between px-2.5">
-            <span className="text-[10px] font-medium text-[#52525B]">
+            <span className="text-[11px] font-medium text-[#52525B]">
               v2.0 · Infinity
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-blue-500/80 shadow-[0_0_6px_rgba(37,99,235,0.6)]" />
-              <span className="text-[10px] font-medium text-[#71717A]">Live</span>
+              <span className="text-[11px] font-medium text-[#71717A]">Live</span>
             </span>
           </div>
-          <p className="mt-1.5 px-2.5 text-[9px] font-medium uppercase leading-tight tracking-[0.12em] text-[#3F3F46]">
+          <p className="mt-1.5 px-2.5 text-[11px] font-medium uppercase leading-tight tracking-[0.12em] text-[#3F3F46]">
             The Financial Brain
             <br />
             of India

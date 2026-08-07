@@ -216,15 +216,15 @@ function mapApiToDoc(c: ClientOption): ClientDoc {
 
 function healthScoreColor(score: number): string {
   if (score >= 80) return 'text-blue-400';
-  if (score >= 60) return 'text-yellow-400';
-  if (score >= 40) return 'text-orange-400';
+  if (score >= 60) return 'text-amber-400';
+  if (score >= 40) return 'text-amber-400';
   return 'text-red-400';
 }
 
 function healthScoreBg(score: number): string {
   if (score >= 80) return 'bg-blue-500/10 ring-blue-500/20';
-  if (score >= 60) return 'bg-yellow-500/10 ring-yellow-500/20';
-  if (score >= 40) return 'bg-orange-500/10 ring-orange-500/20';
+  if (score >= 60) return 'bg-amber-500/10 ring-amber-500/20';
+  if (score >= 40) return 'bg-amber-500/10 ring-amber-500/20';
   return 'bg-red-500/10 ring-red-500/20';
 }
 
@@ -1203,7 +1203,7 @@ export default function ClientRegistryPage() {
                   </button>
                 )}
                 {!search && (
-                  <kbd className="hidden rounded border border-[#222] bg-[#18181B] px-1.5 py-0.5 font-mono text-[10px] font-medium text-[#52525B] sm:inline-block">
+                  <kbd className="hidden rounded border border-[#222] bg-[#18181B] px-1.5 py-0.5 font-mono text-[11px] font-medium text-[#52525B] sm:inline-block">
                     /
                   </kbd>
                 )}
@@ -1268,7 +1268,7 @@ export default function ClientRegistryPage() {
               >
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                 Reset
-                <span className="ml-1.5 rounded-full bg-[#3B82F6]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#60A5FA]">
+                <span className="ml-1.5 rounded-full bg-[#3B82F6]/15 px-1.5 py-0.5 text-[11px] font-bold text-[#60A5FA]">
                   {activeFilterCount}
                 </span>
               </Button>

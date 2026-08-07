@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { escapeHtml } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -103,8 +104,11 @@ function formatDate(date: Date): string {
 function formatMessageContent(content: string) {
   const lines = content.split('\n')
   return lines.map((line, i) => {
+    // SECURITY (POLISH-06): escapeHtml before applying markdown so any HTML
+    // in the AI / user content is rendered as text, not executed.
+    const escaped = escapeHtml(line)
     // Process bold markers
-    let formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    const formatted = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 
     // Process bullet points
     if (formatted.startsWith('•') || formatted.startsWith('- ') || formatted.startsWith('* ')) {

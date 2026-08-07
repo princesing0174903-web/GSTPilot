@@ -320,7 +320,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
               <Calendar className="h-3.5 w-3.5 mr-1.5" />
               Advanced
               {hasAdvanced && (
-                <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-600 text-white text-[11px] font-bold">
                   •
                 </span>
               )}
@@ -335,7 +335,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
                 </h4>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">From</label>
+                    <label className="text-[11px] text-muted-foreground mb-1 block">From</label>
                     <Input
                       type="date"
                       value={filters.dateFrom}
@@ -344,7 +344,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">To</label>
+                    <label className="text-[11px] text-muted-foreground mb-1 block">To</label>
                     <Input
                       type="date"
                       value={filters.dateTo}
@@ -361,7 +361,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
                 </h4>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Min</label>
+                    <label className="text-[11px] text-muted-foreground mb-1 block">Min</label>
                     <div className="relative">
                       <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                       <Input
@@ -374,7 +374,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Max</label>
+                    <label className="text-[11px] text-muted-foreground mb-1 block">Max</label>
                     <div className="relative">
                       <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                       <Input
@@ -456,7 +456,7 @@ export const InvoiceFilters = memo(function InvoiceFilters({
             {activeFilterCount > 0 && (
               <Badge
                 variant="secondary"
-                className="ml-1.5 h-4 px-1.5 text-[10px] bg-blue-500/20 text-blue-300"
+                className="ml-1.5 h-4 px-1.5 text-[11px] bg-blue-500/20 text-blue-300"
               >
                 {activeFilterCount}
               </Badge>

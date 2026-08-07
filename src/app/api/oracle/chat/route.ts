@@ -37,6 +37,8 @@ import { logDecision } from '@/lib/oracle/brain/decision-log';
 import { createAutonomousTaskFromInsight } from '@/lib/oracle/brain/task-engine';
 import { generateRemindersFromSnapshot } from '@/lib/oracle/brain/reminder-engine';
 import { recordLearning, inferPreferencesFromBehavior } from '@/lib/oracle/brain/learning-engine';
+import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
+import { parseBody, schemas } from '@/lib/validation';
 
 /** Render the Brain context snapshot as a system-prompt block. */
 function renderBrainContextBlock(ctx: {
@@ -182,14 +184,44 @@ function parseRequest(body: unknown): ParsedRequest {
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: Request): Promise<Response> {
-  // 1. Parse the body robustly.
-  let body: unknown = null;
-  try {
-    body = await req.json();
-  } catch {
-    body = {};
+  // ── SECURITY (POLISH-06): rate limit per IP — 20 Oracle requests/min. ──
+  // The Oracle pipeline is expensive (Prisma queries + LLM call + memory
+  // writes). Unauthenticated flooders would exhaust the sandbox budget.
+  const rl = rateLimit(req, RATE_LIMIT_PRESETS.oracle, 'oracle-chat');
+  if (rl.denied) {
+    // Return a friendly SSE so the UI's stream parser can render the message
+    // instead of treating it as a network error.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(sseChunk({
+          token: "You're sending messages too quickly — please wait a moment and try again.",
+        }));
+        controller.enqueue(sseChunk({ done: true }));
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: sseHeaders(),
+    });
   }
-  const parsed = parseRequest(body);
+
+  // 1. Parse + validate the body via zod (defensive — caps message length,
+  //    blocks weird types from being smuggled into the pipeline).
+  const [rawBody, validationErr] = await parseBody(req, schemas.oracleChat);
+  if (validationErr) {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(sseChunk({
+          token: "I couldn't read your message — please try sending it again.",
+        }));
+        controller.enqueue(sseChunk({ done: true }));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: sseHeaders() });
+  }
+  const parsed = parseRequest(rawBody);
 
   // 2. Empty / malformed → friendly SSE (NEVER HTTP 400).
   if (!parsed.ok) {

@@ -4,6 +4,7 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitClientNode } from '@/lib/graph/auto-emit'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+import { parseBody, schemas } from '@/lib/validation'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma `Client` model is scoped by `firmId` (nullable
@@ -147,31 +148,11 @@ export async function POST(request: Request) {
     if (authResult instanceof NextResponse) return authResult
     const { uid } = authResult
 
-    const body = await request.json()
-    const {
-      gstin,
-      tradeName,
-      legalName,
-      address,
-      state,
-      stateCode,
-      contactEmail,
-      contactPhone,
-      entityType,
-      returnPeriod,
-      // Tenant scope — accept either organizationId (modern) or firmId (legacy).
-      // They are the same tenant identifier in this app's current state.
-      organizationId,
-      firmId,
-    } = body
-    const tenantId = organizationId || firmId
+    // ── SECURITY (POLISH-06): zod validation via schemas.clientCreate. ──
+    const [body, validationErr] = await parseBody(request, schemas.clientCreate)
+    if (validationErr) return validationErr
+    const tenantId = body.organizationId || body.firmId
 
-    if (!gstin || !tradeName) {
-      return NextResponse.json(
-        { error: 'gstin and tradeName are required' },
-        { status: 400 }
-      )
-    }
     if (!tenantId) {
       return NextResponse.json(
         { error: 'organizationId (or firmId) is required' },
@@ -183,7 +164,7 @@ export async function POST(request: Request) {
     if (memberResult instanceof NextResponse) return memberResult
 
     // Check for duplicate GSTIN within the same tenant
-    const existing = await db.client.findUnique({ where: { gstin } })
+    const existing = await db.client.findUnique({ where: { gstin: body.gstin } })
     if (existing) {
       return NextResponse.json(
         { error: 'A client with this GSTIN already exists' },
@@ -193,16 +174,16 @@ export async function POST(request: Request) {
 
     const client = await db.client.create({
       data: {
-        gstin,
-        tradeName,
-        legalName: legalName ?? null,
-        address: address ?? null,
-        state: state ?? null,
-        stateCode: stateCode ?? null,
-        contactEmail: contactEmail ?? null,
-        contactPhone: contactPhone ?? null,
-        entityType: entityType ?? 'regular',
-        returnPeriod: returnPeriod ?? null,
+        gstin: body.gstin,
+        tradeName: body.tradeName,
+        legalName: body.legalName ?? null,
+        address: body.address ?? null,
+        state: body.state ?? null,
+        stateCode: body.stateCode ?? null,
+        contactEmail: body.contactEmail ?? null,
+        contactPhone: body.contactPhone ?? null,
+        entityType: body.entityType ?? 'regular',
+        returnPeriod: body.returnPeriod ?? null,
         // Persist the tenant scope so subsequent reads can filter by it.
         firmId: tenantId,
       },
@@ -215,7 +196,7 @@ export async function POST(request: Request) {
         action: 'Client Created',
         entity: 'client',
         entityId: client.id,
-        details: `New client ${tradeName} (${gstin}) created`,
+        details: `New client ${body.tradeName} (${body.gstin}) created`,
       },
     })
 
@@ -229,14 +210,14 @@ export async function POST(request: Request) {
     await emitTimelineEvent({
       organizationId: tenantId,
       type: 'customer.created',
-      title: `Customer “${tradeName}” created`,
-      description: `New customer added with GSTIN ${gstin}.`,
+      title: `Customer “${body.tradeName}” created`,
+      description: `New customer added with GSTIN ${body.gstin}.`,
       metadata: {
         clientId: client.id,
-        gstin,
-        tradeName,
-        legalName: legalName ?? null,
-        entityType: entityType ?? 'regular',
+        gstin: body.gstin,
+        tradeName: body.tradeName,
+        legalName: body.legalName ?? null,
+        entityType: body.entityType ?? 'regular',
       },
       severity: 'success',
     })
@@ -255,17 +236,15 @@ export async function PATCH(request: Request) {
     if (authResult instanceof NextResponse) return authResult
     const { uid } = authResult
 
-    const body = await request.json()
-    const { id, ...updates } = body
+    // ── SECURITY (POLISH-06): zod validation via schemas.clientUpdate.
+    // This is critical: the previous route spread `...updates` straight into
+    // Prisma's `data:`, which would have allowed a caller to overwrite `id`,
+    // `createdAt`, `firmId`, or any other column. The zod schema enumerates
+    // every allowed field so nothing else can slip through.
+    const [body, validationErr] = await parseBody(request, schemas.clientUpdate)
+    if (validationErr) return validationErr
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Client id is required' },
-        { status: 400 }
-      )
-    }
-
-    const existing = await db.client.findUnique({ where: { id } })
+    const existing = await db.client.findUnique({ where: { id: body.id } })
     if (!existing) {
       return NextResponse.json(
         { error: 'Client not found' },
@@ -278,8 +257,8 @@ export async function PATCH(request: Request) {
     if (memberResult instanceof NextResponse) return memberResult
 
     // Check GSTIN uniqueness if being updated
-    if (updates.gstin && updates.gstin !== existing.gstin) {
-      const duplicate = await db.client.findUnique({ where: { gstin: updates.gstin } })
+    if (body.gstin && body.gstin !== existing.gstin) {
+      const duplicate = await db.client.findUnique({ where: { gstin: body.gstin } })
       if (duplicate) {
         return NextResponse.json(
           { error: 'A client with this GSTIN already exists' },
@@ -288,9 +267,22 @@ export async function PATCH(request: Request) {
       }
     }
 
+    // Build the update payload from validated fields only — never spread raw input.
+    const updateData: Record<string, string | null | undefined> = {}
+    if (body.gstin !== undefined) updateData.gstin = body.gstin
+    if (body.tradeName !== undefined) updateData.tradeName = body.tradeName
+    if (body.legalName !== undefined) updateData.legalName = body.legalName ?? null
+    if (body.address !== undefined) updateData.address = body.address ?? null
+    if (body.state !== undefined) updateData.state = body.state ?? null
+    if (body.stateCode !== undefined) updateData.stateCode = body.stateCode ?? null
+    if (body.contactEmail !== undefined) updateData.contactEmail = body.contactEmail ?? null
+    if (body.contactPhone !== undefined) updateData.contactPhone = body.contactPhone ?? null
+    if (body.entityType !== undefined) updateData.entityType = body.entityType ?? 'regular'
+    if (body.returnPeriod !== undefined) updateData.returnPeriod = body.returnPeriod ?? null
+
     const client = await db.client.update({
-      where: { id },
-      data: updates,
+      where: { id: body.id },
+      data: updateData,
     })
 
     // Create audit log

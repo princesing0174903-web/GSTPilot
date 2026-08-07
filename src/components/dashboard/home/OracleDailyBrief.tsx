@@ -368,7 +368,7 @@ export function OracleDailyBrief() {
                 <h3 className="text-sm font-semibold text-foreground tracking-tight">
                   Oracle Daily Brief
                 </h3>
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 text-[11px] font-semibold uppercase tracking-wider text-amber-400">
                   <span className="h-1 w-1 rounded-full bg-amber-400 animate-pulse" />
                   Live
                 </span>
@@ -437,7 +437,7 @@ export function OracleDailyBrief() {
                 >
                   <div className="flex items-center gap-1 mb-0.5">
                     <Icon className={cn('h-3 w-3', TONE_CLASSES[m.tone])} />
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       {m.label}
                     </span>
                   </div>

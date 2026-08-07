@@ -252,7 +252,7 @@ function MiniStat({
 }) {
   return (
     <div className="flex-1 rounded-lg bg-white/[0.02] p-2.5 ring-1 ring-white/[0.04]">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
         {label}
       </p>
       <p className={cn('mt-0.5 text-sm font-semibold tabular-nums', tone)}>
@@ -273,7 +273,7 @@ function OracleHeader() {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-white">Oracle AI</h3>
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
             Live
           </span>
         </div>
@@ -310,7 +310,7 @@ function CashFlowAnalysisCard({
 
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Health
             </p>
             <span
@@ -324,7 +324,7 @@ function CashFlowAnalysisCard({
             </span>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Score
             </p>
             <p className={cn('text-2xl font-bold tabular-nums', cfg.text)}>
@@ -393,7 +393,7 @@ function NextMonthPredictionCard({
 
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Predicted Balance
             </p>
             <p className="mt-0.5 text-xl font-bold text-white tabular-nums">
@@ -401,7 +401,7 @@ function NextMonthPredictionCard({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Confidence
             </p>
             <p className="text-xl font-bold text-blue-400 tabular-nums">
@@ -491,7 +491,7 @@ function LargeWithdrawalsCard({
                         </span>
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
                             cfg.chip,
                           )}
                         >
@@ -560,7 +560,7 @@ function DuplicatePaymentsCard({
                       <span className="text-sm font-bold text-zinc-100 tabular-nums">
                         {formatINR(d.amount)}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-300">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-cyan-300">
                         {d.count} {d.count === 1 ? 'payment' : 'payments'}
                       </span>
                     </div>
@@ -568,14 +568,14 @@ function DuplicatePaymentsCard({
                       {d.counterparty || 'Unknown counterparty'}
                     </p>
                     {d.dates.length > 0 && (
-                      <p className="mt-0.5 truncate text-[10px] text-zinc-600">
+                      <p className="mt-0.5 truncate text-[11px] text-zinc-600">
                         {d.dates.slice(0, 3).map(formatDate).join(' · ')}
                         {d.dates.length > 3 ? ` +${d.dates.length - 3} more` : ''}
                       </p>
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-[9px] font-medium uppercase tracking-wider text-zinc-500">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                       Exposure
                     </p>
                     <p className="text-sm font-bold text-red-400 tabular-nums">
@@ -661,7 +661,7 @@ function GstPaymentReadinessCard({
 
         {/* Big liability figure */}
         <div className="mt-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
             Estimated Liability
           </p>
           <p className="mt-0.5 text-2xl font-bold text-white tabular-nums">
@@ -706,7 +706,7 @@ function CollectionEfficiencyCard({
 
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Collection Rate
             </p>
             <p className="mt-0.5 text-2xl font-bold text-blue-400 tabular-nums">
@@ -714,7 +714,7 @@ function CollectionEfficiencyCard({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Avg Days
             </p>
             <p className="text-xl font-bold text-zinc-100 tabular-nums">
@@ -773,7 +773,7 @@ function UnmatchedTransactionsCard({
 
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Count
             </p>
             <p className="mt-0.5 text-2xl font-bold text-amber-400 tabular-nums">
@@ -781,7 +781,7 @@ function UnmatchedTransactionsCard({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Total Amount
             </p>
             <p className="text-xl font-bold text-white tabular-nums">
@@ -792,7 +792,7 @@ function UnmatchedTransactionsCard({
 
         {/* Credit / Debit breakdown */}
         <div className="mt-3">
-          <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
             <span className="flex items-center gap-1 text-blue-400">
               <ArrowDownRight className="h-3 w-3" />
               Credit
@@ -878,7 +878,7 @@ function LateCollectionsCard({
                   <p className="mt-0.5 truncate text-[11px] text-zinc-500">
                     {c.clientName}
                   </p>
-                  <p className="mt-1 text-[10px] font-semibold text-red-400">
+                  <p className="mt-1 text-[11px] font-semibold text-red-400">
                     {c.daysOverdue} {c.daysOverdue === 1 ? 'day' : 'days'} late
                   </p>
                 </div>
@@ -936,7 +936,7 @@ function FraudIndicatorsCard({
                         </p>
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
                             cfg.chip,
                           )}
                         >
@@ -952,7 +952,7 @@ function FraudIndicatorsCard({
                       {f.transactionId && (
                         <a
                           href={`/banking/transactions/${encodeURIComponent(f.transactionId)}`}
-                          className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-cyan-300 hover:text-cyan-200"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-cyan-300 hover:text-cyan-200"
                         >
                           View transaction →
                         </a>
@@ -1013,7 +1013,7 @@ function RecommendationsCard({
                   <div className="flex items-start gap-2.5">
                     <span
                       className={cn(
-                        'mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                        'mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
                         cfg.badge,
                       )}
                     >
@@ -1055,7 +1055,7 @@ function RecommendationsCard({
 function Footer() {
   return (
     <div className="px-1 pb-1 pt-2 text-center">
-      <p className="text-[10px] leading-relaxed text-zinc-600">
+      <p className="text-[11px] leading-relaxed text-zinc-600">
         Powered by <span className="font-semibold text-amber-300/80">Oracle AI™</span> —
         deterministic heuristics, not financial advice.
       </p>

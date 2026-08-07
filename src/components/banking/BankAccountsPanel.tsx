@@ -238,7 +238,7 @@ const AccountCard = React.memo(function AccountCard({
         {/* IFSC + Branch */}
         <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               IFSC
             </p>
             <p className="truncate font-mono text-foreground/90">
@@ -246,7 +246,7 @@ const AccountCard = React.memo(function AccountCard({
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Branch
             </p>
             <p className="truncate text-foreground/90">{account.branch || '—'}</p>
@@ -264,7 +264,7 @@ const AccountCard = React.memo(function AccountCard({
         {/* Monthly inflow / outflow */}
         <div className="mb-3 grid grid-cols-2 gap-2">
           <div className="rounded-lg bg-blue-500/[0.06] p-2">
-            <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-blue-400">
+            <p className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-blue-400">
               <ArrowDownLeft className="h-3 w-3" />
               Inflow
             </p>
@@ -273,7 +273,7 @@ const AccountCard = React.memo(function AccountCard({
             </p>
           </div>
           <div className="rounded-lg bg-red-500/[0.06] p-2">
-            <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-red-400">
+            <p className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-red-400">
               <ArrowUpRight className="h-3 w-3" />
               Outflow
             </p>

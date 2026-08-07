@@ -137,10 +137,32 @@
     border-color: var(--border);
   }
 
+  /* ───────────────────────────────────────────────────────────────────────────
+     SCROLL ARCHITECTURE (POLISH-04)
+     ───────────────────────────────────────────────────────────────────────────
+     Prevents double scroll, body scroll chains, and random page scroll.
+
+       html            → height: 100% (so h-screen / h-full resolve consistently).
+       body            → height: 100%, overscroll-behavior: none (prevents
+                          scroll chaining when a child panel runs out of room).
+                          Overflow is left at its default (`auto`) so that
+                          unauthenticated surfaces (landing, login, onboarding,
+                          error pages) can still scroll naturally.
+       .gst-app-shell  → opt-in overflow:hidden + height:100% — applied by the
+                          authenticated dashboard shell so the body NEVER scrolls
+                          while the user is in the app. The shell owns its own
+                          scroll regions (sidebar nav list + <main> workspace).
+
+     The dashboard shell uses `h-screen flex flex-col overflow-hidden` on its
+     root, with TWO independent scroll regions:
+       • LeftNav (sidebar)      — overflow-y-auto on its inner nav list
+       • <main> workspace       — overflow-y-auto on the main element
+     ─────────────────────────────────────────────────────────────────────────── */
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    height: 100%;
   }
 
   body {
@@ -148,6 +170,15 @@
     color: var(--foreground);
     font-feature-settings: "rlig" 1, "calt" 1;
     font-synthesis-weight: none;
+    height: 100%;
+    min-height: 100%;
+    overscroll-behavior: none;
+  }
+
+  /* When the dashboard shell mounts, it adds `.gst-app-shell` to <body> to
+     lock the document scroll. Only the inner panels scroll, never the body. */
+  body.gst-app-shell {
+    overflow: hidden;
   }
 
   /* Force pure black canvas in dark mode — kill any residual tint */
@@ -781,6 +812,277 @@
 .dark linearGradient stop[stop-color="#00F5D4"],
 .dark linearGradient stop[stop-color="#00f5d4"] {
   stop-color: #2563EB !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   NON-BLUE COLOR NEUTRALIZATION CASCADE (POLISH-05)
+   ───────────────────────────────────────────────────────────────────────────────
+   Converts every Tailwind color that breaks the BLUE design language into the
+   permitted palette (blue / zinc / amber / red). This is a runtime safety net
+   that catches any new occurrences without requiring source edits across 250+
+   component files. Mirrors the GREEN NEUTRALIZATION CASCADE pattern above.
+
+   Permitted: blue-400/500/600, zinc-300/400/500/900/950, amber-400,
+              red-400, emerald-400 (success only — handled above).
+
+   Mappings:
+     • gray-*       → zinc-* (neutral cool gray, identical to design system)
+     • slate-*      → zinc-* (neutral cool gray)
+     • indigo-*     → blue-* (primary brand)
+     • violet-*     → blue-* (primary brand)
+     • purple-*     → blue-* (primary brand)
+     • pink-*       → red-* (warning accent)
+     • rose-*       → red-* (warning accent)
+     • orange-*     → amber-* (warning accent)
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ── GRAY → ZINC (neutral cool gray) ────────────────────────────────────────── */
+.dark .bg-gray-50, .dark .bg-gray-100, .dark .bg-gray-200, .dark .bg-gray-300,
+.dark .bg-gray-400, .dark .bg-gray-500, .dark .bg-gray-600, .dark .bg-gray-700,
+.dark .bg-gray-800, .dark .bg-gray-900, .dark .bg-gray-950 {
+  background-color: #18181B !important;
+}
+
+.dark .text-gray-50, .dark .text-gray-100, .dark .text-gray-200, .dark .text-gray-300,
+.dark .text-gray-400, .dark .text-gray-500, .dark .text-gray-600, .dark .text-gray-700,
+.dark .text-gray-800, .dark .text-gray-900, .dark .text-gray-950 {
+  color: #A1A1AA !important;
+}
+
+.dark .text-gray-300 { color: #D4D4D8 !important; }
+.dark .text-gray-400 { color: #A1A1AA !important; }
+.dark .text-gray-500 { color: #71717A !important; }
+.dark .text-gray-600 { color: #52525B !important; }
+.dark .text-gray-100, .dark .text-gray-200 { color: #E4E4E7 !important; }
+
+.dark .border-gray-200, .dark .border-gray-300, .dark .border-gray-400,
+.dark .border-gray-500, .dark .border-gray-600, .dark .border-gray-700,
+.dark .border-gray-800 {
+  border-color: #27272A !important;
+}
+
+/* Opacity variants */
+.dark [class*="bg-gray-500/"], .dark [class*="bg-gray-400/"], .dark [class*="bg-gray-600/"],
+.dark [class*="bg-gray-700/"], .dark [class*="bg-gray-800/"] {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.dark [class*="text-gray-400/"], .dark [class*="text-gray-500/"],
+.dark [class*="text-gray-300/"], .dark [class*="text-gray-600/"] {
+  color: rgba(161, 161, 170, 0.9) !important;
+}
+
+.dark [class*="border-gray-500/"], .dark [class*="border-gray-400/"],
+.dark [class*="border-gray-600/"], .dark [class*="border-gray-700/"] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── SLATE → ZINC (neutral cool gray, slightly cooler) ──────────────────────── */
+.dark .bg-slate-50, .dark .bg-slate-100, .dark .bg-slate-200, .dark .bg-slate-300,
+.dark .bg-slate-400, .dark .bg-slate-500, .dark .bg-slate-600, .dark .bg-slate-700,
+.dark .bg-slate-800, .dark .bg-slate-900, .dark .bg-slate-950 {
+  background-color: #18181B !important;
+}
+
+.dark .text-slate-300 { color: #D4D4D8 !important; }
+.dark .text-slate-400 { color: #A1A1AA !important; }
+.dark .text-slate-500 { color: #71717A !important; }
+.dark .text-slate-600 { color: #52525B !important; }
+.dark .text-slate-700, .dark .text-slate-800, .dark .text-slate-900 { color: #E4E4E7 !important; }
+.dark .text-slate-100, .dark .text-slate-200 { color: #F4F4F5 !important; }
+
+.dark .border-slate-200, .dark .border-slate-300, .dark .border-slate-400,
+.dark .border-slate-500, .dark .border-slate-600, .dark .border-slate-700,
+.dark .border-slate-800 {
+  border-color: #27272A !important;
+}
+
+.dark [class*="bg-slate-500/"], .dark [class*="bg-slate-400/"],
+.dark [class*="bg-slate-600/"], .dark [class*="bg-slate-700/"],
+.dark [class*="bg-slate-800/"] {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.dark [class*="text-slate-400/"], .dark [class*="text-slate-500/"],
+.dark [class*="text-slate-300/"], .dark [class*="text-slate-600/"] {
+  color: rgba(161, 161, 170, 0.9) !important;
+}
+
+.dark [class*="border-slate-500/"], .dark [class*="border-slate-400/"],
+.dark [class*="border-slate-600/"], .dark [class*="border-slate-700/"] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── INDIGO → BLUE (primary brand) ──────────────────────────────────────────── */
+.dark .bg-indigo-50, .dark .bg-indigo-100, .dark .bg-indigo-200, .dark .bg-indigo-300,
+.dark .bg-indigo-400, .dark .bg-indigo-500, .dark .bg-indigo-600, .dark .bg-indigo-700,
+.dark .bg-indigo-800, .dark .bg-indigo-900, .dark .bg-indigo-950 {
+  background-color: #1E3A8A !important;
+}
+
+.dark .bg-indigo-500, .dark .bg-indigo-600 { background-color: #2563EB !important; }
+.dark .bg-indigo-400 { background-color: #3B82F6 !important; }
+
+.dark .text-indigo-400 { color: #60A5FA !important; }
+.dark .text-indigo-500, .dark .text-indigo-600 { color: #3B82F6 !important; }
+.dark .text-indigo-300 { color: #93C5FD !important; }
+.dark .text-indigo-700, .dark .text-indigo-800, .dark .text-indigo-900 { color: #DBEAFE !important; }
+
+.dark .border-indigo-400, .dark .border-indigo-500, .dark .border-indigo-600 {
+  border-color: rgba(37, 99, 235, 0.4) !important;
+}
+
+.dark [class*="bg-indigo-500/"], .dark [class*="bg-indigo-400/"],
+.dark [class*="bg-indigo-600/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+.dark [class*="text-indigo-400/"], .dark [class*="text-indigo-500/"],
+.dark [class*="text-indigo-600/"] {
+  color: rgba(96, 165, 250, 0.9) !important;
+}
+
+/* ── VIOLET → BLUE (primary brand) ──────────────────────────────────────────── */
+.dark .bg-violet-500, .dark .bg-violet-600 { background-color: #2563EB !important; }
+.dark .bg-violet-400 { background-color: #3B82F6 !important; }
+.dark .bg-violet-50, .dark .bg-violet-100, .dark .bg-violet-200, .dark .bg-violet-300,
+.dark .bg-violet-700, .dark .bg-violet-800, .dark .bg-violet-900, .dark .bg-violet-950 {
+  background-color: #1E3A8A !important;
+}
+
+.dark .text-violet-400 { color: #60A5FA !important; }
+.dark .text-violet-500, .dark .text-violet-600 { color: #3B82F6 !important; }
+.dark .text-violet-300 { color: #93C5FD !important; }
+.dark .text-violet-700, .dark .text-violet-800, .dark .text-violet-900 { color: #DBEAFE !important; }
+
+.dark [class*="bg-violet-500/"], .dark [class*="bg-violet-400/"],
+.dark [class*="bg-violet-600/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+/* ── PURPLE → BLUE (primary brand) ──────────────────────────────────────────── */
+.dark .bg-purple-500, .dark .bg-purple-600 { background-color: #2563EB !important; }
+.dark .bg-purple-400 { background-color: #3B82F6 !important; }
+.dark .bg-purple-50, .dark .bg-purple-100, .dark .bg-purple-200, .dark .bg-purple-300,
+.dark .bg-purple-700, .dark .bg-purple-800, .dark .bg-purple-900, .dark .bg-purple-950 {
+  background-color: #1E3A8A !important;
+}
+
+.dark .text-purple-400 { color: #60A5FA !important; }
+.dark .text-purple-500, .dark .text-purple-600 { color: #3B82F6 !important; }
+.dark .text-purple-300 { color: #93C5FD !important; }
+.dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900 { color: #DBEAFE !important; }
+
+.dark [class*="bg-purple-500/"], .dark [class*="bg-purple-400/"],
+.dark [class*="bg-purple-600/"] {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+/* ── PINK → RED (warning accent — closely related to destructive) ───────────── */
+.dark .bg-pink-500, .dark .bg-pink-600 { background-color: #DC2626 !important; }
+.dark .bg-pink-400 { background-color: #F87171 !important; }
+.dark .bg-pink-50, .dark .bg-pink-100, .dark .bg-pink-200, .dark .bg-pink-300,
+.dark .bg-pink-700, .dark .bg-pink-800, .dark .bg-pink-900, .dark .bg-pink-950 {
+  background-color: #7F1D1D !important;
+}
+
+.dark .text-pink-400 { color: #F87171 !important; }
+.dark .text-pink-500, .dark .text-pink-600 { color: #EF4444 !important; }
+
+.dark [class*="bg-pink-500/"], .dark [class*="bg-pink-400/"],
+.dark [class*="bg-pink-600/"] {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+}
+
+/* ── ROSE → RED (warning accent — closely related to destructive) ───────────── */
+.dark .bg-rose-500, .dark .bg-rose-600 { background-color: #DC2626 !important; }
+.dark .bg-rose-400 { background-color: #F87171 !important; }
+.dark .bg-rose-50, .dark .bg-rose-100, .dark .bg-rose-200, .dark .bg-rose-300,
+.dark .bg-rose-700, .dark .bg-rose-800, .dark .bg-rose-900, .dark .bg-rose-950 {
+  background-color: #7F1D1D !important;
+}
+
+.dark .text-rose-400 { color: #F87171 !important; }
+.dark .text-rose-500, .dark .text-rose-600 { color: #EF4444 !important; }
+
+.dark [class*="bg-rose-500/"], .dark [class*="bg-rose-400/"],
+.dark [class*="bg-rose-600/"] {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+}
+
+/* ── ORANGE → AMBER (warning accent) ────────────────────────────────────────── */
+.dark .bg-orange-500, .dark .bg-orange-600 { background-color: #D97706 !important; }
+.dark .bg-orange-400 { background-color: #FBBF24 !important; }
+.dark .bg-orange-50, .dark .bg-orange-100, .dark .bg-orange-200, .dark .bg-orange-300,
+.dark .bg-orange-700, .dark .bg-orange-800, .dark .bg-orange-900, .dark .bg-orange-950 {
+  background-color: #78350F !important;
+}
+
+.dark .text-orange-400 { color: #FBBF24 !important; }
+.dark .text-orange-500, .dark .text-orange-600 { color: #F59E0B !important; }
+.dark .text-orange-300 { color: #FCD34D !important; }
+
+.dark [class*="bg-orange-500/"], .dark [class*="bg-orange-400/"],
+.dark [class*="bg-orange-600/"] {
+  background-color: rgba(251, 191, 36, 0.12) !important;
+}
+
+.dark [class*="text-orange-400/"], .dark [class*="text-orange-500/"],
+.dark [class*="text-orange-600/"] {
+  color: rgba(251, 191, 36, 0.9) !important;
+}
+
+/* ── Inline-style hex leaks for non-blue colors ─────────────────────────────── */
+.dark [style*="#6366f1"], .dark [style*="#6366F1"],
+.dark [style*="#818cf8"], .dark [style*="#818CF8"],
+.dark [style*="#a78bfa"], .dark [style*="#A78BFA"],
+.dark [style*="#7c3aed"], .dark [style*="#7C3AED"],
+.dark [style*="#9333ea"], .dark [style*="#9333EA"],
+.dark [style*="#d946ef"], .dark [style*="#D946EF"],
+.dark [style*="#ec4899"], .dark [style*="#EC4899"],
+.dark [style*="#f43f5e"], .dark [style*="#F43F5E"],
+.dark [style*="#fb923c"], .dark [style*="#FB923C"],
+.dark [style*="#f97316"], .dark [style*="#F97316"] {
+  background-color: #1E3A8A !important;
+  background-image: none !important;
+}
+
+.dark [style*="rgba(99, 102, 241"], .dark [style*="rgba(99,102,241"],
+.dark [style*="rgba(139, 92, 246"], .dark [style*="rgba(139,92,246"],
+.dark [style*="rgba(168, 85, 247"], .dark [style*="rgba(168,85,247"],
+.dark [style*="rgba(236, 72, 153"], .dark [style*="rgba(236,72,153"],
+.dark [style*="rgba(244, 63, 94"], .dark [style*="rgba(244,63,94"],
+.dark [style*="rgba(249, 115, 22"], .dark [style*="rgba(249,115,22"],
+.dark [style*="rgba(251, 146, 60"], .dark [style*="rgba(251,146,60"] {
+  background-color: rgba(37, 99, 235, 0.1) !important;
+  background-image: none !important;
+}
+
+/* ── SVG fill/stroke for non-blue colors → blue (charts) ─────────────────────── */
+.dark [fill="#6366f1"], .dark [fill="#6366F1"],
+.dark [fill="#818cf8"], .dark [fill="#818CF8"],
+.dark [fill="#a78bfa"], .dark [fill="#A78BFA"],
+.dark [fill="#7c3aed"], .dark [fill="#7C3AED"],
+.dark [fill="#9333ea"], .dark [fill="#9333EA"],
+.dark [fill="#d946ef"], .dark [fill="#D946EF"],
+.dark [fill="#ec4899"], .dark [fill="#EC4899"],
+.dark [fill="#f43f5e"], .dark [fill="#F43F5E"],
+.dark [fill="#fb923c"], .dark [fill="#FB923C"],
+.dark [fill="#f97316"], .dark [fill="#F97316"] {
+  fill: #2563EB !important;
+}
+
+.dark [stroke="#6366f1"], .dark [stroke="#6366F1"],
+.dark [stroke="#818cf8"], .dark [stroke="#818CF8"],
+.dark [stroke="#a78bfa"], .dark [stroke="#A78BFA"],
+.dark [stroke="#7c3aed"], .dark [stroke="#7C3AED"],
+.dark [stroke="#9333ea"], .dark [stroke="#9333EA"],
+.dark [stroke="#d946ef"], .dark [stroke="#D946EF"],
+.dark [stroke="#ec4899"], .dark [stroke="#EC4899"],
+.dark [stroke="#f43f5e"], .dark [stroke="#F43F5E"],
+.dark [stroke="#fb923c"], .dark [stroke="#FB923C"],
+.dark [stroke="#f97316"], .dark [stroke="#F97316"] {
+  stroke: #2563EB !important;
 }
 
 /* ───────────────────────────────────────────────────────────────────────────────

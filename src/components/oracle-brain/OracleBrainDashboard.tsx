@@ -148,11 +148,11 @@ function InsightCard({ insight }: { insight: OracleDashboardData['reasoning']['i
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <SevIcon className={`h-3.5 w-3.5 ${cfg.color}`} />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
               {insight.category.replace('_', ' ')}
             </span>
             {insight.metric !== undefined && (
-              <Badge variant="outline" className="ml-auto border-white/10 bg-white/5 font-mono text-[10px] text-white/60">
+              <Badge variant="outline" className="ml-auto border-white/10 bg-white/5 font-mono text-[11px] text-white/60">
                 {insight.metric} {insight.metricLabel}
               </Badge>
             )}
@@ -172,12 +172,12 @@ function InsightCard({ insight }: { insight: OracleDashboardData['reasoning']['i
           {insight.sources.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {insight.sources.slice(0, 5).map((s, i) => (
-                <span key={i} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/35">
+                <span key={i} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-white/35">
                   {s.kind}:{s.label.slice(0, 12)}
                 </span>
               ))}
               {insight.sources.length > 5 && (
-                <span className="text-[10px] text-white/30">+{insight.sources.length - 5} more</span>
+                <span className="text-[11px] text-white/30">+{insight.sources.length - 5} more</span>
               )}
             </div>
           )}
@@ -204,7 +204,7 @@ function CommandCenter() {
       <div className="flex items-center gap-2">
         <Command className="h-4 w-4 text-emerald-400" />
         <h3 className="text-sm font-semibold text-white">Command Center</h3>
-        <span className="text-[10px] text-white/30">Natural language → real data</span>
+        <span className="text-[11px] text-white/30">Natural language → real data</span>
       </div>
       <form onSubmit={handleSubmit} className="mt-3 flex gap-2">
         <div className="relative flex-1">
@@ -229,7 +229,7 @@ function CommandCenter() {
             key={s}
             onClick={() => { setInput(s); runCommand(s); }}
             disabled={loading}
-            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-white/50 transition hover:border-emerald-500/30 hover:text-white/80"
+            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/50 transition hover:border-emerald-500/30 hover:text-white/80"
           >
             {s}
           </button>
@@ -253,7 +253,7 @@ function CommandResult({ result }: { result: CommandResultData }) {
       <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
         <div className="flex items-center gap-2">
           <Brain className="h-3.5 w-3.5 text-emerald-400" />
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/70">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/70">
             Oracle • {result.durationMs}ms
           </span>
         </div>
@@ -263,9 +263,9 @@ function CommandResult({ result }: { result: CommandResultData }) {
         <p className="mt-1.5 text-sm leading-relaxed text-white/90">{result.answer}</p>
         {result.sources.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            <span className="text-[10px] text-white/30">Sources:</span>
+            <span className="text-[11px] text-white/30">Sources:</span>
             {result.sources.slice(0, 8).map((s, i) => (
-              <span key={i} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/40">
+              <span key={i} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-white/40">
                 {s.kind}:{s.label.slice(0, 14)}
               </span>
             ))}
@@ -287,7 +287,7 @@ function TimelineView({ events }: { events: OracleDashboardData['timeline']['eve
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-emerald-400" />
           <h3 className="text-sm font-semibold text-white">Unified Timeline</h3>
-          <span className="text-[10px] text-white/30">{events.length} events</span>
+          <span className="text-[11px] text-white/30">{events.length} events</span>
         </div>
       </div>
       <div className="mt-4 max-h-[420px] space-y-1 overflow-y-auto pr-2 oracle-scroll">
@@ -312,7 +312,7 @@ function TimelineView({ events }: { events: OracleDashboardData['timeline']['eve
                   )}
                 </div>
                 <p className="truncate text-[11px] text-white/40">{ev.description}</p>
-                <span className="text-[10px] text-white/25">
+                <span className="text-[11px] text-white/25">
                   {new Date(ev.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -351,18 +351,18 @@ function MemoryPanel({ data }: { data: OracleDashboardData }) {
       <div className="flex items-center gap-2">
         <Database className="h-4 w-4 text-emerald-400" />
         <h3 className="text-sm font-semibold text-white">Memory Engine</h3>
-        <span className="text-[10px] text-white/30">{data.memory.totalRecords} records remembered</span>
+        <span className="text-[11px] text-white/30">{data.memory.totalRecords} records remembered</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {items.map((it) => (
           <div key={it.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-white/35">{it.label}</span>
+              <span className="text-[11px] uppercase tracking-wider text-white/35">{it.label}</span>
               <it.icon className="h-3 w-3 text-white/30" />
             </div>
             <div className="mt-0.5 font-mono text-lg font-semibold text-white tabular-nums">{it.count}</div>
             {it.value !== null && it.value > 0 && (
-              <div className="text-[10px] text-white/40">{formatINR(it.value, true)}</div>
+              <div className="text-[11px] text-white/40">{formatINR(it.value, true)}</div>
             )}
           </div>
         ))}
@@ -385,13 +385,13 @@ function GraphPanel({ data }: { data: OracleDashboardData }) {
       <div className="flex items-center gap-2">
         <Network className="h-4 w-4 text-emerald-400" />
         <h3 className="text-sm font-semibold text-white">Business Graph</h3>
-        <span className="text-[10px] text-white/30">{stats.totalNodes} nodes • {stats.totalEdges} edges</span>
+        <span className="text-[11px] text-white/30">{stats.totalNodes} nodes • {stats.totalEdges} edges</span>
       </div>
       <div className="mt-3 space-y-1.5">
         {edgeKinds.length === 0 && <p className="text-xs text-white/30">No relationships yet. Create invoices and payments to build the graph.</p>}
         {edgeKinds.map(([kind, count]) => (
           <div key={kind} className="flex items-center gap-2">
-            <span className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-white/40">{kind.replace('_', ' ')}</span>
+            <span className="w-28 shrink-0 text-[11px] uppercase tracking-wider text-white/40">{kind.replace('_', ' ')}</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
               <motion.div
                 initial={{ width: 0 }}
@@ -400,7 +400,7 @@ function GraphPanel({ data }: { data: OracleDashboardData }) {
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500/60 to-emerald-400"
               />
             </div>
-            <span className="w-8 shrink-0 text-right font-mono text-[10px] text-white/50 tabular-nums">{count}</span>
+            <span className="w-8 shrink-0 text-right font-mono text-[11px] text-white/50 tabular-nums">{count}</span>
           </div>
         ))}
       </div>
@@ -440,7 +440,7 @@ function EmptyState({ onRefresh }: { onRefresh: () => void }) {
           <div key={it.label} className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
             <it.icon className="h-4 w-4 text-white/30" />
             <div className="mt-1.5 text-xs font-medium text-white/70">{it.label}</div>
-            <div className="text-[10px] text-white/30">{it.desc}</div>
+            <div className="text-[11px] text-white/30">{it.desc}</div>
           </div>
         ))}
       </div>
@@ -510,7 +510,7 @@ export function OracleBrainDashboard() {
             <div>
               <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
                 Oracle Intelligence
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
                   Live
                 </span>
               </h1>
@@ -520,7 +520,7 @@ export function OracleBrainDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-white/30">
+            <span className="text-[11px] text-white/30">
               {refreshing ? 'Refreshing…' : `Updated ${timeAgo(data.generatedAt)}`}
             </span>
             <Button
@@ -554,7 +554,7 @@ export function OracleBrainDashboard() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-white">Executive Brief</h2>
-                    <span className="text-[10px] text-white/30">Grounded in {data.reasoning.dataPoints} real records</span>
+                    <span className="text-[11px] text-white/30">Grounded in {data.reasoning.dataPoints} real records</span>
                   </div>
                   <p className="mt-1.5 text-sm leading-relaxed text-white/80">
                     {data.reasoning.executiveSummary}
@@ -586,7 +586,7 @@ export function OracleBrainDashboard() {
                     <div className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-emerald-400" />
                       <h3 className="text-sm font-semibold text-white">Reasoning Engine</h3>
-                      <span className="text-[10px] text-white/30">{data.reasoning.insights.length} conclusions</span>
+                      <span className="text-[11px] text-white/30">{data.reasoning.insights.length} conclusions</span>
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -618,7 +618,7 @@ export function OracleBrainDashboard() {
 
         {/* ── Footer ── */}
         <footer className="mt-8 border-t border-white/5 pt-4 text-center">
-          <p className="text-[10px] text-white/25">
+          <p className="text-[11px] text-white/25">
             Oracle Intelligence • Every number traceable to a real database record • No fabricated analytics
           </p>
         </footer>

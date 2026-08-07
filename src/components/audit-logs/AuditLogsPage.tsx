@@ -505,7 +505,7 @@ export default function AuditLogsPage() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm">
                           {log.entity ? (
-                            <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+                            <Badge variant="outline" className="text-xs border-white/[0.08] bg-white/[0.03] text-muted-foreground">
                               {log.entity}
                             </Badge>
                           ) : (
@@ -603,7 +603,7 @@ export default function AuditLogsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Entity</p>
-                  <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+                  <Badge variant="outline" className="text-xs border-white/[0.08] bg-white/[0.03] text-muted-foreground">
                     {selectedLog.entity ?? '—'}
                   </Badge>
                 </div>

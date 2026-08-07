@@ -347,7 +347,7 @@ function VerticalTimeline({ stages }: VerticalTimelineProps) {
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-sm font-semibold text-foreground">{stage.name}</h4>
                   <span
-                    className={`text-[10px] font-medium uppercase tracking-wider ${cfg.labelText}`}
+                    className={`text-[11px] font-medium uppercase tracking-wider ${cfg.labelText}`}
                   >
                     {cfg.label}
                   </span>
@@ -424,7 +424,7 @@ function CompactTimeline({ stages }: VerticalTimelineProps) {
                   </span>
                 </div>
                 <span
-                  className={`text-[10px] font-medium text-center leading-tight ${
+                  className={`text-[11px] font-medium text-center leading-tight ${
                     stage.status === 'pending' ? 'text-zinc-500' : 'text-foreground'
                   }`}
                 >
@@ -458,7 +458,7 @@ function BankingPaymentTimelineImpl({ transaction, compact = false }: BankingPay
             Payment Lifecycle
           </h3>
         </div>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {stages.filter((s) => s.status === 'done').length}/{stages.length} complete
         </span>
       </div>

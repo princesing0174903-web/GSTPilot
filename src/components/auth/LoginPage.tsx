@@ -243,14 +243,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-3">
+            <h1 className="text-3xl xl:text-4xl font-semibold tracking-tight text-white leading-tight mb-3">
               Welcome back to your
               <br />
-              <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-400 to-blue-300 bg-clip-text text-transparent">
                 GST Command Center
               </span>
             </h1>
-            <p className="text-slate-400 text-base max-w-md">
+            <p className="text-muted-foreground text-base max-w-md">
               Sign in to manage compliance, file returns, and keep your clients audit-ready.
             </p>
           </motion.div>
@@ -270,12 +270,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
                 className="flex items-start gap-3.5"
               >
-                <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                  <benefit.icon className="h-4 w-4 text-emerald-400" />
+                <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                  <benefit.icon className="h-4 w-4 text-blue-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white">{benefit.title}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{benefit.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{benefit.desc}</p>
                 </div>
               </motion.div>
             ))}
@@ -290,22 +290,22 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           >
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center gap-1.5">
-                <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                <span className="text-[11px] text-emerald-400 font-medium">Live Dashboard</span>
+                <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
+                <span className="text-[11px] text-blue-400 font-medium">Live Dashboard</span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/10 p-2.5 text-center">
-                <p className="text-lg font-bold text-emerald-400">94</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Health</p>
+              <div className="rounded-lg bg-blue-500/10 border border-blue-500/10 p-2.5 text-center">
+                <p className="text-lg font-bold text-blue-400">94</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Health</p>
               </div>
               <div className="rounded-lg bg-blue-500/10 border border-blue-500/10 p-2.5 text-center">
                 <p className="text-lg font-bold text-blue-400">128</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Filed</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Filed</p>
               </div>
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/10 p-2.5 text-center">
                 <p className="text-lg font-bold text-amber-400">12</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Pending</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Pending</p>
               </div>
             </div>
           </motion.div>

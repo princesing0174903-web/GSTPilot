@@ -192,7 +192,7 @@ const InvoiceRow = memo(function InvoiceRow({
             <div className="text-sm font-medium text-foreground">
               {highlightMatch(invoice.invoiceNumber ?? '—', searchQuery)}
             </div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider">
               {invoice.invoiceType ?? 'B2B'}
             </div>
           </div>
@@ -229,7 +229,7 @@ const InvoiceRow = memo(function InvoiceRow({
           {formatCurrency(invoice.totalAmount ?? 0)}
         </div>
         {invoice.balanceAmount > 0 && (
-          <div className="text-[10px] text-amber-400 gst-text-tabular">
+          <div className="text-[11px] text-amber-400 gst-text-tabular">
             Bal: {formatCurrency(invoice.balanceAmount)}
           </div>
         )}
@@ -274,7 +274,7 @@ const InvoiceRow = memo(function InvoiceRow({
               align="end"
               className="w-48 bg-zinc-950 border-white/10"
             >
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Invoice Actions
               </DropdownMenuLabel>
               <DropdownMenuItem
@@ -415,20 +415,20 @@ const MobileInvoiceCard = memo(function MobileInvoiceCard({
 
       <div className="flex items-end justify-between gap-2">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
             Total
           </div>
           <div className="text-base font-bold text-foreground gst-text-tabular">
             {formatCurrency(invoice.totalAmount ?? 0)}
           </div>
           {invoice.balanceAmount > 0 && (
-            <div className="text-[10px] text-amber-400">
+            <div className="text-[11px] text-amber-400">
               Bal: {formatCurrency(invoice.balanceAmount)}
             </div>
           )}
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
             Due
           </div>
           <div className="text-xs text-muted-foreground">

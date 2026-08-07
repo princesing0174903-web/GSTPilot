@@ -61,7 +61,7 @@ interface PillProps {
 }
 
 function Pill({ label, tone, icon: Icon, dot, pulse, size = 'sm', className }: PillProps) {
-  const sizeClasses = size === 'sm' ? 'text-[10px] px-2 py-0.5 gap-1' : 'text-xs px-2.5 py-1 gap-1.5';
+  const sizeClasses = size === 'sm' ? 'text-[11px] px-2 py-0.5 gap-1' : 'text-xs px-2.5 py-1 gap-1.5';
   return (
     <span
       className={`inline-flex items-center rounded-full border font-medium ${TONE_CLASSES[tone]} ${sizeClasses} ${className ?? ''}`}

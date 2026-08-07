@@ -90,7 +90,7 @@ const Row = function Row({
             <div className="h-1 w-8 overflow-hidden rounded-full bg-[#1F1F1F]">
               <div className="h-full rounded-full" style={{ width: `${Math.round(m.confidence * 100)}%`, backgroundColor: confColor }} />
             </div>
-            <span className="text-[9px] font-medium" style={{ color: confColor }}>{confidenceLabel(m.confidence)}</span>
+            <span className="text-[11px] font-medium" style={{ color: confColor }}>{confidenceLabel(m.confidence)}</span>
           </div>
         )}
       </button>

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { escapeHtml } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -93,9 +94,12 @@ function getAIResponse(input: string): string {
 
 function formatMessage(content: string) {
   // Simple markdown-like formatting
+  // SECURITY (POLISH-06): escapeHtml before applying markdown so any HTML in
+  // the AI / user content is rendered as text, not executed.
   return content.split('\n').map((line, i) => {
+    const escaped = escapeHtml(line);
     // Bold
-    const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    const formatted = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     // Bullet points
     if (formatted.startsWith('•')) {
       return (

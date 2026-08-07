@@ -681,7 +681,7 @@ function StepIndicator({
                 </span>
                 <span
                   className={cn(
-                    'text-[10px] font-semibold whitespace-nowrap',
+                    'text-[11px] font-semibold whitespace-nowrap',
                     (isCompleted || isCurrent) ? 'text-[#60A5FA]' : 'text-[#525252]',
                   )}
                 >
@@ -732,7 +732,7 @@ function StepHeader({ step }: { step: WizardStepDef }) {
         <div className="size-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/30 flex items-center justify-center shadow-lg shadow-blue-500/10">
           <Icon className="size-7 text-[#60A5FA]" />
         </div>
-        <span className="absolute -top-2 -right-2 size-6 rounded-full bg-[#3B82F6] border-2 border-[#0A0A0A] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+        <span className="absolute -top-2 -right-2 size-6 rounded-full bg-[#3B82F6] border-2 border-[#0A0A0A] text-white text-[11px] font-bold flex items-center justify-center tabular-nums">
           {step.id}
         </span>
       </div>
@@ -978,7 +978,7 @@ const TableRow = memo(function TableRow({
       <td className="min-w-[160px]">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground truncate">{clientName}</p>
-          <p className="text-[10px] text-muted-foreground font-mono truncate">{ret.id.slice(-8).toUpperCase()}</p>
+          <p className="text-[11px] text-muted-foreground font-mono truncate">{ret.id.slice(-8).toUpperCase()}</p>
         </div>
       </td>
       <td className="text-xs text-muted-foreground font-mono truncate max-w-[140px]">{clientGstin || '—'}</td>
@@ -1102,15 +1102,15 @@ function DetailSheet({
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Invoices</p>
+              <p className="text-[11px] text-muted-foreground">Invoices</p>
               <p className="text-lg font-bold text-foreground tabular-nums">{ret.totalInvoices}</p>
             </div>
             <div className="rounded-xl bg-blue-500/[0.08] border border-blue-500/20 p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Taxable</p>
+              <p className="text-[11px] text-muted-foreground">Taxable</p>
               <p className="text-sm font-bold text-blue-300 gst-text-tabular">{formatCurrency(ret.totalTaxableValue)}</p>
             </div>
             <div className="rounded-xl bg-blue-500/[0.08] border border-blue-500/20 p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Total Tax</p>
+              <p className="text-[11px] text-muted-foreground">Total Tax</p>
               <p className="text-sm font-bold text-blue-300 gst-text-tabular">{formatCurrency(ret.totalTax)}</p>
             </div>
           </div>
@@ -1118,7 +1118,7 @@ function DetailSheet({
           <Separator className="bg-white/10" />
 
           <div className="space-y-2.5">
-            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <AlertTriangle className="size-3" /> Issues
             </h4>
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-2 text-xs">
@@ -1131,7 +1131,7 @@ function DetailSheet({
           <Separator className="bg-white/10" />
 
           <div className="space-y-2.5">
-            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Info className="size-3" /> Tax Breakdown
             </h4>
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-2 text-xs">
@@ -1157,7 +1157,7 @@ function DetailSheet({
             <>
               <Separator className="bg-white/10" />
               <div className="space-y-2.5">
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <ShieldCheck className="size-3" /> Filing Details
                 </h4>
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-3.5 space-y-2 text-xs">
@@ -2460,7 +2460,7 @@ export default function ReturnsPage() {
               >
                 <ListChecks className="size-3.5" />
                 {showReturnsList ? 'Hide Returns' : 'View All Returns'}
-                <Badge className="bg-[#3B82F6]/15 text-[#60A5FA] border-[#3B82F6]/25 text-[10px] px-1.5 h-4 ml-1">
+                <Badge className="bg-[#3B82F6]/15 text-[#60A5FA] border-[#3B82F6]/25 text-[11px] px-1.5 h-4 ml-1">
                   {returns.length}
                 </Badge>
               </Button>

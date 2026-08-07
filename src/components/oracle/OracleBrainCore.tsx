@@ -1486,9 +1486,21 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
               </div>
               <div className="space-y-6">
                 {loadingSession && (
-                  <div className="flex items-center justify-center py-8 text-zinc-500">
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    <span className="text-sm">Loading conversation…</span>
+                  // POLISH-04: premium skeleton bubbles instead of bare spinner.
+                  <div className="space-y-4">
+                    <div className="max-w-[80%]">
+                      <div className="rounded-2xl rounded-tl-sm border border-white/[0.06] bg-[#0C0C0C] p-4 space-y-2">
+                        <div className="h-3 w-full rounded bg-white/[0.05] gst-shimmer-premium" />
+                        <div className="h-3 w-5/6 rounded bg-white/[0.05] gst-shimmer-premium" />
+                        <div className="h-3 w-2/3 rounded bg-white/[0.05] gst-shimmer-premium" />
+                      </div>
+                    </div>
+                    <div className="ml-auto max-w-[70%]">
+                      <div className="rounded-2xl rounded-tr-sm border border-white/[0.06] bg-[#0C0C0C] p-4 space-y-2">
+                        <div className="h-3 w-full rounded bg-white/[0.05] gst-shimmer-premium" />
+                        <div className="h-3 w-3/4 rounded bg-white/[0.05] gst-shimmer-premium" />
+                      </div>
+                    </div>
                   </div>
                 )}
                 {messages.map((m, i) => (
@@ -1689,8 +1701,11 @@ function CFOHero({
                 </div>
               </div>
             ) : (
-              <div className="text-[13px] text-zinc-600 leading-relaxed">
-                {loading ? 'Loading…' : 'Connect your first invoice to start tracking business health.'}
+              <div className="text-[13px] text-zinc-600 leading-relaxed flex items-center gap-2">
+                {loading && <span className="inline-block h-3 w-16 rounded bg-white/[0.05] gst-shimmer-premium" />}
+                {loading
+                  ? <span className="sr-only">Loading revenue trend…</span>
+                  : 'Connect your first invoice to start tracking business health.'}
               </div>
             )}
           </div>

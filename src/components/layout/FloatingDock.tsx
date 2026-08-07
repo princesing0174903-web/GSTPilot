@@ -102,7 +102,7 @@ export function FloatingDock({
                   <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
                   {/* Notification badge */}
                   {'badge' in item && item.badge ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm">
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white shadow-sm">
                       {item.badge}
                     </span>
                   ) : null}

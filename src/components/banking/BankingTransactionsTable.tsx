@@ -112,7 +112,7 @@ const CATEGORY_OPTIONS: TransactionCategory[] = [
 function CategoryBadge({ category }: { category: TransactionCategory }) {
   const cfg = CATEGORY_CONFIG[category] ?? CATEGORY_CONFIG.other;
   return (
-    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${cfg.className}`}>
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap ${cfg.className}`}>
       {cfg.label}
     </span>
   );
@@ -295,7 +295,7 @@ const TransactionRow = memo(function TransactionRow({
           {formatDate(txn.date)}
         </div>
         {txn.valueDate && (
-          <div className="text-[10px] text-muted-foreground gst-text-tabular">
+          <div className="text-[11px] text-muted-foreground gst-text-tabular">
             Val: {formatDate(txn.valueDate)}
           </div>
         )}
@@ -375,7 +375,7 @@ const TransactionRow = memo(function TransactionRow({
               align="end"
               className="w-52 bg-zinc-950 border-white/10"
             >
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Transaction
               </DropdownMenuLabel>
               <DropdownMenuItem
@@ -523,7 +523,7 @@ const MobileCard = memo(function MobileCard({
           <CategoryBadge category={txn.category} />
           <TransactionStatusPill status={txn.status} />
           {txn.matched && txn.matchType && <MatchTypePill matchType={txn.matchType} />}
-          <span className="text-[10px] text-muted-foreground ml-auto truncate max-w-[140px]">
+          <span className="text-[11px] text-muted-foreground ml-auto truncate max-w-[140px]">
             {txn.bankName} {txn.accountMasked}
           </span>
         </div>
@@ -749,7 +749,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
             {/* Date range row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
               <div className="space-y-1">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   From date
                 </label>
                 <Input
@@ -760,7 +760,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   To date
                 </label>
                 <Input
@@ -783,7 +783,7 @@ function FilterBar({ filters, onChange, onClear, accounts, activeCount, open }: 
                   {activeCount > 0 && (
                     <Badge
                       variant="outline"
-                      className="ml-1 h-5 min-w-5 px-1.5 text-[10px] border-blue-500/30 bg-blue-500/10 text-blue-300"
+                      className="ml-1 h-5 min-w-5 px-1.5 text-[11px] border-blue-500/30 bg-blue-500/10 text-blue-300"
                     >
                       {activeCount}
                     </Badge>
@@ -912,7 +912,7 @@ function SummaryStats({ totalInflow, totalOutflow }: SummaryStatsProps) {
     <div className="hidden md:flex items-center gap-4">
       <div className="flex items-center gap-1.5">
         <ArrowDownLeft className="h-3.5 w-3.5 text-blue-400" />
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           In
         </span>
         <span className="text-sm font-semibold text-blue-400 gst-text-tabular">
@@ -922,7 +922,7 @@ function SummaryStats({ totalInflow, totalOutflow }: SummaryStatsProps) {
       <div className="h-4 w-px bg-white/[0.08]" />
       <div className="flex items-center gap-1.5">
         <ArrowUpRight className="h-3.5 w-3.5 text-red-400" />
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Out
         </span>
         <span className="text-sm font-semibold text-red-400 tabular-nums">
@@ -931,7 +931,7 @@ function SummaryStats({ totalInflow, totalOutflow }: SummaryStatsProps) {
       </div>
       <div className="h-4 w-px bg-white/[0.08]" />
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Net
         </span>
         <span
@@ -1365,7 +1365,7 @@ export function BankingTransactionsTable({
               Transactions
               <Badge
                 variant="outline"
-                className="text-[10px] font-medium border-white/[0.08] bg-white/[0.03] text-muted-foreground"
+                className="text-[11px] font-medium border-white/[0.08] bg-white/[0.03] text-muted-foreground"
               >
                 {total.toLocaleString('en-IN')}
               </Badge>
@@ -1413,7 +1413,7 @@ export function BankingTransactionsTable({
           {activeFilterCount > 0 && (
             <Badge
               variant="outline"
-              className="h-5 min-w-5 px-1.5 text-[10px] border-blue-500/30 bg-blue-500/10 text-blue-300"
+              className="h-5 min-w-5 px-1.5 text-[11px] border-blue-500/30 bg-blue-500/10 text-blue-300"
             >
               {activeFilterCount}
             </Badge>

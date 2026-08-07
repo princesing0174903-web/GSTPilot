@@ -112,9 +112,10 @@ export function AskOracleButton({
       aria-label={label}
       title={prompt ?? DEFAULT_PROMPTS[context] ?? DEFAULT_PROMPTS.generic}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/[0.06] font-medium text-amber-400 outline-none transition-colors',
+        'inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/[0.06] font-medium text-amber-400 outline-none transition-all duration-150',
         'hover:border-amber-500/40 hover:bg-amber-500/[0.12] hover:text-amber-300',
-        'focus-visible:ring-2 focus-visible:ring-amber-500/40',
+        'focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        'active:scale-[0.98] gst-btn-press',
         heightClass,
         paddingClass,
         textClass,

@@ -176,7 +176,7 @@ function SessionsList({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium text-foreground">{s.title}</div>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                       {s.summary && <span className="truncate">{s.summary.slice(0, 40)}…</span>}
                       <span className="shrink-0">{new Date(s.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                     </div>
@@ -241,7 +241,7 @@ function AgentPicker({
               exit={{ opacity: 0, y: -4 }}
               className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-md border border-border/60 bg-popover/95 p-1.5 shadow-xl backdrop-blur"
             >
-              <div className="px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="px-1.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Agent Persona
               </div>
               {agents.map((a) => {
@@ -264,7 +264,7 @@ function AgentPicker({
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium text-foreground">{a.name}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">{a.role}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{a.role}</div>
                     </div>
                   </button>
                 );
@@ -357,7 +357,7 @@ function TaskRow({ task }: { task: OracleAITask }) {
       <span className="flex h-5 w-5 items-center justify-center">{statusIcon}</span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-foreground">{task.title}</div>
-        <div className="text-[10px] text-muted-foreground">
+        <div className="text-[11px] text-muted-foreground">
           {task.type} · P{task.priority}
           {task.progress > 0 && task.status === 'running' && ` · ${task.progress}%`}
         </div>
@@ -385,10 +385,10 @@ function KnowledgeRow({ entry, onSelect }: { entry: OracleAIKnowledge; onSelect:
       onClick={() => onSelect(entry)}
       className="flex w-full items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-2 py-1.5 text-left transition-colors hover:bg-muted/40"
     >
-      <Badge className={cn('shrink-0 text-[10px]', colorMap[entry.category])}>{entry.category}</Badge>
+      <Badge className={cn('shrink-0 text-[11px]', colorMap[entry.category])}>{entry.category}</Badge>
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs font-medium text-foreground">{entry.title}</div>
-        <div className="truncate text-[10px] text-muted-foreground">{entry.content.slice(0, 80)}</div>
+        <div className="truncate text-[11px] text-muted-foreground">{entry.content.slice(0, 80)}</div>
       </div>
       {entry.pinned && <Pin className="h-3 w-3 shrink-0 text-amber-400" />}
     </button>
@@ -614,7 +614,7 @@ export default function OracleAIWorkspacePage() {
               <div className="truncate text-sm font-semibold text-foreground">
                 {activeSession?.title ?? 'Oracle AI Workspace'}
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-[11px] text-muted-foreground">
                 {activeSession ? `${activeSession.messageCount} messages` : 'Select or start a conversation'}
               </div>
             </div>
@@ -739,7 +739,7 @@ export default function OracleAIWorkspacePage() {
                   rows={1}
                 />
                 <div className="flex items-center justify-between border-t border-border/40 px-2 py-1.5">
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                     <kbd className="flex items-center gap-0.5 rounded border border-border/60 px-1 py-0.5"><Command className="h-2.5 w-2.5" />K</kbd>
                     <span>new</span>
                     <span className="mx-1">·</span>
@@ -790,7 +790,7 @@ export default function OracleAIWorkspacePage() {
                 >
                   <Wrench className="h-3.5 w-3.5" /> Artifacts
                   {visibleArtifacts.length > 0 && (
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0">{visibleArtifacts.length}</Badge>
+                    <Badge variant="secondary" className="text-[11px] px-1 py-0">{visibleArtifacts.length}</Badge>
                   )}
                 </button>
                 <button
@@ -802,7 +802,7 @@ export default function OracleAIWorkspacePage() {
                 >
                   <ListTodo className="h-3.5 w-3.5" /> Tasks
                   {tasks.filter((t) => t.status === 'queued' || t.status === 'running').length > 0 && (
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-amber-500/20 text-amber-400">
+                    <Badge variant="secondary" className="text-[11px] px-1 py-0 bg-amber-500/20 text-amber-400">
                       {tasks.filter((t) => t.status === 'queued' || t.status === 'running').length}
                     </Badge>
                   )}

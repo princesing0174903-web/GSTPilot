@@ -221,7 +221,7 @@ function Tooltip({ point, leftPx, chartWidth }: TooltipProps) {
         transition={{ duration: 0.15 }}
         className="glass-surface min-w-[180px] rounded-lg border border-white/[0.1] bg-black/80 px-3 py-2 shadow-xl backdrop-blur"
       >
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {formatDateLabel(point.date)}
         </div>
         <div className="space-y-1">
@@ -463,7 +463,7 @@ function BankingCashFlowChartImpl({
                 x={MARGIN.left - 8}
                 y={t.y + 3}
                 textAnchor="end"
-                className="fill-muted-foreground text-[9px]"
+                className="fill-muted-foreground text-[11px]"
               >
                 {formatAxisINR(t.value)}
               </text>
@@ -538,7 +538,7 @@ function BankingCashFlowChartImpl({
               x={t.x}
               y={HEIGHT - 8}
               textAnchor="middle"
-              className="fill-muted-foreground text-[9px]"
+              className="fill-muted-foreground text-[11px]"
             >
               {t.label}
             </text>

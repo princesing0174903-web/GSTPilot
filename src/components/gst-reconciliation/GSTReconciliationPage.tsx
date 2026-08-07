@@ -175,7 +175,7 @@ export function GSTReconciliationPage() {
             <div className="flex h-10 items-center rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-muted-foreground">
               <Zap className="mr-2 h-4 w-4 text-[#60A5FA]" />
               Mock GSP (Sandbox)
-              <Badge variant="outline" className="ml-auto text-[10px]">Default</Badge>
+              <Badge variant="outline" className="ml-auto text-[11px]">Default</Badge>
             </div>
           </div>
         </div>
@@ -202,7 +202,7 @@ export function GSTReconciliationPage() {
                   <span className="font-mono text-xs text-muted-foreground">{r.period}</span>
                   <Badge
                     variant="outline"
-                    className="text-[10px]"
+                    className="text-[11px]"
                     style={{
                       color: r.matchPercent >= 85 ? '#3B82F6' : r.matchPercent >= 60 ? '#F59E0B' : '#EF4444',
                       borderColor: 'currentColor',
@@ -214,7 +214,7 @@ export function GSTReconciliationPage() {
                 <div className="mt-1 text-[11px] text-muted-foreground">
                   {r.totalBooks + r.total2B} records · {fmtINR(r.potentialITCLoss)} at risk
                 </div>
-                <div className="mt-0.5 text-[10px] text-muted-foreground">{fmtRelative(r.createdAt)}</div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">{fmtRelative(r.createdAt)}</div>
               </motion.button>
             ))}
           </div>

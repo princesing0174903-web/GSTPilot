@@ -20,6 +20,10 @@ import { GenericWebGSPProvider, type GenericWebConfig } from '@/lib/gst-reconcil
 import { MockGSPProvider } from '@/lib/gst-reconciliation/server/mock-provider';
 import type { IGSPProvider } from '@/lib/gst-reconciliation/types';
 import { GSPError } from '@/lib/gst-reconciliation/errors';
+import { rateLimit, rateLimitedResponse, type RateLimitRule } from '@/lib/rate-limit';
+
+// GSTR-2B sync makes external HTTP calls + DB writes — limit to 10/min per user.
+const SYNC_RATE_LIMIT: RateLimitRule = { windowMs: 60_000, max: 10 };
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -35,6 +39,12 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const { uid } = auth;
+
+    // Rate-limit: GSTR-2B sync is expensive (external HTTP + DB writes).
+    const rl = rateLimit(request, SYNC_RATE_LIMIT, 'gst-sync-2b', uid);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec, 'Too many GSTR-2B sync requests. Please wait a minute and try again.');
+    }
 
     let body: z.infer<typeof schema>;
     try {

@@ -15701,3 +15701,82 @@ Stage Summary:
 - All API calls authenticated (x-gstpilot-actor header for demo/local users).
 - Mobile responsive (tested at 375px viewport).
 - Zero console errors, zero failed requests.
+
+---
+Task ID: GST-VAL-01
+Agent: Main Orchestrator
+Task: REAL-DATA READINESS + INTEGRATION VALIDATION — Phase 1: End-to-end audit + API route verification
+
+Work Log:
+- Read all GST integration source files to verify the current implementation state:
+  • src/lib/gst-reconciliation/server/mastersindia-provider.ts — REAL HTTP client, 30s timeout, typed errors (GSPAuthError/GSPRateLimitError/GSPGSTNOutageError/GSPNotFoundError), secrets masked in logs. SOLID.
+  • src/lib/gst-reconciliation/server/registry.ts — getGSPProviderForOrg() reads Prisma config, decrypts secrets, returns provider + mode. Falls back to mock for demo/not_connected. SOLID.
+  • src/lib/gst-reconciliation/server/provider-mode.ts — resolveProviderMode() is the canonical mode resolver. Uses lastTestOk (not lastConnectedAt) to avoid contradictory states. SOLID.
+  • src/lib/gst-reconciliation/server/gstin-validator.ts — offline GSTIN checksum validator (official GSTN algorithm). SOLID.
+  • src/lib/gst-reconciliation/server/mock-provider.ts — deterministic DEMO data, isLive:false always. SOLID.
+  • src/lib/gst-reconciliation/types.ts — GSTR2BRecord.itcEligible is `boolean`. Confirmed.
+  • src/lib/gst-reconciliation/errors.ts — typed error hierarchy. SOLID.
+  • prisma/schema.prisma — GSTR2BInvoice.itcEligible is `Boolean`, GSPProviderConfig + GSTSyncJob models confirmed present.
+- Audited all 11 GST API routes + 12 gst-reconciliation routes:
+  • NEW architecture routes (auth + org membership + zod validation): /api/gst/status, /connect, /test, /disconnect, /verify-gstin, /sync-2b, /sync-jobs, /providers — ALL SECURE.
+  • LEGACY routes (NO auth, NO org membership — SECURITY HOLES): /api/gst/search, /api/gst/2b, /api/gst/2b/sync, /api/gst/pan, /api/pan/verify — all open to anonymous requests.
+- Confirmed legacy routes use old mock libraries (@/lib/gstn/gstr2b, gstsearch, pan) that:
+  • Return data WITHOUT a DEMO/mode badge (integrity violation — data looks "real")
+  • /api/gst/2b + /api/gst/2b/sync call downloadGstr2b() which does deleteMany on gstin+period then recreates — DESTROYS data synced via the new idempotent /api/gst/sync-2b route
+- Confirmed GSTNLivePage.tsx (the only consumer of legacy routes) is an ORPHAN component — not reachable from main navigation. But the routes remain open HTTP endpoints.
+- Found CRITICAL type bug: /api/gst-reconciliation/run/route.ts line 138 declares `itcEligible: number` in the toCreate type, but schema (Boolean) + GSTR2BRecord (boolean) are both boolean. Line 177 passes `rec.itcEligible` (boolean) into the number-typed field — TypeScript error that breaks compilation when the route is hit.
+- Found modeLabel inconsistency: run route line 349 inlines `resolvedMode === 'live' ? 'LIVE' : ... : 'DEMO'` which misses the 'not_connected' case (would label not_connected as DEMO).
+- Confirmed NO rate limiting on any GST route despite rate-limit.ts existing. sync-2b makes external HTTP calls + DB writes — should be rate-limited.
+- Frontend GSTSection.tsx verified: mode badge derived from canonical /api/gst/status, DEMO banner text is honest ("Demo mode — data is simulated offline"), LIVE badge only shows when mode==='live', emerald reserved for LIVE only. NO contradictory states possible.
+- Dev server healthy: HTTP 200 on /.
+
+Stage Summary:
+- Architecture is SOUND. Provider abstraction, mode resolution, encryption, idempotent sync — all correctly implemented.
+- 4 issues to fix:
+  C1 (CRITICAL, security): Legacy routes /api/gst/search, /2b, /2b/sync, /pan, /pan/verify have NO auth — open to anonymous requests. Fix: add requireAuth.
+  C2 (CRITICAL, compile-breaking): Run route itcEligible type is `number` but should be `boolean`.
+  H1 (HIGH): No rate limiting on sync-2b (external HTTP + DB writes).
+  H2 (MEDIUM): Run route modeLabel misses not_connected case.
+- DEMO mode integrity: VERIFIED correct on all NEW architecture routes + frontend.
+- LIVE mode: NOT testable — no real MastersIndia credentials configured (env has no GSTN_ENCRYPTION_KEY production value, no GSPProviderConfig row with providerKey='mastersindia' + lastTestOk=true). This is EXPECTED and correct — the system honestly reports DEMO mode.
+
+---
+Task ID: GST-VAL-02
+Agent: Main Orchestrator
+Task: REAL-DATA READINESS + INTEGRATION VALIDATION — Phase 2: Fixes + runtime verification + browser QA
+
+Work Log:
+- Fixed C1 (security): Added requireAuth to 5 legacy unauthenticated routes:
+  • /api/gst/search (GET+POST), /api/gst/2b (GET+POST), /api/gst/2b/sync (POST), /api/gst/pan (POST), /api/pan/verify (POST)
+  • All now return 401 without auth header. Responses now include mode:'demo' badge.
+- Fixed C2 (compile-breaking type bug): /api/gst-reconciliation/run/route.ts line 140 itcEligible: number → boolean. Also fixed invoiceDate/supplierName to use ?? null for Prisma consistency.
+- Fixed H1 (rate limiting): Added rate-limit to /api/gst/sync-2b (10 req/min per user). Returns 429 + Retry-After when exceeded.
+- Fixed H2 (modeLabel): Run route now imports + uses canonical modeLabel() from provider-mode.ts instead of inlined ternary (missed not_connected case).
+- Lint: all 7 changed files pass eslint clean (0 errors, 0 warnings).
+- Runtime verification (curl tests):
+  • Legacy routes 401 without auth ✓ | 200 + mode:demo with auth ✓
+  • /api/gst/status → mode:demo, modeLabel:DEMO, provider:"Demo (offline sample data)" ✓
+  • Idempotency: first sync 13 imported, second sync 0 imported (IDEMPOTENT) ✓
+  • Run reconciliation: mode:demo, modeLabel:DEMO, isLive:false, 15 matches persisted ✓
+  • Invalid GSTIN (bad checksum): valid:false, status:"Invalid format", source:demo, professional message ✓
+  • Missing orgId: 400 ✓
+  • Rate limit: requests 1-9 pass, 10+ return 429 RATE_LIMITED ✓
+- Data integrity (DB query): DB records show correct values — 18% tax rate, inter-state IGST vs intra-state CGST+SGST split, ITC = sum of taxes, itcEligible:boolean. Provider → normalized → DB → reconciliation chain preserves all values. ✓
+- Browser QA (agent-browser):
+  • Home page: full dashboard renders, 0 console errors, 0 page errors
+  • Settings → GST/GSTN: DEMO badge, "Demo mode — data is simulated offline" banner, "Demo (offline sample data)" provider, "Never synced", "No config" — all honestly labeled
+  • GST Reconciliation: "Sync Center DEMO" header, "Demo (offline sample data)" provider with DEMO badge, recent runs with match%, Oracle CFO Report with ITC analysis
+  • Clicked Sync Now → toast "Sync complete" → Last Sync "just now · 12 records · 134ms · Fetched 12 · Imported 0" (idempotent) → 0 console errors
+  • Mobile 375px: no horizontal scroll (scrollWidth=375=clientWidth), responsive layout
+  • Screenshots: /tmp/gst-qa-home.png, /tmp/gst-qa-settings-gst.png, /tmp/gst-qa-recon-after-sync.png, /tmp/gst-qa-mobile.png
+
+Stage Summary:
+- ALL 4 issues fixed + verified (C1 security, C2 type bug, H1 rate limit, H2 modeLabel).
+- DEMO mode integrity: PERFECT — never claims LIVE, honest labels everywhere.
+- LIVE mode: NOT testable (no real credentials) — system correctly reports DEMO. This is the RIGHT behavior.
+- Idempotency: VERIFIED — second sync imports 0.
+- Data integrity: VERIFIED — values preserved end-to-end.
+- Failure states: VERIFIED — professional messages for invalid GSTIN, missing params, rate limit.
+- Browser QA: VERIFIED — 0 errors desktop + mobile, sync works end-to-end, no horizontal scroll.
+- Preview: WORKING — user can see the SaaS in the Preview Panel.
+- The system is READY for real GSTR-2B data the moment MastersIndia credentials are configured.

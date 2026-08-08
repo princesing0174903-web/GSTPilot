@@ -21,6 +21,7 @@ import {
   generateFixes,
   type BooksInvoice,
 } from '@/lib/gst-reconciliation';
+import { modeLabel } from '@/lib/gst-reconciliation/server/provider-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
         gstin: string; period: string; supplierGSTIN: string; supplierName: string | null;
         invoiceNo: string; invoiceDate: string | null; taxableValue: number;
         igst: number; cgst: number; sgst: number; cess: number;
-        itcAvailable: number; itcEligible: number;
+        itcAvailable: number; itcEligible: boolean;
         matched: boolean; matchStatus: string;
       }> = [];
       const updateOps: Promise<unknown>[] = [];
@@ -148,7 +149,7 @@ export async function POST(request: Request) {
             db.gSTR2BInvoice.update({
               where: { id: existingId },
               data: {
-                invoiceDate: rec.invoiceDate,
+                invoiceDate: rec.invoiceDate ?? null,
                 taxableValue: rec.taxableValue,
                 igst: rec.igst,
                 cgst: rec.cgst,
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
                 cess: rec.cess,
                 itcAvailable: rec.itcAvailable,
                 itcEligible: rec.itcEligible,
-                supplierName: rec.supplierName,
+                supplierName: rec.supplierName ?? null,
               },
             }),
           );
@@ -165,9 +166,9 @@ export async function POST(request: Request) {
             gstin,
             period,
             supplierGSTIN: rec.supplierGSTIN,
-            supplierName: rec.supplierName,
+            supplierName: rec.supplierName ?? null,
             invoiceNo: rec.invoiceNo,
-            invoiceDate: rec.invoiceDate,
+            invoiceDate: rec.invoiceDate ?? null,
             taxableValue: rec.taxableValue,
             igst: rec.igst,
             cgst: rec.cgst,
@@ -346,7 +347,7 @@ export async function POST(request: Request) {
       isLive: gstr2bResult.isLive,
       provider: provider.displayName,
       mode: resolvedMode,
-      modeLabel: resolvedMode === 'live' ? 'LIVE' : resolvedMode === 'sandbox' ? 'SANDBOX' : 'DEMO',
+      modeLabel: modeLabel(resolvedMode),
       gstin,
     });
   } catch (error) {

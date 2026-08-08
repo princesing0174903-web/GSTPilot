@@ -102,19 +102,39 @@ export async function resolveProviderMode(
 
   // A real provider is configured. Mode depends on the `mode` field
   // (sandbox vs production) AND whether the last test succeeded.
+  // CRITICAL: must use `lastTestOk === true` (the boolean flag set by the
+  // test route), NOT `lastConnectedAt != null`. After a failed re-test the
+  // route preserves the prior `lastConnectedAt` but flips `lastTestOk=false`;
+  // using lastConnectedAt here would cause the status route and this resolver
+  // to disagree — surfacing contradictory states to the UI.
   const isProduction = (cfg.mode ?? 'sandbox') === 'production';
-  const testedOk = cfg.lastConnectedAt != null;
+  const testedOk = cfg.lastTestOk === true;
 
   if (!testedOk) {
-    // Configured but never successfully tested → treat as not_connected for
-    // data-fetch purposes (we won't risk calling an untested provider).
+    // Configured but never successfully tested (or last test failed) → treat
+    // as not_connected for data-fetch purposes (we won't risk calling an
+    // untested or broken provider).
     return {
       mode: 'not_connected',
       providerKey: cfg.providerKey,
       providerName: `${cfg.displayName} (configured, not tested)`,
-      lastTestOk: false,
-      lastTestedAt: null,
-      lastSyncAt: null,
+      lastTestOk: cfg.lastTestOk,
+      lastTestedAt: cfg.lastConnectedAt?.toISOString() ?? null,
+      lastSyncAt: cfg.lastSyncAt?.toISOString() ?? null,
+      gstin: cfg.gstin ?? null,
+      isLive: false,
+    };
+  }
+
+  // Token expired → also not_connected (UI shows a reconnect banner)
+  if (cfg.tokenExpiry && cfg.tokenExpiry.getTime() < Date.now()) {
+    return {
+      mode: 'not_connected',
+      providerKey: cfg.providerKey,
+      providerName: `${cfg.displayName} (token expired)`,
+      lastTestOk: cfg.lastTestOk,
+      lastTestedAt: cfg.lastConnectedAt?.toISOString() ?? null,
+      lastSyncAt: cfg.lastSyncAt?.toISOString() ?? null,
       gstin: cfg.gstin ?? null,
       isLive: false,
     };

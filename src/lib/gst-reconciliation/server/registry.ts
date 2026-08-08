@@ -175,8 +175,21 @@ export async function getGSPProviderForOrg(
     };
   }
 
-  // Never tested → not_connected (refuse to use an untested real provider)
-  if (!cfg.lastConnectedAt) {
+  // Never tested (or last test failed) → not_connected (refuse to use an
+  // untested or broken real provider). CRITICAL: must check lastTestOk, not
+  // lastConnectedAt — they diverge after a failed re-test.
+  if (cfg.lastTestOk !== true) {
+    return {
+      provider: STATELESS_INSTANCES.mock,
+      providerKey: cfg.providerKey,
+      mode: 'not_connected',
+      configId: cfg.id,
+      gstin: cfg.gstin ?? null,
+    };
+  }
+
+  // Token expired → also not_connected (UI shows a reconnect banner).
+  if (cfg.tokenExpiry && cfg.tokenExpiry.getTime() < Date.now()) {
     return {
       provider: STATELESS_INSTANCES.mock,
       providerKey: cfg.providerKey,

@@ -947,7 +947,7 @@ function EmptyGraphState({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[13px] font-semibold text-foreground">{b.label}</span>
-                  {b.done && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}}
+                  {b.done && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
                 </div>
                 <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{b.desc}</p>
               </div>

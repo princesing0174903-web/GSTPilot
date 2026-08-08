@@ -60,5 +60,8 @@ export {
 } from './ai-summary';
 
 // Server-only (do not import from client components)
-export { getGSPProvider, listGSPProviders, isGSPProviderAvailable } from './server/registry';
+export { getGSPProvider, getGSPProviderForOrg, listGSPProviders, getProviderMeta, isGSPProviderAvailable, type ProviderMeta, type OrgProviderResolution } from './server/registry';
 export { MockGSPProvider } from './server/mock-provider';
+export { MastersIndiaGSPProvider, type MastersIndiaConfig } from './server/mastersindia-provider';
+export { GenericWebGSPProvider, type GenericWebConfig } from './server/generic-web-provider';
+export { resolveProviderMode, modeLabel, modeBadgeClasses, type GSPMode, type ProviderModeInfo } from './server/provider-mode';

@@ -58,6 +58,7 @@ import {
   ChevronRight, Download, Database, Key, Plug, Power, RefreshCw, Trash2, Copy,
   Eye, EyeOff, Plus, Clock, Sun, Moon, Laptop, LogOut, CheckCircle2,
   XCircle, ShieldAlert, UserCog, Link as LinkIcon, ScrollText, Settings2,
+  ShieldCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -73,11 +74,13 @@ import {
 } from '@/lib/auth/organizations';
 import type { OrgRole } from '@/lib/auth/types';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
+import { GSTSection } from './GSTSection';
 
 // ─── Section IDs ──────────────────────────────────────────────────────────────
 type SectionId =
   | 'organization' | 'appearance' | 'profile' | 'security' | 'integrations'
-  | 'notifications' | 'team' | 'apikeys' | 'audit' | 'billing' | 'data' | 'danger';
+  | 'notifications' | 'team' | 'apikeys' | 'audit' | 'billing' | 'data' | 'danger'
+  | 'gst';
 
 interface NavSection {
   id: SectionId;
@@ -92,6 +95,7 @@ interface NavSection {
 const SECTIONS: NavSection[] = [
   // ── Workspace ── (organization-level settings)
   { id: 'organization', label: 'Organization', icon: <Building2 className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'gst', label: 'GST / GSTN', icon: <ShieldCheck className="h-4 w-4" />, group: 'Workspace' },
   { id: 'team', label: 'Users', icon: <Users className="h-4 w-4" />, group: 'Workspace' },
   { id: 'integrations', label: 'OAuth', icon: <LinkIcon className="h-4 w-4" />, group: 'Workspace' },
 
@@ -111,6 +115,7 @@ const SECTIONS: NavSection[] = [
 
 const SECTION_META: Record<SectionId, { title: string; subtitle: string }> = {
   organization: { title: 'Organization', subtitle: 'Your firm\u2019s identity, tax registration, and contact details.' },
+  gst: { title: 'GST / GSTN', subtitle: 'Connect a GSP to fetch live GSTR-2B, verify GSTINs, and reconcile purchase data.' },
   appearance: { title: 'Appearance', subtitle: 'Choose how GSTPilot looks. Synced across devices.' },
   profile: { title: 'Profile', subtitle: 'Your personal account information.' },
   security: { title: 'Security', subtitle: 'Manage your password, active sessions, and account security.' },
@@ -176,7 +181,7 @@ export function SettingsPage() {
   if (pendingSettingsSection && pendingSettingsSection !== consumedPending) {
     setConsumedPending(pendingSettingsSection);
     const map: Record<string, SectionId> = {
-      firm: 'organization', gst: 'organization', team: 'team',
+      firm: 'organization', gst: 'gst', team: 'team',
       integrations: 'integrations', notifications: 'notifications',
       security: 'security', billing: 'billing', audit: 'audit',
       ai: 'appearance', data: 'data', apikeys: 'apikeys',
@@ -260,6 +265,7 @@ export function SettingsPage() {
                 transition={{ duration: 0.18, ease: 'easeOut' }}
               >
                 {activeSection === 'organization' && <OrganizationSection />}
+                {activeSection === 'gst' && <GSTSection />}
                 {activeSection === 'appearance' && <AppearanceSection />}
                 {activeSection === 'profile' && <ProfileSection />}
                 {activeSection === 'security' && <SecuritySection />}

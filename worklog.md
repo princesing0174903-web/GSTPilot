@@ -15577,3 +15577,127 @@ Stage Summary:
 - Files deleted: old 1912-line ZohoBooksPage.tsx replaced with new 100-line state router
 - No new features added — only redesign + bug fixes
 - BLUE theme preserved (emerald only for "Connected" success pill, amber for warnings, red for destructive)
+
+---
+Task ID: GST-01
+Agent: Main Orchestrator
+Task: REAL GST DATA INTEGRATION — Backend (Sections 1, 2, 3, 4, 5, 7, 8, 9, 10, 12)
+
+Work Log:
+- AUDIT (Section 12): Inspected existing src/lib/gst-reconciliation/ (IGSPProvider
+  abstraction, MockGSPProvider, match-engine v2, ai-summary, auto-fix, vendor-score)
+  + src/lib/gstn-provider/ (IGSTProvider, MockGSTProvider, FutureOfficialGSTProvider
+  placeholder, orchestrator, crypto AES-256-GCM, Firestore service). Found the
+  GSPProviderConfig Prisma model already existed but lacked mode/gstin/lastTestOk/
+  lastSyncAt/tokenExpiry fields. Existing /api/gst-reconciliation/run was hard-coded
+  to call getGSPProvider('mock'). Preserved IGSPProvider — built ON TOP of it.
+- Created src/lib/gst-reconciliation/server/provider-mode.ts — the SINGLE source of
+  truth for mode resolution (live/sandbox/demo/not_connected) + modeLabel +
+  modeBadgeClasses helpers.
+- Created src/lib/gst-reconciliation/server/mastersindia-provider.ts — a REAL
+  production HTTP client implementing IGSPProvider. Calls MastersIndia's OAuth2
+  token endpoint + GSTR-2B + GSTIN-search APIs over HTTPS. 30s timeout, typed
+  errors (GSPAuthError/GSPRateLimitError/GSPGSTNOutageError/GSPNotFoundError),
+  never logs secrets.
+- Created src/lib/gst-reconciliation/server/generic-web-provider.ts — a generic
+  GSP provider for any standards-compliant gateway (ClearTax/Clarity/custom).
+  Bearer-token auth, canonical GSTR2B JSON contract.
+- Created src/lib/gst-reconciliation/server/gstin-validator.ts — offline GSTIN
+  checksum validator (re-implements the official GSTN algorithm) so format
+  validation works WITHOUT a network call. Used in demo mode + as a pre-flight
+  check before real provider calls.
+- Rewrote src/lib/gst-reconciliation/server/registry.ts — added
+  getGSPProviderForOrg() (reads Prisma config, decrypts secrets, returns provider
+  instance + mode), listGSPProviders() now returns ProviderMeta[] with fields
+  + defaults for the Settings UI, getProviderMeta() for single-provider lookup.
+- Updated Prisma schema: added `mode`, `gstin`, `legalName`, `tradeName`,
+  `lastTestOk`, `lastTestMessage`, `lastSyncAt`, `tokenExpiry` fields to
+  GSPProviderConfig + created new GSTSyncJob model (id, orgId, configId, gstin,
+  period, providerKey, mode, status, trigger, recordsFetched/Imported/Changed/
+  Removed, durationMs, errorMessage, startedAt, completedAt). Ran db:push —
+  schema in sync.
+- Updated src/lib/gst-reconciliation/index.ts — exported new modules.
+- Created 8 auth-gated, zod-validated API routes:
+  • GET  /api/gst/providers    — list supported providers + required fields
+  • GET  /api/gst/status       — canonical connection state (ONE source of truth)
+  • POST /api/gst/connect      — save encrypted config (AES-256-GCM)
+  • POST /api/gst/test         — test connection, persist lastTestOk
+  • POST /api/gst/disconnect   — disable config (keeps row for reconnect)
+  • POST /api/gst/verify-gstin — real GSTIN lookup via provider OR offline
+                                  checksum in demo mode; caches legal/trade name
+  • POST /api/gst/sync-2b      — real GSTR-2B sync: creates GSTSyncJob, fetches
+                                  via provider, idempotent upsert into
+                                  GSTR2BInvoice (by gstin+period+supplierGSTIN+
+                                  invoiceNo), detects changes, updates job + config
+  • GET  /api/gst/sync-jobs    — sync history for the Sync Center
+- Updated /api/gst-reconciliation/run/route.ts — now resolves the provider from
+  the org's saved config via getGSPProviderForOrg() (falls back to mock if
+  gspProvider='mock' is explicitly passed). Response now includes `mode` +
+  `modeLabel` ('LIVE'/'SANDBOX'/'DEMO') so the UI can badge data accurately.
+- Fixed pre-existing syntax error in src/components/oracle/BusinessGraphPanel.tsx
+  (extra `}` on line 950) that was blocking tsc.
+- Lint: all 14 new/modified backend files pass eslint clean (0 errors, 0 warnings).
+
+Stage Summary:
+- Backend architecture COMPLETE for real GST data integration.
+- IGSPProvider preserved — reconciliation engine unchanged.
+- Three providers supported: MockGSPProvider (demo), MastersIndiaGSPProvider
+  (real HTTP), GenericWebGSPProvider (any GSP gateway).
+- Mode resolution is canonical: live/sandbox/demo/not_connected — ONE source of
+  truth from /api/gst/status. UI must never show contradictory states.
+- Secrets encrypted at rest with AES-256-GCM (server-only master key). Never
+  returned in API responses (only masked indicators).
+- Idempotent GSTR-2B sync prevents duplicate imports.
+- GSTSyncJob model tracks every sync for the Sync Center + audit trail.
+- Required env vars for production: GSTN_ENCRYPTION_KEY (32-byte hex/base64).
+  Without it, dev fallback key is used (loud warning logged).
+- To go LIVE: configure MastersIndia credentials in Settings → GST, set mode=
+  'production', click Test Connection, then Sync Now.
+
+---
+Task ID: GST-02
+Agent: Main Orchestrator (subagent completed frontend, main orchestrator fixed auth + verified)
+Task: REAL GST DATA INTEGRATION — Frontend (Settings GST Connection Center + Sync Center + data-source badges)
+
+Work Log:
+- Subagent (full-stack-developer) created src/components/settings/GSTSection.tsx (1295 lines):
+  • Connection Status Card with canonical mode badge (LIVE/SANDBOX/DEMO/NOT CONNECTED)
+  • Mode banner with mode-specific messaging (emerald for LIVE, amber for SANDBOX, zinc for DEMO, red for NOT CONNECTED)
+  • Provider Configuration Card with dynamic fields (provider picker, sandbox/production toggle, GSTIN, credentials)
+  • Actions Card (Test Connection, Verify GSTIN, Sync GSTR-2B, Disconnect with confirm dialog)
+  • GSTIN Verification Result Card with source badge
+  • Skeleton loaders (animate-pulse, never "Loading...")
+  • Secrets never shown — only masked indicators after save
+- Subagent updated src/components/settings/SettingsPage.tsx:
+  • Added 'gst' to SectionId type + SECTIONS array + SECTION_META
+  • Added {activeSection === 'gst' && <GSTSection />} render branch
+  • Imported GSTSection from './GSTSection'
+- Subagent updated src/components/gst-reconciliation/GSTReconciliationPage.tsx:
+  • Added Sync Center panel above the run form (connection state badge, last sync info, Sync Now button, period picker, expandable sync history table)
+  • Replaced hard-coded "Mock GSP (Sandbox)" with GspProviderCell that shows the ACTUAL resolved provider name + mode badge from /api/gst/status
+  • Added data-source badge on reconciliation results ("Data source: DEMO/SANDBOX/LIVE")
+  • handleRun() no longer passes gspProvider:'mock' — backend resolves from saved config
+  • Toast includes modeLabel: "Reconciliation complete (DEMO) — 5 matched, 3 mismatches"
+  • NOT CONNECTED state shows prominent "Connect GSTN" CTA linking to Settings → GST
+- Main orchestrator fixed CRITICAL auth bug:
+  • GSTSection.tsx used raw fetch() without auth headers → 401 on all /api/gst/* calls
+  • Added useGstHeaders() hook (mirrors useSettingsHeaders) that injects x-gstpilot-actor + x-gstpilot-orgid headers
+  • Updated all 7 fetch calls (status, providers, connect, test, verify-gstin, sync-2b, disconnect) to use buildHeaders()
+  • Reconciliation page already used fetchWithTimeout which auto-injects auth from localStorage — no change needed
+- Browser QA with agent-browser:
+  • Settings → GST / GSTN: HTTP 200 on /api/gst/status + /api/gst/providers. Shows DEMO mode banner, Connection Status card with DEMO badge, Provider "Demo (offline sample data)", GSTIN "Not set", Last Test "NEVER TESTED", Actions card with Test/Verify/Sync/Disconnect buttons.
+  • GST Reconciliation page: HTTP 200 on /api/gst/status + /api/gst/sync-jobs + /api/gst-reconciliation/runs. Sync Center panel shows "Sync Center DEMO" heading, Sync Now button, period picker, View Sync History.
+  • Clicked "Sync Now" → toast "Sync complete (DEMO) — 12 fetched, 0 imported." (idempotent — 0 imported because records already existed). Sync History expanded to show 1 job: "12 records · 192ms", DEMO mode badge.
+  • Console errors: ZERO. Page errors: ZERO. Failed requests: ZERO.
+  • Screenshots captured: /tmp/gst-settings.png, /tmp/gst-reconciliation.png, /tmp/gst-reconciliation-mobile.png
+- Lint: all files pass eslint clean (0 errors, 0 warnings).
+
+Stage Summary:
+- Frontend COMPLETE for real GST data integration.
+- Settings → GST / GSTN section: premium Connection Center with ONE source of truth.
+- GST Reconciliation page: Sync Center with live status, sync actions, history.
+- Mode badges always reflect backend canonical state — NEVER contradictory.
+- DEMO mode clearly labeled everywhere — never claims to be LIVE.
+- All API calls authenticated (x-gstpilot-actor header for demo/local users).
+- Mobile responsive (tested at 375px viewport).
+- Zero console errors, zero failed requests.

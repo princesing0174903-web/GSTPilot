@@ -13,6 +13,7 @@ import { db } from '@/lib/db';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import {
   getGSPProvider,
+  getGSPProviderForOrg,
   reconcile,
   generateAISummary,
   computeVendorScores,
@@ -31,9 +32,9 @@ export async function POST(request: Request) {
     const { uid } = authResult;
 
     const body = await request.json();
-    const { organizationId, gstin, period, clientId, gspProvider } = body;
+    const { organizationId, gstin: bodyGstin, period, clientId, gspProvider } = body;
 
-    if (!organizationId || !gstin || !period) {
+    if (!organizationId || !bodyGstin || !period) {
       return NextResponse.json(
         { error: 'organizationId, gstin, and period are required', code: 'MISSING_PARAMS' },
         { status: 400 },
@@ -42,6 +43,24 @@ export async function POST(request: Request) {
 
     const memberResult = await requireOrgMembership(uid, organizationId);
     if (memberResult instanceof NextResponse) return memberResult;
+
+    // ── Resolve the provider ──
+    // If the caller explicitly passed gspProvider AND it's 'mock', honor it.
+    // Otherwise resolve from the org's saved config (live/sandbox/demo).
+    let provider;
+    let resolvedMode: 'live' | 'sandbox' | 'demo' | 'not_connected' = 'demo';
+    let resolvedGstin = bodyGstin;
+    if (gspProvider === 'mock') {
+      provider = getGSPProvider('mock');
+      resolvedMode = 'demo';
+    } else {
+      const resolution = await getGSPProviderForOrg(organizationId);
+      provider = resolution.provider;
+      resolvedMode = resolution.mode;
+      // Use the configured GSTIN if available (it's the authoritative one)
+      if (resolution.gstin) resolvedGstin = resolution.gstin;
+    }
+    const gstin = resolvedGstin;
 
     // ── 1. Fetch purchase invoices from Books (Prisma) ──
     // Pull from PurchaseBill table, scoped to the org + optional client.
@@ -81,8 +100,7 @@ export async function POST(request: Request) {
       total: Number(b.totalAmount || 0),
     }));
 
-    // ── 2. Fetch GSTR-2B from the configured GSP ──
-    const provider = getGSPProvider(gspProvider);
+    // ── 2. Fetch GSTR-2B from the resolved provider ──
     const gspSession = await provider.authenticate({
       clientId: 'gstpilot',
       apikey: 'gstpilot-key',
@@ -327,6 +345,9 @@ export async function POST(request: Request) {
       summary,
       isLive: gstr2bResult.isLive,
       provider: provider.displayName,
+      mode: resolvedMode,
+      modeLabel: resolvedMode === 'live' ? 'LIVE' : resolvedMode === 'sandbox' ? 'SANDBOX' : 'DEMO',
+      gstin,
     });
   } catch (error) {
     return friendlyApiError(

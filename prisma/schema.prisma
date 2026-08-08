@@ -6530,17 +6530,63 @@ model GSTReconciliationMatch {
 model GSPProviderConfig {
   id              String   @id @default(cuid())
   organizationId  String
-  providerKey     String   // mastersindia | clarity | cleartax | gstsuvidha | mock
+  providerKey     String   // mock | mastersindia | generic
   displayName     String
   clientId        String?
-  clientSecret    String?  // encrypted at rest
-  apikey          String?
+  clientSecret    String?  // AES-256-GCM encrypted at rest (server-only key)
+  apikey          String?  // AES-256-GCM encrypted at rest
   authEndpoint    String?
   apiEndpoint     String?
-  enabled         Boolean  @default(false)
+  // 'sandbox' = GSP test environment, 'production' = real GSTN
+  mode            String   @default("sandbox") // sandbox | production
+  // The org's own GSTIN (whose GSTR-2B will be synced)
+  gstin           String?
+  // Verified legal/trade name from GSTIN lookup (cached)
+  legalName       String?
+  tradeName       String?
+  // Whether the last "Test Connection" succeeded
+  lastTestOk      Boolean  @default(false)
+  lastTestMessage String?
+  enabled         Boolean  @default(true)
   lastConnectedAt DateTime?
+  lastSyncAt      DateTime?
+  // Token expiry (if the provider uses expiring tokens)
+  tokenExpiry     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  syncJobs        GSTSyncJob[]
+
   @@unique([organizationId, providerKey])
+  @@index([organizationId, enabled])
+}
+
+// GSTR-2B sync jobs — one per (org, period) sync operation. Tracks every sync
+// for the Sync Center + audit trail.
+model GSTSyncJob {
+  id              String   @id @default(cuid())
+  organizationId  String
+  configId        String?
+  gstin           String
+  period          String   // YYYY-MM
+  providerKey     String
+  mode            String   // sandbox | production | demo
+  status          String   @default("pending") // pending | running | completed | failed | partial
+  trigger         String   @default("manual")  // manual | automatic | retry
+  recordsFetched  Int      @default(0)
+  recordsImported Int      @default(0)
+  recordsChanged  Int      @default(0)
+  recordsRemoved  Int      @default(0)
+  durationMs      Int      @default(0)
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  config          GSPProviderConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([configId, createdAt])
 }

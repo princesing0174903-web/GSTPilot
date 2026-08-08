@@ -25,16 +25,19 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, AlertTriangle, TrendingUp, CheckCircle2,
-  FileText, RefreshCw, Sparkles, Loader2, Zap, Download, X,
+  FileText, RefreshCw, Sparkles, Loader2, Download, X,
+  Wifi, WifiOff, FlaskConical, ChevronDown, ChevronUp,
+  Database, History, ExternalLink, Plug,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useOrg } from '@/contexts/OrgContext';
+import { useApp } from '@/contexts/AppContext';
 import { fetchWithTimeout } from '@/lib/async';
 import {
   type RunSummary, type MatchRow, type AIReconciliationSummary,
@@ -59,10 +62,93 @@ interface RunListEntry {
   createdAt: string;
 }
 
+// ─── GST Status + Sync Job types (mirror /api/gst/status + /api/gst/sync-jobs) ──
+
+type GSPMode = 'live' | 'sandbox' | 'demo' | 'not_connected';
+
+interface GstStatus {
+  mode: GSPMode;
+  modeLabel: string;
+  providerKey: string;
+  providerName: string;
+  providerDisplayName: string;
+  gstin: string | null;
+  legalName: string | null;
+  tradeName: string | null;
+  lastTestOk: boolean | null;
+  lastTestedAt: string | null;
+  lastTestMessage: string | null;
+  lastSyncAt: string | null;
+  tokenExpiry: string | null;
+  tokenExpired: boolean;
+  configId: string | null;
+}
+
+interface SyncJobRow {
+  id: string;
+  gstin: string;
+  period: string;
+  providerKey: string;
+  mode: string;
+  status: string;
+  trigger: string;
+  recordsFetched: number;
+  recordsImported: number;
+  recordsChanged: number;
+  recordsRemoved: number;
+  durationMs: number | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+// Mode → badge classes (mirrors server provider-mode.ts).
+function modeBadgeClass(mode: GSPMode): string {
+  switch (mode) {
+    case 'live':
+      // Emerald allowed ONLY for the LIVE success badge (per GREEN
+      // NEUTRALIZATION CASCADE exception).
+      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+    case 'sandbox':
+      return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+    case 'demo':
+      return 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30';
+    case 'not_connected':
+      return 'bg-red-500/15 text-red-400 border-red-500/30';
+  }
+}
+
+function modeIcon(mode: GSPMode) {
+  switch (mode) {
+    case 'live':
+      return <Wifi className="h-3.5 w-3.5" />;
+    case 'sandbox':
+      return <FlaskConical className="h-3.5 w-3.5" />;
+    case 'demo':
+      return <Sparkles className="h-3.5 w-3.5" />;
+    case 'not_connected':
+      return <WifiOff className="h-3.5 w-3.5" />;
+  }
+}
+
+function fmtSyncDate(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function GSTReconciliationPage() {
   const { organization } = useOrg();
+  const { setPendingSettingsSection, setCurrentView } = useApp();
   const organizationId = organization?.id ?? '';
   const [runs, setRuns] = useState<RunListEntry[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -71,6 +157,122 @@ export function GSTReconciliationPage() {
 
   const [gstin, setGstin] = useState('27AAACR5058K1Z5');
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+
+  // ── GST connection status + sync center state ──
+  // ONE source of truth — fetched from /api/gst/status. The mode badge
+  // below always reflects this. NEVER show "Connected" + "Not connected"
+  // at the same time.
+  const [gstStatus, setGstStatus] = useState<GstStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [syncJobs, setSyncJobs] = useState<SyncJobRow[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncPeriod, setSyncPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [lastSyncSummary, setLastSyncSummary] = useState<{
+    recordsFetched: number;
+    recordsImported: number;
+    recordsChanged: number;
+    durationMs: number;
+    mode: string;
+  } | null>(null);
+
+  // ── Data-source badge for the most recent reconciliation run ──
+  // After handleRun() resolves, this holds the modeLabel returned by
+  // /api/gst-reconciliation/run so the result panel can show
+  // "Data source: DEMO / SANDBOX / LIVE".
+  const [lastRunModeLabel, setLastRunModeLabel] = useState<string | null>(null);
+
+  // ── Load GST status (canonical) ──
+  const loadStatus = useCallback(async () => {
+    if (!organizationId) {
+      setLoadingStatus(false);
+      return;
+    }
+    setLoadingStatus(true);
+    try {
+      const res = await fetchWithTimeout(
+        `/api/gst/status?organizationId=${encodeURIComponent(organizationId)}`,
+      );
+      const data = await res.json();
+      if (data.ok && data.status) setGstStatus(data.status);
+    } catch {
+      /* non-fatal — UI shows a neutral "unknown" state */
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, [organizationId]);
+
+  // ── Load sync jobs (history) ──
+  const loadSyncJobs = useCallback(async () => {
+    if (!organizationId) {
+      setLoadingJobs(false);
+      return;
+    }
+    setLoadingJobs(true);
+    try {
+      const res = await fetchWithTimeout(
+        `/api/gst/sync-jobs?organizationId=${encodeURIComponent(organizationId)}&limit=10`,
+      );
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.jobs)) setSyncJobs(data.jobs);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setLoadingJobs(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    void loadStatus();
+    void loadSyncJobs();
+  }, [loadStatus, loadSyncJobs]);
+
+  // ── Sync GSTR-2B now ──
+  const handleSyncNow = async () => {
+    if (!organizationId) return;
+    if (gstStatus?.mode === 'not_connected') {
+      toast.error('Connect a GSP provider in Settings first.');
+      return;
+    }
+    setSyncing(true);
+    setLastSyncSummary(null);
+    try {
+      const res = await fetchWithTimeout('/api/gst/sync-2b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId, period: syncPeriod }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? 'Sync failed.');
+      }
+      setLastSyncSummary({
+        recordsFetched: data.summary.recordsFetched,
+        recordsImported: data.summary.recordsImported,
+        recordsChanged: data.summary.recordsChanged,
+        durationMs: data.summary.durationMs,
+        mode: data.summary.mode,
+      });
+      toast.success(
+        `Sync complete (${data.summary.mode.toUpperCase()}) — ` +
+        `${data.summary.recordsFetched} fetched, ` +
+        `${data.summary.recordsImported} imported.`,
+      );
+      // Refresh status (lastSyncAt) + jobs list.
+      await Promise.all([loadStatus(), loadSyncJobs()]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // ── Navigate to Settings → GST section ──
+  const goToSettingsGst = useCallback(() => {
+    setPendingSettingsSection('gst');
+    setCurrentView('settings');
+  }, [setPendingSettingsSection, setCurrentView]);
 
   const loadRuns = useCallback(async () => {
     if (!organizationId) return;
@@ -106,15 +308,28 @@ export function GSTReconciliationPage() {
   const handleRun = async () => {
     if (!organizationId || !gstin || !period) return;
     setRunning(true);
+    setLastRunModeLabel(null);
     try {
+      // NOTE: We intentionally do NOT pass `gspProvider: 'mock'` here. The
+      // backend (/api/gst-reconciliation/run) resolves the provider from
+      // the org's saved config (live/sandbox/demo) via getGSPProviderForOrg().
+      // The response now includes `modeLabel` so we can badge the result
+      // accurately (LIVE / SANDBOX / DEMO).
       const res = await fetchWithTimeout('/api/gst-reconciliation/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, gstin, period, gspProvider: 'mock' }),
+        body: JSON.stringify({ organizationId, gstin, period }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to run reconciliation');
-      toast.success(`Reconciliation complete — ${data.summary.matched} matched, ${data.summary.unmatched} mismatches`);
+      // Persist the data-source label so the run-result panel can show a
+      // "Data source: DEMO/SANDBOX/LIVE" badge.
+      const modeLabel = data.modeLabel || (data.mode ? data.mode.toUpperCase() : 'DEMO');
+      setLastRunModeLabel(modeLabel);
+      toast.success(
+        `Reconciliation complete (${modeLabel}) — ` +
+        `${data.summary.matched} matched, ${data.summary.unmatched} mismatches`,
+      );
       await loadRuns();
       if (data.runId) setActiveRunId(data.runId);
     } catch (err) {
@@ -149,6 +364,26 @@ export function GSTReconciliationPage() {
         </Button>
       </div>
 
+      {/* ── Sync Center panel ── */}
+      <SyncCenter
+        gstStatus={gstStatus}
+        loadingStatus={loadingStatus}
+        syncJobs={syncJobs}
+        loadingJobs={loadingJobs}
+        syncing={syncing}
+        syncPeriod={syncPeriod}
+        onSyncPeriodChange={setSyncPeriod}
+        onSyncNow={handleSyncNow}
+        onGoToSettings={goToSettingsGst}
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen((v) => !v)}
+        lastSyncSummary={lastSyncSummary}
+        onRefresh={() => {
+          void loadStatus();
+          void loadSyncJobs();
+        }}
+      />
+
       {/* New run form */}
       <div className="gst-card gst-card-compact mb-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -172,13 +407,33 @@ export function GSTReconciliationPage() {
           </div>
           <div>
             <label className="gst-label mb-1.5 block">GSP Provider</label>
-            <div className="flex h-10 items-center rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm text-muted-foreground">
-              <Zap className="mr-2 h-4 w-4 text-[#60A5FA]" />
-              Mock GSP (Sandbox)
-              <Badge variant="outline" className="ml-auto text-[11px]">Default</Badge>
-            </div>
+            <GspProviderCell gstStatus={gstStatus} loading={loadingStatus} onGoToSettings={goToSettingsGst} />
           </div>
         </div>
+        {/* Data-source badge for the most recent run */}
+        {lastRunModeLabel && (
+          <div className="mt-4 flex items-center gap-2 border-t border-[#1F1F1F] pt-4">
+            <span className="gst-label">Last run data source:</span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                lastRunModeLabel === 'LIVE'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : lastRunModeLabel === 'SANDBOX'
+                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                    : 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30'
+              }`}
+            >
+              {lastRunModeLabel === 'LIVE' ? (
+                <Wifi className="h-3 w-3" />
+              ) : lastRunModeLabel === 'SANDBOX' ? (
+                <FlaskConical className="h-3 w-3" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+              {lastRunModeLabel}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Recent runs */}
@@ -674,6 +929,385 @@ function RunDetail({ runId, organizationId }: { runId: string; organizationId: s
 
 function useMemoVendorOptions(vendors: VendorScore[]): Array<{ gstin: string; name: string | null }> {
   return vendors.map((v) => ({ gstin: v.gstin, name: v.name }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SYNC CENTER — premium panel above the new-run form
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// ONE source of truth — the connection-state badge reflects `gstStatus.mode`
+// from /api/gst/status. NEVER shows contradictory states. When NOT_CONNECTED,
+// all live-data panels (last sync, history) are hidden and a prominent
+// "Connect GSTN" CTA is shown instead.
+//
+// Layout:
+//   1. Header row  — Connection state badge + provider name + Sync Now CTA
+//   2. If NOT_CONNECTED  → "Connect GSTN" CTA card (links to Settings → GST)
+//   3. If connected      → Last-sync info + period picker + Sync result
+//   4. Expandable history (last 10 jobs) — only when connected
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SyncCenter({
+  gstStatus, loadingStatus, syncJobs, loadingJobs, syncing, syncPeriod,
+  onSyncPeriodChange, onSyncNow, onGoToSettings, historyOpen, onToggleHistory,
+  lastSyncSummary, onRefresh,
+}: {
+  gstStatus: GstStatus | null;
+  loadingStatus: boolean;
+  syncJobs: SyncJobRow[];
+  loadingJobs: boolean;
+  syncing: boolean;
+  syncPeriod: string;
+  onSyncPeriodChange: (v: string) => void;
+  onSyncNow: () => void;
+  onGoToSettings: () => void;
+  historyOpen: boolean;
+  onToggleHistory: () => void;
+  lastSyncSummary: {
+    recordsFetched: number;
+    recordsImported: number;
+    recordsChanged: number;
+    durationMs: number;
+    mode: string;
+  } | null;
+  onRefresh: () => void;
+}) {
+  const mode: GSPMode = gstStatus?.mode ?? 'not_connected';
+  const isConnected = mode !== 'not_connected';
+  const lastJob = syncJobs[0] ?? null;
+
+  return (
+    <div className="gst-card mb-6">
+      {/* Header row */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5">
+            <Database className="h-4 w-4 text-[#60A5FA]" />
+          </div>
+          <div>
+            <h2 className="gst-card-title flex items-center gap-2 text-white">
+              Sync Center
+              {loadingStatus ? (
+                <span className="inline-block h-3 w-16 animate-pulse rounded bg-[#181818]" />
+              ) : (
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${modeBadgeClass(mode)}`}
+                >
+                  {modeIcon(mode)}
+                  {gstStatus?.modeLabel ?? 'NOT CONNECTED'}
+                </span>
+              )}
+            </h2>
+            <p className="gst-description mt-0.5 text-zinc-400">
+              Fetch GSTR-2B from {gstStatus?.providerDisplayName ?? 'your GSP'} before reconciling.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            className="gst-btn gst-btn-ghost h-9 gap-1.5 text-zinc-400 hover:text-white"
+            aria-label="Refresh status"
+            title="Refresh"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          {isConnected && (
+            <button
+              onClick={onSyncNow}
+              disabled={syncing}
+              className="gst-btn gst-btn-primary h-9 gap-2"
+            >
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── NOT CONNECTED → prominent CTA ── */}
+      {!loadingStatus && !isConnected && (
+        <div className="mt-5 rounded-lg border border-red-500/20 bg-red-500/5 p-5">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <WifiOff className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+              <div>
+                <p className="gst-card-title text-red-300">No GSP provider connected</p>
+                <p className="gst-description mt-1 text-zinc-400">
+                  Reconciliation runs in <span className="text-zinc-200">demo mode</span> with
+                  simulated sample data. Connect a real GSP to fetch live GSTR-2B from GSTN.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onGoToSettings}
+              className="gst-btn gst-btn-primary h-9 shrink-0 gap-2"
+            >
+              <Plug className="h-4 w-4" />
+              Connect GSTN
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Loading state ── */}
+      {loadingStatus && (
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="h-3 w-20 animate-pulse rounded bg-[#181818]" />
+              <div className="h-5 w-32 animate-pulse rounded bg-[#141414]" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Connected → last-sync info + period picker + result ── */}
+      {!loadingStatus && isConnected && (
+        <>
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <p className="gst-label mb-1">Provider</p>
+              <p className="text-sm text-white">{gstStatus?.providerDisplayName ?? '—'}</p>
+              {gstStatus?.gstin && (
+                <p className="gst-caption mt-0.5 font-mono text-zinc-500">{gstStatus.gstin}</p>
+              )}
+            </div>
+            <div>
+              <p className="gst-label mb-1">Last Sync</p>
+              {gstStatus?.lastSyncAt ? (
+                <>
+                  <p className="text-sm text-white">{fmtRelative(gstStatus.lastSyncAt)}</p>
+                  <p className="gst-caption mt-0.5 text-zinc-500">{fmtSyncDate(gstStatus.lastSyncAt)}</p>
+                </>
+              ) : lastJob ? (
+                <>
+                  <p className="text-sm text-white">{fmtRelative(lastJob.completedAt ?? lastJob.createdAt)}</p>
+                  <p className="gst-caption mt-0.5 text-zinc-500">
+                    {lastJob.recordsFetched} records · {lastJob.durationMs ?? 0}ms
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-zinc-500">Never synced</p>
+              )}
+            </div>
+            <div>
+              <p className="gst-label mb-1">Sync Period</p>
+              <Input
+                type="month"
+                value={syncPeriod}
+                onChange={(e) => onSyncPeriodChange(e.target.value)}
+                className="h-9 text-sm"
+                disabled={syncing}
+              />
+            </div>
+          </div>
+
+          {/* Sync result (after Sync Now) */}
+          {lastSyncSummary && (
+            <div className="mt-4 rounded-md border border-[#1F1F1F] bg-[#0F1115] p-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <p className="gst-label">Fetched</p>
+                  <p className="text-sm font-semibold text-white">{lastSyncSummary.recordsFetched}</p>
+                </div>
+                <div>
+                  <p className="gst-label">Imported</p>
+                  <p className="text-sm font-semibold text-white">{lastSyncSummary.recordsImported}</p>
+                </div>
+                <div>
+                  <p className="gst-label">Changed</p>
+                  <p className="text-sm font-semibold text-white">{lastSyncSummary.recordsChanged}</p>
+                </div>
+                <div>
+                  <p className="gst-label">Duration</p>
+                  <p className="text-sm font-semibold text-white">{lastSyncSummary.durationMs}ms</p>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2 border-t border-[#1F1F1F] pt-2">
+                <span className={`gst-status ${
+                  lastSyncSummary.mode === 'live' ? 'gst-status-success' :
+                  lastSyncSummary.mode === 'sandbox' ? 'gst-status-warning' :
+                  'gst-status-neutral'
+                }`}>
+                  {lastSyncSummary.mode.toUpperCase()}
+                </span>
+                <span className="gst-caption text-zinc-500">
+                  {lastSyncSummary.mode === 'live'
+                    ? 'Fetched from production GSTN.'
+                    : lastSyncSummary.mode === 'sandbox'
+                      ? 'Fetched from GSP sandbox environment.'
+                      : 'Demo mode — simulated sample data.'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Expandable history */}
+          <div className="mt-4 border-t border-[#1F1F1F] pt-4">
+            <button
+              onClick={onToggleHistory}
+              className="gst-btn gst-btn-ghost h-8 gap-1.5 px-2 text-zinc-400 hover:text-white"
+              aria-expanded={historyOpen}
+            >
+              {historyOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              <History className="h-3.5 w-3.5" />
+              View Sync History {syncJobs.length > 0 && `(${syncJobs.length})`}
+            </button>
+            <AnimatePresence initial={false}>
+              {historyOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-3">
+                    {loadingJobs ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="h-9 w-full animate-pulse rounded bg-[#141414]" />
+                        ))}
+                      </div>
+                    ) : syncJobs.length === 0 ? (
+                      <p className="gst-description py-6 text-center text-zinc-500">
+                        No sync jobs yet. Click <strong className="text-zinc-300">Sync Now</strong> to fetch GSTR-2B.
+                      </p>
+                    ) : (
+                      <div className="gst-table-wrap max-h-96 overflow-auto">
+                        <table className="gst-table">
+                          <thead>
+                            <tr>
+                              <th>Period</th>
+                              <th>Provider</th>
+                              <th>Mode</th>
+                              <th>Status</th>
+                              <th className="text-right">Records</th>
+                              <th className="text-right">Duration</th>
+                              <th>Timestamp</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {syncJobs.map((j) => (
+                              <tr key={j.id}>
+                                <td className="font-mono text-[12px] text-zinc-300">{j.period}</td>
+                                <td className="text-zinc-300">{j.providerKey}</td>
+                                <td>
+                                  <span className={`gst-status ${
+                                    j.mode === 'live' ? 'gst-status-success' :
+                                    j.mode === 'sandbox' ? 'gst-status-warning' :
+                                    'gst-status-neutral'
+                                  }`}>
+                                    {j.mode.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td>
+                                  {j.status === 'completed' ? (
+                                    <span className="gst-status gst-status-success">
+                                      <CheckCircle2 className="h-3 w-3" /> Done
+                                    </span>
+                                  ) : j.status === 'running' ? (
+                                    <span className="gst-status gst-status-info">
+                                      <Loader2 className="h-3 w-3 animate-spin" /> Running
+                                    </span>
+                                  ) : j.status === 'failed' ? (
+                                    <span className="gst-status gst-status-danger">
+                                      <X className="h-3 w-3" /> Failed
+                                    </span>
+                                  ) : (
+                                    <span className="gst-status gst-status-neutral">{j.status}</span>
+                                  )}
+                                </td>
+                                <td className="text-right font-mono text-[12px] text-zinc-300">
+                                  {j.recordsFetched}
+                                  {j.recordsImported > 0 && (
+                                    <span className="text-zinc-500"> (+{j.recordsImported})</span>
+                                  )}
+                                </td>
+                                <td className="text-right font-mono text-[12px] text-zinc-400">
+                                  {j.durationMs != null ? `${j.durationMs}ms` : '—'}
+                                </td>
+                                <td className="whitespace-nowrap font-mono text-[12px] text-zinc-400">
+                                  {fmtSyncDate(j.completedAt ?? j.startedAt ?? j.createdAt)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSP PROVIDER CELL — replaces the hard-coded "Mock GSP (Sandbox)" display in
+// the new-run form. Shows the ACTUAL resolved provider name + mode badge from
+// /api/gst/status. If mode is 'demo', shows "Demo (offline sample data)". If
+// 'not_connected', shows "Not connected" + a link to Settings.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function GspProviderCell({
+  gstStatus, loading, onGoToSettings,
+}: {
+  gstStatus: GstStatus | null;
+  loading: boolean;
+  onGoToSettings: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex h-10 items-center rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3">
+        <div className="h-4 w-32 animate-pulse rounded bg-[#181818]" />
+      </div>
+    );
+  }
+
+  const mode: GSPMode = gstStatus?.mode ?? 'not_connected';
+  const displayName =
+    mode === 'not_connected'
+      ? 'Not connected'
+      : mode === 'demo'
+        ? 'Demo (offline sample data)'
+        : gstStatus?.providerDisplayName ?? 'GSP Provider';
+
+  return (
+    <div className="flex h-10 items-center justify-between rounded-lg border border-[#2A2E36] bg-[#0F1115] px-3 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        {mode === 'live' ? (
+          <Wifi className="h-4 w-4 shrink-0 text-emerald-400" />
+        ) : mode === 'sandbox' ? (
+          <FlaskConical className="h-4 w-4 shrink-0 text-amber-400" />
+        ) : mode === 'demo' ? (
+          <Sparkles className="h-4 w-4 shrink-0 text-zinc-400" />
+        ) : (
+          <WifiOff className="h-4 w-4 shrink-0 text-red-400" />
+        )}
+        <span className="truncate text-zinc-200">{displayName}</span>
+      </div>
+      {mode === 'not_connected' ? (
+        <button
+          onClick={onGoToSettings}
+          className="ml-2 flex shrink-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-blue-400 hover:text-blue-300"
+        >
+          Connect <ExternalLink className="h-3 w-3" />
+        </button>
+      ) : (
+        <span
+          className={`ml-2 inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${modeBadgeClass(mode)}`}
+        >
+          {gstStatus?.modeLabel ?? mode.toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default GSTReconciliationPage;

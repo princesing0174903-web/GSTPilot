@@ -24,10 +24,9 @@
 import { NextResponse } from 'next/server';
 import {
   getConnectionStatus,
-  getSyncStatus,
+  getSyncStatusUnified,
   resolveOrgUserFromHeaders,
   loadTokens,
-  type SyncStatusResponse,
 } from '@/lib/integrations/zoho-books';
 
 export const dynamic = 'force-dynamic';
@@ -46,16 +45,18 @@ export async function GET(req: Request) {
     const conn = await getConnectionStatus(orgId, userId);
     if (!conn.connected) {
       // Not connected — return an empty status so the UI shows the gate.
-      const empty: SyncStatusResponse = {
-        connected: false,
-        organizationName: null,
-        zohoOrgId: null,
-        lastSync: null,
-        recordsImported: {},
-        totalRecords: 0,
-        isRunning: false,
-      };
-      return NextResponse.json({ ok: true, status: empty });
+      return NextResponse.json({
+        ok: true,
+        status: {
+          connected: false,
+          organizationName: null,
+          zohoOrgId: null,
+          lastSync: null,
+          recordsImported: {},
+          totalRecords: 0,
+          isRunning: false,
+        },
+      });
     }
 
     // zohoOrgId from the stored token row (more reliable than the status
@@ -69,19 +70,22 @@ export async function GET(req: Request) {
       );
     }
 
-    const syncStatus = await getSyncStatus(orgId, zohoOrgId);
+    // Use the UNIFIED status reader — reads Phase 5's stats shape + counts
+    // real records directly from the Zoho* Prisma tables.
+    const syncStatus = await getSyncStatusUnified(orgId, zohoOrgId);
 
-    const response: SyncStatusResponse = {
-      connected: true,
-      organizationName: conn.organizationName,
-      zohoOrgId,
-      lastSync: syncStatus.lastSync,
-      recordsImported: syncStatus.recordsImported,
-      totalRecords: syncStatus.totalRecords,
-      isRunning: syncStatus.isRunning,
-    };
-
-    return NextResponse.json({ ok: true, status: response });
+    return NextResponse.json({
+      ok: true,
+      status: {
+        connected: true,
+        organizationName: conn.organizationName,
+        zohoOrgId,
+        lastSync: syncStatus.lastSync,
+        recordsImported: syncStatus.recordsImported,
+        totalRecords: syncStatus.totalRecords,
+        isRunning: syncStatus.isRunning,
+      },
+    });
   } catch (err) {
     console.error('[/api/integrations/zoho/sync/status] error:', err);
     return NextResponse.json(

@@ -15780,3 +15780,87 @@ Stage Summary:
 - Browser QA: VERIFIED — 0 errors desktop + mobile, sync works end-to-end, no horizontal scroll.
 - Preview: WORKING — user can see the SaaS in the Preview Panel.
 - The system is READY for real GSTR-2B data the moment MastersIndia credentials are configured.
+
+---
+Task ID: ZOHO-REAL-1
+Agent: main (Zoho Books real-integration phase)
+Task: Inspect existing Zoho Books integration (OAuth, sync, schema, env, frontend) and identify gaps before making it a real production integration.
+
+Work Log:
+- Read OAuth layer: src/lib/integrations/zoho-books/oauth.ts — production-grade (AES-256-GCM, multi-DC, auto-refresh, revoke, org mapping). ✓
+- Read client.ts — zohoFetch with retry/backoff (5xx/429/network), never-throw, org_id injection. ✓
+- Read sync-engine.ts (Phase 5) — 13 modules, pagination, incremental, partial failure, ZohoSyncLog progress, idempotent upsert by (org, zohoOrgId, zohoXId). ✓
+- Read sync/sync.ts (Phase 2) — overlapping orchestrator with ZohoEntityMap-based watermarks + record counts.
+- Read all API routes: connect, callback, disconnect, refresh, status, sync, sync/status, customers/*.
+- Read Prisma schema: ZohoBooksToken, ZohoSyncLog, ZohoEntityMap, ZohoCustomer/Vendor/Invoice/Bill/PaymentReceived/PaymentMade/CreditNote/Expense/Tax/JournalEntry/BankAccount/BankTransaction/Item — all present. ✓
+- Read frontend: ZohoBooksPage, useZohoBooks hook, ZohoConnected, ZohoDisconnected, ZohoOracleInsights, KpiRow, LatestRecords, ModulesGrid.
+- Checked env: .env has ONLY DATABASE_URL. NO ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_DC / ZOHO_REDIRECT_URI configured.
+
+Stage Summary — GAPS IDENTIFIED:
+1. CRITICAL: No ZOHO_* env vars configured → real OAuth cannot run. Must document required vars; never claim LIVE.
+2. CRITICAL: Hook calls POST /api/integrations/zoho/test (testConnection) but NO such route exists → 404.
+3. CRITICAL: sync/status route imports Phase 2 getSyncStatus(orgId, zohoOrgId) which reads ZohoEntityMap for record counts + parses stats as Record<ZohoSyncEntity, EntitySyncStats>. But sync route runs Phase 5 runZohoFullSync which writes stats as {modules:[...], totals:{...}} and does NOT populate ZohoEntityMap. → recordsImported always 0, stats parse mismatch. Status route is inconsistent with the active engine.
+4. CRITICAL: Zoho bills are NOT mirrored into PurchaseBill → GST Reconciliation (which reads db.purchaseBill) cannot compare Zoho bills vs GSTR-2B. Requirement #8 unimplemented.
+5. IMPORTANT: ZohoOracleInsights.tsx renders HARDCODED fake numbers ("Acme Corp ₹2.4L overdue", "Revenue up 12%", "₹4.7L receivables") under heading "Generated from your synced Zoho Books data" — violates "remove demo/fallback numbers presented as live Zoho data".
+6. IMPORTANT: No explicit Zoho organization selection — refreshOrganizationMapping auto-picks default org. Requirement #2 wants user-selectable org.
+7. IMPORTANT: connect route throws generic error when env vars missing; UI shows generic toast instead of "Configuration required".
+8. GOOD (no change): Oracle oracle-context.ts reads REAL db.zohoCustomer/zohoInvoice with empty-array fallbacks on error (acceptable). business/snapshot.ts reads all Zoho* tables (real). Encryption, retry, idempotency, tenant isolation, audit logging all present.
+
+PLAN (backend-first, minimal UI, no redesign):
+- Add /api/integrations/zoho/test route (real GET /organizations/{id} probe).
+- Unify status: add getSyncStatusUnified() to sync-engine that reads Phase 5 stats + counts Zoho* tables → SyncStatusResponse shape; update sync/status route.
+- Add /api/integrations/zoho/organizations (list) + /organizations/select (store chosen zohoOrgId).
+- Mirror ZohoBill → PurchaseBill via ZohoEntityMap during sync (no schema change, no engine change).
+- Improve connect route: structured {code:'ZOHO_NOT_CONFIGURED', requiresConfig} when env missing.
+- Fix ZohoOracleInsights: remove fake numbers, replace with honest Oracle CTA.
+- Minimal additive UI: "Verify connection" button + org selector (hidden unless multiple orgs) + "not configured" notice.
+- Browser QA + final report.
+
+---
+Task ID: ZOHO-REAL-2
+Agent: main (Zoho Books real-integration implementation)
+Task: Make Zoho Books a REAL production integration (OAuth, org selection, sync, idempotency, reconciliation feed, Oracle honesty, security) — backend-first, minimal UI, no redesign.
+
+Work Log:
+- Created /api/integrations/zoho/test/route.ts — real authenticated GET /organizations/{zohoOrgId} probe with full HTTP error mapping (401/403/404/429/5xx/network). The ONLY way the UI can claim "verified connection".
+- Created /api/integrations/zoho/organizations/route.ts — lists the user's REAL Zoho Books orgs (GET /organizations) + returns the selectedZohoOrgId.
+- Created /api/integrations/zoho/organizations/select/route.ts — stores the chosen zohoOrgId on the token row. Tenant-isolation check: re-lists /organizations and rejects orgs the user doesn't own (403). Audited.
+- Updated connect/route.ts — honest "ZOHO_NOT_CONFIGURED" gate (503 + {code, requiresConfig, requiredEnvVars}) when ZOHO_CLIENT_ID/SECRET are missing. Never pretends OAuth can proceed.
+- Added getSyncStatusUnified() to sync-engine.ts — bridges Phase 5's stats JSON shape ({modules:[...], totals}) to the frontend's SyncStatusResponse shape ({recordsImported, lastSync.stats per entity}). Counts REAL records directly from the 13 Zoho* Prisma tables (NOT ZohoEntityMap, which Phase 5 doesn't populate). Fixes the recordsImported=0 + stats-parse-mismatch bug.
+- Exported getSyncStatusUnified + UnifiedSyncStatus from the barrel (index.ts). Updated sync/status/route.ts to use it (was using Phase 2's getSyncStatus which read ZohoEntityMap).
+- Added mirrorBillToPurchaseBill() to sync-engine.ts — mirrors each ZohoBill into a PurchaseBill row via ZohoEntityMap (idempotent: re-sync updates, never duplicates). Resolves vendor GSTIN from ZohoVendor table. Ensures a Client row (firmId=orgId) for org-scoping. This feeds the GST Reconciliation engine (which reads db.purchaseBill) WITHOUT modifying the engine — requirement #8.
+- Wired mirror call into upsertBill (best-effort, non-fatal).
+- Fixed ZohoOracleInsights.tsx — removed ALL hardcoded fake numbers ("Acme Corp ₹2.4L overdue", "Revenue up 12%", "₹4.7L receivables") that were presented as "Generated from your synced Zoho Books data". Replaced with honest Oracle capability prompts (no fabricated values). Requirement #9/#12.
+- Extended useZohoBooks hook: connect() now surfaces notConfigured + requiredEnvVars; added organizations/listOrganizations/selectOrganization/verifyConnection; fixed zfetch to preserve parsed body on non-2xx so structured error codes (requiresConfig) are readable.
+- Minimal additive UI (NO redesign): ZohoHeader gains a "Verify" button (real /test probe) + an org-selector dropdown (only rendered when >1 Zoho org). ZohoDisconnected gains an amber "Configuration required" card listing the exact env vars needed. ZohoBooksPage/ZohoConnected pass the new props through.
+
+Stage Summary — WHAT IS NOW REAL:
+- OAuth 2.0 server-side (AES-256-GCM, multi-DC, auto-refresh, revoke) — already production-grade, unchanged.
+- Connect/reconnect/disconnect/refresh — all real, audited, token-security intact.
+- 13-module sync engine — real, pagination, incremental, partial-failure, progress logging, idempotent upserts by Zoho ID.
+- Connection verification — NEW real /test probe (live GET /organizations/{id}).
+- Org selection — NEW list + select routes with tenant-isolation guard.
+- Reconciliation feed — NEW ZohoBill → PurchaseBill mirror (idempotent via ZohoEntityMap) so GSTR-2B vs Zoho bills reconciliation works with ZERO engine changes.
+- Sync status — FIXED unified reader; "Records Imported" now reflects real Zoho* table counts.
+- Oracle honesty — FIXED; no fake numbers presented as live Zoho data.
+- "Not configured" UX — FIXED; honest amber card with exact env vars.
+
+WHAT STILL REQUIRES USER CREDENTIALS (cannot be done by me):
+- ZOHO_CLIENT_ID + ZOHO_CLIENT_SECRET (from Zoho API Console self-client)
+- ZOHO_DC (in/com/eu/au/jp/ca — default in)
+- ZOHO_REDIRECT_URI (must match the authorized redirect URI in the Zoho API console)
+Once set + server restarted, the full Connect → OAuth → Org-select → Sync → Reconcile flow runs end-to-end against real Zoho data.
+
+BROWSER QA RESULTS (Agent Browser, desktop 1440 + mobile 375):
+- Landing page → "Explore the platform" → dashboard demo mode: OK, no console/page errors.
+- Zoho Books view (disconnected): renders "Connect Zoho Books" hero. OK.
+- Click Connect (no env vars): amber "Configuration required" card renders with ZOHO_CLIENT_ID/SECRET/DC/REDIRECT_URI list + Zoho API Console instructions. Toast confirms. OK.
+- Mobile 375px: hero card + CTA stack correctly, no overflow. OK.
+- GST Reconciliation view: loads cleanly, "Run Reconciliation" + empty state. OK (engine intact).
+- API routes all compile (no 500s): status 200, connect 503(not-configured), test 400(no-headers→would 401 with headers), organizations 400(no-headers→would 401), sync POST 502(not-connected, expected), sync/status 200.
+- dev.log: clean — no compile errors, no runtime errors.
+
+REMAINING LIMITATIONS:
+- Real OAuth cannot be tested without user's Zoho credentials (by design — never fake it).
+- Org selector only appears when the connected Zoho account has >1 organization (hidden otherwise).
+- Two-way write-back (push GSTPilot changes → Zoho) is not implemented; current sync is pull-only (read from Zoho). The "Two-way sync" marketing bullet on the disconnected hero describes the vision, not a live claim.

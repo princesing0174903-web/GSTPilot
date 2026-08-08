@@ -25,7 +25,7 @@
 // pill (sparingly). amber-400 for warnings. No green elsewhere.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   RefreshCw,
   Loader2,
@@ -36,6 +36,8 @@ import {
   Repeat,
   AlertTriangle,
   X,
+  ShieldCheck,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +59,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { formatRelative } from './types';
+import type { ZohoOrgListItem } from '@/hooks/useZohoBooks';
 
 interface ZohoHeaderProps {
   /** Display name of the connected Zoho Books organization. */
@@ -77,6 +80,13 @@ interface ZohoHeaderProps {
   onRefreshToken: () => Promise<{ error: string | null }>;
   /** Disconnect (calls /api/integrations/zoho/disconnect). */
   onDisconnect: () => Promise<{ error: string | null }>;
+  /** Real connection verification (live probe). Optional. */
+  onVerify?: () => Promise<unknown>;
+  /** Available Zoho Books organizations (for the org selector). */
+  organizations?: ZohoOrgListItem[];
+  organizationsLoading?: boolean;
+  onListOrganizations?: () => Promise<unknown>;
+  onSelectOrganization?: (zohoOrgId: string, zohoOrgName?: string) => Promise<{ ok: boolean; error: string | null }>;
 }
 
 function dataCenterLabel(dc: string | null): string {
@@ -125,12 +135,27 @@ export function ZohoHeader({
   onSyncNow,
   onRefreshToken,
   onDisconnect,
+  onVerify,
+  organizations,
+  organizationsLoading,
+  onListOrganizations,
+  onSelectOrganization,
 }: ZohoHeaderProps) {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
 
   const tokenExpired = isTokenExpired(tokenExpiresAt);
+
+  // Lazy-load the org list when the user opens the org selector (only if the
+  // caller supports it). Avoids an extra API call on every page load.
+  useEffect(() => {
+    if (orgMenuOpen && onListOrganizations && (organizations ?? []).length === 0) {
+      void onListOrganizations();
+    }
+  }, [orgMenuOpen, onListOrganizations, organizations]);
 
   const handleSync = useCallback(async () => {
     if (tokenExpired) {
@@ -179,6 +204,33 @@ export function ZohoHeader({
       toast.success('Zoho Books disconnected');
     }
   }, [onDisconnect]);
+
+  const handleVerify = useCallback(async () => {
+    if (!onVerify) return;
+    setVerifying(true);
+    try {
+      await onVerify();
+    } finally {
+      setVerifying(false);
+    }
+  }, [onVerify]);
+
+  const handleSelectOrg = useCallback(
+    async (orgId: string, orgName: string) => {
+      setOrgMenuOpen(false);
+      if (!onSelectOrganization) return;
+      const { error } = await onSelectOrganization(orgId, orgName);
+      if (error) {
+        toast.error("Couldn't switch Zoho organization", { description: error });
+      } else {
+        toast.success('Zoho organization updated', { description: orgName });
+      }
+    },
+    [onSelectOrganization],
+  );
+
+  const orgs = organizations ?? [];
+  const showOrgSelector = orgs.length > 1 && onSelectOrganization;
 
   return (
     <>
@@ -268,9 +320,57 @@ export function ZohoHeader({
                   </Badge>
                 )}
                 {organizationName ? (
-                  <span className="text-xs text-muted-foreground">
-                    {organizationName}
-                  </span>
+                  showOrgSelector ? (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOrgMenuOpen((v) => !v)}
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                        aria-haspopup="listbox"
+                        aria-expanded={orgMenuOpen}
+                        aria-label="Switch Zoho organization"
+                      >
+                        {organizationName}
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {orgMenuOpen ? (
+                        <div
+                          role="listbox"
+                          className="absolute left-0 top-full z-30 mt-1 min-w-[14rem] rounded-lg border border-white/[0.08] bg-[#0C0C0C] p-1 shadow-xl"
+                        >
+                          {organizationsLoading ? (
+                            <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Loading organizations…
+                            </div>
+                          ) : null}
+                          {orgs.map((o) => (
+                            <button
+                              key={o.organization_id}
+                              type="button"
+                              role="option"
+                              aria-selected={o.name === organizationName}
+                              onClick={() => void handleSelectOrg(o.organization_id, o.name)}
+                              className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/[0.06] ${
+                                o.name === organizationName ? 'text-foreground' : 'text-muted-foreground'
+                              }`}
+                            >
+                              <span className="truncate">{o.name}</span>
+                              {o.is_default_org ? (
+                                <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0.5 text-[10px] text-muted-foreground">
+                                  default
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {organizationName}
+                    </span>
+                  )
                 ) : null}
                 {dataCenter ? (
                   <Badge
@@ -374,6 +474,31 @@ export function ZohoHeader({
               <Unplug className="h-3.5 w-3.5" />
               Disconnect
             </Button>
+            {onVerify ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleVerify}
+                      disabled={verifying || pending || syncing}
+                      className="gap-1.5"
+                    >
+                      {verifying ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                      )}
+                      <span className="hidden sm:inline">Verify</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Test the live Zoho Books connection
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import type {
   ZohoConnectionStatus,
   ZohoSyncStatusInfo,
+  ZohoOrgListItem,
 } from '@/hooks/useZohoBooks';
 import { ZohoHeader } from './ZohoHeader';
 import { ZohoKpiRow } from './ZohoKpiRow';
@@ -41,6 +42,18 @@ interface ZohoConnectedProps {
   onRefreshToken: () => Promise<{ error: string | null }>;
   /** Disconnect the integration. */
   onDisconnect: () => Promise<{ error: string | null }>;
+  /** Real connection verification (live probe to Zoho /organizations/{id}). */
+  onVerify?: () => Promise<{
+    ok: boolean;
+    httpStatus: number;
+    organization: { name?: string | null } | null;
+    error: string | null;
+  }>;
+  /** Available Zoho Books organizations (for the org selector). */
+  organizations?: ZohoOrgListItem[];
+  organizationsLoading?: boolean;
+  onListOrganizations?: () => Promise<unknown>;
+  onSelectOrganization?: (zohoOrgId: string, zohoOrgName?: string) => Promise<{ ok: boolean; error: string | null }>;
 }
 
 export function ZohoConnected({
@@ -51,6 +64,11 @@ export function ZohoConnected({
   onSyncNow,
   onRefreshToken,
   onDisconnect,
+  onVerify,
+  organizations,
+  organizationsLoading,
+  onListOrganizations,
+  onSelectOrganization,
 }: ZohoConnectedProps) {
   // Derive the relevant timestamps from the connection + sync state.
   const lastSyncAt =
@@ -85,6 +103,22 @@ export function ZohoConnected({
     return result;
   }, [onSyncNow]);
 
+  const handleVerify = useCallback(async () => {
+    if (!onVerify) return;
+    const result = await onVerify();
+    if (result.ok) {
+      toast.success('Connection verified', {
+        description: result.organization?.name
+          ? `Zoho Books reached ${result.organization.name} successfully.`
+          : 'Zoho Books responded successfully.',
+      });
+    } else {
+      toast.error("Couldn't verify the Zoho connection", {
+        description: result.error ?? `HTTP ${result.httpStatus}`,
+      });
+    }
+  }, [onVerify]);
+
   return (
     <div className="flex flex-col gap-6 pb-10">
       {/* (a) Sticky connection header */}
@@ -98,6 +132,11 @@ export function ZohoConnected({
         onSyncNow={handleSyncNow}
         onRefreshToken={onRefreshToken}
         onDisconnect={onDisconnect}
+        onVerify={onVerify ? handleVerify : undefined}
+        organizations={organizations}
+        organizationsLoading={organizationsLoading}
+        onListOrganizations={onListOrganizations}
+        onSelectOrganization={onSelectOrganization}
       />
 
       {/* (b) KPI row */}

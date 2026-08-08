@@ -4,17 +4,23 @@
 // GSTPilot — ZohoOracleInsights
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Premium Oracle AI insight cards. ONLY rendered when synced data exists
-// (RULE 3e). Uses STATIC placeholder text — NEVER calls the Oracle API
-// (RULE 9 / "Do NOT call Oracle API — use static placeholder insights.").
+// Oracle AI insight entry-point for the Zoho Books page. ONLY rendered when
+// synced data exists (gated by the parent ZohoConnected via hasSyncedData).
 //
-// The parent (ZohoConnected) hides this section entirely when there is no
-// synced data, so this component can assume `hasData === true` when rendered.
+// HONESTY CONTRACT (requirement #9 / #12):
+//   This component NEVER displays fabricated numbers. The previous version
+//   showed hardcoded "Acme Corp ₹2.4L overdue" / "Revenue up 12%" strings
+//   under the heading "Generated from your synced Zoho Books data" — that
+//   was demo data presented as live, which is forbidden.
+//
+//   Instead, this card is a genuine invitation: it tells the user Oracle CAN
+//   analyze their synced Zoho data, and offers concrete example questions they
+//   can ask. Real, computed insights come from the Oracle chat itself (which
+//   reads the live db.zohoCustomer / db.zohoInvoice tables).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import {
   Sparkles,
-  AlertCircle,
   TrendingUp,
   Wallet,
   IndianRupee,
@@ -23,45 +29,52 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-interface Insight {
+interface Prompt {
   id: string;
   icon: LucideIcon;
   title: string;
   body: string;
 }
 
-const STATIC_INSIGHTS: Insight[] = [
+// Example questions the user can ask Oracle. These are CAPABILITIES, not
+// fabricated results — no specific customer names or rupee amounts.
+const ORACLE_PROMPTS: Prompt[] = [
   {
     id: 'overdue',
-    icon: AlertCircle,
-    title: 'Biggest overdue customer',
+    icon: IndianRupee,
+    title: 'Overdue receivables',
     body:
-      'Acme Corp has ₹2.4L overdue across 3 invoices. Recommend sending a payment reminder.',
+      'Ask Oracle which of your synced Zoho customers have the largest overdue balances, and draft a reminder for each.',
   },
   {
     id: 'revenue-trend',
     icon: TrendingUp,
     title: 'Revenue trend',
     body:
-      'Revenue is up 12% vs last month, driven by 8 new enterprise clients.',
+      'Ask Oracle to compare this month\u2019s invoiced revenue against last month using your synced Zoho invoices.',
   },
   {
     id: 'cash-prediction',
     icon: Wallet,
-    title: 'Cash prediction',
+    title: 'Cash runway',
     body:
-      'Predicted cash runway: 8.2 months at current burn rate.',
+      'Ask Oracle to estimate your cash runway from synced Zoho bank balances, receivables, and payables.',
   },
   {
-    id: 'collection',
-    icon: IndianRupee,
-    title: 'Collection recommendation',
+    id: 'reconciliation',
+    icon: Sparkles,
+    title: 'GST reconciliation',
     body:
-      '₹4.7L in receivables due this week. Prioritize Acme Corp and Nova Industries.',
+      'Ask Oracle which Zoho purchase bills are missing from GSTR-2B, and how much ITC is at risk.',
   },
 ];
 
-export function ZohoOracleInsights() {
+export function ZohoOracleInsights({
+  onAskOracle,
+}: {
+  /** Optional: navigate to the Oracle chat view. If omitted, the button is a no-op anchor. */
+  onAskOracle?: () => void;
+}) {
   return (
     <section
       aria-label="Oracle AI insights"
@@ -76,11 +89,11 @@ export function ZohoOracleInsights() {
         </h2>
       </div>
       <p className="mb-5 text-xs text-muted-foreground">
-        Generated from your synced Zoho Books data
+        Ask Oracle to analyze your synced Zoho Books data
       </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {STATIC_INSIGHTS.map(({ id, icon: Icon, title, body }) => (
+        {ORACLE_PROMPTS.map(({ id, icon: Icon, title, body }) => (
           <div
             key={id}
             className="group relative flex flex-col gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/[0.12] hover:shadow-md"
@@ -101,6 +114,7 @@ export function ZohoOracleInsights() {
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1 px-2 text-xs text-[#60A5FA] hover:bg-[#2563EB]/10 hover:text-[#60A5FA]"
+                onClick={onAskOracle}
               >
                 Ask Oracle
                 <ArrowRight className="h-3 w-3" />

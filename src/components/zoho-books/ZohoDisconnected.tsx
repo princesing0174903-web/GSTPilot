@@ -30,6 +30,7 @@ import {
   ReceiptText,
   Activity,
   Sparkles,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -67,14 +68,32 @@ const FEATURES: FeatureBullet[] = [
 export function ZohoDisconnected({
   connect,
 }: {
-  connect: () => Promise<{ authUrl: string | null; error: string | null }>;
+  connect: () => Promise<{
+    authUrl: string | null;
+    error: string | null;
+    notConfigured?: boolean;
+    requiredEnvVars?: string[];
+  }>;
 }) {
   const [connecting, setConnecting] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [requiredEnvVars, setRequiredEnvVars] = useState<string[] | undefined>();
 
   const handleConnect = useCallback(async () => {
     setConnecting(true);
+    setNotConfigured(false);
     try {
-      const { authUrl, error } = await connect();
+      const { authUrl, error, notConfigured: nc, requiredEnvVars: vars } = await connect();
+      if (nc) {
+        // Honest "configuration required" state — the server has no Zoho OAuth
+        // credentials. Show exactly what's needed instead of a misleading error.
+        setNotConfigured(true);
+        setRequiredEnvVars(vars);
+        toast.error('Zoho Books is not configured', {
+          description: 'An administrator must add the Zoho OAuth credentials before you can connect.',
+        });
+        return;
+      }
       if (error) {
         toast.error("We couldn't start the Zoho connection", {
           description: error,
@@ -194,6 +213,54 @@ export function ZohoDisconnected({
               <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
+
+          {/* Configuration-required notice — only when the server reports
+              Zoho OAuth credentials are missing. Honest, actionable, never
+              fakes a connection. */}
+          {notConfigured ? (
+            <div
+              role="alert"
+              className="mt-6 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] p-4 text-left"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-400/15">
+                  <Settings className="h-4 w-4 text-amber-300" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-amber-200">
+                    Configuration required
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-amber-200/80">
+                    Zoho Books OAuth credentials aren&rsquo;t set on this server.
+                    An administrator needs to add the following environment
+                    variables before you can connect:
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {(requiredEnvVars ?? [
+                      'ZOHO_CLIENT_ID',
+                      'ZOHO_CLIENT_SECRET',
+                      'ZOHO_DC',
+                      'ZOHO_REDIRECT_URI',
+                    ]).map((v) => (
+                      <li
+                        key={v}
+                        className="flex items-center gap-2 font-mono text-[11px] text-amber-100/90"
+                      >
+                        <span className="h-1 w-1 rounded-full bg-amber-400" />
+                        {v}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-[11px] leading-relaxed text-amber-200/60">
+                    Create a self-client in the{' '}
+                    <span className="font-medium">Zoho API Console</span>, add
+                    the Books scope, and set the authorized redirect URI to this
+                    app&rsquo;s callback. Then restart the server.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Trust badge */}
           <div className="mt-8 flex items-center justify-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.01] py-3 text-xs text-muted-foreground">

@@ -47,3 +47,13 @@ export { listOrganizations, getPrimaryOrganization } from './services';
 
 // Phase 2 — Data Sync (pagination + incremental + resume + audit logging)
 export * from './sync';
+
+// Phase 5 — Full 13-module sync engine + unified status reader
+export { runZohoFullSync, getSyncStatusUnified } from './sync-engine';
+export type {
+  SyncEngineResult,
+  SyncModuleResult,
+  SyncMode as EngineSyncMode,
+  SyncStatus as EngineSyncStatus,
+  UnifiedSyncStatus,
+} from './sync-engine';

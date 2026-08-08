@@ -196,6 +196,19 @@ export interface ZohoCustomerWriteResult {
   zohoMessage: string | null;
 }
 
+/** A Zoho Books organization returned by GET /organizations. */
+export interface ZohoOrgListItem {
+  organization_id: string;
+  name: string;
+  is_default_org: boolean;
+  is_org_active: boolean | null;
+  plan_name: string | null;
+  plan_type: string | null;
+  country_code: string | null;
+  currency_code: string | null;
+  gst_no: string | null;
+}
+
 interface ApiError {
   error: string;
 }
@@ -233,10 +246,14 @@ async function zfetch<T>(
 ): Promise<{ ok: boolean; data: T | null; error: string | null; status: number }> {
   try {
     const res = await fetch(path, { ...init, headers });
-    const body = (await res.json().catch(() => ({}))) as (T & Partial<ApiError>) | ApiError;
+    const body = (await res.json().catch(() => ({}))) as (T & Partial<ApiError>) | ApiError | Record<string, unknown>;
     if (!res.ok) {
-      const error = ('error' in body && body.error) || `Request failed (${res.status})`;
-      return { ok: false, data: null, error, status: res.status };
+      const error =
+        (body && typeof body === 'object' && 'error' in body && (body as ApiError).error) ||
+        `Request failed (${res.status})`;
+      // Preserve the parsed body in `data` so callers can inspect structured
+      // error fields (e.g. `requiresConfig`, `code`) on non-2xx responses.
+      return { ok: false, data: (body as T) ?? null, error, status: res.status };
     }
     return { ok: true, data: body as T, error: null, status: res.status };
   } catch (err) {
@@ -397,7 +414,12 @@ export function useZohoBooks() {
     };
   }, []);
 
-  const connect = useCallback(async (): Promise<{ authUrl: string | null; error: string | null }> => {
+  const connect = useCallback(async (): Promise<{
+    authUrl: string | null;
+    error: string | null;
+    notConfigured?: boolean;
+    requiredEnvVars?: string[];
+  }> => {
     let bearer = '';
     try {
       if (auth.currentUser) {
@@ -407,11 +429,28 @@ export function useZohoBooks() {
       /* ignore — preview mode */
     }
     const headers = buildHeaders(bearer ? { Authorization: `Bearer ${bearer}` } : {});
-    const res = await zfetch<{ ok: boolean; authUrl: string }>(
-      '/api/integrations/zoho/connect?return=/zoho-books',
-      headers,
-    );
-    return { authUrl: res.data?.authUrl ?? null, error: res.error };
+    const res = await zfetch<{
+      ok: boolean;
+      authUrl?: string;
+      error?: string;
+      code?: string;
+      requiresConfig?: boolean;
+      requiredEnvVars?: string[];
+    }>('/api/integrations/zoho/connect?return=/zoho-books', headers);
+    if (!res.ok) {
+      // Detect the honest "not configured" state so the UI can show exactly
+      // what's required instead of a misleading connection failure.
+      if (res.data?.requiresConfig || res.data?.code === 'ZOHO_NOT_CONFIGURED') {
+        return {
+          authUrl: null,
+          error: res.data?.error ?? res.error ?? 'Zoho Books is not configured.',
+          notConfigured: true,
+          requiredEnvVars: res.data?.requiredEnvVars,
+        };
+      }
+      return { authUrl: null, error: res.error };
+    }
+    return { authUrl: res.data?.authUrl ?? null, error: null };
   }, [buildHeaders]);
 
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
@@ -660,6 +699,63 @@ export function useZohoBooks() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [orgId, refreshCustomerSyncStatus, listCustomers]);
 
+  // ─── Real Zoho organization listing + selection ──────────────────────────
+  const [organizations, setOrganizations] = useState<ZohoOrgListItem[]>([]);
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
+
+  const listOrganizations = useCallback(async (): Promise<{
+    ok: boolean;
+    organizations: ZohoOrgListItem[];
+    selectedZohoOrgId: string | null;
+    error: string | null;
+  }> => {
+    if (!orgId) return { ok: false, organizations: [], selectedZohoOrgId: null, error: 'No org.' };
+    setOrganizationsLoading(true);
+    const res = await zfetch<{
+      ok: boolean;
+      organizations?: ZohoOrgListItem[];
+      selectedZohoOrgId?: string | null;
+      error?: string;
+      needsReconnect?: boolean;
+    }>('/api/integrations/zoho/organizations', buildHeaders());
+    setOrganizationsLoading(false);
+    if (res.ok && res.data) {
+      setOrganizations(res.data.organizations ?? []);
+      return {
+        ok: true,
+        organizations: res.data.organizations ?? [],
+        selectedZohoOrgId: res.data.selectedZohoOrgId ?? null,
+        error: null,
+      };
+    }
+    return {
+      ok: false,
+      organizations: [],
+      selectedZohoOrgId: null,
+      error: res.error ?? res.data?.error ?? 'Failed to list organizations.',
+    };
+  }, [orgId, buildHeaders]);
+
+  const selectOrganization = useCallback(
+    async (zohoOrgId: string, zohoOrgName?: string): Promise<{ ok: boolean; error: string | null }> => {
+      const res = await zfetch<{ ok: boolean; error?: string }>(
+        '/api/integrations/zoho/organizations/select',
+        buildHeaders(),
+        { method: 'POST', body: JSON.stringify({ zohoOrgId, zohoOrgName }) },
+      );
+      if (res.ok) {
+        await Promise.all([refreshStatus(), listOrganizations()]);
+        return { ok: true, error: null };
+      }
+      return { ok: false, error: res.error ?? res.data?.error ?? 'Failed to select organization.' };
+    },
+    [buildHeaders, refreshStatus, listOrganizations],
+  );
+
+  // Real connection verification — a live authenticated probe to Zoho.
+  // (Alias for testConnection with a clearer name for the UI.)
+  const verifyConnection = testConnection;
+
   return {
     status,
     statusLoading,
@@ -670,8 +766,9 @@ export function useZohoBooks() {
     refresh,
     pending,
     call,
-    // Test Connection
+    // Test Connection / Verify
     testConnection,
+    verifyConnection,
     // Phase 2 — Data Sync
     syncStatus,
     syncLoading,
@@ -693,5 +790,10 @@ export function useZohoBooks() {
     createCustomer,
     updateCustomer,
     toggleAutoSync,
+    // Real Zoho organization selection
+    organizations,
+    organizationsLoading,
+    listOrganizations,
+    selectOrganization,
   };
 }

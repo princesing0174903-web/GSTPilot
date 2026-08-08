@@ -23,6 +23,16 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * Detect whether the Zoho OAuth client credentials are configured in the
+ * environment. When they aren't, we return a structured `ZOHO_NOT_CONFIGURED`
+ * payload so the UI can show an honest "Configuration required" state instead
+ * of a misleading connection failure.
+ */
+function isZohoConfigured(): boolean {
+  return Boolean(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET);
+}
+
 export async function GET(req: Request) {
   try {
     const { orgId, userId, userEmail } = resolveOrgUserFromHeaders(req);
@@ -30,6 +40,26 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
+      );
+    }
+
+    // Honest "not configured" gate — never pretend OAuth can proceed.
+    if (!isZohoConfigured()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'Zoho Books OAuth is not configured on this server. An administrator must set ZOHO_CLIENT_ID and ZOHO_CLIENT_SECRET (and optionally ZOHO_DC, ZOHO_REDIRECT_URI) before you can connect.',
+          code: 'ZOHO_NOT_CONFIGURED',
+          requiresConfig: true,
+          requiredEnvVars: [
+            'ZOHO_CLIENT_ID',
+            'ZOHO_CLIENT_SECRET',
+            'ZOHO_DC',
+            'ZOHO_REDIRECT_URI',
+          ],
+        },
+        { status: 503 },
       );
     }
 

@@ -219,8 +219,147 @@ async function upsertBill(orgId: string, zohoOrgId: string, bill: any) {
     };
     if (existing) { await db.zohoBill.update({ where: { id: existing.id }, data }); updated++; }
     else { await db.zohoBill.create({ data: { organizationId: orgId, zohoOrgId, zohoBillId, ...data } }); imported++; }
+
+    // ── Mirror into PurchaseBill so the GST Reconciliation engine (which reads
+    // db.purchaseBill) can compare Zoho bills against GSTR-2B. Idempotent via
+    // ZohoEntityMap — re-running sync NEVER creates duplicate PurchaseBills.
+    // Best-effort: a mirror failure does NOT fail the bill import above.
+    try {
+      await mirrorBillToPurchaseBill(orgId, zohoOrgId, zohoBillId, bill);
+    } catch (mirrorErr) {
+      console.warn(`[zoho-sync] bill mirror to PurchaseBill failed for ${zohoBillId}:`, mirrorErr instanceof Error ? mirrorErr.message : mirrorErr);
+    }
   } catch (err) { failed++; console.error('[zoho-sync] upsertBill upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
+}
+
+// ─── PurchaseBill mirror (feeds GST Reconciliation — requirement #8) ──────────
+//
+// The reconciliation engine (src/app/api/gst-reconciliation/run/route.ts) reads
+// `db.purchaseBill.findMany({ where: { client: { firmId: organizationId } } })`.
+// To include Zoho bills WITHOUT modifying that engine, we mirror each ZohoBill
+// into a PurchaseBill row, scoped under a Client whose firmId = organizationId.
+//
+// Idempotency: ZohoEntityMap (zohoEntityType='bill', zohoEntityId=zohoBillId)
+// stores the local PurchaseBill id. On re-sync, the existing PurchaseBill is
+// updated — never duplicated.
+//
+// Vendor GSTIN: resolved from the synced ZohoVendor table (by zohoContactId) so
+// the reconciliation match engine can compare supplier GSTINs against GSTR-2B.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function mirrorBillToPurchaseBill(orgId: string, zohoOrgId: string, zohoBillId: string, bill: any) {
+  // 1. Resolve the vendor's GSTIN from the ZohoVendor table (synced separately).
+  const vendorContactId = str(bill.vendor_id);
+  let vendorGstin: string | null = str(bill.gstin);
+  if (!vendorGstin && vendorContactId) {
+    const vendor = await db.zohoVendor.findFirst({
+      where: { organizationId: orgId, zohoOrgId, zohoContactId: vendorContactId },
+      select: { gstNumber: true },
+    });
+    vendorGstin = vendor?.gstNumber ?? null;
+  }
+
+  // 2. Ensure a Client row exists for the vendor (firmId = orgId). This is the
+  //    "owning party" the reconciliation query joins on. Idempotent by gstin.
+  const firmId = orgId;
+  // Ensure the Firm exists (the customer mirror does the same).
+  await db.firm.upsert({
+    where: { id: firmId },
+    create: { id: firmId, name: 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+    update: { isActive: true },
+  }).catch(() => {});
+  const clientGstin = (vendorGstin && vendorGstin.trim()) || `ZOHO-VENDOR-${vendorContactId || zohoBillId}`;
+  const clientTradeName = str(bill.vendor_name) || 'Zoho Vendor';
+  const client = await db.client.upsert({
+    where: { gstin: clientGstin },
+    create: {
+      gstin: clientGstin,
+      tradeName: clientTradeName,
+      legalName: clientTradeName,
+      status: 'active',
+      firmId,
+    },
+    update: {
+      tradeName: clientTradeName,
+      legalName: clientTradeName,
+      firmId,
+    },
+  });
+
+  // 3. Look up the existing PurchaseBill via ZohoEntityMap.
+  const mapping = await db.zohoEntityMap.findUnique({
+    where: {
+      organizationId_zohoOrgId_zohoEntityType_zohoEntityId: {
+        organizationId: orgId,
+        zohoOrgId,
+        zohoEntityType: 'bill',
+        zohoEntityId: zohoBillId,
+      },
+    },
+  });
+
+  const taxableValue = num(bill.sub_total, 0) || num(bill.total, 0);
+  const cgst = num(bill.cgst, 0) + num(bill.total_cgst, 0);
+  const sgst = num(bill.sgst, 0) + num(bill.total_sgst, 0);
+  const igst = num(bill.igst, 0) + num(bill.total_igst, 0);
+  const cess = num(bill.cess, 0) + num(bill.total_cess, 0);
+  const gstAmount = cgst + sgst + igst + cess;
+  const totalAmount = num(bill.total, 0);
+  const paidAmount = num(bill.paid_amount, 0);
+  const balanceAmount = num(bill.balance, 0);
+
+  const purchaseData = {
+    clientId: client.id,
+    vendorName: str(bill.vendor_name) || 'Zoho Vendor',
+    vendorGstin: vendorGstin || clientGstin,
+    invoiceNo: str(bill.bill_number) || `ZOHO-${zohoBillId}`,
+    invoiceDate: str(bill.date) || new Date().toISOString().slice(0, 10),
+    dueDate: str(bill.due_date),
+    taxableValue,
+    cgst,
+    sgst,
+    igst,
+    cess,
+    gstAmount,
+    totalAmount,
+    paidAmount,
+    balanceAmount,
+    status: str(bill.status, 'recorded') || 'recorded',
+    paymentStatus: balanceAmount <= 0 && paidAmount > 0 ? 'paid' : 'unpaid',
+    category: 'Zoho Books',
+    notes: `Synced from Zoho Books (bill_id: ${zohoBillId})`,
+  };
+
+  if (mapping) {
+    // Update the existing PurchaseBill.
+    await db.purchaseBill.update({
+      where: { id: mapping.localEntityId },
+      data: purchaseData,
+    });
+    // Refresh the mapping's lastSyncedAt.
+    await db.zohoEntityMap.update({
+      where: { id: mapping.id },
+      data: {
+        lastModifiedAt: date(bill.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  } else {
+    // Create a new PurchaseBill + mapping.
+    const created = await db.purchaseBill.create({ data: purchaseData });
+    await db.zohoEntityMap.create({
+      data: {
+        organizationId: orgId,
+        zohoOrgId,
+        zohoEntityType: 'bill',
+        zohoEntityId: zohoBillId,
+        localEntityType: 'PurchaseBill',
+        localEntityId: created.id,
+        lastModifiedAt: date(bill.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  }
 }
 
 // ─── Payments Received ────────────────────────────────────────────────────────
@@ -998,5 +1137,196 @@ export async function getSyncStatus(organizationId: string): Promise<{
     completedAt: current.completedAt?.toISOString() ?? null,
     stats,
     lastSync,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UNIFIED STATUS — bridges the Phase 5 sync engine to the SyncStatusResponse
+// shape the frontend (useZohoBooks hook) expects.
+//
+// The Phase 5 engine (runZohoFullSync) writes ZohoSyncLog.stats as:
+//   { modules: [{ <moduleKey>: {fetched,imported,updated,failed,status,error} }, ...],
+//     totals: {fetched,imported,updated,failed} }
+//
+// The frontend expects stats as Partial<Record<ZohoSyncEntity, EntitySyncStats>>
+// with keys: customer|vendor|tax|bank_account|invoice|bill|expense|
+// bank_transaction|journal|payment|item|creditnote and per-entity shape
+// {imported,updated,failed,skipped,pages,lastError}.
+//
+// This function translates between the two and counts REAL records directly
+// from the Zoho* Prisma tables (not ZohoEntityMap, which Phase 5 doesn't
+// populate) so "Records Imported" reflects actual synced data.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Maps Phase 5 module keys → frontend ZohoSyncEntity keys.
+const MODULE_KEY_TO_ENTITY: Record<string, string> = {
+  customers: 'customer',
+  vendors: 'vendor',
+  items: 'item',
+  invoices: 'invoice',
+  bills: 'bill',
+  payments_received: 'payment',
+  payments_made: 'payment',
+  creditnotes: 'creditnote',
+  expenses: 'expense',
+  taxes: 'tax',
+  journals: 'journal',
+  bankaccounts: 'bank_account',
+  banktransactions: 'bank_transaction',
+};
+
+interface UnifiedEntityStats {
+  imported: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  pages: number;
+  lastError: string | null;
+}
+
+interface UnifiedLastSync {
+  id: string;
+  status: SyncStatus;
+  mode: SyncMode;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+  stats: Partial<Record<string, UnifiedEntityStats>>;
+  currentEntity: string | null;
+}
+
+export interface UnifiedSyncStatus {
+  connected: boolean;
+  organizationName: string | null;
+  zohoOrgId: string | null;
+  lastSync: UnifiedLastSync | null;
+  recordsImported: Partial<Record<string, number>>;
+  totalRecords: number;
+  isRunning: boolean;
+}
+
+/**
+ * Read the current sync status in the frontend's expected shape.
+ *
+ * @param organizationId — GSTPilot org id
+ * @param zohoOrgId — Zoho Books numeric org id (required to scope the log query)
+ */
+export async function getSyncStatusUnified(
+  organizationId: string,
+  zohoOrgId: string | null,
+): Promise<UnifiedSyncStatus> {
+  // Count real records from the Zoho* tables (org-scoped).
+  const where = zohoOrgId
+    ? { organizationId, zohoOrgId }
+    : { organizationId };
+  const [
+    customers, vendors, items, invoices, bills,
+    paymentsReceived, paymentsMade, creditNotes, expenses,
+    taxes, journals, bankAccounts, bankTransactions,
+  ] = await Promise.all([
+    db.zohoCustomer.count({ where }),
+    db.zohoVendor.count({ where }),
+    db.zohoItem.count({ where }),
+    db.zohoInvoice.count({ where }),
+    db.zohoBill.count({ where }),
+    db.zohoPaymentReceived.count({ where }),
+    db.zohoPaymentMade.count({ where }),
+    db.zohoCreditNote.count({ where }),
+    db.zohoExpense.count({ where }),
+    db.zohoTax.count({ where }),
+    db.zohoJournalEntry.count({ where }),
+    db.zohoBankAccount.count({ where }),
+    db.zohoBankTransaction.count({ where }),
+  ]);
+
+  const recordsImported: Record<string, number> = {
+    customer: customers,
+    vendor: vendors,
+    tax: taxes,
+    bank_account: bankAccounts,
+    invoice: invoices,
+    bill: bills,
+    expense: expenses,
+    bank_transaction: bankTransactions,
+    journal: journals,
+    payment: paymentsReceived + paymentsMade,
+    item: items,
+    creditnote: creditNotes,
+  };
+  const totalRecords = Object.values(recordsImported).reduce((s, n) => s + n, 0);
+
+  // Read the most-recent sync log (scoped to zohoOrgId when available).
+  const logWhere = zohoOrgId
+    ? { organizationId, zohoOrgId }
+    : { organizationId };
+  const current = await db.zohoSyncLog.findFirst({
+    where: logWhere,
+    orderBy: { startedAt: 'desc' },
+  });
+
+  if (!current) {
+    return {
+      connected: true,
+      organizationName: null,
+      zohoOrgId,
+      lastSync: null,
+      recordsImported,
+      totalRecords,
+      isRunning: false,
+    };
+  }
+
+  // Parse the Phase 5 stats JSON.
+  let rawStats: { modules?: Array<Record<string, {
+    fetched?: number; imported?: number; updated?: number; failed?: number;
+    status?: string; error?: string;
+  }>>; totals?: { fetched?: number; imported?: number; updated?: number; failed?: number } } = {};
+  try {
+    rawStats = JSON.parse(current.stats || '{}') as typeof rawStats;
+  } catch {
+    rawStats = {};
+  }
+
+  // Translate the modules array → Partial<Record<entity, stats>>.
+  const entityStats: Record<string, UnifiedEntityStats> = {};
+  for (const entry of rawStats.modules ?? []) {
+    for (const [moduleKey, s] of Object.entries(entry)) {
+      const entity = MODULE_KEY_TO_ENTITY[moduleKey];
+      if (!entity) continue;
+      const prev = entityStats[entity] ?? {
+        imported: 0, updated: 0, failed: 0, skipped: 0, pages: 0, lastError: null,
+      };
+      prev.imported += s.imported ?? 0;
+      prev.updated += s.updated ?? 0;
+      prev.failed += s.failed ?? 0;
+      if (s.error && s.status === 'error') prev.lastError = s.error;
+      entityStats[entity] = prev;
+    }
+  }
+
+  const isRunning = current.status === 'running';
+  const lastSync: UnifiedLastSync | null = isRunning ? null : {
+    id: current.id,
+    status: current.status as SyncStatus,
+    mode: current.mode as SyncMode,
+    startedAt: current.startedAt.toISOString(),
+    completedAt: current.completedAt?.toISOString() ?? null,
+    durationMs: current.completedAt
+      ? current.completedAt.getTime() - current.startedAt.getTime()
+      : null,
+    error: current.error,
+    stats: entityStats,
+    currentEntity: current.currentEntity,
+  };
+
+  return {
+    connected: true,
+    organizationName: null, // filled in by the route from the token row
+    zohoOrgId,
+    lastSync,
+    recordsImported,
+    totalRecords,
+    isRunning,
   };
 }

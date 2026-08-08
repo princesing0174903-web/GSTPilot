@@ -48,12 +48,22 @@ export default function ZohoBooksPage() {
     syncStatus,
     syncing,
     triggerSync,
+    verifyConnection,
+    organizations,
+    organizationsLoading,
+    listOrganizations,
+    selectOrganization,
   } = useZohoBooks();
 
   // Wrap the hook's sync trigger so the page can pass a single callback down.
   const handleSyncNow = useCallback(
     () => triggerSync({ mode: 'incremental', resume: true }),
     [triggerSync],
+  );
+
+  const handleVerify = useCallback(
+    () => verifyConnection(),
+    [verifyConnection],
   );
 
   // ─── STATE 1: Initial load → premium skeleton ───
@@ -91,6 +101,11 @@ export default function ZohoBooksPage() {
       onSyncNow={handleSyncNow}
       onRefreshToken={refresh}
       onDisconnect={disconnect}
+      onVerify={handleVerify}
+      organizations={organizations}
+      organizationsLoading={organizationsLoading}
+      onListOrganizations={listOrganizations}
+      onSelectOrganization={selectOrganization}
     />
   );
 }

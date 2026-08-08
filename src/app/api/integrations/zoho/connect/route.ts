@@ -34,17 +34,21 @@ function isZohoConfigured(): boolean {
 }
 
 export async function GET(req: Request) {
+  const stage = 'connect';
   try {
+    // ─── STAGE 1: Auth context ───
     const { orgId, userId, userEmail } = resolveOrgUserFromHeaders(req);
     if (!orgId || !userId) {
+      console.warn(`[zoho/${stage}] FAIL: missing org/user headers`);
       return NextResponse.json(
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
       );
     }
 
-    // Honest "not configured" gate — never pretend OAuth can proceed.
+    // ─── STAGE 2: Configuration check ───
     if (!isZohoConfigured()) {
+      console.warn(`[zoho/${stage}] FAIL: ZOHO_NOT_CONFIGURED (org=${orgId})`);
       return NextResponse.json(
         {
           ok: false,
@@ -63,9 +67,9 @@ export async function GET(req: Request) {
       );
     }
 
+    // ─── STAGE 3: Build redirect URI + state ───
     const url = new URL(req.url);
     const returnPath = url.searchParams.get('return') ?? '/zoho-books';
-
     const redirectUri = resolveRedirectUri(req);
 
     const state = encodeState({
@@ -77,22 +81,24 @@ export async function GET(req: Request) {
     });
     const authUrl = buildAuthUrl(state, redirectUri);
 
+    // Diagnostic log (NO secrets — only public OAuth params).
     console.info(
-      '[/api/integrations/zoho/connect] redirectUri=',
-      redirectUri,
-      ' host=',
-      req.headers.get('host'),
-      ' x-forwarded-host=',
-      req.headers.get('x-forwarded-host'),
-      ' x-forwarded-proto=',
-      req.headers.get('x-forwarded-proto'),
+      `[zoho/${stage}] OK: org=${orgId} user=${userId} redirectUri=${redirectUri} ` +
+        `host=${req.headers.get('host') ?? 'none'} ` +
+        `x-forwarded-host=${req.headers.get('x-forwarded-host') ?? 'none'} ` +
+        `abc=${req.headers.get('abc') ? 'present' : 'none'} ` +
+        `dc=${process.env.ZOHO_DC ?? 'in'}`,
     );
 
     return NextResponse.json({ ok: true, authUrl, redirectUri });
   } catch (err) {
-    console.error('[/api/integrations/zoho/connect] error:', err);
+    console.error(`[zoho/${stage}] UNEXPECTED ERROR:`, err);
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'Failed to start OAuth flow.' },
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Failed to start OAuth flow.',
+        stage,
+      },
       { status: 500 },
     );
   }

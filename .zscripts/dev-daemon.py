@@ -10,7 +10,7 @@ import signal
 
 PROJECT = "/home/z/my-project"
 LOG = f"{PROJECT}/dev.log"
-NODE_OPTS = "--max-old-space-size=1024"
+NODE_OPTS = "--max-old-space-size=2048"
 
 def daemon():
     # Double-fork to truly detach
@@ -31,11 +31,9 @@ def daemon():
         env = dict(os.environ)
         env["NODE_OPTIONS"] = NODE_OPTS
         proc = subprocess.Popen(
-            ["node", "node_modules/.bin/next", "dev", "-p", "3000"],
+            ["node", "node_modules/.bin/next", "dev", "-p", "3000", "--webpack"],
             cwd=PROJECT,
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
         proc.wait()
         with open(LOG, "a") as f:

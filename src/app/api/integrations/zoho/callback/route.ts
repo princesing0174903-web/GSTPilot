@@ -9,10 +9,15 @@
 //   4. (Best-effort) fetches + stores the user's default Zoho Books org
 //   5. Writes a safeAudit entry (ZOHO_BOOKS_CONNECT)
 //   6. Redirects the browser to the ROOT route with ?zoho_connected=1&view=zoho-books
-//      so the dashboard shell renders the Zoho Books page (matching the Google
-//      Workspace callback pattern).
 //
-// On any failure, redirects with ?zoho_error=<message>.
+// STAGE-BY-STAGE DIAGNOSTIC LOGGING (requirement #12):
+//   Each stage logs a `[zoho/callback] STAGE N: ...` line to the server log.
+//   On failure, the log includes the stage name + the underlying error (NO
+//   secrets — never logs access_token / refresh_token / client_secret).
+//   The redirect URL includes `zoho_stage` so the UI can show WHICH stage
+//   failed (helpful for debugging without exposing credentials).
+//
+// On any failure, redirects with ?zoho_error=<message>&zoho_stage=<stage>.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
@@ -46,8 +51,6 @@ function buildAppRedirectUrl(
   returnPath: string,
   params: Record<string, string>,
 ): string {
-  // Normalize the return path into a view name for the dashboard shell.
-  // e.g. "/zoho-books" → "zoho-books", "/google-workspace" → "google-workspace".
   const viewName =
     returnPath.replace(/^\/+/, '').replace(/[?].*$/, '') || 'zoho-books';
   const url = new URL('/', publicOrigin);
@@ -62,79 +65,99 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
+  const stage = 'callback';
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state') ?? '';
   const zohoError = url.searchParams.get('error');
 
+  // ─── STAGE 0: Decode state ───
   const decoded = decodeState(state);
   const returnPath = decoded?.returnPath ?? '/zoho-books';
-
   const publicOrigin = originFromRedirectUri(decoded?.redirectUri, req);
 
-  // Zoho-side error (user denied consent, etc.)
+  // Zoho-side error (user denied consent, redirect_uri mismatch, etc.)
   if (zohoError) {
+    const errorDesc = url.searchParams.get('error_description') ?? zohoError;
+    console.warn(`[zoho/${stage}] STAGE 0 FAIL: Zoho returned error="${zohoError}" desc="${errorDesc}"`);
     const target = buildAppRedirectUrl(publicOrigin, returnPath, {
-      zoho_error: zohoError,
+      zoho_error: errorDesc,
+      zoho_stage: 'authorization',
     });
     return NextResponse.redirect(new URL(target));
   }
 
   if (!code || !decoded) {
+    console.warn(`[zoho/${stage}] STAGE 0 FAIL: missing code or invalid state (code=${code ? 'present' : 'missing'}, state=${state ? 'present' : 'missing'})`);
     const target = buildAppRedirectUrl(publicOrigin, returnPath, {
-      zoho_error: 'Missing code or invalid state.',
+      zoho_error: 'Missing authorization code or invalid OAuth state. Please try connecting again.',
+      zoho_stage: 'state',
     });
     return NextResponse.redirect(new URL(target));
   }
 
+  console.info(`[zoho/${stage}] STAGE 0 OK: state decoded (org=${decoded.orgId}, user=${decoded.userId}, returnPath=${returnPath})`);
+
+  // ─── STAGE 1: Token exchange ───
+  const redirectUri = decoded.redirectUri ?? resolveRedirectUri(req);
+  console.info(`[zoho/${stage}] STAGE 1: exchanging code for tokens (redirectUri=${redirectUri})`);
+
+  const { tokens, userInfo, error: exchangeError } = await exchangeCodeForTokens(code, redirectUri);
+  if (exchangeError || !tokens.accessToken) {
+    console.error(`[zoho/${stage}] STAGE 1 FAIL: token exchange failed — ${exchangeError ?? 'no access_token'}`);
+    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+      zoho_error: exchangeError ?? 'Zoho did not return an access token. Please reconnect.',
+      zoho_stage: 'token_exchange',
+    });
+    return NextResponse.redirect(new URL(target));
+  }
+  console.info(`[zoho/${stage}] STAGE 1 OK: tokens received (scope=${tokens.scope?.slice(0, 60) ?? 'none'}..., expires=${tokens.expiryDate?.toISOString() ?? 'unknown'})`);
+
+  // ─── STAGE 2: Token storage ───
+  let stored;
   try {
-    const redirectUri = decoded.redirectUri ?? resolveRedirectUri(req);
-
-    const { tokens, userInfo, error } = await exchangeCodeForTokens(code, redirectUri);
-    if (error || !tokens.accessToken) {
-      const target = buildAppRedirectUrl(publicOrigin, returnPath, {
-        zoho_error: error ?? 'No access token returned.',
-      });
-      return NextResponse.redirect(new URL(target));
-    }
-
-    const stored = await storeTokens(
+    stored = await storeTokens(
       decoded.orgId,
       decoded.userId,
       decoded.userEmail || userInfo.email || 'unknown@zoho',
       userInfo.userId ?? null,
       tokens,
     );
-
-    // Production-grade audit logging (best-effort — never throws).
-    try {
-      await safeAudit({
-        userId: decoded.userId,
-        action: 'ZOHO_BOOKS_CONNECT',
-        entity: 'ZohoBooksToken',
-        entityId: stored.id,
-        newValue: JSON.stringify({
-          userEmail: stored.userEmail,
-          zohoUserId: stored.zohoUserId,
-          zohoOrgId: stored.zohoOrgId,
-          zohoOrgName: stored.zohoOrgName,
-          dataCenter: stored.dataCenter,
-        }),
-        details: `Connected Zoho Books as ${stored.userEmail}`,
-      });
-    } catch (auditErr) {
-      console.warn('[/api/integrations/zoho/callback] audit log failed:', auditErr);
-    }
-
+    console.info(`[zoho/${stage}] STAGE 2 OK: tokens encrypted + stored (tokenRowId=${stored.id}, orgMapping=${stored.zohoOrgId ?? 'pending'})`);
+  } catch (storeErr) {
+    console.error(`[zoho/${stage}] STAGE 2 FAIL: token storage failed —`, storeErr);
     const target = buildAppRedirectUrl(publicOrigin, returnPath, {
-      zoho_connected: '1',
-    });
-    return NextResponse.redirect(new URL(target));
-  } catch (err) {
-    console.error('[/api/integrations/zoho/callback] error:', err);
-    const target = buildAppRedirectUrl(publicOrigin, returnPath, {
-      zoho_error: err instanceof Error ? err.message : 'Callback failed.',
+      zoho_error: storeErr instanceof Error ? `Token storage failed: ${storeErr.message}` : 'Failed to store Zoho tokens securely.',
+      zoho_stage: 'token_storage',
     });
     return NextResponse.redirect(new URL(target));
   }
+
+  // ─── STAGE 3: Audit log (best-effort) ───
+  try {
+    await safeAudit({
+      userId: decoded.userId,
+      action: 'ZOHO_BOOKS_CONNECT',
+      entity: 'ZohoBooksToken',
+      entityId: stored.id,
+      newValue: JSON.stringify({
+        userEmail: stored.userEmail,
+        zohoUserId: stored.zohoUserId,
+        zohoOrgId: stored.zohoOrgId,
+        zohoOrgName: stored.zohoOrgName,
+        dataCenter: stored.dataCenter,
+      }),
+      details: `Connected Zoho Books as ${stored.userEmail}`,
+    });
+    console.info(`[zoho/${stage}] STAGE 3 OK: audit logged`);
+  } catch (auditErr) {
+    console.warn(`[zoho/${stage}] STAGE 3 WARN: audit log failed (non-fatal) —`, auditErr);
+  }
+
+  // ─── SUCCESS ───
+  console.info(`[zoho/${stage}] SUCCESS: user=${stored.userEmail} org=${stored.zohoOrgName ?? 'none'} (${stored.zohoOrgId ?? 'none'})`);
+  const target = buildAppRedirectUrl(publicOrigin, returnPath, {
+    zoho_connected: '1',
+  });
+  return NextResponse.redirect(new URL(target));
 }

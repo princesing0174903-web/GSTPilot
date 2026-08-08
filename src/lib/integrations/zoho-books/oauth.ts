@@ -146,8 +146,27 @@ function resolveProto(host: string, forwardedProto: string | null): string {
   return 'https';
 }
 
-/** Resolve the OAuth redirect_uri for a specific request. */
+/**
+ * Resolve the OAuth redirect_uri for a specific request.
+ *
+ * PRIORITY (ensures the redirect_uri ALWAYS matches the Zoho API Console):
+ *   1. `ZOHO_REDIRECT_URI` env var (if set) — the user registers THIS exact
+ *      URL in the Zoho API Console, so it must be used consistently for the
+ *      authorization URL, the OAuth state, and the token-exchange callback.
+ *      This is the safest default and prevents "redirect_uri mismatch" errors.
+ *   2. Dynamic resolution from the request origin (preview / gateway-aware).
+ *      Used only when the env var is NOT set.
+ *
+ * Set `ZOHO_REDIRECT_URI_DYNAMIC=true` to force dynamic resolution even when
+ * the env var is present (useful for preview environments where the public
+ * URL is stable and registered in Zoho).
+ */
 export function resolveRedirectUri(req: Request): string {
+  const forceDynamic = process.env.ZOHO_REDIRECT_URI_DYNAMIC === 'true';
+  const envUri = process.env.ZOHO_REDIRECT_URI;
+  if (envUri && !forceDynamic) {
+    return envUri;
+  }
   const origin = resolvePublicOrigin(req);
   return `${origin}/api/integrations/zoho/callback`;
 }

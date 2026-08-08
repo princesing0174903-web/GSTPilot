@@ -257,10 +257,18 @@ async function zfetch<T>(
     }
     return { ok: true, data: body as T, error: null, status: res.status };
   } catch (err) {
+    // Network-level failure (server down, DNS error, connection refused).
+    // Surface a clear, actionable message rather than a raw TypeError.
+    const raw = err instanceof Error ? err.message : 'Network error';
+    let friendly = raw;
+    if (/Failed to fetch|NetworkError|fetch failed|ECONNREFUSED|ERR_CONNECTION/i.test(raw)) {
+      friendly =
+        'Cannot reach the GSTPilot server. The dev server may be restarting — wait a few seconds and try again.';
+    }
     return {
       ok: false,
       data: null,
-      error: err instanceof Error ? err.message : 'Network error.',
+      error: friendly,
       status: 0,
     };
   }

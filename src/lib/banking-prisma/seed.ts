@@ -136,7 +136,25 @@ export async function seedBankingData(organizationId: string): Promise<{
   accountsCreated: number;
   transactionsCreated: number;
 }> {
-  // Check if data already exists.
+  // ── REAL DATA FIRST ──
+  // If this org has ANY real (non-mock) bank accounts — e.g. from a Zoho
+  // Books sync (provider='zoho_books') — DO NOT seed demo data. The user
+  // explicitly forbade fake/demo records when real data exists.
+  const realCount = await db.bankAccount.count({
+    where: { organizationId, provider: { not: 'mock' } },
+  });
+  if (realCount > 0) {
+    return { seeded: false, accountsCreated: 0, transactionsCreated: 0 };
+  }
+
+  // Also skip if the org has synced ZohoBankAccounts (even if the mirror
+  // hasn't run yet) — the mirror will populate the native table.
+  const zohoCount = await db.zohoBankAccount.count({ where: { organizationId } });
+  if (zohoCount > 0) {
+    return { seeded: false, accountsCreated: 0, transactionsCreated: 0 };
+  }
+
+  // Check if mock data already exists (idempotent for the demo seeding).
   const existing = await db.bankAccount.count({ where: { organizationId } });
   if (existing > 0) {
     return { seeded: false, accountsCreated: 0, transactionsCreated: 0 };

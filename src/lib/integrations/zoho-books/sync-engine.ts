@@ -90,8 +90,30 @@ interface ModuleDef {
   label: string;
   endpoint: string;
   responseKey: string;
-   
+
   upsert: (orgId: string, zohoOrgId: string, record: any) => Promise<{ imported: number; updated: number; failed: number }>;
+  /**
+   * Optional: path to the DETAIL endpoint for each record.
+   *
+   * Zoho Books LIST endpoints (e.g. GET /invoices) return summary fields only
+   * (invoice_number, total, balance, status, date). They do NOT return:
+   *   - sub_total
+   *   - tax_total / cgst / sgst / igst / cess
+   *   - line_items
+   *   - custom fields, notes, billing/shipping address
+   *
+   * To get the full record (needed for GST reconciliation, invoice totals
+   * breakdown, and line-item-level analysis), we must fetch each record
+   * individually via GET /invoices/{invoice_id} (same for bills).
+   *
+   * When `detailPath` is set, fetchModule fetches the detail for each record
+   * in parallel (concurrency 5) and merges the detail fields into the list
+   * record before calling `upsert`. Detail-fetch failures are non-fatal —
+   * the record is still upserted with whatever list data is available.
+   */
+  detailPath?: (record: any) => string | null;
+  /** The JSON key holding the single detail record (e.g. 'invoice', 'bill'). */
+  detailKey?: string;
 }
 
 // ─── Module upsert functions ─────────────────────────────────────────────────
@@ -188,6 +210,14 @@ async function upsertInvoice(orgId: string, zohoOrgId: string, inv: any) {
     });
     if (created.createdAt.getTime() === created.updatedAt.getTime()) imported++;
     else updated++;
+
+    // ── Mirror into native Invoice table so the Invoices page shows real
+    // Zoho data (not just native invoices). Idempotent via ZohoEntityMap.
+    try {
+      await mirrorInvoiceToNativeInvoice(orgId, zohoOrgId, zohoInvoiceId, inv);
+    } catch (mirrorErr) {
+      console.warn(`[zoho-sync] invoice mirror to native Invoice failed for ${zohoInvoiceId}:`, mirrorErr instanceof Error ? mirrorErr.message : mirrorErr);
+    }
   } catch (err) { failed++; console.error('[zoho-sync] upsertInvoice upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
@@ -366,6 +396,192 @@ async function mirrorBillToPurchaseBill(orgId: string, zohoOrgId: string, zohoBi
         localEntityType: 'PurchaseBill',
         localEntityId: created.id,
         lastModifiedAt: date(bill.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  }
+}
+
+// ─── Invoice mirror (ZohoInvoice → native Invoice) ──────────────────────────
+//
+// The Invoices page (view=invoices) reads from db.invoice.findMany({ where: {
+// client: { firmId } } }). Without this mirror, the 6 real ZohoInvoices are
+// HIDDEN from the Invoices page — the user only sees native invoices.
+//
+// Idempotent via ZohoEntityMap (zohoEntityType='invoice'). Re-running sync
+// NEVER creates duplicate native Invoices.
+//
+// Best-effort: a mirror failure does NOT fail the invoice import above.
+
+async function mirrorInvoiceToNativeInvoice(orgId: string, zohoOrgId: string, zohoInvoiceId: string, inv: any) {
+  // 1. Resolve the customer's Client row (created by the Customer→Client mirror).
+  //    The mirror uses gstin = ZOHO-CONTACT-{zohoContactId} for customers
+  //    without a real GSTIN.
+  const zohoCustomerId = str(inv.customer_id);
+  let buyerGstin: string | null = str(inv.gstin);
+  let clientRow: { id: string } | null = null;
+  if (zohoCustomerId) {
+    // Look up the ZohoCustomer to get the GSTIN.
+    const zc = await db.zohoCustomer.findFirst({
+      where: { organizationId: orgId, zohoOrgId, zohoContactId: zohoCustomerId },
+      select: { gstNumber: true, contactName: true, companyName: true },
+    });
+    if (zc?.gstNumber?.trim()) buyerGstin = zc.gstin.trim();
+    // Find the Client row by gstin (real or synthetic).
+    const clientGstin = buyerGstin?.trim() || `ZOHO-CONTACT-${zohoCustomerId}`;
+    clientRow = await db.client.findUnique({
+      where: { gstin: clientGstin },
+      select: { id: true },
+    }).catch(() => null);
+  }
+  // If no Client row exists (customer mirror didn't run), create a stub.
+  if (!clientRow && zohoCustomerId) {
+    const clientGstin = buyerGstin?.trim() || `ZOHO-CONTACT-${zohoCustomerId}`;
+    await db.firm.upsert({
+      where: { id: orgId },
+      create: { id: orgId, name: 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+      update: { isActive: true },
+    }).catch(() => {});
+    clientRow = await db.client.upsert({
+      where: { gstin: clientGstin },
+      create: {
+        gstin: clientGstin,
+        tradeName: str(inv.customer_name) || 'Zoho Customer',
+        legalName: str(inv.customer_name) || 'Zoho Customer',
+        status: 'active',
+        firmId: orgId,
+      },
+      update: {},
+    }).then((c) => ({ id: c.id })).catch(() => null);
+  }
+  if (!clientRow) return; // can't mirror without a client
+
+  // 2. Look up existing mapping.
+  const mapping = await db.zohoEntityMap.findUnique({
+    where: {
+      organizationId_zohoOrgId_zohoEntityType_zohoEntityId: {
+        organizationId: orgId, zohoOrgId,
+        zohoEntityType: 'invoice', zohoEntityId: zohoInvoiceId,
+      },
+    },
+  });
+
+  const cgst = num(inv.cgst, 0) + num(inv.total_cgst, 0);
+  const sgst = num(inv.sgst, 0) + num(inv.total_sgst, 0);
+  const igst = num(inv.igst, 0) + num(inv.total_igst, 0);
+  const cess = num(inv.cess, 0) + num(inv.total_cess, 0);
+  const gstAmount = cgst + sgst + igst + cess;
+  const totalAmount = num(inv.total, 0);
+  const paidAmount = num(inv.paid_amount, 0);
+  const balanceAmount = num(inv.balance, 0);
+  const taxableValue = num(inv.sub_total, 0) || (totalAmount - gstAmount);
+
+  const invoiceData = {
+    clientId: clientRow.id,
+    invoiceNumber: str(inv.invoice_number) || `ZOHO-${zohoInvoiceId}`,
+    invoiceDate: str(inv.date) || new Date().toISOString().slice(0, 10),
+    sellerGstin: `ZOHO-ORG-${zohoOrgId}`, // org's own GSTIN placeholder
+    buyerGstin: buyerGstin || undefined,
+    buyerName: str(inv.customer_name) || undefined,
+    invoiceType: 'B2B',
+    gstr1Section: 'b2b',
+    taxableValue,
+    cgst, sgst, igst, cess,
+    totalAmount,
+    gstAmount,
+    paidAmount,
+    balanceAmount,
+    paymentStatus: balanceAmount <= 0 && paidAmount > 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+    status: str(inv.status, 'draft') || 'draft',
+    dueDate: str(inv.due_date) || undefined,
+    notes: `Synced from Zoho Books (invoice_id: ${zohoInvoiceId})`,
+  };
+
+  if (mapping) {
+    await db.invoice.update({ where: { id: mapping.localEntityId }, data: invoiceData });
+    await db.zohoEntityMap.update({
+      where: { id: mapping.id },
+      data: {
+        lastModifiedAt: date(inv.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  } else {
+    const created = await db.invoice.create({ data: invoiceData });
+    await db.zohoEntityMap.create({
+      data: {
+        organizationId: orgId, zohoOrgId,
+        zohoEntityType: 'invoice', zohoEntityId: zohoInvoiceId,
+        localEntityType: 'Invoice', localEntityId: created.id,
+        lastModifiedAt: date(inv.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  }
+}
+
+// ─── BankAccount mirror (ZohoBankAccount → native BankAccount) ──────────────
+//
+// The Banking page (view=banking) reads from db.bankAccount.findMany({ where:
+// { organizationId } }). Without this mirror, the 4 real ZohoBankAccounts are
+// HIDDEN — and worse, the Banking page auto-seeds 4 DEMO accounts (HDFC/ICICI/
+// Axis/Cash) which the user explicitly told us to remove.
+//
+// Idempotent via ZohoEntityMap (zohoEntityType='bank_account'). Re-running
+// sync NEVER creates duplicate native BankAccounts.
+//
+// Best-effort: a mirror failure does NOT fail the bank account import above.
+
+async function mirrorBankAccountToNativeBankAccount(orgId: string, zohoOrgId: string, zohoAccountId: string, ba: any) {
+  const mapping = await db.zohoEntityMap.findUnique({
+    where: {
+      organizationId_zohoOrgId_zohoEntityType_zohoEntityId: {
+        organizationId: orgId, zohoOrgId,
+        zohoEntityType: 'bank_account', zohoEntityId: zohoAccountId,
+      },
+    },
+  });
+
+  const accountNumber = str(ba.account_number) || str(ba.bank_account_number) || '';
+  const masked = accountNumber
+    ? accountNumber.length > 4
+      ? `****${accountNumber.slice(-4)}`
+      : accountNumber
+    : '****';
+
+  const accountData = {
+    organizationId: orgId,
+    bankName: str(ba.bank_name) || str(ba.account_name) || 'Zoho Bank Account',
+    accountNumber,
+    accountMasked: masked,
+    accountType: str(ba.account_type) || 'current',
+    ifsc: str(ba.ifsc_code) || null,
+    owner: str(ba.account_name) || null,
+    balance: num(ba.balance, 0),
+    availableBalance: num(ba.available_balance, 0),
+    currency: str(ba.currency_code) || 'INR',
+    provider: 'zoho_books', // NOT 'mock' — this is real data from Zoho Books
+    status: str(ba.status, 'active') || 'active',
+    lastSyncAt: new Date(),
+  };
+
+  if (mapping) {
+    await db.bankAccount.update({ where: { id: mapping.localEntityId }, data: accountData });
+    await db.zohoEntityMap.update({
+      where: { id: mapping.id },
+      data: {
+        lastModifiedAt: date(ba.last_modified_time) ?? undefined,
+        lastSyncedAt: new Date(),
+      },
+    });
+  } else {
+    const created = await db.bankAccount.create({ data: accountData });
+    await db.zohoEntityMap.create({
+      data: {
+        organizationId: orgId, zohoOrgId,
+        zohoEntityType: 'bank_account', zohoEntityId: zohoAccountId,
+        localEntityType: 'BankAccount', localEntityId: created.id,
+        lastModifiedAt: date(ba.last_modified_time) ?? undefined,
         lastSyncedAt: new Date(),
       },
     });
@@ -612,6 +828,15 @@ async function upsertBankAccount(orgId: string, zohoOrgId: string, ba: any) {
     });
     if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
     else updated++;
+
+    // ── Mirror into native BankAccount table so the Banking page shows real
+    // Zoho bank accounts (provider='zoho_books', NOT 'mock'). Idempotent via
+    // ZohoEntityMap. Without this, the Banking page auto-seeds DEMO accounts.
+    try {
+      await mirrorBankAccountToNativeBankAccount(orgId, zohoOrgId, zohoAccountId, ba);
+    } catch (mirrorErr) {
+      console.warn(`[zoho-sync] bank account mirror to native BankAccount failed for ${zohoAccountId}:`, mirrorErr instanceof Error ? mirrorErr.message : mirrorErr);
+    }
   } catch (err) { failed++; console.error('[zoho-sync] upsertBankAccount upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
@@ -691,8 +916,17 @@ async function upsertItem(orgId: string, zohoOrgId: string, item: any) {
 const MODULES: ModuleDef[] = [
   { key: 'vendors', label: 'Fetching Vendors', endpoint: '/contacts?contact_type=vendor', responseKey: 'contacts', upsert: upsertVendor },
   { key: 'items', label: 'Fetching Items', endpoint: '/items', responseKey: 'items', upsert: upsertItem },
-  { key: 'invoices', label: 'Fetching Invoices', endpoint: '/invoices', responseKey: 'invoices', upsert: upsertInvoice },
-  { key: 'bills', label: 'Fetching Bills', endpoint: '/bills', responseKey: 'bills', upsert: upsertBill },
+  { key: 'invoices', label: 'Fetching Invoices', endpoint: '/invoices', responseKey: 'invoices', upsert: upsertInvoice,
+    // Fetch each invoice's detail to get sub_total, tax_total, cgst/sgst/igst,
+    // cess, and line_items (the list endpoint only returns summary fields).
+    detailPath: (inv) => str(inv.invoice_id) ? `/invoices/${inv.invoice_id}` : null,
+    detailKey: 'invoice',
+  },
+  { key: 'bills', label: 'Fetching Bills', endpoint: '/bills', responseKey: 'bills', upsert: upsertBill,
+    // Same as invoices — the list endpoint omits tax breakdown + line items.
+    detailPath: (bill) => str(bill.bill_id) ? `/bills/${bill.bill_id}` : null,
+    detailKey: 'bill',
+  },
   { key: 'payments_received', label: 'Fetching Payments Received', endpoint: '/customerpayments', responseKey: 'customerpayments', upsert: upsertPaymentReceived },
   { key: 'payments_made', label: 'Fetching Payments Made', endpoint: '/vendorpayments', responseKey: 'vendorpayments', upsert: upsertPaymentMade },
   { key: 'creditnotes', label: 'Fetching Credit Notes', endpoint: '/creditnotes', responseKey: 'creditnotes', upsert: upsertCreditNote },
@@ -702,6 +936,68 @@ const MODULES: ModuleDef[] = [
   { key: 'bankaccounts', label: 'Fetching Bank Accounts', endpoint: '/bankaccounts', responseKey: 'bankaccounts', upsert: upsertBankAccount },
   { key: 'banktransactions', label: 'Fetching Bank Transactions', endpoint: '/banktransactions', responseKey: 'banktransactions', upsert: upsertBankTransaction },
 ];
+
+// ─── Detail enrichment (invoices, bills) ─────────────────────────────────────
+//
+// Fetches the full detail for each record in parallel (concurrency 5) and
+// merges it into the list record. The Zoho LIST endpoint returns summary
+// fields only; the DETAIL endpoint returns sub_total, tax_total, cgst/sgst/igst,
+// cess, line_items, billing/shipping address, custom fields, notes, etc.
+//
+// Non-fatal: if a detail fetch fails (404, 429, network error), the record
+// is returned with only the list data — we log the failure but don't drop
+// the record. This ensures a partial Zoho API outage never loses records.
+
+const DETAIL_CONCURRENCY = 5;
+
+async function enrichWithDetails(
+  def: ModuleDef,
+  records: unknown[],
+  accessToken: string,
+  zohoOrgId: string,
+): Promise<unknown[]> {
+  const detailPath = def.detailPath!;
+  const detailKey = def.detailKey!;
+  const results: unknown[] = new Array(records.length);
+
+  // Process in batches of DETAIL_CONCURRENCY to avoid hammering the Zoho API.
+  for (let i = 0; i < records.length; i += DETAIL_CONCURRENCY) {
+    const batch = records.slice(i, i + DETAIL_CONCURRENCY);
+    const settled = await Promise.allSettled(
+      batch.map(async (record) => {
+        const rec = record as Record<string, unknown>;
+        const path = detailPath(rec);
+        if (!path) return record; // no detail path → use list record as-is
+        const res = await zohoGet<Record<string, unknown>>(
+          path,
+          accessToken,
+          { organizationId: zohoOrgId },
+        );
+        if (res.error || res.status >= 400 || !res.data) {
+          console.warn(
+            `[zoho-sync] ${def.key} · detail fetch failed for ${path} · HTTP ${res.status} · ` +
+              `${res.error?.slice(0, 120) ?? 'no data'} — using list record`,
+          );
+          return record; // fall back to list record
+        }
+        const detail = res.data[detailKey];
+        if (!detail || typeof detail !== 'object') {
+          console.warn(`[zoho-sync] ${def.key} · detail response missing key "${detailKey}" for ${path} — using list record`);
+          return record;
+        }
+        // Merge: detail fields take priority, but list fields fill any gaps.
+        // This preserves list-only fields (like last_modified_time) that some
+        // detail endpoints omit.
+        return { ...(record as object), ...(detail as object) };
+      }),
+    );
+    for (let j = 0; j < settled.length; j++) {
+      const s = settled[j];
+      results[i + j] = s.status === 'fulfilled' ? s.value : batch[j];
+    }
+  }
+  return results;
+}
 
 // ─── Error message helper ─────────────────────────────────────────────────────
 
@@ -794,8 +1090,21 @@ async function fetchModule(
     result.fetched += records.length;
     console.log(`[zoho-sync] ${def.key} · page ${page} · fetched ${records.length} records (cumulative: ${result.fetched})`);
 
+    // ── Detail enrichment (invoices, bills) ──
+    // The LIST endpoint returns summary fields only. For modules that declare
+    // a `detailPath`, fetch each record's full detail (which includes
+    // sub_total, tax_total, cgst/sgst/igst, cess, line_items) in parallel
+    // (concurrency 5) and merge it into the list record before upsert.
+    //
+    // Non-fatal: if a detail fetch fails, the record is still upserted with
+    // the summary data from the list — we just log the failure.
+    let enrichedRecords = records;
+    if (def.detailPath && def.detailKey && records.length > 0) {
+      enrichedRecords = await enrichWithDetails(def, records, accessToken, zohoOrgId);
+    }
+
     // Upsert each record
-    for (const record of records) {
+    for (const record of enrichedRecords) {
       try {
         const r = await def.upsert(organizationId, zohoOrgId, record);
         result.imported += r.imported;
@@ -1366,4 +1675,141 @@ export async function getSyncStatusUnified(
     totalRecords,
     isRunning,
   };
+}
+
+// ─── Backfill: mirror existing Zoho* data into native tables ────────────────
+//
+// One-time / on-demand function that reads ALL existing ZohoInvoice,
+// ZohoBankAccount, and ZohoCustomer rows for an org and mirrors them into
+// the native Invoice, BankAccount, and Client tables.
+//
+// Use case: when the mirror functions were added AFTER a sync already ran,
+// the existing Zoho data isn't mirrored yet. This function backfills the
+// mirrors without requiring a full re-sync (which would need a valid token).
+//
+// Idempotent: safe to run multiple times (uses ZohoEntityMap for dedup).
+
+export async function backfillMirrors(
+  organizationId: string,
+  zohoOrgId: string,
+): Promise<{ invoices: number; bankAccounts: number; customers: number; errors: string[] }> {
+  const errors: string[] = [];
+  let invoiceCount = 0;
+  let bankAccountCount = 0;
+  let customerCount = 0;
+
+  // 1. Mirror customers → Client (same logic as the inline mirror in runZohoFullSync)
+  try {
+    const customers = await db.zohoCustomer.findMany({
+      where: { organizationId, zohoOrgId },
+    });
+    for (const zc of customers) {
+      try {
+        await db.firm.upsert({
+          where: { id: organizationId },
+          create: { id: organizationId, name: zc.companyName || zc.contactName || 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+          update: { isActive: true },
+        }).catch(() => {});
+        const gstin = zc.gstNumber?.trim() || `ZOHO-CONTACT-${zc.zohoContactId}`;
+        await db.client.upsert({
+          where: { gstin },
+          create: {
+            gstin,
+            tradeName: zc.companyName || zc.contactName,
+            legalName: zc.companyName || zc.contactName,
+            contactEmail: zc.email,
+            contactPhone: zc.phone,
+            status: zc.status || 'active',
+            firmId: organizationId,
+          },
+          update: {
+            tradeName: zc.companyName || zc.contactName,
+            legalName: zc.companyName || zc.contactName,
+            contactEmail: zc.email,
+            contactPhone: zc.phone,
+            status: zc.status || 'active',
+            firmId: organizationId,
+          },
+        });
+        customerCount++;
+      } catch (e) {
+        errors.push(`customer ${zc.zohoContactId}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  } catch (e) {
+    errors.push(`customers query: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // 2. Mirror invoices → native Invoice
+  try {
+    const invoices = await db.zohoInvoice.findMany({
+      where: { organizationId, zohoOrgId },
+    });
+    for (const inv of invoices) {
+      try {
+        // Reconstruct the inv object from the stored ZohoInvoice row
+        // (the mirror function expects the raw Zoho API shape).
+        const invData = {
+          invoice_id: inv.zohoInvoiceId,
+          invoice_number: inv.invoiceNumber,
+          customer_id: inv.customerId,
+          customer_name: inv.customerName,
+          status: inv.status,
+          date: inv.date,
+          due_date: inv.dueDate,
+          sub_total: inv.subTotal,
+          total: inv.total,
+          balance: inv.balance,
+          paid_amount: inv.paidAmount,
+          cgst: inv.cgst,
+          sgst: inv.sgst,
+          igst: inv.igst,
+          cess: inv.cess,
+          tax_total: inv.totalTax,
+          currency_code: inv.currencyCode,
+          line_items: inv.lineItems ? JSON.parse(inv.lineItems) : [],
+          last_modified_time: inv.zohoUpdatedAt?.toISOString(),
+        };
+        await mirrorInvoiceToNativeInvoice(organizationId, zohoOrgId, inv.zohoInvoiceId, invData);
+        invoiceCount++;
+      } catch (e) {
+        errors.push(`invoice ${inv.zohoInvoiceId}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  } catch (e) {
+    errors.push(`invoices query: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // 3. Mirror bank accounts → native BankAccount
+  try {
+    const accounts = await db.zohoBankAccount.findMany({
+      where: { organizationId, zohoOrgId },
+    });
+    for (const ba of accounts) {
+      try {
+        const baData = {
+          account_id: ba.zohoAccountId,
+          account_name: ba.accountName,
+          account_number: ba.accountNumber,
+          ifsc_code: ba.ifscCode,
+          bank_name: ba.bankName,
+          account_type: ba.accountType,
+          currency_code: ba.currencyCode,
+          balance: ba.balance,
+          available_balance: ba.availableBalance,
+          status: ba.status,
+          last_modified_time: ba.zohoUpdatedAt?.toISOString(),
+        };
+        await mirrorBankAccountToNativeBankAccount(organizationId, zohoOrgId, ba.zohoAccountId, baData);
+        bankAccountCount++;
+      } catch (e) {
+        errors.push(`bank_account ${ba.zohoAccountId}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  } catch (e) {
+    errors.push(`bank_accounts query: ${e instanceof Error ? e.message : e}`);
+  }
+
+  console.log(`[zoho-backfill] org=${organizationId} zohoOrgId=${zohoOrgId} · customers=${customerCount} invoices=${invoiceCount} bankAccounts=${bankAccountCount} errors=${errors.length}`);
+  return { invoices: invoiceCount, bankAccounts: bankAccountCount, customers: customerCount, errors };
 }

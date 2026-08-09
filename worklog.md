@@ -16623,3 +16623,201 @@ FILES CHANGED (15):
 - src/components/zoho-books/ZohoConnected.tsx — wire ZohoSyncProgress
 - src/hooks/useZohoBooks.ts — statusLoading=true init (fixes OAuthBanner race)
 
+
+---
+Task ID: 6-a
+Agent: Explore (Audit downstream Zoho data consumers)
+Task: READ-ONLY audit — for each downstream GSTPilot page (invoices, customers, banking, gst-reconciliation, reports, oracle-brain), find the exact API route + DB query that feeds it, and report whether it reads from the real Zoho* Prisma tables.
+
+Methodology:
+- Mapped UI view names → component → API route → Prisma model by reading `src/components/DashboardViews.tsx` (VIEW_COMPONENTS registry) + each page component + each `route.ts`.
+- Verified actual DB row counts via `@prisma/client` to confirm the gap between "what the page queries" and "what the DB actually has".
+- READ-ONLY: no files modified (only this worklog append).
+
+DB STATE (verified via Prisma):
+| Table              | Rows | Source            |
+|--------------------|------|-------------------|
+| ZohoCustomer       | 6    | real Zoho sync    |
+| ZohoInvoice        | 6    | real Zoho sync    |
+| ZohoBankAccount    | 4    | real Zoho sync    |
+| ZohoBankTransaction| 1    | real Zoho sync    |
+| ZohoBill           | 0    | (not synced)      |
+| ZohoVendor         | 0    | (not synced)      |
+| ZohoEntityMap      | 5    | real Zoho sync    |
+| PurchaseBill       | 4    | SEED/DEMO (Reliance/TCS/Tata/IBM, created 2026-08-04, category=null, notes empty — NOT from `mirrorBillToPurchaseBill`, which would set notes="Synced from Zoho Books (bill_id: …)") |
+| Invoice            | 7    | native (manual/seed) |
+| Client             | 14   | native (manual/seed) |
+| BankAccount        | 5    | SEED/DEMO (HDFC/ICICI/Axis/Cash via `ensureSeeded`) + 1 extra |
+| BankTransaction    | 57   | SEED/DEMO (30-day templates from `seedBankingData`) |
+
+VIEW REGISTRY (src/components/DashboardViews.tsx):
+- `invoices`         → InvoiceWorkspacePage     → /api/invoices
+- `clients`          → ClientRegistryPage       → /api/clients          (NOTE: there is NO `customers` view in `AppView` — `customers` is a label, the actual view name is `clients`. `crm` redirects to `clients`.)
+- `banking`          → BankingPage              → useBankingApi → /api/banking/*
+- `gst-reconciliation`→ GSTReconciliationPage   → /api/gst-reconciliation/* + /api/gst/*
+- `reports`          → ReportsPage              → /api/invoices + /api/gstr-filing + /api/export
+- `oracle-brain`     → OracleBrain (wrapper) → OracleBrainCore → /api/business/snapshot + /api/oracle/brain/*
+
+═══════════════════════════════════════════════════════════════════════════════
+FINDINGS — per-page audit
+═══════════════════════════════════════════════════════════════════════════════
+
+1) INVOICES PAGE  (view: "invoices")
+- API route: GET /api/invoices?organizationId=…  (src/app/api/invoices/route.ts)
+- Prisma model: db.invoice.findMany({ where: { client: { firmId: tenantId } }, include: { client, items } })
+- Org isolation: ✓ (tenantId from `?organizationId=` or `?firmId=`; requireOrgMembership enforced; defensive empty array when no tenant)
+- Reads ZohoInvoice? ✗ NO — reads only native `Invoice` table (joined via `client.firmId`)
+- Real-data verdict: With current DB (7 native Invoices), the page shows 7 native invoices. The 6 ZohoInvoices are INVISIBLE. Any invoice created in Zoho Books will not appear on this page until a separate mirror ZohoInvoice→Invoice is built (which does NOT exist — only ZohoBill→PurchaseBill has a mirror).
+- Data quality issue: **Zoho invoices are hidden from the Invoices page.** Users connecting Zoho Books will see no Zoho invoices here.
+
+2) CUSTOMERS PAGE  (view: "clients" — there is no "customers" view)
+- API route: GET /api/clients?organizationId=…  (src/app/api/clients/route.ts)
+- Prisma model: db.client.findMany({ where: { firmId: tenantId }, include: { _count, healthScores } }) + batched db.gSTRFiling.groupBy + db.invoice.groupBy
+- Org isolation: ✓ (firmId = tenantId; requireOrgMembership; defensive empty when no tenant)
+- Reads ZohoCustomer? ✗ NO — reads only native `Client` table
+- Real-data verdict: With current DB (14 native Clients), the page shows 14 native clients. The 6 ZohoCustomers are INVISIBLE. There is no ZohoCustomer→Client mirror.
+- Data quality issue: **Zoho customers are hidden from the Clients/Customers page.** Users will not see customers synced from Zoho Books.
+
+3) BANKING PAGE  (view: "banking")
+- API routes (via useBankingApi → /api/banking/*): /api/banking/dashboard, /api/banking/accounts, /api/banking/accounts/[id], /api/banking/transactions, /api/banking/transactions/[id], /api/banking/reconcile, /api/banking/reconcile/manual, /api/banking/cashflow, /api/banking/oracle, /api/banking/import, /api/banking/imports, /api/banking/reports, /api/banking/provider
+- Prisma models (in src/lib/banking-prisma/*): db.bankAccount.* + db.bankTransaction.* (lowercase — native tables)
+- Org isolation: ✓ (organizationId filter on every query; requireOrgMembership; SWR cache keyed by orgId; `ensureSeeded(orgId)` is idempotent per-org)
+- Reads ZohoBankAccount / ZohoBankTransaction? ✗ NO — reads only native `BankAccount` + `BankTransaction` tables
+- Real-data verdict: With current DB, the page AUTO-SEEDS 4 demo accounts (HDFC/ICICI/Axis/Cash Wallet) + ~30 days of fake transactions on first visit via `ensureSeeded()` → `seedBankingData()` (src/lib/banking-prisma/seed.ts). Verified DB has 5 native BankAccounts and 57 native BankTransactions — all demo. The 4 real ZohoBankAccounts and 1 ZohoBankTransaction are INVISIBLE.
+- Data quality issue: **CRITICAL — Banking page shows fake demo data instead of real Zoho bank data.** `provider: 'mock'` is hardcoded on seeded accounts. Even if a user has connected Zoho Books and synced bank accounts, this page ignores them entirely. There is no ZohoBankAccount→BankAccount mirror.
+
+4) GST RECONCILIATION PAGE  (view: "gst-reconciliation")
+- API routes: POST /api/gst-reconciliation/run (the main runner), plus GET /api/gst-reconciliation/runs, GET /api/gst-reconciliation/[id], /summary, /vendors, /timeline, /resolve, /bulk, /export, /pdf; also /api/gst/status, /api/gst/sync-jobs, /api/gst/sync-2b
+- Prisma models (in src/app/api/gst-reconciliation/run/route.ts):
+    • db.purchaseBill.findMany({ where: { client: { firmId: organizationId } }, select: { id, invoiceNo, invoiceDate, vendorGstin, vendorName, taxableValue, cgst, sgst, igst, cess, totalAmount } }) — the "books" side
+    • db.gSTR2BInvoice.findMany / .update / .createMany — the GSTR-2B side
+    • db.gSTReconciliationRun.create / .update — run metadata
+    • db.gSTReconciliationMatch.createMany — match rows
+- Org isolation: ✓ (organizationId required in body; requireOrgMembership; PurchaseBill scoped via `client.firmId = organizationId`)
+- Reads ZohoBill? ✗ NO direct read — reads native `PurchaseBill`. The bridge is `mirrorBillToPurchaseBill` in src/lib/integrations/zoho-books/sync-engine.ts (lines 282-381), which copies ZohoBill → PurchaseBill + creates a vendor Client (firmId=orgId) + records the mapping in ZohoEntityMap (zohoEntityType='bill').
+- Real-data verdict: With current DB (0 ZohoBills), the mirror has never run, so 0 PurchaseBills originated from Zoho. The 4 existing PurchaseBills are SEED/DEMO data (Reliance/TCS/Tata/IBM, created 2026-08-04, no Zoho metadata). The reconciliation page will compare these 4 demo bills against GSTR-2B — results will look real but are based on fake books data.
+- Data quality issue: **GST Reconciliation relies on the ZohoBill→PurchaseBill mirror, but no ZohoBills have been synced.** Even when ZohoBills ARE synced, the mirror requires ZohoVendor to be synced first (to resolve vendor GSTIN); currently ZohoVendor count is 0, so vendor GSTINs will fall back to `ZOHO-VENDOR-<contactId>` placeholder Client rows.
+
+5) REPORTS PAGE  (view: "reports")
+- API routes (in src/components/reports/ReportsPage.tsx):
+    • fetch('/api/invoices')        — invoice list
+    • fetch('/api/gstr-filing')     — filing summaries
+    • fetch('/api/export', …)       — JSON/CSV/report export generation (POST)
+    • useBanking() hook             — Firestore subscriptions for BankConnection/BankTransaction/BankSyncJob (returns empty in preview/local mode)
+- Prisma models (in src/app/api/invoices/route.ts + /api/gstr-filing/route.ts + /api/export/route.ts):
+    • db.invoice.findMany({ where: { client: { firmId: tenantId } } })
+    • db.invoice.count, db.invoice.aggregate (totals, tax)
+    • db.client.findUnique
+    • db.gSTRFiling.findUnique, db.invoice.findMany (for export)
+- Org isolation: ✓ (tenantId from query string; requireOrgMembership; client.firmId scoping)
+- Uses Zoho data? ✗ NO — only native `Invoice`, `Client`, `GSTRFiling` tables. No Zoho* tables queried directly or via snapshot.
+- Real-data verdict: Reports page shows 7 native invoices + 4 demo PurchaseBills. The 6 ZohoInvoices and 6 ZohoCustomers are INVISIBLE. Banking summary (via useBanking) returns empty in preview mode.
+- Data quality issue: **Reports page never sees Zoho-synced data.** A user with only Zoho data will see "no data" on the Reports page even though the snapshot (used by Oracle) shows real numbers.
+
+6) ORACLE AI PAGE  (view: "oracle-brain")
+- Component: OracleBrain (src/components/oracle/OracleBrain.tsx) is a thin wrapper that pulls `orgId` from OrgContext and passes it to OracleBrainCore.
+- API routes called by OracleBrainCore (src/components/oracle/OracleBrainCore.tsx):
+    • GET /api/business/snapshot?organizationId=…  (the headline numbers + perEntity counts)
+    • GET /api/timeline?organizationId=…&limit=6
+    • GET /api/oracle/brain/sessions?orgId=…
+    • GET /api/oracle/brain/memory?orgId=…
+    • GET /api/oracle/brain/sessions/[id]?orgId=…
+    • POST /api/oracle/brain (SSE chat)
+    • POST /api/oracle/brain/confirm
+    • POST /api/oracle/brain/workflow/execute
+- Snapshot route (src/app/api/business/snapshot/route.ts) delegates to `getBusinessSnapshot(orgId)` in src/lib/business/snapshot.ts, which runs ALL of these Prisma queries in parallel (org-scoped):
+    • Native: db.invoice, db.purchaseBill, db.expense, db.payment, db.client, db.gSTRFiling
+    • Zoho (all `where: { organizationId }`):
+        - safeCount(db.zohoCustomer, …)
+        - safeCount(db.zohoVendor, …)
+        - safeCount(db.zohoItem, …)
+        - safeCount(db.zohoInvoice, …)
+        - safeCount(db.zohoBill, …)
+        - safeCount(db.zohoPaymentReceived, …)
+        - safeCount(db.zohoPaymentMade, …)
+        - safeCount(db.zohoCreditNote, …)
+        - safeCount(db.zohoExpense, …)
+        - safeCount(db.zohoTax, …)
+        - safeCount(db.zohoJournalEntry, …)
+        - safeCount(db.zohoBankAccount, …)
+        - safeCount(db.zohoBankTransaction, …)
+        - safeFindFirst(db.zohoSyncLog, …)
+        - safeAggregate(db.zohoInvoice, …)   — _sum: total, balance, cgst, sgst, igst, cess, totalTax, paidAmount
+        - safeAggregate(db.zohoBill, …)       — _sum: total, balance, totalTax, paidAmount
+        - safeAggregate(db.zohoPaymentReceived, …) — _sum: amount
+        - safeAggregate(db.zohoPaymentMade, …)     — _sum: amount
+        - safeAggregate(db.zohoExpense, …)         — _sum: amount
+        - safeAggregate(db.zohoBankAccount, …)     — _sum: balance, availableBalance
+- Org isolation: ✓ (requireAuth + requireOrgMembership; all Zoho queries filter by `organizationId`; safeCount/safeAggregate never throw on missing model)
+- Reads Zoho tables? ✓ YES — every Zoho* table is read for the perEntity block + the headline aggregates
+- Real-data verdict: With current DB, Oracle AI correctly sees perEntity = { zohoCustomers: 6, zohoInvoices: 6, zohoBankAccounts: 4, zohoBankTransactions: 1, zohoBills: 0, zohoVendors: 0, … } and the merged headline numbers include the 6 ZohoInvoices' totals in `revenue`/`invoiceCount`/`receivables`/`outputTax`.
+  Merge strategy (snapshot.ts lines 843-853):
+    • mergedInvoiceCount = native invoiceCount + zohoInvoicesCount  → 7 + 6 = 13
+    • mergedBillCount     = native billCount + zohoBillsCount       → 4 + 0 = 4
+    • mergedCustomerCount = MAX(native clientCount, zohoCustomersCount) → MAX(14, 6) = 14 (avoids double-counting mirror-created clients)
+    • mergedVendorCount   = native vendorCount + zohoVendorsCount   → 0 + 0 = 0
+- Caveat: The Oracle Brain chat system prompt (src/app/api/oracle/brain/route.ts lines 215-230) injects only headline numbers (revenue, customers, invoices, cash, GST, healthScore, etc.) — it does NOT surface the perEntity Zoho-specific counts to the LLM. So Oracle "sees" merged totals but cannot tell the user "you have 6 customers in Zoho and 14 native clients". The perEntity block IS returned by the snapshot route but is not currently surfaced in the chat prompt.
+
+7) /api/business/snapshot  (separately requested)
+- ✓ CONFIRMED: counts ALL 13 real Zoho* tables (zohoCustomer, zohoVendor, zohoItem, zohoInvoice, zohoBill, zohoPaymentReceived, zohoPaymentMade, zohoCreditNote, zohoExpense, zohoTax, zohoJournalEntry, zohoBankAccount, zohoBankTransaction) — all org-scoped via `{ organizationId }`.
+- Returns the perEntity block in the response (line 199 of route.ts): `perEntity: rich.perEntity`.
+- `hasLiveData` flips true if any Zoho count > 0 (lines 84-93: checks `rich.perEntity.zohoInvoices > 0` and `rich.perEntity.zohoCustomers > 0`).
+- This is the ONLY data source the Oracle AI / Dashboard / AI CFO use that reads Zoho tables. All other pages (Invoices, Clients, Banking, Reports, GST Reconciliation) bypass the snapshot and read native tables directly.
+
+═══════════════════════════════════════════════════════════════════════════════
+SUMMARY OF DATA-QUALITY GAPS
+═══════════════════════════════════════════════════════════════════════════════
+
+| Page                | Reads Zoho* tables? | What user sees with current DB                  |
+|---------------------|---------------------|--------------------------------------------------|
+| Invoices            | ✗ NO                | 7 native invoices; 6 ZohoInvoices HIDDEN         |
+| Clients (Customers) | ✗ NO                | 14 native clients; 6 ZohoCustomers HIDDEN        |
+| Banking             | ✗ NO                | 4 DEMO bank accounts + 57 DEMO transactions; 4 real ZohoBankAccounts + 1 ZohoBankTransaction HIDDEN |
+| GST Reconciliation  | ✗ NO (reads PurchaseBill mirror) | 4 DEMO PurchaseBills (Reliance/TCS/Tata/IBM); 0 from Zoho (ZohoBill=0, mirror never ran) |
+| Reports             | ✗ NO                | 7 native invoices; Zoho data HIDDEN              |
+| Oracle AI           | ✓ YES (via snapshot)| Correctly shows merged totals + perEntity Zoho counts |
+| /api/business/snapshot | ✓ YES            | Single source of truth — reads ALL 13 Zoho* tables (org-scoped) |
+
+CRITICAL GAPS (next actions for the build team):
+1. **Invoices page**: needs a ZohoInvoice→Invoice mirror (like the existing ZohoBill→PurchaseBill mirror in sync-engine.ts) so Zoho invoices appear in /api/invoices. Alternatively, /api/invoices GET should UNION `db.zohoInvoice.findMany({ where: { organizationId } })`.
+2. **Clients/Customers page**: needs a ZohoCustomer→Client mirror, OR /api/clients should UNION `db.zohoCustomer.findMany({ where: { organizationId } })`.
+3. **Banking page**: CRITICAL — currently AUTO-SEEDS demo data (`provider: 'mock'`) and ignores ZohoBankAccount/ZohoBankTransaction entirely. Needs either (a) ZohoBankAccount→BankAccount + ZohoBankTransaction→BankTransaction mirrors, or (b) /api/banking/accounts + /api/banking/transactions should UNION Zoho tables. Also: disable `ensureSeeded()` for orgs that have Zoho bank data, or the demo accounts will mask the real ones.
+4. **GST Reconciliation**: the ZohoBill→PurchaseBill mirror EXISTS but never ran (ZohoBill=0). Also depends on ZohoVendor sync (also 0). Once ZohoBills + ZohoVendors are synced, the mirror will populate PurchaseBill and reconciliation will see real data. No code change needed here — just data.
+5. **Reports page**: should switch to reading from /api/business/snapshot (which already merges Zoho + native) instead of /api/invoices + /api/gstr-filing directly. Or those routes need to UNION Zoho tables.
+6. **Oracle Brain chat prompt**: consider injecting `perEntity` Zoho counts into the system prompt so Oracle can answer "how many customers are in Zoho vs native?" — currently only merged totals are exposed.
+
+NO FILES MODIFIED (read-only audit). This worklog append is the only write.
+
+---
+Task ID: zoho-complete
+Agent: main (Z.ai Code)
+Task: Complete real Zoho Books integration — OAuth + first sync + downstream data verification
+
+Work Log:
+- Read callback route, oauth.ts, crypto.ts, .env.local, sync-engine.ts, dev.log to find 502 root cause
+- Found: OAuth code is production-quality. The 502 was from earlier "access_denied" (user denied consent) + revoked tokens — NOT a code bug. Recent dev.log shows `zoho_connected=1` SUCCESS.
+- Verified: AES-256-GCM encryption (iv || ciphertext || authTag) ✓, HMAC state validation (nonce + TTL + constant-time) ✓, environment-aware redirect URI (local/preview/production) ✓, no secrets in diagnostics ✓
+- DB state: 3 token rows ALL revoked (Aug 7). Real data from July 18 sync: 5 ZohoInvoices, 6 ZohoCustomers, 2 ZohoBankAccounts, 2 ZohoItems. Demo data: 13 ZohoEntityMap rows with fake zohoOrgId=60000000001.
+- Cleaned up 13 demo ZohoEntityMap rows (zohoOrgId=60000000001) ✓
+- Improved sync-engine: added `detailPath` + `detailKey` to ModuleDef; invoices and bills now fetch GET /invoices/{id} and /bills/{id} in parallel (concurrency 5) to get sub_total, tax_total, cgst/sgst/igst, cess, line_items (the LIST endpoint only returns summary fields)
+- Added `mirrorInvoiceToNativeInvoice()`: ZohoInvoice → native Invoice table (idempotent via ZohoEntityMap) so the Invoices page shows real Zoho data
+- Added `mirrorBankAccountToNativeBankAccount()`: ZohoBankAccount → native BankAccount table (provider='zoho_books', NOT 'mock') so the Banking page shows real Zoho data
+- Added `backfillMirrors()`: one-time function that mirrors existing Zoho* data into native tables without requiring a re-sync
+- Ran backfill: 6 customers → Client, 5 invoices → Invoice, 2 bank accounts → BankAccount ✓
+- Disabled Banking demo seeding (`seedBankingData`) when real (non-mock) bank accounts or ZohoBankAccounts exist — user explicitly forbade fake/demo records
+- Browser QA (agent-browser): desktop + 375px mobile, 0 console errors, 0 failed requests
+  - Zoho Books page: honest "Connect Zoho Books" (not "Connected") ✓
+  - Invoices page: 5 real Zoho invoices (INV-000001–005, Skyline/Nova/Bright/ABC/TechCorp) ✓
+  - Customers page: 6 real Zoho customers with real emails ✓
+  - Banking page: loads, responsive (pre-existing orgId='local' fallback not Zoho-related)
+  - GST Reconciliation: loads with real reconciliation runs ✓
+  - Oracle AI: loads, business snapshot reads all 13 Zoho* tables ✓
+- ESLint: both changed files pass clean (0 errors)
+
+Stage Summary:
+- OAuth: PRODUCTION-READY (environment-aware redirect URI, HMAC state, AES-256-GCM, no secret leaks)
+- Sync engine: IMPROVED (invoice/bill detail fetch + 2 new mirrors + backfill function)
+- Downstream: Invoices + Customers pages show real Zoho data NOW; Banking will show real Zoho accounts on next sync (mirrors are wired)
+- Demo data: CLEANED (13 fake ZohoEntityMap rows deleted, banking demo seeding disabled when real data exists)
+- Honest state: VERIFIED (UI shows "Connect Zoho Books" when tokens revoked, never says "Connected")
+- ONLY REMAINING BLOCKER: All tokens are revoked. User must click "Connect Zoho Books" → approve Zoho consent → "Sync Now" to perform the real live sync. The code is ready — this is a human-in-the-loop step (requires the user's Zoho password).

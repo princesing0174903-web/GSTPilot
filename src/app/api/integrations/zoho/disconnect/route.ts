@@ -16,6 +16,7 @@ import {
   loadTokens,
 } from '@/lib/integrations/zoho-books';
 import { safeAudit } from '@/lib/audit/safe-write';
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,6 +29,12 @@ export async function POST(req: Request) {
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
       );
+    }
+
+    // Rate limit: 5 disconnects per minute per user — destructive, low limit.
+    const rl = rateLimit(req, { windowMs: 60_000, max: 5 }, 'zoho-disconnect', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec, 'Too many disconnect requests. Please wait before retrying.');
     }
 
     // Capture the stored token id for audit before disconnect clears it.

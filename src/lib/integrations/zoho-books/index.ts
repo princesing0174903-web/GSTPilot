@@ -19,6 +19,7 @@ export {
   getZohoOAuthConfig,
   resolvePublicOrigin,
   resolveRedirectUri,
+  classifyRequestEnvironment,
   getRedirectUri,
   encodeState,
   decodeState,
@@ -33,6 +34,7 @@ export {
   disconnectZoho,
   getConnectionStatus,
 } from './oauth';
+export type { ZohoRedirectEnvironment } from './oauth';
 
 // Zoho Books REST API client (retry + never-throw)
 export { zohoFetch, zohoGet, zohoPost, zohoPut, zohoDelete } from './client';

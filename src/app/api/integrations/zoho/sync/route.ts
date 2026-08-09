@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integrations/zoho-books/sync-engine';
 import { resolveOrgUserFromHeaders } from '@/lib/integrations/zoho-books/oauth';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
+import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — sync can take a while for large orgs
@@ -34,22 +35,32 @@ export async function POST(request: NextRequest) {
   try {
     const { orgId, userId } = resolveOrgUserFromHeaders(request);
 
-    if (!orgId) {
+    // SECURITY: require BOTH orgId AND userId — prevents anonymous callers
+    // from triggering expensive syncs using only an orgId.
+    if (!orgId || !userId) {
       return NextResponse.json(
-        { ok: false, error: 'Organization ID is required (x-gstpilot-orgid header or ?organizationId=).' },
+        { ok: false, error: 'Organization + user context required (x-gstpilot-orgid + x-gstpilot-actor headers).' },
         { status: 400 },
       );
     }
 
-    // Parse mode from body (default: full)
-    let mode: SyncMode = 'full';
+    // Rate limit: 5 sync triggers per minute per user — sync is expensive
+    // (10-60s, hits Zoho API + writes to DB). Prevents abuse / accidental
+    // double-clicks from overwhelming the server.
+    const rl = rateLimit(request, { windowMs: 60_000, max: 5 }, 'zoho-sync', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec, 'Too many sync requests. Please wait before retrying.');
+    }
+
+    // Parse mode from body (default: incremental — safer for repeated clicks)
+    let mode: SyncMode = 'incremental';
     try {
       const body = await request.json();
       if (body?.mode === 'incremental' || body?.mode === 'full') {
         mode = body.mode;
       }
     } catch {
-      // No body or invalid JSON — default to full sync
+      // No body or invalid JSON — default to incremental sync
     }
 
     const result = await runZohoFullSync({
@@ -111,20 +122,26 @@ export async function POST(request: NextRequest) {
 // ─── GET: current sync status (for UI polling) ────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
-    const { orgId } = resolveOrgUserFromHeaders(request);
-    // Fallback: accept ?organizationId= query param (for non-hook callers)
-    const queryOrgId = request.nextUrl.searchParams.get('organizationId');
+    const { orgId, userId } = resolveOrgUserFromHeaders(request);
 
-    const finalOrgId = orgId || queryOrgId;
-
-    if (!finalOrgId) {
+    // SECURITY: require BOTH orgId AND userId — no ?organizationId= fallback.
+    // Previously this route accepted ?organizationId= which allowed tenant
+    // isolation bypass for sync-status metadata. Removed.
+    if (!orgId || !userId) {
       return NextResponse.json(
-        { status: 'idle', error: 'Organization ID is required.' },
+        { status: 'idle', error: 'Organization + user context required.' },
         { status: 400 },
       );
     }
 
-    const status = await getSyncStatus(finalOrgId);
+    // Light rate limit on status polling — 60/min (the hook polls every 1.5s
+    // during a sync = 40 req/min worst case, so 60 leaves headroom).
+    const rl = rateLimit(request, RATE_LIMIT_PRESETS.write, 'zoho-sync-status', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec);
+    }
+
+    const status = await getSyncStatus(orgId);
     return NextResponse.json(status);
   } catch (error) {
     console.error('GET /api/integrations/zoho/sync error:', error);

@@ -17,6 +17,11 @@
 import { db } from '@/lib/db';
 import { encrypt, decrypt, safeDecrypt } from './crypto';
 import {
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'crypto';
+import {
   ZOHO_BOOKS_SCOPE,
   ZOHO_BOOKS_SCOPE_AREAS,
   type ZohoDataCenter,
@@ -147,28 +152,110 @@ function resolveProto(host: string, forwardedProto: string | null): string {
 }
 
 /**
- * Resolve the OAuth redirect_uri for a specific request.
+ * Classify the incoming request environment for OAuth redirect URI selection.
+ *   - "local"      → request originated from localhost / 127.0.0.1 (dev server)
+ *   - "preview"    → request came through the z.ai gateway (abc header or
+ *                    x-forwarded-host ending in `.space-z.ai` or any public host)
+ *   - "production" → request came from a non-localhost public hostname
+ */
+export type ZohoRedirectEnvironment = 'local' | 'preview' | 'production';
+
+const CALLBACK_PATH = '/api/integrations/zoho/callback';
+
+/** Returns true when host refers to the local dev server. */
+function isLocalhostHost(host: string | null): boolean {
+  if (!host) return false;
+  const h = host.toLowerCase();
+  return (
+    h.startsWith('localhost') ||
+    h.startsWith('127.0.0.1') ||
+    h.startsWith('0.0.0.0') ||
+    h.startsWith('[::1]')
+  );
+}
+
+/** Classify the request environment by inspecting gateway / host headers. */
+export function classifyRequestEnvironment(req: Request): ZohoRedirectEnvironment {
+  const headers = req.headers;
+  // The z.ai gateway stamps the public preview hostname into the `abc` header.
+  if (headers.get('abc')) return 'preview';
+  // x-forwarded-host takes precedence over host when behind a reverse proxy.
+  const fwdHost = headers.get('x-forwarded-host');
+  if (fwdHost && !isLocalhostHost(fwdHost)) return 'production';
+  const origin = headers.get('origin');
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      if (!isLocalhostHost(u.host)) return 'production';
+    } catch {
+      /* ignore */
+    }
+  }
+  const host = headers.get('host');
+  if (isLocalhostHost(host)) return 'local';
+  if (host) return 'production';
+  return 'local';
+}
+
+/**
+ * Resolve the OAuth redirect_uri for a specific request — environment-aware.
  *
  * PRIORITY (ensures the redirect_uri ALWAYS matches the Zoho API Console):
- *   1. `ZOHO_REDIRECT_URI` env var (if set) — the user registers THIS exact
- *      URL in the Zoho API Console, so it must be used consistently for the
- *      authorization URL, the OAuth state, and the token-exchange callback.
- *      This is the safest default and prevents "redirect_uri mismatch" errors.
- *   2. Dynamic resolution from the request origin (preview / gateway-aware).
- *      Used only when the env var is NOT set.
  *
- * Set `ZOHO_REDIRECT_URI_DYNAMIC=true` to force dynamic resolution even when
- * the env var is present (useful for preview environments where the public
- * URL is stable and registered in Zoho).
+ *   1. LOCAL development (browser on the same machine as the dev server):
+ *        → use `ZOHO_REDIRECT_URI` env var (typically http://localhost:3000/...).
+ *          This is what the user has registered in the Zoho API Console for
+ *          local development.
+ *
+ *   2. PREVIEW / PRODUCTION (browser on a different machine, request came
+ *      through the gateway or a public hostname):
+ *        → use `ZOHO_REDIRECT_URI_PUBLIC` env var if set (the public URL the
+ *          user registered in the Zoho API Console for preview/production).
+ *        → else fall back to deriving the origin from the request headers
+ *          (abc / x-forwarded-host / origin / host).
+ *        → else fall back to `ZOHO_REDIRECT_URI` env var (last resort — will
+ *          likely fail because the preview browser can't reach localhost).
+ *
+ *   3. `ZOHO_REDIRECT_URI_DYNAMIC=true` overrides everything and forces
+ *      dynamic origin resolution (useful if you have a wildcard registered).
+ *
+ * CRITICAL: Whatever value is used MUST be registered in the Zoho API Console
+ * (Self-Client → Authorized Redirect URIs). The /diagnostics endpoint surfaces
+ * the exact value so the user can verify the match.
  */
 export function resolveRedirectUri(req: Request): string {
   const forceDynamic = process.env.ZOHO_REDIRECT_URI_DYNAMIC === 'true';
-  const envUri = process.env.ZOHO_REDIRECT_URI;
-  if (envUri && !forceDynamic) {
-    return envUri;
+  const envLocal = process.env.ZOHO_REDIRECT_URI;
+  const envPublic = process.env.ZOHO_REDIRECT_URI_PUBLIC;
+
+  if (forceDynamic) {
+    const origin = resolvePublicOrigin(req);
+    return `${origin}${CALLBACK_PATH}`;
   }
+
+  const env = classifyRequestEnvironment(req);
+
+  if (env === 'local') {
+    // Local dev — use the localhost env var (must be registered in Zoho console).
+    if (envLocal) return envLocal;
+    // No env var — derive from the request origin (still localhost).
+    const origin = resolvePublicOrigin(req);
+    return `${origin}${CALLBACK_PATH}`;
+  }
+
+  // Preview / production — prefer the public env var.
+  if (envPublic) return envPublic;
+
+  // No public env var — derive from the request origin (gateway-aware).
+  // This works ONLY if the derived URL is registered in the Zoho console.
   const origin = resolvePublicOrigin(req);
-  return `${origin}/api/integrations/zoho/callback`;
+  const derived = `${origin}${CALLBACK_PATH}`;
+  console.warn(
+    `[zoho-books] WARNING: ZOHO_REDIRECT_URI_PUBLIC is not set, derived redirect_uri="${derived}" from request. ` +
+      `This MUST be registered in the Zoho API Console or OAuth will fail with "redirect_uri mismatch". ` +
+      `For local-only testing, complete OAuth from the same machine that runs the dev server.`,
+  );
+  return derived;
 }
 
 /** Resolve the static redirect_uri from env (no request context). */
@@ -179,18 +266,95 @@ export function getRedirectUri(): string {
   );
 }
 
-// ─── OAuth state encode/decode ───────────────────────────────────────────────
+// ─── OAuth state encode/decode (HMAC-signed, nonce, TTL) ─────────────────────
+//
+// The OAuth `state` param protects against CSRF: an attacker can't trick a
+// user into connecting the attacker's Zoho account because the callback
+// validates that the state matches what WE issued at /connect time.
+//
+// To make this protection strong (not just base64-encoded JSON that an
+// attacker could craft), the state is:
+//   1. A random 16-byte nonce (base64url) — unguessable, single-use feel
+//   2. The JSON payload (orgId, userId, returnPath, redirectUri)
+//   3. An HMAC-SHA256 signature over (nonce + payload) using a server secret
+//   4. A TTL: state expires after 10 minutes (defence-in-depth against replay)
+//
+// Format: `<nonce>.<base64url(payload)>.<expiresAtMs>.<hmac>`
+//
+// The HMAC secret is derived from ZOHO_CLIENT_SECRET (already a server-side
+// secret) so no additional env var is required. A separate
+// ZOHO_OAUTH_STATE_SECRET can override this for environments that rotate
+// client secrets independently.
+
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function getStateHmacSecret(): string {
+  // Prefer an explicit state secret if set, else derive from the client secret.
+  // The client secret is already a server-side value never exposed to the
+  // browser, so it's a suitable HMAC key for OAuth state protection.
+  return (
+    process.env.ZOHO_OAUTH_STATE_SECRET ??
+    process.env.ZOHO_CLIENT_SECRET ??
+    'gstpilot-zoho-state-fallback-secret-CHANGEME'
+  );
+}
+
+function hmacSign(message: string): string {
+  const key = getStateHmacSecret();
+  return createHmac('sha256', key)
+    .update(message)
+    .digest('base64url');
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  // Node 18+ has timingSafeEqual on Buffer — use it to avoid timing attacks.
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return a === b;
+  }
+}
 
 export function encodeState(input: ZohoOAuthState): string {
-  const json = JSON.stringify(input);
-  return Buffer.from(json, 'utf8').toString('base64url');
+  // Generate a random 16-byte nonce (base64url, ~22 chars).
+  const nonce = randomBytes(16).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(input), 'utf8').toString('base64url');
+  const expiresAt = Date.now() + STATE_TTL_MS;
+  const message = `${nonce}.${payload}.${expiresAt}`;
+  const sig = hmacSign(message);
+  return `${message}.${sig}`;
 }
 
 export function decodeState(state: string): ZohoOAuthState | null {
   try {
-    const json = Buffer.from(state, 'base64url').toString('utf8');
+    const parts = state.split('.');
+    if (parts.length !== 4) return null;
+    const [nonce, payload, expiresAtStr, sig] = parts;
+    if (!nonce || !payload || !expiresAtStr || !sig) return null;
+
+    // Verify the HMAC signature (constant-time comparison).
+    const message = `${nonce}.${payload}.${expiresAtStr}`;
+    const expectedSig = hmacSign(message);
+    if (!constantTimeEqual(sig, expectedSig)) {
+      console.warn('[zoho/oauth-state] REJECTED: invalid HMAC signature');
+      return null;
+    }
+
+    // Verify TTL — state expires after STATE_TTL_MS.
+    const expiresAt = parseInt(expiresAtStr, 10);
+    if (isNaN(expiresAt) || Date.now() > expiresAt) {
+      console.warn('[zoho/oauth-state] REJECTED: state expired');
+      return null;
+    }
+
+    const json = Buffer.from(payload, 'base64url').toString('utf8');
     return JSON.parse(json) as ZohoOAuthState;
-  } catch {
+  } catch (err) {
+    console.warn('[zoho/oauth-state] REJECTED: decode error', err instanceof Error ? err.message : err);
     return null;
   }
 }

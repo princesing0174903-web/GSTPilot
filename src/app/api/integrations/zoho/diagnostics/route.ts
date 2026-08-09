@@ -27,6 +27,7 @@ import { NextResponse } from 'next/server';
 import {
   getZohoEndpoints,
   resolveRedirectUri,
+  classifyRequestEnvironment,
   ZOHO_BOOKS_SCOPE,
   resolveOrgUserFromHeaders,
 } from '@/lib/integrations/zoho-books';
@@ -39,7 +40,8 @@ export async function GET(req: Request) {
 
   const clientId = process.env.ZOHO_CLIENT_ID;
   const clientSecret = process.env.ZOHO_CLIENT_SECRET;
-  const envRedirectUri = process.env.ZOHO_REDIRECT_URI;
+  const envLocalRedirectUri = process.env.ZOHO_REDIRECT_URI;
+  const envPublicRedirectUri = process.env.ZOHO_REDIRECT_URI_PUBLIC;
   const forceDynamic = process.env.ZOHO_REDIRECT_URI_DYNAMIC === 'true';
 
   const endpoints = (() => {
@@ -50,15 +52,24 @@ export async function GET(req: Request) {
     }
   })();
 
+  const environment = classifyRequestEnvironment(req);
   const effectiveRedirectUri = (() => {
     try {
       return resolveRedirectUri(req);
     } catch {
-      return envRedirectUri ?? '(unable to resolve)';
+      return envLocalRedirectUri ?? '(unable to resolve)';
     }
   })();
 
-  const redirectUriSource = envRedirectUri && !forceDynamic ? 'env' : 'dynamic';
+  // Determine the source of the effective redirect URI for transparency.
+  let redirectUriSource: 'env_local' | 'env_public' | 'dynamic' | 'fallback';
+  if (forceDynamic) {
+    redirectUriSource = 'dynamic';
+  } else if (environment === 'local') {
+    redirectUriSource = envLocalRedirectUri ? 'env_local' : 'dynamic';
+  } else {
+    redirectUriSource = envPublicRedirectUri ? 'env_public' : 'dynamic';
+  }
 
   return NextResponse.json({
     ok: true,
@@ -71,8 +82,13 @@ export async function GET(req: Request) {
     dataCenter: endpoints?.dc ?? process.env.ZOHO_DC ?? 'in',
     accountsUrl: endpoints?.authBaseUrl?.replace('/oauth/v2/auth', '') ?? null,
     apiBaseUrl: endpoints?.apiBaseUrl ?? null,
+    environment,
     redirectUri: effectiveRedirectUri,
     redirectUriSource,
+    registeredUrisExpected: {
+      local: envLocalRedirectUri ?? '(not set — http://localhost:3000/api/integrations/zoho/callback)',
+      public: envPublicRedirectUri ?? '(not set — preview/production will derive from request origin)',
+    },
     clientIdPrefix: clientId
       ? clientId.slice(0, 20) + (clientId.length > 20 ? '…' : '')
       : null,
@@ -80,16 +96,24 @@ export async function GET(req: Request) {
     envVars: {
       ZOHO_CLIENT_ID: Boolean(clientId),
       ZOHO_CLIENT_SECRET: Boolean(clientSecret),
-      ZOHO_REDIRECT_URI: Boolean(envRedirectUri),
+      ZOHO_REDIRECT_URI: Boolean(envLocalRedirectUri),
+      ZOHO_REDIRECT_URI_PUBLIC: Boolean(envPublicRedirectUri),
       ZOHO_DC: Boolean(process.env.ZOHO_DC),
       ZOHO_REDIRECT_URI_DYNAMIC: forceDynamic,
       ZOHO_ACCOUNTS_URL: Boolean(process.env.ZOHO_ACCOUNTS_URL),
       ZOHO_BOOKS_API: Boolean(process.env.ZOHO_BOOKS_API),
     },
+    requestHeaders: {
+      host: req.headers.get('host'),
+      origin: req.headers.get('origin'),
+      abc: req.headers.get('abc') ? '(present)' : null,
+      xForwardedHost: req.headers.get('x-forwarded-host'),
+      xForwardedProto: req.headers.get('x-forwarded-proto'),
+    },
     zohoConsoleRequirements: {
       redirectUriMustMatch: effectiveRedirectUri,
       note:
-        'The redirect URI above MUST be registered exactly (protocol + host + port + path) in the Zoho API Console → your Client → Authorized Redirect URIs.',
+        'The redirect URI above MUST be registered exactly (protocol + host + port + path) in the Zoho API Console → your Client → Authorized Redirect URIs. For both local dev AND preview/production, register BOTH URIs.',
     },
   });
 }

@@ -30,6 +30,7 @@ import { ZohoModulesGrid } from './ZohoModulesGrid';
 import { ZohoSyncHistory } from './ZohoSyncHistory';
 import { ZohoOracleInsights } from './ZohoOracleInsights';
 import { ZohoLatestRecords } from './ZohoLatestRecords';
+import { ZohoSyncProgress } from './ZohoSyncProgress';
 
 interface ZohoConnectedProps {
   status: ZohoConnectionStatus;
@@ -141,6 +142,13 @@ export function ZohoConnected({
 
       {/* (b) KPI row */}
       <ZohoKpiRow syncStatus={syncStatus} syncing={syncing} />
+
+      {/* (b.5) Live sync progress / partial-sync warning */}
+      <ZohoSyncProgress
+        syncStatus={syncStatus}
+        syncing={syncing}
+        onRetry={handleSyncNow}
+      />
 
       {/* (c) Modules grid */}
       <ZohoModulesGrid

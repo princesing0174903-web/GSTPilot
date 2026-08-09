@@ -19,6 +19,7 @@ import {
   resolveOrgUserFromHeaders,
   resolveRedirectUri,
 } from '@/lib/integrations/zoho-books';
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -44,6 +45,13 @@ export async function GET(req: Request) {
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
       );
+    }
+
+    // Rate limit: 10 OAuth URL generations per minute per user — prevents
+    // OAuth flow abuse / accidental double-clicks.
+    const rl = rateLimit(req, { windowMs: 60_000, max: 10 }, 'zoho-connect', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec, 'Too many connection attempts. Please wait before retrying.');
     }
 
     // ─── STAGE 2: Configuration check ───

@@ -90,25 +90,25 @@ interface ModuleDef {
   label: string;
   endpoint: string;
   responseKey: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   upsert: (orgId: string, zohoOrgId: string, record: any) => Promise<{ imported: number; updated: number; failed: number }>;
 }
 
 // ─── Module upsert functions ─────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function num(v: any, def = 0): number {
   const n = typeof v === 'number' ? v : parseFloat(v);
   return isNaN(n) ? def : n;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function str(v: any, def: string | null = null): string | null {
   if (v === undefined || v === null || v === '') return def;
   return String(v);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function date(v: any): Date | null {
   if (!v) return null;
   const d = new Date(v);
@@ -116,15 +116,12 @@ function date(v: any): Date | null {
 }
 
 // ─── Vendors ──────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertVendor(orgId: string, zohoOrgId: string, v: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoContactId = str(v.contact_id) || '';
     if (!zohoContactId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoVendor.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoContactId },
-    });
     const data = {
       contactName: str(v.contact_name, '') || v.company_name || 'Unknown',
       companyName: str(v.company_name),
@@ -141,22 +138,26 @@ async function upsertVendor(orgId: string, zohoOrgId: string, v: any) {
       zohoCreatedAt: date(v.created_time),
       zohoUpdatedAt: date(v.last_modified_time),
     };
-    if (existing) { await db.zohoVendor.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoVendor.create({ data: { organizationId: orgId, zohoOrgId, zohoContactId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip instead of findFirst+update/create (2).
+    // Uses the @@unique([organizationId, zohoOrgId, zohoContactId]) constraint.
+    const created = await db.zohoVendor.upsert({
+      where: { organizationId_zohoOrgId_zohoContactId: { organizationId: orgId, zohoOrgId, zohoContactId } },
+      create: { organizationId: orgId, zohoOrgId, zohoContactId, ...data },
+      update: data,
+    });
+    if (created.createdAt.getTime() === created.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] vendor upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertInvoice(orgId: string, zohoOrgId: string, inv: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoInvoiceId = str(inv.invoice_id) || '';
     if (!zohoInvoiceId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoInvoice.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoInvoiceId },
-    });
     const data = {
       invoiceNumber: str(inv.invoice_number),
       customerId: str(inv.customer_id),
@@ -179,22 +180,25 @@ async function upsertInvoice(orgId: string, zohoOrgId: string, inv: any) {
       zohoCreatedAt: date(inv.created_time),
       zohoUpdatedAt: date(inv.last_modified_time),
     };
-    if (existing) { await db.zohoInvoice.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoInvoice.create({ data: { organizationId: orgId, zohoOrgId, zohoInvoiceId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const created = await db.zohoInvoice.upsert({
+      where: { organizationId_zohoOrgId_zohoInvoiceId: { organizationId: orgId, zohoOrgId, zohoInvoiceId } },
+      create: { organizationId: orgId, zohoOrgId, zohoInvoiceId, ...data },
+      update: data,
+    });
+    if (created.createdAt.getTime() === created.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertInvoice upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Bills ────────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertBill(orgId: string, zohoOrgId: string, bill: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoBillId = str(bill.bill_id) || '';
     if (!zohoBillId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoBill.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoBillId },
-    });
     const data = {
       billNumber: str(bill.bill_number),
       vendorId: str(bill.vendor_id),
@@ -217,8 +221,14 @@ async function upsertBill(orgId: string, zohoOrgId: string, bill: any) {
       zohoCreatedAt: date(bill.created_time),
       zohoUpdatedAt: date(bill.last_modified_time),
     };
-    if (existing) { await db.zohoBill.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoBill.create({ data: { organizationId: orgId, zohoOrgId, zohoBillId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoBill.upsert({
+      where: { organizationId_zohoOrgId_zohoBillId: { organizationId: orgId, zohoOrgId, zohoBillId } },
+      create: { organizationId: orgId, zohoOrgId, zohoBillId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
 
     // ── Mirror into PurchaseBill so the GST Reconciliation engine (which reads
     // db.purchaseBill) can compare Zoho bills against GSTR-2B. Idempotent via
@@ -246,7 +256,7 @@ async function upsertBill(orgId: string, zohoOrgId: string, bill: any) {
 //
 // Vendor GSTIN: resolved from the synced ZohoVendor table (by zohoContactId) so
 // the reconciliation match engine can compare supplier GSTINs against GSTR-2B.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function mirrorBillToPurchaseBill(orgId: string, zohoOrgId: string, zohoBillId: string, bill: any) {
   // 1. Resolve the vendor's GSTIN from the ZohoVendor table (synced separately).
   const vendorContactId = str(bill.vendor_id);
@@ -363,15 +373,12 @@ async function mirrorBillToPurchaseBill(orgId: string, zohoOrgId: string, zohoBi
 }
 
 // ─── Payments Received ────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertPaymentReceived(orgId: string, zohoOrgId: string, p: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoPaymentId = str(p.payment_id) || '';
     if (!zohoPaymentId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoPaymentReceived.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoPaymentId },
-    });
     const data = {
       paymentNumber: str(p.payment_number),
       customerId: str(p.customer_id),
@@ -388,22 +395,25 @@ async function upsertPaymentReceived(orgId: string, zohoOrgId: string, p: any) {
       zohoCreatedAt: date(p.created_time),
       zohoUpdatedAt: date(p.last_modified_time),
     };
-    if (existing) { await db.zohoPaymentReceived.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoPaymentReceived.create({ data: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoPaymentReceived.upsert({
+      where: { organizationId_zohoOrgId_zohoPaymentId: { organizationId: orgId, zohoOrgId, zohoPaymentId } },
+      create: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertPaymentReceived upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Payments Made ────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertPaymentMade(orgId: string, zohoOrgId: string, p: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoPaymentId = str(p.payment_id) || '';
     if (!zohoPaymentId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoPaymentMade.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoPaymentId },
-    });
     const data = {
       paymentNumber: str(p.payment_number),
       vendorId: str(p.vendor_id),
@@ -420,22 +430,25 @@ async function upsertPaymentMade(orgId: string, zohoOrgId: string, p: any) {
       zohoCreatedAt: date(p.created_time),
       zohoUpdatedAt: date(p.last_modified_time),
     };
-    if (existing) { await db.zohoPaymentMade.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoPaymentMade.create({ data: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoPaymentMade.upsert({
+      where: { organizationId_zohoOrgId_zohoPaymentId: { organizationId: orgId, zohoOrgId, zohoPaymentId } },
+      create: { organizationId: orgId, zohoOrgId, zohoPaymentId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertPaymentMade upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Credit Notes ─────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertCreditNote(orgId: string, zohoOrgId: string, cn: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoCreditNoteId = str(cn.creditnote_id) || '';
     if (!zohoCreditNoteId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoCreditNote.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoCreditNoteId },
-    });
     const data = {
       creditNoteNumber: str(cn.creditnote_number),
       date: str(cn.date),
@@ -456,22 +469,25 @@ async function upsertCreditNote(orgId: string, zohoOrgId: string, cn: any) {
       zohoCreatedAt: date(cn.created_time),
       zohoUpdatedAt: date(cn.last_modified_time),
     };
-    if (existing) { await db.zohoCreditNote.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoCreditNote.create({ data: { organizationId: orgId, zohoOrgId, zohoCreditNoteId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoCreditNote.upsert({
+      where: { organizationId_zohoOrgId_zohoCreditNoteId: { organizationId: orgId, zohoOrgId, zohoCreditNoteId } },
+      create: { organizationId: orgId, zohoOrgId, zohoCreditNoteId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertCreditNote upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertExpense(orgId: string, zohoOrgId: string, e: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoExpenseId = str(e.expense_id) || '';
     if (!zohoExpenseId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoExpense.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoExpenseId },
-    });
     const data = {
       expenseNumber: str(e.expense_number),
       vendorId: str(e.vendor_id),
@@ -489,22 +505,25 @@ async function upsertExpense(orgId: string, zohoOrgId: string, e: any) {
       zohoCreatedAt: date(e.created_time),
       zohoUpdatedAt: date(e.last_modified_time),
     };
-    if (existing) { await db.zohoExpense.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoExpense.create({ data: { organizationId: orgId, zohoOrgId, zohoExpenseId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoExpense.upsert({
+      where: { organizationId_zohoOrgId_zohoExpenseId: { organizationId: orgId, zohoOrgId, zohoExpenseId } },
+      create: { organizationId: orgId, zohoOrgId, zohoExpenseId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertExpense upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Taxes ────────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertTax(orgId: string, zohoOrgId: string, t: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoTaxId = str(t.tax_id) || '';
     if (!zohoTaxId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoTax.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoTaxId },
-    });
     const data = {
       taxName: str(t.tax_name, '') || 'Unknown Tax',
       taxPercentage: num(t.tax_percentage, 0),
@@ -516,14 +535,20 @@ async function upsertTax(orgId: string, zohoOrgId: string, t: any) {
       zohoCreatedAt: date(t.created_time),
       zohoUpdatedAt: date(t.last_modified_time),
     };
-    if (existing) { await db.zohoTax.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoTax.create({ data: { organizationId: orgId, zohoOrgId, zohoTaxId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoTax.upsert({
+      where: { organizationId_zohoOrgId_zohoTaxId: { organizationId: orgId, zohoOrgId, zohoTaxId } },
+      create: { organizationId: orgId, zohoOrgId, zohoTaxId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertTax upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Journals ─────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertJournal(orgId: string, zohoOrgId: string, j: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
@@ -534,7 +559,7 @@ async function upsertJournal(orgId: string, zohoOrgId: string, j: any) {
       where: { organizationId: orgId, zohoOrgId, journalNumber },
     });
     // Normalize journal lines
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const lines = (j.line_items || j.journal_lines || []).map((l: any) => ({
       account: l.account_name || l.account_id || '',
       debit: num(l.debit, 0),
@@ -559,15 +584,12 @@ async function upsertJournal(orgId: string, zohoOrgId: string, j: any) {
 }
 
 // ─── Bank Accounts ────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertBankAccount(orgId: string, zohoOrgId: string, ba: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoAccountId = str(ba.account_id) || '';
     if (!zohoAccountId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoBankAccount.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoAccountId },
-    });
     const data = {
       accountName: str(ba.account_name, '') || str(ba.bank_name, '') || 'Bank Account',
       accountNumber: str(ba.account_number) || str(ba.bank_account_number),
@@ -582,22 +604,25 @@ async function upsertBankAccount(orgId: string, zohoOrgId: string, ba: any) {
       zohoCreatedAt: date(ba.created_time),
       zohoUpdatedAt: date(ba.last_modified_time),
     };
-    if (existing) { await db.zohoBankAccount.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoBankAccount.create({ data: { organizationId: orgId, zohoOrgId, zohoAccountId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoBankAccount.upsert({
+      where: { organizationId_zohoOrgId_zohoAccountId: { organizationId: orgId, zohoOrgId, zohoAccountId } },
+      create: { organizationId: orgId, zohoOrgId, zohoAccountId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertBankAccount upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Bank Transactions ────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertBankTransaction(orgId: string, zohoOrgId: string, bt: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoTransactionId = str(bt.transaction_id) || '';
     if (!zohoTransactionId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoBankTransaction.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoTransactionId },
-    });
     const data = {
       bankAccountId: str(bt.bank_account_id),
       accountName: str(bt.account_name),
@@ -613,22 +638,25 @@ async function upsertBankTransaction(orgId: string, zohoOrgId: string, bt: any) 
       zohoCreatedAt: date(bt.created_time),
       zohoUpdatedAt: date(bt.last_modified_time),
     };
-    if (existing) { await db.zohoBankTransaction.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoBankTransaction.create({ data: { organizationId: orgId, zohoOrgId, zohoTransactionId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoBankTransaction.upsert({
+      where: { organizationId_zohoOrgId_zohoTransactionId: { organizationId: orgId, zohoOrgId, zohoTransactionId } },
+      create: { organizationId: orgId, zohoOrgId, zohoTransactionId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertBankTransaction upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
 
 // ─── Items ────────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function upsertItem(orgId: string, zohoOrgId: string, item: any) {
   let imported = 0, updated = 0, failed = 0;
   try {
     const zohoItemId = str(item.item_id) || '';
     if (!zohoItemId) { failed++; return { imported, updated, failed }; }
-    const existing = await db.zohoItem.findFirst({
-      where: { organizationId: orgId, zohoOrgId, zohoItemId },
-    });
     const data = {
       name: str(item.name, '') || 'Unknown Item',
       description: str(item.description),
@@ -646,8 +674,14 @@ async function upsertItem(orgId: string, zohoOrgId: string, item: any) {
       source: 'zoho',
       updatedAt: new Date(),
     };
-    if (existing) { await db.zohoItem.update({ where: { id: existing.id }, data }); updated++; }
-    else { await db.zohoItem.create({ data: { organizationId: orgId, zohoOrgId, zohoItemId, ...data } }); imported++; }
+    // Native Prisma .upsert() — 1 DB round-trip (was 2).
+    const existing = await db.zohoItem.upsert({
+      where: { organizationId_zohoOrgId_zohoItemId: { organizationId: orgId, zohoOrgId, zohoItemId } },
+      create: { organizationId: orgId, zohoOrgId, zohoItemId, ...data },
+      update: data,
+    });
+    if (existing.createdAt.getTime() === existing.updatedAt.getTime()) imported++;
+    else updated++;
   } catch (err) { failed++; console.error('[zoho-sync] upsertItem upsert failed:', err instanceof Error ? err.message : err); }
   return { imported, updated, failed };
 }
@@ -1306,7 +1340,10 @@ export async function getSyncStatusUnified(
   }
 
   const isRunning = current.status === 'running';
-  const lastSync: UnifiedLastSync | null = isRunning ? null : {
+  // Always populate `lastSync` — even when running — so the UI can show live
+  // progress (currentEntity, partial stats, startedAt). Previously this was
+  // null during a running sync, which hid the "Fetching Customers…" indicator.
+  const lastSync: UnifiedLastSync = {
     id: current.id,
     status: current.status as SyncStatus,
     mode: current.mode as SyncMode,
@@ -1314,7 +1351,7 @@ export async function getSyncStatusUnified(
     completedAt: current.completedAt?.toISOString() ?? null,
     durationMs: current.completedAt
       ? current.completedAt.getTime() - current.startedAt.getTime()
-      : null,
+      : Date.now() - current.startedAt.getTime(),
     error: current.error,
     stats: entityStats,
     currentEntity: current.currentEntity,

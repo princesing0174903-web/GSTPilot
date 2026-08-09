@@ -282,7 +282,14 @@ export function useZohoBooks() {
   const { user } = useAuth();
 
   const [status, setStatus] = useState<ZohoConnectionStatus | null>(null);
-  const [statusLoading, setStatusLoading] = useState(false);
+  // Initialize to `true` so the skeleton renders on first paint. This prevents
+  // a race condition where the OAuthBanner would briefly mount (during the
+  // initial STATE-2 render), read the ?zoho_error= URL params, clear them,
+  // then unmount when the status check fires and remounts as a fresh banner
+  // that reads the now-cleared URL → no banner shown to the user.
+  // With `true`, STATE 1 (skeleton) renders first, then STATE 2/3 mount AFTER
+  // the status check completes — by which point the URL params are intact.
+  const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -345,10 +352,17 @@ export function useZohoBooks() {
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
+    // If org/user context isn't available yet, skip the fetch but clear the
+    // loading flag so the UI shows the disconnected state (not a perpetual
+    // skeleton). refreshStatus will be re-invoked when orgId/userId arrive.
+    if (!orgId || !userId) {
+      setStatusLoading(false);
+      return;
+    }
     void refreshStatus();
     void refreshSyncStatus();
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [refreshStatus, refreshSyncStatus]);
+  }, [refreshStatus, refreshSyncStatus, orgId, userId]);
 
   // Phase 5 — trigger a manual sync (POST /api/integrations/zoho/sync)
   //

@@ -19,6 +19,7 @@ import {
   getValidAccessToken,
   getZohoEndpoints,
 } from '@/lib/integrations/zoho-books';
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,6 +44,12 @@ export async function GET(req: Request) {
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
       );
+    }
+
+    // Rate limit: 10 org-list requests per minute per user.
+    const rl = rateLimit(req, { windowMs: 60_000, max: 10 }, 'zoho-orgs', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec);
     }
 
     const { accessToken, error: tokenError } = await getValidAccessToken(orgId, userId);

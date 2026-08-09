@@ -28,6 +28,7 @@ import {
 } from '@/lib/integrations/zoho-books';
 import { db } from '@/lib/db';
 import { safeAudit } from '@/lib/audit/safe-write';
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -40,6 +41,13 @@ export async function POST(req: Request) {
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },
       );
+    }
+
+    // Rate limit: 10 token refreshes per minute per user — prevents refresh
+    // storms if the UI accidentally fires multiple refresh calls.
+    const rl = rateLimit(req, { windowMs: 60_000, max: 10 }, 'zoho-refresh', userId);
+    if (rl.denied) {
+      return rateLimitedResponse(rl.retryAfterSec, 'Too many refresh requests. Please wait before retrying.');
     }
 
     const { tokens, stored } = await loadTokens(orgId, userId);

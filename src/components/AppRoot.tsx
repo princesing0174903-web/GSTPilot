@@ -37,6 +37,15 @@ import dynamic from 'next/dynamic';
 import { PremiumGlobalLoading } from '@/components/ui/premium-loading';
 import { ProvidersLazy } from '@/components/providers-lazy';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { boot } from '@/lib/perf/boot-tracer';
+
+// Mark the very first client-side mount of AppRoot. START_TIME in the boot
+// tracer is captured at module load (before React mounts), so this mark
+// measures "time from module eval to first React mount of the root" —
+// typically <50ms but useful to spot slow module evaluation.
+if (typeof window !== 'undefined') {
+  boot.mark('app root mount');
+}
 
 // ── Loading placeholder (premium full-screen splash) ─────────────────────────
 const PageLoader = () => <PremiumGlobalLoading />;

@@ -38,7 +38,6 @@ import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 
 import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
 import { FloatingDock } from '@/components/layout/FloatingDock'
-import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 // NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
 // experience at /oracle, launched by <OracleLauncher /> (mounted globally in
@@ -47,9 +46,27 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 // lived in the top bar has been removed. Branding now lives ONLY in the
 // sidebar (LeftNav.tsx), so the content area starts with the breadcrumb.
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
-import CommandPalette from '@/components/command-palette/CommandPalette'
 import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
 import { PremiumPageLoader } from '@/components/ui/premium-loading'
+
+// ── LAZY-LOADED SHELL COMPONENTS ─────────────────────────────────────────
+// CommandPalette (1400 lines) + NotificationsSheet are heavy and only used
+// on demand (⌘K press / bell click). Loading them eagerly adds ~2–4s to the
+// dashboard shell compile on a cold dev server. By deferring them to their
+// own chunks, the shell renders faster and the palette/sheet compile in the
+// background after the user is already interactive.
+//
+// Both are gated by user interaction (open state), so they're never rendered
+// until the user actually needs them — and by then the chunk is almost
+// certainly already cached from the background compile.
+const CommandPalette = dynamic(
+  () => import('@/components/command-palette/CommandPalette').then((m) => ({ default: m.default })),
+  { ssr: false, loading: () => null },
+)
+const NotificationsSheet = dynamic(
+  () => import('@/components/layout/NotificationsSheet').then((m) => ({ default: m.NotificationsSheet })),
+  { ssr: false, loading: () => null },
+)
 
 // DashboardViews is a lazy-loaded registry of ~21 real view components.
 // Keeping it dynamic means this shell file only compiles the layout chrome,

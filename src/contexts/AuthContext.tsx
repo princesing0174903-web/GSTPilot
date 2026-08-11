@@ -136,19 +136,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // ── Restore from localStorage for instant UI ──
+    // Declared BEFORE the safety timer so the timer's closure can read it.
+    let restoredFromCache = false;
+
     // Safety timeout — if Firebase doesn't respond in 3s, unblock the UI so
     // the landing page and login form are always reachable, even on slow
     // networks or in restricted sandbox environments.
+    //
+    // CRITICAL FIX (root cause of the "can't sign back in" failure mode):
+    // Previously this timer called `setUser(null)` unconditionally — which
+    // WIPED a cached real session restored from localStorage. So any Firebase
+    // Auth network blip bounced a real user to the landing page on every
+    // reload, and since sign-in itself requires Firebase Auth network, the
+    // user couldn't get back in. Now: if a cached session was restored, we
+    // keep it as a tentative session (the user can still use the app in
+    // local-workspace mode). A longer 15s hard deadline clears it only if
+    // Firebase never responds at all.
     const safetyTimer = setTimeout(() => {
       if (mounted && !initialized) {
         console.warn('[Auth] Initialization timeout (3s) — unblocking UI so login is reachable');
-        setUser(null);
+        // Only clear the user if we did NOT restore from cache. A cached
+        // real session is kept tentative so the user can still navigate
+        // (OrgContext will install a local workspace if Firestore is
+        // unreachable). Clearing it here would bounce the user to the
+        // landing page on every reload when Firebase is slow.
+        if (!restoredFromCache) {
+          setUser(null);
+        }
         setIsInitializing(false);
+        boot.mark('auth ready');
+        console.log('[Auth] Initialization complete (3s safety) — isInitializing=false');
+        initialized = true;
       }
     }, 3000);
 
+    // Hard deadline — if Firebase STILL hasn't responded after 15s, the
+    // cached session is genuinely stale (token endpoint totally unreachable).
+    // Clear it so the user sees the login page and can re-authenticate.
+    // This is long enough that genuine network blips recover, but short
+    // enough that a permanently-unreachable Firebase doesn't leave a zombie
+    // session in the UI.
+    const hardDeadline = setTimeout(() => {
+      if (mounted && restoredFromCache) {
+        console.warn('[Auth] Hard 15s deadline exceeded with no Firebase response — clearing cached session');
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
+        cachedUserIdRef.current = null;
+      }
+    }, 15000);
+
     // ── Restore from localStorage for instant UI ──
-    let restoredFromCache = false;
+    // (restoredFromCache declared above, before the safety timer)
     try {
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored) {
@@ -251,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
+      clearTimeout(hardDeadline);
       if (unsubscribe) unsubscribe();
     };
   }, []);

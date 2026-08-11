@@ -38,8 +38,16 @@ import type {
   Permission,
   OrgMembership,
 } from '@/lib/auth/types';
-import { useAuth } from './AuthContext';
+import { useAuth, type AuthUser } from './AuthContext';
 import { boot } from '@/lib/perf/boot-tracer';
+
+// ── Hard timeout for the Firebase SDK initialization itself ─────────────────
+// `loadFirebase()` dynamically imports the Firebase SDK and initializes Auth.
+// In a restricted sandbox, the SDK's internal network calls to
+// securetoken.googleapis.com / firebaselogging-pa.googleapis.com can hang
+// indefinitely. This bounds the entire init flow so the user is never stuck
+// on a loading screen because Firebase Auth is unreachable.
+const FIREBASE_INIT_TIMEOUT_MS = 8_000;
 
 // ── Lazy Firebase + org-service loaders ───────────────────────────────────────
 // @/lib/firebase and @/lib/auth/organizations both pull in the Firebase SDK
@@ -104,6 +112,23 @@ interface OrgContextValue {
   switchOrganization: (orgId: string) => Promise<{ error: string | null }>;
   /** Mark onboarding complete and set the current org. */
   completeOnboarding: (orgId: string) => Promise<void>;
+
+  /**
+   * Imperatively install a LOCAL workspace for the given user.
+   *
+   * This is the GUARANTEED ESCAPE HATCH used by `AutoProvisionWorkspace` when
+   * Firestore org creation fails OR when `markOnboardingComplete` hangs.
+   * Without it, `needsOrganization` stays `true` and `<AutoProvisionWorkspace />`
+   * re-mounts forever (with `ranRef` blocking re-provision) — the direct cause
+   * of the "Preparing your dashboard…" infinite hang.
+   *
+   * Mirrors the demo fast path (lines 497-564) but accepts any user.
+   * Sets `organization`, `profile`, `membership`, `members`, `organizations`,
+   * `loading=false`, `loadingForRef.current=user.id`, and persists
+   * `gstpilot_org_id` to localStorage. After this call, `needsOrganization`
+   * flips to `false` and the dashboard renders.
+   */
+  setLocalWorkspace: (user: AuthUser) => void;
 
   /** Permission check — convenience wrapper around `can(role, permission)`. */
   can: (permission: Permission) => boolean;
@@ -480,6 +505,75 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     [resolveOrgContext]
   );
 
+  // ── setLocalWorkspace — guaranteed escape hatch ─────────────────────────
+  // Builds a local org/profile/membership purely from an AuthUser (no Firebase
+  // round-trip). Used by AutoProvisionWorkspace when Firestore writes hang or
+  // org creation fails. Without this, the user can be stuck on "Preparing your
+  // dashboard…" indefinitely because `needsOrganization` only flips to `false`
+  // when `organization` is set — and neither `setCurrentView('dashboard')` nor
+  // `setCurrentScreen('app')` updates `organization`.
+  const setLocalWorkspace = useCallback((wsUser: AuthUser) => {
+    const localOrgId = `local-${wsUser.id}`;
+    const localOrg: OrganizationDoc = {
+      id: localOrgId,
+      name: wsUser.name + "'s Workspace",
+      slug: 'my-workspace',
+      ownerId: wsUser.id,
+      logoUrl: null,
+      gstin: null,
+      plan: 'free',
+      status: 'active',
+      createdAt: null,
+      updatedAt: null,
+    };
+    const localMember: OrganizationMemberDoc = {
+      id: `${localOrgId}_${wsUser.id}`,
+      organizationId: localOrgId,
+      userId: wsUser.id,
+      userEmail: wsUser.email,
+      userDisplayName: wsUser.name,
+      userPhotoURL: wsUser.picture ?? null,
+      role: 'owner',
+      status: 'active',
+      invitedBy: null,
+      invitedAt: null,
+      joinedAt: null,
+      createdAt: null,
+      updatedAt: null,
+    };
+    const localProfile: UserProfileDoc = {
+      uid: wsUser.id,
+      email: wsUser.email,
+      displayName: wsUser.name,
+      photoURL: wsUser.picture ?? null,
+      phone: null,
+      company: null,
+      gstin: null,
+      role: 'owner',
+      provider: wsUser.provider === 'google' ? 'google' : 'email',
+      emailVerified: wsUser.emailVerified,
+      onboardingCompleted: true,
+      currentOrganizationId: localOrgId,
+      createdAt: null,
+      updatedAt: null,
+    };
+    setProfile(localProfile);
+    setOrganization(localOrg);
+    setMembership(localMember);
+    setMembers([localMember]);
+    setOrganizations([{ organization: localOrg, member: localMember, role: 'owner' }]);
+    setIsPreviewMode(false);
+    setLoading(false);
+    setError(null);
+    loadingForRef.current = wsUser.id;
+    try {
+      localStorage.setItem('gstpilot_org_id', localOrgId);
+    } catch {
+      /* non-fatal */
+    }
+    console.log('[Org] setLocalWorkspace installed for uid:', wsUser.id, '→ orgId:', localOrgId);
+  }, []);
+
   // ── Reactively resolve the org context whenever the auth user changes ──
   useEffect(() => {
     // Firebase is loaded lazily so this effect can't read `auth.currentUser`
@@ -564,8 +658,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    loadFirebase()
-      .then(({ auth, onIdTokenChanged }) => {
+    // Wrap the entire Firebase init chain in a hard timeout. If the SDK's
+    // internal network calls hang (sandbox, offline, DNS failure), the user
+    // gets a local workspace after 8s instead of sitting on a loader forever.
+    withTimeout(
+      loadFirebase().then(({ auth, onIdTokenChanged }) => {
         if (cancelled) return;
 
         // If React says "not authenticated" but Firebase still has a currentUser,
@@ -673,17 +770,55 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         // Kick off the initial resolve immediately.
         if (auth.currentUser && loadingForRef.current !== auth.currentUser.uid) {
           resolveOrgContext(auth.currentUser);
+        } else if (
+          !auth.currentUser &&
+          user &&
+          user.provider !== 'demo' &&
+          loadingForRef.current !== user.id
+        ) {
+          // ── Cached-real-user fallback ──────────────────────────────────
+          // Firebase Auth hasn't surfaced `currentUser` (network unreachable,
+          // token endpoint hung), but AuthContext has a cached real user from
+          // localStorage. Without this branch, `loading` stays `true` FOREVER
+          // because `resolveOrgContext` is never called.
+          //
+          // We build a synthetic minimal FirebaseUser-shaped object so the
+          // normal resolve path runs. The Firestore calls inside
+          // `resolveOrgContext` have their own 5s timeouts and will fall back
+          // to a local workspace if Firestore is also unreachable — exactly
+          // what we want.
+          console.warn('[Org] auth.currentUser is null but cached real user exists — resolving with synthetic user to avoid indefinite loading state');
+          const syntheticUser = {
+            uid: user.id,
+            email: user.email,
+            displayName: user.name,
+            photoURL: user.picture ?? null,
+            emailVerified: user.emailVerified,
+            providerData: [{
+              providerId: user.provider === 'google' ? 'google.com' : 'password',
+            }],
+          } as unknown as FirebaseUser;
+          resolveOrgContext(syntheticUser);
         }
-      })
-      .catch((err) => {
+      }),
+      FIREBASE_INIT_TIMEOUT_MS,
+      'org firebase init',
+    ).catch((err) => {
+      if (isTimeoutError(err)) {
+        console.warn('[Org] Firebase init timed out — installing local workspace to unblock the user');
+        if (user && user.provider !== 'demo') {
+          setLocalWorkspace(user);
+        }
+      } else {
         console.warn('[Org] Firebase load failed — org context inactive:', err);
-      });
+      }
+    });
 
     return () => {
       cancelled = true;
       if (unsubscribe) unsubscribe();
     };
-  }, [isAuthenticated, user?.id, user, resolveOrgContext]);
+  }, [isAuthenticated, user?.id, user, resolveOrgContext, setLocalWorkspace]);
 
   // ── Derived values ──
   const role: OrgRole | null = membership?.role ?? profile?.role ?? null;
@@ -719,6 +854,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     reload,
     switchOrganization,
     completeOnboarding,
+    setLocalWorkspace,
     can: canPermission,
   };
 

@@ -90,6 +90,29 @@ export function installChunkErrorHandler() {
   if ((window as unknown as { __chunkHandlerInstalled?: boolean }).__chunkHandlerInstalled) return;
   (window as unknown as { __chunkHandlerInstalled?: boolean }).__chunkHandlerInstalled = true;
 
+  // ── Reset the reload flag on a clean page load ──────────────────────────
+  // The RELOAD_FLAG is set right before a chunk-error reload. Without this
+  // reset, the flag stays set for the entire session, so a SECOND independent
+  // chunk error later would NOT trigger a recovery reload — the error would
+  // be silently swallowed and the app would be dead with no UI. By clearing
+  // the flag once the new page has fully loaded, we restore the recovery
+  // mechanism for future chunk errors.
+  window.addEventListener('load', () => {
+    try {
+      // Only clear if the page loaded successfully (no pending chunk errors).
+      // A small delay ensures any synchronous chunk-error handlers fire first.
+      setTimeout(() => {
+        try {
+          sessionStorage.removeItem(RELOAD_FLAG);
+        } catch {
+          /* sessionStorage unavailable — ignore */
+        }
+      }, 2000);
+    } catch {
+      /* ignore */
+    }
+  });
+
   window.addEventListener('error', (event) => {
     const msg = event.message || '';
     if (

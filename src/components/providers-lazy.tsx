@@ -134,6 +134,16 @@ export function ProvidersLazy({ children }: { children: ReactNode }) {
 
     boot.mark('providers prefetch start')
 
+    // ── Install dev-only perf monitor ───────────────────────────────────
+    // Wraps fetch to log any /api/ request >1s, subscribes to LCP/long-task
+    // observers, and logs hydration timing. No-op in production.
+    try {
+      const { installPerfMonitor } = require('@/lib/perf/monitor')
+      installPerfMonitor()
+    } catch {
+      /* non-fatal — perf monitor is dev-only diagnostics */
+    }
+
     // ── PARALLEL PREFETCH ────────────────────────────────────────────────
     // Kick off EVERY heavy chunk import at once. Webpack compiles them
     // back-to-back (no React round-trips between), and each module lands in

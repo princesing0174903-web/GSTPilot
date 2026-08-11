@@ -97,7 +97,7 @@ const EmailVerificationBanner = dynamic(
 // ═══════════════════════════════════════════════════════════════════════════════
 function AutoProvisionWorkspace() {
   const { user } = useAuth();
-  const { completeOnboarding } = useOrg();
+  const { completeOnboarding, setLocalWorkspace } = useOrg();
   const { setCurrentScreen, setCurrentView } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [isProvisioning, setIsProvisioning] = useState(false);
@@ -106,30 +106,36 @@ function AutoProvisionWorkspace() {
   const provisionInFlightRef = useRef(false);
   // Track whether we've ever kicked off provisioning for this mount. Prevents
   // StrictMode double-invoke from creating two organizations.
+  //
+  // IMPORTANT: This is RESET in `handleRetry` so the Retry button actually
+  // re-runs `provision()`. Previously the stale `ranRef` blocked retries,
+  // leaving the user stuck on "Preparing your dashboard…" forever.
   const ranRef = useRef(false);
 
   // ── Local-workspace fallback ──────────────────────────────────────────────
-  // Mirrors OrgContext.tsx:297-354. Sets a local org + profile + membership
-  // directly in localStorage so the dashboard renders in local mode. The user
-  // can navigate, configure settings, and use the UI. When Firestore becomes
-  // reachable again, a reload will pick up real data.
+  // CRITICAL FIX (root cause of the "Preparing your dashboard…" 1–2 hour hang):
+  // Previously this only set localStorage + AppContext view — but
+  // `needsOnboarding` in AppRouter depends on `OrgContext.organization`,
+  // which NEITHER of those updates. So `<AutoProvisionWorkspace />` re-mounted
+  // with `ranRef.current=true` blocking re-provision → stuck on
+  // "Preparing your dashboard…" FOREVER.
+  //
+  // The fix is to call `setLocalWorkspace(user)` from OrgContext BEFORE
+  // changing the view. This sets `organization = localOrg`, `loading=false`,
+  // and `loadingForRef.current=user.id` so `needsOrganization` flips to
+  // `false` and `<AutoProvisionWorkspace />` unmounts cleanly.
   const fallbackToLocalWorkspace = useCallback(async () => {
     if (!user) return false;
     console.warn('[AutoProvision] Falling back to local workspace — Firestore create failed');
-    const localOrgId = `local-${user.id}`;
-    try {
-      localStorage.setItem('gstpilot_org_id', localOrgId);
-    } catch {
-      /* non-fatal */
-    }
-    // Navigate to dashboard. OrgContext will resolve the local workspace on
-    // next render (its `needsOrganization` flag will flip to false because
-    // the user is a demo/local user OR because the Firestore fetch fails and
-    // the OrgContext fallback kicks in).
+    // Install the local workspace in OrgContext so `needsOrganization`
+    // flips to `false` and this component actually unmounts.
+    setLocalWorkspace(user);
+    // Belt-and-suspenders: also navigate to dashboard (in case the
+    // OrgContext update alone doesn't trigger AppRouter to re-render).
     setCurrentView('dashboard');
     setCurrentScreen('app');
     return true;
-  }, [user, setCurrentView, setCurrentScreen]);
+  }, [user, setLocalWorkspace, setCurrentView, setCurrentScreen]);
 
   const provision = useCallback(async () => {
     if (provisionInFlightRef.current) return;
@@ -167,20 +173,42 @@ function AutoProvisionWorkspace() {
           return 'fail';
         }
         // completeOnboarding also hits Firestore (updateDoc) — bound it too.
+        // CRITICAL FIX (root cause of the "Preparing your dashboard…" infinite hang):
+        // Previously, on timeout, this branch swallowed the error and
+        // `return 'ok'`. But `completeOnboarding` only calls
+        // `resolveOrgContext` AFTER `markOnboardingComplete` succeeds — so a
+        // timeout here meant `OrgContext.organization` stayed `null`, the
+        // outer code called `setCurrentView('dashboard') + setCurrentScreen('app')`,
+        // but `needsOrganization` was still `true` → `<AutoProvisionWorkspace />`
+        // re-mounted with `ranRef.current=true` blocking re-provision →
+        // INFINITE "Preparing your dashboard…" hang.
+        //
+        // Now: on timeout, install the local workspace via `setLocalWorkspace`
+        // (which sets `organization` directly) so the component actually
+        // unmounts. The created Firestore org still exists; on next reload,
+        // `resolveOrgContext` will find it and reconcile.
         await withTimeout(
           completeOnboarding(organization.id),
           4_000,
           'completeOnboarding',
         ).catch((err) => {
           if (isTimeoutError(err)) {
-            console.warn('[AutoProvision] completeOnboarding timed out — proceeding anyway (org was created)');
+            console.warn('[AutoProvision] completeOnboarding timed out — installing local workspace so the dashboard renders (created Firestore org will reconcile on next reload)');
+            setLocalWorkspace({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              picture: user.picture,
+              provider: user.provider,
+              emailVerified: user.emailVerified,
+            });
           } else {
             throw err;
           }
         });
-        // After `completeOnboarding`, OrgContext re-resolves and `organization`
-        // becomes set → `needsOnboarding` flips to false → AppRouter falls
-        // through to the DashboardTimeoutBoundary.
+        // After `completeOnboarding` (or the timeout fallback above),
+        // `organization` is set (either real or local) → `needsOnboarding`
+        // flips to false → AppRouter falls through to the DashboardTimeoutBoundary.
         setCurrentView('dashboard');
         setCurrentScreen('app');
         return 'ok';
@@ -226,7 +254,7 @@ function AutoProvisionWorkspace() {
         "We're having trouble setting up your workspace right now. Please try again, or contact support if the problem continues."
       );
     }
-  }, [user, completeOnboarding, setCurrentView, setCurrentScreen, fallbackToLocalWorkspace]);
+  }, [user, completeOnboarding, setLocalWorkspace, setCurrentView, setCurrentScreen, fallbackToLocalWorkspace]);
 
   // Kick off provisioning once on mount.
   useEffect(() => {
@@ -238,8 +266,39 @@ function AutoProvisionWorkspace() {
     // can't change without unmounting).
   }, []);
 
+  // ── HARD SAFETY NET — 15s max-mount deadline ─────────────────────────────
+  // Even if every internal timeout/retry/fallback in `provision()` somehow
+  // fails to escape, this hard deadline guarantees the user is NEVER stuck on
+  // "Preparing your dashboard…" for more than 15 seconds. After 15s, we
+  // unconditionally install a local workspace and switch to the dashboard.
+  // This is the "belt-and-suspenders" backstop that makes the infinite-hang
+  // bug structurally impossible.
+  useEffect(() => {
+    const HARD_DEADLINE_MS = 15_000;
+    const timer = setTimeout(() => {
+      if (!user) return;
+      console.error('[AutoProvision] HARD 15s deadline exceeded — force-installing local workspace to unblock the user');
+      setLocalWorkspace({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        picture: user.picture,
+        provider: user.provider,
+        emailVerified: user.emailVerified,
+      });
+      setCurrentView('dashboard');
+      setCurrentScreen('app');
+    }, HARD_DEADLINE_MS);
+    return () => clearTimeout(timer);
+  }, [user, setLocalWorkspace, setCurrentView, setCurrentScreen]);
+
   const handleRetry = useCallback(() => {
     setError(null);
+    // CRITICAL: reset ranRef so provision() actually re-runs. Without this,
+    // the guard at the top of the mount effect (`if (ranRef.current) return`)
+    // blocks retry, leaving the user stuck on "Preparing your dashboard…"
+    // forever — even after clicking Retry.
+    ranRef.current = false;
     void provision();
   }, [provision]);
 

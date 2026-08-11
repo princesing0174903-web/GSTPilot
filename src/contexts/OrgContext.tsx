@@ -39,6 +39,7 @@ import type {
   OrgMembership,
 } from '@/lib/auth/types';
 import { useAuth } from './AuthContext';
+import { boot } from '@/lib/perf/boot-tracer';
 
 // ── Lazy Firebase + org-service loaders ───────────────────────────────────────
 // @/lib/firebase and @/lib/auth/organizations both pull in the Firebase SDK
@@ -56,6 +57,15 @@ function loadOrgService(): Promise<OrgServiceModule> {
   if (!orgServiceCache) orgServiceCache = import('@/lib/auth/organizations');
   return orgServiceCache;
 }
+
+// ── Hard timeout for Firestore calls ──────────────────────────────────────────
+// Firestore's SDK has NO hard deadline — on network issues or permission
+// errors it retries with exponential backoff that can run for MINUTES. This
+// guarantees every Firestore operation in the org-resolution path resolves
+// (or rejects) within 5s, so the user never sits on a loading screen for
+// more than ~5s before we fall back to a local workspace.
+import { withTimeout, isTimeoutError } from '@/lib/async/withTimeout';
+const FIRESTORE_OP_TIMEOUT_MS = 5_000;
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -177,16 +187,38 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
         // 1. Fetch / create the user profile AND the user's org memberships
         //    in PARALLEL (previously sequential — saved ~200-500ms on login).
+        //    Each call is bounded by FIRESTORE_OP_TIMEOUT_MS so a hung
+        //    Firestore SDK (no hard deadline of its own) can't block the boot.
         console.log('[Org] Fetching profile + memberships (attempt', attempt + 1, ')');
         const [profileResult, membershipsResult] = await Promise.all([
-          orgService.fetchOrCreateUserProfile({
-            uid: fbUser.uid,
-            email: fbUser.email || '',
-            displayName: fbUser.displayName,
-            photoURL: fbUser.photoURL,
-            provider,
+          withTimeout(
+            orgService.fetchOrCreateUserProfile({
+              uid: fbUser.uid,
+              email: fbUser.email || '',
+              displayName: fbUser.displayName,
+              photoURL: fbUser.photoURL,
+              provider,
+            }),
+            FIRESTORE_OP_TIMEOUT_MS,
+            'fetchOrCreateUserProfile',
+          ).catch((err) => {
+            if (isTimeoutError(err)) {
+              console.warn('[Org] fetchOrCreateUserProfile timed out');
+              return { profile: null, error: 'Profile fetch timed out.' };
+            }
+            throw err;
           }),
-          orgService.fetchUserOrganizations(fbUser.uid),
+          withTimeout(
+            orgService.fetchUserOrganizations(fbUser.uid),
+            FIRESTORE_OP_TIMEOUT_MS,
+            'fetchUserOrganizations',
+          ).catch((err) => {
+            if (isTimeoutError(err)) {
+              console.warn('[Org] fetchUserOrganizations timed out');
+              return { memberships: [], error: 'Organizations fetch timed out.' };
+            }
+            throw err;
+          }),
         ]);
 
         const { profile: userProfile, error: profileError } = profileResult;
@@ -248,9 +280,28 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setOrganization(membershipFromList.organization);
           setMembership(membershipFromList.member);
         } else {
+          // Both calls bounded — a hung Firestore SDK can't block here either.
           const [orgResult, memberResult] = await Promise.all([
-            orgService.fetchOrganization(orgId),
-            orgService.fetchMembership(orgId, fbUser.uid),
+            withTimeout(
+              orgService.fetchOrganization(orgId),
+              FIRESTORE_OP_TIMEOUT_MS,
+              'fetchOrganization',
+            ).catch((err) => {
+              if (isTimeoutError(err)) {
+                return { organization: null, error: 'Organization fetch timed out.' };
+              }
+              throw err;
+            }),
+            withTimeout(
+              orgService.fetchMembership(orgId, fbUser.uid),
+              FIRESTORE_OP_TIMEOUT_MS,
+              'fetchMembership',
+            ).catch((err) => {
+              if (isTimeoutError(err)) {
+                return { member: null, error: 'Membership fetch timed out.' };
+              }
+              throw err;
+            }),
           ]);
 
           if (orgResult.error || !orgResult.organization) {
@@ -290,6 +341,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       if (result === 'done') {
         setLoading(false);
         loadingForRef.current = null;
+        boot.mark('organization ready');
         return;
       }
       if (attempt < MAX_RETRIES) {
@@ -358,6 +410,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(false);
     loadingForRef.current = null;
+    boot.mark('organization ready (local fallback)');
     try {
       localStorage.setItem('gstpilot_org_id', localOrgId);
     } catch {

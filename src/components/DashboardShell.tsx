@@ -24,6 +24,7 @@ import dynamic from 'next/dynamic'
 import { getViewMeta } from '@/lib/navigation-registry'
 import { ChevronRight, Menu } from 'lucide-react'
 import { sendVerificationEmail } from '@/lib/auth'
+import { boot } from '@/lib/perf/boot-tracer'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -67,8 +68,11 @@ export function DashboardContent() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
 
-  // Dashboard shell mounted. (Removed verbose console.log — production code
-  // should be silent. If you need to trace mounts, use React DevTools.)
+  // Dashboard shell mounted — log the milestone once.
+  useEffect(() => {
+    boot.mark('dashboard shell rendered')
+  }, [])
+
   // ── Notifications sheet state ──────────────────────────────────────────────
   // Oracle is now a full page (/oracle), not a docked sidebar popup.
   const [notificationsOpen, setNotificationsOpen] = useState(false)

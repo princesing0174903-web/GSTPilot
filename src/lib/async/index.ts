@@ -25,3 +25,9 @@ export { useMountedRef } from './useMountedRef';
 export { useAsyncAction, type UseAsyncActionState } from './useAsyncAction';
 
 export { useSafePolling, type SafePollingOptions } from './useSafePolling';
+
+export {
+  withTimeout,
+  TimeoutError,
+  isTimeoutError,
+} from './withTimeout';

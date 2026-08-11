@@ -31,6 +31,7 @@ import {
 import { type User as FirebaseUser } from 'firebase/auth';
 // errors.ts is a pure error-code map (no Firebase import) — safe to import statically.
 import { friendlyAuthError, isSessionError } from '@/lib/auth/errors';
+import { boot } from '@/lib/perf/boot-tracer';
 
 // ── Lazy Firebase loaders ────────────────────────────────────────────────────
 // @/lib/firebase and @/lib/auth both pull in the Firebase SDK (~40 MB).
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!initialized) {
         initialized = true;
         setIsInitializing(false);
+        boot.mark('auth ready');
         console.log('[Auth] Initialization complete — isInitializing=false');
       }
     };

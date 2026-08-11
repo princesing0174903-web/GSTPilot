@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ProSkeleton, AnimatedNumber } from '@/components/ui-pro';
+import { boot } from '@/lib/perf/boot-tracer';
 import {
   FileText,
   Users,
@@ -592,21 +593,30 @@ export default function DashboardPage() {
   const { pipeline, loading: pipelineLoading, refresh: refreshPipeline } = useWorkflowPipeline();
   const { briefing, loading: briefingLoading, refresh: refreshBriefing } = useOracleDailyBriefing();
 
-  // ── Loading safety timer (12s) — never let the skeleton hang forever ──
+  // ── Loading safety timer (8s) — never let the skeleton hang forever ──
   // The timer is armed while loading; if it fires before loading clears, we
   // surface whatever data we have. We avoid calling setState synchronously in
   // the effect body (which would trigger cascading renders) by only setting
   // state from inside the async timeout callback.
+  // Reduced from 12s → 8s so the dashboard becomes interactive faster when
+  // the snapshot API is slow.
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const allLoading = snapshotLoading || metricsLoading || timelineLoading;
   useEffect(() => {
+    boot.mark('dashboard data started');
     if (!allLoading) {
       // Loading cleared naturally — reset the flag on the NEXT tick via a
       // microtask so we never call setState synchronously inside the effect.
+      boot.mark('dashboard data complete');
+      boot.measure('interactive');
       const id = setTimeout(() => setLoadingTimedOut(false), 0);
       return () => clearTimeout(id);
     }
-    const t = setTimeout(() => setLoadingTimedOut(true), 12_000);
+    const t = setTimeout(() => {
+      setLoadingTimedOut(true);
+      boot.mark('dashboard data complete (timeout)');
+      boot.measure('interactive (after timeout)');
+    }, 8_000);
     return () => clearTimeout(t);
   }, [allLoading]);
 

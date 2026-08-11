@@ -24,7 +24,11 @@ import { fetchWithTimeout } from '@/lib/async';
 import { onBusinessSnapshotInvalidated } from '@/lib/business-snapshot-events';
 
 const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
-const FETCH_TIMEOUT_MS = 30_000;
+// Reduced from 30s → 8s. The snapshot is the FIRST thing the dashboard needs,
+// and a hung snapshot = a hung dashboard. At 8s we surface whatever data we
+// have (zeros + error state) and let the user keep using the shell. The
+// 60s polling loop will retry in the background.
+const FETCH_TIMEOUT_MS = 8_000;
 
 // ── Module-level request deduplication ─────────────────────────────────────
 // Multiple components (DashboardPage + OracleDailyBrief) mount this hook

@@ -27,6 +27,7 @@ import { useOrg } from '@/contexts/OrgContext';
 import { withRetry, installChunkErrorHandler } from '@/lib/dynamic-retry';
 import { PremiumPageLoader, PremiumGlobalLoading } from '@/components/ui/premium-loading';
 import { Button } from '@/components/ui/button';
+import { withTimeout, isTimeoutError } from '@/lib/async/withTimeout';
 
 // Install the global chunk-error safety net once on the client.
 if (typeof window !== 'undefined') {
@@ -143,20 +144,40 @@ function AutoProvisionWorkspace() {
     const tryCreate = async (): Promise<'ok' | 'fail'> => {
       try {
         const { createOrganization } = await import('@/lib/auth/organizations');
-        const { organization, error: orgError } = await createOrganization({
-          name: `${user.name}'s Workspace`,
-          ownerId: user.id,
-          ownerEmail: user.email,
-          ownerDisplayName: user.name,
-          ownerPhotoURL: user.picture || null,
-          gstin: null,
-          plan: 'free',
-        });
+        // HARD TIMEOUT — Firestore's addDoc/setDoc can hang for MINUTES or
+        // hours on network issues or permission errors (Firebase's internal
+        // retry storm has no deadline). Race against 6s so the user NEVER
+        // sits on "Preparing your dashboard…" for more than ~6s before we
+        // fall back to a local workspace.
+        const { organization, error: orgError } = await withTimeout(
+          createOrganization({
+            name: `${user.name}'s Workspace`,
+            ownerId: user.id,
+            ownerEmail: user.email,
+            ownerDisplayName: user.name,
+            ownerPhotoURL: user.picture || null,
+            gstin: null,
+            plan: 'free',
+          }),
+          6_000,
+          'createOrganization',
+        );
         if (orgError || !organization) {
           console.warn('[AutoProvision] createOrganization returned error:', orgError);
           return 'fail';
         }
-        await completeOnboarding(organization.id);
+        // completeOnboarding also hits Firestore (updateDoc) — bound it too.
+        await withTimeout(
+          completeOnboarding(organization.id),
+          4_000,
+          'completeOnboarding',
+        ).catch((err) => {
+          if (isTimeoutError(err)) {
+            console.warn('[AutoProvision] completeOnboarding timed out — proceeding anyway (org was created)');
+          } else {
+            throw err;
+          }
+        });
         // After `completeOnboarding`, OrgContext re-resolves and `organization`
         // becomes set → `needsOnboarding` flips to false → AppRouter falls
         // through to the DashboardTimeoutBoundary.
@@ -164,7 +185,11 @@ function AutoProvisionWorkspace() {
         setCurrentScreen('app');
         return 'ok';
       } catch (err) {
-        console.warn('[AutoProvision] createOrganization threw:', err);
+        if (isTimeoutError(err)) {
+          console.warn('[AutoProvision] createOrganization TIMED OUT after 6s — Firestore unreachable, falling back to local workspace');
+        } else {
+          console.warn('[AutoProvision] createOrganization threw:', err);
+        }
         return 'fail';
       }
     };
@@ -308,20 +333,19 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
 
     setTimedOut(false);
     let startTime = Date.now();
-    const TIMEOUT_SECONDS = 15;
+    // Reduced from 15s → 6s. The org context either resolves in <3s (normal)
+    // or is unreachable (Firestore down). Waiting 15s + a 15s retry = 30s of
+    // "Preparing your dashboard…" is unacceptable. At 6s we surface the
+    // timeout screen with Retry + Continue-in-local-mode so the user is
+    // NEVER blocked for more than ~6s.
+    const TIMEOUT_SECONDS = 6;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);
       if (secs >= TIMEOUT_SECONDS) {
-        if (!autoRetriedRef.current) {
-          autoRetriedRef.current = true;
-          console.warn('[Dashboard] Initialization slow — auto-retrying org context once');
-          void reload();
-          startTime = Date.now();
-          setElapsed(0);
-          return;
-        }
-        console.error('[Dashboard] Initialization exceeded 15s — showing timeout screen');
+        // No auto-retry — the user can press "Retry" manually. Auto-retry
+        // doubled the effective wait and made a slow Firestore feel even slower.
+        console.error('[Dashboard] Org resolution exceeded 6s — showing timeout screen');
         setTimedOut(true);
         clearInterval(interval);
       }
@@ -393,34 +417,16 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // While org is loading, render the dashboard shell immediately with an
-  // inline loading indicator. This is the "progressive loading" requirement:
-  // the shell (top bar, left nav) appears instantly, and only the
-  // org-dependent content area shows a loader.
-  if (orgLoading && !organization && !isPreviewMode) {
-    return (
-      <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-        {/* Minimal top bar so the shell is visible */}
-        <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-foreground">
-              GSTPilot Infinity<span className="accent-text">™</span>
-            </span>
-          </div>
-        </header>
-        {/* Loading workspace */}
-        <div className="flex flex-1 items-center justify-center">
-          <PremiumPageLoader
-            label={elapsed > 0 ? `Loading your workspace… ${elapsed}s` : 'Loading your workspace…'}
-          />
-        </div>
-      </div>
-    );
-  }
-
+  // PROGRESSIVE RENDERING: instead of blocking on `orgLoading` with a full
+  // splash screen, we render the dashboard shell IMMEDIATELY. The shell's own
+  // data hooks (useBusinessSnapshot, useTimelineEvents, etc.) all gracefully
+  // handle a missing/undefined org — they return `loading: true` and the
+  // dashboard shows inline skeletons. This means the user sees the app
+  // structure (top bar, left nav, breadcrumb) within milliseconds of auth
+  // resolving, instead of waiting for org resolution to complete.
+  //
+  // The `timedOut` state (6s) still provides an escape hatch with Retry +
+  // Continue-in-local-mode if org resolution genuinely hangs.
   return <>{children}</>;
 }
 

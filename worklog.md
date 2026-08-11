@@ -17409,3 +17409,100 @@ Stage Summary:
 - Agent-browser verified end-to-end: dashboard + Oracle view both render with real data, navigation works, zero 401s, zero 500s, zero console errors. Task complete.
 
 — *Task perf-2-apply complete. Evidence: dev.log (last 60 lines), agent-browser snapshots of / (landing → sign-in → dashboard → Oracle view → back to dashboard), full reads of src/lib/workflow/engine.ts, src/lib/oracle/daily-briefing.ts, src/lib/financial-engine/businessSnapshot.ts, src/components/oracle/OracleBrainCore.tsx, src/hooks/useBusinessSnapshot.ts, src/hooks/useWorkflowPipeline.ts, src/hooks/useOracleDailyBriefing.ts, src/app/api/timeline/route.ts, src/middleware.ts, prisma/schema.prisma (relevant models only).*
+
+---
+Task ID: perf-2-verify
+Agent: main (Z.ai Code)
+Task: Continue the Phase 2 performance optimization work — lint changed files, verify dev server health, and do end-to-end browser verification.
+
+Work Log:
+- Checked dev server state: dev server was running (PID 1222) but NOT via the keepalive script — dev.log was missing (logs going to uncaptured stdout). curl to / returned HTTP 000 (empty reply) after 12.6s — server was hung/OOM-thrashing (128% CPU, 2.2GB RSS).
+- Killed the stuck dev server processes (pkill -9 next dev / next-server / bun x next).
+- Restarted dev server via dev-keepalive-direct.sh (captures logs to /home/z/my-project/dev.log, auto-restarts on crash, 2GB heap).
+- Checked dev.log: found a CRITICAL build-breaking regression — `Module not found: Can't resolve '@/lib/gstpilot-data/local-workspace'` in 14 files:
+  - src/hooks/useAIRecommendations.ts:31
+  - src/hooks/useERP.ts:2
+  - src/hooks/useInvoices.ts:27
+  - src/hooks/useBilling.ts:2
+  - src/hooks/useGSTTransactions.ts:2
+  - src/hooks/useAIInsights.ts:2
+  - src/hooks/use-firestore.ts:31
+  - src/hooks/useCommunications.ts:2
+  - src/hooks/useGSTConnection.ts:2
+  - src/hooks/useDocuments.ts:2
+  - src/hooks/useBanking.ts:2
+  - src/hooks/useGenerationJobs.ts:2
+  - src/components/command-palette/CommandPalette.tsx:66
+  - src/lib/business/snapshot.ts:41
+  - src/lib/timeline/emit.ts:21 (re-export)
+  The file `src/lib/gstpilot-data/local-workspace.ts` was referenced in the conversation summary as a key created file (with `isLocalOrgId()` + `LOCAL_ORG_PREFIX`), but it was MISSING from disk — likely lost during a prior session transition.
+
+- **FIXED the missing module**: Recreated `src/lib/gstpilot-data/local-workspace.ts` with the correct API:
+  - `export const LOCAL_ORG_PREFIX = 'local-'` — the prefix for per-session demo orgs
+  - `export const LOCAL_ORG_ID = 'local'` — the canonical seeded local org ID
+  - `export function isLocalOrgId(orgId: string | null | undefined): boolean` — returns true if orgId equals 'local' or starts with 'local-'; handles null/undefined/non-string safely (returns false)
+  - Added comprehensive JSDoc explaining the local-workspace concept (demo/sandbox org backed by Prisma SQLite, no Firestore/GSTN/banking) and why hooks check isLocalOrgId (to skip Firestore subscriptions + API calls that would 401 for unauthenticated demo users).
+  - Verified the API matches all 14 import sites: every usage is `isLocalOrgId(orgId)` returning a boolean — no other exports needed.
+
+- After creating the file, waited for dev server recompile:
+  - GET / → 200 in 16s (cold compile after fix)
+  - GET / → 200 in 51ms (warm) ✓
+  - dev.log shows the module-not-found errors are GONE.
+
+- Verified the AuthContext.tsx duplicate declaration issue mentioned in the user's prompt: CONFIRMED FIXED. Only ONE `let restoredFromCache = false;` declaration exists (line 141), with a clear comment at line 189-190: "(restoredFromCache declared above, before the safety timer)". The earlier "Identifier 'restoredFromCache' has already been declared (129:16)" error was transient and is resolved.
+
+- **Linted all changed files** (8 files) with ESLint:
+  - src/lib/workflow/engine.ts
+  - src/lib/oracle/daily-briefing.ts
+  - src/hooks/useBusinessSnapshot.ts
+  - src/components/oracle/OracleBrainCore.tsx
+  - src/lib/gstpilot-data/local-workspace.ts (newly created)
+  - src/hooks/useWorkflowPipeline.ts
+  - src/hooks/useOracleDailyBriefing.ts
+  - src/middleware.ts
+  Result: EXIT_CODE=0 — all files pass lint cleanly. Zero errors, zero warnings.
+
+- Verified key API routes compile and respond:
+  - GET /api/workflow/pipeline?organizationId=local → 401 (expected, no auth) in 2.0s (compile)
+  - GET /api/oracle/daily-briefing?organizationId=local → 401 (expected) in 0.9s
+  - GET /api/timeline?organizationId=local&limit=15 → 200 OK in 1.5s (timeline doesn't require auth)
+  - GET /api/business/snapshot?organizationId=local → 401 (expected) in 0.9s
+
+- Agent-browser end-to-end verification:
+  1. Opened http://localhost:3000/ → landing page rendered cleanly ("Stop being a cost center. Become the CFO your clients trust.").
+  2. Clicked "Get Started" → sign-in page rendered.
+  3. Clicked "Explore the platform" → dashboard rendered with REAL DATA:
+     - "Good afternoon, Guest"
+     - Workflow Pipeline: "5 INVOICE", "2 PAYMENT", "3 BANK", "54 MATCH", "54 DONE this month" (real counts — confirms FIX-A org-scoping works)
+     - Oracle proactive briefing section present
+     - Business Snapshot, Action Center, AI Recommendations, Recent Activity sections all rendered
+  4. Clicked "Oracle AI" nav → OracleBrainCore rendered with REAL DATA:
+     - "Good evening, Prince 👋"
+     - Business Health 35/100 Poor
+     - Revenue ₹2.19L (57% trend), Cash on Hand ₹20.0K, GST Liability ₹-58.7K
+     - Oracle Intelligence, Ask Oracle, Timeline sections all rendered
+  5. Clicked "Home" nav → dashboard re-rendered with same data (no regressions).
+
+- Dev log analysis confirmed ALL perf-2-apply optimizations are effective:
+  - Dashboard API render times (authenticated, real org local-dXKkLqbkIjbwN41dEG4pI6PgiMl2):
+    - /api/business/snapshot: 81ms render
+    - /api/workflow/pipeline: 59ms render
+    - /api/oracle/daily-briefing: 10ms render
+    - /api/recommendations: 41ms render
+    - /api/timeline: 7ms render (SWR cache hit — FIX-F working)
+  - NO duplicate /api/business/snapshot call from OracleBrainCore (FIX-D cache-first working — read from shared latestSnapshot cache)
+  - Timeline limit=15 shared between dashboard and Oracle view (FIX-F working — second call 7ms cache hit)
+  - Oracle brain sessions + memory both 200 OK
+  - ZERO 401s during authenticated navigation (FIX-D auth header + cache-first working)
+  - ZERO 500s, ZERO console errors
+
+Stage Summary:
+- Fixed a CRITICAL build-breaking regression: recreated the missing `src/lib/gstpilot-data/local-workspace.ts` module that 14 files depend on. The file exports `isLocalOrgId()`, `LOCAL_ORG_PREFIX`, and `LOCAL_ORG_ID` — matching the exact API all importers expect.
+- Verified all 8 changed files pass ESLint cleanly (EXIT_CODE=0).
+- Verified dev server is healthy: GET / 200 in 51ms warm, all dashboard APIs 200 OK with real data.
+- Agent-browser verified end-to-end: landing → sign-in → dashboard → Oracle view → back to dashboard, all rendering real data ("5 INVOICE", "54 MATCH", "₹2.19L Revenue", "35/100 Business Health"), zero 401s, zero errors.
+- Confirmed all perf-2-apply optimizations remain effective: dashboard API render times 7-81ms (vs 6.4s baseline in original profile — ~80-900x faster), OracleBrainCore reads snapshot from cache (no duplicate fetch), timeline shares SWR cache (7ms second call).
+- The AuthContext.tsx duplicate declaration error was transient and is confirmed fixed (single declaration at line 141).
+- Task complete. The dev server is running via dev-keepalive-direct.sh with logs captured to /home/z/my-project/dev.log.
+
+— *Task perf-2-verify complete. Evidence: dev.log (last 25 lines), agent-browser snapshots of / (landing → sign-in → dashboard → Oracle view → dashboard), ESLint exit code 0 on 8 changed files, full read of src/contexts/AuthContext.tsx (lines 125-199), grep of all 14 isLocalOrgId import sites.*

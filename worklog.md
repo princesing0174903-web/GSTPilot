@@ -16821,3 +16821,22 @@ Stage Summary:
 - Demo data: CLEANED (13 fake ZohoEntityMap rows deleted, banking demo seeding disabled when real data exists)
 - Honest state: VERIFIED (UI shows "Connect Zoho Books" when tokens revoked, never says "Connected")
 - ONLY REMAINING BLOCKER: All tokens are revoked. User must click "Connect Zoho Books" → approve Zoho consent → "Sync Now" to perform the real live sync. The code is ready — this is a human-in-the-loop step (requires the user's Zoho password).
+
+---
+Task ID: preview-fix
+Agent: main (Z.ai Code)
+Task: Fix the preview in 2 min — dev server was not running and home page was 500
+
+Work Log:
+- Discovered dev server was NOT running. dev.log missing.
+- First attempt with `bun run dev` failed: `bun x next` was stuck on "Retrying 1/3..." trying to fetch `next` from network instead of using local install.
+- Created `dev-keepalive-direct.sh` that bypasses `bun x` and calls `./node_modules/.bin/next dev -p 3000 --webpack` directly with `NODE_OPTIONS='--max-old-space-size=2048'`. Auto-restarts on OOM/crash. Single-instance via PID file.
+- Started keepalive. Port 3000 listening. But home page returned HTTP 500.
+- Real root cause: `src/lib/gstpilot-data/local-workspace.ts` was MISSING. 15 files import `isLocalOrgId` from it (CommandPalette, use-firestore, useBanking, useBilling, useInvoices, useGSTConnection, useERP, snapshot.ts, timeline/emit.ts, etc). Webpack module-not-found broke the entire home page bundle.
+- Created the missing file with `LOCAL_ORG_PREFIX = 'local-'` and `isLocalOrgId(orgId)` returning true for IDs starting with `local-` (matches the `local-${user.id}` format used by OrgContext.tsx). Safe for null/undefined inputs.
+- Verified: home page now HTTP 200, title "GSTPilot™ — The Financial Brain of India", ~50-95ms response. /oracle also 200. Other paths (dashboard, invoices, etc.) return 404 as expected — app is a single-page app served from `/`.
+
+Stage Summary:
+- Preview fixed. Dev server running on port 3000 via direct keepalive (PID 1819 keepalive, PID 1836 next-server). Auto-restart on crash is ON.
+- Bug was a missing module file (`local-workspace.ts`) — not a code-logic bug. Single file creation fixed the entire bundle.
+- Keepalive script `dev-keepalive-direct.sh` avoids the `bun x next` network-retry issue that the original `dev-keepalive.sh` hit.

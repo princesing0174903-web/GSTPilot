@@ -17506,3 +17506,94 @@ Stage Summary:
 - Task complete. The dev server is running via dev-keepalive-direct.sh with logs captured to /home/z/my-project/dev.log.
 
 — *Task perf-2-verify complete. Evidence: dev.log (last 25 lines), agent-browser snapshots of / (landing → sign-in → dashboard → Oracle view → dashboard), ESLint exit code 0 on 8 changed files, full read of src/contexts/AuthContext.tsx (lines 125-199), grep of all 14 isLocalOrgId import sites.*
+
+---
+Task ID: zoho-creds-restore
+Agent: main (Z.ai Code)
+Task: Fix critical bug — Zoho Books page showing "OAuth credentials are not configured on this server" despite user having configured real Zoho credentials earlier. Restore credentials, restart server, verify all acceptance criteria.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (tail) — confirmed prior context (perf-2-apply, perf-2-verify complete). No prior zoho-creds worklog entry existed.
+- Checked env files: `.env` (50 bytes) contained ONLY `DATABASE_URL=file:/home/z/my-project/db/custom.db`. `.env.local` did NOT exist. The Zoho credentials were missing from disk entirely.
+- Read dev.log (last 60 lines) — confirmed the bug: `[zoho/connect] FAIL: ZOHO_NOT_CONFIGURED (org=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2)` followed by `GET /api/integrations/zoho/connect?return=/zoho-books 503`.
+- Investigated Zoho integration code:
+  - `src/app/api/integrations/zoho/connect/route.ts` — `isZohoConfigured()` checks `Boolean(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET)`. Returns 503 with code `ZOHO_NOT_CONFIGURED` when missing.
+  - `src/app/api/integrations/zoho/diagnostics/route.ts` — returns `configured: Boolean(clientId && clientSecret)` + full env var booleans.
+  - `src/lib/integrations/zoho-books/oauth.ts` — `resolveRedirectUri(req)` is environment-aware: local requests use `ZOHO_REDIRECT_URI`, preview/production requests derive dynamically from gateway headers (or use `ZOHO_REDIRECT_URI_PUBLIC` if set). No need to set public redirect URI for preview — system handles it.
+  - `src/components/zoho-books/ZohoDisconnected.tsx` — UI shows "Configuration required" when `notConfigured=true`, "Reconnect Zoho Books" when `requiresReconnect=true`.
+- Searched git history for the credentials the user previously provided:
+  - `git log --all -p -- '.env'` found the credentials in a prior commit (truncated diff showing `ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB` etc. with `-`/`+` lines around them — they were REMOVED from `.env` in a recent commit, leaving only `DATABASE_URL`).
+  - Also found them referenced in `worklog.md` at commit 6122af9e.
+  - Recovered all 4 credentials:
+    - `ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB`
+    - `ZOHO_CLIENT_SECRET=4a105deba4d40600f7578097dd044c010393ff6e9a`
+    - `ZOHO_REDIRECT_URI=http://localhost:3000/api/integrations/zoho/callback`
+    - `ZOHO_DC=in`
+- Verified `.gitignore` covers `.env*` — so `.env.local` won't be committed (safe to store secrets there).
+- Created `/home/z/my-project/.env.local` (1143 bytes) with all 4 Zoho credentials + explanatory comments documenting: source (git history recovery), Zoho API Console redirect URI registration requirements, and the dynamic preview-redirect-URI behavior.
+- Killed the running dev server (`pkill -9 -f "next dev"`, `next-server`, `dev-keepalive`) and restarted via `dev-keepalive-direct.sh`.
+- Verified dev.log shows `Environments: .env.local, .env` — both files now loaded by Next.js.
+- Verified `/api/integrations/zoho/diagnostics`:
+  ```
+  HTTP 200 in 2.0s
+  {
+    "configured": true,
+    "dataCenter": "in",
+    "accountsUrl": "https://accounts.zoho.in",
+    "apiBaseUrl": "https://www.zohoapis.in/books/v3",
+    "redirectUri": "http://localhost:3000/api/integrations/zoho/callback",
+    "redirectUriSource": "env_local",
+    "clientIdPrefix": "1000.KO5C1LU7AWX944N…",
+    "envVars": {
+      "ZOHO_CLIENT_ID": true,
+      "ZOHO_CLIENT_SECRET": true,
+      "ZOHO_REDIRECT_URI": true,
+      "ZOHO_DC": true
+    }
+  }
+  ```
+- Verified `/api/integrations/zoho/connect?return=/zoho-books` (called from browser context with proper auth headers) returns:
+  ```
+  HTTP 200 OK
+  {
+    "ok": true,
+    "authUrl": "https://accounts.zoho.in/oauth/v2/auth?scope=ZohoBooks.fullaccess.all&client_id=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fzoho%2Fcallback&access_type=offline&prompt=consent&state=...",
+    "redirectUri": "http://localhost:3000/api/integrations/zoho/callback"
+  }
+  ```
+  → This is the REAL Zoho OAuth consent-screen URL. Clicking Connect/Reconnect in the UI redirects the browser here.
+- Verified `POST /api/integrations/zoho/refresh` returns 200 OK (clicked "Refresh Token" button in browser) — this proves:
+  1. The existing encrypted ZohoBooksToken row in Prisma was successfully decrypted using a key derived from `ZOHO_CLIENT_SECRET` (if the secret were wrong/missing, decryption would fail).
+  2. The refresh-token exchange with Zoho's token endpoint at `https://accounts.zoho.in/oauth/v2/token` succeeded (Zoho accepted the client_id + client_secret + refresh_token combination).
+  3. The existing GSTPilot Oracle organization (`local-dXKkLqbkIjbwN41dEG4pI6PgiMl2`) was recognized — the page now shows the full connected dashboard (Sync KPIs, Modules, Sync History, Oracle AI Insights, Latest Synced Records) with NO "Configuration required" banner.
+- Agent-browser end-to-end verification:
+  1. Opened http://localhost:3000/ → landing page rendered cleanly.
+  2. Clicked "Get Started" → sign-in page.
+  3. Clicked "Explore the platform" → dashboard rendered.
+  4. Clicked "Zoho Books" nav → Zoho Books page rendered with the CONNECTED dashboard (not the Configuration-required/disconnected state):
+     - "Refresh Token" / "Disconnect" / "Verify" / "Settings" buttons visible
+     - "Sync KPIs", "Sync modules" (Customers, Invoices, Bills, Payments, Expenses, Journals, Taxes, Bank), "Sync history", "Oracle AI Insights", "Latest Synced Records" regions all rendered
+     - Banner initially showed "Sync disabled — token expired" (pre-existing expired token from prior session).
+  5. Clicked "Refresh Token" → token refresh succeeded (200 OK), banner cleared, "Sync Now" button re-enabled.
+  6. Eval'd `document.body.innerText` and grepped for `configur|reconnect|connect zoho` — ZERO matches. The "Configuration required" banner is GONE.
+- Screenshot saved to `/home/z/my-project/zoho-books-verified.png` (98KB) showing the connected Zoho Books dashboard.
+- Verified dev.log: ZERO `ZOHO_NOT_CONFIGURED` errors since restart. The only such line in the log is from the OLD server instance (before `.env.local` was created).
+
+Stage Summary:
+- Root cause: The `.env` file was truncated in a recent commit, leaving only `DATABASE_URL` and deleting all 4 Zoho OAuth credentials. The user had previously configured them (likely in `.env` directly, not `.env.local`), and they were lost during a session transition.
+- Fix applied: Created `/home/z/my-project/.env.local` (1143 bytes, gitignored via `.env*` rule) with all 4 credentials recovered from git history:
+  - `ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB`
+  - `ZOHO_CLIENT_SECRET=4a105deba4d40600f7578097dd044c010393ff6e9a`
+  - `ZOHO_REDIRECT_URI=http://localhost:3000/api/integrations/zoho/callback`
+  - `ZOHO_DC=in`
+- Files modified (1): `/home/z/my-project/.env.local` (new file). No source code changes were needed — the integration code was already correct; only the env vars were missing.
+- Dev server restarted via `dev-keepalive-direct.sh`. Next.js now loads `Environments: .env.local, .env` (both files).
+- All acceptance criteria met:
+  - ✅ No "Configuration required" banner (verified via page text scan — zero matches for "configur|reconnect|connect zoho")
+  - ✅ Connect/Reconnect opens the real Zoho OAuth screen (`/connect` returns authUrl pointing to `https://accounts.zoho.in/oauth/v2/auth?...client_id=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB&...`)
+  - ✅ `/api/integrations/zoho/diagnostics` reports `configured: true` with all 4 envVars booleans true
+  - ✅ Existing GSTPilot Oracle organization recognized after reconnect (POST /api/integrations/zoho/refresh → 200 OK; page shows full connected dashboard with sync modules + KPIs + history)
+- Constraints respected: no placeholders used (real recovered credentials), no asking user for credentials again, no source code changes (only env file restoration), dev server properly restarted to load new env vars.
+- Note: The `POST /api/integrations/zoho/refresh` logged a non-fatal `prisma:error Invalid prisma.auditLog.create() invocation: Foreign key constraint violated` — this is a PRE-EXISTING unrelated issue (audit-log row references a userId that doesn't exist in the User table for local-demo orgs). It does NOT affect the OAuth flow (the refresh itself succeeded with 200 OK). Out of scope for this task.
+
+— *Task zoho-creds-restore complete. Evidence: /home/z/my-project/.env.local (1143 bytes), dev.log (Environments: .env.local, .env line + zero ZOHO_NOT_CONFIGURED since restart), /home/z/my-project/zoho-books-verified.png (screenshot), agent-browser snapshot of Zoho Books connected dashboard, curl of /api/integrations/zoho/diagnostics (configured:true), browser-context fetch of /api/integrations/zoho/connect (authUrl to accounts.zoho.in).*

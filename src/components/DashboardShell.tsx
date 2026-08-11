@@ -245,6 +245,18 @@ export function DashboardContent() {
             overflow-hidden on the root). The custom-scrollbar class keeps the
             rail thin + dark. */}
         <main id="main-content" role="main" className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
+          {/* DEMO WORKSPACE BANNER — shown when user signed in via "Explore the
+              platform" (provider === 'demo'). Makes it unambiguously clear that
+              all data visible is sample/demo data, NOT real financial records. */}
+          {user?.provider === 'demo' && (
+            <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-300 backdrop-blur-sm">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[10px] font-bold">D</span>
+              <span>
+                <strong>DEMO WORKSPACE</strong> — All data shown is sample data for exploration only.
+                This is not a real financial account.
+              </span>
+            </div>
+          )}
           <ViewErrorBoundary
             key={currentView}
             viewName={getViewMeta(currentView)?.label || currentView}

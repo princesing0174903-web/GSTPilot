@@ -26,6 +26,7 @@
 
 import dynamic from 'next/dynamic'
 import type { ComponentType } from 'react'
+import { withRetry } from '@/lib/dynamic-retry'
 import {
   Landmark, ShieldCheck, Wallet, BarChart3, Network,
   Workflow, GitBranch, Cpu, Boxes, Database, Sparkles,
@@ -43,29 +44,29 @@ const PageLoader = () => <PremiumPageLoader />
 // Adding a view here means it has passed the 8-Gate Constitution.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const DashboardHomePage = dynamic(() => import('@/components/dashboard/DashboardPage'), { loading: PageLoader, ssr: false })
-const ClientRegistryPage = dynamic(() => import('@/components/clients/ClientRegistryPage'), { loading: PageLoader, ssr: false })
-const ClientWorkspacePage = dynamic(() => import('@/components/clients/ClientWorkspacePage'), { loading: PageLoader, ssr: false })
-const InvoiceWorkspacePage = dynamic(() => import('@/components/invoices/InvoiceWorkspacePage'), { loading: PageLoader, ssr: false })
-const ReturnsPage = dynamic(() => import('@/components/returns/ReturnsPage'), { loading: PageLoader, ssr: false })
-const ReturnPrepWorkspace = dynamic(() => import('@/components/returns/ReturnPrepWorkspace'), { loading: PageLoader, ssr: false })
-const ReconciliationPage = dynamic(() => import('@/components/reconciliation/ReconciliationPage'), { loading: PageLoader, ssr: false })
-const GSTReconciliationPage = dynamic(() => import('@/components/gst-reconciliation/GSTReconciliationPage'), { loading: PageLoader, ssr: false })
-const BankingPage = dynamic(() => import('@/components/banking/BankingPage'), { loading: PageLoader, ssr: false })
-const ReportsPage = dynamic(() => import('@/components/reports/ReportsPage'), { loading: PageLoader, ssr: false })
-const SettingsPage = dynamic(() => import('@/components/settings/SettingsPage'), { loading: PageLoader, ssr: false })
-const GoogleWorkspacePage = dynamic(() => import('@/components/google-workspace/GoogleWorkspacePage'), { loading: PageLoader, ssr: false })
-const ZohoBooksPage = dynamic(() => import('@/components/zoho-books/ZohoBooksPage'), { loading: PageLoader, ssr: false })
-const OracleBrainPage = dynamic(() => import('@/components/oracle/OracleBrain'), { loading: PageLoader, ssr: false })
-const TimelinePage = dynamic(() => import('@/components/timeline/TimelinePage'), { loading: PageLoader, ssr: false })
-const TasksPage = dynamic(() => import('@/components/tasks/TasksPage'), { loading: PageLoader, ssr: false })
-const DocumentVaultPage = dynamic(() => import('@/components/documents/DocumentVaultPage'), { loading: PageLoader, ssr: false })
-const NoticeCenterPage = dynamic(() => import('@/components/notices/NoticeCenterPage'), { loading: PageLoader, ssr: false })
+const DashboardHomePage = dynamic(withRetry(() => import('@/components/dashboard/DashboardPage')), { loading: PageLoader, ssr: false })
+const ClientRegistryPage = dynamic(withRetry(() => import('@/components/clients/ClientRegistryPage')), { loading: PageLoader, ssr: false })
+const ClientWorkspacePage = dynamic(withRetry(() => import('@/components/clients/ClientWorkspacePage')), { loading: PageLoader, ssr: false })
+const InvoiceWorkspacePage = dynamic(withRetry(() => import('@/components/invoices/InvoiceWorkspacePage')), { loading: PageLoader, ssr: false })
+const ReturnsPage = dynamic(withRetry(() => import('@/components/returns/ReturnsPage')), { loading: PageLoader, ssr: false })
+const ReturnPrepWorkspace = dynamic(withRetry(() => import('@/components/returns/ReturnPrepWorkspace')), { loading: PageLoader, ssr: false })
+const ReconciliationPage = dynamic(withRetry(() => import('@/components/reconciliation/ReconciliationPage')), { loading: PageLoader, ssr: false })
+const GSTReconciliationPage = dynamic(withRetry(() => import('@/components/gst-reconciliation/GSTReconciliationPage')), { loading: PageLoader, ssr: false })
+const BankingPage = dynamic(withRetry(() => import('@/components/banking/BankingPage')), { loading: PageLoader, ssr: false })
+const ReportsPage = dynamic(withRetry(() => import('@/components/reports/ReportsPage')), { loading: PageLoader, ssr: false })
+const SettingsPage = dynamic(withRetry(() => import('@/components/settings/SettingsPage')), { loading: PageLoader, ssr: false })
+const GoogleWorkspacePage = dynamic(withRetry(() => import('@/components/google-workspace/GoogleWorkspacePage')), { loading: PageLoader, ssr: false })
+const ZohoBooksPage = dynamic(withRetry(() => import('@/components/zoho-books/ZohoBooksPage')), { loading: PageLoader, ssr: false })
+const OracleBrainPage = dynamic(withRetry(() => import('@/components/oracle/OracleBrain')), { loading: PageLoader, ssr: false })
+const TimelinePage = dynamic(withRetry(() => import('@/components/timeline/TimelinePage')), { loading: PageLoader, ssr: false })
+const TasksPage = dynamic(withRetry(() => import('@/components/tasks/TasksPage')), { loading: PageLoader, ssr: false })
+const DocumentVaultPage = dynamic(withRetry(() => import('@/components/documents/DocumentVaultPage')), { loading: PageLoader, ssr: false })
+const NoticeCenterPage = dynamic(withRetry(() => import('@/components/notices/NoticeCenterPage')), { loading: PageLoader, ssr: false })
 // ── GSTPilot Firestore-connected registries (real CRUD) ────────────────────────
-const GSTpilotVendorsView = dynamic(() => import('@/components/gstpilot-data/VendorsView'), { loading: PageLoader, ssr: false })
-const GSTpilotExpensesView = dynamic(() => import('@/components/gstpilot-data/ExpensesView'), { loading: PageLoader, ssr: false })
-const GSTpilotPaymentsView = dynamic(() => import('@/components/gstpilot-data/PaymentsView'), { loading: PageLoader, ssr: false })
-const GSTpilotProductsView = dynamic(() => import('@/components/gstpilot-data/ProductsView'), { loading: PageLoader, ssr: false })
+const GSTpilotVendorsView = dynamic(withRetry(() => import('@/components/gstpilot-data/VendorsView')), { loading: PageLoader, ssr: false })
+const GSTpilotExpensesView = dynamic(withRetry(() => import('@/components/gstpilot-data/ExpensesView')), { loading: PageLoader, ssr: false })
+const GSTpilotPaymentsView = dynamic(withRetry(() => import('@/components/gstpilot-data/PaymentsView')), { loading: PageLoader, ssr: false })
+const GSTpilotProductsView = dynamic(withRetry(() => import('@/components/gstpilot-data/ProductsView')), { loading: PageLoader, ssr: false })
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VIEW → COMPONENT MAP — only canonical, real views live here.

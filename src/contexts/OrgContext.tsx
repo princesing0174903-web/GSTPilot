@@ -70,10 +70,15 @@ function loadOrgService(): Promise<OrgServiceModule> {
 // Firestore's SDK has NO hard deadline — on network issues or permission
 // errors it retries with exponential backoff that can run for MINUTES. This
 // guarantees every Firestore operation in the org-resolution path resolves
-// (or rejects) within 5s, so the user never sits on a loading screen for
-// more than ~5s before we fall back to a local workspace.
+// (or rejects) within 3s, so the user never sits on a loading screen for
+// more than ~3s before we fall back to a local workspace.
+//
+// Previously 5s with 1 retry = 10.5s worst case, which exceeded the
+// DashboardTimeoutBoundary's 6s timeout and showed a "Taking longer than
+// usual" error screen. With 3s + 0 retries, worst case is ~3.5s (well
+// under the 6s boundary) and the user lands on the dashboard fast.
 import { withTimeout, isTimeoutError } from '@/lib/async/withTimeout';
-const FIRESTORE_OP_TIMEOUT_MS = 5_000;
+const FIRESTORE_OP_TIMEOUT_MS = 3_000;
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -196,11 +201,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
 
-    // Reduced from 3 retries @ [500,1000,2000]ms = 3.5s of pure waiting to
-    // 1 retry @ 500ms. Permission-denied / not-found are permanent and don't
-    // benefit from retries; transient network blips recover in <500ms.
-    const MAX_RETRIES = 1;
-    const BACKOFF_MS = [500];
+    // No retries — Firestore in this sandbox is either reachable (<1s) or
+    // unreachable (blocked). Retrying just doubles the wait for no benefit.
+    // If the first attempt fails, we immediately fall back to a local
+    // workspace so the user is NEVER blocked for more than ~3.5s.
+    const MAX_RETRIES = 0;
+    const BACKOFF_MS: number[] = [];
 
     const attemptResolve = async (attempt: number): Promise<'done' | 'retry' | 'fail'> => {
       try {

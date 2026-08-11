@@ -228,8 +228,16 @@ export async function seedBankingData(organizationId: string): Promise<{
 /**
  * Ensures banking data is seeded for the org. Called by API routes on first
  * load. Non-throwing — if seeding fails, the API still returns (empty) data.
+ *
+ * GATED behind GSTPILOT_ALLOW_SEED=true (matching the marketplace/enterprise/
+ * app-platform pattern). Without this flag, NO demo banking data is created —
+ * real users see honest empty states ("No bank accounts connected") instead of
+ * fake HDFC/ICICI/Axis accounts with fabricated transactions.
  */
 export async function ensureSeeded(organizationId: string): Promise<void> {
+  if (process.env.GSTPILOT_ALLOW_SEED !== 'true') {
+    return;
+  }
   try {
     await seedBankingData(organizationId);
   } catch (err) {

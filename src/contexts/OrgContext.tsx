@@ -581,11 +581,28 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Reactively resolve the org context whenever the auth user changes ──
+  // CRITICAL: The dependency array uses only primitive values (isAuthenticated,
+  // userId, provider) — NOT the `user` object itself. The `user` object is
+  // recreated on every AuthContext render, which would cause this effect to
+  // tear down and re-create the Firebase subscription on every render cycle,
+  // leading to repeated resolveOrgContext calls, repeated Firestore queries,
+  // and ultimately the org-resolution timeout loop. By depending only on the
+  // primitive userId + provider, the subscription is created ONCE per sign-in
+  // and stays stable until the user actually changes (sign-out → sign-in).
+  // The `user` object is captured in a ref so the effect body always reads
+  // the latest value without re-triggering the effect.
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
   useEffect(() => {
     // Firebase is loaded lazily so this effect can't read `auth.currentUser`
     // synchronously. We kick off the lazy load and act on the result.
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
+
+    // Read the latest user from the ref (not the closure-captured value).
+    const currentUser = userRef.current;
 
     // ── FAST PATH: Demo users have no Firebase Auth session, so we can set up
     //    their local workspace SYNCHRONOUSLY without waiting for the lazy
@@ -594,16 +611,16 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     //    Firebase finished loading — on slow connections that took >8s and
     //    triggered the DashboardTimeoutBoundary error screen. Moving it above
     //    the firebase load means demo users resolve in <1 render cycle.
-    if (isAuthenticated && user && user.provider === 'demo') {
+    if (isAuthenticated && currentUser && currentUser.provider === 'demo') {
       // Skip if we've already resolved for this user.
-      if (loadingForRef.current !== user.id) {
+      if (loadingForRef.current !== currentUser.id) {
         console.log('[Org] Demo user detected (fast path) — creating local workspace synchronously');
-        const localOrgId = `local-${user.id}`;
+        const localOrgId = `local-${currentUser.id}`;
         const localOrg: OrganizationDoc = {
           id: localOrgId,
-          name: user.name + "'s Workspace",
+          name: currentUser.name + "'s Workspace",
           slug: 'my-workspace',
-          ownerId: user.id,
+          ownerId: currentUser.id,
           logoUrl: null,
           gstin: null,
           plan: 'free',
@@ -612,11 +629,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           updatedAt: null,
         };
         const localMember: OrganizationMemberDoc = {
-          id: `${localOrgId}_${user.id}`,
+          id: `${localOrgId}_${currentUser.id}`,
           organizationId: localOrgId,
-          userId: user.id,
-          userEmail: user.email,
-          userDisplayName: user.name,
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userDisplayName: currentUser.name,
           userPhotoURL: null,
           role: 'owner',
           status: 'active',
@@ -627,9 +644,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           updatedAt: null,
         };
         const localProfile: UserProfileDoc = {
-          uid: user.id,
-          email: user.email,
-          displayName: user.name,
+          uid: currentUser.id,
+          email: currentUser.email,
+          displayName: currentUser.name,
           photoURL: null,
           phone: null,
           company: null,
@@ -642,7 +659,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           createdAt: null,
           updatedAt: null,
         };
-        /* eslint-disable react-hooks/set-state-in-effect */
         setProfile(localProfile);
         setOrganization(localOrg);
         setMembership(localMember);
@@ -651,8 +667,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setIsPreviewMode(false);
         setLoading(false);
         setError(null);
-        /* eslint-enable react-hooks/set-state-in-effect */
-        loadingForRef.current = user.id;
+        loadingForRef.current = currentUser.id;
         try {
           localStorage.setItem('gstpilot_org_id', localOrgId);
         } catch {
@@ -674,7 +689,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         // If React says "not authenticated" but Firebase still has a currentUser,
         // this is a transient state (HMR remount, brief re-render) — don't wipe
         // the org context. Only reset on a genuine sign-out (no Firebase user).
-        if (!isAuthenticated || !user) {
+        if (!isAuthenticated || !currentUser) {
           if (auth.currentUser) {
             // Firebase still has a user — this is a transient blip. Wait for
             // onAuthStateChanged to re-sync the React state.
@@ -696,14 +711,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
         // ── Demo user fallback (should never run because of the fast path above,
         //    but kept as a safety net in case the fast path was skipped).
-        if (user && user.provider === 'demo') {
+        if (currentUser && currentUser.provider === 'demo') {
           console.log('[Org] Demo user detected (fallback path) — creating local workspace');
-          const localOrgId = `local-${user.id}`;
+          const localOrgId = `local-${currentUser.id}`;
           const localOrg: OrganizationDoc = {
             id: localOrgId,
-            name: user.name + "'s Workspace",
+            name: currentUser.name + "'s Workspace",
             slug: 'my-workspace',
-            ownerId: user.id,
+            ownerId: currentUser.id,
             logoUrl: null,
             gstin: null,
             plan: 'free',
@@ -712,11 +727,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
             updatedAt: null,
           };
           const localMember: OrganizationMemberDoc = {
-            id: `${localOrgId}_${user.id}`,
+            id: `${localOrgId}_${currentUser.id}`,
             organizationId: localOrgId,
-            userId: user.id,
-            userEmail: user.email,
-            userDisplayName: user.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
+            userDisplayName: currentUser.name,
             userPhotoURL: null,
             role: 'owner',
             status: 'active',
@@ -727,9 +742,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
             updatedAt: null,
           };
           const localProfile: UserProfileDoc = {
-            uid: user.id,
-            email: user.email,
-            displayName: user.name,
+            uid: currentUser.id,
+            email: currentUser.email,
+            displayName: currentUser.name,
             photoURL: null,
             phone: null,
             company: null,
@@ -750,7 +765,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           setIsPreviewMode(false);
           setLoading(false);
           setError(null);
-          loadingForRef.current = user.id;
+          loadingForRef.current = currentUser.id;
           try {
             localStorage.setItem('gstpilot_org_id', localOrgId);
           } catch {
@@ -778,9 +793,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           resolveOrgContext(auth.currentUser);
         } else if (
           !auth.currentUser &&
-          user &&
-          user.provider !== 'demo' &&
-          loadingForRef.current !== user.id
+          currentUser &&
+          currentUser.provider !== 'demo' &&
+          loadingForRef.current !== currentUser.id
         ) {
           // ── Cached-real-user fallback ──────────────────────────────────
           // Firebase Auth hasn't surfaced `currentUser` (network unreachable,
@@ -790,18 +805,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           //
           // We build a synthetic minimal FirebaseUser-shaped object so the
           // normal resolve path runs. The Firestore calls inside
-          // `resolveOrgContext` have their own 5s timeouts and will fall back
+          // `resolveOrgContext` have their own 3s timeouts and will fall back
           // to a local workspace if Firestore is also unreachable — exactly
           // what we want.
           console.warn('[Org] auth.currentUser is null but cached real user exists — resolving with synthetic user to avoid indefinite loading state');
           const syntheticUser = {
-            uid: user.id,
-            email: user.email,
-            displayName: user.name,
-            photoURL: user.picture ?? null,
-            emailVerified: user.emailVerified,
+            uid: currentUser.id,
+            email: currentUser.email,
+            displayName: currentUser.name,
+            photoURL: currentUser.picture ?? null,
+            emailVerified: currentUser.emailVerified,
             providerData: [{
-              providerId: user.provider === 'google' ? 'google.com' : 'password',
+              providerId: currentUser.provider === 'google' ? 'google.com' : 'password',
             }],
           } as unknown as FirebaseUser;
           resolveOrgContext(syntheticUser);
@@ -812,8 +827,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     ).catch((err) => {
       if (isTimeoutError(err)) {
         console.warn('[Org] Firebase init timed out — installing local workspace to unblock the user');
-        if (user && user.provider !== 'demo') {
-          setLocalWorkspace(user);
+        if (currentUser && currentUser.provider !== 'demo') {
+          setLocalWorkspace(currentUser);
         }
       } else {
         console.warn('[Org] Firebase load failed — org context inactive:', err);
@@ -824,7 +839,13 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       if (unsubscribe) unsubscribe();
     };
-  }, [isAuthenticated, user?.id, user, resolveOrgContext, setLocalWorkspace]);
+    // CRITICAL: Only depend on primitive values (isAuthenticated, userId,
+    // provider) — NOT the `user` object. The `user` object is recreated on
+    // every AuthContext render, which would cause this effect to re-run and
+    // re-create the Firebase subscription on every render cycle. The `user`
+    // is read from `userRef.current` inside the effect, so it's always fresh.
+    // `resolveOrgContext` and `setLocalWorkspace` are stable (useCallback).
+  }, [isAuthenticated, user?.id, user?.provider, resolveOrgContext, setLocalWorkspace]);
 
   // ── Derived values ──
   const role: OrgRole | null = membership?.role ?? profile?.role ?? null;

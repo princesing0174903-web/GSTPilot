@@ -171,20 +171,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 3000);
 
-    // Hard deadline — if Firebase STILL hasn't responded after 15s, the
-    // cached session is genuinely stale (token endpoint totally unreachable).
-    // Clear it so the user sees the login page and can re-authenticate.
-    // This is long enough that genuine network blips recover, but short
-    // enough that a permanently-unreachable Firebase doesn't leave a zombie
-    // session in the UI.
-    const hardDeadline = setTimeout(() => {
-      if (mounted && restoredFromCache) {
-        console.warn('[Auth] Hard 15s deadline exceeded with no Firebase response — clearing cached session');
-        localStorage.removeItem(SESSION_KEY);
-        setUser(null);
-        cachedUserIdRef.current = null;
-      }
-    }, 15000);
+    // NOTE: The previous "hard deadline" (15s) that cleared the cached session
+    // has been REMOVED. A timeout is NOT an authentication failure — logging
+    // the user out because Firebase is slow/unreachable is the wrong behavior.
+    // The cached session is kept indefinitely; the user can still use the app
+    // in local-workspace mode. The session is ONLY cleared when Firebase
+    // explicitly reports that the session is invalid (via onAuthStateChanged
+    // firing null for a non-demo user, or via an explicit auth error).
 
     // ── Restore from localStorage for instant UI ──
     // (restoredFromCache declared above, before the safety timer)
@@ -290,7 +283,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
-      clearTimeout(hardDeadline);
       if (unsubscribe) unsubscribe();
     };
   }, []);

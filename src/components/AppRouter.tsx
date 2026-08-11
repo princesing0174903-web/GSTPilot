@@ -364,47 +364,50 @@ function AutoProvisionWorkspace() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DashboardTimeoutBoundary — handles loading + timeout states for the dashboard.
-// Once authenticated, the user ALWAYS sees this boundary (never the landing
-// page). It shows:
-//   • Inline loading shell while org resolves (up to 15s, with 1 auto-retry)
-//   • Timeout screen with Retry + Continue in local mode + Reload if org
-//     takes >15s (rare — only on very slow networks; Firestore failure falls
-//     back to a local workspace, not an error)
-//   • The dashboard children once org is resolved
+//
+// CRITICAL CONTRACT (root-cause fix for auto-reload/logout loop):
+//   • A timeout is a UI SAFETY BOUNDARY, NOT an authentication failure.
+//   • The user's authenticated session is NEVER cleared on timeout.
+//   • There is NO automatic retry, NO automatic reload, NO automatic logout.
+//   • The dashboard shell renders IMMEDIATELY (progressive rendering) — the
+//     user sees the app structure within milliseconds, and org-dependent
+//     widgets show inline loaders while the org resolves in the background.
+//   • If org resolution exceeds 8s, a NON-DESTRUCTIVE timeout screen appears
+//     with a MANUAL "Retry" button. The session is preserved. The user can
+//     also "Continue waiting" (dismiss the timeout screen and keep waiting).
+//   • The underlying org-resolution request continues running — if it
+//     succeeds later, the dashboard hydrates automatically.
 // ═══════════════════════════════════════════════════════════════════════════════
 function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   const { loading: orgLoading, organization, reload, isPreviewMode } = useOrg();
   const { user } = useAuth();
-  const { setCurrentView, setCurrentScreen } = useApp();
   const [timedOut, setTimedOut] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const autoRetriedRef = useRef(false);
 
   useEffect(() => {
     if (!orgLoading && (organization || isPreviewMode)) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setTimedOut(false);
       setElapsed(0);
-      autoRetriedRef.current = false;
       /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
     setTimedOut(false);
     let startTime = Date.now();
-    // Reduced from 15s → 6s. The org context either resolves in <3s (normal)
-    // or is unreachable (Firestore down). Waiting 15s + a 15s retry = 30s of
-    // "Preparing your dashboard…" is unacceptable. At 6s we surface the
-    // timeout screen with Retry + Continue-in-local-mode so the user is
-    // NEVER blocked for more than ~6s.
-    const TIMEOUT_SECONDS = 6;
+    // 8s timeout — this is a UI safety boundary, not an auth failure. The
+    // underlying request continues running; if it succeeds later, the
+    // dashboard hydrates automatically. The timeout screen just gives the
+    // user a MANUAL "Retry" option — no auto-reload, no auto-logout.
+    const TIMEOUT_SECONDS = 8;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);
       if (secs >= TIMEOUT_SECONDS) {
-        // No auto-retry — the user can press "Retry" manually. Auto-retry
-        // doubled the effective wait and made a slow Firestore feel even slower.
-        console.error('[Dashboard] Org resolution exceeded 6s — showing timeout screen');
+        // NON-DESTRUCTIVE: just show the timeout UI. Do NOT clear the session,
+        // do NOT reload the page, do NOT auto-retry. The user presses Retry
+        // manually if they want to re-attempt org resolution.
+        console.warn('[Dashboard] Org resolution is taking longer than expected — showing manual retry option (session preserved)');
         setTimedOut(true);
         clearInterval(interval);
       }
@@ -414,38 +417,19 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   }, [orgLoading, organization, isPreviewMode, reload]);
 
   const handleRetry = useCallback(() => {
+    // MANUAL retry — only fires when the user clicks the button.
     setTimedOut(false);
     setElapsed(0);
-    autoRetriedRef.current = false;
     void reload();
   }, [reload]);
 
-  // ── Continue in local mode ──────────────────────────────────────────────
-  // Lets the user escape a slow / stuck org resolution by switching to a
-  // local workspace. They land on the dashboard immediately.
-  const handleContinueLocal = useCallback(() => {
-    if (!user) return;
-    console.warn('[Dashboard] User chose local mode — escaping stuck org resolution');
-    const localOrgId = `local-${user.id}`;
-    try {
-      localStorage.setItem('gstpilot_org_id', localOrgId);
-    } catch {
-      /* non-fatal */
-    }
+  const handleContinueWaiting = useCallback(() => {
+    // Dismiss the timeout screen and keep waiting for the background request.
     setTimedOut(false);
-    setElapsed(0);
-    autoRetriedRef.current = false;
-    setCurrentView('dashboard');
-    setCurrentScreen('app');
-    // Force a reload so OrgContext picks up the local-workspace fast path.
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    }
-  }, [user, setCurrentView, setCurrentScreen]);
+  }, []);
 
-  // ── Timeout state: org loading exceeded 15s. Has Retry + Continue local +
-  // Reload. The "Continue in local mode" option ensures the user is NEVER
-  // hard-blocked on a slow network — they can always escape to local mode.
+  // ── Timeout state: org loading exceeded 8s. MANUAL Retry only.
+  // NO auto-reload. NO auto-logout. Session is preserved.
   if (timedOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -453,24 +437,23 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="h-7 w-7 text-amber-400" />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Taking longer than usual</h2>
+          <h2 className="text-xl font-bold text-foreground">Something is taking longer than expected</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Your workspace is still loading. This can happen on slow connections.
-            Give it a moment, retry now, or continue in local mode.
+            Your workspace is still loading in the background. This can happen on slow connections.
+            Your session is preserved — you can retry now or continue waiting.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button onClick={handleRetry}>
               <RefreshCw className="h-4 w-4" />
               Retry
             </Button>
-            <Button variant="outline" onClick={handleContinueLocal}>
-              Continue in local mode
-            </Button>
-            <Button variant="outline" onClick={() => window.location.reload()}>
-              <RefreshCw className="h-4 w-4" />
-              Reload page
+            <Button variant="outline" onClick={handleContinueWaiting}>
+              Continue waiting
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Signed in as {user?.email ?? 'Guest'} · Session preserved
+          </p>
         </div>
       </div>
     );

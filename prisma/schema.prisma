@@ -70,6 +70,11 @@ model Client {
   emailMessages       EmailMessage[]
   smsMessages         SMSMessage[]
   communicationLogs   CommunicationLog[]
+
+  // ── PERF: Client is queried by firmId (every org-scoped query) and status ──
+  @@index([firmId])
+  @@index([firmId, status])
+  @@index([status])
 }
 
 model Invoice {
@@ -119,6 +124,15 @@ model Invoice {
   reconciliations ReconciliationResult[]
   issues          Issue[]
   items           InvoiceItem[]
+
+  // ── PERF: indexes for the most common dashboard queries ──
+  // Invoice is queried by status (workflow pipeline), client.firmId (snapshot),
+  // invoiceDate (monthly aggregates), and matchStatus (reconciliation).
+  @@index([clientId])
+  @@index([status])
+  @@index([invoiceDate])
+  @@index([matchStatus])
+  @@index([status, matchStatus])
 }
 
 model GSTRFiling {
@@ -144,6 +158,11 @@ model GSTRFiling {
   client Client        @relation(fields: [clientId], references: [id])
   events FilingEvent[]
   issues Issue[]
+
+  // ── PERF: GSTRFiling is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([returnType, period])
 }
 
 model ReconciliationResult {
@@ -332,6 +351,10 @@ model Notice {
 
   client   Client      @relation(fields: [clientId], references: [id])
   assignee TeamMember? @relation(fields: [assignedTo], references: [id])
+
+  // ── PERF: Notice is queried by clientId (snapshot) and status ──
+  @@index([clientId])
+  @@index([status])
 }
 
 model Document {
@@ -740,6 +763,11 @@ model PurchaseBill {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: PurchaseBill is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([paymentStatus])
 }
 
 // ─── Expenses (Receipts / Operational Spend) ─────────────────────────────────────
@@ -762,6 +790,11 @@ model Expense {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: Expense is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([date])
 }
 
 // ─── Payments (Customer + Vendor Settlements) ────────────────────────────────────
@@ -783,6 +816,11 @@ model Payment {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: Payment is queried by clientId, invoiceId, and status ──
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([status])
 }
 
 // ─── Employees (Payroll Roster) ──────────────────────────────────────────────────
@@ -995,6 +1033,13 @@ model BusinessEvent {
   createdAt   DateTime @default(now())
 
   decision    Decision?
+
+  // ── PERF: BusinessEvent is queried by status+severity (workflow pipeline)
+  // and businessId (org scope). createdAt for "recent" ordering.
+  @@index([status, severity])
+  @@index([businessId])
+  @@index([createdAt])
+  @@index([type, status])
 }
 
 // ─── MODULE 2 — Decision Engine™: Decision ──────────────────────────────────────
@@ -4256,6 +4301,13 @@ model GSTReturn {
   downloadedAt      DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // ── PERF: GSTReturn is queried by status (workflow pipeline: prepared/draft),
+  // filedAt (done count this month), and type+period (lookup) ──
+  @@index([status])
+  @@index([filedAt])
+  @@index([type, period])
+  @@index([gstin, period])
 }
 
 // ─── Global Enterprise — Audit / Brief / Recommendation ────────────────────────

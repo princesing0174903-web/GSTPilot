@@ -27,7 +27,12 @@ interface State {
 
 export function useOracleDailyBriefing(): State {
   const { organization } = useOrg();
-  const orgId = organization?.id ?? 'local';
+  // ── PERF FIX: only fetch when we have a REAL org id. Previously this used
+  //    `?? 'local'`, which fired a request immediately on mount BEFORE
+  //    OrgContext resolved the real org. That request either returned empty
+  //    data (wasted round-trip) or 401'd (auth header not yet attached),
+  //    then the hook fired AGAIN when the real org id arrived. Now we wait.
+  const orgId = organization?.id ?? null;
 
   const [briefing, setBriefing] = useState<OracleDailyBriefing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +45,11 @@ export function useOracleDailyBriefing(): State {
   const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   useEffect(() => {
+    // Don't fire until the real org id is available. This prevents a
+    // wasted request with the placeholder 'local' id that OrgContext
+    // hasn't resolved yet (which also caused 401s because the auth
+    // header wasn't attached for the placeholder).
+    if (!orgId) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 

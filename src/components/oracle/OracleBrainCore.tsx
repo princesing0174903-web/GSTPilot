@@ -55,6 +55,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { toast } from 'sonner';
+import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Props (no context dependency — keeps this module Firebase-free) ──────────
 
@@ -622,14 +623,18 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
     let cancelled = false;
     setSnapshotLoading(true);
-    fetch(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`)
+    // PERF FIX: use fetchWithTimeout instead of raw fetch — it auto-injects
+    // the `x-gstpilot-actor` auth header that requireAuth() checks for.
+    // Raw fetch() caused 401 errors on every Oracle Brain mount (visible in
+    // dev.log as repeated `GET /api/business/snapshot ... 401`).
+    fetchWithTimeout(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`, { timeoutMs: 10_000 })
       .then(r => (r.ok ? r.json() : null))
       .then(data => { if (!cancelled && data) setSnapshot(data); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setSnapshotLoading(false); });
 
     setTimelineLoading(true);
-    fetch(`/api/timeline?organizationId=${encodeURIComponent(orgId)}&limit=6`)
+    fetchWithTimeout(`/api/timeline?organizationId=${encodeURIComponent(orgId)}&limit=6`, { timeoutMs: 10_000 })
       .then(r => (r.ok ? r.json() : { events: [] }))
       .then(data => { if (!cancelled) setTimeline(data?.events ?? []); })
       .catch(() => { if (!cancelled) setTimeline([]); })

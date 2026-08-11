@@ -17093,3 +17093,235 @@ Stage Summary:
 - NO DEMO DATA INTRODUCED: existing real Zoho data still visible (INV-2025-0418, 6 customers, etc.)
 - PERF MONITORING: dev-only fetch wrapper logs slow API requests (>1s amber, >5s red), LCP, long tasks, TTFB — makes future slowdowns immediately visible
 - FILES CHANGED: src/contexts/OrgContext.tsx (setLocalWorkspace + Firebase init timeout + cached-user fallback), src/contexts/AuthContext.tsx (don't wipe cached session + 15s hard deadline), src/components/AppRouter.tsx (use setLocalWorkspace in fallbacks + reset ranRef in retry + 15s hard deadline), src/components/shared/DevServerReconnect.tsx (15s interval + production no-op), src/lib/dynamic-retry.ts (clear reload flag on clean load), src/lib/perf/monitor.ts (NEW — dev-only perf monitor), src/components/providers-lazy.tsx (install perf monitor)
+
+---
+Task ID: perf-2-profile
+Agent: Explore (profiling)
+Task: Profile dashboard data hooks, API routes, Prisma queries, middleware, duplicate requests — RESEARCH ONLY, NO CODE CHANGES
+
+Work Log:
+- Read prior worklog entries (perf-1 boot-flow profile + perf-fix-final applied fixes) — did NOT re-do their work. This profile is scoped to the POST-BOOT dashboard data path (what happens AFTER the dashboard renders).
+- Read 6 dashboard hooks: src/hooks/useBusinessSnapshot.ts, useTimelineEvents.ts, useAIRecommendations.ts, useWorkflowPipeline.ts, useOracleDailyBriefing.ts, use-firestore.ts (useLiveDashboardMetrics + useFireReturns).
+- Read 5 API routes: src/app/api/business/snapshot/route.ts, timeline/route.ts, recommendations/route.ts, workflow/pipeline/route.ts, oracle/daily-briefing/route.ts.
+- Read 5 underlying lib functions: src/lib/business/snapshot.ts (rich engine, 1307 lines), src/lib/financial-engine/businessSnapshot.ts (fin engine), src/lib/timeline/emit.ts, src/lib/recommendations/engine.ts, src/lib/workflow/engine.ts, src/lib/oracle/daily-briefing.ts.
+- Read prisma/schema.prisma (6592 lines, ~200+ models — grep'd indexes for every model touched by the dashboard routes).
+- Read src/middleware.ts — this is the file Next.js logs as "proxy.ts" in dev.log (there is no src/proxy.ts file; the dev.log naming is Next's internal name for the middleware layer).
+- Read src/lib/auth/session.ts (requireAuth + requireOrgMembership + loadAdmin).
+- Read src/lib/cache/swr.ts (server-side SWR cache).
+- Read src/lib/async/fetchWithTimeout.ts (auto-injects x-gstpilot-actor header from localStorage).
+- Read src/hooks/api.ts (apiFetch broadcasts session-expired on 401).
+- Read src/components/dashboard/DashboardPage.tsx (lines 575-600, 735-750) — confirmed it mounts all 6 dashboard hooks simultaneously.
+- Read src/components/oracle/OracleBrainCore.tsx (lines 605-660) — confirmed it makes raw fetch() calls to /api/business/snapshot + /api/timeline?limit=6 (no auth header, bypassing the hook caches).
+- Analyzed /home/z/my-project/dev.log (970 lines) — grep'd all 5 dashboard API paths + 401s + forceRefresh + limit=6 patterns.
+
+Stage Summary:
+
+### Dashboard API waterfall (measured from dev.log warm cache)
+
+Cold-compile timings (first hit per route, Next.js dev on-demand compile):
+| API | Cold total | Compile | proxy.ts | Render (DB+compute) |
+|---|---|---|---|---|
+| /api/business/snapshot | 6.5s | 5.9s | 22ms | 524ms |
+| /api/timeline | 6.1s | 5.9s | 22ms | 139ms |
+| /api/recommendations | 6.5s | 5.9s | 23ms | 522ms |
+| /api/workflow/pipeline | 6.4s | 5.9s | 26ms | 454ms |
+| /api/oracle/daily-briefing | 6.4s | 5.9s | 37ms | 458ms |
+
+Warm timings (server cache hit — second dashboard mount, dev.log:75-79):
+| API | Warm total | Compile | proxy.ts | Render |
+|---|---|---|---|---|
+| /api/business/snapshot | 38ms | 22ms | 11ms | 5ms |
+| /api/timeline | 44ms | 13ms | 28ms | 3ms |
+| /api/recommendations | 48ms | 11ms | 34ms | 3ms |
+| /api/workflow/pipeline | 38ms | 9ms | 25ms | 4ms |
+| /api/oracle/daily-briefing | 43ms | 15ms | 25ms | 4ms |
+
+Warm timings (server cache MISS, dev.log:153-157 — typical background refresh):
+| API | Warm total | Compile | proxy.ts | Render (DB+compute) |
+|---|---|---|---|---|
+| /api/timeline | 48ms | 24ms | 17ms | 7ms |
+| /api/recommendations | 115ms | 46ms | 17ms | 52ms |
+| /api/business/snapshot | 127ms | 70ms | 17ms | 39ms |
+| /api/workflow/pipeline | 187ms | 13ms | 120ms | 54ms |
+| /api/oracle/daily-briefing | 192ms | 51ms | 120ms | 21ms |
+
+Parallel-burst timings (dev.log:851-856 — 5 APIs fire simultaneously, server caches cold):
+| API | Total | Compile | proxy.ts | Render |
+|---|---|---|---|---|
+| /api/timeline | 490ms | 108ms | 371ms | 11ms |
+| /api/business/snapshot | 529ms | 9ms | 371ms | 149ms |
+| /api/recommendations | 532ms | 118ms | 374ms | 40ms |
+| /api/workflow/pipeline | 534ms | 132ms | 374ms | 28ms |
+| /api/oracle/daily-briefing | 535ms | 145ms | 369ms | 22ms |
+
+### Top 5 performance issues found (ranked by impact)
+
+1. **/api/business/snapshot runs TWO snapshot engines in parallel, one of which loads ALL ROWS of 8 tables via findMany with NO take limit.** `src/app/api/business/snapshot/route.ts:62-71` calls both `getFinSnapshot` (financial-engine) and `getRichSnapshot` (business/snapshot) in `Promise.all`. The fin engine (`src/lib/financial-engine/businessSnapshot.ts:200-256`) runs 8 `findMany` calls — `db.invoice.findMany`, `db.purchaseBill.findMany`, `db.expense.findMany`, `db.payment.findMany`, `db.bankAccount.findMany`, `db.client.findMany`, `db.notice.findMany`, `db.gSTRFiling.findMany` — every one with `orderBy: { createdAt: 'desc' }` and NO `take` parameter. For an org with thousands of invoices/payments, this loads megabytes of rows into Node memory just to compute sums that the rich engine already computes via `aggregate` (snapshot.ts:653-800). On top of that, `db.bankAccount.findMany` at line 236 has NO `where` filter at all — it returns EVERY bank account across ALL tenants (a cross-tenant data leak the rich engine explicitly works around at snapshot.ts:707-712 by returning null for the native bank balance).
+
+2. **9 of the 15 Prisma queries in /api/workflow/pipeline are NOT org-scoped — they leak across tenants AND scan the entire table.** `src/lib/workflow/engine.ts:155-225` runs 15 queries in parallel. Of these, 9 omit the `client: { firmId: organizationId }` (or `organizationId`/`businessId`) filter:
+   - L155-160: `db.invoice.findMany({ where: { status: { in: ['sent','issued','pending','overdue'] } } })` — ALL invoices in the DB
+   - L163-168: `db.invoice.findMany({ where: { status: 'paid', matchStatus: { not: 'matched' } } })` — ALL paid invoices in the DB
+   - L187-192: `db.gSTReturn.findMany({ where: { status: { in: ['prepared','draft'] } } })` — ALL GST returns
+   - L195-200: `db.businessEvent.findMany({ where: { status: 'open', severity: { in: ['high','critical'] } } })` — ALL business events
+   - L203-205: `db.gSTReturn.count({ where: { status: 'filed', filedAt: { gte: startOfMonth() } } })` — ALL filed returns
+   - L209-211: `db.invoice.count({ where: { status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0,10) } } })` — ALL paid invoices
+   - L214: `db.invoice.count({ where: { status: { in: ['sent','issued','pending','overdue'] } } })`
+   - L215: `db.invoice.count({ where: { status: 'paid', matchStatus: { not: 'matched' } } })`
+   - L222: `db.gSTReturn.count({ where: { status: { in: ['prepared','draft'] } } })`
+   - L223-225: `db.businessEvent.count({ where: { status: 'open', severity: { in: ['high','critical'] } } })`
+   Only the 6 banking queries (L171-185, L206-208, L216-221) are org-scoped via `organizationId: bankingOrgId`.
+
+3. **/api/oracle/daily-briefing duplicates 4 of workflow/pipeline's queries AND also lacks org scoping on invoices/returns.** `src/lib/oracle/daily-briefing.ts:145-173` runs 4 queries in parallel on top of calling `getWorkflowPipeline`:
+   - L149-154: `db.invoice.findMany({ where: { status: 'paid', invoiceDate: { gte: startOfMonth() } } })` — NO org filter, AND identical intent to workflow's `paidInvoicesCount` at engine.ts:209-211 (just take:5 vs count).
+   - L156-158: `db.bankTransaction.count({ where: { organizationId: bankingOrgId, matched: true, reconciledAt: { gte: startOfMonth() } } })` — LITERALLY IDENTICAL query to workflow's `reconTxnsCount` at engine.ts:206-208. Pure duplicate.
+   - L160-165: `db.gSTReturn.findMany({ where: { status: { in: ['not_started','prepared','draft'] } } })` — NO org filter, superset of workflow's `gstPrepared` at engine.ts:187-192.
+   - L167-172: `db.bankTransaction.findMany({ where: { organizationId, type: 'credit', status: { in: ['posted','pending'] } } })` — partial overlap with workflow's `bankCreditsUnreconciled` at engine.ts:171-176 (oracle omits `matched: false`, so it returns matched + unmatched credits; workflow returns only unmatched).
+
+4. **Massive missing Prisma indexes on every table the dashboard queries (except the Zoho* + banking tables).** See "Missing Prisma indexes" section below. Combined with issues #1-3, every cold snapshot/pipeline/briefing call does multiple un-indexed full-table scans. Even warm calls pay this cost when the 30-60s server cache expires.
+
+5. **OracleBrainCore.tsx makes raw `fetch()` calls to /api/business/snapshot and /api/timeline that bypass the hook-level caches AND fail to send the auth header.** `src/components/oracle/OracleBrainCore.tsx:625,632` calls plain `fetch()` (not `fetchWithTimeout`) inside a `useEffect` — bypassing (a) useBusinessSnapshot's module-level `inflightCache` + `latestSnapshot` (useBusinessSnapshot.ts:42-43), (b) useTimelineEvents's existing `limit=15` fetch, and (c) the `x-gstpilot-actor` auth header auto-injection in fetchWithTimeout.ts:118-153. Result: when the user navigates to the Oracle Brain view, dev.log shows the snapshot route returning 401 (8 times: dev.log:107, 163, 474, 547, 680, 725, 754, 899) because `requireAuth` (session.ts:108-163) finds no Authorization header and no x-gstpilot-actor header. The timeline call succeeds (200) only because the timeline route does NOT call `requireAuth` (timeline/route.ts:23-44 returns [] for empty orgId without auth). Every one of those 401s is a wasted round-trip that broadcasts `gstpilot:session-expired` (api.ts:60-62) — though useBusinessSnapshot doesn't use apiFetch so the broadcast comes from OTHER components that do. The snapshot 401 + timeline limit=6 pair appears 8 times in dev.log, always together — confirming the source is a single component (OracleBrainCore.tsx).
+
+### Dashboard hooks — per-hook profile
+
+| Hook | File | API endpoint | TanStack Query? | queryKey | staleTime | refetchInterval | Depends on orgId? | Fetches when orgId undefined? | Duplicates data? |
+|---|---|---|---|---|---|---|---|---|---|
+| useBusinessSnapshot | useBusinessSnapshot.ts:53-205 | GET /api/business/snapshot?organizationId=...[&forceRefresh=true] | NO (custom) | n/a | n/a | 60s (L26) + on focus + on invalidation bus | Yes (L54-55) | NO — early-returns at L91-98 | YES — fin engine duplicates rich engine (see issue #1) |
+| useTimelineEvents | useTimelineEvents.ts:45-142 | GET /api/timeline?organizationId=...&limit=N | NO (custom) | n/a | n/a | 30s (L31) + on focus + on invalidation bus | Yes (L46-47) | NO — early-returns at L61-66 | No (pure event log) |
+| useAIRecommendations | useAIRecommendations.ts:75-228 | GET /api/recommendations?organizationId=... | NO (custom) | n/a | n/a | 60s (L58) + on focus | Yes (L76-77) | NO — early-returns at L114-121 | YES — getRevenueTrend + getTopCustomerByRevenue duplicate snapshot fields |
+| useWorkflowPipeline | useWorkflowPipeline.ts:29-88 | GET /api/workflow/pipeline?organizationId=... | NO (custom) | n/a | n/a | 45s (L19) + on focus | Yes (L30-31, falls back to 'local') | YES — fetches with organizationId=local (L31) | YES — invoice/return/event stages overlap with oracle briefing |
+| useOracleDailyBriefing | useOracleDailyBriefing.ts:28-87 | GET /api/oracle/daily-briefing?organizationId=... | NO (custom) | n/a | n/a | 60s (L18) + on focus | Yes (L29-30, falls back to 'local') | YES — fetches with organizationId=local (L30) | YES — paidInvoices, reconTxns, gstPrepared, bankCredits all overlap with workflow/pipeline |
+| useLiveDashboardMetrics | use-firestore.ts:400-435 | 5 Firestore onSnapshot subscriptions (clients, invoices, returns, documents, activities) | NO (onSnapshot) | n/a | n/a | real-time (onSnapshot) | Yes (L110-111) | NO — early-returns at L143-148 (also L153-158 for local- orgs) | YES — every metric it computes is already in /api/business/snapshot |
+| useFireReturns | use-firestore.ts:310-316 | 1 Firestore onSnapshot (returns, ordered by createdAt) | NO (onSnapshot) | n/a | n/a | real-time (onSnapshot) | Yes (implicit via useFirestoreCollection) | NO — early-returns for local- orgs | YES — already subscribed inside useLiveDashboardMetrics (use-firestore.ts:407) |
+
+**Critical observation on TanStack Query:** NONE of the 5 HTTP-based dashboard hooks use TanStack Query. They each implement their own bespoke polling/focus/invalidation logic. TanStack Query is configured globally (providers.tsx, per perf-1 worklog §4 line 16998) but only used by src/hooks/api.ts (clients/invoices/returns/recon/documents/notifications — the legacy dashboard APIs). This means:
+- No shared query-cache invalidation across the 5 dashboard hooks (each maintains its own `inflightCache` Map at module scope).
+- No shared stale-while-revalidate window (each hook hard-codes its own REFRESH_INTERVAL_MS).
+- The hooks cannot dedupe across each other even when they fetch the same underlying Prisma data (e.g., useBusinessSnapshot and useAIRecommendations both indirectly trigger `getBusinessSnapshot` — but only the SERVER side dedupes via the snapshot's 30s cache).
+- The hooks cannot share focus/invalidation events (though useBusinessSnapshot + useTimelineEvents + useAIRecommendations happen to share a manual event bus via `onBusinessSnapshotInvalidated` from src/lib/business-snapshot-events.ts).
+
+**Fetch-when-undefined-orgId issue:** useWorkflowPipeline (L31) and useOracleDailyBriefing (L30) use `organization?.id ?? 'local'` as the orgId — so when OrgContext is still loading (organization is null), they IMMEDIATELY fetch with organizationId=local. This is a wasteful prefetch during boot — the user is on a real org but these hooks fetch local-data first, then re-fetch with the real orgId once OrgContext resolves. The other 3 hooks (useBusinessSnapshot, useTimelineEvents, useAIRecommendations) correctly early-return when orgId is null (no fetch).
+
+### Duplicate / overlapping data between hooks
+
+1. **revenueThisMonth / revenueLastMonth** — computed in BOTH:
+   - /api/business/snapshot (rich engine, snapshot.ts:760-775 — two `db.invoice.aggregate` queries)
+   - /api/recommendations (engine.ts:339-354 `getRevenueTrend` — two more `db.invoice.aggregate` queries)
+   → 4 redundant Prisma aggregate queries per cold recommendations call. The recommendations engine could read these from the snapshot it already fetches at engine.ts:384 (`snapshot.revenueThisMonth` / `snapshot.revenueLastMonth` are already in the snapshot object — see snapshot.ts:1035-1036).
+
+2. **topCustomerShare / topCustomerByRevenue** — computed in BOTH:
+   - /api/business/snapshot (snapshot.ts:777-787 — `db.invoice.groupBy({ by: ['buyerName'], ..., take: 1 })`)
+   - /api/recommendations (engine.ts:289-293 — `db.invoice.groupBy({ by: ['clientId'], ..., take: 1 })`)
+   → 2 redundant groupBy queries per cold recommendations call. Grouping key differs (buyerName vs clientId) but the top-revenue insight is the same; the recommendations engine could read `snapshot.topCustomerShare` and only fetch the customer name if share > 40%.
+
+3. **paidInvoicesCount / recentPaidInvoices** — computed in BOTH:
+   - /api/workflow/pipeline (engine.ts:209-211 — `db.invoice.count({ where: { status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0,10) } } })`)
+   - /api/oracle/daily-briefing (daily-briefing.ts:149-154 — `db.invoice.findMany({ where: { status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0,10) } }, take: 5 })`)
+   → Same filter, different shape (count vs take:5 findMany). Oracle could reuse pipeline.stages or pipeline data.
+
+4. **reconTxnsCount / recentReconciled** — computed in BOTH:
+   - /api/workflow/pipeline (engine.ts:206-208 — `db.bankTransaction.count({ where: { organizationId: bankingOrgId, matched: true, reconciledAt: { gte: startOfMonth() } } })`)
+   - /api/oracle/daily-briefing (daily-briefing.ts:156-158 — IDENTICAL `db.bankTransaction.count` query)
+   → Pure duplicate. Oracle already imports `getWorkflowPipeline` (daily-briefing.ts:31) and could read the count from the pipeline result instead of re-querying.
+
+5. **gstPrepared / upcomingReturns** — computed in BOTH:
+   - /api/workflow/pipeline (engine.ts:187-192 + L222 — `db.gSTReturn.findMany` + `db.gSTReturn.count` where status in [prepared, draft])
+   - /api/oracle/daily-briefing (daily-briefing.ts:160-165 — `db.gSTReturn.findMany` where status in [not_started, prepared, draft])
+   → Same table, similar filter (oracle adds 'not_started'). Oracle could filter the pipeline's gstPrepared items.
+
+6. **bankCreditsUnreconciled / recentCredits** — computed in BOTH:
+   - /api/workflow/pipeline (engine.ts:171-176 — `db.bankTransaction.findMany` where orgId + credit + unmatched + posted/pending, take 3)
+   - /api/oracle/daily-briefing (daily-briefing.ts:167-172 — `db.bankTransaction.findMany` where orgId + credit + posted/pending, take 3)
+   → Same table, similar filter (workflow adds `matched: false`).
+
+7. **OracleBrainCore duplicate fetches** (src/components/oracle/OracleBrainCore.tsx:625,632):
+   - Raw `fetch('/api/business/snapshot?organizationId=...')` — DUPLICATES useBusinessSnapshot. No auth header → 401. Bypasses both the client-side module cache (useBusinessSnapshot.ts:42-43 `latestSnapshot`) and the server-side 30s cache (because the request fails auth before reaching swrCache).
+   - Raw `fetch('/api/timeline?organizationId=...&limit=6')` — DUPLICATES useTimelineEvents(15) with a different limit. No auth header, but timeline route doesn't requireAuth → succeeds. Bypasses the client-side state and the server-side 10s SWR cache (because the cache key includes the limit: timeline/route.ts:40 `${organizationId}:${limit}`).
+
+8. **DashboardPage's useLiveDashboardMetrics + useFireReturns are completely redundant with useBusinessSnapshot** for local- orgs (return empty data) and produce 6 Firestore onSnapshot subscriptions for real orgs that compute the SAME metrics (revenue, customers, invoices, returns, etc.) the snapshot already returns from Prisma. DashboardPage.tsx:582-583 mounts both — useLiveDashboardMetrics internally calls useFireReturns (use-firestore.ts:407), and DashboardPage ALSO calls useFireReturns separately at line 583. For local- orgs both are no-ops (use-firestore.ts:153-158 early-returns), but they still execute 5 useEffect bodies + 5 useState initializations on every dashboard mount.
+
+### Missing Prisma indexes
+
+Models queried by the dashboard routes that have NO `@@index` on commonly-filtered fields (only `@id` on `id`):
+
+| Model | schema.prisma line | Queried by | Missing index on |
+|---|---|---|---|
+| Client | 28-73 | snapshot.ts:681, 241-243, 688; financial-engine/businessSnapshot.ts:241 | **firmId** (queried in every snapshot) |
+| Invoice | 75-122 | snapshot.ts:653,761,769,777,791,938,1128; recommendations/engine.ts:209,238,289,340,347; workflow/engine.ts:155,163,209,214,215; oracle/daily-briefing.ts:149 | **clientId, status, paymentStatus, matchStatus, dueDate, createdAt, buyerName** (every snapshot/recommendation/workflow/oracle query filters by client.firmId + status + createdAt or dueDate) |
+| GSTRFiling | 124-147 | snapshot.ts:694,696,700; financial-engine/businessSnapshot.ts:252 | **clientId, status, createdAt** |
+| PurchaseBill | 716-743 | snapshot.ts:659,683,690; financial-engine/businessSnapshot.ts:218 | **clientId, status, paymentStatus, vendorName, createdAt** |
+| Expense | 746-765 | snapshot.ts:665,692; financial-engine/businessSnapshot.ts:224 | **clientId, category, status, createdAt** |
+| Payment | 768-786 | snapshot.ts:671,676,805; recommendations/engine.ts (no direct); financial-engine/businessSnapshot.ts:230 | **clientId, invoiceId, partyType, status, createdAt** |
+| BusinessEvent | 987-998 | timeline/emit.ts:104; snapshot.ts:1172; workflow/engine.ts:195,223 | **businessId, type, status, severity, createdAt** — every timeline query filters by businessId + orderBy createdAt |
+| GSTReturn | 4243-4259 | workflow/engine.ts:187,203,222; oracle/daily-briefing.ts:160 | **gstin, type, period, status, filedAt, createdAt** |
+
+Models with ADEQUATE indexes (no action needed):
+- BankAccount (schema.prisma:2936-2965): `@@index([organizationId])` ✓
+- BankTransaction (schema.prisma:5297-5332): `@@index([accountId])`, `@@index([organizationId])`, `@@index([date])`, `@@index([matched])` ✓
+- BankReconciliation (schema.prisma:6357-6385): `@@index([organizationId])`, `@@index([transactionId])`, `@@index([invoiceId])`, `@@index([status])` ✓
+- All Zoho* models (ZohoCustomer, ZohoVendor, ZohoInvoice, ZohoBill, ZohoPaymentReceived, ZohoPaymentMade, ZohoCreditNote, ZohoExpense, ZohoTax, ZohoJournalEntry, ZohoBankAccount, ZohoBankTransaction): `@@index([organizationId, zohoOrgId])` ✓
+- ZohoSyncLog (schema.prisma:5657-5682): `@@index([organizationId, zohoOrgId, startedAt])`, `@@index([status])` ✓
+
+### proxy.ts overhead (actually src/middleware.ts — there is no src/proxy.ts file)
+
+The "proxy.ts" timing in dev.log is Next.js's internal name for the edge middleware defined in `src/middleware.ts`. What it does on EVERY request (matcher at L87 covers all routes except _next/static, _next/image, favicon.ico, icon.svg, robots.txt):
+
+1. `resolveHost(req)` (L35-40) — reads `x-forwarded-host` header, falls back to `host` header.
+2. `isPreviewGatewayHost(host)` (L24-33) — string-matches host against `.space-z.ai` suffix or `localhost`/`127.0.0.1`/`0.0.0.0` prefixes.
+3. `NextResponse.next()` (L79) — creates the response.
+4. `applySecurityHeaders(res, host)` (L44-71) — sets 7 HTTP headers via `res.headers.set`:
+   - `X-Frame-Options` (ALLOWALL or DENY)
+   - `Content-Security-Policy` (frame-ancestors)
+   - `X-Content-Type-Options: nosniff`
+   - `Referrer-Policy: strict-origin-when-cross-origin`
+   - `X-XSS-Protection: 1; mode=block`
+   - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+   - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+
+Latency contribution (from dev.log):
+- Warm single request: 5-30ms (dev.log:75-79 — proxy.ts: 11-34ms)
+- Cold compile: 22-37ms (dev.log:60-66 — proxy.ts: 22-37ms)
+- Parallel burst of 5 dashboard APIs: 369-374ms per request (dev.log:851-856) — the middleware runs SERIALLY per request through Node's event loop, so 5 parallel API calls each take ~370ms of middleware time, total ~1.85s of middleware work for one dashboard mount.
+- Worst single-request spike: 374ms (dev.log:854) — likely Node event-loop congestion during the parallel burst.
+
+Caching/skipping opportunities for GET /api/ requests:
+- The middleware runs IDENTICAL header logic for every request — there is no per-request variability in the headers it sets (only the frame-ancestors branch depends on the host, which is constant per deployment). The matcher at L87 includes `/api/` routes — these get the full security headers treatment even though `X-Frame-Options`/`CSP frame-ancestors` are irrelevant for JSON API responses (no browser will frame an API response).
+- The middleware could be skipped entirely for `/api/` routes (the security headers on a JSON response are harmless but pointless — the browser doesn't render JSON in a frame). The matcher could exclude `/api/` and save 5-30ms per API call (and 370ms of event-loop time per dashboard mount).
+- Alternatively, the matcher could exclude `/api/` ONLY for GET requests (POST/PATCH/DELETE could still get the CSRF-adjacent headers). However, Next.js middleware matcher doesn't support method filtering — it would need to be done inside the middleware function itself (early-return for GET /api/).
+
+### Unnecessary API calls (from dev.log)
+
+1. **`/api/business/snapshot` 401s — 8 occurrences, all paired with `/api/timeline?limit=6`** (dev.log:107, 163, 474, 547, 680, 725, 754, 899). Root cause: `src/components/oracle/OracleBrainCore.tsx:625` makes a raw `fetch()` call (NOT fetchWithTimeout) to `/api/business/snapshot` without the `x-gstpilot-actor` header. The timeline call at line 632 succeeds only because `/api/timeline` doesn't call `requireAuth`. Every 401 is a wasted round-trip that broadcasts `gstpilot:session-expired` (via api.ts:60-62 if other components use apiFetch, or via the AuthContext 401-listener). Fix opportunity: replace the raw `fetch()` with `fetchWithTimeout` (auto-injects the auth header) AND/OR use the existing `useBusinessSnapshot` hook instead of duplicating the fetch.
+
+2. **`/api/timeline` is fetched with TWO different limits by the same dashboard** (dev.log: limit=15 from DashboardPage.tsx:584, limit=6 from OracleBrainCore.tsx:632). The server SWR cache key includes the limit (timeline/route.ts:40 `${organizationId}:${limit}`), so the two calls do NOT share a cache entry — two separate Prisma queries run for the same org's timeline. Fix opportunity: use `useTimelineEvents(15)` everywhere and slice client-side, OR raise the SWR cache to deduplicate by orgId-only (ignoring the limit, returning the max-limit result and letting clients slice).
+
+3. **`HEAD /` polling** — 445+ entries in dev.log (e.g. dev.log:55-59, 70-74, 80-84, …). Already identified and partially mitigated by perf-fix-final (DevServerReconnect.tsx raised to 15s). Still present in this dev.log capture (older capture pre-fix). NOT a current issue.
+
+4. **`/api/integrations/google/status` is called 6 times in rapid succession** (dev.log:131-136 — 1188ms, 21ms, 36ms, 84ms, 60ms, 72ms). The first call compiles the route (1.1s), the next 5 are warm. This is a separate Google-integration widget re-fetching on every state change — not in the 5-dashboard-API scope but worth noting as a dashboard-mount cost. The widget appears to poll or re-trigger on each render rather than using a single subscription.
+
+5. **`/api/integrations/google/gmail?action=profile`, `?action=messages&max=20`, `?action=messages&max=15`, `calendar/events?max=15`, `drive`** — all return 401 (dev.log:137-141). Same root cause as #1: Google integration widgets make raw `fetch()` calls without the `x-gstpilot-actor` header. Five parallel 401s = wasted compile + request time (each takes 2.3-2.5s due to first-compile).
+
+6. **`/api/invoices?cloud=true` + `/api/clients`** (dev.log:100,102,112,114,149,150) are called on dashboard mount alongside the 5 dashboard APIs. These are from legacy TanStack Query hooks (src/hooks/api.ts:256, 273) mounted by other dashboard components. They overlap with /api/business/snapshot which already returns invoiceCount, customerCount, etc. — but they return the actual row data (not just counts), so they're not pure duplicates. Still, they add 2 more API calls + 2 more Prisma queries to every dashboard mount.
+
+### Specific optimization opportunities (file + change — RESEARCH ONLY, not applied)
+
+1. **`src/lib/financial-engine/businessSnapshot.ts:200-256`** — Replace the 8 `findMany` calls with `aggregate`/`count`/`groupBy` calls (mirroring the rich engine at `src/lib/business/snapshot.ts:651-816`). This eliminates loading every row of every financial table into Node memory. Alternatively, since the route at `src/app/api/business/snapshot/route.ts:62-71` already runs the rich engine in parallel and uses rich for all headline numbers (route.ts:99-233), consider removing the fin engine's `fetchFinancialData` entirely and only use fin for the pure calculators (calculateHealth, calculateRisk, calculateRunway, calculateForecast) — feeding them the rich engine's already-computed aggregates.
+
+2. **`src/lib/workflow/engine.ts:155-225`** — Add `client: { firmId: organizationId }` to the 6 invoice queries (L155, L163, L209, L214, L215), the 2 GSTReturn queries (L187, L203, L222), and the 2 BusinessEvent queries (L195, L223 — add `businessId: organizationId`). Without this, the pipeline leaks cross-tenant data AND does full-table scans on every cold call.
+
+3. **`src/lib/oracle/daily-briefing.ts:145-173`** — Remove the 4 duplicate Prisma queries and read from the already-fetched `pipeline` result (L147). `recentReconciled` = `pipeline.stages.find(s => s.id === 'auto-match')?.count` (already done at L252-263 for the "approve-matches" item); `paidInvoicesCount` can be derived from a single new field on the pipeline; `gstPrepared` is already in `pipeline.stages.find(s => s.id === 'gst-updates')`. This drops the oracle briefing from 4 queries to 0 when the pipeline is cached.
+
+4. **`src/lib/recommendations/engine.ts:326-364` (getRevenueTrend)** and **`engine.ts:283-320` (getTopCustomerByRevenue)** — Remove these functions and read `snapshot.revenueThisMonth`, `snapshot.revenueLastMonth`, and `snapshot.topCustomerShare` from the already-fetched snapshot (engine.ts:384). Only fall back to a Prisma query if you need the customer name (single `findUnique` instead of a `groupBy`).
+
+5. **`src/components/oracle/OracleBrainCore.tsx:623-639`** — Replace the raw `fetch('/api/business/snapshot')` and `fetch('/api/timeline?limit=6')` with calls to the existing hooks (`useBusinessSnapshot`, `useTimelineEvents`). This eliminates the 401 cascade (the hooks use `fetchWithTimeout` which auto-injects the auth header) AND eliminates the duplicate Prisma queries (the hooks share client-side state via module-level caches).
+
+6. **`prisma/schema.prisma`** — Add `@@index` entries for the 8 models listed in "Missing Prisma indexes" above. The most impactful single addition would be `@@index([clientId, createdAt])` on Invoice (used by 4 of the 5 dashboard routes) and `@@index([businessId, createdAt])` on BusinessEvent (used by timeline + workflow + snapshot's overdue-detection background job).
+
+7. **`src/components/dashboard/DashboardPage.tsx:582-583`** — Consider removing `useLiveDashboardMetrics` and `useFireReturns` for local- orgs (they return empty data and only add 6 no-op Firestore subscription setups per mount). For real orgs, they're completely redundant with `useBusinessSnapshot` (which returns all the same metrics via Prisma) — they should either be removed or repurposed as a real-time invalidation trigger (e.g., when Firestore activities change, call `refreshSnapshot()` instead of computing metrics locally).
+
+8. **`src/middleware.ts:87`** — Consider excluding `/api/` from the matcher (`matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt|api).*)']`) to save 5-30ms per API call and ~370ms of event-loop time per dashboard mount. The security headers (X-Frame-Options, CSP frame-ancestors, etc.) are irrelevant for JSON API responses — no browser will frame an API response. If header-set is still desired for API responses, the middleware function could early-return `NextResponse.next()` for GET /api/ requests after setting only the standard hardening headers (skip the host-detection + frame-policy work).
+
+9. **`src/hooks/useWorkflowPipeline.ts:30-31` and `src/hooks/useOracleDailyBriefing.ts:29-30`** — Change `organization?.id ?? 'local'` to `organization?.id ?? null` and add an early-return guard `if (!orgId) return { ... }` (mirroring useBusinessSnapshot.ts:91-98 and useTimelineEvents.ts:61-66). This eliminates the wasteful prefetch with organizationId=local during boot (before OrgContext resolves the real org).
+
+10. **`src/app/api/timeline/route.ts:38-44`** — Change the SWR cache key from `${organizationId}:${limit}` to just `${organizationId}` (always fetch the max limit — 200 — and let the client slice). This deduplicates the limit=15 and limit=6 calls into a single cache entry per org.
+
+— *Task perf-2-profile complete. Research only; no code modified. Evidence: dev.log (970 lines), full reads of useBusinessSnapshot.ts, useTimelineEvents.ts, useAIRecommendations.ts, useWorkflowPipeline.ts, useOracleDailyBriefing.ts, use-firestore.ts, snapshot/route.ts, timeline/route.ts, recommendations/route.ts, workflow/pipeline/route.ts, oracle/daily-briefing/route.ts, business/snapshot.ts (1307 lines), financial-engine/businessSnapshot.ts, timeline/emit.ts, recommendations/engine.ts, workflow/engine.ts, oracle/daily-briefing.ts, prisma/schema.prisma (6592 lines), src/middleware.ts, src/lib/auth/session.ts, src/lib/cache/swr.ts, src/lib/async/fetchWithTimeout.ts, src/hooks/api.ts, src/components/dashboard/DashboardPage.tsx, src/components/oracle/OracleBrainCore.tsx.*

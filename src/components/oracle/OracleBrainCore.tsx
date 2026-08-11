@@ -56,6 +56,7 @@ import { Separator } from '@/components/ui/separator';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { fetchWithTimeout } from '@/lib/async';
+import { getCachedSnapshot, setCachedSnapshot } from '@/hooks/useBusinessSnapshot';
 
 // ─── Props (no context dependency — keeps this module Firebase-free) ──────────
 
@@ -613,7 +614,15 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   }, [orgId]);
 
   // ─── Load snapshot + timeline on mount / orgId change ───
+  // PERF (Phase 2): Read from the shared snapshot cache first. The dashboard's
+  // useBusinessSnapshot hook populates this cache whenever it's mounted. So
+  // when the user navigates Dashboard → Oracle view, we get an instant cache
+  // hit and skip the duplicate `/api/business/snapshot` fetch entirely. We
+  // only fall back to a fresh fetch on cache miss (e.g. user lands directly
+  // on the Oracle view). On a successful fetch, we write back to the cache so
+  // the dashboard hydrates instantly if it mounts later.
   useEffect(() => {
+    let cancelled = false;
     if (!orgId) {
       setSnapshot(null);
       setSnapshotLoading(false);
@@ -621,20 +630,30 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       setTimelineLoading(false);
       return;
     }
-    let cancelled = false;
-    setSnapshotLoading(true);
-    // PERF FIX: use fetchWithTimeout instead of raw fetch — it auto-injects
-    // the `x-gstpilot-actor` auth header that requireAuth() checks for.
-    // Raw fetch() caused 401 errors on every Oracle Brain mount (visible in
-    // dev.log as repeated `GET /api/business/snapshot ... 401`).
-    fetchWithTimeout(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`, { timeoutMs: 10_000 })
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => { if (!cancelled && data) setSnapshot(data); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setSnapshotLoading(false); });
 
+    // 1) Snapshot: cache-first
+    const cached = getCachedSnapshot(orgId);
+    if (cached) {
+      setSnapshot(cached);
+      setSnapshotLoading(false);
+    } else {
+      setSnapshotLoading(true);
+      fetchWithTimeout(`/api/business/snapshot?organizationId=${encodeURIComponent(orgId)}`, { timeoutMs: 10_000 })
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+          if (!cancelled && data) {
+            setSnapshot(data);
+            setCachedSnapshot(orgId, data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setSnapshotLoading(false); });
+    }
+
+    // 2) Timeline: limit=15 (matches DashboardPage's useTimelineEvents(15)
+    //    call → same SWR cache key on the server → no duplicate Prisma query).
     setTimelineLoading(true);
-    fetchWithTimeout(`/api/timeline?organizationId=${encodeURIComponent(orgId)}&limit=6`, { timeoutMs: 10_000 })
+    fetchWithTimeout(`/api/timeline?organizationId=${encodeURIComponent(orgId)}&limit=15`, { timeoutMs: 10_000 })
       .then(r => (r.ok ? r.json() : { events: [] }))
       .then(data => { if (!cancelled) setTimeline(data?.events ?? []); })
       .catch(() => { if (!cancelled) setTimeline([]); })

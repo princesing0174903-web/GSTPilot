@@ -142,20 +142,26 @@ export async function getOracleDailyBriefing(
   //   collected, prepared) and what specifically needs ITS sign-off
   //   (unmatched credits, prepared returns awaiting filing, auto-matched
   //   transactions awaiting approval).
-  const [pipeline, recentPaidInvoices, recentReconciled, upcomingReturns, recentCredits] =
+  // PERF FIX (Phase 2): We previously ran 4 duplicate Prisma queries here that
+  // overlapped with the workflow pipeline. We now:
+  //   • Read `reconciledTransactions` from pipeline.doneBreakdown (was an
+  //     identical db.bankTransaction.count — pure duplicate).
+  //   • Org-scope `recentPaidInvoices` via client.firmId (was un-scoped —
+  //     cross-tenant leak + full table scan).
+  // `upcomingReturns` (GSTReturn) and `recentCredits` (BankTransaction) cannot
+  // be deduped: GSTReturn has no org field in the schema, and recentCredits
+  // has a different filter than the pipeline's bankCreditsUnreconciled (we
+  // want matched+unmatched credits, pipeline wants only unmatched).
+  const [pipeline, recentPaidInvoices, upcomingReturns, recentCredits] =
     await Promise.all([
       getWorkflowPipeline(organizationId, opts),
-      // Invoices paid this month (Oracle "collected" these)
+      // Invoices paid this month (Oracle "collected" these) — org-scoped via client.firmId
       db.invoice.findMany({
-        where: { status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0, 10) } },
+        where: { client: { firmId: organizationId }, status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0, 10) } },
         take: 5,
         orderBy: { invoiceDate: 'desc' },
         select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, invoiceDate: true },
       }).catch(() => []),
-      // Reconciled transactions this month (Oracle "matched" these)
-      db.bankTransaction.count({
-        where: { organizationId: bankingOrgId, matched: true, reconciledAt: { gte: startOfMonth() } },
-      }).catch(() => 0),
       // GST returns due soon (not filed) — used to surface "prepared, ready to file"
       db.gSTReturn.findMany({
         where: { status: { in: ['not_started', 'prepared', 'draft'] } },
@@ -171,6 +177,10 @@ export async function getOracleDailyBriefing(
         select: { id: true, description: true, counterparty: true, amount: true, date: true, matched: true },
       }).catch(() => []),
     ]);
+
+  // Reconciled transactions this month — read from the pipeline's doneBreakdown
+  // (was: db.bankTransaction.count(...) — identical to workflow's reconTxnsCount)
+  const recentReconciled = pipeline.doneBreakdown.reconciledTransactions;
 
   const done: BriefingItem[] = [];
   const needsAttention: BriefingItem[] = [];

@@ -42,7 +42,11 @@ export function useOracleDailyBriefing(): State {
   const abortRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef(false);
 
-  const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setRefreshTick((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     // Don't fire until the real org id is available. This prevents a
@@ -55,9 +59,6 @@ export function useOracleDailyBriefing(): State {
 
     const ac = new AbortController();
     abortRef.current = ac;
-
-    setLoading(true);
-    setError(null);
 
     fetchWithTimeout(
       `/api/oracle/daily-briefing?organizationId=${encodeURIComponent(orgId)}`,

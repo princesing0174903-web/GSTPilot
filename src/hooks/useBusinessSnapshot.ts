@@ -42,6 +42,26 @@ interface CacheEntry {
 const inflightCache = new Map<string, CacheEntry>();
 const latestSnapshot = new Map<string, BusinessSnapshot>();
 
+// ── Shared cache helpers ─────────────────────────────────────────────────────
+// PERF (Phase 2): Expose the module-level snapshot cache so NON-hook callers
+// (e.g. OracleBrainCore, which is intentionally Firebase-free and cannot use
+// useOrg/useBusinessSnapshot directly) can READ the cached snapshot instead
+// of re-fetching. This eliminates the duplicate `/api/business/snapshot` call
+// when the user navigates Dashboard → Oracle view (8 wasted round-trips per
+// dev.log capture prior to this fix).
+//
+// Usage:
+//   import { getCachedSnapshot, setCachedSnapshot } from '@/hooks/useBusinessSnapshot';
+//   const cached = getCachedSnapshot(orgId);
+//   if (cached) { setSnapshot(cached); } else { /* fetch and setCachedSnapshot */ }
+export function getCachedSnapshot(orgId: string): BusinessSnapshot | null {
+  return latestSnapshot.get(orgId) ?? null;
+}
+
+export function setCachedSnapshot(orgId: string, snapshot: BusinessSnapshot): void {
+  latestSnapshot.set(orgId, snapshot);
+}
+
 export interface UseBusinessSnapshotResult {
   snapshot: BusinessSnapshot;
   loading: boolean;

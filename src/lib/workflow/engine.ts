@@ -64,6 +64,13 @@ export interface WorkflowPipeline {
   totalActive: number;
   /** Items completed this month */
   totalDone: number;
+  /** Breakdown of `totalDone` — exposes the 3 underlying counts so callers
+   *  (e.g. oracle daily briefing) don't have to re-query the DB. */
+  doneBreakdown: {
+    filedReturns: number;
+    reconciledTransactions: number;
+    paidInvoices: number;
+  };
   /** Overall pipeline health: 'healthy' if no critical stages, etc. */
   health: StageStatus;
   /** ISO timestamp of when this was computed */
@@ -100,6 +107,7 @@ function emptyPipeline(organizationId: string): WorkflowPipeline {
     stages: [],
     totalActive: 0,
     totalDone: 0,
+    doneBreakdown: { filedReturns: 0, reconciledTransactions: 0, paidInvoices: 0 },
     health: 'clear',
     computedAt: new Date().toISOString(),
     organizationId,
@@ -151,17 +159,17 @@ export async function getWorkflowPipeline(
     gstPreparedCount,
     openEventsCount,
   ] = await Promise.all([
-    // 1. Invoices sent (awaiting payment)
+    // 1. Invoices sent (awaiting payment) — org-scoped via client.firmId
     db.invoice.findMany({
-      where: { status: { in: ['sent', 'issued', 'pending', 'overdue'] } },
+      where: { client: { firmId: organizationId }, status: { in: ['sent', 'issued', 'pending', 'overdue'] } },
       take: 3,
       orderBy: { invoiceDate: 'desc' },
       select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, invoiceDate: true, status: true },
     }).catch(() => []),
 
-    // 2. Invoices paid but not yet bank-reconciled
+    // 2. Invoices paid but not yet bank-reconciled — org-scoped via client.firmId
     db.invoice.findMany({
-      where: { status: 'paid', matchStatus: { not: 'matched' } },
+      where: { client: { firmId: organizationId }, status: 'paid', matchStatus: { not: 'matched' } },
       take: 3,
       orderBy: { invoiceDate: 'desc' },
       select: { id: true, invoiceNumber: true, buyerName: true, totalAmount: true, invoiceDate: true },
@@ -191,9 +199,9 @@ export async function getWorkflowPipeline(
       select: { id: true, type: true, period: true, totalTax: true, totalITC: true, invoiceCount: true },
     }).catch(() => []),
 
-    // 6. Oracle actions / risk alerts (open high/critical business events)
+    // 6. Oracle actions / risk alerts (open high/critical business events) — org-scoped via businessId
     db.businessEvent.findMany({
-      where: { status: 'open', severity: { in: ['high', 'critical'] } },
+      where: { businessId: organizationId, status: 'open', severity: { in: ['high', 'critical'] } },
       take: 3,
       orderBy: { createdAt: 'desc' },
       select: { id: true, type: true, source: true, severity: true, payload: true, createdAt: true },
@@ -207,12 +215,12 @@ export async function getWorkflowPipeline(
       where: { organizationId: bankingOrgId, matched: true, reconciledAt: { gte: startOfMonth() } },
     }).catch(() => 0),
     db.invoice.count({
-      where: { status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0, 10) } },
+      where: { client: { firmId: organizationId }, status: 'paid', invoiceDate: { gte: startOfMonth().toISOString().slice(0, 10) } },
     }).catch(() => 0),
 
-    // Counts for totals
-    db.invoice.count({ where: { status: { in: ['sent', 'issued', 'pending', 'overdue'] } } }).catch(() => 0),
-    db.invoice.count({ where: { status: 'paid', matchStatus: { not: 'matched' } } }).catch(() => 0),
+    // Counts for totals — org-scoped via client.firmId
+    db.invoice.count({ where: { client: { firmId: organizationId }, status: { in: ['sent', 'issued', 'pending', 'overdue'] } } }).catch(() => 0),
+    db.invoice.count({ where: { client: { firmId: organizationId }, status: 'paid', matchStatus: { not: 'matched' } } }).catch(() => 0),
     db.bankTransaction.count({
       where: { organizationId: bankingOrgId, type: 'credit', matched: false, status: { in: ['posted', 'pending'] } },
     }).catch(() => 0),
@@ -221,7 +229,7 @@ export async function getWorkflowPipeline(
     }).catch(() => 0),
     db.gSTReturn.count({ where: { status: { in: ['prepared', 'draft'] } } }).catch(() => 0),
     db.businessEvent.count({
-      where: { status: 'open', severity: { in: ['high', 'critical'] } },
+      where: { businessId: organizationId, status: 'open', severity: { in: ['high', 'critical'] } },
     }).catch(() => 0),
   ]);
 
@@ -369,6 +377,11 @@ export async function getWorkflowPipeline(
     stages,
     totalActive,
     totalDone,
+    doneBreakdown: {
+      filedReturns: filedReturnsCount,
+      reconciledTransactions: reconTxnsCount,
+      paidInvoices: paidInvoicesCount,
+    },
     health,
     computedAt: new Date().toISOString(),
     organizationId,

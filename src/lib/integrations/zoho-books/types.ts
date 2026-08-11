@@ -122,6 +122,22 @@ export interface ZohoConnectionStatus {
   dataCenter: string | null;
   /** Functional scope areas covered (Books, Invoices, Customers, …). */
   scopeAreas: readonly string[];
+  /**
+   * TRUE when a token row exists in the DB but the server CANNOT actually use
+   * it — either because ZOHO_CLIENT_SECRET is missing (tokens can't be
+   * decrypted) or because the encrypted payload is corrupt/was encrypted with
+   * a different secret. When `requiresReconnect` is true, `connected` is
+   * forced to `false` so the UI NEVER shows a fake "Connected" state.
+   */
+  requiresReconnect: boolean;
+  /**
+   * TRUE when the Zoho OAuth client credentials (ZOHO_CLIENT_ID /
+   * ZOHO_CLIENT_SECRET) are not configured on the server. The UI uses this to
+   * show a "Configuration required" notice instead of a misleading error.
+   */
+  notConfigured: boolean;
+  /** Human-readable reason for the current state (null when fully connected). */
+  reason: string | null;
 }
 
 /** Result of an exchange-code-for-tokens call. */

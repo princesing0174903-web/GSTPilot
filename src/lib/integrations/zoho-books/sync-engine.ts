@@ -1013,6 +1013,17 @@ function describeError(status: number, error: string | null, zohoBody: { code?: 
 }
 
 // ─── Fetch all pages of a module ──────────────────────────────────────────────
+//
+// 401 AUTO-REFRESH:
+//   Zoho access tokens expire after 1 hour. For large organizations a full sync
+//   can take longer than that — meaning the token obtained at the start of the
+//   sync expires mid-way. When a 401 is received, we call `refreshFn()` to
+//   obtain a fresh access token (which transparently refreshes via
+//   getValidAccessToken) and retry the page ONCE. This prevents a single token
+//   expiry from failing every subsequent module.
+//
+//   The refreshFn is injected by runZohoFullSync so fetchModule stays pure
+//   (no direct dependency on the oauth module).
 
 async function fetchModule(
   def: ModuleDef,
@@ -1021,10 +1032,14 @@ async function fetchModule(
   organizationId: string,
   mode: SyncMode,
   lastSyncAt: Date | null,
+  refreshFn: () => Promise<string | null>,
 ): Promise<SyncModuleResult> {
   const result: SyncModuleResult = {
     module: def.key, status: 'ok', fetched: 0, imported: 0, updated: 0, failed: 0,
   };
+
+  // Mutable token — updated in-place when a 401 triggers a refresh.
+  let currentToken = accessToken;
 
   // Build the initial URL with pagination + incremental filter
   let page = 1;
@@ -1057,11 +1072,31 @@ async function fetchModule(
 
     console.log(`[zoho-sync] ${def.key} · page ${page} · GET ${url}`);
 
-    const res = await zohoGet<{ code?: number; message?: string; page_context?: { has_more_page?: boolean; page?: number } } & Record<string, unknown>>(
+    let res = await zohoGet<{ code?: number; message?: string; page_context?: { has_more_page?: boolean; page?: number } } & Record<string, unknown>>(
       url,
-      accessToken,
+      currentToken,
       { organizationId: zohoOrgId },
     );
+
+    // ── 401 AUTO-REFRESH: the access token expired mid-sync. Call refreshFn
+    // to obtain a fresh token (getValidAccessToken handles the refresh-token
+    // grant + persists the new access token) and retry the page ONCE. If the
+    // refresh also fails (e.g. refresh token revoked), treat as a hard error.
+    if (res.status === 401) {
+      console.warn(`[zoho-sync] ${def.key} · 401 received — attempting token refresh…`);
+      const refreshed = await refreshFn();
+      if (refreshed) {
+        currentToken = refreshed;
+        console.info(`[zoho-sync] ${def.key} · token refreshed — retrying page ${page}`);
+        res = await zohoGet<{ code?: number; message?: string; page_context?: { has_more_page?: boolean; page?: number } } & Record<string, unknown>>(
+          url,
+          currentToken,
+          { organizationId: zohoOrgId },
+        );
+      } else {
+        console.error(`[zoho-sync] ${def.key} · refresh failed — refresh token may be revoked`);
+      }
+    }
 
     // If incremental filter caused a 400, retry this page without it.
     // The error message could be in res.error (string) or res.data.message (object).
@@ -1100,7 +1135,7 @@ async function fetchModule(
     // the summary data from the list — we just log the failure.
     let enrichedRecords = records;
     if (def.detailPath && def.detailKey && records.length > 0) {
-      enrichedRecords = await enrichWithDetails(def, records, accessToken, zohoOrgId);
+      enrichedRecords = await enrichWithDetails(def, records, currentToken, zohoOrgId);
     }
 
     // Upsert each record
@@ -1342,7 +1377,13 @@ export async function runZohoFullSync(opts: {
         data: { currentEntity: def.key, lastEntity: def.key },
       });
 
-      const r = await fetchModule(def, accessToken, zohoOrgId, opts.organizationId, opts.mode, lastSyncAt);
+      const r = await fetchModule(def, accessToken, zohoOrgId, opts.organizationId, opts.mode, lastSyncAt, async () => {
+        // 401 refresh callback — called when a Zoho API page returns 401
+        // (access token expired mid-sync). getValidAccessToken transparently
+        // refreshes via the refresh-token grant and persists the new token.
+        const fresh = await getValidAccessToken(opts.organizationId, resolvedUserId);
+        return fresh.accessToken;
+      });
       modules.push(r);
       totalFetched += r.fetched;
       totalImported += r.imported;

@@ -53,6 +53,9 @@ export async function GET(req: Request) {
           zohoOrgId: null,
           dataCenter: null,
           scopeAreas: [],
+          requiresReconnect: false,
+          notConfigured: false,
+          reason: null,
           requiresAuth: true,
         },
       });
@@ -77,6 +80,9 @@ export async function GET(req: Request) {
         zohoOrgId: null,
         dataCenter: null,
         scopeAreas: [],
+        requiresReconnect: false,
+        notConfigured: false,
+        reason: null,
         requiresAuth: true,
       },
     });

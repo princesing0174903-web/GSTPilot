@@ -869,6 +869,16 @@ export async function disconnectZoho(
 /**
  * Read the public connection status for an (org, user) pair. Never exposes
  * token strings — only metadata.
+ *
+ * HONESTY CONTRACT (production requirement):
+ *   `connected` is TRUE **only** when ALL of the following hold:
+ *     1. A non-revoked token row exists for this (org, user) pair.
+ *     2. ZOHO_CLIENT_ID + ZOHO_CLIENT_SECRET are set in the environment.
+ *     3. The stored access token can be decrypted with the current secret.
+ *
+ *   If (2) or (3) fail, `connected` is `false`, `requiresReconnect` is `true`,
+ *   and `reason` explains what happened — so the UI NEVER shows a fake
+ *   "Connected" dashboard when the server cannot actually call the Zoho API.
  */
 export async function getConnectionStatus(
   organizationId: string,
@@ -878,21 +888,74 @@ export async function getConnectionStatus(
     where: { organizationId_userId: { organizationId, userId } },
   })) as ZohoTokenRow | null;
 
+  // Case 1: No token row OR explicitly revoked → genuinely not connected.
   if (!row || row.revokedAt) {
     return {
       connected: false,
-      userEmail: null,
+      userEmail: row?.userEmail ?? null,
       zohoUserId: null,
-      connectedAt: null,
-      lastConnectedAt: null,
+      connectedAt: row?.connectedAt.toISOString() ?? null,
+      lastConnectedAt: row?.updatedAt.toISOString() ?? null,
       scopes: [],
       organizationName: null,
       zohoOrgId: null,
       dataCenter: null,
       scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
+      requiresReconnect: false,
+      notConfigured: false,
+      reason: null,
     };
   }
 
+  // Case 2: Token row exists — verify the server can actually USE it.
+  //   (a) Are the OAuth client credentials configured?
+  const hasClientId = Boolean(process.env.ZOHO_CLIENT_ID);
+  const hasClientSecret = Boolean(process.env.ZOHO_CLIENT_SECRET);
+  if (!hasClientId || !hasClientSecret) {
+    return {
+      connected: false,
+      userEmail: row.userEmail,
+      zohoUserId: row.zohoUserId,
+      connectedAt: row.connectedAt.toISOString(),
+      lastConnectedAt: row.updatedAt.toISOString(),
+      scopes: row.scope ? row.scope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      organizationName: row.zohoOrgName,
+      zohoOrgId: row.zohoOrgId,
+      dataCenter: row.dataCenter,
+      scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
+      requiresReconnect: true,
+      notConfigured: true,
+      reason:
+        'Zoho Books OAuth credentials are not configured on this server. An administrator must set ZOHO_CLIENT_ID and ZOHO_CLIENT_SECRET before the connection can be used.',
+    };
+  }
+
+  //   (b) Can the access token be decrypted with the current secret?
+  //       safeDecrypt returns null on any failure (wrong key, corrupt payload,
+  //       tamper). This catches the "secret was rotated" case — the row exists
+  //       but the tokens are effectively useless.
+  const decryptedAccess = safeDecrypt(row.accessToken);
+  if (!decryptedAccess) {
+    return {
+      connected: false,
+      userEmail: row.userEmail,
+      zohoUserId: row.zohoUserId,
+      connectedAt: row.connectedAt.toISOString(),
+      lastConnectedAt: row.updatedAt.toISOString(),
+      scopes: row.scope ? row.scope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      organizationName: row.zohoOrgName,
+      zohoOrgId: row.zohoOrgId,
+      dataCenter: row.dataCenter,
+      scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
+      requiresReconnect: true,
+      notConfigured: false,
+      reason:
+        'The stored Zoho Books tokens cannot be decrypted. This usually means the ZOHO_CLIENT_SECRET was rotated since the last connection. Please reconnect Zoho Books.',
+    };
+  }
+
+  // Case 3: Fully usable — row exists, credentials configured, tokens decrypt.
+  // This is the ONLY path that returns connected: true.
   return {
     connected: true,
     userEmail: row.userEmail,
@@ -904,6 +967,9 @@ export async function getConnectionStatus(
     zohoOrgId: row.zohoOrgId,
     dataCenter: row.dataCenter,
     scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
+    requiresReconnect: false,
+    notConfigured: false,
+    reason: null,
   };
 }
 

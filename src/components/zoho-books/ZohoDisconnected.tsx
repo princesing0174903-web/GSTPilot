@@ -67,6 +67,10 @@ const FEATURES: FeatureBullet[] = [
 
 export function ZohoDisconnected({
   connect,
+  requiresReconnect = false,
+  reason = null,
+  lastConnectedAt = null,
+  organizationName = null,
 }: {
   connect: () => Promise<{
     authUrl: string | null;
@@ -74,8 +78,20 @@ export function ZohoDisconnected({
     notConfigured?: boolean;
     requiredEnvVars?: string[];
   }>;
+  /** True when a token row exists but the server can't use it (secret missing/rotated). */
+  requiresReconnect?: boolean;
+  /** Human-readable reason for the disconnected state (from /status). */
+  reason?: string | null;
+  /** ISO timestamp of the last successful connection (for the reconnect prompt). */
+  lastConnectedAt?: string | null;
+  /** Zoho Books organization name (shown in the reconnect prompt if known). */
+  organizationName?: string | null;
 }) {
   const [connecting, setConnecting] = useState(false);
+  // Don't pre-populate from status — the status reason is shown in the
+  // dedicated banner above. This state is only set when the user ACTUALLY
+  // clicks Connect and the server returns ZOHO_NOT_CONFIGURED, so the user
+  // gets immediate feedback after the click (not on page load).
   const [notConfigured, setNotConfigured] = useState(false);
   const [requiredEnvVars, setRequiredEnvVars] = useState<string[] | undefined>();
 
@@ -163,13 +179,55 @@ export function ZohoDisconnected({
               id="zoho-connect-title"
               className="mt-6 text-2xl font-semibold tracking-tight text-foreground md:text-3xl"
             >
-              Connect Zoho Books
+              {requiresReconnect ? 'Reconnect Zoho Books' : 'Connect Zoho Books'}
             </h1>
             <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Sync your customers, invoices, bills, payments, and taxes into
-              GSTPilot&rsquo;s unified financial brain.
+              {requiresReconnect
+                ? 'Your previous Zoho Books connection can no longer be used. Reconnect to resume syncing your financial data.'
+                : 'Sync your customers, invoices, bills, payments, and taxes into GSTPilot&rsquo;s unified financial brain.'}
             </p>
           </div>
+
+          {/* Reconnect / configuration reason banner — honest explanation of
+              WHY the user is seeing the disconnected screen. Only shown when
+              the /status endpoint provided a reason (token row exists but
+              unusable, or credentials not configured). */}
+          {(requiresReconnect || notConfigured) && reason ? (
+            <div
+              role="alert"
+              className={`mt-6 rounded-xl border p-4 text-left ${
+                notConfigured
+                  ? 'border-amber-400/30 bg-amber-400/[0.06]'
+                  : 'border-orange-400/30 bg-orange-400/[0.06]'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  notConfigured ? 'bg-amber-400/15' : 'bg-orange-400/15'
+                }`}>
+                  <Settings className={`h-4 w-4 ${notConfigured ? 'text-amber-300' : 'text-orange-300'}`} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold ${
+                    notConfigured ? 'text-amber-200' : 'text-orange-200'
+                  }`}>
+                    {notConfigured ? 'Configuration required' : 'Reconnection required'}
+                  </p>
+                  <p className={`mt-1 text-xs leading-relaxed ${
+                    notConfigured ? 'text-amber-200/80' : 'text-orange-200/80'
+                  }`}>
+                    {reason}
+                  </p>
+                  {lastConnectedAt ? (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Last connected: {new Date(lastConnectedAt).toLocaleString()}
+                      {organizationName ? ` · ${organizationName}` : ''}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Feature bullets */}
           <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -202,7 +260,7 @@ export function ZohoDisconnected({
               {connecting ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : null}
-              {connecting ? 'Connecting…' : 'Connect Zoho Books'}
+              {connecting ? 'Connecting…' : requiresReconnect ? 'Reconnect Zoho Books' : 'Connect Zoho Books'}
             </Button>
             <a
               href="#"

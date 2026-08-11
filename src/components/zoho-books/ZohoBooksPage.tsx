@@ -174,11 +174,25 @@ export default function ZohoBooksPage() {
   }
 
   // ─── STATE 2: Disconnected → ONLY the premium connection screen ───
+  // This covers THREE honest sub-states:
+  //   (a) No token row at all → fresh "Connect Zoho Books" screen
+  //   (b) Token row exists but ZOHO_CLIENT_ID/SECRET missing → "Configuration
+  //       required" notice is shown by ZohoDisconnected (it calls /connect and
+  //       the server returns ZOHO_NOT_CONFIGURED).
+  //   (c) Token row exists but tokens can't be decrypted (secret rotated) →
+  //       show a "Reconnect" prompt so the user knows the old connection is
+  //       stale and must be re-authorized.
   if (!status?.connected) {
     return (
       <div>
         <OAuthBanner />
-        <ZohoDisconnected connect={connect} />
+        <ZohoDisconnected
+          connect={connect}
+          requiresReconnect={status?.requiresReconnect ?? false}
+          reason={status?.reason ?? null}
+          lastConnectedAt={status?.lastConnectedAt ?? null}
+          organizationName={status?.organizationName ?? null}
+        />
       </div>
     );
   }

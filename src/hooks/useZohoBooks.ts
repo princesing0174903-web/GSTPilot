@@ -36,6 +36,18 @@ export interface ZohoConnectionStatus {
   dataCenter: string | null;
   /** Functional scope areas covered (Books, Invoices, Customers, …). */
   scopeAreas: string[];
+  /**
+   * TRUE when a token row exists but the server CANNOT use it (secret missing
+   * or rotated). The UI should show a "Reconnect" prompt — never a dashboard.
+   */
+  requiresReconnect: boolean;
+  /**
+   * TRUE when ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET are not configured.
+   * The UI shows a "Configuration required" notice.
+   */
+  notConfigured: boolean;
+  /** Human-readable reason for the current state (null when fully connected). */
+  reason: string | null;
 }
 
 // ─── Phase 2 — Data Sync types ───────────────────────────────────────────────

@@ -56,6 +56,8 @@ import {
 import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { useBanking } from '@/hooks/useBanking';
+import { useOrg } from '@/contexts/OrgContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking';
 import type { TransactionCategory } from '@/lib/banking-provider';
 import { createReport, deleteReport } from '@/lib/firestore-service';
@@ -747,6 +749,11 @@ function openPrintWindow(html: string): boolean {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  // ─── Org + Auth context (for local-workspace API calls) ──────────────────
+  const { organization } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? null;
+
   // ─── State ────────────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filings, setFilings] = useState<GSTRFiling[]>([]);
@@ -847,9 +854,13 @@ export default function ReportsPage() {
     async function fetchData() {
       setLoading(true);
       try {
+        // Build org-scoped URLs + headers for local-workspace compatibility
+        const actor = JSON.stringify({ uid: user?.uid ?? 'local-user', email: user?.email ?? 'local@gstpilot.dev' });
+        const headers = { 'x-gstpilot-actor': actor };
+        const orgParam = orgId ? `?organizationId=${encodeURIComponent(orgId)}` : '';
         const [invoicesRes, filingsRes] = await Promise.all([
-          fetch('/api/invoices'),
-          fetch('/api/gstr-filing'),
+          fetch(`/api/invoices${orgParam}`, { headers }),
+          fetch(`/api/gstr-filing${orgParam}`, { headers }),
         ]);
 
         if (invoicesRes.ok) {
@@ -867,7 +878,7 @@ export default function ReportsPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [orgId, user?.uid]);
 
   // Extract clients (from old invoices API, the Real Invoice Engine™, and filings)
   useEffect(() => {

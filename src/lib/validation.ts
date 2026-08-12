@@ -90,11 +90,12 @@ export const emailSchema = z
 
 /** Phone — 6-20 digits, optional leading +. */
 export const phoneSchema = z
-  .string()
-  .trim()
-  .max(20)
-  .regex(/^\+?[0-9]{6,20}$/, { message: 'Phone must be 6-20 digits.' })
-  .optional();
+  .union([
+    z.string().trim().max(20).regex(/^\+?[0-9]{6,20}$/, { message: 'Phone must be 6-20 digits.' }),
+    z.literal(''),
+  ])
+  .optional()
+  .transform((v) => (v === '' ? undefined : v));
 
 /** UUID/cuid — Prisma IDs. */
 export const idSchema = z
@@ -121,7 +122,7 @@ export const schemas = {
     state: safeString(100).optional(),
     stateCode: safeString(10).optional(),
     contactEmail: emailSchema.optional(),
-    contactPhone: phoneSchema,
+    contactPhone: phoneSchema.optional(),
     entityType: safeString(50).optional(),
     returnPeriod: safeString(20).optional(),
     organizationId: safeString(128).optional(),
@@ -138,7 +139,7 @@ export const schemas = {
     state: safeString(100).optional(),
     stateCode: safeString(10).optional(),
     contactEmail: emailSchema.optional(),
-    contactPhone: phoneSchema,
+    contactPhone: phoneSchema.optional(),
     entityType: safeString(50).optional(),
     returnPeriod: safeString(20).optional(),
   }),

@@ -17,6 +17,7 @@ import { db } from '@/lib/db';
 import { decryptString } from '@/lib/gstn-provider/server/crypto';
 import { MastersIndiaGSPProvider, type MastersIndiaConfig } from '@/lib/gst-reconciliation/server/mastersindia-provider';
 import { validateGstinChecksum } from '@/lib/gst-reconciliation/server/gstin-validator';
+import { logGSTAudit } from '@/lib/gst-reconciliation/server/audit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -108,10 +109,43 @@ export async function POST(request: Request) {
       const provider = new MastersIndiaGSPProvider(miConfig);
       try {
         const lookup = await provider.verifyGSTIN(gstin);
-        // Cache the result
+        // Cache the result on the config (for the UI status card)
         await db.gSPProviderConfig.update({
           where: { id: cfg.id },
           data: { gstin, legalName: lookup.legalName, tradeName: lookup.tradeName },
+        });
+        // Persist an org-scoped GSTProfile row (for audit trail + future queries)
+        const source = cfg.mode === 'production' ? 'live' : 'sandbox';
+        await db.gSTProfile.upsert({
+          where: { organizationId_gstin: { organizationId: body.organizationId, gstin: lookup.gstin } },
+          create: {
+            organizationId: body.organizationId,
+            gstin: lookup.gstin,
+            legalName: lookup.legalName || null,
+            tradeName: lookup.tradeName || null,
+            stateCode: lookup.stateCode || null,
+            state: lookup.stateCode || null,
+            status: lookup.status || null,
+            source,
+            lastSyncedAt: new Date(),
+          },
+          update: {
+            legalName: lookup.legalName || null,
+            tradeName: lookup.tradeName || null,
+            stateCode: lookup.stateCode || null,
+            state: lookup.stateCode || null,
+            status: lookup.status || null,
+            source,
+            lastSyncedAt: new Date(),
+          },
+        });
+        await logGSTAudit({
+          organizationId: body.organizationId,
+          userId: uid,
+          action: 'gst.verify-gstin',
+          entity: 'GSTProfile',
+          entityId: lookup.gstin,
+          details: { gstin: lookup.gstin, source, status: lookup.status },
         });
         return NextResponse.json({
           ok: true,
@@ -122,7 +156,7 @@ export async function POST(request: Request) {
             tradeName: lookup.tradeName,
             stateCode: lookup.stateCode,
             status: lookup.status,
-            source: cfg.mode === 'production' ? 'live' : 'sandbox',
+            source,
           },
         });
       } catch (err) {

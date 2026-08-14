@@ -4247,7 +4247,9 @@ model FirmProfile {
 
 model GSTProfile {
   id               String   @id @default(cuid())
-  gstin            String   @unique
+  // Tenant isolation — a GSTIN profile is scoped to the org that verified it.
+  organizationId   String
+  gstin            String
   pan              String?
   legalName        String?
   tradeName        String?
@@ -4258,13 +4260,21 @@ model GSTProfile {
   taxpayerType     String?
   status           String?
   businessType     String?
+  // Whether this profile came from a live/sandbox/demo verification.
+  source           String   @default("demo") // live | sandbox | demo
   lastSyncedAt     DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, gstin])
+  @@index([organizationId])
 }
 
 model GSTR2BInvoice {
   id             String   @id @default(cuid())
+  // Tenant isolation — every GSTR-2B row is scoped to the org that synced it.
+  // A user who knows another org's GSTIN must NOT be able to read their rows.
+  organizationId String
   gstin          String
   period         String   // YYYY-MM
   supplierGSTIN  String
@@ -4281,12 +4291,23 @@ model GSTR2BInvoice {
   matched        Boolean  @default(false)
   matchStatus    String   @default("unmatched") // unmatched | matched | mismatched
   mismatchReason String?
+  // Source document ID from the provider (for audit traceability).
+  sourceDocId    String?
+  // Whether this row came from a live/sandbox/demo sync.
+  source         String   @default("demo") // live | sandbox | demo
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  // Tenant isolation + dedup queries both filter on these.
+  @@index([organizationId, period])
+  @@index([organizationId, gstin, period])
+  @@index([gstin, period, supplierGSTIN, invoiceNo])
 }
 
 model GSTReturn {
   id                String   @id @default(cuid())
+  // Tenant isolation — a return is scoped to the org that owns it.
+  organizationId    String
   gstin             String
   type              String   // GSTR-1 | GSTR-2B | GSTR-3B
   period            String   // YYYY-MM
@@ -4304,6 +4325,7 @@ model GSTReturn {
 
   // ── PERF: GSTReturn is queried by status (workflow pipeline: prepared/draft),
   // filedAt (done count this month), and type+period (lookup) ──
+  @@index([organizationId, period])
   @@index([status])
   @@index([filedAt])
   @@index([type, period])
@@ -4363,6 +4385,8 @@ model GlobalRecommendation {
 
 model ITCMismatch {
   id            String   @id @default(cuid())
+  // Tenant isolation — an ITC mismatch is scoped to the org that owns it.
+  organizationId String
   gstin         String
   invoiceId     String?  // TODO: relation to GSTR2BInvoice (not added — back-ref bloat)
   supplierGSTIN String?
@@ -4374,6 +4398,9 @@ model ITCMismatch {
   suggestion    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, gstin])
 }
 
 // ─── Enterprise — Identity Provider Config ─────────────────────────────────────
@@ -6599,10 +6626,17 @@ model GSPProviderConfig {
   // Whether the last "Test Connection" succeeded
   lastTestOk      Boolean  @default(false)
   lastTestMessage String?
+  // Explicit connection state machine — drives the UI badge + data-fetch gates.
+  // not_connected | connecting | connected | syncing | synced | token_expired | connection_error | rate_limited | partial_sync
+  connectionState String   @default("not_connected")
+  // When the last TEST was performed (distinct from lastConnectedAt which is
+  // when the last successful connection was established).
+  lastTestedAt    DateTime?
   enabled         Boolean  @default(true)
   lastConnectedAt DateTime?
   lastSyncAt      DateTime?
-  // Token expiry (if the provider uses expiring tokens)
+  // Token expiry (if the provider uses expiring tokens). Updated by /api/gst/test
+  // and /api/gst/sync-2b after every successful authentication.
   tokenExpiry     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -6611,6 +6645,7 @@ model GSPProviderConfig {
 
   @@unique([organizationId, providerKey])
   @@index([organizationId, enabled])
+  @@index([organizationId, connectionState])
 }
 
 // GSTR-2B sync jobs — one per (org, period) sync operation. Tracks every sync
@@ -6627,10 +6662,19 @@ model GSTSyncJob {
   trigger         String   @default("manual")  // manual | automatic | retry
   recordsFetched  Int      @default(0)
   recordsImported Int      @default(0)
+  // Records that existed and were updated with new values.
+  recordsUpdated  Int      @default(0)
+  // Records that existed and were unchanged (skipped, no-op).
+  recordsSkipped  Int      @default(0)
+  // Records that failed to insert/update (validation error, etc.).
+  recordsFailed   Int      @default(0)
+  // Legacy field — kept for backward compat. Same as recordsUpdated.
   recordsChanged  Int      @default(0)
   recordsRemoved  Int      @default(0)
   durationMs      Int      @default(0)
   errorMessage    String?
+  // Retry tracking — if this job is a retry, points to the original job.
+  retryOf         String?
   startedAt       DateTime?
   completedAt     DateTime?
   createdAt       DateTime @default(now())
@@ -6641,4 +6685,5 @@ model GSTSyncJob {
   @@index([organizationId, createdAt])
   @@index([organizationId, status])
   @@index([configId, createdAt])
+  @@index([gstin, period])
 }

@@ -31,6 +31,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useCurrentOrgId } from '@/contexts/OrgContext';
+import { fetchWithTimeout, FetchHttpError } from '@/lib/async/fetchWithTimeout';
+
+// ─── Auth-aware fetch helper ─────────────────────────────────────────────────
+// Wraps fetchWithTimeout so every call auto-injects the `x-gstpilot-actor`
+// header (sandbox/preview auth fallback). On non-2xx, extracts the friendly
+// error message from the JSON body so the UI can surface it via toast.
+async function gstFetch<T>(
+  url: string,
+  init: RequestInit,
+  okKey: 'ok' = 'ok',
+): Promise<{ ok: boolean; data?: T; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(url, init, { timeoutMs: 30_000, retries: 0 });
+    const data = (await res.json()) as T & { ok?: boolean; error?: string };
+    if ((data as Record<string, unknown>)[okKey] === false || data.error) {
+      return { ok: false, error: data.error ?? 'Request failed.' };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    if (err instanceof FetchHttpError) {
+      const body = err.body as { error?: string } | null;
+      return { ok: false, error: body?.error ?? err.message };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error.' };
+  }
+}
 
 // ─── Types (mirror of src/lib/gstn/client.ts) ────────────────────────────────
 
@@ -162,6 +189,7 @@ const DEFAULT_PERIOD = new Date().toISOString().slice(0, 7);
 
 export default function GSTNLivePage() {
   const { toast } = useToast();
+  const orgId = useCurrentOrgId();
   const [gstin, setGstin] = useState(DEFAULT_GSTIN);
   const [period, setPeriod] = useState(DEFAULT_PERIOD);
 
@@ -181,15 +209,14 @@ export default function GSTNLivePage() {
   const doSearch = async () => {
     setBusy('search');
     try {
-      const res = await fetch('/api/gst/search', {
+      const r = await gstFetch<{ profile: GSTSearchResult; message: string }>('/api/gst/search', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setSearchResult(data.profile);
-        toast({ title: `🔍 ${data.message}`, description: `${data.profile.legalName} · ${data.profile.state}` });
-      } else toast({ title: 'GST Search failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setSearchResult(r.data.profile);
+        toast({ title: `🔍 ${r.data.message}`, description: `${r.data.profile.legalName} · ${r.data.profile.state}` });
+      } else toast({ title: 'GST Search failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GST Search failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -199,15 +226,14 @@ export default function GSTNLivePage() {
     if (!panInput) return;
     setBusy('pan');
     try {
-      const res = await fetch('/api/pan/verify', {
+      const r = await gstFetch<{ result: PANVerifyResult; message: string }>('/api/pan/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pan: panInput }),
+        body: JSON.stringify({ organizationId: orgId ?? '', pan: panInput }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setPanResult(data.result);
-        toast({ title: `🪪 ${data.message}` });
-      } else toast({ title: 'PAN Verification failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setPanResult(r.data.result);
+        toast({ title: `🪪 ${r.data.message}` });
+      } else toast({ title: 'PAN Verification failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'PAN Verification failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -216,15 +242,14 @@ export default function GSTNLivePage() {
   const do2bDownload = async () => {
     setBusy('2b');
     try {
-      const res = await fetch('/api/gst/2b/sync', {
+      const r = await gstFetch<{ result: GSTR2BDownloadResult; message: string }>('/api/gst/2b/sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setGstr2b(data.result);
-        toast({ title: `📥 ${data.message}` });
-      } else toast({ title: 'GSTR-2B download failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setGstr2b(r.data.result);
+        toast({ title: `📥 ${r.data.message}` });
+      } else toast({ title: 'GSTR-2B download failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GSTR-2B download failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -233,15 +258,14 @@ export default function GSTNLivePage() {
   const doGstr1Prepare = async () => {
     setBusy('gstr1');
     try {
-      const res = await fetch('/api/gstr1/prepare', {
+      const r = await gstFetch<{ draft: GSTR1Draft; message: string }>('/api/gstr1/prepare', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setGstr1(data.draft);
-        toast({ title: `📄 ${data.message}` });
-      } else toast({ title: 'GSTR-1 prepare failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setGstr1(r.data.draft);
+        toast({ title: `📄 ${r.data.message}` });
+      } else toast({ title: 'GSTR-1 prepare failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GSTR-1 prepare failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -249,14 +273,13 @@ export default function GSTNLivePage() {
   const doGstr1File = async () => {
     setBusy('gstr1file');
     try {
-      const res = await fetch('/api/gstr1/file', {
+      const r = await gstFetch<{ result: { ackNo: string }; message: string }>('/api/gstr1/file', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        toast({ title: `✅ ${data.message}`, description: `ARN: ${data.result.ackNo}` });
-      } else toast({ title: 'GSTR-1 file failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        toast({ title: `✅ ${r.data.message}`, description: `ARN: ${r.data.result.ackNo}` });
+      } else toast({ title: 'GSTR-1 file failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GSTR-1 file failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -265,15 +288,14 @@ export default function GSTNLivePage() {
   const doGstr3bPrepare = async () => {
     setBusy('gstr3b');
     try {
-      const res = await fetch('/api/gstr3b/prepare', {
+      const r = await gstFetch<{ draft: GSTR3BDraft; message: string }>('/api/gstr3b/prepare', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setGstr3b(data.draft);
-        toast({ title: `🧾 ${data.message}` });
-      } else toast({ title: 'GSTR-3B prepare failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setGstr3b(r.data.draft);
+        toast({ title: `🧾 ${r.data.message}` });
+      } else toast({ title: 'GSTR-3B prepare failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GSTR-3B prepare failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -281,14 +303,13 @@ export default function GSTNLivePage() {
   const doGstr3bFile = async () => {
     setBusy('gstr3bfile');
     try {
-      const res = await fetch('/api/gstr3b/file', {
+      const r = await gstFetch<{ result: { ackNo: string }; message: string }>('/api/gstr3b/file', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        toast({ title: `✅ ${data.message}`, description: `ARN: ${data.result.ackNo}` });
-      } else toast({ title: 'GSTR-3B file failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        toast({ title: `✅ ${r.data.message}`, description: `ARN: ${r.data.result.ackNo}` });
+      } else toast({ title: 'GSTR-3B file failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'GSTR-3B file failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -297,15 +318,14 @@ export default function GSTNLivePage() {
   const doReconcile = async () => {
     setBusy('reconcile');
     try {
-      const res = await fetch('/api/reconcile', {
+      const r = await gstFetch<{ result: ReconcileResult; message: string }>('/api/reconcile', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gstin, period }),
+        body: JSON.stringify({ organizationId: orgId ?? '', gstin, period }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setReconcile(data.result);
-        toast({ title: `⚖️ ${data.message}` });
-      } else toast({ title: 'Reconciliation failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setReconcile(r.data.result);
+        toast({ title: `⚖️ ${r.data.message}` });
+      } else toast({ title: 'Reconciliation failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'Reconciliation failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -314,20 +334,20 @@ export default function GSTNLivePage() {
   const doEinvoice = async () => {
     setBusy('einvoice');
     try {
-      const res = await fetch('/api/einvoice', {
+      const r = await gstFetch<{ result: EInvoiceResult; message: string }>('/api/einvoice', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId: orgId ?? '',
           sellerGstin: gstin, buyerGstin: '29AAACI4799L1ZB',
           invoiceNo: `INV-${period.replace('-', '')}-${Math.floor(1000 + Math.random() * 9000)}`,
           invoiceDate: `${period}-15`, invoiceValue: 150000, taxableValue: 127119,
           igst: 22881, cgst: 0, sgst: 0, hsnCode: '998314',
         }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setEinvoice(data.result);
-        toast({ title: `⚡ ${data.message}` });
-      } else toast({ title: 'E-Invoice generation failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setEinvoice(r.data.result);
+        toast({ title: `⚡ ${r.data.message}` });
+      } else toast({ title: 'E-Invoice generation failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'E-Invoice generation failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };
@@ -336,9 +356,10 @@ export default function GSTNLivePage() {
   const doEwaybill = async () => {
     setBusy('ewaybill');
     try {
-      const res = await fetch('/api/ewaybill', {
+      const r = await gstFetch<{ result: EWayBillResult; message: string }>('/api/ewaybill', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId: orgId ?? '',
           supplierGstin: gstin, recipientGstin: '29AAACI4799L1ZB',
           documentNo: `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
           documentDate: `${period}-15`, transactionType: 'regular', supplyType: 'inter',
@@ -347,11 +368,10 @@ export default function GSTNLivePage() {
           vehicleNo: 'MH12AB1234', distanceKm: 850,
         }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setEwaybill(data.result);
-        toast({ title: `🚚 ${data.message}` });
-      } else toast({ title: 'E-Way Bill generation failed', description: data.error, variant: 'destructive' });
+      if (r.ok && r.data) {
+        setEwaybill(r.data.result);
+        toast({ title: `🚚 ${r.data.message}` });
+      } else toast({ title: 'E-Way Bill generation failed', description: r.error, variant: 'destructive' });
     } catch { toast({ title: 'E-Way Bill generation failed', variant: 'destructive' }); }
     finally { setBusy(null); }
   };

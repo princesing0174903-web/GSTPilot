@@ -62,6 +62,7 @@ import {
   Plug, Power, Zap, Clock, AlertTriangle, KeyRound,
   Activity, Eye, EyeOff, Save, ChevronDown, ChevronUp,
   Sparkles, Wifi, WifiOff, FlaskConical, Server, ExternalLink,
+  History, RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOrg } from '@/contexts/OrgContext';
@@ -98,6 +99,10 @@ type GSPMode = 'live' | 'sandbox' | 'demo' | 'not_connected';
 interface GstStatus {
   mode: GSPMode;
   modeLabel: string;
+  // Connection state machine — secondary signal alongside `mode`.
+  // Values: not_connected | connecting | connected | syncing | synced |
+  // token_expired | connection_error | rate_limited | partial_sync
+  connectionState: string;
   providerKey: string;
   providerName: string;
   providerDisplayName: string;
@@ -152,6 +157,10 @@ interface SyncSummary {
   recordsFetched: number;
   recordsImported: number;
   recordsChanged: number;
+  // Per-record outcome breakdown (added with the sync-2b-runner upgrade).
+  recordsUpdated: number;  // existing rows that had values changed
+  recordsSkipped: number;  // existing rows that were unchanged (no-op)
+  recordsFailed: number;   // records that errored during insert/update
   recordsRemoved: number;
   durationMs: number;
   mode: string;
@@ -170,9 +179,15 @@ interface SyncJobRow {
   recordsFetched: number;
   recordsImported: number;
   recordsChanged: number;
+  // Per-record outcome breakdown (added with the sync-jobs route upgrade).
+  recordsUpdated: number;
+  recordsSkipped: number;
+  recordsFailed: number;
   recordsRemoved: number;
   durationMs: number | null;
   errorMessage: string | null;
+  // If this job is a retry, points to the original job's id.
+  retryOf: string | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -231,6 +246,109 @@ function modeBannerText(mode: GSPMode): string {
       return 'Demo mode — data is simulated offline. Connect a real GSP provider to fetch live GSTR-2B.';
     case 'not_connected':
       return 'Not connected — configure a GSP provider below to fetch live GSTR-2B data.';
+  }
+}
+
+// ─── Connection-state badge (secondary indicator next to the mode badge) ────
+//
+// The mode badge (LIVE / SANDBOX / DEMO / NOT CONNECTED) is the PRIMARY
+// indicator. The connectionState badge is SECONDARY — it surfaces what the
+// backend's state machine currently says about the live connection (e.g.
+// "syncing", "token_expired", "rate_limited"). Subtle styling so the mode
+// badge stays the visual anchor.
+
+function connectionStateBadge(state: string | null | undefined): React.ReactNode {
+  if (!state || state === 'not_connected') return null;
+  const label = state.replace(/_/g, ' ');
+  const pretty = label.charAt(0).toUpperCase() + label.slice(1);
+  switch (state) {
+    case 'connecting':
+    case 'syncing':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-300">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {pretty}
+        </span>
+      );
+    case 'connected':
+    case 'synced':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+          <CheckCircle2 className="h-3 w-3" />
+          {pretty}
+        </span>
+      );
+    case 'token_expired':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">
+          <AlertTriangle className="h-3 w-3" />
+          Token expired
+        </span>
+      );
+    case 'rate_limited':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">
+          <AlertTriangle className="h-3 w-3" />
+          Rate limited
+        </span>
+      );
+    case 'connection_error':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-300">
+          <XCircle className="h-3 w-3" />
+          Connection error
+        </span>
+      );
+    case 'partial_sync':
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">
+          <AlertTriangle className="h-3 w-3" />
+          Partial sync
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
+          {pretty}
+        </span>
+      );
+  }
+}
+
+// ─── Sync job row badge helpers ──────────────────────────────────────────────
+//
+// Mirrors the modeBadgeClass shape but accepts plain string (the job.mode
+// column is a free-text string in the schema, even though we always store
+// 'live' | 'sandbox' | 'demo').
+
+function jobModeBadgeClass(mode: string): string {
+  switch (mode) {
+    case 'live':
+      // Emerald is allowed ONLY for LIVE badges (per GREEN NEUTRALIZATION CASCADE exception).
+      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+    case 'sandbox':
+      return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+    case 'demo':
+      return 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30';
+    default:
+      return 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30';
+  }
+}
+
+function jobStatusBadgeClass(status: string): string {
+  switch (status) {
+    case 'completed':
+      // Use blue success token (gst-status-success is blue per the design system,
+      // emerald is reserved for LIVE mode only).
+      return 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+    case 'partial':
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    case 'failed':
+      return 'border-red-500/30 bg-red-500/10 text-red-300';
+    case 'running':
+      return 'border-[#8B5CF6]/30 bg-[#8B5CF6]/10 text-[#A78BFA]';
+    default:
+      return 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300';
   }
 }
 
@@ -328,14 +446,16 @@ function PrimaryButton({
 }
 
 function GhostButton({
-  children, ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  children, loading, ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
   return (
     <Button
       {...props}
+      disabled={loading || props.disabled}
       variant="outline"
       className="gst-btn gst-btn-outline h-9 gap-2"
     >
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </Button>
   );
@@ -445,6 +565,10 @@ export function GSTSection() {
   // Action loading flags
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Sync history (recent GSTR-2B sync jobs) — shown in the Sync History card.
+  const [syncJobs, setSyncJobs] = useState<SyncJobRow[]>([]);
+  const [syncJobsLoading, setSyncJobsLoading] = useState(false);
+
   // ── Load status + providers ──
   const load = useCallback(async () => {
     if (!orgId) {
@@ -477,6 +601,28 @@ export function GSTSection() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // ── Load sync history (recent GSTR-2B sync jobs) ──
+  // Shown in the Sync History card. Refreshed after every sync/retry and via
+  // the Refresh button on the card.
+  const loadSyncHistory = useCallback(async () => {
+    if (!orgId) return;
+    setSyncJobsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/gst/sync-jobs?organizationId=${encodeURIComponent(orgId)}&limit=10`,
+        { headers: buildHeaders() },
+      );
+      const data = await res.json();
+      if (res.ok && data.ok && Array.isArray(data.jobs)) {
+        setSyncJobs(data.jobs as SyncJobRow[]);
+      }
+    } catch {
+      /* non-fatal — empty state will render */
+    } finally {
+      setSyncJobsLoading(false);
+    }
+  }, [orgId, buildHeaders]);
 
   // ── Resolve the selected provider meta ──
   const selectedProvider = useMemo<ProviderMeta | null>(() => {
@@ -633,6 +779,12 @@ export function GSTSection() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        // The backend returns HTTP 409 with code='NOT_TESTED' when a real
+        // provider is configured but has not been Test-Connection'd yet.
+        // Surface a clear, actionable error so the user knows what to do.
+        if (res.status === 409 && data.code === 'NOT_TESTED') {
+          throw new Error('Provider not tested. Click "Test Connection" first to activate it.');
+        }
         throw new Error(data.error ?? 'Sync failed.');
       }
       setSyncResult(data.summary);
@@ -642,8 +794,45 @@ export function GSTSection() {
         `${data.summary.recordsImported} imported.`,
       );
       await load();
+      await loadSyncHistory();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Sync failed.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Retry a previous sync job ──
+  // Calls POST /api/gst/sync-2b/retry with the original job's id. The retry
+  // route re-runs the sync with trigger='retry' and retryOf=<originalJobId>,
+  // using the original job's period (the user does NOT re-supply it).
+  const handleRetry = async (jobId: string) => {
+    if (!orgId || !jobId) return;
+    setActionLoading(`retry:${jobId}`);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/gst/sync-2b/retry', {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: JSON.stringify({ organizationId: orgId, jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        if (res.status === 409 && data.code === 'NOT_TESTED') {
+          throw new Error('Provider not tested. Click "Test Connection" first to activate it.');
+        }
+        throw new Error(data.error ?? 'Retry failed.');
+      }
+      setSyncResult(data.summary);
+      toast.success(
+        `Retry complete (${data.summary.mode.toUpperCase()}) — ` +
+        `${data.summary.recordsFetched} fetched, ` +
+        `${data.summary.recordsImported} imported.`,
+      );
+      await load();
+      await loadSyncHistory();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Retry failed.');
     } finally {
       setActionLoading(null);
     }
@@ -681,6 +870,14 @@ export function GSTSection() {
   const isDemo = status?.mode === 'demo';
   const isLive = status?.mode === 'live';
   const isSandbox = status?.mode === 'sandbox';
+
+  // Load sync history once the org is connected (or once we discover that
+  // jobs exist for the org even if `mode` is somehow not_connected — defensive).
+  useEffect(() => {
+    if (isConnected) {
+      void loadSyncHistory();
+    }
+  }, [isConnected, loadSyncHistory]);
 
   // ── Loading state ──
   if (loading) {
@@ -741,13 +938,18 @@ export function GSTSection() {
                 </CardDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider ${modeBadgeClass(status.mode)}`}
               >
                 {modeIcon(status.mode)}
                 {status.modeLabel}
               </span>
+              {/* Secondary connection-state badge — subtle, surfaces what the
+                  backend's state machine currently says (e.g. "syncing",
+                  "token_expired", "rate_limited"). Hidden when state is
+                  not_connected (the mode badge already covers that case). */}
+              {connectionStateBadge(status.connectionState)}
             </div>
           </CardHeader>
           <CardContent className="p-6">
@@ -1150,24 +1352,57 @@ export function GSTSection() {
               </div>
               {syncResult && (
                 <div className="mt-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3 text-xs">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div>
-                      <p className="gst-label">Fetched</p>
-                      <p className="text-sm font-semibold text-white">{syncResult.recordsFetched}</p>
-                    </div>
-                    <div>
-                      <p className="gst-label">Imported</p>
-                      <p className="text-sm font-semibold text-white">{syncResult.recordsImported}</p>
-                    </div>
-                    <div>
-                      <p className="gst-label">Changed</p>
-                      <p className="text-sm font-semibold text-white">{syncResult.recordsChanged}</p>
-                    </div>
-                    <div>
-                      <p className="gst-label">Duration</p>
-                      <p className="text-sm font-semibold text-white">{syncResult.durationMs}ms</p>
-                    </div>
-                  </div>
+                  {/* Per-record outcome grid. "Changed" is hidden when it
+                      equals recordsUpdated (the runner sets both to the same
+                      value for backward compat — showing both would be
+                      confusing). "Failed" is shown in red when > 0. */}
+                  {(() => {
+                    const updated = typeof syncResult.recordsUpdated === 'number'
+                      ? syncResult.recordsUpdated
+                      : (typeof syncResult.recordsChanged === 'number' ? syncResult.recordsChanged : 0);
+                    const changed = typeof syncResult.recordsChanged === 'number' ? syncResult.recordsChanged : 0;
+                    const skipped = typeof syncResult.recordsSkipped === 'number' ? syncResult.recordsSkipped : 0;
+                    const failed = typeof syncResult.recordsFailed === 'number' ? syncResult.recordsFailed : 0;
+                    const showChanged = typeof syncResult.recordsChanged === 'number' && changed !== updated;
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                          <div>
+                            <p className="gst-label">Fetched</p>
+                            <p className="text-sm font-semibold text-white">{syncResult.recordsFetched}</p>
+                          </div>
+                          <div>
+                            <p className="gst-label">Imported</p>
+                            <p className="text-sm font-semibold text-white">{syncResult.recordsImported}</p>
+                          </div>
+                          <div>
+                            <p className="gst-label">Updated</p>
+                            <p className="text-sm font-semibold text-white">{updated}</p>
+                          </div>
+                          <div>
+                            <p className="gst-label">Skipped</p>
+                            <p className="text-sm font-semibold text-white">{skipped}</p>
+                          </div>
+                          <div>
+                            <p className="gst-label">Failed</p>
+                            <p className={`text-sm font-semibold ${failed > 0 ? 'text-red-400' : 'text-white'}`}>
+                              {failed}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="gst-label">Duration</p>
+                            <p className="text-sm font-semibold text-white">{syncResult.durationMs}ms</p>
+                          </div>
+                        </div>
+                        {showChanged && (
+                          <div className="mt-2 flex items-center gap-2 border-t border-[#1F1F1F] pt-2">
+                            <p className="gst-label">Changed (legacy)</p>
+                            <p className="text-sm font-semibold text-zinc-300">{changed}</p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="mt-2 flex items-center gap-2 border-t border-[#1F1F1F] pt-2">
                     <span className={`gst-status ${
                       syncResult.mode === 'live' ? 'gst-status-success' :
@@ -1228,7 +1463,123 @@ export function GSTSection() {
         </SettingsCard>
       )}
 
-      {/* ── 4. GSTIN VERIFICATION RESULT CARD ── */}
+      {/* ── 4. SYNC HISTORY CARD ── */}
+      {/* Shown when connected OR when sync jobs already exist (so a user who
+          disconnects after syncing can still see the audit trail until they
+          reconnect). */}
+      {(isConnected || syncJobs.length > 0) && (
+        <SettingsCard
+          title="Sync History"
+          description="Recent GSTR-2B sync jobs for this organization. Retry failed or partial runs."
+          action={
+            <GhostButton
+              onClick={() => void loadSyncHistory()}
+              loading={syncJobsLoading}
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </GhostButton>
+          }
+        >
+          {syncJobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[#181818]">
+                <History className="h-5 w-5 text-zinc-500" />
+              </div>
+              <p className="text-sm text-zinc-400">
+                No sync jobs yet. Click{' '}
+                <span className="font-medium text-white">Sync Now</span> to fetch
+                your first GSTR-2B.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto rounded-md border border-[#1F1F1F]">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-[#0A0A0A]">
+                  <tr className="border-b border-[#1F1F1F] text-zinc-500">
+                    <th className="px-2 py-2 font-medium">Period</th>
+                    <th className="px-2 py-2 font-medium">Provider</th>
+                    <th className="px-2 py-2 font-medium">Mode</th>
+                    <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 text-right font-medium">Fetched</th>
+                    <th className="px-2 py-2 text-right font-medium">Imported</th>
+                    <th className="px-2 py-2 text-right font-medium">Updated</th>
+                    <th className="px-2 py-2 text-right font-medium">Skipped</th>
+                    <th className="px-2 py-2 text-right font-medium">Failed</th>
+                    <th className="px-2 py-2 text-right font-medium">Duration</th>
+                    <th className="px-2 py-2 font-medium">Trigger</th>
+                    <th className="px-2 py-2 font-medium">Started</th>
+                    <th className="px-2 py-2 font-medium">{/* Retry */}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncJobs.map((job) => {
+                    const failed = job.recordsFailed ?? 0;
+                    const canRetry = job.status === 'failed' || job.status === 'partial';
+                    const retryLoading = actionLoading === `retry:${job.id}`;
+                    return (
+                      <tr
+                        key={job.id}
+                        className="border-b border-[#1F1F1F]/60 hover:bg-[#0F1115]/50"
+                      >
+                        <td className="px-2 py-2 font-mono text-zinc-300">{job.period}</td>
+                        <td className="px-2 py-2 text-zinc-400">{job.providerKey}</td>
+                        <td className="px-2 py-2">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-semibold uppercase ${jobModeBadgeClass(job.mode)}`}>
+                            {job.mode}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${jobStatusBadgeClass(job.status)}`}>
+                            {job.status}
+                          </span>
+                          {job.status === 'running' && (
+                            <Loader2 className="ml-1 inline h-3 w-3 animate-spin text-[#A78BFA]" />
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{job.recordsFetched}</td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{job.recordsImported}</td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{job.recordsUpdated ?? 0}</td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-400">{job.recordsSkipped ?? 0}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${failed > 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                          {failed}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-400">
+                          {job.durationMs != null ? `${job.durationMs}ms` : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-zinc-400">{job.trigger}</td>
+                        <td className="px-2 py-2 text-zinc-500">
+                          {fmtRelative(job.startedAt ?? job.createdAt)}
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          {canRetry && (
+                            <GhostButton
+                              onClick={() => void handleRetry(job.id)}
+                              loading={retryLoading}
+                              disabled={retryLoading}
+                              className="h-7 gap-1 !px-2 text-[11px]"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Retry
+                            </GhostButton>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {syncJobs.length > 0 && (
+            <p className="gst-caption mt-3 text-zinc-500">
+              Showing the {syncJobs.length} most recent{' '}
+              {syncJobs.length === 1 ? 'job' : 'jobs'}. Click Refresh to reload.
+            </p>
+          )}
+        </SettingsCard>
+      )}
+
+      {/* ── 5. GSTIN VERIFICATION RESULT CARD ── */}
       {verifyResult && (
         <SettingsCard
           title="GSTIN Verification Result"

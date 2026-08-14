@@ -1,38 +1,33 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// POST /api/gst/sync-2b
+// POST /api/gst/sync-2b/retry
 // ═══════════════════════════════════════════════════════════════════════════════
-// Sync GSTR-2B for an org's GSTIN + period through the configured provider.
-// Delegates the actual sync logic to `runSync2B` (shared with the retry route)
-// and maps the structured outcome to an HTTP response.
+// Retry a previous GSTR-2B sync job. Loads the original job, verifies it
+// belongs to the org, then runs a fresh sync with `trigger='retry'` and
+// `retryOf=originalJobId`. The fresh sync uses the original job's period +
+// organizationId — the user does NOT need to re-supply them.
 //
-// Body: { organizationId, period }  (period = YYYY-MM; defaults to current month)
-// Returns:
-//   200 { ok: true, jobId, summary: { recordsFetched, recordsImported,
-//        recordsUpdated, recordsSkipped, recordsFailed, recordsChanged,
-//        recordsRemoved, durationMs, mode, isLive, provider } }
-//   200 { ok: true, jobId, partial: true, summary: {...} }  (some records failed)
-//   400 { error, code: 'VALIDATION_ERROR' | 'NO_GSTIN' | 'UNSUPPORTED_PROVIDER' }
-//   401 { error, code: 'GSP_AUTH_FAILED' }
-//   409 { error, code: 'NOT_TESTED' }     ← real provider configured but not tested
-//   429 { error, code: 'RATE_LIMITED' }   ← GSP rate limit OR per-user rate limit
-//   502 { error, code: 'GSTN_OUTAGE' }
+// This is mainly for the UI "Retry" button on a failed/partial sync job.
+//
+// Body: { organizationId, jobId }
+// Returns: same shape as POST /api/gst/sync-2b
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { db } from '@/lib/db';
 import { rateLimit, rateLimitedResponse, type RateLimitRule } from '@/lib/rate-limit';
 import { runSync2B } from '@/lib/gst-reconciliation/server/sync-2b-runner';
 
-// GSTR-2B sync makes external HTTP calls + DB writes — limit to 10/min per user.
-const SYNC_RATE_LIMIT: RateLimitRule = { windowMs: 60_000, max: 10 };
+// Retry carries the same cost as a fresh sync — share the same rate limit.
+const RETRY_RATE_LIMIT: RateLimitRule = { windowMs: 60_000, max: 10 };
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const schema = z.object({
   organizationId: z.string().min(1),
-  period: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  jobId: z.string().min(1),
 });
 
 export async function POST(request: Request) {
@@ -41,12 +36,11 @@ export async function POST(request: Request) {
     if (auth instanceof NextResponse) return auth;
     const { uid } = auth;
 
-    // Rate-limit: GSTR-2B sync is expensive (external HTTP + DB writes).
-    const rl = rateLimit(request, SYNC_RATE_LIMIT, 'gst-sync-2b', uid);
+    const rl = rateLimit(request, RETRY_RATE_LIMIT, 'gst-sync-2b-retry', uid);
     if (rl.denied) {
       return rateLimitedResponse(
         rl.retryAfterSec,
-        'Too many GSTR-2B sync requests. Please wait a minute and try again.',
+        'Too many GSTR-2B retry requests. Please wait a minute and try again.',
       );
     }
 
@@ -66,37 +60,57 @@ export async function POST(request: Request) {
     const member = await requireOrgMembership(uid, body.organizationId);
     if (member instanceof NextResponse) return member;
 
-    const period = body.period ?? new Date().toISOString().slice(0, 7);
+    // Load the original job + verify it belongs to the org (tenant isolation).
+    const originalJob = await db.gSTSyncJob.findFirst({
+      where: { id: body.jobId, organizationId: body.organizationId },
+      select: { id: true, period: true, status: true, gstin: true },
+    });
+    if (!originalJob) {
+      return NextResponse.json(
+        { error: 'Sync job not found in this organization.', code: 'JOB_NOT_FOUND' },
+        { status: 404 },
+      );
+    }
 
-    // Run the sync. The runner handles provider resolution, job creation,
-    // record upsert, connection-state transitions, and error mapping.
+    // Refuse to retry a job that is currently running — would create duplicate
+    // concurrent syncs against the same provider config.
+    if (originalJob.status === 'running') {
+      return NextResponse.json(
+        { error: 'This sync is already running. Wait for it to finish before retrying.', code: 'JOB_RUNNING' },
+        { status: 409 },
+      );
+    }
+
+    // Run a fresh sync with the original job's period + trigger='retry'.
     const outcome = await runSync2B({
       organizationId: body.organizationId,
-      period,
-      trigger: 'manual',
+      period: originalJob.period,
+      trigger: 'retry',
+      retryOf: originalJob.id,
     });
 
-    // Map the structured outcome to an HTTP response.
+    // Map outcome to HTTP — identical to the sync-2b route.
     switch (outcome.kind) {
       case 'success':
-        return NextResponse.json({ ok: true, jobId: outcome.jobId, summary: outcome.summary });
+        return NextResponse.json({
+          ok: true,
+          jobId: outcome.jobId,
+          retryOf: originalJob.id,
+          summary: outcome.summary,
+        });
 
       case 'partial':
         return NextResponse.json({
           ok: true,
           jobId: outcome.jobId,
+          retryOf: originalJob.id,
           partial: true,
           summary: outcome.summary,
         });
 
       case 'not_tested':
-        // Real provider configured but lastTestOk !== true. Refuse to silently
-        // fall back to demo — the user must run "Test Connection" first.
         return NextResponse.json(
-          {
-            error: 'Provider not tested. Run Test Connection first.',
-            code: 'NOT_TESTED',
-          },
+          { error: 'Provider not tested. Run Test Connection first.', code: 'NOT_TESTED' },
           { status: 409 },
         );
 
@@ -143,7 +157,6 @@ export async function POST(request: Request) {
         );
 
       default: {
-        // Exhaustiveness check — if a new outcome kind is added, this fails loudly.
         const _exhaustive: never = outcome;
         void _exhaustive;
         return NextResponse.json(
@@ -155,7 +168,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return friendlyApiError(
       error,
-      'Unable to sync GSTR-2B. Please check your provider connection and try again.',
+      'Unable to retry the GSTR-2B sync. Please check your provider connection and try again.',
     );
   }
 }

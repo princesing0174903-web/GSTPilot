@@ -22,6 +22,7 @@ import {
   type BooksInvoice,
 } from '@/lib/gst-reconciliation';
 import { modeLabel } from '@/lib/gst-reconciliation/server/provider-mode';
+import { decryptString } from '@/lib/gstn-provider/server/crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
     let provider;
     let resolvedMode: 'live' | 'sandbox' | 'demo' | 'not_connected' = 'demo';
     let resolvedGstin = bodyGstin;
+    let resolvedConfigId: string | null = null;
     if (gspProvider === 'mock') {
       provider = getGSPProvider('mock');
       resolvedMode = 'demo';
@@ -58,10 +60,37 @@ export async function POST(request: Request) {
       const resolution = await getGSPProviderForOrg(organizationId);
       provider = resolution.provider;
       resolvedMode = resolution.mode;
+      resolvedConfigId = resolution.configId;
       // Use the configured GSTIN if available (it's the authoritative one)
       if (resolution.gstin) resolvedGstin = resolution.gstin;
     }
     const gstin = resolvedGstin;
+
+    // Resolve the credentials to pass to provider.authenticate(). For real
+    // providers, this is the actual clientId + decrypted apikey from the
+    // GSPProviderConfig row. For the mock provider (no config), pass empty
+    // strings — the mock provider ignores them.
+    let authClientId = '';
+    let authApikey = '';
+    if (resolvedConfigId) {
+      const cfgRow = await db.gSPProviderConfig.findUnique({
+        where: { id: resolvedConfigId },
+        select: { clientId: true, apikey: true },
+      });
+      if (cfgRow) {
+        authClientId = cfgRow.clientId ?? '';
+        if (cfgRow.apikey) {
+          try { authApikey = decryptString(cfgRow.apikey); } catch { /* swallow */ }
+        }
+      }
+    }
+
+    // Source field for GSTR2BInvoice rows — reflects the data's provenance.
+    // 'not_connected' collapses to 'demo' since the mock provider is used.
+    const source: 'live' | 'sandbox' | 'demo' =
+      resolvedMode === 'live' ? 'live' :
+      resolvedMode === 'sandbox' ? 'sandbox' :
+      'demo';
 
     // ── 1. Fetch purchase invoices from Books (Prisma) ──
     // Pull from PurchaseBill table, scoped to the org + optional client.
@@ -102,9 +131,13 @@ export async function POST(request: Request) {
     }));
 
     // ── 2. Fetch GSTR-2B from the resolved provider ──
+    // Pass the actual config credentials (not the old hardcoded placeholder).
+    // Real providers (MastersIndia, GenericWeb) ignore these args — they use
+    // the credentials baked into the provider instance at construction time —
+    // but the mock provider uses `clientId` for display in its session token.
     const gspSession = await provider.authenticate({
-      clientId: 'gstpilot',
-      apikey: 'gstpilot-key',
+      clientId: authClientId,
+      apikey: authApikey,
     });
     const gstr2bResult = await provider.fetchGSTR2B(gspSession, gstin, period);
 
@@ -116,8 +149,11 @@ export async function POST(request: Request) {
     const records = gstr2bResult.records;
     if (records.length > 0) {
       const compositeKeys = records.map((r) => `${r.supplierGSTIN}||${r.invoiceNo}`);
+      // Tenant isolation: scope the lookup by organizationId so a user who
+      // knows another org's GSTIN cannot read or overwrite their rows.
       const existingRows = await db.gSTR2BInvoice.findMany({
         where: {
+          organizationId,
           gstin,
           period,
           OR: records.map((r) => ({
@@ -133,11 +169,13 @@ export async function POST(request: Request) {
       }
 
       const toCreate: Array<{
+        organizationId: string;
         gstin: string; period: string; supplierGSTIN: string; supplierName: string | null;
         invoiceNo: string; invoiceDate: string | null; taxableValue: number;
         igst: number; cgst: number; sgst: number; cess: number;
         itcAvailable: number; itcEligible: boolean;
         matched: boolean; matchStatus: string;
+        source: string;
       }> = [];
       const updateOps: Promise<unknown>[] = [];
       for (let i = 0; i < records.length; i++) {
@@ -158,11 +196,16 @@ export async function POST(request: Request) {
                 itcAvailable: rec.itcAvailable,
                 itcEligible: rec.itcEligible,
                 supplierName: rec.supplierName ?? null,
+                // Refresh the source so audit trails reflect the most recent
+                // sync's mode (a row previously synced in demo can later be
+                // refreshed by a live sync).
+                source,
               },
             }),
           );
         } else {
           toCreate.push({
+            organizationId,
             gstin,
             period,
             supplierGSTIN: rec.supplierGSTIN,
@@ -178,6 +221,7 @@ export async function POST(request: Request) {
             itcEligible: rec.itcEligible,
             matched: false,
             matchStatus: 'unmatched',
+            source,
           });
         }
       }

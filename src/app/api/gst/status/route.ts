@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
           lastSyncAt: null,
           tokenExpiry: null,
           tokenExpired: false,
+          connectionState: 'not_connected',
           configId: null,
         },
       });
@@ -94,6 +95,14 @@ export async function GET(request: NextRequest) {
       mode = cfg.mode === 'production' ? 'live' : 'sandbox';
     }
 
+    // Derive the effective connection state. If the token is expired but the
+    // stored state is 'connected'/'synced', override to 'token_expired' so the
+    // UI can show the correct banner.
+    let effectiveConnectionState = cfg.connectionState ?? 'not_connected';
+    if (!isMock && tokenExpired && (effectiveConnectionState === 'connected' || effectiveConnectionState === 'synced')) {
+      effectiveConnectionState = 'token_expired';
+    }
+
     return NextResponse.json({
       ok: true,
       status: {
@@ -106,11 +115,12 @@ export async function GET(request: NextRequest) {
         legalName: cfg.legalName,
         tradeName: cfg.tradeName,
         lastTestOk: cfg.lastTestOk,
-        lastTestedAt: cfg.lastConnectedAt?.toISOString() ?? null,
+        lastTestedAt: cfg.lastTestedAt?.toISOString() ?? cfg.lastConnectedAt?.toISOString() ?? null,
         lastTestMessage: cfg.lastTestMessage,
         lastSyncAt: cfg.lastSyncAt?.toISOString() ?? null,
         tokenExpiry: tokenExpiry?.toISOString() ?? null,
         tokenExpired,
+        connectionState: effectiveConnectionState,
         configId: cfg.id,
       },
     });

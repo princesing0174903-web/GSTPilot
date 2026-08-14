@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { db } from '@/lib/db';
+import { logGSTAudit } from '@/lib/gst-reconciliation/server/audit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -41,6 +42,12 @@ export async function POST(request: Request) {
     const member = await requireOrgMembership(uid, body.organizationId);
     if (member instanceof NextResponse) return member;
 
+    // Load the config before disabling (for audit).
+    const cfg = await db.gSPProviderConfig.findFirst({
+      where: { organizationId: body.organizationId, enabled: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+
     await db.gSPProviderConfig.updateMany({
       where: { organizationId: body.organizationId, enabled: true },
       data: {
@@ -49,8 +56,20 @@ export async function POST(request: Request) {
         lastTestMessage: 'Disconnected by user.',
         lastConnectedAt: null,
         lastSyncAt: null,
+        connectionState: 'not_connected',
       },
     });
+
+    if (cfg) {
+      await logGSTAudit({
+        organizationId: body.organizationId,
+        userId: uid,
+        action: 'gst.disconnect',
+        entity: 'GSPProviderConfig',
+        entityId: cfg.id,
+        details: { provider: cfg.providerKey, mode: cfg.mode },
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

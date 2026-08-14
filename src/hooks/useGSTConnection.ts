@@ -344,7 +344,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       await fetch('/api/gstn/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encryptedSession: connection.encryptedSession }),
+        body: JSON.stringify({ organizationId: orgId, encryptedSession: connection.encryptedSession }),
       });
       // Cascade-delete all GST data for this connection.
       await cascadeDisconnect(orgId, connection.id);
@@ -368,7 +368,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       const res = await fetch('/api/gstn/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encryptedSession: connection.encryptedSession }),
+        body: JSON.stringify({ organizationId: orgId, encryptedSession: connection.encryptedSession }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {

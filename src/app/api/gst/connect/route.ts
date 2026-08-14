@@ -18,6 +18,7 @@ import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/
 import { db } from '@/lib/db';
 import { encryptString } from '@/lib/gstn-provider/server/crypto';
 import { getProviderMeta } from '@/lib/gst-reconciliation/server/registry';
+import { logGSTAudit } from '@/lib/gst-reconciliation/server/audit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -112,6 +113,9 @@ export async function POST(request: Request) {
         gstin: body.gstin ?? null,
         enabled: true,
         lastTestOk: false,
+        // New config starts in 'connecting' — the user must run Test Connection
+        // to advance to 'connected'.
+        connectionState: 'connecting',
       },
       update: {
         displayName: meta.displayName,
@@ -127,7 +131,18 @@ export async function POST(request: Request) {
         lastTestOk: false,
         lastTestMessage: null,
         lastConnectedAt: null,
+        // Back to 'connecting' — the user must re-test after a config change.
+        connectionState: 'connecting',
       },
+    });
+
+    await logGSTAudit({
+      organizationId: body.organizationId,
+      userId: uid,
+      action: 'gst.connect',
+      entity: 'GSPProviderConfig',
+      entityId: config.id,
+      details: { provider: body.providerKey, mode: body.mode, hasGstin: !!body.gstin },
     });
 
     // Return ONLY masked indicators — NEVER the secret

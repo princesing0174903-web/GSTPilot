@@ -15,7 +15,7 @@ import {
   useFireFirm,
 } from '@/hooks/use-firestore';
 import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
-import type { BusinessSnapshot } from '@/lib/financial-engine';
+import type { BusinessSnapshot } from '@/lib/financial-engine/types';
 import type {
   FirestoreClient,
   FirestoreInvoice,

@@ -17,36 +17,36 @@ import {
   Building2, Plane, Briefcase, Megaphone, Code2, Package,
 } from 'lucide-react'
 
-// ── Engine libs ────────────────────────────────────────────────────────────────
+// ── Engine libs (imported from -utils files to keep Prisma out of client bundle) ─
 import {
   formatInvoiceCurrency, getInvoiceStats,
   generateInvoiceNumber, calculateInvoiceTotals,
   daysOverdue,
-} from '@/lib/invoices/invoices'
+} from '@/lib/invoices/invoices-utils'
 import {
   seedPurchaseBills, getPurchaseStats,
-} from '@/lib/invoices/purchases'
+} from '@/lib/invoices/purchases-utils'
 import {
   seedExpenses, getExpenseStats, autoCategorize,
-} from '@/lib/invoices/expenses'
+} from '@/lib/invoices/expenses-utils'
 import {
   computeAging, getReceivablesSummary, scheduleReminders,
   forecastCollections,
-} from '@/lib/invoices/receivables'
+} from '@/lib/invoices/receivables-utils'
 import {
   getPayablesSummary, prioritizePayments, cashAllocationPlan,
-} from '@/lib/invoices/payables'
+} from '@/lib/invoices/payables-utils'
 import {
   seedPayments, getPaymentStats,
-} from '@/lib/invoices/payments'
+} from '@/lib/invoices/payments-utils'
 import {
   seedTDSRecords, getTDSStats, TDS_SECTIONS, detectSection, calculateTDS,
   quarterForDate,
-} from '@/lib/invoices/tds'
+} from '@/lib/invoices/tds-utils'
 import {
   seedEmployees, seedPayroll, getPayrollStats,
   calculateSalaryBreakdown,
-} from '@/lib/invoices/payroll'
+} from '@/lib/invoices/payroll-utils'
 import {
   generateCashFlowForecast, identifyDelayedCollections, predictSurplusOrDeficit,
 } from '@/lib/invoices/forecast'

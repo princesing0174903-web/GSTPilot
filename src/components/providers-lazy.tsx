@@ -176,9 +176,10 @@ export function ProvidersLazy({ children }: { children: ReactNode }) {
       // is a no-op on failure — these are pure prefetch hints.
       import('@/components/DashboardViews').catch(() => undefined),
       import('@/components/dashboard/DashboardPage').catch(() => undefined),
-      // The business snapshot hook + API path are used by every dashboard
-      // view. Pre-warming them avoids a fresh compile on first API call.
-      import('@/lib/business/snapshot').catch(() => undefined),
+      // NOTE: Do NOT prefetch '@/lib/business/snapshot' here — it imports
+      // @prisma/client at module scope, which would leak Prisma (~150KB)
+      // into the client bundle. The snapshot data is fetched at runtime
+      // via /api/business/snapshot (a server-only API route).
     ])
 
     prefetch

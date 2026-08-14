@@ -14,6 +14,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
+import { formatForecastCurrency } from './forecasting-format';
+
+// Re-export the Prisma-free formatter so existing server-side imports
+// (`import { formatForecastCurrency } from './forecasting'`) keep working.
+// Client components should import directly from './forecasting-format'.
+export { formatForecastCurrency } from './forecasting-format';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,15 +59,8 @@ export interface ForecastBundle {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-export function formatForecastCurrency(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)} L`;
-  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
-  return `${sign}₹${abs.toFixed(0)}`;
-}
+// `formatForecastCurrency` is defined in ./forecasting-format (Prisma-free) and
+// re-exported above so existing imports keep working.
 
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

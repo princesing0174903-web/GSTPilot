@@ -42,7 +42,7 @@ import {
   type DeveloperDashboardDTO, type GeneratedAppSpec, type ExtensionSDKInfo,
   type AppCategory, type AppType, type AppPermission, type ExtensionPoint,
   type AIEmployeeAppDef,
-} from '@/lib/app-platform'
+} from '@/lib/app-platform/client'
 
 // ── Icon registry — maps catalog icon strings to lucide components ─────────────
 const ICONS: Record<string, React.ElementType> = {

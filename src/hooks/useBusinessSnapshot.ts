@@ -18,8 +18,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
-import type { BusinessSnapshot } from '@/lib/financial-engine';
-import { emptySnapshot } from '@/lib/financial-engine';
+import type { BusinessSnapshot } from '@/lib/financial-engine/types';
+import { emptySnapshot } from '@/lib/financial-engine/types';
 import { fetchWithTimeout } from '@/lib/async';
 import { onBusinessSnapshotInvalidated } from '@/lib/business-snapshot-events';
 

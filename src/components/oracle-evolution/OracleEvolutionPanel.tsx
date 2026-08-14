@@ -22,7 +22,7 @@ import {
 import type {
   ForecastBundle, ForecastPoint, ForecastMetric,
 } from '@/lib/oracle-evolution/forecasting';
-import { formatForecastCurrency } from '@/lib/oracle-evolution/forecasting';
+import { formatForecastCurrency } from '@/lib/oracle-evolution/forecasting-format';
 import type { AgentId } from '@/lib/oracle-evolution/agents';
 import type { DiagnosticResult, ChainId } from '@/lib/oracle-evolution/diagnostic';
 import type { ValidationResult } from '@/lib/oracle-evolution/validation';

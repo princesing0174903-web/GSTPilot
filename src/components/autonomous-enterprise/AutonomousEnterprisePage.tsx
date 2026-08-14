@@ -55,7 +55,7 @@ import {
   type SystemHealthCheck, type ExecutiveAgent, type VoiceCommand,
   type SimulationScenario,
 } from '@/lib/autonomous/types';
-import { SCENARIO_META } from '@/lib/autonomous/simulator';
+import { SCENARIO_META } from '@/lib/autonomous/simulator-defs';
 import { fetchWithTimeout } from '@/lib/async';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

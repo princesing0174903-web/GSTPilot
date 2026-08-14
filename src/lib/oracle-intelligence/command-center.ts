@@ -17,6 +17,11 @@
 import { db } from '@/lib/db';
 import type { CommandResult, EntityRef } from './types';
 
+// Re-export Prisma-free static definitions so existing server-side imports
+// (`import { COMMAND_SUGGESTIONS } from './command-center'`) keep working.
+// Client components should import directly from './command-center-defs'.
+export { COMMAND_SUGGESTIONS } from './command-center-defs';
+
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const DAY = 1000 * 60 * 60 * 24;
 
@@ -386,14 +391,5 @@ async function cmdFallback(query: string): Promise<CommandResult> {
   };
 }
 
-/** Sample command suggestions for the UI. */
-export const COMMAND_SUGGESTIONS = [
-  'Show invoices unpaid for 90 days',
-  'Who owes me more than ₹5 lakh?',
-  'Which customers are most profitable?',
-  'How much GST do I owe this month?',
-  'What happened last Friday?',
-  'How much is outstanding total?',
-  'How much did I spend this month?',
-  'What are my total vendor payables?',
-];
+// `COMMAND_SUGGESTIONS` is defined in ./command-center-defs (Prisma-free) and
+// re-exported above so existing imports keep working.

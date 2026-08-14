@@ -58,7 +58,7 @@ import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { useBanking } from '@/hooks/useBanking';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking';
+import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking/categorize';
 import type { TransactionCategory } from '@/lib/banking-provider';
 import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {

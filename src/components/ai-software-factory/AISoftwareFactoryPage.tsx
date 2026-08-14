@@ -42,7 +42,7 @@ import type {
   FactoryDashboard, Project, BuildRecord, Deployment, Release,
   CodeReview, DevEmployee, CollaborationPipeline, AppType,
 } from '@/lib/software-factory/types';
-import { DEV_EMPLOYEE_DEFS, PIPELINE_ORDER } from '@/lib/software-factory/employees';
+import { DEV_EMPLOYEE_DEFS, PIPELINE_ORDER } from '@/lib/software-factory/employees-defs';
 import { APP_TEMPLATES } from '@/lib/software-factory/templates';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { Sparkles, Shield, Play, Eye, History, X } from 'lucide-react';
-import { ORACLE_ACTIONS, type OracleAction } from '@/lib/autonomous-finance/oracle-actions';
+import { ORACLE_ACTIONS, type OracleAction } from '@/lib/autonomous-finance/oracle-actions-defs';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrustBar } from '@/components/shared/TrustBar';

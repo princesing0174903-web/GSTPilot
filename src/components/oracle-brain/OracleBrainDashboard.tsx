@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useOracleDashboard, useOracleCommand } from '@/hooks/useOracleBrain';
 import type { OracleDashboardData, CommandResultData } from '@/hooks/useOracleBrain';
-import { COMMAND_SUGGESTIONS } from '@/lib/oracle-intelligence/command-center';
+import { COMMAND_SUGGESTIONS } from '@/lib/oracle-intelligence/command-center-defs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

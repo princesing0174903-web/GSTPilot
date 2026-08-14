@@ -5,9 +5,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Next.js 16 removed the top-level `eslint` key from next.config.
+  // ESLint during build is now controlled via `next lint` and the
+  // CLI flag `--no-lint` (passed by the build script when needed).
   reactStrictMode: false,
   // pdfkit + qrcode need to be resolved from node_modules at runtime
   // (pdfkit loads .afm font data files relative to its module path, which

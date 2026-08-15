@@ -2,12 +2,21 @@
 // Returns the forward cash flow forecast (7d / 30d horizons).
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { buildAccountsState, buildCashFlowState } from '@/lib/banking/engine';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     const accounts = await buildAccountsState();
     const cashflow = await buildCashFlowState(accounts);
     return NextResponse.json({
@@ -27,10 +36,6 @@ export async function GET() {
       },
     });
   } catch (err) {
-    console.error('[bank/cashflow/forecast] GET failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to load forecast', detail: String(err) },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'Failed to load forecast.');
   }
 }

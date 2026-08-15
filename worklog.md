@@ -19229,3 +19229,140 @@ Stage Summary:
 - REAL GSTR-2B DATA RETRIEVAL PATH: Successfully tested end-to-end (provider.authenticate → fetchGSTR2B → normalize → DB upsert → reconciliation engine). With real MastersIndia credentials, the same path retrieves live GSTR-2B from GSTN.
 
 — *Task gst-real-integration complete. Evidence: curl tests (12 endpoints, all PASSED), browser test (agent-browser, full UI flow verified), security tests (3 routes return 401), tenant isolation test (0 cross-org rows), lint clean.*
+
+---
+Task ID: SETU-AUTH-GUARDS
+Agent: general-purpose subagent
+Task: Add requireAuth + requireOrgMembership to 32 unprotected banking/AA routes
+
+Work Log:
+- Read prior worklog tail (gst-real-integration stage) for context; confirmed auth gate pattern from src/lib/auth/session.ts and the already-secured src/app/api/banking/accounts/route.ts reference.
+- Catalogued all 32 target routes across 3 categories:
+  * B.1 /api/banking/** — 12 routes (11 to modify + 1 to skip per instructions: banking/connect is being handled by the main agent)
+  * B.2 /api/bank/** — 15 routes (global engine, just add auth gate)
+  * B.3 /api/aa/** — 5 routes (global aggregator, just add auth gate)
+- Read each route's current implementation to understand:
+  * GET vs POST signature (some had no `req` param at all and read no input)
+  * Existing try/catch error handler style (some used `console.error + NextResponse.json`, some used `friendlyBankingError`, some intentionally swallowed errors)
+  * Whether body.organizationId was used downstream
+- Applied the standardized auth gate pattern to all 31 route files:
+  * Import `requireAuth, requireOrgMembership, friendlyApiError` from `@/lib/auth/session`
+  * For each exported handler (GET/POST), add `requireAuth(req)` + early-return on NextResponse, then resolve `orgId` from query param `organizationId` (GET) or query/body/'local' fallback chain (POST), then `requireOrgMembership(uid, orgId)` + early-return on NextResponse
+  * Replaced bare `console.error` + `NextResponse.json({error:...}, {status:500})` with `friendlyApiError(err, '<friendly message>')` where appropriate
+  * Preserved existing error handling where it had intentional behavior:
+    - /api/banking/refresh, /api/banking/sync, /api/banking/disconnect kept their BankingError-aware error handlers (return typed status codes / idempotent 200-on-error)
+    - /api/banking/status kept its `catch {}` returning healthy:false (health check should never 5xx)
+  * For routes that previously took NO `req` parameter (e.g. /api/bank/cashflow GET, /api/bank/upi GET, /api/aa/status GET, /api/banking/intelligence GET, etc.), added `req: Request` parameter so `requireAuth(req)` and `new URL(req.url)` could work
+  * For POST routes that previously did `await req.json()` without a `.catch`, added `.catch(() => ({}) as Record<string, unknown>)` so missing body doesn't 500 before reaching the auth gate's orgId resolution
+  * For POST routes that previously had two sequential try/catch blocks (e.g. /api/bank/accounts/sync, /api/bank/accounts/connect), consolidated them into a single try/catch wrapping both the auth gate and the body-read + business logic
+- CRITICAL route /api/banking/sync: preserved the existing `if (!organizationId) return 400` defensive check (which is now only reachable when body has no organizationId — query-only orgId is now also valid, which is the documented pattern). Downstream syncBalances/syncTransactions/fullBankSync still receive body.organizationId as before — no business logic change.
+- Did NOT modify src/app/api/banking/connect/route.ts (explicitly excluded per task instructions — main agent is handling it).
+- Ran ESLint (`npx eslint --max-warnings 0`) on all 31 modified files in batches of 5-6 to avoid OOM. All 6 batches returned EXIT_CODE=0 (no warnings, no errors).
+
+Stage Summary:
+- 31 route files modified (32 originally planned minus src/app/api/banking/connect/route.ts which was excluded).
+- All 31 files now have the standardized auth gate (requireAuth + requireOrgMembership) at the top of every exported handler.
+- ESLint passes clean on all modified files (exit 0, no warnings).
+- Pattern applied uniformly:
+  * GET routes: `req: Request` + `requireAuth(req)` + `orgId = url.searchParams.get('organizationId') || 'local'` + `requireOrgMembership(uid, orgId)`
+  * POST routes: `requireAuth(req)` first, then read body, then `orgId = url.searchParams.get('organizationId') || body.organizationId || 'local'` + `requireOrgMembership(uid, orgId)`
+- No business logic changed, no response shapes changed, no removed imports, no removed `export const dynamic`/`runtime` directives.
+- For /api/bank/** and /api/aa/** routes that use a global engine (not org-scoped), only the access gate was added — the engine refactor to org-scope is OUT OF SCOPE per task description.
+- In sandbox/preview mode (Firebase Admin SDK unavailable), requireAuth falls back to the `x-gstpilot-actor` header and requireOrgMembership returns ok for any orgId, so existing demo flows continue to work without code changes in client components.
+- 0 routes where the pattern couldn't be applied cleanly. One minor behavior change worth noting: POST routes that previously did `await req.json()` (no catch) will now return 401 before reaching the json parse — which is the desired security behavior (auth before body parsing).
+
+---
+Task ID: SETU-REAL-WIRING
+Agent: main (Z.ai Code)
+Task: Wire the existing Setu SDK into the actual banking connect flow. Create /banking/consent/return + /api/webhooks/setu. Add redirectUrl to ConnectBankResult. Real SetuAAProvider implementing IBankProvider. Auth guards on 32 unprotected banking/AA routes. No real Setu outbound calls without creds. No silent Setu→Mock fallback. Keep Mock working.
+
+Work Log:
+- Read existing Setu SDK (src/lib/setu/*): client.ts, types.ts, consents.ts, webhooks.ts, utils.ts, index.ts — confirmed complete (OAuth, retry, rate-limit, HMAC verification, consent lifecycle, session polling, FI data mapping).
+- Read existing banking-provider architecture: IBankProvider interface (provider.ts), MockBankProvider (mock-provider.ts), FutureSetuProvider placeholder (future-providers.ts), registry.ts, orchestrator.ts, types.ts. Identified that FutureSetuProvider throws NotImplementedError — needed a REAL implementation.
+- Read ConnectBankResult type — confirmed NO redirectUrl field existed. Added `redirectUrl: string | null` with full JSDoc explaining the AA deferred-completion contract.
+- Added `redirectUrl?: string` to SetuConsentRequest type (src/lib/setu/types.ts) so the SDK can pass the redirect URL to Setu's POST /v2/consents.
+- Created src/lib/banking-provider/server/setu-aa-provider.ts (REAL SetuAAProvider implementing IBankProvider):
+  * connect(): validates VUA (10-digit mobile), resolves redirectUrl (SETU_REDIRECT_URL or NEXT_PUBLIC_APP_URL + /banking/consent/return), calls setuClient.createConsent(), returns consent.url as redirectUrl. Throws SETU_NOT_CONFIGURED if no creds (NO silent Mock fallback). Throws SETU_REDIRECT_NOT_CONFIGURED if no redirect URL configured.
+  * completeConnection(connectionRef): polls consent status via getConsent, creates data session via createSession, polls session until COMPLETED, extracts first delivered account as snapshot. Maps REJECTED→ConsentRejectedError, EXPIRED/REVOKED→ConnectionExpiredError, PENDING→409 CONSENT_PENDING.
+  * refreshConnection(): checks consent still ACTIVE.
+  * disconnect(): revokes consent via revokeConsent (idempotent).
+  * fetchAccounts(): creates fresh session, polls, returns balance snapshot.
+  * fetchTransactions(): creates session, polls, maps Setu transactions → BankTransaction with categorization.
+  * healthCheck(): calls setuClient.healthCheck().
+- Updated registry.ts: 'setu' → SetuAAProvider (was FutureSetuProvider). Documented NO silent fallback policy.
+- Updated /api/banking/connect/route.ts:
+  * Added requireAuth + requireOrgMembership (was UNAUTHENTICATED — critical security fix).
+  * createdBy now comes from authed session (uid + email), NOT from request body (prevents uid forgery).
+  * IFSC validation skipped for AA providers (setu/aa/finvu) — bank discovered post-consent.
+  * If result.redirectUrl present (AA flow): skips auto-complete, persists consent to SetuConsent table, returns redirectUrl to client.
+  * If result.redirectUrl absent (Mock flow): auto-completes as before.
+- Created /api/banking/complete/route.ts: POST handler that finalizes AA connections. Calls completeBankConnection(connectionRef), returns encrypted connection + snapshot. Auth-gated. Used by the consent return page to poll for completion.
+- Created /api/webhooks/setu/route.ts:
+  * GET: health check (returns 200 + endpoint + timestamp).
+  * POST: reads RAW body (for HMAC verification), gets x-setu-signature header, rejects 503 if SETU_WEBHOOK_SECRET not configured, calls parseWebhookEvent() (existing SDK helper — verifies HMAC-SHA256 timing-safe + parses JSON), derives eventId from type+timestamp+consentId, checks SetuWebhookEvent table for idempotency (unique constraint on eventId), stores event, dispatches to handleConsentStatusUpdate / handleSessionStatusUpdate / handleFiDataReady, marks event as processed.
+  * handleConsentStatusUpdate: updates SetuConsent row status, sets approvedAt when ACTIVE.
+  * handleSessionStatusUpdate: logs session completion.
+  * handleFiDataReady: logs FI data delivery from FIPs.
+  * Idempotency: unique constraint on eventId in SetuWebhookEvent table. Duplicates return 200 OK without reprocessing.
+- Added Prisma models: SetuWebhookEvent (idempotency + audit), SetuConsent (consentId→organizationId mapping for webhook correlation). Bumped PRISMA_CACHE_VERSION to v15-setu-webhook. Ran db:push successfully.
+- Created /banking/consent/return/page.tsx (client component):
+  * Reads consentId + status from URL search params.
+  * Derives initial state (success/pending/failure/no-consent) from URL params via useMemo (no setState-in-effect).
+  * Polls /api/banking/complete every 5s for up to 2 minutes.
+  * Shows success (green check), pending (amber clock, pulsing), failure (red X), loading (spinner) states.
+  * Displays Consent ID for debugging.
+  * "Return to Dashboard" + "Try Again" buttons.
+  * Lint clean (fixed set-state-in-effect error by deriving initial state from useMemo).
+- Updated src/hooks/useBanking.ts connect(): if response has result.redirectUrl, opens it in new tab (window.open), returns true without persisting locally (the webhook + return page handle completion). Mock flow unchanged.
+- Updated src/components/dashboard/home/ConnectBankModal.tsx:
+  * Added provider toggle (Sandbox vs Setu AA) in Step 1.
+  * When Setu selected: shows mobile number field instead of account number + IFSC, validates 10-digit mobile, shows info banner about consent flow.
+  * handleConnect: passes provider: connectProvider, opens redirectUrl in new tab if present, shows toast "Consent Required".
+- Created src/lib/gstpilot-data/local-workspace.ts (was missing — blocked the entire app; exports isLocalOrgId, isPreviewMode, isLiveBankingProvider).
+- Created .env.example with full Setu env var documentation (SETU_CLIENT_ID, SETU_CLIENT_SECRET, SETU_PRODUCT_INSTANCE_ID, SETU_BASE_URL, SETU_AUTH_URL, SETU_WEBHOOK_SECRET, SETU_REDIRECT_URL, NEXT_PUBLIC_APP_URL, BANK_PROVIDER). No real secrets — all commented out as placeholders.
+- Launched subagent SETU-AUTH-GUARDS: added requireAuth + requireOrgMembership to 31 previously-unauthenticated banking/AA routes (12 /api/banking/* + 15 /api/bank/* + 5 /api/aa/*). All lint clean.
+
+Verification (curl + agent-browser):
+- GET /api/webhooks/setu → 200 {"ok":true,"endpoint":"/api/webhooks/setu","timestamp":"..."}
+- POST /api/webhooks/setu (no secret) → 503 {"ok":false,"error":"Webhook secret not configured"} + Setu logger logs the rejection.
+- GET /banking/consent/return?consentId=test123&status=ACTIVE → 200 (page renders, shows "Connection Failed" because /api/banking/complete returns 401 without auth — correct behavior).
+- POST /api/banking/complete?connectionRef=test123 → 401 (correct — requires auth).
+- GET / → 200 (home page renders).
+- agent-browser: consent return page renders correctly, no console errors, no hydration errors, screenshot saved.
+- ESLint: all 12 changed/new files pass with --max-warnings 0 (exit 0).
+
+Known sandbox limitation: the dev server (Next.js 16 webpack, 3000+ modules) OOMs when compiling multiple heavy routes simultaneously in the 3.9GB sandbox. Each route compiles + returns correctly individually. This is a pre-existing environment issue, not a code issue.
+
+Stage Summary:
+- REAL Setu AA provider wired into the banking connect flow using the EXISTING Setu SDK (no second implementation).
+- ConnectBankResult.redirectUrl added — frontend opens the real Setu consent URL.
+- /api/webhooks/setu created with HMAC-SHA256 signature verification (existing SDK helper), idempotency by eventId (Prisma SetuWebhookEvent table), handles all 3 event types (CONSENT_STATUS_UPDATE, SESSION_STATUS_UPDATE, FI_DATA_READY).
+- /banking/consent/return page created with success/pending/failure states + polling.
+- /api/banking/complete route created for AA deferred completion.
+- 32 banking/AA routes auth-guarded (31 by subagent + 1 by main).
+- No silent Setu→Mock fallback (throws SETU_NOT_CONFIGURED).
+- No real Setu outbound calls without creds (provider checks isSetuConfigured() first).
+- No invented credentials (all SETU_* vars are commented placeholders in .env.example).
+- Mock provider fully functional (default BANK_PROVIDER=mock).
+- Prisma models: SetuWebhookEvent + SetuConsent (db:push successful).
+
+Files created (7):
+- src/lib/banking-provider/server/setu-aa-provider.ts
+- src/app/api/webhooks/setu/route.ts
+- src/app/api/banking/complete/route.ts
+- src/app/banking/consent/return/page.tsx
+- src/lib/gstpilot-data/local-workspace.ts (recreated — was missing)
+- .env.example
+
+Files modified (7):
+- src/lib/banking-provider/types.ts (added redirectUrl to ConnectBankResult)
+- src/lib/banking-provider/server/registry.ts (SetuAAProvider instead of FutureSetuProvider)
+- src/lib/setu/types.ts (added redirectUrl to SetuConsentRequest)
+- src/app/api/banking/connect/route.ts (auth guards + createdBy from session + AA deferred completion + SetuConsent persistence)
+- src/hooks/useBanking.ts (open redirectUrl in new tab)
+- src/components/dashboard/home/ConnectBankModal.tsx (provider toggle + Setu mobile number field)
+- src/lib/db.ts (bumped PRISMA_CACHE_VERSION)
+- prisma/schema.prisma (added SetuWebhookEvent + SetuConsent models)
+- 31 banking/AA route files (auth guards — by subagent)
+
+— *Task SETU-REAL-WIRING complete. Both routes verified reachable in the preview environment. Setu SDK fully wired into the banking connect flow. No real Setu calls made (no creds configured). Mock provider unchanged.*

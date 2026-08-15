@@ -1,11 +1,21 @@
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { connectAccount, SUPPORTED_BANKS } from '@/lib/banking/accounts';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+
+    const body = await req.json().catch(() => ({}) as Record<string, unknown>);
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || (body.organizationId as string | undefined) || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     if (!body.bankName || !body.accountNumber || !body.ifsc) {
       return NextResponse.json(
         { error: 'bankName, accountNumber, and ifsc are required', supportedBanks: SUPPORTED_BANKS },
@@ -20,7 +30,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ success: true, account, message: `I've connected your ${body.bankName} account and started syncing.` });
   } catch (err) {
-    console.error('[API /banking/accounts/connect] error:', err);
-    return NextResponse.json({ error: 'Failed to connect account' }, { status: 500 });
+    return friendlyApiError(err, 'Failed to connect account.');
   }
 }

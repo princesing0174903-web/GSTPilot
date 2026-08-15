@@ -6687,3 +6687,61 @@ model GSTSyncJob {
   @@index([configId, createdAt])
   @@index([gstin, period])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Setu Account Aggregator — Webhook Idempotency + Consent Tracking
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Tracks every Setu webhook event received. The `eventId` unique constraint
+// guarantees idempotency — if Setu retries a webhook (which it does), we
+// process it exactly once. The raw payload is stored for audit/debugging.
+model SetuWebhookEvent {
+  id          String   @id @default(cuid())
+  // Setu's event id from the payload, or a derived hash (type+timestamp+consentId)
+  // if Setu doesn't send one. This is the idempotency key.
+  eventId     String   @unique
+  eventType   String   // CONSENT_STATUS_UPDATE | SESSION_STATUS_UPDATE | FI_DATA_READY
+  consentId   String?
+  dataSessionId String?
+  success     Boolean  @default(true)
+  payload     String   // JSON string of the full webhook body (for audit)
+  processed   Boolean  @default(true)
+  processedAt DateTime @default(now())
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([consentId])
+}
+
+// Tracks Setu consents per organization. Created when POST /api/banking/connect
+// initiates a consent, updated by the webhook when the consent status changes.
+// This is how the webhook knows which org a consent belongs to.
+model SetuConsent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  // Setu's consent id (the `id` field from POST /v2/consents response).
+  consentId       String   @unique
+  // The VUA (mobile number) the consent was created for.
+  vua             String
+  // The user who initiated the consent.
+  createdByUid    String
+  // Current consent status: INITIATED | PENDING | ACTIVE | REJECTED | REVOKED | EXPIRED
+  status          String   @default("INITIATED")
+  // The Setu webview URL where the user approves the consent.
+  approvalUrl     String?
+  // The redirect URL Setu sends the user to after consent.
+  redirectUrl     String?
+  // When the consent was approved (Setu webhook CONSENT_STATUS_UPDATE + ACTIVE).
+  approvedAt      DateTime?
+  // When the consent expires (Setu's consentExpiry).
+  expiresAt       DateTime?
+  // Linked bank connection id (set after completeConnection succeeds).
+  connectionId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdByUid])
+}

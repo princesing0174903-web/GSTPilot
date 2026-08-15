@@ -76,6 +76,16 @@ export interface SetuConsentRequest {
   vua: string;
   consentDuration: SetuConsentDuration;
   dataRange: SetuDateRange;
+  /**
+   * Optional redirect URL. Setu redirects the user's browser here after they
+   * approve/deny the consent in the Setu webview. The redirect includes query
+   * params (consentId, status) that the return page can read to show the
+   * appropriate UI state.
+   *
+   * If omitted, Setu uses the redirect URL configured at the product-instance
+   * level in the Setu dashboard.
+   */
+  redirectUrl?: string;
   context?: Array<{ key: string; value: string }>;
   additionalParams?: { tags?: string[] };
 }

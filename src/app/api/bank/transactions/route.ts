@@ -3,6 +3,7 @@
 // Supports: ?accountId=, ?category=, ?type=, ?matched=, ?limit=
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { ensureSeedData } from '@/lib/banking/engine';
 
@@ -10,8 +11,15 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await ensureSeedData();
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
     const url = new URL(request.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
+    await ensureSeedData();
     const accountId = url.searchParams.get('accountId');
     const category = url.searchParams.get('category');
     const type = url.searchParams.get('type');
@@ -54,10 +62,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ ok: true, count: transactions.length, transactions });
   } catch (err) {
-    console.error('[bank/transactions] GET failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to load transactions', detail: String(err) },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'Failed to load transactions.');
   }
 }

@@ -228,7 +228,24 @@ export function useBanking(): UseBankingResult {
           throw new Error(data.error ?? 'Failed to connect bank account.');
         }
 
-        const { connectionRef, accountNumberMasked, accountSnapshot } = data.result;
+        const { connectionRef, accountNumberMasked, accountSnapshot, redirectUrl } = data.result;
+
+        // AA provider flow (Setu): if a redirectUrl is present, the connection
+        // is NOT complete yet. Open the Setu consent webview in a new tab so
+        // the user can approve data sharing. Do NOT persist a connection doc
+        // locally — the connection finalizes after the user returns from Setu
+        // (via /banking/consent/return → /api/banking/complete).
+        if (redirectUrl) {
+          window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+          setError(null);
+          // Use a non-error informational signal — the caller can show a toast.
+          // We return true so the UI knows the connect call succeeded (the
+          // consent webview is now open).
+          void connectionRef;
+          return true;
+        }
+
+        // Instant-complete flow (Mock / direct providers): persist immediately.
         const { encryptedConnection, consentExpiry, accountSnapshot: completedSnapshot } = data.complete;
 
         // Persist a connection doc with status='connected'.

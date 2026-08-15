@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 import {
   syncBalances,
   syncTransactions,
@@ -29,7 +30,16 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+
     const body = await req.json();
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || body.organizationId || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     const {
       organizationId,
       connectionId,

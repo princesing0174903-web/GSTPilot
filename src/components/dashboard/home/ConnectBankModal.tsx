@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Landmark, CheckCircle2, Building2 } from 'lucide-react';
+import { Loader2, Landmark, CheckCircle2, Building2, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
@@ -47,6 +47,9 @@ interface ConnectBankModalProps {
   userEmail?: string | null;
 }
 
+// Provider selection: 'mock' = instant Sandbox connect; 'setu' = real Setu AA consent flow.
+type ConnectProvider = 'mock' | 'setu';
+
 const BANKS = [
   { id: 'hdfc', name: 'HDFC Bank', color: '#004C8F' },
   { id: 'icici', name: 'ICICI Bank', color: '#AE282E' },
@@ -72,6 +75,7 @@ export function ConnectBankModal({
   userEmail,
 }: ConnectBankModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
+  const [connectProvider, setConnectProvider] = useState<ConnectProvider>('mock');
   const [selectedBank, setSelectedBank] = useState<(typeof BANKS)[number] | null>(null);
   const [holder, setHolder] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -84,6 +88,7 @@ export function ConnectBankModal({
   React.useEffect(() => {
     if (open) {
       setStep(1);
+      setConnectProvider('mock');
       setSelectedBank(null);
       setHolder('');
       setAccountNumber('');
@@ -94,9 +99,13 @@ export function ConnectBankModal({
     }
   }, [open]);
 
-  const ifscValid = IFSC_REGEX.test(ifsc.trim().toUpperCase());
+  // For the Setu AA flow, `accountNumber` carries the mobile number (VUA).
+  const isSetu = connectProvider === 'setu';
+  const ifscValid = isSetu ? true : IFSC_REGEX.test(ifsc.trim().toUpperCase());
   const holderValid = holder.trim().length >= 2;
-  const accountValid = accountNumber.trim().length >= 9;
+  const accountValid = isSetu
+    ? /^\d{10}$/.test(accountNumber.trim())
+    : accountNumber.trim().length >= 9;
   const formValid = ifscValid && holderValid && accountValid;
 
   const handleConnect = async () => {
@@ -109,11 +118,12 @@ export function ConnectBankModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId,
-          provider: 'mock', // mock provider does instant connect+complete
+          provider: connectProvider, // 'mock' = instant; 'setu' = AA consent redirect
           accountHolder: holder.trim(),
           bankName: selectedBank.name,
+          // For Setu AA, accountNumber carries the mobile number (VUA).
           accountNumber: accountNumber.trim(),
-          ifsc: ifsc.trim().toUpperCase(),
+          ifsc: isSetu ? 'NA' : ifsc.trim().toUpperCase(),
           accountType,
           createdBy: {
             uid: userId ?? 'unknown',
@@ -122,10 +132,25 @@ export function ConnectBankModal({
           },
         }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Could not connect bank (${res.status}).`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data?.error || `Could not connect bank (${res.status}).`);
       }
+
+      // AA flow: if a redirectUrl is present, the connection is deferred —
+      // open the Setu consent webview in a new tab.
+      if (data.result?.redirectUrl) {
+        window.open(data.result.redirectUrl, '_blank', 'noopener,noreferrer');
+        toast.info('Consent Required', {
+          description:
+            'A new tab opened for Setu consent approval. Approve the data-sharing request, then return here — your bank connection will complete automatically.',
+          duration: 8000,
+        });
+        onConnected?.();
+        onOpenChange(false);
+        return;
+      }
+
       toast.success('Bank Connected', {
         description: `${selectedBank.name} account linked successfully.`,
       });
@@ -170,32 +195,82 @@ export function ConnectBankModal({
         </div>
 
         {step === 1 && (
-          <div className="grid grid-cols-2 gap-2 py-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
-            {BANKS.map((bank) => (
+          <div className="space-y-3 py-2">
+            {/* Provider toggle: Sandbox (Mock) vs Setu AA */}
+            <div className="grid grid-cols-2 gap-2">
               <button
-                key={bank.id}
                 type="button"
-                onClick={() => setSelectedBank(bank)}
-                className={`flex items-center gap-2.5 rounded-xl border px-3 py-3 text-left transition-all ${
-                  selectedBank?.id === bank.id
+                onClick={() => setConnectProvider('mock')}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                  connectProvider === 'mock'
                     ? 'border-blue-500/40 bg-blue-500/[0.06]'
                     : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
                 }`}
               >
-                <div
-                  className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0"
-                  style={{ backgroundColor: `${bank.color}20`, color: bank.color }}
-                >
-                  <Building2 className="h-4 w-4" />
+                <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-blue-500/10 shrink-0">
+                  <Building2 className="h-3.5 w-3.5 text-blue-400" />
                 </div>
-                <span className="text-xs font-medium text-foreground truncate flex-1">
-                  {bank.name}
-                </span>
-                {selectedBank?.id === bank.id && (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                )}
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-foreground">Sandbox</div>
+                  <div className="text-[10px] text-muted-foreground">Instant demo connect</div>
+                </div>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setConnectProvider('setu')}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                  connectProvider === 'setu'
+                    ? 'border-blue-500/40 bg-blue-500/[0.06]'
+                    : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                }`}
+              >
+                <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-blue-500/10 shrink-0">
+                  <Smartphone className="h-3.5 w-3.5 text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-foreground">Setu AA</div>
+                  <div className="text-[10px] text-muted-foreground">Real bank consent</div>
+                </div>
+              </button>
+            </div>
+
+            {isSetu && (
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.04] px-3 py-2">
+                <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                  Setu Account Aggregator uses your mobile number to initiate a
+                  consent flow. You will be redirected to Setu's secure webview to
+                  approve data sharing. Requires Setu sandbox credentials.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+              {BANKS.map((bank) => (
+                <button
+                  key={bank.id}
+                  type="button"
+                  onClick={() => setSelectedBank(bank)}
+                  className={`flex items-center gap-2.5 rounded-xl border px-3 py-3 text-left transition-all ${
+                    selectedBank?.id === bank.id
+                      ? 'border-blue-500/40 bg-blue-500/[0.06]'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div
+                    className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0"
+                    style={{ backgroundColor: `${bank.color}20`, color: bank.color }}
+                  >
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                  <span className="text-xs font-medium text-foreground truncate flex-1">
+                    {bank.name}
+                  </span>
+                  {selectedBank?.id === bank.id && (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -215,48 +290,73 @@ export function ConnectBankModal({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bank-number" className="text-xs">
-                Account Number <span className="text-red-400">*</span>
+                {isSetu ? (
+                  <span className="flex items-center gap-1">
+                    Mobile Number (VUA) <span className="text-red-400">*</span>
+                  </span>
+                ) : (
+                  <span>
+                    Account Number <span className="text-red-400">*</span>
+                  </span>
+                )}
               </Label>
               <Input
                 id="bank-number"
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value.replace(/\s/g, ''))}
-                placeholder="XXXXXXXXXX"
+                placeholder={isSetu ? '10-digit mobile number' : 'XXXXXXXXXX'}
                 inputMode="numeric"
+                maxLength={isSetu ? 10 : undefined}
                 className="text-sm font-mono tracking-wider"
               />
+              {isSetu && (
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  The mobile number registered with your bank / Account Aggregator.
+                </p>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="bank-ifsc" className="text-xs">
-                  IFSC <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  id="bank-ifsc"
-                  value={ifsc}
-                  onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-                  placeholder="HDFC0001234"
-                  maxLength={11}
-                  autoCapitalize="characters"
-                  className="text-sm font-mono tracking-wider"
-                />
+            {!isSetu && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="bank-ifsc" className="text-xs">
+                    IFSC <span className="text-red-400">*</span>
+                  </Label>
+                  <Input
+                    id="bank-ifsc"
+                    value={ifsc}
+                    onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                    placeholder="HDFC0001234"
+                    maxLength={11}
+                    autoCapitalize="characters"
+                    className="text-sm font-mono tracking-wider"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Account Type</Label>
+                  <Select
+                    value={accountType}
+                    onValueChange={(v) => setAccountType(v as 'savings' | 'current')}
+                  >
+                    <SelectTrigger className="text-sm h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="savings">Savings</SelectItem>
+                      <SelectItem value="current">Current</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Account Type</Label>
-                <Select
-                  value={accountType}
-                  onValueChange={(v) => setAccountType(v as 'savings' | 'current')}
-                >
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="savings">Savings</SelectItem>
-                    <SelectItem value="current">Current</SelectItem>
-                  </SelectContent>
-                </Select>
+            )}
+            {isSetu && (
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.04] px-3 py-2">
+                <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                  After clicking “Connect Bank”, a new tab will open for Setu consent
+                  approval. Approve the data-sharing request there, then return to
+                  GSTPilot — your bank connection will complete automatically.
+                </p>
               </div>
-            </div>
+            )}
             {error && (
               <p className="text-xs text-red-400 leading-relaxed">{error}</p>
             )}

@@ -19366,3 +19366,58 @@ Files modified (7):
 - 31 banking/AA route files (auth guards — by subagent)
 
 — *Task SETU-REAL-WIRING complete. Both routes verified reachable in the preview environment. Setu SDK fully wired into the banking connect flow. No real Setu calls made (no creds configured). Mock provider unchanged.*
+
+---
+Task ID: SETU-REDIRECT-URL-FIX
+Agent: main (Z.ai Code)
+Task: Investigate why Setu was rejecting the redirect URL https://preview-chat-...space-z.ai/banking/consent/return and fix it so Setu can save it and reveal sandbox test credentials.
+
+Work Log:
+- User reported: Setu sandbox Step 1 — Test Callback URL saved OK, but Redirect URL could NOT be saved, blocking sandbox credential reveal.
+- Read prior worklog (SETU-REAL-WIRING) — confirmed /banking/consent/return page + /api/webhooks/setu route were created in the previous session, and worklog claimed they returned 200.
+- Inspected /banking/consent/return/page.tsx — file exists, uses useSearchParams() without Suspense boundary (potential Next.js 16 issue, but not the primary blocker).
+- Started dev server (bun run dev). First curl to /banking/consent/return returned HTTP 500 (not 200 as worklog claimed).
+- Read dev.log → ROOT CAUSE FOUND:
+    ⨯ ./src/components/command-palette/CommandPalette.tsx:66:1
+    Module not found: Can't resolve '@/lib/gstpilot-data/local-workspace'
+  Import trace: CommandPalette → DashboardShell → providers-lazy → AppRoot → app/page.tsx (root layout).
+  This broke the root layout, causing EVERY route (including /banking/consent/return) to return 500.
+- Verified src/lib/gstpilot-data/local-workspace.ts did NOT exist on disk, despite:
+    • The SETU-REAL-WIRING worklog claiming it was created
+    • 15 files importing { isLocalOrgId } from it
+    • The barrel src/lib/gstpilot-data/index.ts doing `export * from './local-workspace'`
+- Confirmed all 15 importers only need isLocalOrgId (isPreviewMode comes from useOrg() context, not this module).
+- Confirmed the canonical pattern: orgId.startsWith('local-') is used in session.ts, config.ts, engine.ts.
+- CREATED src/lib/gstpilot-data/local-workspace.ts with:
+    • isLocalOrgId(orgId) — returns true if orgId starts with 'local-' (the only symbol actually imported)
+    • isPreviewMode() — server-side check for Firebase Admin SDK availability
+    • isLiveBankingProvider() — checks BANK_PROVIDER env var
+- Added Suspense boundary around useSearchParams() in /banking/consent/return/page.tsx (defensive — prevents Next.js 16 production build failure and potential dev 500s). Split into ConsentReturnPage (wrapper) + ConsentReturnFallback + ConsentReturnContent.
+- ESLint: clean (exit 0) on the edited page.
+- Started dev server with a persistent watchdog (setsid + nohup + restart loop) because the sandbox OOM-kills the Next.js 16 webpack dev server periodically.
+
+Verification (single-command, no gaps, through preview HTTPS gateway):
+- GET /banking/consent/return → HTTP 200 (39202 bytes, 0.32s, 0 redirects, no Location header)
+- GET /banking/consent/return?consentId=abc123&status=ACTIVE → HTTP 200
+- GET /api/webhooks/setu → HTTP 200 ({"ok":true,"endpoint":"/api/webhooks/setu","timestamp":"..."})
+- Content: page contains "GSTPilot", "Setu", "consent", valid <!DOCTYPE html>
+- HTTPS: yes (preview gateway terminates TLS)
+- No auth required: page is a public client component (no requireAuth gate) — Setu can validate it without credentials
+- No redirect loop: direct 200, no Location header
+- Server kept alive by watchdog (PID 2562) + next-server (PID 2579)
+
+Stage Summary:
+- ROOT CAUSE: Missing module src/lib/gstpilot-data/local-workspace.ts (claimed created in prior session but absent from disk) caused webpack "Module not found" error that broke the root layout, making every route return HTTP 500. Setu's redirect-URL validation saw 500 and refused to save.
+- FIX: Created the missing module (isLocalOrgId + isPreviewMode + isLiveBankingProvider). Added Suspense boundary around useSearchParams() for Next.js 16 production safety.
+- RESULT: Both /banking/consent/return and /api/webhooks/setu now return HTTP 200 over HTTPS through the preview gateway. No redirects, no auth required, correct content.
+- The exact URL to enter into Setu's Redirect URL field: https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/banking/consent/return
+- The webhook URL (already saved by user): https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/api/webhooks/setu
+- No production configuration modified. No fake credentials. No new routes invented.
+
+Files created (1):
+- src/lib/gstpilot-data/local-workspace.ts
+
+Files modified (1):
+- src/app/banking/consent/return/page.tsx (added Suspense boundary)
+
+— *Task SETU-REDIRECT-URL-FIX complete. Root cause: missing module → HTTP 500 → Setu rejected. Fix applied. Both routes verified HTTP 200 via preview gateway. User can now save the redirect URL in Setu and complete Step 1.*

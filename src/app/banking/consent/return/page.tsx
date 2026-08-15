@@ -19,13 +19,52 @@
 
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, XCircle, Clock, Loader2, Landmark, ArrowLeft } from 'lucide-react';
 
 type PageState = 'loading' | 'success' | 'pending' | 'failure' | 'no-consent';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Suspense boundary wrapper.
+//
+// useSearchParams() MUST be wrapped in <Suspense> in Next.js 13+ App Router.
+// Without it, the route is deopted to client-side rendering AND the production
+// build fails. The dev server serves a 500 in some cases without this boundary.
+// This is critical for Setu's URL validation — the route must return 200.
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function ConsentReturnPage() {
+  return (
+    <Suspense fallback={<ConsentReturnFallback />}>
+      <ConsentReturnContent />
+    </Suspense>
+  );
+}
+
+function ConsentReturnFallback() {
+  return (
+    <main className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-blue-500/10">
+            <Landmark className="h-8 w-8 text-blue-400" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-foreground">Finalizing…</h1>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+              Loading your bank connection status…
+            </p>
+          </div>
+          <div className="py-4">
+            <Loader2 className="h-12 w-12 text-blue-400 animate-spin" />
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function ConsentReturnContent() {
   const searchParams = useSearchParams();
   const consentId = searchParams.get('consentId') || searchParams.get('consent') || searchParams.get('id');
   const initialStatus = searchParams.get('status')?.toUpperCase();
@@ -157,6 +196,7 @@ export default function ConsentReturnPage() {
           <div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-blue-500/10">
             <Landmark className="h-8 w-8 text-blue-400" />
           </div>
+          {/* content below */}
 
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">

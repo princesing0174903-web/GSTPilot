@@ -173,6 +173,11 @@ export class SetuAAProvider implements IBankProvider {
       );
     }
 
+    // Check Setu configuration FIRST (throws SETU_NOT_CONFIGURED with the full
+    // list of missing vars) — before the redirect-URL check. This way the user
+    // sees ALL missing config at once, not just the redirect URL.
+    const client = this.getClient();
+
     // Resolve the redirect URL (where Setu sends the user after consent).
     const redirectUrl = resolveRedirectUrl();
     if (!redirectUrl) {
@@ -182,8 +187,6 @@ export class SetuAAProvider implements IBankProvider {
         { code: 'SETU_REDIRECT_NOT_CONFIGURED', statusCode: 503, retryable: false },
       );
     }
-
-    const client = this.getClient();
 
     // Create the consent request. Default: 12 months consent, last 12 months of data.
     const now = new Date();

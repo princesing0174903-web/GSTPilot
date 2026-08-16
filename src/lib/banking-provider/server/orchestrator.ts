@@ -64,13 +64,19 @@ function assertAccountNumber(accountNumber: string | undefined | null): void {
 export async function connectBank(input: ConnectBankInput): Promise<ConnectBankResult> {
   assertOrg(input.organizationId);
   assertAccountNumber(input.accountNumber);
-  if (!input.ifsc) {
+  const provider = getBankProvider();
+  // IFSC is required ONLY for direct-bank providers (mock/razorpayx/perfios).
+  // For Account Aggregator providers (setu/aa/finvu), the bank account is
+  // discovered AFTER the user approves consent — IFSC is not known upfront.
+  // The SetuAAProvider.connect() uses `accountNumber` as the VUA (mobile).
+  const isAAProvider =
+    provider.provider === 'setu' || provider.provider === 'aa' || provider.provider === 'finvu';
+  if (!input.ifsc && !isAAProvider) {
     throw new BankingError('IFSC code is required.', {
       code: 'INVALID_IFSC',
       statusCode: 400,
     });
   }
-  const provider = getBankProvider();
   try {
     return await provider.connect({
       accountHolder: input.accountHolder,

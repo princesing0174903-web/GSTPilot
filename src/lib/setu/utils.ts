@@ -45,9 +45,14 @@ export function loadSetuConfig(): SetuConfig | null {
 
   if (missing.length > 0) {
     // Single warn per missing-config evaluation — keeps logs clean.
+    // NOTE: When BANK_PROVIDER=setu, the registry does NOT fall back to Mock —
+    // SetuAAProvider is instantiated and every method throws SETU_NOT_CONFIGURED.
+    // This warn is informational only. To use Mock (Demo/Sandbox), set
+    // BANK_PROVIDER=mock explicitly.
     console.warn(
       `[setu] Not configured — missing env vars: ${missing.join(', ')}. ` +
-        `SetuBankingProvider will be unavailable; factory will fall back to MockBankingProvider.`,
+        `If BANK_PROVIDER=setu, Setu AA calls will fail with SETU_NOT_CONFIGURED (no silent Mock fallback). ` +
+        `To use the Mock provider for Demo/Sandbox, set BANK_PROVIDER=mock.`,
     );
     return null;
   }

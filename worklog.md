@@ -19421,3 +19421,86 @@ Files modified (1):
 - src/app/banking/consent/return/page.tsx (added Suspense boundary)
 
 — *Task SETU-REDIRECT-URL-FIX complete. Root cause: missing module → HTTP 500 → Setu rejected. Fix applied. Both routes verified HTTP 200 via preview gateway. User can now save the redirect URL in Setu and complete Step 1.*
+
+---
+Task ID: SETU-SANDBOX-ACTIVATION
+Agent: main (Z.ai Code)
+Task: Activate Setu SANDBOX integration. User will provide TEST credentials via secure server env. Verify the full flow: connect → consent → webhook → complete → fetch → reconcile → Oracle. 20 verification tests. No silent fallback. No GST changes. No fake data.
+
+Work Log:
+- Checked .env: NO SETU_* vars present yet. BANK_PROVIDER not set (defaults to mock). User said they will provide creds via secure server env.
+- Verified all 12 existing Setu implementation files exist and are correct (SetuAAProvider, SDK, routes, webhook, consent return, Prisma models).
+- FOUND & FIXED CRITICAL BUG #1: orchestrator.connectBank() threw "IFSC code is required" for ALL providers — but AA providers (Setu) don't have an IFSC upfront (bank discovered post-consent). This would have blocked the entire Setu connect flow even with valid creds. Fixed: skip IFSC check for setu/aa/finvu providers.
+- FOUND & FIXED CRITICAL BUG #2: verifyWebhookSignature() only accepted raw base64 signatures. Real Setu webhooks may use hex, base64, or prefixed (sha256=...) format. Fixed: now handles all 4 formats (raw b64, prefixed b64, raw hex, prefixed hex) with timingSafeEqual.
+- FOUND & FIXED BUG #3: SetuAAProvider.connect() checked redirect URL before checking if Setu is configured — user saw SETU_REDIRECT_NOT_CONFIGURED instead of the full list of missing vars. Fixed: call ensureConfigured() first.
+- FIXED BUG #4: utils.ts log message said "factory will fall back to MockBankingProvider" — but the registry does NOT fall back. Fixed the message to accurately say "no silent Mock fallback."
+- Recreated src/lib/gstpilot-data/local-workspace.ts (was lost to sandbox reset — 15 files import isLocalOrgId from it; without it every route returns 500).
+- Created .env.setu.template with all 8 required env vars + instructions (no secrets — placeholders only).
+
+Verification (all PASSED):
+- TEST A: Webhook GET health → 200 {"ok":true,"endpoint":"/api/webhooks/setu"}
+- TEST B: Webhook POST no secret → 503 "Webhook secret not configured" (not parsed insecurely)
+- TEST C: Banking status no auth → 401 AUTH_REQUIRED
+- TEST D: Banking connect no auth → 401 AUTH_REQUIRED
+- TEST E: Banking complete no auth → 401 AUTH_REQUIRED
+- TEST F: Consent return page (success state) → 200, contains "GSTPilot" + "Setu"
+- TEST G: Consent return page (failure state) → 200
+- TEST H: Consent return page (pending state) → 200
+- TEST 9a: Webhook raw base64 sig → 200 accepted + stored
+- TEST 9b: Webhook prefixed base64 (sha256=...) → 200 (idempotent duplicate)
+- TEST 9c: Webhook raw hex → 200 accepted
+- TEST 9d: Webhook prefixed hex (sha256=...) → 200 accepted
+- TEST 9e: Webhook idempotency (resend same event) → 200 duplicate:true
+- TEST 9f: Webhook wrong signature → 401 rejected
+- TEST 9g: Webhook tampered payload → 401 rejected (sig mismatch)
+- TEST 9h: SESSION_STATUS_UPDATE event → 200 processed
+- TEST 9i: FI_DATA_READY event → 200 processed
+- TEST 20a: BANK_PROVIDER=setu, no creds, connect → 503 SETU_NOT_CONFIGURED (NOT Mock fallback)
+- TEST 20b: BANK_PROVIDER=setu, no creds, complete → 503 SETU_NOT_CONFIGURED (NOT Mock fallback)
+- TEST 20c: BANK_PROVIDER=setu, no creds, status → healthy:false, provider:"setu", isLive:true (correctly identifies as Setu, not Mock)
+- ESLint: all changed files clean (exit 0)
+
+Stage Summary:
+- Implementation is COMPLETE and VERIFIED for all paths that don't require real Setu outbound calls.
+- 2 critical bugs fixed that would have blocked the Setu flow even with valid credentials (IFSC guard, webhook signature format).
+- NO silent fallback: BANK_PROVIDER=setu with no creds → SETU_NOT_CONFIGURED (503), never Mock.
+- Webhook accepts all 4 signature formats (raw/prefixed × base64/hex) — robust to Setu's actual format.
+- Auth guards on all banking routes (401 without auth).
+- Consent return page renders all 3 states (success/pending/failure).
+- Idempotent webhook handling (duplicate events return 200 without reprocessing).
+- SetuConsent + SetuWebhookEvent Prisma models present for consent→org correlation + audit.
+- .env.setu.template created with all 8 vars + instructions.
+
+BLOCKING on user action:
+- User must generate the Setu sandbox OAuth key in Bridge → Org settings → API keys → OAuth → Generate key (Sandbox env, scoped to the AA product).
+- Then set: SETU_CLIENT_ID, SETU_CLIENT_SECRET, SETU_WEBHOOK_SECRET, BANK_PROVIDER=setu in .env.
+- SETU_PRODUCT_INSTANCE_ID is already known: 66168f7c-f3f5-4d4d-860f-921ced28abb9.
+- SETU_BASE_URL / SETU_AUTH_URL: confirm exact sandbox endpoints from Bridge after key generation.
+
+Once creds are configured + server restarted, the remaining tests (5-8, 10-19) can run:
+- Test 5: Connect Bank → Setu AA (real createConsent call)
+- Test 6: Open real Setu sandbox consent URL
+- Test 7: Complete sandbox consent (user approves in Setu webview)
+- Test 8: Verify consent return page (already verified for all states)
+- Test 10: Complete banking connection (real completeConnection call)
+- Test 11: Fetch sandbox accounts (real createSession + getSession)
+- Test 12: Fetch sandbox transactions (real FI data fetch)
+- Test 13: Persist with correct organizationId (SetuConsent + BankConnection)
+- Test 14: Run banking reconciliation
+- Test 15: Verify cash-flow calculations
+- Test 16: Verify Oracle banking insights
+- Test 17: Verify duplicate sync/idempotency
+- Test 18: Verify disconnect/reconnect
+- Test 19: Verify tenant isolation (cross-org access denied)
+
+Files created (2):
+- src/lib/gstpilot-data/local-workspace.ts (recreated — lost to sandbox reset)
+- .env.setu.template
+
+Files modified (4):
+- src/lib/banking-provider/server/orchestrator.ts (IFSC guard for AA providers)
+- src/lib/banking-provider/server/setu-aa-provider.ts (config check before redirect URL check)
+- src/lib/setu/webhooks.ts (robust 4-format signature verification)
+- src/lib/setu/utils.ts (accurate no-fallback log message)
+
+— *Task SETU-SANDBOX-ACTIVATION (pre-credentials phase) complete. All safety/negative tests pass. 2 critical bugs fixed. Waiting for user to provide Setu sandbox TEST credentials via secure server env.*

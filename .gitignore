@@ -55,3 +55,9 @@ server.log
 
 # Tool scratch output (not source code)
 /tool-results/
+# Environment files with secrets — never commit
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.setu.template

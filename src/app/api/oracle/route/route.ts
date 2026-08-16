@@ -1,10 +1,22 @@
 // POST /api/oracle/route — Multi-Model AI Router™ explicit routing
 // Returns the chosen model for a given request without executing the call.
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { chooseModel } from '@/lib/oracle-core/router';
 import type { ModelPurpose, ModelTier, AIProvider } from '@/lib/oracle-core/types';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(request.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   let body: any = {};
   try {
     body = await request.json();

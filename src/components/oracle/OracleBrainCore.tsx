@@ -57,6 +57,17 @@ import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { fetchWithTimeout } from '@/lib/async';
 import { getCachedSnapshot, setCachedSnapshot } from '@/hooks/useBusinessSnapshot';
+// ─── Oracle UI upgrade (ORACLE-UI-UPGRADE) ────────────────────────────────────
+import { CopilotModeSelector } from './CopilotModeSelector';
+import { ExecutiveBriefingPanel } from './ExecutiveBriefingPanel';
+import { EvidenceCard } from './EvidenceCard';
+import { EnvironmentBadge } from './EnvironmentBadge';
+import { PermissionTierBadge } from './PermissionTierBadge';
+import { COPILOT_MODES, type CopilotModeId } from '@/lib/oracle/brain/copilot-modes';
+import type { PermissionTier } from '@/lib/oracle/brain/tool-permissions';
+import { getToolTier } from '@/lib/oracle/brain/tool-permissions';
+import type { Evidence, DataEnvironment } from '@/lib/oracle/context/types';
+import type { ExecutiveBriefing } from '@/lib/oracle/executive-briefing';
 
 // ─── Props (no context dependency — keeps this module Firebase-free) ──────────
 
@@ -81,7 +92,18 @@ interface ChatMessage {
 }
 
 type MessagePart =
-  | { type: 'tool-call'; tool: string; args: Record<string, any>; result?: string; error?: string; durationMs?: number }
+  | {
+      type: 'tool-call';
+      tool: string;
+      args: Record<string, any>;
+      result?: string;
+      error?: string;
+      durationMs?: number;
+      /** ORACLE-UI-UPGRADE: permission tier emitted by the brain route (tool-start / tool-result). */
+      tier?: PermissionTier;
+      /** ORACLE-UI-UPGRADE: evidence attached to the tool result (source provenance). */
+      evidence?: Evidence;
+    }
   | ActionConfirmPart
   | WorkflowPart;
 
@@ -118,6 +140,10 @@ interface ActionConfirmPart {
     recentActivity?: any[];
     memory?: any[];
   };
+  /** ORACLE-UI-UPGRADE: permission tier for this action (resolved client-side via getToolTier). */
+  tier?: PermissionTier;
+  /** ORACLE-UI-UPGRADE: evidence attached to this action preview (source provenance). */
+  evidence?: Evidence;
 }
 
 interface Session {
@@ -596,6 +622,33 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const [timeline, setTimeline] = useState<TimelineEventLite[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
 
+  // ─── ORACLE-UI-UPGRADE: Copilot mode (persisted to localStorage) ───
+  // The active mode shapes Oracle's system prompt, tool allowlist, and the
+  // suggested prompts in the empty state. It's also sent in the brain POST
+  // body so the backend can switch system-prompt + tool allowlist accordingly.
+  const [mode, setMode] = useState<CopilotModeId>('general');
+  // Hydrate mode from localStorage on mount (client-only — guarded against SSR).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem('gstpilot.oracle.mode');
+      if (stored && COPILOT_MODES[stored as CopilotModeId]) {
+        setMode(stored as CopilotModeId);
+      }
+    } catch {
+      // localStorage might be unavailable (privacy mode) — silently fall back to 'general'.
+    }
+  }, []);
+  const handleModeChange = useCallback((next: CopilotModeId) => {
+    setMode(next);
+    try {
+      window.localStorage.setItem('gstpilot.oracle.mode', next);
+    } catch {
+      // best-effort — ignore failures.
+    }
+  }, []);
+  const activeMode = COPILOT_MODES[mode] ?? COPILOT_MODES.general;
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -771,11 +824,14 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       const res = await fetch('/api/oracle/brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // ORACLE-UI-UPGRADE: send the active copilot mode in the POST body so
+        // the backend can switch its system-prompt + tool allowlist accordingly.
         body: JSON.stringify({
           message: trimmed,
           sessionId: currentSessionId,
           orgId,
           userId: undefined,
+          mode,
         }),
         signal: controller.signal,
       });
@@ -812,6 +868,16 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
               case 'session':
                 resolvedSessionId = data.sessionId;
                 setCurrentSessionId(data.sessionId);
+                // ORACLE-UI-UPGRADE: the brain route now echoes the active mode
+                // back in the session event. If the backend switched modes
+                // (e.g. via a message prefix), sync the local state so the
+                // selector + suggested prompts stay consistent.
+                if (data.mode && COPILOT_MODES[data.mode as CopilotModeId] && data.mode !== mode) {
+                  setMode(data.mode as CopilotModeId);
+                  try {
+                    window.localStorage.setItem('gstpilot.oracle.mode', data.mode);
+                  } catch {}
+                }
                 break;
               case 'token':
                 updateAssistant(m => ({ ...m, content: m.content + (data.text || '') }));
@@ -824,10 +890,18 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   status: 'running',
                 };
                 toolEvents.push(te);
+                // ORACLE-UI-UPGRADE: capture the permission tier emitted by the
+                // brain route so the ToolCallCard can render a READ/CONFIRM/
+                // STRONG CONFIRM badge.
+                const tier: PermissionTier | undefined =
+                  data.tier === 'read-only' || data.tier === 'confirmation' || data.tier === 'strong-confirm'
+                    ? data.tier
+                    : getToolTier(data.tool);
                 updateAssistant(m => ({ ...m, parts: [...m.parts, {
                   type: 'tool-call' as const,
                   tool: te.tool,
                   args: te.args,
+                  tier,
                 }] }));
                 break;
               }
@@ -839,11 +913,29 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   te.durationMs = data.durationMs;
                   te.artifacts = data.result?.artifacts;
                 }
+                // ORACLE-UI-UPGRADE: the brain route now attaches an `evidence`
+                // object to the tool result (source provenance). Capture it and
+                // the permission tier so the ToolCallCard can render a source
+                // citation card + environment badge below the result.
+                const resultEvidence: Evidence | undefined =
+                  data.result?.evidence && typeof data.result.evidence === 'object' && data.result.evidence.id
+                    ? data.result.evidence as Evidence
+                    : undefined;
+                const resultTier: PermissionTier | undefined =
+                  data.tier === 'read-only' || data.tier === 'confirmation' || data.tier === 'strong-confirm'
+                    ? data.tier
+                    : undefined;
                 updateAssistant(m => ({
                   ...m,
                   parts: m.parts.map((p, i) =>
                     i === m.parts.length - 1 && p.type === 'tool-call' && p.tool === data.tool && !p.result
-                      ? { ...p, result: data.result?.summary, durationMs: data.durationMs } as MessagePart
+                      ? {
+                          ...p,
+                          result: data.result?.summary,
+                          durationMs: data.durationMs,
+                          tier: resultTier ?? p.tier,
+                          evidence: resultEvidence ?? p.evidence,
+                        } as MessagePart
                       : p
                   ),
                 }));
@@ -864,6 +956,14 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                 break;
               }
               case 'action-confirm': {
+                // ORACLE-UI-UPGRADE: resolve the permission tier client-side via
+                // getToolTier (the action-confirm SSE event doesn't include it
+                // today). Also forward an optional evidence payload if present.
+                const actionTier: PermissionTier = getToolTier(data.tool);
+                const actionEvidence: Evidence | undefined =
+                  data.evidence && typeof data.evidence === 'object' && data.evidence.id
+                    ? data.evidence as Evidence
+                    : undefined;
                 const part: ActionConfirmPart = {
                   type: 'action-confirm',
                   tool: data.tool,
@@ -877,6 +977,8 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                   validationFields: Array.isArray(data.validationFields) ? data.validationFields : [],
                   note: data.note,
                   state: 'pending',
+                  tier: actionTier,
+                  evidence: actionEvidence,
                 };
                 updateAssistant(m => ({ ...m, parts: [...m.parts, part] }));
                 break;
@@ -938,7 +1040,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [orgId, currentSessionId, isStreaming, refreshSessions, refreshMemory, onNavigate]);
+  }, [orgId, currentSessionId, isStreaming, refreshSessions, refreshMemory, onNavigate, mode]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -1293,15 +1395,15 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   return (
     <div className="h-full w-full flex flex-col bg-black overflow-hidden">
       {/* ─── Header ─── */}
-      <header className="shrink-0 h-16 border-b border-[#1F1F1F] bg-black flex items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <header className="shrink-0 h-16 border-b border-[#1F1F1F] bg-black flex items-center justify-between px-4 sm:px-6 gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative shrink-0">
             <div className="absolute inset-0 bg-[#2563EB]/20 blur-md rounded-full" />
             <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5 border border-[#2563EB]/30 flex items-center justify-center">
               <BrainCircuit className="h-5 w-5 text-[#60A5FA]" />
             </div>
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-white tracking-tight">Oracle</span>
               <span className="hidden sm:inline-flex gst-status gst-status-info">AI CFO</span>
@@ -1311,9 +1413,16 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
               Online · reads live data · takes real actions
             </div>
           </div>
+          {/* ORACLE-UI-UPGRADE: Copilot mode selector (next to the "Oracle" title). */}
+          <CopilotModeSelector
+            mode={mode}
+            onChange={handleModeChange}
+            disabled={isStreaming}
+            className="ml-1 shrink-0"
+          />
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Memory popover */}
           <div className="relative" data-oracle-popover>
             <button
@@ -1462,6 +1571,16 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       <main ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
 
+          {/* ORACLE-UI-UPGRADE: Today's Briefing — collapsible 8-section executive
+              briefing panel (above the chat). Defaults expanded on desktop,
+              collapsed on mobile. Fetches /api/oracle/executive-briefing on
+              expand; never crashes the Oracle view (errors are isolated). */}
+          <ExecutiveBriefingPanel
+            orgId={orgId}
+            onNavigate={onNavigate}
+            onAction={(prompt) => sendMessage(prompt)}
+          />
+
           {/* 1. CFO Hero — greeting + health score */}
           <CFOHero
             greeting={greeting}
@@ -1488,8 +1607,12 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
             disabled={isStreaming || !orgId}
           />
 
-          {/* 5. Ask Oracle — quick action chips */}
-          <AskOracleChips onPrompt={sendMessage} disabled={isStreaming || !orgId} />
+          {/* 5. Ask Oracle — mode-aware quick action chips */}
+          <AskOracleChips
+            onPrompt={sendMessage}
+            disabled={isStreaming || !orgId}
+            mode={mode}
+          />
 
           {/* 6. Timeline */}
           <TimelineList events={timeline} loading={timelineLoading} />
@@ -1551,6 +1674,24 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
       {/* ─── Sticky chat input ─── */}
       <div className="shrink-0 border-t border-[#1F1F1F] bg-black px-4 sm:px-6 lg:px-8 py-4">
         <div className="mx-auto max-w-5xl">
+          {/* ORACLE-UI-UPGRADE: Mode-aware suggested prompts above the input bar
+              (only when chat is empty — matches the spec for "empty state"). */}
+          {!hasMessages && activeMode.suggestedPrompts.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {activeMode.suggestedPrompts.map((prompt, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => sendMessage(prompt)}
+                  disabled={isStreaming || !orgId}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-medium text-zinc-300 bg-[#0A0A0A] border border-[#1F1F1F] hover:border-emerald-500/40 hover:bg-[#0F0F0F] hover:text-white transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Sparkle className="h-3 w-3 text-emerald-400" />
+                  <span className="truncate max-w-[280px]">{prompt}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <div className="relative flex-1">
               <Input
@@ -1563,7 +1704,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
                     sendMessage(input);
                   }
                 }}
-                placeholder="Ask Oracle anything about your business…"
+                placeholder={`Ask Oracle in ${activeMode.label} mode…`}
                 disabled={isStreaming || !orgId}
                 className="h-12 pr-4 pl-4 bg-[#0A0A0A] border-[#1F1F1F] text-white placeholder:text-zinc-600 rounded-xl text-[15px] focus-visible:ring-1 focus-visible:ring-[#2563EB]/40 focus-visible:border-[#2563EB]/40"
               />
@@ -2155,33 +2296,41 @@ function InsightCard({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 5. Ask Oracle — quick action chips
+// 5. Ask Oracle — mode-aware quick action chips
+//    (ORACLE-UI-UPGRADE: now renders COPILOT_MODES[mode].suggestedPrompts
+//     instead of the static QUICK_ACTIONS list. The first prompt is treated
+//     as "primary" so users have a clear default.)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function AskOracleChips({
   onPrompt,
   disabled,
+  mode,
 }: {
   onPrompt: (text: string) => void;
   disabled: boolean;
+  mode: CopilotModeId;
 }) {
+  const modeMeta = COPILOT_MODES[mode] ?? COPILOT_MODES.general;
+  const prompts = modeMeta.suggestedPrompts;
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <BrainCircuit className="h-5 w-5 text-[#60A5FA]" />
         <h2 className="gst-section-title text-white">Ask Oracle</h2>
+        <span className="text-[11px] text-zinc-500 ml-1">· {modeMeta.label} mode</span>
       </div>
       <div className="flex flex-wrap gap-2">
-        {QUICK_ACTIONS.map((action, i) => {
-          const Icon = action.icon;
-          const isPrimary = action.tone === 'primary';
+        {prompts.map((prompt, i) => {
+          const isPrimary = i === 0;
           return (
             <motion.button
-              key={action.label}
+              key={prompt}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.04 }}
-              onClick={() => onPrompt(action.prompt)}
+              onClick={() => onPrompt(prompt)}
               disabled={disabled}
               className={`
                 inline-flex items-center gap-2 h-10 px-4 rounded-full text-[13px] font-medium transition-all
@@ -2192,8 +2341,8 @@ function AskOracleChips({
                 }
               `}
             >
-              <Icon className={`h-3.5 w-3.5 ${isPrimary ? 'text-white' : 'text-[#60A5FA]'}`} />
-              {action.label}
+              <Sparkle className={`h-3.5 w-3.5 ${isPrimary ? 'text-white' : 'text-emerald-400'}`} />
+              <span className="truncate max-w-[300px]">{prompt}</span>
             </motion.button>
           );
         })}
@@ -2344,7 +2493,11 @@ function MessageBubble({
       <div className="flex-1 min-w-0 space-y-3">
         {/* Tool call cards */}
         {toolCallParts.map((p, i) => (
-          <ToolCallCard key={`tc-${i}`} part={p as Extract<MessagePart, { type: 'tool-call' }>} />
+          <ToolCallCard
+            key={`tc-${i}`}
+            part={p as Extract<MessagePart, { type: 'tool-call' }>}
+            onNavigate={onNavigate}
+          />
         ))}
 
         {/* Action Engine confirmation cards */}
@@ -2439,11 +2592,22 @@ function MessageBubble({
 // Tool call card — shows what Oracle is doing / did
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call' }> }) {
+function ToolCallCard({
+  part,
+  onNavigate,
+}: {
+  part: Extract<MessagePart, { type: 'tool-call' }>;
+  onNavigate?: (view: string, entityId?: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const Icon = TOOL_ICONS[part.tool] ?? Wrench;
   const label = TOOL_LABELS[part.tool] ?? part.tool;
   const isRunning = !part.result && !part.error;
+  // ORACLE-UI-UPGRADE: the brain route now emits the permission tier + an
+  // evidence object on tool-start / tool-result. Use them to render a
+  // READ/CONFIRM/STRONG CONFIRM badge + a clickable source citation card.
+  const tier: PermissionTier | undefined = part.tier ?? getToolTier(part.tool);
+  const evidence: Evidence | undefined = part.evidence;
 
   return (
     <div className={`
@@ -2471,13 +2635,19 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
           )}
         </div>
         <div className="flex-1 text-left min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Icon className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
             <span className="text-[12px] font-medium text-zinc-200 truncate">{label}</span>
             {isRunning && (
               <Badge variant="outline" className="text-[9px] h-3.5 px-1 text-[#60A5FA] border-[#2563EB]/30 bg-[#2563EB]/10">
                 running
               </Badge>
+            )}
+            {/* ORACLE-UI-UPGRADE: permission tier badge (READ / CONFIRM / STRONG CONFIRM). */}
+            {tier && <PermissionTierBadge tier={tier} compact />}
+            {/* ORACLE-UI-UPGRADE: environment badge from the attached evidence (if any). */}
+            {evidence?.source?.environment && (
+              <EnvironmentBadge environment={evidence.source.environment} className="text-[10px] px-1.5 py-0" withDot />
             )}
             {part.durationMs != null && (
               <span className="text-[10px] text-zinc-600">{part.durationMs}ms</span>
@@ -2513,6 +2683,11 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
               </pre>
             </div>
           )}
+          {/* ORACLE-UI-UPGRADE: source citation card (click-through to the
+              underlying view if a deepLink is present). */}
+          {evidence && (
+            <EvidenceCard evidence={evidence} onNavigate={onNavigate} />
+          )}
         </div>
       )}
 
@@ -2524,6 +2699,17 @@ function ToolCallCard({ part }: { part: Extract<MessagePart, { type: 'tool-call'
       {!expanded && part.error && (
         <div className="px-3 pb-2 -mt-0.5">
           <div className="text-[11px] text-rose-400 line-clamp-1">{part.error}</div>
+        </div>
+      )}
+      {/* ORACLE-UI-UPGRADE: when collapsed, still show a compact source-citation
+          hint if evidence is present, so the user knows the data is traceable. */}
+      {!expanded && evidence && (
+        <div className="px-3 pb-2 -mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-600">
+          <Database className="h-2.5 w-2.5 text-emerald-400" />
+          <span className="truncate">{evidence.label}</span>
+          {evidence.source?.environment && (
+            <EnvironmentBadge environment={evidence.source.environment} className="text-[9px] px-1 py-0" />
+          )}
         </div>
       )}
     </div>
@@ -2554,8 +2740,16 @@ function ActionConfirmCard({
   const isError = part.state === 'error';
   const isSuccess = part.state === 'success';
 
+  // ORACLE-UI-UPGRADE: permission tier (server-enforced) + evidence (source
+  // provenance). The tier drives the destructive-action warning banner below.
+  const tier: PermissionTier = part.tier ?? getToolTier(part.tool);
+  const isStrongConfirm = tier === 'strong-confirm';
+  const evidence: Evidence | undefined = part.evidence;
+
   const accent = isPending
-    ? 'border-amber-500/40 bg-amber-500/[0.04]'
+    ? isStrongConfirm
+      ? 'border-rose-500/50 bg-rose-500/[0.05]'
+      : 'border-amber-500/40 bg-amber-500/[0.04]'
     : isExecuting
       ? 'border-[#2563EB]/40 bg-[#2563EB]/[0.04]'
       : isSuccess
@@ -2564,7 +2758,9 @@ function ActionConfirmCard({
           ? 'border-rose-500/40 bg-rose-500/[0.04]'
           : 'border-[#1F1F1F] bg-[#0A0A0A]';
   const iconBg = isPending
-    ? 'bg-amber-500/15 text-amber-400'
+    ? isStrongConfirm
+      ? 'bg-rose-500/15 text-rose-400'
+      : 'bg-amber-500/15 text-amber-400'
     : isExecuting
       ? 'bg-[#2563EB]/15 text-[#60A5FA]'
       : isSuccess
@@ -2595,7 +2791,7 @@ function ActionConfirmCard({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[14px] font-semibold text-white truncate">{part.displayName}</span>
             <Badge variant="outline" className={`text-[9px] h-4 px-1.5 capitalize ${
               isPending ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' :
@@ -2606,10 +2802,27 @@ function ActionConfirmCard({
             }`}>
               {part.state}
             </Badge>
+            {/* ORACLE-UI-UPGRADE: permission tier badge (READ / CONFIRM / STRONG CONFIRM). */}
+            <PermissionTierBadge tier={tier} compact />
+            {/* ORACLE-UI-UPGRADE: environment badge from the attached evidence (if any). */}
+            {evidence?.source?.environment && (
+              <EnvironmentBadge environment={evidence.source.environment} className="text-[10px] px-1.5 py-0" withDot />
+            )}
           </div>
           <div className="text-[12px] text-zinc-400 mt-0.5 truncate">{part.previewTitle}</div>
         </div>
       </div>
+
+      {/* ORACLE-UI-UPGRADE: destructive-action warning banner (strong-confirm tier only). */}
+      {isStrongConfirm && (isPending || isExecuting) && (
+        <div className="flex items-start gap-2 px-4 py-2.5 bg-rose-500/[0.08] border-b border-rose-500/30 text-rose-300">
+          <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+          <div className="text-[11px] leading-relaxed">
+            <span className="font-semibold text-rose-200">⚠️ This is a destructive / irreversible action.</span>{' '}
+            Please review the preview carefully before confirming. This cannot be undone.
+          </div>
+        </div>
+      )}
 
       {(isPending || isExecuting) && (
         <div className="px-4 py-3 space-y-3">
@@ -2650,15 +2863,23 @@ function ActionConfirmCard({
             </div>
           )}
 
+          {/* ORACLE-UI-UPGRADE: source citation card (if evidence is attached). */}
+          {evidence && (
+            <EvidenceCard evidence={evidence} onNavigate={onNavigate} />
+          )}
+
           <div className="flex items-center gap-2 pt-1">
             <Button
               size="sm"
               disabled={isExecuting}
               onClick={() => onConfirm?.(part.toolCallId)}
-              className="h-8 gap-1.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white border-0"
+              className={isStrongConfirm
+                ? 'h-8 gap-1.5 bg-rose-600 hover:bg-rose-500 text-white border-0'
+                : 'h-8 gap-1.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white border-0'
+              }
             >
               {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              {isExecuting ? 'Executing…' : 'Confirm & Execute'}
+              {isExecuting ? 'Executing…' : isStrongConfirm ? 'Approve (irreversible)' : 'Confirm & Execute'}
             </Button>
             <Button
               size="sm"

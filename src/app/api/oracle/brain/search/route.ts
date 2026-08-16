@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { semanticSearch, hybridSearch, findSimilarMemories } from '@/lib/oracle/brain/semantic-search';
 import type { BrainMemoryType } from '@/lib/oracle/brain/types';
 
@@ -12,8 +13,16 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(req.url);
+  const orgId0 = url.searchParams.get('firmId') || url.searchParams.get('orgId') || '';
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
+
   try {
-    const url = new URL(req.url);
     const firmId = url.searchParams.get('firmId') || 'preview-org';
     const query = url.searchParams.get('q') || '';
     const topK = parseInt(url.searchParams.get('topK') || '5', 10);
@@ -48,8 +57,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const orgId0 = (body.firmId as string) || (body.orgId as string) || '';
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
     const firmId = (body.firmId as string) || 'preview-org';
     const query = (body.query as string) || '';
     const topK = (body.topK as number) || 5;

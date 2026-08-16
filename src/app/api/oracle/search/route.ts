@@ -12,12 +12,25 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { searchAll } from '@/lib/oracle/search';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
-  const q = new URL(request.url).searchParams.get('q')?.trim() ?? '';
+export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(request.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
+  const q = url.searchParams.get('q')?.trim() ?? '';
   if (q.length < 2) {
     return Response.json({ ok: true, results: [] });
   }

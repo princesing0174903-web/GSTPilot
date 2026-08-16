@@ -28,13 +28,19 @@
 // executor halts at the next step boundary (no orphaned work).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { executeWorkflow, type WorkflowPlan } from '@/lib/oracle/workflow-engine';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // workflows can chain several actions
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — must happen BEFORE the SSE stream starts. ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   let body: any = {};
   try {
     body = await request.json();
@@ -53,6 +59,9 @@ export async function POST(request: NextRequest) {
   if (!orgId) {
     return new Response('orgId is required', { status: 400 });
   }
+
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   // Build the SSE stream. The executor pushes events through the controller;
   // we wire onEvent → enqueue. An AbortController tied to the request close

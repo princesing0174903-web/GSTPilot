@@ -17,6 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { getApprovalRequest, decideApproval, completeApproval, writeCfoAudit } from '@/lib/oracle-cfo/approval';
 import { getTool } from '@/lib/oracle-cfo/tools';
 
@@ -24,6 +25,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -46,6 +52,10 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
     // ─── 1. Load the approval request (from Firestore, or inline fallback) ─

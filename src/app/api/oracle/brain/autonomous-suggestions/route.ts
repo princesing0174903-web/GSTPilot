@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot';
 
 export const runtime = 'nodejs';
@@ -267,7 +268,15 @@ function buildSuggestions(
 // ─── Main handler ──────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  const orgId = request.nextUrl.searchParams.get('orgId');
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
+  const orgId = request.nextUrl.searchParams.get('orgId') || request.nextUrl.searchParams.get('firmId') || '';
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
+
   if (!orgId) {
     return NextResponse.json(
       { ok: false, error: 'orgId is required' },

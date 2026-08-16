@@ -22,12 +22,18 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { planWorkflow, type WorkflowPlannerInput } from '@/lib/oracle/workflow-engine';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   let body: any = {};
   try {
     body = await request.json();
@@ -48,6 +54,9 @@ export async function POST(request: NextRequest) {
   if (!orgId) {
     return NextResponse.json({ ok: false, error: 'orgId is required' }, { status: 400 });
   }
+
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   const input: WorkflowPlannerInput = { message, orgId, extractedArgs, sessionId, userId };
   const result = await planWorkflow(input);

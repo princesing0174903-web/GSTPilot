@@ -1,10 +1,16 @@
 // POST /api/oracle/plan — Oracle creates an executive plan
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { reason } from '@/lib/oracle-core/reasoning';
 import { runExecutiveConversation } from '@/lib/oracle-core/conversation';
 import { auditLog } from '@/lib/oracle-core/security';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -26,8 +32,12 @@ export async function POST(request: NextRequest) {
     });
 
     // 2. Generate structured reasoning with requestType='plan'
+    const firmId0 = body.firmId || body.orgId || body.organizationId || '';
+    const orgResult = await requireOrgMembership(uid, firmId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+
     const reasoning = await reason({
-      firmId: body.firmId || 'gstpilot-default-firm',
+      firmId: firmId0 || 'gstpilot-default-firm',
       userId: body.userId ?? null,
       request: objective,
       requestType: 'plan',

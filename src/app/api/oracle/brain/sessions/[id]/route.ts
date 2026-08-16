@@ -3,13 +3,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const { id } = await params;
-  const orgId = request.nextUrl.searchParams.get('orgId');
+  const orgId = request.nextUrl.searchParams.get('orgId') || request.nextUrl.searchParams.get('firmId') || '';
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
   if (!orgId) return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
 
   // Verify session belongs to org
@@ -50,8 +58,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const { id } = await params;
-  const orgId = request.nextUrl.searchParams.get('orgId');
+  const orgId = request.nextUrl.searchParams.get('orgId') || request.nextUrl.searchParams.get('firmId') || '';
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
   if (!orgId) return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
 
   await db.oracleAISession.updateMany({

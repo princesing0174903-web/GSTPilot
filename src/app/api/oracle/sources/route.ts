@@ -5,10 +5,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { retrieveSources, ensureSourcesSeeded } from '@/lib/oracle/sources';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  // Note: the GST law/circular knowledge base is global (not org-scoped), so
+  // we verify identity but skip org membership (no per-tenant filtering).
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const q = req.nextUrl.searchParams.get('q') ?? '';
     const k = Number(req.nextUrl.searchParams.get('k') ?? '6');

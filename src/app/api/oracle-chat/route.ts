@@ -11,7 +11,8 @@
 //   6. done
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { runOracleAgent } from '@/lib/oracle-chat/agent';
 import type { OracleChatRequest, OracleStreamEvent } from '@/lib/oracle-chat/types';
 
@@ -23,6 +24,11 @@ function sse(event: OracleStreamEvent): string {
 }
 
 export async function POST(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — must happen BEFORE the SSE stream starts. ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   let body: OracleChatRequest;
   try {
     body = (await req.json()) as OracleChatRequest;
@@ -33,6 +39,13 @@ export async function POST(req: NextRequest) {
   const message = body.message?.trim();
   if (!message) {
     return new Response('Message is required', { status: 400 });
+  }
+
+  // Validate org membership (body may carry orgId / organizationId / firmId).
+  const orgId0 = (body as any).orgId || (body as any).organizationId || (body as any).firmId || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
   }
 
   const conversationId = body.conversationId || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

@@ -17,6 +17,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { resolveOracleAICtx, toErrorResponse } from '@/lib/oracle-ai/api-auth';
 import { streamChat } from '@/lib/oracle-ai/engine';
 import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
@@ -27,6 +29,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — reject unauthenticated requests BEFORE the SSE stream starts. ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   // ── SECURITY (POLISH-06): rate limit per IP — 20 Oracle requests/min. ──
   const rl = rateLimit(req, RATE_LIMIT_PRESETS.oracle, 'oracle-ai-chat');
   if (rl.denied) return rateLimitedResponse(rl.retryAfterSec, 'You have sent too many messages to Oracle. Please wait a moment and try again.');
@@ -36,6 +43,12 @@ export async function POST(req: NextRequest) {
     ctx = await resolveOracleAICtx(req);
   } catch (err) {
     return toErrorResponse(err);
+  }
+
+  // Validate org membership (skip in demo mode where ctx.firmId is the fallback).
+  if (!ctx.isDemo) {
+    const orgResult = await requireOrgMembership(uid, ctx.firmId);
+    if (orgResult instanceof NextResponse) return orgResult;
   }
 
   // ── SECURITY (POLISH-06): zod validation on the request body. ──

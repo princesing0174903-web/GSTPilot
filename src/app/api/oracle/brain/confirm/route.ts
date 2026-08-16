@@ -29,12 +29,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { executeAndRefresh, cancelAction, type ActionContext } from '@/lib/oracle/action-engine';
+import { checkToolPermission, verifyConfirmation, getToolTier } from '@/lib/oracle/brain/tool-permissions';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — destructive endpoint, must verify first. ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   let body: any = {};
   try {
     body = await request.json();
@@ -57,7 +64,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'orgId is required' }, { status: 400 });
   }
 
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
+
   const ctx: ActionContext = { orgId, userId, sessionId, toolCallId };
+
+  // ─── Tool Permission Check (server-enforced, non-bypassable) ──────────────
+  // Even though the user clicked "Confirm", we re-verify:
+  //   1. The caller is allowed to use this tool (role gate).
+  //   2. The tool is actually a confirmation-tier or strong-confirm-tier tool
+  //      (read-only tools shouldn't reach this endpoint).
+  //   3. For strong-confirm tools, the caller must pass strongConfirm:true.
+  const permCheck = checkToolPermission(tool, {
+    uid,
+    orgId,
+    role: orgResult.role ?? 'viewer',
+  });
+  if (!permCheck.allowed) {
+    // Audit the blocked execution attempt.
+    db.oracleAIToolCall.create({
+      data: {
+        id: toolCallId || undefined,
+        sessionId, firmId: orgId, userId: uid,
+        toolName: tool,
+        args: JSON.stringify(args),
+        status: 'blocked',
+        durationMs: 0,
+        error: permCheck.denialReason ?? 'Permission denied',
+      },
+    }).catch(() => {});
+    return NextResponse.json(
+      { ok: false, success: false, error: permCheck.denialReason ?? 'Permission denied', code: 'PERMISSION_DENIED' },
+      { status: 403 }
+    );
+  }
+
+  // Verify the confirmation is valid for this tool's tier.
+  const confirmCheck = verifyConfirmation(tool, {
+    confirmed,
+    strongConfirm: body.strongConfirm === true,
+  });
+  if (!confirmCheck.ok) {
+    return NextResponse.json(
+      { ok: false, success: false, error: confirmCheck.reason, code: 'CONFIRMATION_REQUIRED' },
+      { status: 403 }
+    );
+  }
 
   // ─── Cancellation ─────────────────────────────────────────────────────────
   if (!confirmed) {

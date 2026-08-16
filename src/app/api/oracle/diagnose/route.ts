@@ -2,12 +2,17 @@
 // Body: { query?: string, chainId?: ChainId }
 // If query is provided, auto-detects the chain. If chainId is provided, runs that chain.
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { runDiagnosticChain, detectChain, DIAGNOSTIC_CHAINS, type ChainId } from '@/lib/oracle-evolution/diagnostic';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+
   // List available chains
   const chains = Object.entries(DIAGNOSTIC_CHAINS).map(([id, c]) => ({
     id: id as ChainId,
@@ -20,8 +25,18 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = await request.json();
+    const orgId0 = body.orgId || body.organizationId || body.firmId || '';
+    if (orgId0) {
+      const orgResult = await requireOrgMembership(uid, orgId0);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
     const query = body.query as string | undefined;
     const explicitChainId = body.chainId as ChainId | undefined;
 

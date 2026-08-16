@@ -12,18 +12,31 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { generateOracleBriefing } from '@/lib/oracle/oracle-engine';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const userId = request.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json(
       { error: 'userId is required', usage: '/api/oracle/briefing?userId=<firebase_uid>' },
       { status: 400 },
     );
+  }
+
+  // Optional orgId check — pass via query if available
+  const orgId0 = request.nextUrl.searchParams.get('orgId') || request.nextUrl.searchParams.get('organizationId') || request.nextUrl.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
   }
 
   try {

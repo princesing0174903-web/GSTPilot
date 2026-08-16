@@ -7,10 +7,22 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { ingestDocument } from '@/lib/oracle/documents';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(req.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   try {
     const rows = await db.oracleDocument.findMany({
       orderBy: { createdAt: 'desc' },
@@ -33,6 +45,17 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(req.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   try {
     const form = await req.formData();
     const file = form.get('file');

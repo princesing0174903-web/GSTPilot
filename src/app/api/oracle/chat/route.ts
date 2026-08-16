@@ -28,8 +28,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import ZAI from 'z-ai-web-dev-sdk';
+import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { runPipeline } from '@/lib/oracle/pipeline/orchestrator';
-import { extractAndPersistFacts, loadMemorySnapshot } from '@/lib/oracle/memory-store';
+import { extractAndPersistFacts } from '@/lib/oracle/memory-store';
 import type { PipelineSSEEvent, ToolExecution } from '@/lib/oracle/pipeline/types';
 import { getContextSnapshot, storeConversationMemory } from '@/lib/oracle/brain/memory-engine';
 import { hybridSearch } from '@/lib/oracle/brain/semantic-search';
@@ -184,6 +186,12 @@ function parseRequest(body: unknown): ParsedRequest {
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: Request): Promise<Response> {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — must happen BEFORE the SSE stream starts. ──
+  // Returns a normal JSON 401/403 — never inside the SSE stream.
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   // ── SECURITY (POLISH-06): rate limit per IP — 20 Oracle requests/min. ──
   // The Oracle pipeline is expensive (Prisma queries + LLM call + memory
   // writes). Unauthenticated flooders would exhaust the sandbox budget.
@@ -222,6 +230,13 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(stream, { status: 200, headers: sseHeaders() });
   }
   const parsed = parseRequest(rawBody);
+
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) — org membership check. ──
+  // Now that we have the parsed body, verify the caller belongs to the
+  // organization they're asking about. Returns 403 as JSON (not SSE).
+  const orgId0 = parsed.organizationId ?? '';
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   // 2. Empty / malformed → friendly SSE (NEVER HTTP 400).
   if (!parsed.ok) {
@@ -495,7 +510,7 @@ export async function POST(req: Request): Promise<Response> {
       // 7. Persist memory (non-blocking) — both legacy OracleMemory facts AND
       //    the new PROMPT 6 Brain memory (conversation record + decisions + tasks).
       try {
-        await extractAndPersistFacts({
+        await extractAndPersistFacts(orgId0, {
           ...persistCtx,
           oracleResponse: fullText,
         });

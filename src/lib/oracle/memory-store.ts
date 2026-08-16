@@ -89,9 +89,14 @@ export function detectLanguagePreference(text: string): string | undefined {
 }
 
 // ─── Public: read the full memory snapshot ────────────────────────────────────
+//
+// ORG-SCOPED (ORACLE-SECURITY-FIX): Previously this function read ALL OracleMemory
+// rows globally — a critical cross-tenant data leak. Now it requires an orgId
+// and filters by firmId. Callers MUST pass the orgId.
 
-export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
+export async function loadMemorySnapshot(orgId: string): Promise<MemorySnapshot> {
   const rows = await db.oracleMemory.findMany({
+    where: { firmId: orgId },
     orderBy: { updatedAt: 'asc' },
   });
 
@@ -124,23 +129,26 @@ export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
 
 // ─── Public: persist a single fact (upsert) ───────────────────────────────────
 //
-// The OracleMemory schema requires firmId + title and has no compound unique
-// key on (category, key). We use a findFirst-then-create/update pattern with
-// entityId as the "key" and summary as the "value". firmId defaults to
-// "oracle-global" since Oracle memory is cross-firm.
-
-const ORACLE_MEMORY_FIRM_ID = 'oracle-global';
+// ORG-SCOPED (ORACLE-SECURITY-FIX): Previously this function wrote all facts with
+// firmId='oracle-global' — a critical cross-tenant data leak where every org's
+// extracted GSTINs, preferences, and topics were co-mingled in one bucket.
+// Now it requires an orgId and writes with firmId=orgId. Callers MUST pass orgId.
 
 export async function rememberFact(
+  orgId: string,
   category: MemoryCategory,
   key: string,
   value: string,
   source: 'user' | 'oracle_inferred' | 'system' = 'oracle_inferred',
   confidence = 1,
 ): Promise<void> {
+  if (!orgId) {
+    console.warn('[memory-store] rememberFact called without orgId — refusing to write to global bucket.');
+    return;
+  }
   if (!value || !value.trim()) return;
   const existing = await db.oracleMemory.findFirst({
-    where: { category, entityId: key },
+    where: { firmId: orgId, category, entityId: key },
     select: { id: true },
   });
   const title = `${category}:${key}`;
@@ -153,7 +161,7 @@ export async function rememberFact(
   } else {
     await db.oracleMemory.create({
       data: {
-        firmId: ORACLE_MEMORY_FIRM_ID,
+        firmId: orgId,
         category,
         entityId: key,
         title,
@@ -180,27 +188,34 @@ export interface ExchangeContext {
  * Scan a user/oracle exchange and persist any durable facts worth remembering
  * permanently: GSTIN, industry, language preference, firm name, user name.
  * Also pushes the user's topic into the rolling "history" list.
+ *
+ * ORG-SCOPED (ORACLE-SECURITY-FIX): now requires orgId so facts are written to
+ * the caller's org, not a global bucket.
  */
-export async function extractAndPersistFacts(ctx: ExchangeContext): Promise<void> {
+export async function extractAndPersistFacts(orgId: string, ctx: ExchangeContext): Promise<void> {
+  if (!orgId) {
+    console.warn('[memory-store] extractAndPersistFacts called without orgId — skipping.');
+    return;
+  }
   const text = `${ctx.userMessage ?? ''}\n${ctx.oracleResponse ?? ''}`;
 
   const tasks: Promise<void>[] = [];
 
   // GSTIN — anywhere in the exchange.
   const gstin = extractGstin(text) ?? ctx.knownGstin;
-  if (gstin) tasks.push(rememberFact('gst', 'gstin', gstin, 'user', 1));
+  if (gstin) tasks.push(rememberFact(orgId, 'gst', 'gstin', gstin, 'user', 1));
 
   // Industry.
   const industry = detectIndustry(text);
-  if (industry) tasks.push(rememberFact('industry', 'industry', industry, 'oracle_inferred', 0.85));
+  if (industry) tasks.push(rememberFact(orgId, 'industry', 'industry', industry, 'oracle_inferred', 0.85));
 
   // Preferred language.
   const lang = detectLanguagePreference(ctx.userMessage ?? '');
-  if (lang) tasks.push(rememberFact('preference', 'preferredLanguage', lang, 'user', 1));
+  if (lang) tasks.push(rememberFact(orgId, 'preference', 'preferredLanguage', lang, 'user', 1));
 
   // User name / firm name (from workspace, if provided).
-  if (ctx.knownUserName) tasks.push(rememberFact('preference', 'userName', ctx.knownUserName, 'user', 1));
-  if (ctx.knownFirmName) tasks.push(rememberFact('firm', 'name', ctx.knownFirmName, 'user', 1));
+  if (ctx.knownUserName) tasks.push(rememberFact(orgId, 'preference', 'userName', ctx.knownUserName, 'user', 1));
+  if (ctx.knownFirmName) tasks.push(rememberFact(orgId, 'firm', 'name', ctx.knownFirmName, 'user', 1));
 
   // Rolling topic history — keep last 12, dedupe.
   const topic = (ctx.userMessage ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
@@ -208,10 +223,10 @@ export async function extractAndPersistFacts(ctx: ExchangeContext): Promise<void
     tasks.push(
       (async () => {
         const key = `topic-${Date.now()}`;
-        await rememberFact('history', key, topic, 'user', 1);
-        // Trim to last 12 topics.
+        await rememberFact(orgId, 'history', key, topic, 'user', 1);
+        // Trim to last 12 topics (org-scoped).
         const history = await db.oracleMemory.findMany({
-          where: { category: 'history' },
+          where: { firmId: orgId, category: 'history' },
           orderBy: { updatedAt: 'desc' },
         });
         if (history.length > 12) {

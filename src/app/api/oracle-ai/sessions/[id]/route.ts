@@ -3,6 +3,7 @@
 // DELETE /api/oracle-ai/sessions/:id  — soft-delete (status = deleted)
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { resolveOracleAICtx, toErrorResponse } from '@/lib/oracle-ai/api-auth';
 import { deleteSession, getSession, updateSession } from '@/lib/oracle-ai/engine';
 
@@ -10,8 +11,17 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const ctx = await resolveOracleAICtx(req);
+    if (!ctx.isDemo) {
+      const orgResult = await requireOrgMembership(uid, ctx.firmId);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
     const { id } = await params;
     const session = await getSession(id, ctx.firmId);
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -22,8 +32,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const ctx = await resolveOracleAICtx(req);
+    if (!ctx.isDemo) {
+      const orgResult = await requireOrgMembership(uid, ctx.firmId);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
     const session = await updateSession(
@@ -44,8 +63,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const ctx = await resolveOracleAICtx(req);
+    if (!ctx.isDemo) {
+      const orgResult = await requireOrgMembership(uid, ctx.firmId);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
     const { id } = await params;
     await deleteSession(id, ctx.firmId);
     return NextResponse.json({ ok: true });

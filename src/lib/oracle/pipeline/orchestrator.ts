@@ -201,7 +201,7 @@ export async function runPipeline(
   let memory = opts.memory;
   if (!memory) {
     try {
-      memory = await loadMemorySnapshot();
+      memory = await loadMemorySnapshot(orgId);
     } catch {
       memory = { connectedServices: [], reportsGenerated: [], recentTopics: [], facts: [] };
     }

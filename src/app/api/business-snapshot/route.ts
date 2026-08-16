@@ -18,13 +18,19 @@
 // (honest empty state — never fabricated).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { getBusinessSnapshot, emptySnapshot } from '@/lib/business/snapshot';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const { searchParams } = new URL(request.url);
     const organizationId =
@@ -32,6 +38,10 @@ export async function GET(request: Request) {
       searchParams.get('firmId') ||
       request.headers.get('x-gstpilot-orgid') ||
       '';
+
+    // Validate org membership (reject cross-tenant spoofing).
+    const orgResult = await requireOrgMembership(uid, organizationId);
+    if (orgResult instanceof NextResponse) return orgResult;
 
     // No org scope → empty snapshot (never leak cross-tenant data)
     if (!organizationId) {

@@ -3,9 +3,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 
 export async function GET(request: NextRequest) {
-  const orgId = request.nextUrl.searchParams.get('orgId');
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
+  const orgId = request.nextUrl.searchParams.get('orgId') || request.nextUrl.searchParams.get('firmId') || '';
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
   if (!orgId) {
     return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
   }
@@ -22,14 +30,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   let body: any = {};
   try { body = await request.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
-  const orgId = String(body.orgId ?? '').trim();
+  const orgId = String(body.orgId ?? body.firmId ?? '').trim();
   const userId = body.userId ? String(body.userId) : undefined;
   const title = body.title ? String(body.title) : 'New conversation';
   if (!orgId) return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
+
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   const session = await db.oracleAISession.create({
     data: {

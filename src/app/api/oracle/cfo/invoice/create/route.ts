@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import {
   extractInvoiceIntent,
   lookupCustomer,
@@ -39,6 +40,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -59,6 +65,10 @@ export async function POST(request: NextRequest) {
     userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
     userRole: (body.userRole as string) ?? 'manager',
   };
+
+  const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
     // ─── STEP 1: Extract all 9 fields from the message ──────────────────

@@ -1,10 +1,16 @@
 // POST /api/oracle/analyze — Deep analysis of a business topic
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { reason } from '@/lib/oracle-core/reasoning';
 import { gatherBusinessContext, formatContextForPrompt } from '@/lib/oracle-core/context';
 import { auditLog } from '@/lib/oracle-core/security';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -23,8 +29,12 @@ export async function POST(request: NextRequest) {
     const ctx = await gatherBusinessContext();
 
     // 2. Run deep reasoning
+    const firmId0 = body.firmId || body.orgId || body.organizationId || '';
+    const orgResult = await requireOrgMembership(uid, firmId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+
     const reasoning = await reason({
-      firmId: body.firmId || 'gstpilot-default-firm',
+      firmId: firmId0 || 'gstpilot-default-firm',
       userId: body.userId ?? null,
       request: topic,
       requestType: 'analyze',

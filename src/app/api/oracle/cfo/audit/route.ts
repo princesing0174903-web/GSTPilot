@@ -9,14 +9,24 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { getRecentCfoAudit, getPendingApprovals } from '@/lib/oracle-cfo/approval';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const { searchParams } = new URL(request.url);
-  const organizationId = String(searchParams.get('organizationId') ?? 'preview-org');
+  const organizationId = String(searchParams.get('organizationId') ?? searchParams.get('orgId') ?? searchParams.get('firmId') ?? 'preview-org');
+
+  const orgResult = await requireOrgMembership(uid, organizationId);
+  if (orgResult instanceof NextResponse) return orgResult;
+
   const limit = Math.min(Number(searchParams.get('limit') ?? 20), 100);
   const pending = searchParams.get('pending') === 'true';
 

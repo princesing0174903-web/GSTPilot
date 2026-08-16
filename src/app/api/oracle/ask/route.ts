@@ -1,10 +1,16 @@
 // POST /api/oracle/ask — Ask Oracle a question. Returns structured reasoning.
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { reason } from '@/lib/oracle-core/reasoning';
 import { explain } from '@/lib/oracle-core/explainable';
 import { auditLog, rateLimitCheck } from '@/lib/oracle-core/security';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -31,6 +37,9 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  const orgResult = await requireOrgMembership(uid, firmId);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   // Rate limit: 30 asks/minute per user (or IP fallback)
   const identifier = body.userId || request.headers.get('x-forwarded-for') || 'anonymous';

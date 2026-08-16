@@ -182,8 +182,11 @@ export function lineItemFromApiItem(
   interState: boolean,
 ): LineItem {
   __lineKeyCounter += 1;
-  const gstRate =
-    NUMBER(it.cgstRate) + NUMBER(it.sgstRate) + NUMBER(it.igstRate) + NUMBER(it.cessRate);
+  // FIX (B5): gstRate is the GST slab (CGST+SGST or IGST) — it must NOT
+  // include cessRate. Previously this summed all four rates, which caused
+  // CESS to be double-counted when the line was re-computed by
+  // computeLineItem (cess was baked into gstRate AND applied via cessRate).
+  const gstRate = NUMBER(it.cgstRate) + NUMBER(it.sgstRate) + NUMBER(it.igstRate);
   const base: LineItem = {
     key: `line-${Date.now().toString(36)}-${__lineKeyCounter}`,
     description: it.description ?? '',

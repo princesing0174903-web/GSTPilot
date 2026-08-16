@@ -50,6 +50,11 @@ export interface ApiInvoice {
   paymentStatus: string;
   createdAt: string;
   updatedAt: string;
+  // Invoice Cloud™ document fields (nullable — older invoices may not have them)
+  terms?: string | null;
+  bankDetails?: string | null;
+  placeOfSupply?: string | null;
+  reverseCharge?: boolean;
 }
 
 /** Shape of the POST body sent to `/api/invoices` with `cloud: true`. */
@@ -61,14 +66,27 @@ export interface CreateInvoicePayload {
   sellerGstin?: string;
   date?: string;
   dueDate?: string;
+  invoiceNumber?: string;
+  invoiceType?: string;
   items: Array<{
     description: string;
     hsnCode?: string;
     quantity: number;
+    unit?: string;
     unitPrice: number;
     gstRate: number;
+    cessRate?: number;
+    discount?: number;
   }>;
   notes?: string;
+  notesFinance?: string;
+  terms?: string;
+  bankDetails?: string;
+  placeOfSupply?: string;
+  reverseCharge?: boolean;
+  isInterState?: boolean;
+  recurring?: boolean;
+  recurringCycle?: string;
 }
 
 /** Shape of an Oracle AI insight payload returned by `/api/invoices/[id]/insights`. */
@@ -90,16 +108,19 @@ export interface UseInvoicesApiResult {
   createInvoice: (payload: CreateInvoicePayload) => Promise<ApiInvoice | null>;
   updateInvoice: (id: string, patch: Record<string, unknown>) => Promise<ApiInvoice | null>;
   deleteInvoice: (id: string) => Promise<boolean>;
-  /** Set the invoice status to `approved` via PATCH. */
+  /** Set the invoice status to `sent` via PATCH (promotes a draft). */
   approveInvoice: (id: string) => Promise<ApiInvoice | null>;
+  /** Cancel an invoice (status → 'cancelled') via PATCH. */
+  cancelInvoice: (id: string) => Promise<ApiInvoice | null>;
   /** Mark an invoice paid (full or partial) via POST /api/invoices/mark-paid. */
   markPaid: (id: string, paidAmount?: number, paymentMode?: string, paymentDate?: string) => Promise<ApiInvoice | null>;
   /** Duplicate an invoice via POST /api/invoices/duplicate. */
   duplicateInvoice: (id: string) => Promise<ApiInvoice | null>;
   /** Fetch Oracle AI insights for an invoice via GET /api/invoices/[id]/insights. */
   fetchInsights: (id: string) => Promise<InvoiceInsights | null>;
-  /** Send an invoice (email/whatsapp/sms) via POST /api/invoices/send. */
-  sendInvoice: (id: string, channel?: 'email' | 'whatsapp' | 'sms') => Promise<ApiInvoice | null>;
+  /** Send an invoice (email/whatsapp/sms) via POST /api/invoices/send.
+   *  Returns the invoice + delivery status (delivered, deliveryNote). */
+  sendInvoice: (id: string, channel?: 'email' | 'whatsapp' | 'sms') => Promise<{ invoice: ApiInvoice; delivered: boolean; deliveryNote: string } | null>;
   /** Generate a print-ready HTML + UPI payment link via POST /api/invoices/pdf. */
   generatePdf: (id: string) => Promise<{ html: string; paymentLink: string; invoice: ApiInvoice } | null>;
   /** True while any mutation is in-flight (used for button spinners). */
@@ -258,10 +279,20 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     [orgId],
   );
 
-  // ── Approve (PATCH status → 'approved') ──
+  // ── Approve (PATCH status → 'sent' — promotes a draft to sent) ──
+  // FIX (B10): 'approved' is not a valid invoice status. The approve action
+  // promotes a draft to 'sent' (the invoice is approved for sending).
   const approveInvoice = useCallback(
     async (id: string): Promise<ApiInvoice | null> => {
-      return updateInvoice(id, { status: 'approved' });
+      return updateInvoice(id, { status: 'sent' });
+    },
+    [updateInvoice],
+  );
+
+  // ── Cancel (PATCH status → 'cancelled') ──
+  const cancelInvoice = useCallback(
+    async (id: string): Promise<ApiInvoice | null> => {
+      return updateInvoice(id, { status: 'cancelled' });
     },
     [updateInvoice],
   );
@@ -395,8 +426,10 @@ export function useInvoicesApi(): UseInvoicesApiResult {
   );
 
   // ── Send invoice (POST /api/invoices/send) ──
+  // Returns { invoice, delivered, deliveryNote } so the UI can surface the
+  // actual delivery status (never fake "sent" when the email wasn't delivered).
   const sendInvoice = useCallback(
-    async (id: string, channel: 'email' | 'whatsapp' | 'sms' = 'email'): Promise<ApiInvoice | null> => {
+    async (id: string, channel: 'email' | 'whatsapp' | 'sms' = 'email'): Promise<{ invoice: ApiInvoice; delivered: boolean; deliveryNote: string } | null> => {
       if (!orgId) return null;
       setSaving(true);
       try {
@@ -413,10 +446,14 @@ export function useInvoicesApi(): UseInvoicesApiResult {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `HTTP ${res.status}`);
         }
-        const json = (await res.json()) as { invoice: ApiInvoice };
+        const json = (await res.json()) as { invoice: ApiInvoice; delivered?: boolean; deliveryNote?: string; channel?: string };
         setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
         invalidateBusinessSnapshot();
-        return json.invoice;
+        return {
+          invoice: json.invoice,
+          delivered: Boolean(json.delivered),
+          deliveryNote: json.deliveryNote ?? '',
+        };
       } catch (err) {
         console.error('[useInvoicesApi] send failed:', err);
         setError(err instanceof Error ? err.message : 'Unable to send this invoice. Please try again.');
@@ -477,6 +514,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
       updateInvoice,
       deleteInvoice,
       approveInvoice,
+      cancelInvoice,
       markPaid,
       duplicateInvoice,
       fetchInsights,
@@ -493,6 +531,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
       updateInvoice,
       deleteInvoice,
       approveInvoice,
+      cancelInvoice,
       markPaid,
       duplicateInvoice,
       fetchInsights,

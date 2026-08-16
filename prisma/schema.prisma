@@ -119,6 +119,10 @@ model Invoice {
   notesFinance    String?             // Invoice Cloud private notes
   sentToCustomer  Boolean  @default(false)
   sentAt          DateTime?
+  // ── Invoice Cloud™ document fields (Phase: Invoice QA Overhaul) ──
+  terms           String?             // Terms & conditions (separate from notes)
+  bankDetails     String?             // Org bank details for the invoice PDF
+  placeOfSupply   String?             // State code (place of supply for GST)
 
   client          Client                 @relation(fields: [clientId], references: [id])
   reconciliations ReconciliationResult[]
@@ -642,7 +646,7 @@ model InvoiceItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 // ─── Uploaded Files (Processing Pipeline) ────────────────────────────────────────

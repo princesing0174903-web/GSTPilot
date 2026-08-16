@@ -447,10 +447,15 @@ export async function duplicateInvoice(
 }
 
 /**
- * Mark an invoice as sent to the customer (sets sentToCustomer=true, status=issued).
- * This is the "send invoice" action — in production it would also trigger an
- * email; here we record the sent state + timeline event. The Oracle sendInvoice
- * action uses this.
+ * Mark an invoice as sent to the customer (sets sentToCustomer=true, status=sent).
+ *
+ * IMPORTANT: This records the "sent" state + audit + timeline, but does NOT
+ * dispatch an actual email/WhatsApp/SMS. The real dispatch requires a connected
+ * Gmail/WhatsApp integration — callers (API routes + Oracle) MUST check
+ * integration status before claiming the message was delivered. Never report
+ * "sent" to the user unless the communication provider confirmed success.
+ *
+ * The Oracle sendInvoice action uses this.
  */
 export async function sendInvoice(
   orgId: string,
@@ -463,9 +468,20 @@ export async function sendInvoice(
   const existing = await db.invoice.findUnique({ where: { id }, include: { client: true } }).catch(() => null);
   if (!existing) return { ok: false, error: 'Invoice not found', status: 404 };
 
+  // Validate status transition — cancelled invoices cannot be sent without
+  // explicit restoration. Draft/sent/overdue/paid can transition to sent.
+  if (existing.status === 'cancelled') {
+    return { ok: false, error: 'A cancelled invoice cannot be sent. Restore it first.', status: 409 };
+  }
+
   const invoice = await db.invoice.update({
     where: { id },
-    data: { sentToCustomer: true, status: 'issued' },
+    data: {
+      sentToCustomer: true,
+      sentAt: new Date().toISOString(),
+      // Only promote draft → sent; never downgrade paid/overdue.
+      status: existing.status === 'draft' ? 'sent' : existing.status,
+    },
     select: {
       id: true, invoiceNumber: true, clientId: true, buyerName: true, buyerGstin: true,
       sellerGstin: true, invoiceDate: true, dueDate: true, taxableValue: true, cgst: true,
@@ -480,7 +496,7 @@ export async function sendInvoice(
       action: 'Invoice Sent',
       entity: 'invoice',
       entityId: invoice.id,
-      details: `Invoice ${invoice.invoiceNumber} sent to customer via ${channel}`,
+      details: `Invoice ${invoice.invoiceNumber} marked sent via ${channel} (delivery handled by communication service).`,
     },
   }).catch(() => {});
 

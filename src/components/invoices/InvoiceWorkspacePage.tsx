@@ -327,8 +327,23 @@ export default function InvoiceWorkspacePage() {
       const isEdit = Boolean(editInvoice);
       const status = (payload.status as 'draft' | 'sent') ?? 'draft';
       try {
+        // Normalize line items — pass ALL fields the builder emits so the
+        // backend can persist cess, discount, unit, hsn, etc. (previously
+        // only description/hsn/qty/price/gstRate were sent — cess & discount
+        // were silently dropped, causing GST mismatches on re-open).
+        const normalizedItems = (payload.items as Array<Record<string, unknown>>)?.map((it) => ({
+          description: (it.description as string) ?? '',
+          hsnCode: (it.hsnCode as string) || undefined,
+          quantity: Number(it.quantity ?? 1),
+          unit: (it.unit as string) || undefined,
+          unitPrice: Number(it.unitPrice ?? 0),
+          gstRate: Number(it.gstRate ?? 0),
+          cessRate: it.cessRate !== undefined ? Number(it.cessRate) : undefined,
+          discount: it.discountPct !== undefined ? Number(it.discountPct) : undefined,
+        }));
+
         if (isEdit && editInvoice) {
-          // Edit: PATCH
+          // Edit: PATCH — pass all document fields.
           await updateInvoice(editInvoice.id, {
             clientId: payload.clientId,
             buyerGstin: payload.buyerGstin,
@@ -339,12 +354,16 @@ export default function InvoiceWorkspacePage() {
             invoiceType: payload.invoiceType,
             notes: payload.notes,
             notesFinance: payload.notesFinance,
-            items: payload.items,
+            terms: payload.terms,
+            bankDetails: payload.bankDetails,
+            placeOfSupply: payload.placeOfSupply,
+            reverseCharge: payload.reverseCharge,
+            items: normalizedItems,
             status: status === 'sent' ? 'sent' : undefined,
           });
           toast.success('Invoice updated');
         } else {
-          // Create: POST
+          // Create: POST — pass all document fields.
           await createInvoice({
             cloud: true,
             clientId: payload.clientId as string | undefined,
@@ -353,14 +372,16 @@ export default function InvoiceWorkspacePage() {
             sellerGstin: payload.sellerGstin as string | undefined,
             date: payload.date as string | undefined,
             dueDate: payload.dueDate as string | undefined,
-            items: (payload.items as Array<Record<string, unknown>>)?.map((it) => ({
-              description: (it.description as string) ?? '',
-              hsnCode: (it.hsnCode as string) ?? undefined,
-              quantity: Number(it.quantity ?? 1),
-              unitPrice: Number(it.unitPrice ?? 0),
-              gstRate: Number(it.gstRate ?? 0),
-            })),
+            invoiceNumber: payload.invoiceNumber as string | undefined,
+            invoiceType: payload.invoiceType as string | undefined,
+            items: normalizedItems,
             notes: payload.notes as string | undefined,
+            notesFinance: payload.notesFinance as string | undefined,
+            terms: payload.terms as string | undefined,
+            bankDetails: payload.bankDetails as string | undefined,
+            placeOfSupply: payload.placeOfSupply as string | undefined,
+            reverseCharge: payload.reverseCharge as boolean | undefined,
+            isInterState: payload.isInterState as boolean | undefined,
           });
           toast.success(status === 'sent' ? 'Invoice created & sent' : 'Invoice created');
         }
@@ -387,9 +408,17 @@ export default function InvoiceWorkspacePage() {
           handleOpenEdit(inv);
           break;
         case 'send': {
-          const ok = await sendInvoice(inv.id, 'email');
-          if (ok) {
-            toast.success(`Invoice ${inv.invoiceNumber} sent via email`);
+          const result = await sendInvoice(inv.id, 'email');
+          if (result) {
+            // Surface the actual delivery status — never fake "sent" when the
+            // email wasn't delivered (Gmail disconnected, no customer email, etc.)
+            if (result.delivered) {
+              toast.success(`Invoice ${inv.invoiceNumber} emailed to customer`);
+            } else if (result.deliveryNote) {
+              toast.warning(`Invoice ${inv.invoiceNumber} marked as sent`, { description: result.deliveryNote });
+            } else {
+              toast.success(`Invoice ${inv.invoiceNumber} marked as sent`);
+            }
             refetchInvoices();
           } else {
             toast.error('Unable to send invoice');
@@ -397,9 +426,9 @@ export default function InvoiceWorkspacePage() {
           break;
         }
         case 'send-whatsapp': {
-          const ok = await sendInvoice(inv.id, 'whatsapp');
-          if (ok) {
-            toast.success(`Invoice ${inv.invoiceNumber} sent via WhatsApp`);
+          const result = await sendInvoice(inv.id, 'whatsapp');
+          if (result) {
+            toast.success(`Invoice ${inv.invoiceNumber} marked as sent`, { description: result.deliveryNote || undefined });
             refetchInvoices();
           } else {
             toast.error('Unable to send invoice');
@@ -457,10 +486,22 @@ export default function InvoiceWorkspacePage() {
           }
           break;
         }
-        case 'archive': {
-          const ok = await updateInvoice(inv.id, { status: 'archived' });
+        case 'cancel': {
+          // FIX (B9): 'archived' is not a valid status. Use 'cancelled'.
+          const ok = await updateInvoice(inv.id, { status: 'cancelled' });
           if (ok) {
-            toast.success('Invoice archived');
+            toast.success(`Invoice ${inv.invoiceNumber} cancelled`);
+            refetchInvoices();
+          } else {
+            toast.error('Unable to cancel invoice');
+          }
+          break;
+        }
+        case 'archive': {
+          // Backward-compat alias — treat 'archive' as 'cancel'.
+          const ok = await updateInvoice(inv.id, { status: 'cancelled' });
+          if (ok) {
+            toast.success(`Invoice ${inv.invoiceNumber} cancelled`);
             refetchInvoices();
           }
           break;
@@ -511,8 +552,9 @@ export default function InvoiceWorkspacePage() {
             const ok = await markPaid(id);
             if (ok) successCount++;
             else failCount++;
-          } else if (action === 'archive') {
-            const ok = await updateInvoice(id, { status: 'archived' });
+          } else if (action === 'archive' || action === 'cancel') {
+            // FIX (B9): 'archived' is not a valid status. Use 'cancelled'.
+            const ok = await updateInvoice(id, { status: 'cancelled' });
             if (ok) successCount++;
             else failCount++;
           } else if (action === 'delete') {

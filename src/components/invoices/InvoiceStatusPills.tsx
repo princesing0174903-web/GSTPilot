@@ -91,17 +91,17 @@ export const INVOICE_STATUS_CONFIG: Record<string, StatusConfig> = {
   paid: {
     label: 'Paid',
     icon: CheckCircle2,
-    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
-    dot: 'bg-blue-400',
-    iconColor: 'text-blue-400',
+    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+    dot: 'bg-emerald-400',
+    iconColor: 'text-emerald-400',
     group: 'paid',
   },
   approved: {
     label: 'Approved',
     icon: CheckCircle2,
-    className: 'bg-blue-500/10 text-blue-300 border-blue-500/25',
-    dot: 'bg-blue-400',
-    iconColor: 'text-blue-400',
+    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+    dot: 'bg-emerald-400',
+    iconColor: 'text-emerald-400',
     group: 'paid',
   },
   filed: {
@@ -166,8 +166,10 @@ export interface PaymentStatusConfig {
 }
 
 const PAYMENT_STATUS_CONFIG: Record<string, PaymentStatusConfig> = {
-  paid: { label: 'Paid', className: 'bg-blue-500/10 text-blue-300 border-blue-500/25', dot: 'bg-blue-400' },
+  paid: { label: 'Paid', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25', dot: 'bg-emerald-400' },
   unpaid: { label: 'Unpaid', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/25', dot: 'bg-zinc-400' },
+  partial: { label: 'Partial', className: 'bg-amber-500/10 text-amber-300 border-amber-500/25', dot: 'bg-amber-400' },
+  // Backward-compat alias — some legacy rows may still use 'partially_paid'.
   partially_paid: { label: 'Partial', className: 'bg-amber-500/10 text-amber-300 border-amber-500/25', dot: 'bg-amber-400' },
   overdue: { label: 'Overdue', className: 'bg-red-500/10 text-red-300 border-red-500/25', dot: 'bg-red-400' },
 };

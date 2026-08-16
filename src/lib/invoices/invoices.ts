@@ -30,9 +30,27 @@ export {
 
 // ─── DB-backed list query ──────────────────────────────────────────────────────
 
-/** Fetches sales invoices from Prisma and maps them to the InvoiceDTO shape. */
-export async function getInvoices(opts?: { limit?: number }): Promise<InvoiceListResult> {
+/** Fetches sales invoices from Prisma and maps them to the InvoiceDTO shape.
+ *
+ * SECURITY: `firmId` is REQUIRED. When omitted, returns an empty result rather
+ * than leaking every invoice across every tenant platform-wide. The caller
+ * (an API route) is responsible for resolving the org scope via
+ * `requireOrgMembership` before invoking this function. */
+export async function getInvoices(opts?: { limit?: number; firmId?: string }): Promise<InvoiceListResult> {
+  // No org scope → no data. Prevents cross-tenant leakage.
+  if (!opts?.firmId) {
+    return {
+      invoices: [],
+      total: 0,
+      totalRevenue: 0,
+      totalPaid: 0,
+      totalOutstanding: 0,
+      totalOverdue: 0,
+      hasLiveData: false,
+    };
+  }
   const rows = await db.invoice.findMany({
+    where: { client: { firmId: opts.firmId } },
     take: opts?.limit ?? 500,
     orderBy: { createdAt: 'desc' },
   });
@@ -74,10 +92,19 @@ export async function getInvoices(opts?: { limit?: number }): Promise<InvoiceLis
   };
 }
 
-/** Fetches a single invoice by ID from Prisma and maps it to InvoiceDTO. */
-export async function getInvoice(id: string): Promise<InvoiceDTO | null> {
-  const r = await db.invoice.findUnique({ where: { id } });
+/** Fetches a single invoice by ID from Prisma and maps it to InvoiceDTO.
+ *
+ * SECURITY: when `firmId` is supplied, the invoice is only returned if its
+ * client.firmId matches — otherwise null (treated as "not found" so the
+ * caller can return a 404 without revealing the invoice's existence). */
+export async function getInvoice(id: string, firmId?: string): Promise<InvoiceDTO | null> {
+  const r = await db.invoice.findUnique({
+    where: { id },
+    include: firmId ? { client: { select: { firmId: true } } } : undefined,
+  });
   if (!r) return null;
+  // Org scope check — prevents cross-tenant reads via this engine function.
+  if (firmId && ('client' in r) && r.client && r.client.firmId !== firmId) return null;
   return {
     id: r.id,
     clientId: r.clientId,
@@ -137,12 +164,16 @@ function mapInvoice(r: {
 
 /** Creates a sales invoice in Prisma from line items and returns the DTO. */
 export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceDTO> {
-  // Look up client for buyer details
+  // Look up client for buyer details + firmId (for org-scoped invoice numbering)
   const client = await db.client.findUnique({ where: { id: input.clientId } });
 
-  // Generate invoice number
+  // Generate invoice number — ORG-SCOPED so two tenants can both have INV-2025-001.
+  // Falls back to a global query only when the client has no firmId (legacy).
+  const yearPrefix = `INV-${new Date().getFullYear()}-`;
   const existing = await db.invoice.findMany({
-    where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
+    where: client?.firmId
+      ? { invoiceNumber: { startsWith: yearPrefix }, client: { firmId: client.firmId } }
+      : { invoiceNumber: { startsWith: yearPrefix } },
     select: { invoiceNumber: true },
   });
   const invoiceNo = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
@@ -218,7 +249,12 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<InvoiceD
   return mapInvoice(created);
 }
 
-/** Generates a PDF + UPI payment link for an invoice. */
+/**
+ * @deprecated Use the `/api/invoices/pdf` route instead — it is read-only and
+ * does NOT mutate invoice state. This engine helper is retained only for
+ * backward compatibility with callers that import from the engine directly.
+ * It no longer flips `sentToCustomer`/`status` (generating a preview must
+ * never mutate financial state). */
 export async function generatePaymentLink(id: string): Promise<{
   invoice: InvoiceDTO;
   pdfUrl: string;
@@ -226,24 +262,15 @@ export async function generatePaymentLink(id: string): Promise<{
 }> {
   const r = await db.invoice.findUnique({ where: { id } });
   if (!r) throw new Error('Invoice not found');
-  // Mark as sent
-  const updated = await db.invoice.update({
-    where: { id },
-    data: {
-      sentToCustomer: true,
-      sentAt: new Date().toISOString(),
-      status: r.status === 'draft' ? 'sent' : r.status,
-    },
-  });
-  const invoice = mapInvoice(updated);
-  // Deterministic payment link (UPI deep link with invoice number as reference)
-  const upiId = 'business@upi';
-  const paymentLink = `upi://pay?pa=${upiId}&pn=Business&tr=${invoice.invoiceNo}&am=${invoice.total}&cu=INR`;
+  // READ-ONLY — no state mutation. Call POST /api/invoices/send to mark sent.
+  const invoice = mapInvoice(r);
+  const amt = r.balanceAmount || r.totalAmount;
+  const paymentLink = `upi://pay?pa=business@upi&pn=Business&tr=${invoice.invoiceNo}&am=${amt}&cu=INR`;
   const pdfUrl = `/api/invoices/${id}/pdf`;
   return { invoice, pdfUrl, paymentLink };
 }
 
-/** Generates a PDF for an invoice (returns the URL). */
+/** @deprecated Alias for `generatePaymentLink` — use `/api/invoices/pdf` route. */
 export async function generatePdf(id: string): Promise<{
   invoice: InvoiceDTO;
   pdfUrl: string;
@@ -252,22 +279,17 @@ export async function generatePdf(id: string): Promise<{
   return generatePaymentLink(id);
 }
 
-/** Sends an invoice via the specified channel (email/whatsapp/sms). */
+/**
+ * @deprecated Use `/api/invoices/send` instead. This engine helper is retained
+ * for backward compatibility but NO LONGER mutates state — it only validates
+ * the invoice exists. The real send (with email/WhatsApp dispatch + Gmail
+ * integration check) lives in the API route + services layer. */
 export async function sendInvoice(id: string, channel: SendChannel): Promise<InvoiceDTO> {
   const r = await db.invoice.findUnique({ where: { id } });
   if (!r) throw new Error('Invoice not found');
-  const updated = await db.invoice.update({
-    where: { id },
-    data: {
-      sentToCustomer: true,
-      sentAt: new Date().toISOString(),
-      status: r.status === 'draft' ? 'sent' : r.status,
-    },
-  });
-  // In production this would dispatch an email/WhatsApp/SMS via the
-  // communication service. Here we just mark it sent and return.
+  // READ-ONLY — the API route handles the actual send + audit + dispatch.
   void channel;
-  return mapInvoice(updated);
+  return mapInvoice(r);
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────

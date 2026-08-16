@@ -161,7 +161,16 @@ const InvoiceRow = memo(function InvoiceRow({
 }: InvoiceRowProps) {
   const clientName = client?.tradeName ?? invoice.buyerName ?? 'Unknown Client';
   const gstin = invoice.buyerGstin ?? client?.gstin ?? '—';
-  const isOverdue = invoice.status === 'overdue';
+  // FIX (B11): overdue is derived from paymentStatus + due date, not just
+  // status. An invoice with status='sent' but paymentStatus='overdue' (due
+  // date passed, unpaid) must show the red overdue indicator.
+  const isOverdue =
+    invoice.status === 'overdue' ||
+    invoice.paymentStatus === 'overdue' ||
+    (!!invoice.dueDate &&
+      new Date(invoice.dueDate).getTime() < Date.now() &&
+      (invoice.paymentStatus === 'unpaid' || invoice.paymentStatus === 'partial') &&
+      invoice.status !== 'cancelled');
 
   const handleAction = (e: React.MouseEvent, action: string) => {
     e.stopPropagation();
@@ -340,11 +349,11 @@ const InvoiceRow = memo(function InvoiceRow({
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/[0.06]" />
               <DropdownMenuItem
-                onClick={() => onAction('archive', invoice)}
+                onClick={() => onAction('cancel', invoice)}
                 className="text-xs text-foreground focus:bg-white/[0.06] focus:text-foreground cursor-pointer"
               >
                 <Archive className="h-3.5 w-3.5 mr-2" />
-                Archive
+                Cancel Invoice
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onAction('delete', invoice)}
@@ -381,7 +390,14 @@ const MobileInvoiceCard = memo(function MobileInvoiceCard({
   onAction,
 }: MobileInvoiceCardProps) {
   const clientName = client?.tradeName ?? invoice.buyerName ?? 'Unknown';
-  const isOverdue = invoice.status === 'overdue';
+  // FIX (B11): same overdue derivation as the desktop row.
+  const isOverdue =
+    invoice.status === 'overdue' ||
+    invoice.paymentStatus === 'overdue' ||
+    (!!invoice.dueDate &&
+      new Date(invoice.dueDate).getTime() < Date.now() &&
+      (invoice.paymentStatus === 'unpaid' || invoice.paymentStatus === 'partial') &&
+      invoice.status !== 'cancelled');
 
   return (
     <motion.div
@@ -563,11 +579,11 @@ function BulkActionBar({
           size="sm"
           variant="outline"
           className="h-8 border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-xs"
-          onClick={() => onBulkAction('archive')}
+          onClick={() => onBulkAction('cancel')}
           disabled={saving}
         >
           <Archive className="h-3.5 w-3.5 mr-1.5" />
-          Archive
+          Cancel
         </Button>
         <Button
           size="sm"

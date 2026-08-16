@@ -136,12 +136,15 @@ export function daysToDue(dueDate: string): number {
 
 /**
  * Formats an amount in Indian numbering with the ₹ symbol — e.g. 123456 → "₹1,23,456".
+ * Preserves paisa precision (2 decimals) when the amount has a fractional component.
  */
 export function formatInvoiceCurrency(amount: number): string {
-  const rounded = Math.round(amount);
-  const sign = rounded < 0 ? '-' : '';
-  const abs = Math.abs(rounded);
-  const formatted = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(abs);
+  const sign = amount < 0 ? '-' : '';
+  const abs = Math.abs(amount);
+  const formatted = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(abs);
   return `${sign}₹${formatted}`;
 }
 

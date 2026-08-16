@@ -171,7 +171,10 @@ export async function POST(request: Request) {
       if (dupAccessErr) return dupAccessErr;
 
       const existing = await db.invoice.findMany({
-        where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
+        where: {
+          invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` },
+          client: { firmId: source.client?.firmId ?? '' },
+        },
         select: { invoiceNumber: true },
       });
       const invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
@@ -283,6 +286,9 @@ export async function POST(request: Request) {
         notesFinance,
         invoiceType: cloudInvoiceType,
         terms,
+        bankDetails,
+        placeOfSupply,
+        reverseCharge,
       } = body ?? {}
 
       if (!customerName || !Array.isArray(items) || items.length === 0) {
@@ -290,6 +296,39 @@ export async function POST(request: Request) {
           { error: 'customerName and at least one line item are required for Invoice Cloud creation' },
           { status: 400 }
         );
+      }
+
+      // ── Validate line items: reject malformed financial data ──
+      const VALID_GST_RATES = [0, 0.25, 1, 1.5, 3, 5, 6, 7.5, 12, 18, 28];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const qty = Number(it?.quantity);
+        const price = Number(it?.unitPrice);
+        const rate = Number(it?.gstRate);
+        if (!Number.isFinite(qty) || qty < 0) {
+          return NextResponse.json(
+            { error: `Line ${i + 1}: quantity must be a non-negative number.` },
+            { status: 400 },
+          );
+        }
+        if (!Number.isFinite(price) || price < 0) {
+          return NextResponse.json(
+            { error: `Line ${i + 1}: unit price must be a non-negative number.` },
+            { status: 400 },
+          );
+        }
+        if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+          return NextResponse.json(
+            { error: `Line ${i + 1}: GST rate must be between 0 and 100.` },
+            { status: 400 },
+          );
+        }
+        if (!VALID_GST_RATES.includes(rate)) {
+          return NextResponse.json(
+            { error: `Line ${i + 1}: GST rate ${rate}% is not a valid Indian GST slab. Allowed: ${VALID_GST_RATES.join(', ')}%.` },
+            { status: 400 },
+          );
+        }
       }
 
       // Determine inter-state vs intra-state from GSTIN state codes (first 2 digits)
@@ -329,16 +368,6 @@ export async function POST(request: Request) {
 
       const totals = calculateInvoiceTotals(lineItems, items);
 
-      // Generate the next invoice number if not provided
-      let invoiceNumber = cloudInvoiceNumber
-      if (!invoiceNumber) {
-        const existing = await db.invoice.findMany({
-          where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
-          select: { invoiceNumber: true },
-        })
-        invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber))
-      }
-
       // ── Resolve a clientId (required by the Invoice model). ──
       // CRITICAL: scope the lookup to the resolved org's firmId — never call
       // `db.client.findFirst({})` (which would adopt the FIRST client across
@@ -366,6 +395,21 @@ export async function POST(request: Request) {
       {
         const memberResult = await requireOrgMembership(uid, cloudOrgId);
         if (memberResult instanceof NextResponse) return memberResult;
+      }
+
+      // Generate the next invoice number if not provided — ORG-SCOPED so two
+      // tenants can both have INV-2025-001. Uses the resolved org's firmId.
+      // (Moved AFTER org resolution so cloudOrgId is initialized.)
+      let invoiceNumber = cloudInvoiceNumber
+      if (!invoiceNumber) {
+        const existing = await db.invoice.findMany({
+          where: {
+            invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` },
+            client: { firmId: cloudOrgId },
+          },
+          select: { invoiceNumber: true },
+        })
+        invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber))
       }
 
       let resolvedClientId = cloudClientId as string | undefined
@@ -453,7 +497,7 @@ export async function POST(request: Request) {
           cess: totals.cess,
           totalAmount: totals.totalAmount,
           hsnCode: itemsCreate[0]?.hsnCode ?? null,
-          reverseCharge: false,
+          reverseCharge: Boolean(reverseCharge),
           status: 'draft',
           matchStatus: 'unmatched',
           riskLevel: 'low',
@@ -470,6 +514,10 @@ export async function POST(request: Request) {
           recurringCycle: recurringCycle ?? null,
           notesFinance: notesFinance ?? null,
           sentToCustomer: false,
+          // Invoice Cloud™ document fields
+          terms: terms ?? null,
+          bankDetails: bankDetails ?? null,
+          placeOfSupply: placeOfSupply ?? null,
           items: { create: itemsCreate },
         },
         include: { items: true, client: true },
@@ -550,12 +598,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Tenant scope check on the legacy branch too.
+    // Tenant scope check on the legacy branch — REQUIRED (never skip).
+    // If no org can be resolved, the invoice has no tenant owner and must
+    // not be created (prevents orphan/cross-tenant invoices).
     const legacyOrgId = await resolveOrgForInvoice(request, body, clientId);
-    if (legacyOrgId) {
-      const memberResult = await requireOrgMembership(uid, legacyOrgId);
-      if (memberResult instanceof NextResponse) return memberResult;
+    if (!legacyOrgId) {
+      return NextResponse.json(
+        { error: 'An organization context is required to create an invoice.' },
+        { status: 400 },
+      );
     }
+    const memberResult = await requireOrgMembership(uid, legacyOrgId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     const invoice = await db.invoice.create({
       data: {
@@ -663,6 +717,36 @@ export async function PATCH(request: Request) {
     delete updates.updatedAt;
     delete updates.id;
     delete updates.clientId;
+
+    // ── Status transition validation ──
+    // Prevent logically invalid transitions:
+    //   • cancelled → paid/sent/overdue  (must restore first)
+    //   • paid → draft                   (must un-pay first)
+    // Allowed transitions: draft→sent, draft→paid, sent→paid, sent→overdue,
+    //   any→cancelled, paid→cancelled (refund), overdue→paid.
+    const VALID_STATUSES = ['draft', 'sent', 'paid', 'overdue', 'cancelled'];
+    if (updates.status !== undefined) {
+      const newStatus = String(updates.status);
+      if (!VALID_STATUSES.includes(newStatus)) {
+        return NextResponse.json(
+          { error: `"${newStatus}" is not a valid invoice status. Allowed: ${VALID_STATUSES.join(', ')}.` },
+          { status: 400 },
+        );
+      }
+      const oldStatus = existing.status;
+      if (oldStatus === 'cancelled' && newStatus !== 'cancelled' && newStatus !== 'draft') {
+        return NextResponse.json(
+          { error: 'A cancelled invoice must be restored to draft before transitioning to another status.' },
+          { status: 409 },
+        );
+      }
+      if (oldStatus === 'paid' && newStatus === 'draft') {
+        return NextResponse.json(
+          { error: 'A paid invoice cannot be reverted to draft. Adjust the payment first.' },
+          { status: 409 },
+        );
+      }
+    }
 
     // ── If line items are supplied, replace them atomically ──
     if (Array.isArray(newItems)) {
@@ -798,18 +882,24 @@ export async function DELETE(request: Request) {
     const delAccessErr = await assertInvoiceTenantAccess(uid, existing);
     if (delAccessErr) return delAccessErr;
 
-    // Create audit log before deletion
-    await db.auditLog.create({
-      data: {
-        clientId: existing.clientId,
-        action: 'Invoice Deleted',
-        entity: 'invoice',
-        entityId: id,
-        details: `Invoice ${existing.invoiceNumber} deleted for ${existing.client.tradeName}`,
-      },
-    });
+    // Create audit log + delete invoice atomically. InvoiceItem rows are
+    // removed automatically via the onDelete: Cascade relation — no need
+    // to deleteMany first (and no "referential constraint" failure).
+    await db.$transaction([
+      db.auditLog.create({
+        data: {
+          clientId: existing.clientId,
+          action: 'Invoice Deleted',
+          entity: 'invoice',
+          entityId: id,
+          details: `Invoice ${existing.invoiceNumber} deleted for ${existing.client.tradeName}`,
+        },
+      }),
+      db.invoice.delete({ where: { id } }),
+    ]);
 
-    await db.invoice.delete({ where: { id } });
+    // Invalidate graph cache so live dashboards reflect the deletion.
+    invalidateGraph();
 
     return NextResponse.json({ success: true });
   } catch (error) {

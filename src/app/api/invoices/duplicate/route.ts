@@ -43,9 +43,13 @@ export async function POST(req: Request) {
     const accessErr = await assertInvoiceTenantAccess(uid, source);
     if (accessErr) return accessErr;
 
-    // Generate the next invoice number for the current FY.
+    // Generate the next invoice number for the current FY — ORG-SCOPED.
+    const sourceFirmId = source.client?.firmId ?? '';
     const existing = await db.invoice.findMany({
-      where: { invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` } },
+      where: {
+        invoiceNumber: { startsWith: `INV-${new Date().getFullYear()}-` },
+        client: { firmId: sourceFirmId },
+      },
       select: { invoiceNumber: true },
     });
     const invoiceNumber = generateInvoiceNumber(existing.map((i) => i.invoiceNumber));
@@ -85,6 +89,10 @@ export async function POST(req: Request) {
         recurringCycle: null,
         notesFinance: source.notesFinance,
         sentToCustomer: false,
+        // Clone document fields too.
+        terms: source.terms ?? null,
+        bankDetails: source.bankDetails ?? null,
+        placeOfSupply: source.placeOfSupply ?? null,
         // Clone line items with a fresh 1..N sequence.
         items: source.items.length > 0
           ? {

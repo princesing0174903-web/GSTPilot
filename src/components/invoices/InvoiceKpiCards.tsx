@@ -194,15 +194,20 @@ export function computeInvoiceKpis(invoices: ApiInvoice[]): InvoiceKpis {
   const now = new Date();
   const total = invoices.length;
   const paid = invoices.filter((i) => i.status === 'paid' || i.paymentStatus === 'paid').length;
+  // FIX (B12): 'viewed'/'issued' are not valid invoice statuses. Pending =
+  // sent (awaiting payment) OR partial payment received. Use 'partial' (the
+  // canonical paymentStatus) with 'partially_paid' as a legacy alias.
   const pending = invoices.filter(
     (i) =>
       i.status === 'sent' ||
-      i.status === 'viewed' ||
-      i.status === 'issued' ||
-      i.paymentStatus === 'partially_paid' ||
-      i.status === 'partially_paid',
+      i.paymentStatus === 'partial' ||
+      i.paymentStatus === 'partially_paid',
   ).length;
-  const overdue = invoices.filter((i) => i.status === 'overdue').length;
+  // FIX (B11): overdue is a paymentStatus, not just a status. An invoice is
+  // overdue when its due date has passed AND it isn't fully paid.
+  const overdue = invoices.filter(
+    (i) => i.status === 'overdue' || i.paymentStatus === 'overdue',
+  ).length;
   const totalValue = invoices.reduce((sum, i) => sum + (i.totalAmount ?? 0), 0);
   const outstanding = invoices.reduce((sum, i) => sum + (i.balanceAmount ?? 0), 0);
   const avgValue = total > 0 ? totalValue / total : 0;
@@ -226,12 +231,11 @@ export function computeInvoiceKpis(invoices: ApiInvoice[]): InvoiceKpis {
     if (inv.status === 'paid' || inv.paymentStatus === 'paid') m.paid += 1;
     if (
       inv.status === 'sent' ||
-      inv.status === 'viewed' ||
-      inv.status === 'issued' ||
+      inv.paymentStatus === 'partial' ||
       inv.paymentStatus === 'partially_paid'
     )
       m.pending += 1;
-    if (inv.status === 'overdue') m.overdue += 1;
+    if (inv.status === 'overdue' || inv.paymentStatus === 'overdue') m.overdue += 1;
   }
 
   return {

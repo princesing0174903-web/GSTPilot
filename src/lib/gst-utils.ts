@@ -140,7 +140,20 @@ export function formatCurrency(amount: number): string {
     style: 'currency',
     currency: 'INR',
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
+ * Formats a currency amount with full 2-decimal precision — use for invoice
+ * line items, totals, and PDF/export where paisa precision is required.
+ */
+export function formatCurrencyPrecise(amount: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 

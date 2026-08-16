@@ -213,11 +213,12 @@ function deriveItems(invoice: DetailedInvoice): ItemsRow[] {
         unit: it.unit ?? 'NOS',
         unitPrice: NUMBER(it.unitPrice),
         taxableValue: NUMBER(it.taxableValue),
+        // FIX (B5): gstRate is the GST slab (CGST+SGST or IGST) — must NOT
+        // include cessRate (would double-count CESS in the displayed rate).
         gstRate:
           NUMBER(it.cgstRate) +
           NUMBER(it.sgstRate) +
-          NUMBER(it.igstRate) +
-          NUMBER(it.cessRate),
+          NUMBER(it.igstRate),
         cgst: NUMBER(it.cgst),
         sgst: NUMBER(it.sgst),
         igst: NUMBER(it.igst),

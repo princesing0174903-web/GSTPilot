@@ -25,8 +25,9 @@
 // Spec compliance: Task 3-a (A4 Invoice Preview).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import QRCode from 'qrcode';
 import {
   Printer,
   Download,
@@ -226,105 +227,50 @@ function computeWatermark(invoice: InvoiceA4PreviewProps['invoice']): WatermarkS
   return null;
 }
 
-// ─── UPI QR code placeholder (SVG) ───────────────────────────────────────────
-// We cannot generate a real scannable UPI QR without a QR library, so we render
-// a stylized square that *looks* like a QR code (3 finder squares + a small
-// dot grid) with a "UPI" badge. The real paymentLink URL is rendered as text
-// below with a "Scan to pay" caption.
+// ─── UPI QR code (REAL, scannable) ───────────────────────────────────────────
+// Generates a genuine QR code from the UPI payment link using the `qrcode`
+// library. The QR is scannable by GPay / PhonePe / Paytm / BHIM. When no
+// payment link is available, renders a clear "no QR" placeholder instead of a
+// fake one (never mislead the customer into scanning a non-functional code).
 
-function UpiQrPlaceholder({ size = 96 }: { size?: number }) {
-  // Deterministic-ish dot grid so the placeholder is stable across renders.
-  const dots: React.ReactNode[] = [];
-  const gridSize = 11;
-  const cell = size / gridSize;
-  for (let y = 0; y < gridSize; y++) {
-    for (let x = 0; x < gridSize; x++) {
-      // Skip the 3 finder-square corners
-      const inFinder =
-        (x < 3 && y < 3) ||
-        (x >= gridSize - 3 && y < 3) ||
-        (x < 3 && y >= gridSize - 3);
-      if (inFinder) continue;
-      // Pseudo-random fill using a stable seed
-      const seed = (x * 31 + y * 17 + 7) % 10;
-      if (seed < 5) continue;
-      dots.push(
-        <rect
-          key={`${x}-${y}`}
-          x={x * cell + cell * 0.15}
-          y={y * cell + cell * 0.15}
-          width={cell * 0.7}
-          height={cell * 0.7}
-          fill="#0f172a"
-          rx={cell * 0.18}
-        />,
-      );
-    }
+function UpiQrCode({ value, size = 96 }: { value: string | null | undefined; size?: number }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  // Only generate when a real value exists — the null case is handled in render.
+  useEffect(() => {
+    if (!value) return;
+    let cancelled = false;
+    QRCode.toDataURL(value, { width: size * 2, margin: 1, errorCorrectionLevel: 'M' })
+      .then((url) => {
+        if (!cancelled) setDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [value, size]);
+
+  if (!value || !dataUrl) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 text-center"
+        style={{ width: size, height: size }}
+      >
+        <QrCode className="h-6 w-6 text-zinc-300" />
+        <span className="mt-1 px-1 text-[9px] leading-tight text-zinc-400">No payment link</span>
+      </div>
+    );
   }
   return (
-    <svg
+    <img
+      src={dataUrl}
       width={size}
       height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      role="img"
-      aria-label="UPI QR code placeholder"
+      alt="UPI QR code — scan to pay"
       className="rounded-lg border border-zinc-200 bg-white"
-    >
-      <rect x={0} y={0} width={size} height={size} fill="#ffffff" />
-      {dots}
-      {/* Finder squares */}
-      <FinderSquare x={0} y={0} cell={cell} />
-      <FinderSquare x={(gridSize - 3) * cell} y={0} cell={cell} />
-      <FinderSquare x={0} y={(gridSize - 3) * cell} cell={cell} />
-      {/* Center "UPI" badge */}
-      <g>
-        <rect
-          x={size * 0.32}
-          y={size * 0.4}
-          width={size * 0.36}
-          height={size * 0.2}
-          rx={size * 0.04}
-          fill="#ffffff"
-          stroke="#0f172a"
-          strokeWidth={1.5}
-        />
-        <text
-          x={size * 0.5}
-          y={size * 0.54}
-          textAnchor="middle"
-          fontSize={size * 0.1}
-          fontWeight={800}
-          fill="#0f172a"
-          fontFamily="ui-sans-serif, system-ui, sans-serif"
-        >
-          UPI
-        </text>
-      </g>
-    </svg>
-  );
-}
-
-function FinderSquare({ x, y, cell }: { x: number; y: number; cell: number }) {
-  return (
-    <g>
-      <rect x={x} y={y} width={cell * 3} height={cell * 3} fill="#0f172a" rx={cell * 0.35} />
-      <rect
-        x={x + cell * 0.55}
-        y={y + cell * 0.55}
-        width={cell * 1.9}
-        height={cell * 1.9}
-        fill="#ffffff"
-        rx={cell * 0.2}
-      />
-      <rect
-        x={x + cell * 0.95}
-        y={y + cell * 0.95}
-        width={cell * 1.1}
-        height={cell * 1.1}
-        fill="#0f172a"
-        rx={cell * 0.1}
-      />
-    </g>
+    />
   );
 }
 
@@ -370,7 +316,9 @@ export function InvoiceA4Preview({
           unit: it.unit ?? 'NOS',
           unitPrice: NUMBER(it.unitPrice),
           taxableValue: NUMBER(it.taxableValue),
-          gstRate: NUMBER(it.cgstRate) + NUMBER(it.sgstRate) + NUMBER(it.igstRate) + NUMBER(it.cessRate),
+          // FIX (B5): gstRate is the GST slab (CGST+SGST or IGST) — must NOT
+          // include cessRate (would double-count CESS in the displayed rate).
+          gstRate: NUMBER(it.cgstRate) + NUMBER(it.sgstRate) + NUMBER(it.igstRate),
           cgst: NUMBER(it.cgst),
           sgst: NUMBER(it.sgst),
           igst: NUMBER(it.igst),
@@ -447,12 +395,12 @@ export function InvoiceA4Preview({
   const pos = placeOfSupply(invoice.buyerGstin, client?.state ?? undefined);
   const reverseChargeLabel = invoice.reverseCharge ? 'Yes' : 'No';
 
-  // Terms & Conditions: parse invoice.notes as numbered list, with sensible
-  // defaults if notes are absent.
+  // Terms & Conditions: use the dedicated `terms` field (not notes). Parse
+  // newline/numbered-bullet separated clauses. Fall back to sensible defaults
+  // only when no terms were entered.
   const terms: string[] = useMemo(() => {
-    const raw = (invoice.notes ?? '').trim();
+    const raw = (invoice.terms ?? '').trim();
     if (raw) {
-      // Split on newlines or numbered bullets like "1. ", "2) "
       const parts = raw
         .split(/\r?\n|\s*\d+[.)]\s+/)
         .map((s) => s.trim())
@@ -467,7 +415,7 @@ export function InvoiceA4Preview({
       'Goods once sold will not be taken back; exchange subject to seller\'s approval.',
       'This invoice is computer-generated and is valid without a physical signature.',
     ];
-  }, [invoice.notes]);
+  }, [invoice.terms]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -779,17 +727,35 @@ export function InvoiceA4Preview({
                       Bank &amp; Payment Details
                     </h3>
                   </div>
-                  <dl className="grid grid-cols-1 gap-y-1.5 text-xs sm:grid-cols-2 sm:gap-x-4">
-                    <PayRow label="Bank Name" value="HDFC Bank" />
-                    <PayRow label="Account No." value="5010XXXXXXXXXX12" />
-                    <PayRow label="IFSC Code" value="HDFC0001234" />
-                    <PayRow label="Branch" value="Bengaluru — MG Road" />
-                    <PayRow label="UPI ID" value="gstpilot@hdfcbank" />
-                    <PayRow label="Beneficiary" value={org.name} />
-                  </dl>
+                  {/* Use the org's bank details from invoice.bankDetails (multiline
+                       string) — never hardcode HDFC for every org. Fall back to a
+                       clear "not configured" state so the user knows to add them. */}
+                  {(() => {
+                    const raw = (invoice.bankDetails ?? '').trim();
+                    if (raw) {
+                      // Parse "Label: Value" or "Label: Value" lines.
+                      const rows = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+                      const parsed = rows.map((line) => {
+                        const m = /^([^:]{2,40}):\s*(.+)$/.exec(line);
+                        return m ? { label: m[1].trim(), value: m[2].trim() } : { label: '', value: line };
+                      });
+                      return (
+                        <dl className="grid grid-cols-1 gap-y-1.5 text-xs sm:grid-cols-2 sm:gap-x-4">
+                          {parsed.map((r, i) => (
+                            <PayRow key={i} label={r.label || 'Detail'} value={r.value} />
+                          ))}
+                        </dl>
+                      );
+                    }
+                    return (
+                      <p className="text-xs italic text-zinc-400">
+                        Bank details not configured. Add them in the invoice builder (Notes &amp; Terms section) so customers can pay via NEFT/RTGS/UPI.
+                      </p>
+                    );
+                  })()}
 
                   <div className="mt-4 flex items-center gap-3 rounded-md border border-zinc-200 bg-white p-3">
-                    <UpiQrPlaceholder size={88} />
+                    <UpiQrCode value={invoice.paymentLink} size={88} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <QrCode className="h-3.5 w-3.5 text-blue-600" />

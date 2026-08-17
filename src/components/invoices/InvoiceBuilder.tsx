@@ -547,33 +547,44 @@ export function InvoiceBuilder({
       <DialogContent
         showCloseButton
         className={cn(
-          // ~92vw width, capped at max-w-7xl (1280px). Single scroll container.
-          'max-w-7xl gap-0 overflow-hidden border-[#2A2E36] bg-[#0F1115] p-0 text-foreground',
-          'h-[92vh] max-h-[92vh] w-[calc(100vw-2rem)]',
+          // ── WIDTH FIX (CRITICAL) ───────────────────────────────────────────
+          // The base DialogContent ships with `sm:max-w-lg` (512px) which
+          // tailwind-merge does NOT strip when we pass `max-w-7xl` (different
+          // responsive variant). On desktop the media-query rule wins and the
+          // modal ends up only 512px wide — squeezing every section.
+          // We explicitly override at every breakpoint:
+          //   mobile:  100vw - 1rem
+          //   sm+:     100vw - 2rem
+          //   lg+:     1100px
+          //   xl+:     1240px   (target per spec: ~1100–1250px)
+          'gap-0 overflow-hidden border-[#2A2E36] bg-[#0F1115] p-0 text-foreground',
+          'flex flex-col h-[92vh] max-h-[92vh]',
+          'w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)]',
+          'max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] lg:max-w-[1100px] xl:max-w-[1240px]',
         )}
       >
-        {/* ── Sticky Header ─────────────────────────────────────────────────── */}
-        <DialogHeader className="sticky top-0 z-30 gap-0 border-b border-[#2A2E36] bg-[#0F1115]/95 px-6 py-4 backdrop-blur-xl">
+        {/* ── Sticky Header (shrink-0 — never collapses) ─────────────────────── */}
+        <DialogHeader className="shrink-0 gap-0 border-b border-[#2A2E36] bg-[#0F1115]/95 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/15 text-[#60A5FA] ring-1 ring-[#2563EB]/30">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/15 text-[#60A5FA] ring-1 ring-[#2563EB]/30 sm:h-11 sm:w-11">
                 <FileText className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="gst-card-title truncate text-[18px] text-foreground">
+                <DialogTitle className="gst-card-title truncate text-[16px] text-foreground sm:text-[18px]">
                   {dialogTitle}
                 </DialogTitle>
-                <DialogDescription className="gst-description mt-0.5 flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[12px] text-muted-foreground">
+                <DialogDescription className="gst-description mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-mono text-[11px] text-muted-foreground sm:text-[12px]">
                     {invoiceNumber || 'INV-PREVIEW'}
                   </span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className="text-[12px] text-muted-foreground">
+                  <span className="hidden text-muted-foreground/50 sm:inline">·</span>
+                  <span className="text-[11px] text-muted-foreground sm:text-[12px]">
                     Total{' '}
                     <span className="font-semibold tabular-nums text-[#60A5FA]">
                       {formatCurrency(totals.total)}
                     </span>
-                    <span className="ml-1 text-muted-foreground/70">
+                    <span className="ml-1 hidden text-muted-foreground/70 sm:inline">
                       (incl. GST {formatCurrency(gstAmount)})
                     </span>
                   </span>
@@ -583,7 +594,7 @@ export function InvoiceBuilder({
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={cn(
-                  'gst-status',
+                  'gst-status hidden md:inline-flex',
                   interState ? 'gst-status-warning' : 'gst-status-success',
                 )}
               >
@@ -606,7 +617,7 @@ export function InvoiceBuilder({
                 className="gst-btn gst-btn-ghost"
               >
                 <X className="h-4 w-4" />
-                Cancel
+                <span className="hidden sm:inline">Cancel</span>
               </button>
               <button
                 type="button"
@@ -615,7 +626,7 @@ export function InvoiceBuilder({
                 className={cn('gst-btn gst-btn-secondary', saving && 'gst-btn-loading')}
               >
                 <Save className="h-4 w-4" />
-                Save Draft
+                <span className="hidden sm:inline">Save Draft</span>
               </button>
               <button
                 type="button"
@@ -624,14 +635,15 @@ export function InvoiceBuilder({
                 className={cn('gst-btn gst-btn-primary', saving && 'gst-btn-loading')}
               >
                 <Send className="h-4 w-4" />
-                Save &amp; Send
+                <span className="hidden sm:inline">Save &amp; Send</span>
+                <span className="sm:hidden">Send</span>
               </button>
             </div>
           </div>
         </DialogHeader>
 
-        {/* ── Single-scroll body ────────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0F1115]">
+        {/* ── Single-scroll body (overflow-x: hidden — only the line-item table may scroll horizontally) ── */}
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#0F1115]">
           <motion.form
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -640,7 +652,7 @@ export function InvoiceBuilder({
               e.preventDefault();
               void handleSubmit('sent');
             }}
-            className="mx-auto max-w-[1280px] space-y-6 px-6 py-6 lg:px-8"
+            className="mx-auto w-full max-w-[1200px] space-y-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8"
           >
             {/* ── Row 1: Customer Information (left) | Invoice Details (right) ─ */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -728,9 +740,65 @@ export function InvoiceBuilder({
               organization={livePreviewOrg}
             />
 
-            {/* Bottom padding for breathing room */}
-            <div className="h-2" aria-hidden />
+            {/* Bottom padding for breathing room above the sticky footer */}
+            <div className="h-4" aria-hidden />
           </motion.form>
+        </div>
+
+        {/* ── Sticky Footer (shrink-0 — always visible, easy access to primary actions) ── */}
+        <div className="shrink-0 border-t border-[#2A2E36] bg-[#0F1115]/95 px-4 py-3 backdrop-blur-xl sm:px-6">
+          <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+              <span className="gst-status gst-status-neutral">
+                {interState ? 'IGST' : 'CGST+SGST'}
+              </span>
+              <span className="hidden sm:inline">
+                {computedItems.length} item{computedItems.length === 1 ? '' : 's'}
+              </span>
+              <span className="hidden text-muted-foreground/50 sm:inline">·</span>
+              <span className="font-mono text-[11px] text-muted-foreground sm:text-[12px]">
+                {invoiceNumber || 'INV-PREVIEW'}
+              </span>
+              <span className="hidden text-muted-foreground/50 sm:inline">·</span>
+              <span>
+                Grand Total{' '}
+                <span className="font-bold tabular-nums text-[#60A5FA]">
+                  {formatCurrency(totals.total)}
+                </span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+                className="gst-btn gst-btn-ghost"
+              >
+                <X className="h-4 w-4" />
+                <span className="hidden sm:inline">Cancel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit('draft')}
+                disabled={saving}
+                className={cn('gst-btn gst-btn-secondary', saving && 'gst-btn-loading')}
+              >
+                <Save className="h-4 w-4" />
+                <span className="hidden sm:inline">Save Draft</span>
+                <span className="sm:hidden">Draft</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit('sent')}
+                disabled={saving}
+                className={cn('gst-btn gst-btn-primary', saving && 'gst-btn-loading')}
+              >
+                <Send className="h-4 w-4" />
+                <span className="hidden sm:inline">Save &amp; Send</span>
+                <span className="sm:hidden">Send</span>
+              </button>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

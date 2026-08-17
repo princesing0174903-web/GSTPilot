@@ -114,7 +114,7 @@ export function InvoiceLineItems({
         <table className="gst-table w-full min-w-[860px] lg:min-w-0 lg:table-fixed">
           <colgroup>
             <col className="w-10" />
-            <col className="min-w-[180px] lg:w-auto" />
+            <col className="min-w-[180px] lg:min-w-0 lg:w-auto" />
             <col className="w-24" />
             <col className="w-16" />
             <col className="w-20" />

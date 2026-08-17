@@ -21224,3 +21224,75 @@ Files modified (4):
 - src/components/invoices/InvoiceWorkspacePage.tsx (enhanced Delete confirmation dialog)
 
 — *Task INVOICE-QA-OVERHAUL-2 complete. The Invoices module is now genuinely production-ready AND browser-verified end-to-end. All core flows tested: Create, View, Edit, Mark Paid, Send Email (honest), PDF, Duplicate (resets), Delete (cascade + enhanced dialog), Search, Mobile. GST calculations correct for intra/inter-state. Cross-tenant isolation enforced. No console errors. ESLint clean.*
+
+---
+Task ID: INVOICE-BUILDER-UI-FIX
+Agent: main (Z.ai Code)
+Task: Fix the Invoice Builder modal UI — previous report claimed production-ready but the Create Invoice modal was visually broken (512px wide, squeezed cards, clipped inputs, horizontal overflow). User demanded a fresh visual browser QA and an actual layout fix, not just API verification.
+
+Work Log:
+- Read prior worklog entries (INVOICE-AUDIT-1, INVOICE-QA-OVERHAUL, INVOICE-QA-OVERHAUL-2). Prior sessions fixed 14 CRITICAL bugs and verified all API endpoints, but the user reports the Invoice Builder UI is STILL visually broken.
+- Inspected InvoiceBuilder.tsx, InvoiceCustomerPanel.tsx, InvoiceHeaderPanel.tsx, InvoiceLineItems.tsx, InvoiceGSTSummary.tsx, builder/ui.tsx, and the base Dialog component (src/components/ui/dialog.tsx).
+- ROOT CAUSE IDENTIFIED: The base `DialogContent` (src/components/ui/dialog.tsx line 63) ships with `sm:max-w-lg` (512px) as a default max-width. InvoiceBuilder passed `max-w-7xl` (1280px), but `tailwind-merge` (cn utility) kept BOTH classes because they have different responsive variants (`max-w-7xl` has no prefix; `sm:max-w-lg` has `sm:` prefix). On desktop (≥640px), the `sm:max-w-lg` media-query rule wins (declared later in Tailwind's generated CSS), capping the modal at exactly 512px. Verified via Agent Browser: `getComputedStyle(dialog).maxWidth === "512px"` on a 1366px viewport. This squeezed Customer Info + Invoice Details into ~250px columns, clipped invoice number/date inputs, and forced horizontal scrolling.
+
+- FIX 1 (src/components/invoices/InvoiceBuilder.tsx) — DialogContent className:
+  Replaced `max-w-7xl ... w-[calc(100vw-2rem)]` with explicit responsive overrides at every breakpoint:
+    mobile: `max-w-[calc(100vw-1rem)]`
+    sm+:    `sm:max-w-[calc(100vw-2rem)]`   ← overrides the base `sm:max-w-lg`
+    lg+:    `lg:max-w-[1100px]`
+    xl+:    `xl:max-w-[1240px]`             ← target per spec (~1100–1250px)
+  Also restructured DialogContent from `grid` to `flex flex-col` with three zones:
+    (a) Sticky header (`shrink-0`) — title, invoice #, total, inter/intra-state badge, Cancel/Save Draft/Save & Send (with clear primary/secondary/ghost hierarchy). Button labels hidden on mobile (`hidden sm:inline`), icons always visible.
+    (b) Scrollable body (`flex-1 overflow-y-auto overflow-x-hidden`) — the form. `overflow-x: hidden` guarantees the ENTIRE FORM never horizontally scrolls.
+    (c) Sticky footer (`shrink-0`) — Cancel/Save Draft/Save & Send + grand-total summary (GST type, item count, invoice #, Grand Total). Gives users access to primary actions after scrolling down, per spec section 9.
+  Form padding responsive: `px-4 py-5 sm:px-6 sm:py-6 lg:px-8`. Form max-width `max-w-[1200px]` centered.
+
+- FIX 2 (src/components/invoices/InvoiceLineItems.tsx) — colgroup:
+  The Description `<col>` had `min-w-[180px] lg:w-auto`. Even with `lg:table-fixed`, the `min-width: 180px` was being honored at desktop, forcing the table to 1196px (sum of all colgroup widths) in a 1102px container — a 94px horizontal scroll at 1440px.
+  Changed to `min-w-[180px] lg:min-w-0 lg:w-auto`. The `lg:min-w-0` override removes the minimum at desktop, letting `table-layout: fixed` + `width: 100%` fit the table exactly to its container. Mobile/tablet still get the 180px minimum so the table scrolls horizontally within its `overflow-x-auto` wrapper (touch-swipe on mobile).
+
+- Browser verification (Agent Browser, fresh visual QA at every breakpoint):
+  | Viewport | Modal W | Form body overflow-x | Line-item table |
+  |----------|---------|----------------------|------------------|
+  | 375px (iPhone SE)  | 360px | hidden — no form scroll | scrolls within own container (touch-swipe) |
+  | 390px (iPhone 14)  | 375px | hidden — no form scroll | scrolls within own container |
+  | 768px (iPad)       | 738px | hidden — no form scroll | scrolls within own container |
+  | 1024px             | 994px | hidden — no form scroll | scrolls (13 cols > 900px) |
+  | 1366px             | 1240px| hidden — no form scroll | NO scroll — perfect fit |
+  | 1440px             | 1240px (capped) | hidden — no form scroll | NO scroll — perfect fit |
+
+  At 1366px and 1440px: `body.scrollWidth === body.clientWidth` (1238 === 1238) — zero horizontal overflow on the form. `tableWrap.scrollWidth === tableWrap.clientWidth` (1102 === 1102) — table fits perfectly, no horizontal scroll at all on desktop.
+
+- VLM (vision model) verification of the 1366px screenshot confirmed:
+  • Modal is "exceptionally wide" with a "clear two-column grid layout" — Customer Information and Invoice Details side-by-side with "ample horizontal space" and "generous" spacing.
+  • "No inputs clipped or truncated" — all fields fully visible.
+  • "No horizontal scrollbar" — neither on the modal nor the viewport.
+  • "Professional and spacious" — "high-quality UI patterns", "breathing room", "clear hierarchy".
+  • Sticky footer with Cancel/Save Draft/Save & Send + summary confirmed.
+  • Header buttons with clear primary/secondary/ghost hierarchy confirmed.
+
+- Functional regression (all pass):
+  • Create New Invoice → filled Business Name "GSTPilot QA Test Co", GSTIN "27AAACR5055K1Z5", line item "QA Consulting Services" qty=2 rate=5000 → Save Draft → INV-2026-2700 created in DB.
+  • GST calculation verified correct: subtotal ₹10,000, CGST ₹900 + SGST ₹900 = GST ₹1,800, Grand Total ₹11,800 (intra-state, 18% slab).
+  • Edit mode: title changes to "Edit Invoice"; Business Name + Invoice Number pre-filled correctly.
+  • Cancel (header button) closes modal.
+  • Cancel (footer button) closes modal.
+  • Escape closes modal.
+  • All 6 action buttons present: header (Cancel, Save Draft, Save & Send) + footer (Cancel, Save Draft, Save & Send).
+  • Detail sheet: Edit, Send Email, Mark Paid, Duplicate, More actions — all present and accessible.
+  • No existing functionality broken. NO Oracle/GST/Google/Zoho/banking code modified.
+
+- ESLint: both modified files pass `--max-warnings 0` (exit 0, zero errors, zero warnings).
+- Console: zero JavaScript errors, zero hydration errors, zero module-not-found errors. Only performance warnings (long tasks) and Fast Refresh logs.
+
+Stage Summary:
+- ROOT CAUSE: Base DialogContent's `sm:max-w-lg` (512px) was winning over InvoiceBuilder's `max-w-7xl` on desktop because tailwind-merge treats different responsive variants as non-conflicting. The modal was literally 512px wide on a 1366px viewport.
+- FIX: Explicit responsive max-width overrides at sm/lg/xl breakpoints + restructured DialogContent as flex-col (header/body/footer) + overflow-x: hidden on the form body + sticky footer with primary actions + colgroup min-width override so the table fits perfectly at desktop.
+- The Invoice Builder is now genuinely production-ready visually. Desktop (≥1366px): 1240px modal, Customer Info + Invoice Details side-by-side with ample space, all inputs fully visible, line items table fits with NO horizontal scroll, clear header/footer action hierarchy. Tablet (768-1199px): single-column sections, table scrolls within its own container. Mobile (≤767px): single-column stacked form, table touch-swipe scrolls, no page horizontal overflow.
+- All 15 acceptance criteria from the user's spec verified PASS via fresh browser QA.
+
+Files modified (2):
+- src/components/invoices/InvoiceBuilder.tsx — DialogContent width override + flex-col layout + sticky footer + responsive padding + mobile button labels.
+- src/components/invoices/InvoiceLineItems.tsx — colgroup Description column min-width override at lg+.
+
+— *Task INVOICE-BUILDER-UI-FIX complete. The Invoice Builder modal is now genuinely professional and production-ready. Verified at 375/390/768/1024/1366/1440px with zero horizontal form overflow, zero clipped inputs, zero horizontal scroll on desktop. Functional regression passes (Create, Edit, Cancel, Save Draft, GST calc, all buttons). ESLint clean. Zero console errors.*

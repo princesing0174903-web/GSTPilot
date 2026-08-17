@@ -933,8 +933,39 @@ export default function InvoiceWorkspacePage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete invoice {deleteTarget?.invoiceNumber}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. The invoice and all its line items will be permanently removed.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  This action cannot be undone. The invoice and all its line items will be permanently removed from your records.
+                </p>
+                {deleteTarget && (
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Customer</span>
+                      <span className="font-medium text-foreground text-right truncate max-w-[60%]">
+                        {deleteTarget.buyerName || '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Invoice #</span>
+                      <span className="font-medium text-foreground">{deleteTarget.invoiceNumber}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Total Amount</span>
+                      <span className="font-semibold text-foreground">
+                        {formatCurrency(deleteTarget.totalAmount ?? 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className="font-medium text-foreground capitalize">{deleteTarget.status}</span>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  A record of this deletion will be kept in the audit log for compliance.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -60,6 +60,9 @@ export interface ApiInvoice {
 /** Shape of the POST body sent to `/api/invoices` with `cloud: true`. */
 export interface CreateInvoicePayload {
   cloud: true;
+  /** Resolved organization/firm id — required by the API to scope the new
+   * invoice to the caller's tenant (the hook injects this automatically). */
+  organizationId?: string;
   clientId?: string;
   customerName: string;
   buyerGstin?: string;
@@ -197,12 +200,17 @@ export function useInvoicesApi(): UseInvoicesApiResult {
       }
       setSaving(true);
       try {
+        // Inject the resolved org id so the API can scope the new invoice to
+        // the caller's tenant. Without this, the POST returns 400 "A client or
+        // organization is required" when creating an invoice for a brand-new
+        // customer (no clientId to look up the firm from).
+        const requestBody = { ...payload, organizationId: orgId };
         const res = await fetchWithTimeout(
           '/api/invoices',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(requestBody),
           },
           { timeoutMs: 20_000, retries: 1 },
         );

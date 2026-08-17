@@ -159,7 +159,10 @@ const InvoiceRow = memo(function InvoiceRow({
   searchQuery,
   onAction,
 }: InvoiceRowProps) {
-  const clientName = client?.tradeName ?? invoice.buyerName ?? 'Unknown Client';
+  // Prefer the invoice's buyerName (what the user typed for THIS invoice) over
+  // the client record's tradeName (the master name). The buyerName on the
+  // invoice is what appears on the PDF and is what the user intended to show.
+  const clientName = invoice.buyerName || client?.tradeName || 'Unknown Client';
   const gstin = invoice.buyerGstin ?? client?.gstin ?? '—';
   // FIX (B11): overdue is derived from paymentStatus + due date, not just
   // status. An invoice with status='sent' but paymentStatus='overdue' (due
@@ -389,7 +392,7 @@ const MobileInvoiceCard = memo(function MobileInvoiceCard({
   onClick,
   onAction,
 }: MobileInvoiceCardProps) {
-  const clientName = client?.tradeName ?? invoice.buyerName ?? 'Unknown';
+  const clientName = invoice.buyerName || client?.tradeName || 'Unknown';
   // FIX (B11): same overdue derivation as the desktop row.
   const isOverdue =
     invoice.status === 'overdue' ||

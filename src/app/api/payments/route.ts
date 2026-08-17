@@ -4,6 +4,7 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot'
 
 /** Resolve orgId for a payment from header, body, or Client.firmId lookup. */
 async function resolveOrgForPayment(
@@ -281,10 +282,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Payment recorded → cash flow, collection rate, receivables, customer
+    // outstanding, and health score all need recomputation.
+    if (orgId) invalidateBusinessSnapshotCache(orgId)
+
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {
     console.error('POST /api/payments error:', error)
     return friendlyApiError(error, 'We could not record the payment right now. Please try again.')
+  }
+}
+
+// Helper: invalidate snapshot cache for the org that owns the payment's client.
+// Called after POST / PATCH / DELETE so cash flow, receivables, collection
+// rate, and health score all reflect the payment immediately.
+async function invalidateSnapshotForPayment(payment: { clientId?: string | null }): Promise<void> {
+  if (!payment.clientId) return
+  const client = await db.client.findUnique({
+    where: { id: payment.clientId },
+    select: { firmId: true },
+  }).catch(() => null)
+  if (client?.firmId) {
+    invalidateBusinessSnapshotCache(client.firmId)
   }
 }
 
@@ -333,6 +353,10 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Payment amount/status changed → cash flow, collection rate, receivables.
+    await invalidateSnapshotForPayment(payment)
+
     return NextResponse.json({ payment })
   } catch (error) {
     console.error('PATCH /api/payments error:', error)
@@ -365,6 +389,9 @@ export async function DELETE(request: NextRequest) {
         details: `Payment ₹${payment.amount} (${payment.partyName}) deleted`,
       },
     })
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    await invalidateSnapshotForPayment(payment)
 
     return NextResponse.json({ success: true })
   } catch (error) {

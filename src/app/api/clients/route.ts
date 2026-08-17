@@ -4,6 +4,7 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitClientNode } from '@/lib/graph/auto-emit'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot'
 import { parseBody, schemas } from '@/lib/validation'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
@@ -207,6 +208,10 @@ export async function POST(request: Request) {
     try { await emitClientNode(client.id) } catch (e) { console.error('[graph] emitClientNode failed', e) }
 
     // ── Business Timeline — emit customer.created (fire-and-forget, never breaks the flow) ──
+    // Unified SaaS: invalidate the canonical snapshot cache so the new customer
+    // appears on the dashboard, Oracle, and reports immediately.
+    invalidateBusinessSnapshotCache(tenantId)
+
     await emitTimelineEvent({
       organizationId: tenantId,
       type: 'customer.created',
@@ -299,6 +304,12 @@ export async function PATCH(request: Request) {
     // ── Real Business Graph Engine™ — invalidate cache so edits reflect instantly ──
     invalidateGraph()
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Customer count / health score may have changed.
+    if (existing.firmId) {
+      invalidateBusinessSnapshotCache(existing.firmId)
+    }
+
     return NextResponse.json({ client })
   } catch (error) {
     console.error('PATCH /api/clients error:', error)
@@ -349,6 +360,12 @@ export async function DELETE(request: Request) {
 
     // ── Real Business Graph Engine™ — invalidate cache so removal reflects instantly ──
     invalidateGraph()
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Customer count, receivables, and GST metrics all need recomputation.
+    if (existing.firmId) {
+      invalidateBusinessSnapshotCache(existing.firmId)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

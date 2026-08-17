@@ -23,6 +23,7 @@ import {
 } from '@/lib/gst-reconciliation';
 import { modeLabel } from '@/lib/gst-reconciliation/server/provider-mode';
 import { decryptString } from '@/lib/gstn-provider/server/crypto';
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
 
 export const dynamic = 'force-dynamic';
 
@@ -384,6 +385,11 @@ export async function POST(request: Request) {
         vendorScores: JSON.stringify(vendorScores),
       },
     });
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // GST reconciliation ran → ITC, mismatch counts, vendor compliance, and
+    // risk score all need recomputation across Dashboard, Reports, Oracle.
+    invalidateBusinessSnapshotCache(organizationId);
 
     return NextResponse.json({
       runId: run.id,

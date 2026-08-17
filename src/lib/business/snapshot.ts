@@ -1092,6 +1092,30 @@ export async function getBusinessSnapshot(
 }
 
 /**
+ * Invalidate the cached Business Snapshot for one org (or every org when
+ * `organizationId` is omitted). Safe to call from any server-side mutation
+ * route (invoices POST / mark-paid / DELETE, clients POST / PATCH, payments,
+ * expenses, bank imports, GST reconciliation runs, Zoho sync, etc.) so the
+ * NEXT read reflects the new state without waiting the full 30s TTL.
+ *
+ * The client-side `invalidateBusinessSnapshot()` event bus already triggers
+ * a re-fetch with `?forceRefresh=true` — but if the server cache is stale the
+ * re-fetch still returns old numbers. This function clears the server cache
+ * so `forceRefresh=true` actually returns fresh data.
+ *
+ * Usage (server-side, inside any mutation route):
+ *   import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
+ *   invalidateBusinessSnapshotCache(organizationId);
+ */
+export function invalidateBusinessSnapshotCache(organizationId?: string): void {
+  if (organizationId) {
+    cache.delete(organizationId);
+  } else {
+    cache.clear();
+  }
+}
+
+/**
  * Background helper that finds overdue invoices for an org and emits
  * `invoice.overdue` timeline events for each (deduplicated by invoiceId
  * within the last 24h). Also fills in `snapshot.overdueReceivables`.

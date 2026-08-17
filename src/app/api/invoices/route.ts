@@ -10,6 +10,7 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { emitInvoiceNode } from '@/lib/graph/auto-emit';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
 import { assertInvoiceTenantAccess } from './_helpers';
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
@@ -251,6 +252,10 @@ export async function POST(request: Request) {
       try { await emitInvoiceNode(cloned.id); } catch (e) { console.error('[graph] emitInvoiceNode failed', e); }
 
       const dupOrgId = await resolveOrgForInvoice(request, body, source.clientId);
+      // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+      // so every dashboard / Oracle / AI CFO / report reflects the new invoice
+      // immediately (no 30s TTL wait).
+      if (dupOrgId) invalidateBusinessSnapshotCache(dupOrgId);
       if (dupOrgId) {
         const memberResult2 = await requireOrgMembership(uid, dupOrgId);
         if (memberResult2 instanceof NextResponse) return memberResult2;
@@ -541,6 +546,11 @@ export async function POST(request: Request) {
 
       // ── Business Timeline — emit invoice.created (fire-and-forget) ──
       if (cloudOrgId) {
+        // Unified SaaS: invalidate the canonical snapshot cache so every
+        // dependent module (Dashboard, Oracle, Reports, GST) reflects the new
+        // invoice immediately — no 30s TTL wait.
+        invalidateBusinessSnapshotCache(cloudOrgId);
+
         await emitTimelineEvent({
           organizationId: cloudOrgId,
           type: 'invoice.created',
@@ -657,6 +667,10 @@ export async function POST(request: Request) {
 
     // ── Business Timeline — emit invoice.created (fire-and-forget) ──
     if (legacyOrgId) {
+      // Unified SaaS: invalidate the canonical snapshot cache so every
+      // dependent module reflects the new invoice immediately.
+      invalidateBusinessSnapshotCache(legacyOrgId);
+
       await emitTimelineEvent({
         organizationId: legacyOrgId,
         type: 'invoice.created',
@@ -849,6 +863,13 @@ export async function PATCH(request: Request) {
     // ── Real Business Graph Engine™ — invalidate cache so edits reflect instantly ──
     invalidateGraph();
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Invoice totals/status changed → revenue, receivables, GST, health score
+    // all need recomputation. Clears the 30s server cache for this org.
+    if (existing.client?.firmId) {
+      invalidateBusinessSnapshotCache(existing.client.firmId);
+    }
+
     return NextResponse.json({ invoice });
   } catch (error) {
     console.error('PATCH /api/invoices error:', error);
@@ -900,6 +921,13 @@ export async function DELETE(request: Request) {
 
     // Invalidate graph cache so live dashboards reflect the deletion.
     invalidateGraph();
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Invoice deleted → revenue, receivables, GST, customer balances all
+    // need recomputation.
+    if (existing.client?.firmId) {
+      invalidateBusinessSnapshotCache(existing.client.firmId);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

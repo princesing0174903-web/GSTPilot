@@ -26,6 +26,7 @@ import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integration
 import { resolveOrgUserFromHeaders } from '@/lib/integrations/zoho-books/oauth';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — sync can take a while for large orgs
@@ -101,6 +102,14 @@ export async function POST(request: NextRequest) {
         },
         severity: result.status === 'partial' ? 'warning' : 'success',
       });
+    }
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Zoho sync imported/updated records → revenue, customers, invoices, GST,
+    // cash, and per-entity Zoho counts all need recomputation across every
+    // dashboard, Oracle, AI CFO, and report.
+    if (result.ok && (result.totalImported > 0 || result.totalUpdated > 0)) {
+      invalidateBusinessSnapshotCache(orgId);
     }
 
     return NextResponse.json(result, {

@@ -35,6 +35,7 @@ import {
   listImports,
   type ParsedStatementRow,
 } from '@/lib/banking-prisma';
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -117,6 +118,10 @@ export async function POST(req: NextRequest) {
         rows,
         uploadedBy: uid,
       });
+      // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+      // Bank transactions imported → cash position, cash flow, and reconciliation
+      // all need recomputation.
+      invalidateBusinessSnapshotCache(orgId);
       return NextResponse.json({ success: true, result }, { status: 201 });
     }
 

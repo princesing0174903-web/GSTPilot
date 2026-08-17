@@ -4,6 +4,7 @@ import { autoCategorize } from '@/lib/invoices/expenses'
 import { graphEvents } from '@/lib/graph/live-update'
 import { emitTimelineEvent } from '@/lib/timeline/emit'
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot'
 
 /** Resolve orgId for an expense from header, body, or Client.firmId lookup. */
 async function resolveOrgForExpense(
@@ -168,6 +169,10 @@ export async function POST(request: NextRequest) {
     // ── Business Timeline — emit expense.created (fire-and-forget) ──
     // orgId was resolved above for the membership check; reuse it here.
     if (orgId) {
+      // Unified SaaS: invalidate the canonical Business Snapshot cache so
+      // expenses, profit, and cash flow reflect the new expense immediately.
+      invalidateBusinessSnapshotCache(orgId)
+
       await emitTimelineEvent({
         organizationId: orgId,
         type: 'expense.created',
@@ -238,6 +243,9 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    await invalidateSnapshotForExpense(expense)
+
     return NextResponse.json({ expense })
   } catch (error) {
     console.error('PATCH /api/expenses error:', error)
@@ -271,9 +279,24 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    await invalidateSnapshotForExpense(expense)
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/expenses error:', error)
     return friendlyApiError(error, 'We could not delete the expense right now. Please try again.')
+  }
+}
+
+// Helper: invalidate snapshot cache for the org that owns the expense's client.
+async function invalidateSnapshotForExpense(expense: { clientId?: string | null }): Promise<void> {
+  if (!expense.clientId) return
+  const client = await db.client.findUnique({
+    where: { id: expense.clientId },
+    select: { firmId: true },
+  }).catch(() => null)
+  if (client?.firmId) {
+    invalidateBusinessSnapshotCache(client.firmId)
   }
 }

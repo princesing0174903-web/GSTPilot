@@ -29,6 +29,7 @@ import {
   type ExpenseStats,
 } from '@/lib/gstpilot-data';
 import { useOrg } from '@/contexts/OrgContext';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 
 export interface UseGSTpilotExpensesResult {
   expenses: Expense[];
@@ -113,6 +114,9 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
     try {
       const expense = await svcCreate(orgIdRef.current, input);
       setExpenses((prev) => [expense, ...prev]);
+      // Unified SaaS: invalidate the Business Snapshot so profit, cash flow,
+      // and reports reflect the new expense immediately.
+      invalidateBusinessSnapshot();
       return expense;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create expense.';
@@ -132,6 +136,7 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
     try {
       const updated = await svcUpdate(orgIdRef.current, id, patch);
       setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      invalidateBusinessSnapshot();
       return updated;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update expense.';
@@ -154,6 +159,7 @@ export function useGSTpilotExpenses(): UseGSTpilotExpensesResult {
       setExpenses((cur) => cur.filter((e) => e.id !== id));
       try {
         await svcDelete(orgIdRef.current, id);
+        invalidateBusinessSnapshot();
         return true;
       } catch (err) {
         setExpenses(prev);

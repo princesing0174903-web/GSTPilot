@@ -4,6 +4,7 @@ import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 import { assertInvoiceTenantAccess } from '../_helpers';
 import { derivePaymentStatus } from '@/lib/invoices/invoices';
 import { invalidateGraph } from '@/lib/graph/live-update';
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
 import { parseBody, schemas } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,13 @@ export async function POST(req: Request) {
     });
 
     invalidateGraph();
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Invoice paid → cash, receivables, collection rate, customer outstanding,
+    // health score, and reports all need recomputation.
+    if (existing.client?.firmId) {
+      invalidateBusinessSnapshotCache(existing.client.firmId);
+    }
 
     return NextResponse.json({
       invoice,

@@ -32,6 +32,7 @@ import {
   type PaymentStats,
 } from '@/lib/gstpilot-data';
 import { useOrg } from '@/contexts/OrgContext';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 
 export interface UseGSTpilotPaymentsResult {
   payments: Payment[];
@@ -116,6 +117,9 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
     try {
       const payment = await svcCreate(orgIdRef.current, input);
       setPayments((prev) => [payment, ...prev]);
+      // Unified SaaS: invalidate the Business Snapshot so dashboards, Oracle,
+      // AI CFO, and reports reflect the new payment immediately.
+      invalidateBusinessSnapshot();
       return payment;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create payment.';
@@ -135,6 +139,7 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
     try {
       const updated = await svcUpdate(orgIdRef.current, id, patch);
       setPayments((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      invalidateBusinessSnapshot();
       return updated;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update payment.';
@@ -157,6 +162,7 @@ export function useGSTpilotPayments(): UseGSTpilotPaymentsResult {
       setPayments((cur) => cur.filter((p) => p.id !== id));
       try {
         await svcDelete(orgIdRef.current, id);
+        invalidateBusinessSnapshot();
         return true;
       } catch (err) {
         setPayments(prev);

@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import type {
   BankingAccount,
   BankingAccountListResult,
@@ -231,7 +232,14 @@ export function useBankingApi(): UseBankingApi {
             (body as { error?: string }).error || `Import failed (${res.status})`,
           );
         }
-        return res.json();
+        const result = await res.json();
+        // Unified SaaS: when the import persisted rows (confirm=true), invalidate
+        // the Business Snapshot so cash position, cash flow, dashboards, Oracle,
+        // and reports all reflect the new transactions immediately.
+        if (confirm) {
+          invalidateBusinessSnapshot();
+        }
+        return result;
       },
       fetchImports: () => call<unknown[]>('/api/banking/imports'),
       fetchReport: (period) => call<BankingReport>(`/api/banking/reports?period=${period}`),

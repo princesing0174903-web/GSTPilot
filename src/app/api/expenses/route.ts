@@ -228,6 +228,17 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    const existing = await db.expense.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
+
     const expense = await db.expense.update({
       where: { id },
       data: updateData,
@@ -266,6 +277,17 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
     }
+
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    const existing = await db.expense.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
 
     const expense = await db.expense.delete({ where: { id } })
 

@@ -1,18 +1,26 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { safeAuditWithRow } from '@/lib/audit/safe-write'
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session'
 
 // GET /api/audit-logs — Fetch audit logs with filters and pagination
+// Tenant-scoped via client.firmId = organizationId.
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
     const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
     const clientId = searchParams.get('clientId')
     const action = searchParams.get('action')
     const entity = searchParams.get('entity')
     const limit = parseInt(searchParams.get('limit') ?? '50', 10)
     const offset = parseInt(searchParams.get('offset') ?? '0', 10)
 
-    const where: Record<string, unknown> = {}
+    const where: Record<string, unknown> = { client: { firmId: organizationId } }
 
     if (clientId) where.clientId = clientId
     if (action) where.action = { contains: action }
@@ -56,10 +64,16 @@ export async function GET(request: Request) {
 }
 
 // POST /api/audit-logs — Create an audit log entry
+// Tenant-scoped via organizationId.
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
     const body = await request.json()
-    const { clientId, userId, action, entity, entityId, details } = body
+    const { organizationId, clientId, userId, action, entity, entityId, details } = body
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
 
     if (!action) {
       return NextResponse.json(

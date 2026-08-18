@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session'
 import {
   computeAging,
   getReceivablesSummary,
@@ -13,9 +14,18 @@ import type { InvoiceCloudInvoice } from '@/lib/invoices/types'
 // Returns: summary (outstanding, overdue, collection rate, DSO, forecast),
 // aging buckets, overdue invoices, reminder schedule, collection forecast,
 // and top defaulters. Returns real empty state when the DB is empty (no mock data).
-export async function GET() {
+// Tenant-scoped via client.firmId = organizationId.
+export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
     const rows = await db.invoice.findMany({
+      where: { client: { firmId: organizationId } },
       orderBy: { createdAt: 'desc' },
     })
 

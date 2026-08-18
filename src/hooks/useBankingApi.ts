@@ -173,22 +173,36 @@ export function useBankingApi(): UseBankingApi {
           `/api/banking/transactions?${params.toString()}`,
         );
       },
-      createTransaction: (input) =>
-        call<BankingTransaction>('/api/banking/transactions', {
+      createTransaction: async (input) => {
+        const r = await call<BankingTransaction>('/api/banking/transactions', {
           method: 'POST',
           body: JSON.stringify(input),
-        }),
-      updateTransaction: (id, patch) =>
-        call<BankingTransaction | null>(`/api/banking/transactions/${id}`, {
+        });
+        // Phase 2: invalidate snapshot so dashboard cash reflects the new txn.
+        invalidateBusinessSnapshot();
+        return r;
+      },
+      updateTransaction: async (id, patch) => {
+        const r = await call<BankingTransaction | null>(`/api/banking/transactions/${id}`, {
           method: 'PATCH',
           body: JSON.stringify(patch),
-        }),
-      deleteTransaction: (id) => call<void>(`/api/banking/transactions/${id}`, { method: 'DELETE' }),
-      bulkUpdateTransactions: (ids, patch) =>
-        call<{ updated: number }>('/api/banking/transactions/bulk', {
+        });
+        invalidateBusinessSnapshot();
+        return r;
+      },
+      deleteTransaction: async (id) => {
+        const r = await call<void>(`/api/banking/transactions/${id}`, { method: 'DELETE' });
+        invalidateBusinessSnapshot();
+        return r;
+      },
+      bulkUpdateTransactions: async (ids, patch) => {
+        const r = await call<{ updated: number }>('/api/banking/transactions/bulk', {
           method: 'POST',
           body: JSON.stringify({ ids, patch }),
-        }),
+        });
+        invalidateBusinessSnapshot();
+        return r;
+      },
       fetchReconciliationSummary: () =>
         call<{ summary: ReconciliationSummary; records: BankReconciliationRecord[] }>(
           '/api/banking/reconcile',

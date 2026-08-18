@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentOrgId } from '@/contexts/OrgContext';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
 import { fetchWithTimeout } from '@/lib/async';
@@ -187,6 +188,23 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     };
   }, [orgId, retryTick]);
 
+  // ── Phase 2 fix: cross-cutting TanStack Query invalidation ──
+  // useInvoicesApi manages its OWN React state but other components
+  // (Customer detail page, Reports, Reconciliation, Filings) consume
+  // invoices via TanStack Query. After every mutation, invalidate the
+  // cross-cutting keys so those views don't show stale data.
+  const queryClient = useQueryClient();
+  const invalidateCrossCutting = useCallback(() => {
+    // Invalidate invoice / reconciliation / filing / client caches so views
+    // that read via TanStack Query (Customer detail, Reports, etc.) refresh.
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+    queryClient.invalidateQueries({ queryKey: ['reconciliation'] });
+    queryClient.invalidateQueries({ queryKey: ['filings'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['business-snapshot'] });
+  }, [queryClient]);
+
   const refetch = useCallback(() => {
     setRetryTick((t) => t + 1);
   }, []);
@@ -224,6 +242,8 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         // Instantly refresh every dashboard / Oracle / AI CFO that reads
         // from the Business Snapshot (revenue, GST, health score, etc.).
         invalidateBusinessSnapshot();
+        // Phase 2: refresh TanStack Query consumers too.
+        invalidateCrossCutting();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] create failed:', err);
@@ -269,6 +289,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
         // Snapshot changed (totals, status, payment) — refresh everywhere.
         invalidateBusinessSnapshot();
+        invalidateCrossCutting();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] update failed:', err);
@@ -325,6 +346,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         }
         // Invoice removed — revenue / GST / outstanding all change.
         invalidateBusinessSnapshot();
+        invalidateCrossCutting();
         return true;
       } catch (err) {
         console.error('[useInvoicesApi] delete failed:', err);
@@ -365,6 +387,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         const json = (await res.json()) as { invoice: ApiInvoice };
         setInvoices((list) => list.map((inv) => (inv.id === id ? json.invoice : inv)));
         invalidateBusinessSnapshot();
+        invalidateCrossCutting();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] markPaid failed:', err);
@@ -399,6 +422,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
         const json = (await res.json()) as { invoice: ApiInvoice };
         setInvoices((prev) => [json.invoice, ...prev]);
         invalidateBusinessSnapshot();
+        invalidateCrossCutting();
         return json.invoice;
       } catch (err) {
         console.error('[useInvoicesApi] duplicate failed:', err);

@@ -110,6 +110,30 @@ export function DashboardContent() {
     }
   }, [])
 
+  // ── Command Palette bridge (Phase 2) ──────────────────────────────────────
+  // The CommandPalette lives in a different component subtree and can't reach
+  // `setNotificationsOpen` directly. It dispatches window events; we listen
+  // here and toggle the relevant sheet. This makes cmd-open-notifications +
+  // cmd-open-ai-copilot actually do something (previously they just closed
+  // the palette without opening their target).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onOpenNotifications = () => setNotificationsOpen(true)
+    const onOpenCopilot = () => {
+      // Copilot lives at /oracle?view=oracle — navigate there. The Oracle
+      // page itself focuses its input on mount, so a simple view switch is
+      // enough to "open" it.
+      setCurrentView('oracle')
+    }
+    window.addEventListener('gstpilot:open-notifications', onOpenNotifications as EventListener)
+    window.addEventListener('gstpilot:open-copilot', onOpenCopilot as EventListener)
+    return () => {
+      window.removeEventListener('gstpilot:open-notifications', onOpenNotifications as EventListener)
+      window.removeEventListener('gstpilot:open-copilot', onOpenCopilot as EventListener)
+    }
+  }, [setCurrentView])
+
+
   const userInitials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : 'U'

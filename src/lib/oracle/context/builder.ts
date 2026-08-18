@@ -505,6 +505,12 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
     const connected = !!z;
     const expired = z?.expiresAt ? new Date(z.expiresAt).getTime() < Date.now() : false;
     const lastSync = z?.updatedAt ?? z?.createdAt ?? null;
+    const lastSyncLog = connected ? await db.zohoSyncLog.findFirst({
+      where: { organizationId: orgId },
+      orderBy: { startedAt: 'desc' },
+      select: { status: true, error: true },
+    }).catch(() => null) : null;
+    const lastSyncFailed = lastSyncLog?.status === 'failed' || lastSyncLog?.status === 'partial';
     const daysSince = lastSync ? Math.floor((Date.now() - new Date(lastSync).getTime()) / 86_400_000) : null;
     const state: ConnectionState = !connected ? 'disconnected' : expired ? 'expired' : 'connected';
     const env = resolveEnvironment(state, lastSync, FRESHNESS_WINDOWS.zoho, isDemo);
@@ -516,9 +522,10 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
       environment: env,
       lastSyncAt: lastSync,
       daysSinceSync: daysSince,
-      lastSyncFailed: false,
+      lastSyncFailed,
       statusMessage: !connected ? 'Not connected — Zoho Books accounting data is unavailable.'
         : expired ? 'Token expired — reconnect Zoho Books to refresh accounting data.'
+        : lastSyncFailed ? `Last sync failed${lastSyncLog?.error ? ` · ${lastSyncLog.error.slice(0, 120)}` : ''}.`
         : `Connected${daysSince !== null ? ` · last sync ${daysSince}d ago` : ''}`,
     });
   } catch {}
@@ -533,25 +540,28 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
     gspConnected = !!profile;
     const lastSync = profile?.updatedAt ?? null;
     const daysSince = lastSync ? Math.floor((Date.now() - new Date(lastSync).getTime()) / 86_400_000) : null;
-    const env = resolveEnvironment(gspConnected ? 'connected' : 'disconnected', lastSync, FRESHNESS_WINDOWS.gst, isDemo);
+    const gstnProviderEnv = process.env.GSTN_PROVIDER ?? 'mock';
+    const gstIsSandbox = !['official', 'clear'].includes(gstnProviderEnv);
+    const gstState: ConnectionState = !gspConnected ? 'disconnected' : gstIsSandbox ? 'sandbox' : 'connected';
+    const env = resolveEnvironment(gstState, lastSync, FRESHNESS_WINDOWS.gst, isDemo);
     list.push({
       provider: 'gst-gsp',
       label: 'GST GSP',
       connected: gspConnected,
-      connectionState: gspConnected ? 'connected' : 'disconnected',
+      connectionState: gstState,
       environment: env,
       lastSyncAt: lastSync,
       daysSinceSync: daysSince,
       lastSyncFailed: false,
-      statusMessage: gspConnected
-        ? `Connected${daysSince !== null ? ` · last sync ${daysSince}d ago` : ''}`
-        : 'Not connected — live GSTR-2B data is unavailable.',
+      statusMessage: !gspConnected ? 'Not connected — live GSTR-2B data is unavailable.'
+        : gstIsSandbox ? `Connected (sandbox · ${gstnProviderEnv} provider)${daysSince !== null ? ` · last sync ${daysSince}d ago` : ''} — test data, not live GST.`
+        : `Connected${daysSince !== null ? ` · last sync ${daysSince}d ago` : ''}`,
     });
   } catch {}
 
   // Banking
   try {
-    const bankConn = await db.bankConnection.findFirst({
+    const bankConn = await db.bankAccount.findFirst({
       where: { organizationId: orgId, status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: { id: true, provider: true, status: true, createdAt: true, updatedAt: true },
@@ -589,7 +599,7 @@ async function buildBanking(orgId: string, isDemo: boolean): Promise<BankingSect
   const isSandbox = bankProviderEnv !== 'live';
 
   try {
-    const conn = await db.bankConnection.findFirst({
+    const conn = await db.bankAccount.findFirst({
       where: { organizationId: orgId, status: 'active' },
       orderBy: { createdAt: 'desc' },
       select: { id: true, provider: true },
@@ -602,15 +612,15 @@ async function buildBanking(orgId: string, isDemo: boolean): Promise<BankingSect
     const accounts = await db.bankAccount.findMany({
       where: { organizationId: orgId },
       take: 10,
-      select: { id: true, maskedAccountNumber: true, bankName: true, balance: true, ifsc: true },
+      select: { id: true, accountMasked: true, bankName: true, balance: true, ifsc: true },
     }).catch(() => []);
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
     const txns = await db.bankTransaction.findMany({
-      where: { organizationId: orgId, transactionDate: { gte: thirtyDaysAgo } },
-      orderBy: { transactionDate: 'desc' },
+      where: { organizationId: orgId, date: { gte: thirtyDaysAgo } },
+      orderBy: { date: 'desc' },
       take: 50,
-      select: { id: true, transactionDate: true, description: true, amount: true, category: true, reconciled: true },
+      select: { id: true, date: true, description: true, amount: true, category: true, matched: true },
     }).catch(() => []);
 
     const categorizedMap = new Map<string, { inflow: number; outflow: number }>();
@@ -627,18 +637,18 @@ async function buildBanking(orgId: string, isDemo: boolean): Promise<BankingSect
       connected: true,
       accounts: accounts.map(a => ({
         id: a.id,
-        maskedNumber: a.maskedAccountNumber ?? '****',
+        maskedNumber: a.accountMasked ?? '****',
         bankName: a.bankName ?? 'Bank',
         balance: a.balance,
         environment: env,
       })),
       recentTransactions: txns.map(t => ({
         id: t.id,
-        date: t.transactionDate.toISOString(),
+        date: t.date.toISOString(),
         description: t.description ?? '',
         amount: t.amount,
         category: t.category,
-        reconciled: t.reconciled,
+        reconciled: t.matched,
       })),
       categorizedTotals: Array.from(categorizedMap.entries()).map(([category, v]) => ({ category, ...v })),
       isSandbox,
@@ -666,7 +676,7 @@ async function buildBanking(orgId: string, isDemo: boolean): Promise<BankingSect
         records: accounts.slice(0, 5).map(a => ({
           kind: 'bank-account' as const,
           id: a.id,
-          label: `${a.bankName ?? 'Bank'} ${a.maskedAccountNumber ?? '****'}`,
+          label: `${a.bankName ?? 'Bank'} ${a.accountMasked ?? '****'}`,
         })),
         supports: ['cash balance', 'transactions', 'categorized totals'],
       },
@@ -805,19 +815,19 @@ async function buildSupplierDetail(orgId: string): Promise<SupplierSection> {
   try {
     const bills = await db.purchaseBill.findMany({
       where: { client: { firmId: orgId } },
-      select: { vendorName: true, totalAmount: true, balanceAmount: true, dueDate: true, gstin: true },
+      select: { vendorName: true, totalAmount: true, balanceAmount: true, dueDate: true, vendorGstin: true },
     }).catch(() => []);
 
     const byVendor = new Map<string, { spend: number; outstanding: number; overdue: number; gstin: string | null }>();
     for (const b of bills) {
       const name = b.vendorName ?? 'Unknown';
-      const entry = byVendor.get(name) ?? { spend: 0, outstanding: 0, overdue: 0, gstin: b.gstin };
+      const entry = byVendor.get(name) ?? { spend: 0, outstanding: 0, overdue: 0, gstin: b.vendorGstin };
       entry.spend += b.totalAmount ?? 0;
       entry.outstanding += b.balanceAmount ?? 0;
       if (b.balanceAmount && b.balanceAmount > 0 && b.dueDate && new Date(b.dueDate) < new Date()) {
         entry.overdue += b.balanceAmount;
       }
-      if (!entry.gstin) entry.gstin = b.gstin;
+      if (!entry.gstin) entry.gstin = b.vendorGstin;
       byVendor.set(name, entry);
     }
 
@@ -827,7 +837,7 @@ async function buildSupplierDetail(orgId: string): Promise<SupplierSection> {
         spend: v.spend,
         outstandingBalance: v.outstanding,
         overdueBalance: v.overdue,
-        gstCompliant: v.gstin ? /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}\d{Z}[A-Z\d]{1}$/.test(v.gstin) : null,
+        gstCompliant: v.gstin ? /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$/.test(v.gstin) : null,
       }))
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 5);
@@ -895,17 +905,21 @@ async function buildGSTDetail(orgId: string, isDemo: boolean): Promise<{ reconci
     }
   } catch {}
 
-  const env: DataEnvironment = isDemo ? 'DEMO' : gspConnected ? 'LIVE' : 'UNAVAILABLE';
+  const gstnProviderEnv = process.env.GSTN_PROVIDER ?? 'mock';
+  const gstIsSandbox = !['official', 'clear'].includes(gstnProviderEnv);
+  const env: DataEnvironment = isDemo ? 'DEMO' : !gspConnected ? 'UNAVAILABLE' : gstIsSandbox ? 'SANDBOX' : 'LIVE';
   return {
     reconciliation: { matched, mismatched, missingInBooks, missingIn2B, itcAtRisk },
     gspConnected,
     source: {
-      system: gspConnected ? 'GST GSP · GSTR-2B' : 'GST (not connected)',
+      system: !gspConnected ? 'GST (not connected)' : gstIsSandbox ? `GST GSP · GSTR-2B (sandbox · ${gstnProviderEnv})` : 'GST GSP · GSTR-2B',
       environment: env,
       lastUpdatedAt: new Date().toISOString(),
-      connectionState: gspConnected ? 'connected' : 'disconnected',
+      connectionState: gspConnected ? (gstIsSandbox ? 'sandbox' : 'connected') : 'disconnected',
       deepLink: '/dashboard?view=gst-reconciliation',
-      note: !gspConnected ? 'GSP not connected — reconciliation data may be incomplete' : undefined,
+      note: !gspConnected ? 'GSP not connected — reconciliation data may be incomplete'
+        : gstIsSandbox ? `Sandbox provider (${gstnProviderEnv}) — test data, not live GST.`
+        : undefined,
     },
   };
 }

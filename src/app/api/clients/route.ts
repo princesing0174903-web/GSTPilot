@@ -290,6 +290,22 @@ export async function PATCH(request: Request) {
       data: updateData,
     })
 
+    // ── Unified SaaS (Phase 2): cascade denormalized snapshot to invoices ──
+    // Invoice.buyerName + Invoice.buyerGstin are denormalized snapshots taken
+    // at invoice creation. When a customer is renamed or their GSTIN changes,
+    // existing invoices MUST be updated too — otherwise the snapshot's
+    // top-customer concentration splits revenue across old + new buyerName
+    // values, and the Receivables table shows stale customer names.
+    const cascadeUpdate: Record<string, string | null> = {}
+    if (body.tradeName !== undefined) cascadeUpdate.buyerName = body.tradeName
+    if (body.gstin !== undefined) cascadeUpdate.buyerGstin = body.gstin ?? null
+    if (Object.keys(cascadeUpdate).length > 0) {
+      await db.invoice.updateMany({
+        where: { clientId: client.id },
+        data: cascadeUpdate,
+      })
+    }
+
     // Create audit log
     await db.auditLog.create({
       data: {

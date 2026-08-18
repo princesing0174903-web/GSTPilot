@@ -28,7 +28,7 @@ import {
   GitCompareArrows, Activity, CheckCircle2, AlertTriangle, XCircle,
   Plus, Trash2, Loader2, CloudUpload, FileSpreadsheet, FileJson,
   File as FileIcon, Image as ImageIcon, Send, Pencil, ShieldCheck,
-  Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell,
+  Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell, Wallet,
 } from 'lucide-react';
 import type { ReturnType, DocumentType, FilingStatus, MatchStatus } from '@/types/gst';
 import { FILING_STATUS_CONFIG, MATCH_STATUS_CONFIG } from '@/types/gst';
@@ -55,6 +55,8 @@ import {
   useDeleteDocument,
   useActivities,
   useNotifications,
+  useInvoices,
+  usePayments,
   queryKeys,
 } from '@/hooks/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -169,6 +171,22 @@ export default function ClientDetailPage() {
   const { data: reconResultsData } = useReconResults(selectedClientId ? { clientId: selectedClientId } : undefined);
   const { data: activitiesData, isLoading: activitiesLoading } = useActivities(selectedClientId);
   const { data: notificationsData } = useNotifications();
+
+  // ─── Phase 2: Customer ↔ Invoice ↔ Payment bidirectional link ───────────
+  // Previously this page showed documents/filings/recon runs but NO invoices
+  // or payments — so a user opening a Customer's detail page had no way to
+  // see what invoices belonged to that customer, what their outstanding
+  // balance was, or what payment history they had. The link existed in the DB
+  // (Invoice.clientId FK) but no UI surfaced it.
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments(selectedClientId ?? undefined);
+  const clientInvoices = invoicesData?.invoices ?? [];
+  const clientPayments = paymentsData?.payments ?? [];
+  const outstandingBalance = clientInvoices.reduce((s, i) => s + (i.balanceAmount ?? 0), 0);
+  const totalInvoiced = clientInvoices.reduce((s, i) => s + (i.totalAmount ?? 0), 0);
+  const totalPaid = clientPayments
+    .filter((p) => p.partyType === 'customer' && p.status === 'completed')
+    .reduce((s, p) => s + p.amount, 0);
 
   // Mutations
   const updateClientMutation = useUpdateClient();
@@ -560,6 +578,8 @@ export default function ClientDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-slate-50 border">
           <TabsTrigger value="overview" className="gap-1.5 text-xs"><ShieldCheck className="h-3.5 w-3.5" />Overview</TabsTrigger>
+          <TabsTrigger value="invoices" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Invoices</TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1.5 text-xs"><Wallet className="h-3.5 w-3.5" />Payments</TabsTrigger>
           <TabsTrigger value="documents" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Documents</TabsTrigger>
           <TabsTrigger value="returns" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Returns</TabsTrigger>
           <TabsTrigger value="reconciliation" className="gap-1.5 text-xs"><GitCompareArrows className="h-3.5 w-3.5" />Reconciliation</TabsTrigger>
@@ -691,6 +711,152 @@ export default function ClientDetailPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            INVOICES TAB (Phase 2 — Customer↔Invoice bidirectional link)
+        ═══════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="invoices" className="space-y-4 mt-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Total Invoiced</div>
+                <div className="text-lg font-semibold mt-1">{formatCurrency(totalInvoiced)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Outstanding Balance</div>
+                <div className="text-lg font-semibold mt-1 text-amber-600">{formatCurrency(outstandingBalance)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Invoice Count</div>
+                <div className="text-lg font-semibold mt-1">{clientInvoices.length}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {invoicesLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : clientInvoices.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No invoices for this customer yet."
+              description="Create an invoice for this customer from the Invoices page — it will appear here automatically."
+            />
+          ) : (
+            <Card className="border-border/60">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Invoice #</TableHead>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Total</TableHead>
+                      <TableHead className="text-xs">Balance</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientInvoices.map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="text-xs font-medium">{inv.invoiceNumber}</TableCell>
+                        <TableCell className="text-xs">{inv.invoiceDate ?? '—'}</TableCell>
+                        <TableCell className="text-xs">{formatCurrency(inv.totalAmount)}</TableCell>
+                        <TableCell className="text-xs">{formatCurrency(inv.balanceAmount)}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant="outline" className={
+                            inv.paymentStatus === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                            inv.paymentStatus === 'partial' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                            'border-slate-200 bg-slate-50 text-slate-700'
+                          }>
+                            {inv.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            PAYMENTS TAB (Phase 2 — Customer payment history)
+        ═══════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="payments" className="space-y-4 mt-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Total Collected (completed)</div>
+                <div className="text-lg font-semibold mt-1 text-emerald-600">{formatCurrency(totalPaid)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Payment Count</div>
+                <div className="text-lg font-semibold mt-1">{clientPayments.length}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {paymentsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : clientPayments.length === 0 ? (
+            <EmptyState
+              icon={Wallet}
+              title="No payment history for this customer yet."
+              description="When you mark an invoice as paid or record a payment, it will appear here automatically."
+            />
+          ) : (
+            <Card className="border-border/60">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Amount</TableHead>
+                      <TableHead className="text-xs">Mode</TableHead>
+                      <TableHead className="text-xs">Reference</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientPayments.map((pmt) => (
+                      <TableRow key={pmt.id}>
+                        <TableCell className="text-xs">{pmt.paymentDate}</TableCell>
+                        <TableCell className="text-xs font-medium">{formatCurrency(pmt.amount)}</TableCell>
+                        <TableCell className="text-xs uppercase">{pmt.paymentMode}</TableCell>
+                        <TableCell className="text-xs">{pmt.referenceNo ?? '—'}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant="outline" className={
+                            pmt.status === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                            pmt.status === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                            'border-slate-200 bg-slate-50 text-slate-700'
+                          }>
+                            {pmt.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ═══════════════════════════════════════════════════════════════════

@@ -99,6 +99,8 @@ export async function POST(
             resolutionNote: note || 'Bulk resolved',
           },
         });
+        const { invalidateBusinessSnapshotCache } = await import('@/lib/business/snapshot');
+        invalidateBusinessSnapshotCache(run.organizationId);
         return NextResponse.json({ ok: true, action, affected: matches.length });
       }
 
@@ -112,6 +114,8 @@ export async function POST(
             resolutionNote: null,
           },
         });
+        const { invalidateBusinessSnapshotCache } = await import('@/lib/business/snapshot');
+        invalidateBusinessSnapshotCache(run.organizationId);
         return NextResponse.json({ ok: true, action, affected: matches.length });
       }
 

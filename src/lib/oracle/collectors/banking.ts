@@ -39,13 +39,15 @@ function emptyData(): BankingData {
 export const bankingCollector: Collector<BankingData> = {
   id: 'banking',
   label: 'Banking',
-  async collect(_ctx: CollectorContext): Promise<CollectorResult<BankingData>> {
+  async collect(ctx: CollectorContext): Promise<CollectorResult<BankingData>> {
     const collectedAt = new Date().toISOString();
 
     try {
+      const orgFilter = ctx.organizationId ? { organizationId: ctx.organizationId } : undefined;
       const [accounts, transactions] = await Promise.all([
-        db.bankAccount.findMany({ take: 50 }).catch(() => []),
+        db.bankAccount.findMany({ where: orgFilter, take: 50 }).catch(() => []),
         db.bankTransaction.findMany({
+          where: orgFilter,
           take: 500,
           orderBy: { date: 'desc' },
         }).catch(() => []),
@@ -73,7 +75,7 @@ export const bankingCollector: Collector<BankingData> = {
         category: t.category,
         referenceNo: t.referenceNo,
         matched: t.matched,
-        balanceAfter: t.balanceAfter,
+        balanceAfter: t.balance,
       }));
 
       // ── Aggregate totals (last 30 days for "recent" metrics) ─────────────

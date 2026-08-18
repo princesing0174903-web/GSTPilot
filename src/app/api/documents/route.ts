@@ -1,23 +1,30 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session'
 
 // GET /api/documents — List documents, tenant-scoped.
 // Accepts organizationId (preferred) or clientId. If NEITHER is provided,
 // returns empty (prevents cross-tenant data leak).
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
     const { searchParams } = new URL(request.url)
     const folder = searchParams.get('folder')
     const clientId = searchParams.get('clientId')
     const search = searchParams.get('search')
     const organizationId = searchParams.get('organizationId') ?? searchParams.get('firmId')
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
 
     const where: Record<string, unknown> = { isLatest: true }
 
     if (clientId) {
       where.clientId = clientId
     } else if (organizationId) {
-      where.client = { organizationId }
+      // Client has firmId (not organizationId) — fix the previous cross-tenant leak.
+      where.client = { firmId: organizationId }
     } else {
       // No tenant scope — return empty rather than leak cross-tenant data
       return NextResponse.json({ documents: [] })

@@ -186,7 +186,7 @@ export async function POST(
 
     // ── Update the match ──
     await db.gSTReconciliationMatch.update({
-      where: { id: matchId },
+      where: { id: matchId, runId },
       data: {
         fixApplied: true,
         fixAppliedAt: new Date(),
@@ -209,6 +209,12 @@ export async function POST(
           : {}),
       },
     });
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Auto-fix changes the match status (and possibly books values) → ITC at
+    // risk + reconciliation aggregates shift. Mirror resolve/bulk invalidation.
+    const { invalidateBusinessSnapshotCache } = await import('@/lib/business/snapshot');
+    invalidateBusinessSnapshotCache(run.organizationId);
 
     return NextResponse.json({
       ok: true,

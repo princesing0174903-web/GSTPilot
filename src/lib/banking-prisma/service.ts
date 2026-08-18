@@ -680,11 +680,20 @@ export async function updateTransaction(
   }>,
   actor?: string,
 ): Promise<BankingTransaction | null> {
-  const updated = await db.bankTransaction.update({
-    where: { id: txnId },
+  // SECURITY: scope the update by both id AND organizationId — prevents an
+  // authenticated caller in org A from patching a transaction in org B by
+  // passing their own organizationId alongside a foreign txnId. Mirrors the
+  // pattern used by deleteTransaction() below.
+  const result = await db.bankTransaction.updateMany({
+    where: { id: txnId, organizationId },
     data: patch,
+  });
+  if (result.count === 0) return null;
+  const updated = await db.bankTransaction.findUnique({
+    where: { id: txnId },
     include: { account: { select: { bankName: true, accountMasked: true } } },
   });
+  if (!updated) return null;
   await writeAuditLog({
     organizationId,
     actor: actor || 'system',

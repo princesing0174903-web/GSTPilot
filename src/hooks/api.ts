@@ -81,6 +81,10 @@ export const queryKeys = {
     all: (clientId?: string) =>
       ['invoices', clientId ?? 'all'] as const,
   },
+  payments: {
+    all: (clientId?: string) =>
+      ['payments', clientId ?? 'all'] as const,
+  },
   filings: {
     all: (clientId?: string, status?: string) =>
       ['filings', clientId ?? 'all', status ?? 'all'] as const,
@@ -164,6 +168,29 @@ interface InvoicesResponse {
 
 interface InvoiceResponse {
   invoice: Invoice;
+}
+
+// Phase 2: Payment type for the customer-detail payment history tab.
+// Mirrors the canonical Prisma Payment model fields exposed by GET /api/payments.
+interface Payment {
+  id: string;
+  clientId: string | null;
+  invoiceId: string | null;
+  partyName: string;
+  partyType: string;
+  amount: number;
+  paymentDate: string;
+  paymentMode: string;
+  referenceNo: string | null;
+  status: string;
+  reconciled: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PaymentsResponse {
+  payments: Payment[];
 }
 
 interface FilingsResponse {
@@ -392,6 +419,29 @@ export function useInvoices(
       const qs = params.toString();
       return apiFetch<InvoicesResponse>(`/api/invoices${qs ? `?${qs}` : ''}`);
     },
+    ...options,
+  });
+}
+
+// Phase 2: Payment history hook — used by the ClientDetailPage "Payments" tab.
+// Calls GET /api/payments?clientId=X (tenant-scoped via organizationId on the
+// server). Returns an empty list when clientId is absent.
+export function usePayments(
+  clientId?: string,
+  options?: Omit<
+    UseQueryOptions<PaymentsResponse, Error>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery<PaymentsResponse, Error>({
+    queryKey: queryKeys.payments.all(clientId),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (clientId) params.set('clientId', clientId);
+      const qs = params.toString();
+      return apiFetch<PaymentsResponse>(`/api/payments${qs ? `?${qs}` : ''}`);
+    },
+    enabled: !!clientId,
     ...options,
   });
 }

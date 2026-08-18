@@ -21,6 +21,7 @@
 
 import { NextResponse } from 'next/server';
 import { getBusinessSnapshot } from '@/lib/business/snapshot';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -87,12 +88,18 @@ async function persistSnapshotRow(snapshot: Awaited<ReturnType<typeof getBusines
 // Response shape (typed inline so the frontend can mirror it 1:1).
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
     const { searchParams } = new URL(request.url);
     const organizationId =
       searchParams.get('organizationId') ||
       searchParams.get('firmId') ||
       request.headers.get('x-gstpilot-orgid') ||
       '';
+
+    const orgResult = await requireOrgMembership(uid, organizationId);
+    if (orgResult instanceof NextResponse) return orgResult;
 
     // No org scope → empty state (never leak cross-tenant data)
     if (!organizationId) {

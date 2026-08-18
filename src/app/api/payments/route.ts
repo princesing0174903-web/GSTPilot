@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
     if (clientId) {
       where.clientId = clientId
     } else if (organizationId) {
-      where.client = { organizationId }
+      // Payment has no organizationId column — scope via client.firmId.
+      where.client = { firmId: organizationId }
     } else {
       // No tenant scope — return empty rather than leak cross-tenant data
       return NextResponse.json({ payments: [] })
@@ -338,6 +339,19 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    // Fetch the payment's client.firmId before mutating, and require the
+    // caller to be a member of that org. Mirrors `assertInvoiceTenantAccess`.
+    const existing = await db.payment.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
+
     const payment = await db.payment.update({
       where: { id },
       data: updateData,
@@ -377,6 +391,17 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
     }
+
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    const existing = await db.payment.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
 
     const payment = await db.payment.delete({ where: { id } })
 

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session'
 import { isOverdue, getFilingDueDate } from '@/lib/gst-utils'
 
 // Helper: get last N month periods in "YYYY-MM" format
@@ -21,12 +22,21 @@ function getLastNMonths(n: number, referencePeriod?: string): string[] {
 }
 
 // GET /api/analytics — Fetch analytics data for charts
-// Query params: period (e.g., "2025-06"), clientId
+// Query params: period (e.g., "2025-06"), clientId, organizationId (required)
+// Tenant-scoped via client.firmId = organizationId.
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
     const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
     const period = searchParams.get('period')
     const clientId = searchParams.get('clientId')
+    // Tenant scope applied to every query below via client.firmId.
+    const tenantWhere = { client: { firmId: organizationId! } }
 
     // Generate last 6 months of periods for consistent chart data
     const last6Months = getLastNMonths(6, period ?? undefined)
@@ -34,7 +44,7 @@ export async function GET(request: Request) {
     // ── 1. Monthly Filing Volume ──────────────────────────────────────────
     // Array of { period, filed, pending, overdue } - last 6 months from GSTRFiling
     const allFilings = await db.gSTRFiling.findMany({
-      where: clientId ? { clientId } : undefined,
+      where: { ...tenantWhere, ...(clientId ? { clientId } : {}) },
       select: { period: true, status: true },
     })
 
@@ -65,6 +75,7 @@ export async function GET(request: Request) {
     // Array of { period, cgst, sgst, igst, cess, total } - from Invoice sums
     const allInvoices = await db.invoice.findMany({
       where: {
+        ...tenantWhere,
         ...(clientId ? { clientId } : {}),
         ...(period ? { period } : {}),
       },
@@ -96,7 +107,7 @@ export async function GET(request: Request) {
     // ── 3. Compliance Trend ──────────────────────────────────────────────
     // Array of { period, score } - from HealthScore or Client.healthScore averages
     const healthScores = await db.healthScore.findMany({
-      where: clientId ? { clientId } : undefined,
+      where: { ...tenantWhere, ...(clientId ? { clientId } : {}) },
       select: { period: true, score: true },
     })
 
@@ -119,6 +130,7 @@ export async function GET(request: Request) {
     // If no health scores recorded yet, compute from current client health scores
     if (complianceTrend.length === 0) {
       const clients = await db.client.findMany({
+        where: { firmId: organizationId! },
         select: { healthScore: true },
       })
       const avgScore = clients.length > 0
@@ -131,6 +143,7 @@ export async function GET(request: Request) {
     // ── 4. Client Health Distribution ────────────────────────────────────
     // Array of { range, count } - bucket clients by healthScore ranges
     const clients = await db.client.findMany({
+      where: { firmId: organizationId! },
       select: { healthScore: true },
     })
 
@@ -151,6 +164,7 @@ export async function GET(request: Request) {
     // Array of { period, total, validated, errors } - from Invoice counts
     const invoiceStats = await db.invoice.findMany({
       where: {
+        ...tenantWhere,
         ...(clientId ? { clientId } : {}),
         ...(period ? { period } : {}),
       },
@@ -183,6 +197,7 @@ export async function GET(request: Request) {
     // Array of { period, amount } - estimated from overdue filings
     const overdueFilings = await db.gSTRFiling.findMany({
       where: {
+        ...tenantWhere,
         status: { not: 'filed' },
         ...(clientId ? { clientId } : {}),
       },

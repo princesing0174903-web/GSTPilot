@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session'
 import {
   getPayablesSummary,
   dueThisWeek,
@@ -13,14 +14,21 @@ import type { PurchaseBill } from '@/lib/invoices/types'
 // Returns: summary (total payable, overdue, due this/next week),
 // supplier aging, payment priorities, cash allocation plan, and
 // upcoming supplier payments. Returns real empty state when the DB is empty
-// (no mock data).
+// (no mock data). Tenant-scoped via client.firmId = organizationId.
 export async function GET(request: Request) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
     const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId')
+    const orgResult = await requireOrgMembership(uid, organizationId)
+    if (orgResult instanceof NextResponse) return orgResult
     const availableCashParam = searchParams.get('availableCash')
     const availableCash = availableCashParam ? Number(availableCashParam) : 500000
 
     const rows = await db.purchaseBill.findMany({
+      where: { client: { firmId: organizationId } },
       orderBy: { createdAt: 'desc' },
       include: { client: { select: { tradeName: true, gstin: true } } },
     })

@@ -43,6 +43,8 @@ export async function POST(req: Request) {
     const paid = body.paidAmount !== undefined ? Number(body.paidAmount) : total;
     const balance = Math.max(0, Math.round((total - paid) * 100) / 100);
     const paymentStatus = derivePaymentStatus(paid, total, existing.dueDate ?? undefined);
+    const paymentDate = body.paymentDate ?? new Date().toISOString().split('T')[0];
+    const paymentMode = body.paymentMode ?? existing.paymentMode ?? 'upi';
 
     // Status logic:
     //   • Fully paid → 'paid' (don't downgrade from 'paid').
@@ -55,18 +57,42 @@ export async function POST(req: Request) {
       newStatus = 'sent';
     }
 
-    const invoice = await db.invoice.update({
-      where: { id: body.id },
-      data: {
-        paidAmount: paid,
-        paymentMode: body.paymentMode ?? existing.paymentMode ?? null,
-        paymentDate: body.paymentDate ?? new Date().toISOString().split('T')[0],
-        balanceAmount: balance,
-        paymentStatus,
-        status: newStatus,
-      },
-      include: { client: true, items: { orderBy: { lineNumber: 'asc' } } },
-    });
+    // ── Unified SaaS (Phase 2): create a canonical Payment row ──
+    // Previously mark-paid updated Invoice AR but wrote NO Payment row → the
+    // customer's payment history (Payment table) was always empty for these
+    // events, and snapshot.totalCollected diverged from Invoice.paidAmount.
+    // Now both writes happen atomically inside a $transaction.
+    const partyName =
+      existing.buyerName ?? existing.client?.tradeName ?? 'Unknown Customer';
+
+    const [invoice] = await db.$transaction([
+      db.invoice.update({
+        where: { id: body.id },
+        data: {
+          paidAmount: paid,
+          paymentMode,
+          paymentDate,
+          balanceAmount: balance,
+          paymentStatus,
+          status: newStatus,
+        },
+        include: { client: true, items: { orderBy: { lineNumber: 'asc' } } },
+      }),
+      db.payment.create({
+        data: {
+          clientId: existing.clientId,
+          invoiceId: existing.id,
+          partyName,
+          partyType: 'customer',
+          amount: paid,
+          paymentDate,
+          paymentMode,
+          status: 'completed',
+          reconciled: false,
+          notes: `Auto-created from mark-paid action on ${existing.invoiceNumber}.`,
+        },
+      }),
+    ]);
 
     await db.auditLog.create({
       data: {
@@ -74,7 +100,7 @@ export async function POST(req: Request) {
         action: 'invoice_marked_paid',
         entity: 'invoice',
         entityId: existing.id,
-        details: `Invoice ${existing.invoiceNumber} marked paid (₹${paid} of ₹${total}; status=${paymentStatus}).`,
+        details: `Invoice ${existing.invoiceNumber} marked paid (₹${paid} of ₹${total}; status=${paymentStatus}). Payment record created.`,
       },
     });
 
@@ -89,7 +115,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       invoice,
-      message: `Marked Invoice ${existing.invoiceNumber} as paid (₹${paid} of ₹${total}).`,
+      message: `Marked Invoice ${existing.invoiceNumber} as paid (₹${paid} of ₹${total}). Payment record created.`,
     });
   } catch (err) {
     console.error('[API /invoices/mark-paid] error:', err);

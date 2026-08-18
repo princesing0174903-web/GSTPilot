@@ -386,6 +386,10 @@ export default function CommandPalette() {
         icon: Bell,
         action: () => {
           setCommandPaletteOpen(false);
+          // Phase 2 fix: previously this command just closed the palette
+          // without opening the notifications sheet. Dispatch a window event
+          // that DashboardShell listens for to open the sheet.
+          window.dispatchEvent(new CustomEvent('gstpilot:open-notifications'));
           addToRecent('cmd-open-notifications', 'Open Notifications', 'command');
         },
         group: 'Commands',
@@ -419,6 +423,10 @@ export default function CommandPalette() {
         icon: Bot,
         action: () => {
           setCommandPaletteOpen(false);
+          // Phase 2 fix: previously this command just closed the palette
+          // without opening the Copilot panel. Dispatch a window event that
+          // DashboardShell listens for to focus the Copilot input.
+          window.dispatchEvent(new CustomEvent('gstpilot:open-copilot'));
           addToRecent('cmd-open-ai-copilot', 'Open AI Copilot', 'command');
         },
         group: 'Commands',

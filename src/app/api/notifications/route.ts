@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     const { uid } = authResult
 
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // SECURITY: Always use the authenticated uid — never trust a client-supplied userId.
+    const userId = uid
     const clientId = searchParams.get('clientId')
     const isRead = searchParams.get('isRead')
     const category = searchParams.get('category')
@@ -25,11 +26,9 @@ export async function GET(request: Request) {
     // Build where clause using Prisma
     const where: Record<string, unknown> = {
       dismissed: false,
+      userId, // always scope by authenticated uid
     }
 
-    if (userId) {
-      where.userId = userId
-    }
     if (clientId) {
       where.clientId = clientId
     }
@@ -61,9 +60,7 @@ export async function GET(request: Request) {
     const unreadWhere: Record<string, unknown> = {
       isRead: false,
       dismissed: false,
-    }
-    if (userId) {
-      unreadWhere.userId = userId
+      userId, // always scope by authenticated uid
     }
     if (clientId) {
       unreadWhere.clientId = clientId
@@ -184,9 +181,17 @@ export async function PATCH(request: Request) {
       updateData.readAt = readAt ? new Date(readAt) : null
     }
 
-    const notification = await db.notification.update({
-      where: { id },
+    // SECURITY: scope update by both id AND authenticated uid — prevents
+    // any authenticated user from mutating another user's notifications.
+    const result = await db.notification.updateMany({
+      where: { id, userId: uid },
       data: updateData,
+    })
+    if (result.count === 0) {
+      return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
+    }
+    const notification = await db.notification.findUnique({
+      where: { id },
       include: {
         client: {
           select: {
@@ -240,9 +245,14 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const notification = await db.notification.delete({
-      where: { id },
+    // SECURITY: scope delete by both id AND authenticated uid.
+    const result = await db.notification.deleteMany({
+      where: { id, userId: uid },
     })
+    if (result.count === 0) {
+      return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
+    }
+    const notification = { id, title: '(deleted)' }
 
     // Best-effort audit log (safe-write: retries without userId on P2003).
     await safeAudit({

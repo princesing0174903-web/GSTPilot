@@ -112,7 +112,18 @@ function resolveRedirectUrl(): string {
 export class SetuAAProvider implements IBankProvider {
   readonly name = 'Setu Account Aggregator';
   readonly provider = 'setu' as const;
-  readonly isLive = true;
+  /**
+   * True only when Setu is configured with PRODUCTION URLs. When the configured
+   * SETU_BASE_URL points at a sandbox host (sandbox/uat/fiu-sandbox), this is
+   * `false` so UI badges + Oracle context correctly label the data as SANDBOX.
+   * Phase 2 fix: was previously hardcoded `true`, which mislabeled Setu sandbox
+   * environments as "live" in the UI badge (BankingStatusPills.tsx) + Oracle.
+   */
+  readonly isLive = (() => {
+    const baseUrl = process.env.SETU_BASE_URL ?? '';
+    const isSandboxUrl = /sandbox|uat|fiu-sandbox|\.uat\.|sandbox\./i.test(baseUrl);
+    return baseUrl.length > 0 && !isSandboxUrl;
+  })();
 
   /**
    * Ensure Setu is configured. Throws a clear, actionable error if not.

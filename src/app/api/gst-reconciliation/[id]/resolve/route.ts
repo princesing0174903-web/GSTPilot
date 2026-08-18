@@ -36,8 +36,11 @@ export async function POST(
     const memberResult = await requireOrgMembership(uid, run.organizationId);
     if (memberResult instanceof NextResponse) return memberResult;
 
+    // SECURITY: scope the match update by BOTH matchId AND runId. Without
+    // runId scoping, an authenticated user in any org could resolve a
+    // mismatch in another org by knowing the cuid. Mirrors the bulk route.
     const updated = await db.gSTReconciliationMatch.update({
-      where: { id: matchId },
+      where: { id: matchId, runId },
       data: {
         resolved,
         resolvedAt: resolved ? new Date() : null,
@@ -45,6 +48,13 @@ export async function POST(
         resolutionNote: note || null,
       },
     });
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Resolution changes ITC-at-risk + reconciliation aggregates that the
+    // snapshot exposes to dashboard/Oracle/reports. Phase 1 wired this for
+    // the run route; the resolve/bulk/auto-fix routes must also invalidate.
+    const { invalidateBusinessSnapshotCache } = await import('@/lib/business/snapshot');
+    invalidateBusinessSnapshotCache(run.organizationId);
 
     return NextResponse.json({ ok: true, match: updated });
   } catch (error) {

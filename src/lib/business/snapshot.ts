@@ -650,8 +650,13 @@ export async function getBusinessSnapshot(
     paidPaymentsForAdp,         // recent customer payments with invoiceId, paymentDate (for avgDaysToPay)
   ] = await Promise.all([
     // Invoices (sales) — this FY
+    // Excludes 'cancelled' invoices (voided → never revenue). 'draft' is
+    // intentionally kept because the legacy POST defaults new invoices to
+    // 'draft' and many flows don't transition to 'sent' until marked paid;
+    // excluding drafts would zero-out revenue for orgs that haven't issued
+    // formal "sent" transitions. See Phase 3 canonical-map audit.
     db.invoice.aggregate({
-      where: { client: { firmId: organizationId }, createdAt: { gte: fyStart } },
+      where: { client: { firmId: organizationId }, createdAt: { gte: fyStart }, status: { not: 'cancelled' } },
       _sum: { totalAmount: true, balanceAmount: true, cgst: true, sgst: true, igst: true, cess: true, paidAmount: true },
       _count: true,
     }),

@@ -621,11 +621,20 @@ export async function POST(request: Request) {
     const memberResult = await requireOrgMembership(uid, legacyOrgId);
     if (memberResult instanceof NextResponse) return memberResult;
 
+    // Derive the invoice period consistently. If the caller supplied an
+    // explicit `period`, use it. Otherwise derive from `invoiceDate` (or
+    // today's date as the final fallback) by taking the YYYY-MM slice.
+    // This matches the cloud POST branch (line 510) and prevents orphan
+    // invoices with `period: null` that would be invisible to GSTR
+    // aggregation queries (`db.invoice.aggregate({ where: { period } })`).
+    const resolvedInvoiceDate = invoiceDate ?? new Date().toISOString().split('T')[0];
+    const resolvedPeriod = period ?? resolvedInvoiceDate.slice(0, 7);
+
     const invoice = await db.invoice.create({
       data: {
         clientId,
         invoiceNumber,
-        invoiceDate: invoiceDate ?? new Date().toISOString().split('T')[0],
+        invoiceDate: resolvedInvoiceDate,
         sellerGstin: sellerGstin ?? '',
         buyerGstin: buyerGstin ?? null,
         buyerName: buyerName ?? null,
@@ -643,7 +652,7 @@ export async function POST(request: Request) {
         matchStatus: matchStatus ?? 'unmatched',
         riskLevel: riskLevel ?? 'low',
         riskScore: riskScore ?? 0,
-        period: period ?? null,
+        period: resolvedPeriod,
         notes: notes ?? null,
       },
     });
@@ -684,7 +693,7 @@ export async function POST(request: Request) {
           customerName: buyerName ?? null,
           amount: Number(totalAmount ?? 0),
           taxableValue: Number(taxableValue ?? 0),
-          period: period ?? null,
+          period: resolvedPeriod,
         },
         severity: 'info',
       });

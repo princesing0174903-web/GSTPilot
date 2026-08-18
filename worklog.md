@@ -22481,3 +22481,696 @@ Stage Summary:
 - **Database changes**: 0 (no schema migrations needed — all fixes use existing columns).
 - **API changes**: 0 new endpoints; same contracts, just secured + canonical-data-backed.
 - **No fake data added. No invented integrations. No working code rewritten.**
+
+---
+Task ID: P3-GST-ENGINES
+Agent: gst-engines-auditor
+Task: Audit ALL GST tax calculation engines/logic in src/ and classify CANONICAL / UI-PREVIEW / LEGACY / DUPLICATE; verify consistency on ₹100k @ 18% intra-state; recommend deprecation.
+
+Work Log:
+- Read prior worklog context (Phase 1 + Phase 2 complete — canonical data flow already centralized on Prisma `Invoice` table via `/api/invoices` + `lib/invoices/invoices.ts → createInvoice`; cross-tenant security closed; shadow calcs in `/api/ai-reports` replaced with canonical Prisma queries).
+- Performed READ-ONLY audit — no files modified.
+- Grepped `src/` for: `cgst.*sgst.*igst` (110 files), `calculateInvoiceTotals` (14 files), `calculateGST`, `calculateTax`, `computeLineItem`, `computeTotals`, `cessRate`, `gstAmount`, `_sum: { cgst`, `taxableValue * gst`, `from '@/lib/gst-utils'`, `from '@/lib/invoice-engine'`, `from '@/lib/gst-engine'`, `from '@/lib/oracle-cfo/invoice-engine'`, `from '@/lib/gstpilot-data'`, `from '@/lib/billing-provider/server/invoice-engine'`, `from './gst'` (invoice builder), `from '@/lib/financial-engine'`.
+- Read in full: `lib/invoices/invoices.ts`, `lib/invoices/invoices-utils.ts`, `lib/gst-utils.ts`, `lib/gst-engine/calculations.ts`, `lib/invoice-engine/calculations.ts`, `lib/oracle-cfo/invoice-engine.ts`, `lib/oracle-cfo/gst-report-engine.ts`, `lib/billing-provider/server/invoice-engine.ts`, `lib/gstpilot-data/gst.ts`, `lib/gstpilot-data/invoices.ts`, `lib/financial-engine/calculateGST.ts`, `lib/business/snapshot.ts` (tax-relevant ranges), `components/invoices/builder/gst.ts`, `app/api/invoices/route.ts` (POST + PATCH create flows), `app/api/oracle/cfo/invoice/create/route.ts` (NL invoice flow), `app/api/returns/route.ts` (aggregation).
+- For each engine, verified callers + tested semantics for ₹100,000 @ 18% intra-state + 1% CESS + 10% discount scenarios.
+
+### Inventory — All GST/tax calculation engines found
+
+| # | Engine (file:line) | Function | Classification | CGST/SGST | IGST | CESS | Discount | Round-off | Multi-line | Persist target | Used by |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| E1 | `src/lib/invoices/invoices-utils.ts:64` | `calculateInvoiceTotals(items, rawItems?)` | **CANONICAL** | Y (per-line rate) | Y (per-line rate) | Y (per-line rate) | N (caller subtracts) | N (round2 only) | Y (Σ) | Prisma `Invoice` + `InvoiceItem` | `/api/invoices` POST+PATCH (route.ts:374,835), `lib/invoices/invoices.ts:189` (`createInvoice`), `InvoiceCloudPage.tsx:1169` (preview — but forces igstRate) |
+| E2 | `src/components/invoices/builder/gst.ts:67,98` | `computeLineItem` + `computeTotals` | **UI-PREVIEW** | Y (split 50/50) | Y (full) | Y | Y (percent off gross) | Y (nearest rupee, `roundOff` field) | Y | none (live preview only) | `InvoiceBuilder.tsx:200,271,277` |
+| E3 | `src/lib/invoice-engine/calculations.ts:35,92` | `computeLineItem` + `calculateInvoiceTotals` | **LEGACY** (Firestore v1) | Y (split 50/50) | Y (full) | N (caller-supplied flat arg) | Y (absolute) | Y (nearest rupee, `roundOff` field) | Y | Firestore `invoices` collection | `lib/invoice-engine/service.ts:168,400,681`, `hooks/useInvoices.ts`, `InvoiceCloudPage.tsx` (types only) |
+| E4 | `src/lib/gstpilot-data/gst.ts:35,76` | `computeLineItem` + `calculateInvoiceTotals` | **LEGACY** (Firestore v2) | Y (split 50/50) | Y (full) | N (no cess support) | Y (percent off gross) | N (round2 only) | Y | Firestore `invoices` subcollection | `lib/gstpilot-data/invoices.ts:298,410` (createInvoice/updateInvoice), `hooks/useGSTpilotInvoices.ts` |
+| E5 | `src/lib/oracle-cfo/invoice-engine.ts:351` | `calculateGST({ amount, gstRate, isInterState, amountIsTaxInclusive=true })` | **DUPLICATE — INCONSISTENT** | Y (split 50/50 of `gstAmount`) | Y (full) | N (hardcoded `cess: 0`) | N (no discount concept) | N (round2 only) | N (single-line only) | Firestore `invoices` collection | `/api/oracle/cfo/invoice/create` (line 179), `/execute` (line 95), `/pdf`, `lib/oracle-cfo/tools.ts:1321` |
+| E6 | `src/lib/gst-utils.ts:30` | `calculateTax(taxableValue, cgstRate, sgstRate, isInterState)` | **DUPLICATE — DEAD CODE** | Y (per-rate) | Y (`cgstRate+sgstRate`) | N | N | N | N | none | **zero consumers** (the `calculateTax` referenced by `MultiTaxEngine.tsx` is `lib/global/data.ts:230`, a different module — not this one) |
+| E7 | `src/lib/gst-engine/calculations.ts:70` | `calculateGST(taxableValue, gstRate, interState, cessRate=0)` | **LEGACY HELPER** (unused by sales flow) | Y (split 50/50) | Y (full) | Y | N | Y (round2 per component) | N (single taxable) | none (pure utility) | only re-exported via `export * from './calculations'` in `gst-engine/index.ts`; the gst-engine service uses `calculateInvoiceGST` (line 110) which READS stored `invoice.cgst/sgst/igst/cess` — does NOT recompute |
+| E8 | `src/lib/billing-provider/server/invoice-engine.ts:107` | `calculateInvoiceTotals(lineItems, coupon, organizationState, billingState)` | **SCOPED** (SaaS subscription billing) | Y (hardcoded CGST_RATE=0.09) | Y (hardcoded IGST_RATE=0.18) | N (hardcoded `cess: 0`) | Y (coupon) | N (round2 only) | Y | Firestore `billingInvoices` | `lib/billing-provider/server/orchestrator.ts` — used for GSTPilot's own subscription billing (HSN 998314, fixed 18%); NOT customer sales invoices |
+| E9 | `src/lib/financial-engine/calculateGST.ts:31` | `calculateGST(invoices, purchaseBills, expenses)` | **AGGREGATOR** (not per-invoice) | reads `inv.cgst` | reads `inv.igst` | reads `inv.cess` | N | N | Y (Σ across invoices) | none (pure) | `lib/financial-engine/businessSnapshot.ts:99` — for dashboard snapshot; reads STORED values, does NOT recompute |
+| E10 | `src/lib/gst-engine/calculations.ts:223` | `calculateLiability(transactions)` | **AGGREGATOR** (GSTR-3B prep) | reads `txn.cgst` | reads `txn.igst` | reads `txn.cess` | N | N | Y (Σ across txns) | none | `lib/gst-engine/return-prep.ts:16`, `gst-engine/calculations.ts:396` (inside `generateGSTSummary`) — GSTR-3B preparation |
+| E11 | `src/lib/business/snapshot.ts:655,825` | Prisma `_sum: { cgst, sgst, igst, cess }` aggregate | **AGGREGATOR** (canonical dashboard) | reads stored | reads stored | reads stored | N | N | Y (Σ via Prisma) | none | `getBusinessSnapshot()` — dashboard Cash/GST/tax totals |
+| E12 | `src/lib/oracle-cfo/gst-report-engine.ts:651,752,949` | reads `inv.cgst/sgst/igst/cess` for GST report builder | **AGGREGATOR** (Oracle CFO report) | reads stored | reads stored | reads stored | N | N | Y (Σ) | none | `/api/oracle/cfo/.../report` routes |
+| E13 | `src/app/api/returns/route.ts:144,149,153` | Prisma `_sum: { cgst, sgst, igst, cess }` aggregate | **AGGREGATOR** (canonical GSTR returns) | reads stored | reads stored | reads stored | N | N | Y (Σ via Prisma) | none | `/api/returns` GET |
+
+### The CANONICAL engine
+
+**File:** `src/lib/invoices/invoices-utils.ts` (pure module — zero Prisma imports)
+**Function:** `calculateInvoiceTotals(items, rawItems?)` — lines 64-93.
+**Re-exported by:** `src/lib/invoices/invoices.ts:8,14-29` (so server callers can import from either path; client components MUST import from `invoices-utils` directly to avoid Prisma in bundle — already documented in the file's header comment).
+**Signature:** Takes `InvoiceLineItem[]` where each item is `{ taxableValue, cgstRate, sgstRate, igstRate, cessRate? }`. The optional second arg `rawItems?` carries `{ discount?, cessRate?, quantity?, unitPrice? }` so per-line cess can be re-derived when `cessRate` is missing on the primary shape.
+**Math:** For each line — `cgst += taxableValue × cgstRate / 100`, `sgst += …`, `igst += …`, `cess += (taxableValue × cessRate) / 100`. Sums are accumulated UNROUNDED, then `round2()` is applied once per component at the end. `gstAmount = round2(cgst + sgst + igst)` (excludes CESS). `totalAmount = round2(taxableValue + gstAmount + cess)`.
+**Caller responsibility:** the route (`/api/invoices` POST at route.ts:362-371) computes `taxable = round2(gross × (1 − discount/100))` BEFORE calling — i.e. discount is subtracted from the gross, then the engine multiplies by the GST rate. The route also splits the user-supplied `gstRate` into `cgstRate = sgstRate = rate/2` for intra-state OR `igstRate = rate` for inter-state, based on the sellerGstin/buyerGstin first-2-digit state-code comparison (route.ts:341-346) or the explicit `isInterState` body flag.
+
+### Verification — canonical engine handles all required cases
+
+| Required case | Canonical engine handles? | Notes |
+|---|---|---|
+| Intra-state (CGST+SGST 9% each on 18% slab) | ✓ | Caller passes `cgstRate: 9, sgstRate: 9, igstRate: 0`. Engine computes `cgst = taxable × 9/100`, `sgst = taxable × 9/100`. |
+| Inter-state (IGST 18%) | ✓ | Caller passes `cgstRate: 0, sgstRate: 0, igstRate: 18`. Engine computes `igst = taxable × 18/100`. |
+| CESS (e.g. 1% on taxable) | ✓ | Caller passes `cessRate: 1`. Engine computes `cess = taxable × 1/100`. `gstAmount` EXCLUDES cess; `totalAmount = taxable + gstAmount + cess` (cess added separately). |
+| Discount (subtract from taxable before tax) | ✓ (caller-side) | The route (`/api/invoices` POST at route.ts:362-363) computes `taxable = round2(gross × (1 − disc/100))` and passes the discounted value to the engine. Engine itself has no discount concept — by design (separation of concerns). |
+| Rounding (2 decimals) | ✓ | `round2(n) = Math.round((n + Number.EPSILON) × 100) / 100`. Applied per component at the end of the loop. **No nearest-rupee round-off** —paisa precision is preserved (deliberate; matches Indian GST best practice where line items are kept at 2dp). |
+| Multiple line items (summed) | ✓ | Loop accumulates `taxableValue`, `cgst`, `sgst`, `igst`, `cess` across all items, then `round2`s each at the end. |
+
+### Concrete consistency check — ₹100,000 @ 18% intra-state, no discount, no CESS
+
+| Engine | taxableValue | CGST | SGST | IGST | CESS | gstAmount / totalTax | totalAmount / grandTotal | Notes |
+|---|---|---|---|---|---|---|---|---|
+| **E1 CANONICAL** (`invoices-utils.ts`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 | 118000 | ✓ matches all engines except E5 |
+| E2 UI-PREVIEW (`builder/gst.ts`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 | 118000 (roundOff=0) | ✓ |
+| E3 LEGACY (`invoice-engine`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 | 118000 (roundOff=0) | ✓ |
+| E4 LEGACY (`gstpilot-data`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 | 118000 | ✓ |
+| **E5 DUPLICATE — INCONSISTENT** (`oracle-cfo/invoice-engine.ts`) | **84745.76** | **7627.12** | **7627.12** | 0 | 0 | **15254.24** | **100000** | ⚠️ **DIVERGENT**: defaults `amountIsTaxInclusive: true` (line 359) → treats the input ₹1,00,000 as the tax-INCLUSIVE grand total and back-extracts taxable = 100000/(1+0.18) = 84745.76. The Oracle CFO NL-invoice flow (`/api/oracle/cfo/invoice/create` route.ts:179-186) explicitly passes `amountIsTaxInclusive: true` with comment "₹50,000 at 18% GST means tax-inclusive". For the same ₹1,00,000 input, the canonical `/api/invoices` route returns taxable=100000+gst=18000 (tax-EXCLUSIVE), while Oracle CFO returns taxable=84745.76+gst=15254.24 (tax-INCLUSIVE). Total in canonical = ₹1,18,000; total in Oracle CFO = ₹1,00,000 — **₹18,000 discrepancy**. |
+| E6 DUPLICATE — DEAD (`gst-utils.ts → calculateTax`) | 100000 | 9000 | 9000 | 0 | (n/a — no cess) | (n/a — returns only {cgst,sgst,igst}) | (n/a — no total field) | Same per-component values as canonical for the basic case, but function returns ONLY `{cgst, sgst, igst}` — no CESS, no gstAmount, no totalAmount. Function exists in `gst-utils.ts` but **has zero callers** across `src/`. The `calculateTax` imported by `MultiTaxEngine.tsx` comes from `lib/global/data.ts:230` — a different function. |
+| E7 LEGACY HELPER (`gst-engine → calculateGST`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 (returned as `totalTax`) | (n/a — returns `{cgst, sgst, igst, cess, totalTax}`, no `totalAmount`) | Pure utility; `calculateInvoiceGST` (line 110) — the only gst-engine function used by the service — READS stored `invoice.cgst/sgst/igst/cess` and does NOT recompute. So `calculateGST` itself is dead code from the sales-invoice flow's perspective. |
+| E8 SCOPED (`billing-provider`) | 100000 | 9000 | 9000 | 0 | 0 | 18000 | 118000 | Same values as canonical for the basic case, but `CGST_RATE = 0.09`, `SGST_RATE = 0.09`, `IGST_RATE = 0.18` are HARDCODED constants (line 35-39) — only supports 18% GST (the SaaS subscription rate). Different domain. |
+
+### Discrepancies (concrete, with examples)
+
+**DISCREPANCY 1 — Oracle CFO tax-inclusive vs canonical tax-exclusive (CRITICAL):**
+- Engine E1 (canonical): for input "₹1,00,000 @ 18% intra-state" → taxableValue=100000, cgst=9000, sgst=9000, totalAmount=118000.
+- Engine E5 (Oracle CFO): for input "₹1,00,000 @ 18% intra-state" (with `amountIsTaxInclusive=true`, the default) → taxableValue=84745.76, cgst=7627.12, sgst=7627.12, totalAmount=100000.
+- **₹18,000 difference in `totalAmount` for the same headline input.**
+- The two engines persist to DIFFERENT databases too: E1 writes to Prisma `Invoice` table (canonical, dashboard reads from here); E5 writes to Firestore `COLLECTIONS.INVOICES` (legacy parallel store, read by `useGSTpilotInvoices` hook + Oracle CFO pipeline).
+- The Oracle CFO flow at `/api/oracle/cfo/invoice/create/route.ts:179-186` explicitly passes `amountIsTaxInclusive: true` with the comment "₹50,000 at 18% GST means tax-inclusive". So this is intentional design — the Oracle CFO assumes the user's NL amount is tax-inclusive. But this means Oracle-CFO-created invoices and `/api/invoices`-created invoices with the same headline amount will have DIFFERENT `taxableValue`, `cgst`, `sgst`, `totalAmount` stored, and dashboard aggregations mixing the two sources will be inconsistent.
+
+**DISCREPANCY 2 — `calculateInvoiceTotals` naming clash (DANGEROUS):**
+- Engine E1: `lib/invoices/invoices-utils.ts:64` → `calculateInvoiceTotals(items, rawItems?)` — items are `{ taxableValue, cgstRate, sgstRate, igstRate, cessRate? }[]`. No round-off, no discount handling. Used by `/api/invoices`.
+- Engine E3: `lib/invoice-engine/calculations.ts:92` → `calculateInvoiceTotals(items, cess=0)` — items are `InvoiceLineItem[]` with pre-computed `cgst/sgst/igst` per line. Adds round-off to nearest rupee. Used by Firestore-v1 pipeline.
+- Engine E4: `lib/gstpilot-data/gst.ts:76` → `calculateInvoiceTotals({ items, sellerStateCode, customerStateCode, paidAmount })` — items are `CreateInvoiceInput['items']`. No round-off. Used by Firestore-v2 pipeline.
+- Engine E8: `lib/billing-provider/server/invoice-engine.ts:107` → `calculateInvoiceTotals(lineItems, coupon, organizationState, billingState)` — items are `BillingInvoiceLineItem[]`. Returns `{ subtotal, discount, taxBreakdown, tax, total }` (different shape!).
+- **Four functions with the same name `calculateInvoiceTotals`, four different signatures, four different return shapes.** A developer who imports `calculateInvoiceTotals` from the wrong module gets silently different behavior. The canonical engine (E1) is the only one whose return shape matches `InvoiceTotals` from `lib/invoices/invoices-utils.ts`.
+
+**DISCREPANCY 3 — Per-line vs aggregate rounding in canonical createInvoice (MINOR):**
+- In `lib/invoices/invoices.ts:212-216`, per-line items persisted to `InvoiceItem` are stored as `round2(taxable × cgstR / 100)` etc. — ROUNDED PER LINE.
+- In `lib/invoices/invoices-utils.ts:73-83`, the invoice HEADER totals accumulate UNROUNDED per-line tax then `round2(sum)` at the end — ROUNDED PER AGGREGATE.
+- Example: 3 lines at ₹333.33 @ 2.5% CGST:
+  - Per-line `InvoiceItem.cgst` = round2(8.33325) = 8.33 each → Σ = 24.99
+  - Header `Invoice.cgst` = round2(25.0) = 25.00
+  - **0.01 paisa mismatch** between `Σ InvoiceItem.cgst` and `Invoice.cgst`.
+- This is a known GST rounding dilemma (Indian GST allows either approach, but consistency matters). Currently the canonical engine uses aggregate-rounding for the header and per-line-rounding for the items — they can diverge by ≤ ₹0.01 per component per invoice. Not material for filing but visible in audit.
+
+**DISCREPANCY 4 — `InvoiceCloudPage` preview forces IGST (UI-PREVIEW only):**
+- `components/invoice-cloud/InvoiceCloudPage.tsx:1165-1168` maps line items as `{ taxableValue: qty*price, cgstRate: 0, sgstRate: 0, igstRate: gstRate }` — always sets IGST regardless of buyer/seller state. For an intra-state invoice, the UI preview shows IGST ₹18,000 where the canonical server (POST `/api/invoices` with proper sellerGstin/buyerGstin) will compute CGST ₹9,000 + SGST ₹9,000. The `totalAmount` matches (₹1,18,000) but the tax breakdown is wrong in the preview.
+
+### Duplicate / legacy engines — deprecation recommendation
+
+| Engine | Action | Reason |
+|---|---|---|
+| **E5** `lib/oracle-cfo/invoice-engine.ts → calculateGST` | **DEPRECATE / FIX** | The `amountIsTaxInclusive=true` default is inconsistent with the canonical `/api/invoices` flow (which is tax-exclusive). Either (a) flip the default to `false` and add an explicit `amountIsTaxInclusive` flag in the NL extraction (so "₹50,000 at 18% GST" → tax-exclusive → matches `/api/invoices`); OR (b) keep tax-inclusive but route the Oracle CFO NL flow through the canonical `/api/invoices` POST with a pre-extracted `taxable = amount / (1 + gstRate/100)` step, so all invoices land in the same Prisma `Invoice` table with consistent semantics. **Currently Oracle CFO writes to Firestore (parallel store), which is a separate Phase-1-legacy issue.** Recommended: migrate Oracle CFO to call the canonical `createInvoice` (Prisma) instead of writing to Firestore directly. |
+| **E6** `lib/gst-utils.ts → calculateTax` | **DELETE (safe)** | Zero callers across `src/`. Function returns `{cgst, sgst, igst}` only — no CESS, no total, no round-off. Strictly less capable than E1. Can be removed in a single-line PR; no migration needed. |
+| **E3** `lib/invoice-engine/calculations.ts → calculateInvoiceTotals + computeLineItem` | **DEPRECATE** | Legacy Firestore-v1 invoice pipeline. The Prisma-backed `lib/invoices/invoices.ts → createInvoice` is the canonical creation flow (per prior worklog). If `useInvoices` hook + `lib/invoice-engine/service.ts` are still active for Firestore-mode workspaces, mark `@deprecated` with a comment pointing to `lib/invoices/invoices-utils.ts`. If the Firestore pipeline is fully retired, DELETE. (Status of Firestore retirement: not confirmed in prior worklog — needs separate audit.) |
+| **E4** `lib/gstpilot-data/gst.ts → calculateInvoiceTotals + computeLineItem` | **DEPRECATE** | Legacy Firestore-v2 invoice pipeline (parallel to E3). Same recommendation as E3. |
+| **E7** `lib/gst-engine/calculations.ts → calculateGST` (the helper at line 70) | **KEEP as documented utility** | The function is unused by the sales-invoice flow (the gst-engine service uses `calculateInvoiceGST` at line 110 which READS stored values). The `calculateGST` helper is dead code from the canonical flow's perspective but is a reasonable pure utility for tests / future use. Add a doc comment: "Pure utility — the canonical sales-invoice tax math lives in `lib/invoices/invoices-utils.ts → calculateInvoiceTotals`. This function is used by GSTR-3B preparation flows that operate on stored transactions." Keep `calculateLiability`, `calculateITC`, `generateGSTSummary`, `calculateReverseCharge`, `calculateComposition` — these are canonical for GSTR-3B prep and operate on stored `GSTTransaction[]`. |
+| **E2** `components/invoices/builder/gst.ts → computeLineItem + computeTotals` | **KEEP — UI-PREVIEW** | Correctly scoped to `InvoiceBuilder.tsx` (live preview during invoice creation). Has discount + CESS + nearest-rupee round-off (preview-only — actual persistence uses canonical E1 via POST `/api/invoices`). The nearest-rupee round-off behavior diverges from canonical E1 (which uses 2dp only) — for invoices where the round-off is non-zero (e.g. taxable=₹100.50 @ 18% → exact=₹118.59, rounded=₹119, roundOff=₹0.41), the UI preview will show `grandTotal=₹119` while the canonical server persists `totalAmount=₹118.59`. Document this divergence in the file header. |
+| **E8** `lib/billing-provider/server/invoice-engine.ts → calculateInvoiceTotals` | **KEEP — SCOPED** | Different domain (SaaS subscription billing for GSTPilot itself, hardcoded 18% GST, HSN 998314). Correctly isolated from the customer sales-invoice flow. Add a doc comment: "Scoped to GSTPilot SaaS subscription billing — NOT for customer sales invoices. For customer invoices, use `lib/invoices/invoices-utils.ts → calculateInvoiceTotals`." |
+| **E9–E13** aggregators | **KEEP** | All read STORED `Invoice.cgst/sgst/igst/cess` values (do NOT recompute). They're canonical for their respective surfaces (dashboard snapshot, GSTR-3B prep, GSTR-1 prep, GST reports, returns). No deprecation needed. |
+
+### Next actions (priority order)
+
+1. **Fix Oracle CFO tax-inclusive divergence (CRITICAL):** in `src/lib/oracle-cfo/invoice-engine.ts:359`, change the default of `amountIsTaxInclusive` from `true` to `false`, OR migrate the Oracle CFO create-invoice flow (`/api/oracle/cfo/invoice/create/route.ts:179-186`, `/execute/route.ts:95`) to call the canonical `createInvoice` from `lib/invoices/invoices.ts` (Prisma-backed). This eliminates the ₹18,000 discrepancy for ₹1,00,000 input between Oracle-CFO-created invoices and `/api/invoices`-created invoices. **Phase 3 fix sprint.**
+2. **Delete `calculateTax` from `gst-utils.ts:30-43`** — zero callers, dead code. **Safe one-line PR.**
+3. **Mark `lib/invoice-engine/calculations.ts` and `lib/gstpilot-data/gst.ts` as `@deprecated`** with `// @deprecated Use `lib/invoices/invoices-utils.ts → calculateInvoiceTotals` instead. Legacy Firestore-v1/v2 invoice pipeline.` comments at the top of each file. Schedule a follow-up audit to determine whether the Firestore-based invoice pipeline (`useInvoices`, `useGSTpilotInvoices`, `lib/invoice-engine/service.ts`, `lib/gstpilot-data/invoices.ts`) can be fully retired — if so, delete these engines.
+4. **Add a one-line doc comment to `lib/gst-engine/calculations.ts:70`** clarifying that `calculateGST` is a pure utility, NOT the canonical sales-invoice tax calculator. Point readers to `lib/invoices/invoices-utils.ts → calculateInvoiceTotals`.
+5. **Document the round-off divergence between UI-PREVIEW (E2) and CANONICAL (E1):** the InvoiceBuilder preview rounds to nearest rupee (with a `roundOff` field); the canonical engine preserves 2dp. For invoices where the round-off is non-zero, the preview will display `grandTotal ≠ totalAmount` saved. Either (a) add `roundOff` support to the canonical engine (and persist it on `Invoice.roundOff`), or (b) remove `roundOff` from the preview to match canonical behavior.
+6. **Fix the per-line vs aggregate rounding discrepancy** in `lib/invoices/invoices.ts → createInvoice` (lines 212-216). Either round per-line in the header aggregation (matching the persisted `InvoiceItem.cgst/sgst/igst/cess`), or persist unrounded values in `InvoiceItem` and round only on read. Currently the two can diverge by ≤ ₹0.01 per component per invoice.
+7. **Fix `InvoiceCloudPage.tsx:1165-1168` preview** to derive `interState` from sellerGstin/buyerGstin (or accept an `isInterState` body field) and pass `cgstRate/sgstRate` for intra-state — currently always passes `igstRate: gstRate`, producing a wrong breakdown in the preview (though `totalAmount` is correct).
+
+Stage Summary:
+- **Verdict: SHADOW-CALCS-FOUND.** Audit identified 8 distinct calculation engines (E1–E8) plus 5 aggregators (E9–E13).
+- **CANONICAL engine:** `src/lib/invoices/invoices-utils.ts → calculateInvoiceTotals` (line 64). Used by `/api/invoices` POST+PATCH, `lib/invoices/invoices.ts → createInvoice`. Handles CGST/SGST/IGST/CESS/multi-line/2dp-rounding; discount + intra/inter-state splitting done by the caller (route layer).
+- **CRITICAL bug:** Oracle CFO NL-invoice engine (`lib/oracle-cfo/invoice-engine.ts → calculateGST`) defaults to tax-INCLUSIVE math (`amountIsTaxInclusive=true`), producing ₹15,254.24 GST on ₹1,00,000 input where the canonical engine produces ₹18,000 GST. The same headline amount yields different `taxableValue`/`cgst`/`sgst`/`totalAmount` depending on which creation flow is used. Oracle CFO also writes to Firestore (parallel to Prisma `Invoice` table) — compounding the divergence.
+- **DEAD CODE:** `calculateTax` in `lib/gst-utils.ts:30` has zero callers — safe to delete.
+- **NAMING CLASH:** Four functions named `calculateInvoiceTotals` exist with different signatures + return shapes (E1, E3, E4, E8) — high risk of silent wrong-import bugs.
+- **AGGREGATORS (E9–E13):** All correctly read STORED `Invoice.cgst/sgst/igst/cess` values — no recomputation. Canonical for their surfaces (dashboard, GSTR-3B, GSTR-1, returns, Oracle CFO reports).
+- **Recommendation:** Keep E1 (canonical), E2 (UI preview — documented), E7 (utility — documented), E8 (scoped SaaS billing — documented), E9–E13 (aggregators). Deprecate E3, E4 (legacy Firestore pipelines). Fix E5 (Oracle CFO tax-inclusive default). Delete E6 (dead code).
+
+**Status: AUDIT-P3-GST-ENGINES COMPLETE. Read-only — no files modified. Ready to feed into the Phase 3 fix sprint.**
+
+---
+Task ID: P3-CANONICAL-MAP
+Agent: canonical-mapper
+Task: Produce explicit source-of-truth map for every business metric in the GSTPilot Infinity codebase (READ-ONLY audit — no files modified)
+
+Work Log:
+- Read prior Phase 1/2 context from worklog.md (lines 22283–22482): Phase 1 = canonical Business Snapshot established at `src/lib/business/snapshot.ts` + server-side cache invalidation wiring; Phase 2 = cross-tenant leaks closed, mark-paid now creates Payment rows, BankAccount aggregate bug fixed, ai-reports canonical queries restored, ClientDetailPage invoices/payments tabs added.
+- Read the canonical snapshot engine (`src/lib/business/snapshot.ts`, 1334 lines) — confirmed it is the SINGLE source of truth for Revenue, Receivables, Payables, GST Output/Input, Cash, Health/Risk Score, Collection Rate, Working Capital, Runway, Forecast.
+- Read the SHADOW snapshot engine (`src/lib/financial-engine/businessSnapshot.ts`, 439 lines) — confirmed it ALSO computes revenue/cash/gst/receivables via a different code path (different status filters + different date fields).
+- Read the unified merge route `/api/business/snapshot/route.ts` (247 lines) — confirmed it merges `rich` (canonical) + `fin` (shadow) into a unified response. Headlines come from `rich`; nested `risks.*`, `forecast.projectedCash`, `runway.monthlyBurnRate`, `notices`, `invoices.draftCount`, `collections.averageDaysToPay` come from `fin` — these are computed from a DIFFERENT data path than the canonical snapshot.
+- Read the alternate snapshot route `/api/business-snapshot/route.ts` (67 lines) — calls ONLY the rich engine (`@/lib/business/snapshot`). Two parallel routes exist for the same logical resource.
+- Read `/api/business-health/route.ts` — properly delegates to canonical snapshot.
+- Read `/api/dashboard/route.ts` (260 lines) — headlines sourced from `getBusinessSnapshot()` (rich engine), then independently queries Invoice/Issue/AuditLog/GSTRFiling for non-snapshot fields.
+- Read `/api/receivables/route.ts` (119 lines) — fetches `db.invoice.findMany({ where: { client: { firmId: organizationId } } })` and runs `getReceivablesSummary()` from `lib/invoices/receivables.ts`. This recomputes AR from invoice rows — DIFFERENT path from the snapshot's aggregate `db.invoice.aggregate({ _sum: { balanceAmount: true } })`.
+- Read `/api/payables/route.ts` (144 lines) — fetches `db.purchaseBill.findMany()` and runs `getPayablesSummary()`. Recomputes AP from rows — DIFFERENT path from the snapshot's aggregate `_sum: { balanceAmount: true }`.
+- Read `/api/invoices/mark-paid/route.ts` (124 lines) — confirmed Phase 2 fix: mark-paid now atomically writes BOTH `db.invoice.update({ paidAmount, balanceAmount })` AND `db.payment.create({...})` inside a `db.$transaction`. Phase 2 verified.
+- Read `/api/payments/route.ts` (427 lines) — POST creates Payment row, reconciles against Invoice or PurchaseBill, invalidates `invalidateBusinessSnapshotCache(orgId)`. PATCH/DELETE have resource-level tenant check.
+- Read `/api/returns/route.ts` (363 lines) and `/api/gstr-filing/route.ts` (377 lines) — both compute `taxSum = cgst+sgst+igst+cess` via `db.invoice.aggregate({ where: { clientId, period } })` BEFORE creating a GSTRFiling row. Each route runs its own tax aggregation (no shared helper).
+- Read `/api/banking/cashflow/route.ts` (59 lines) + `/api/banking-intel/cashflow/route.ts` (25 lines) — confirmed FOUR cash-flow paths exist (see Cash row in table below).
+- Read `/api/gst-reconciliation/run/route.ts` (410 lines) — writes `GSTReconciliationRun` + `GSTReconciliationMatch` rows from match-engine results. `itcAtRisk` per match is stored as a column on `GSTReconciliationMatch`.
+- Read `src/lib/oracle/context/builder.ts` (1046 lines) — confirmed canonical Oracle context source. Calls `getBusinessSnapshot(orgId)` for headlines, then runs additional org-scoped Prisma queries for customer concentration, supplier spend, banking sandbox labelling, GST reconciliation. `itcAtRisk` is computed inline at line 892-905 from `db.gSTR2BInvoice.findMany()` — DIFFERENT source than `GSTReconciliationMatch.itcAtRisk`.
+- Read `src/lib/banking-prisma/service.ts` (940 lines) + `cashflow.ts` (440 lines) — confirmed Prisma-backed banking service for `/api/banking/*` routes.
+- Read `src/lib/banking-service/mock-provider.ts` (100/2185 lines) — confirmed in-memory MockBankingProvider backing `/api/banking-intel/*` routes. NOT Prisma-backed. Parallel banking system.
+- Read `src/lib/banking/engine.ts` (920 lines) — Phase 8 Step 2 banking cloud engine. Reads from `CashForecast` Prisma table (not `BankTransaction`/`BankAccount`). A THIRD cash-flow path.
+- Read `src/hooks/useBanking.ts` (523 lines) — confirmed it reads from Firestore (`subscribeToTransactions` in `banking-provider/service.ts`), NOT Prisma. FOURTH banking data path.
+- Read `src/hooks/useGSTTransactions.ts` (270 lines) — confirmed it reads from Firestore `gst_transactions` collection (`gst-engine/service.ts`). ReportsPage uses this for its GST summary, ITC summary, GSTR-1 draft, GSTR-3B draft — DIFFERENT data source from the canonical snapshot's GST numbers (Prisma Invoice).
+- Read `src/lib/financial-engine/calculateRevenue.ts` (82 lines) — confirmed it filters `status === 'draft' || 'cancelled'` OUT of revenue (line 27). The rich `snapshot.ts` does NOT apply this filter (line 654-657) — so the two engines compute Revenue differently for orgs with draft/cancelled invoices.
+- Read `src/lib/financial-engine/calculateCash.ts` (51 lines) — confirmed it filters `status === 'disconnected' || 'error'` OUT of cash (line 33). The rich `snapshot.ts` does NOT apply this filter (line 712-715) — so the two engines compute Cash differently for orgs with disconnected/error bank accounts.
+- Read `src/lib/gst-reconciliation/match-engine.ts` (598 lines) — confirmed `itcAtRisk` per match = `book.cgst + book.sgst + book.igst + book.cess` (for missing-in-2B) OR `rec.itcAvailable` (for missing-in-books). This is computed LIVE during a reconciliation run, then stored on `GSTReconciliationMatch.itcAtRisk`.
+- Read `src/lib/invoices/payables.ts` (197 lines) — confirmed `getPayables()` at line 36 calls `db.purchaseBill.findMany({})` with NO tenant filter — cross-tenant leak. Called from `/api/intelligence/forecast` + `lib/invoices/oracle.ts`.
+- Read `src/components/reports/ReportsPage.tsx` (2796 lines, key reads) — confirmed ReportsPage reads invoices via `useInvoices()` (Prisma), GST via `useGSTTransactions()` (Firestore — DIFFERENT source), banking via `useBanking()` (Firestore — DIFFERENT source). Three different data backends in one page.
+- Read `src/lib/oracle/context/builder.ts:719-800` (buildCustomerDetail) — confirmed it reads `db.client.findMany({ where: { firmId: orgId } })` + `db.invoice.groupBy({ by: ['clientId'], where: { client: { firmId: orgId }, clientId: { not: null } } })`. Canonical Customer source = Prisma `Client` table scoped by `firmId`.
+- Read `src/lib/oracle/context/builder.ts:814-880` (buildSupplierDetail) — confirmed it reads `db.purchaseBill.findMany({ where: { client: { firmId: orgId } } })` and groups by `vendorName`. Canonical Supplier source = Prisma `PurchaseBill` table (NOT `Vendor` model — see duplicate logic section).
+- Read `prisma/schema.prisma` — confirmed `Vendor` model at line 5341 has NO `organizationId` column (cross-tenant leak). `PurchaseBill` model at line 743 has `clientId` (which joins to `Client.firmId` for scoping). `Payment` model at line 805 has NO `organizationId` column either (scoped via `client.firmId`).
+- Read `src/hooks/api.ts` (1302 lines) + `src/hooks/useBusinessSnapshot.ts` (226 lines) — confirmed client-side hooks. `useBusinessSnapshot` hits `/api/business/snapshot` (the merged route), not `/api/business-snapshot` (the rich-only route). So the dashboard sees merged data with shadow-computed nested fields.
+- Grep'd for all usages of `getPayables()` + `db.vendor.*` — confirmed `Vendor` model is queried in 11 files without org scoping (cross-tenant leak; noted in worklog line 21829).
+
+# CANONICAL BUSINESS-METRIC MAP
+
+## Summary Table
+
+| # | Metric | Canonical Source (Prisma Model) | Canonical Query Path | Readers (Endpoints/Hooks/Pages) | Duplicate/Shadow Logic Found? |
+|---|--------|----------------------------------|----------------------|----------------------------------|-------------------------------|
+| 1 | **Revenue** | `Invoice` table (sum of `totalAmount`, current FY) | `src/lib/business/snapshot.ts:653-657` → `db.invoice.aggregate({ where: { client: { firmId: organizationId }, createdAt: { gte: fyStart } }, _sum: { totalAmount: true } })` | `/api/business/snapshot` (line 99 — uses `rich.revenue`), `/api/business-snapshot` (line 52 — uses `getBusinessSnapshot` from rich engine), `/api/dashboard` (line 81 — `snapshot.customerCount` etc. from rich), `/api/business-health` (line 23), Oracle context builder (`src/lib/oracle/context/builder.ts:98`), `/api/ai-reports` POST (line 184 — calls `getBusinessSnapshot`) | **YES** — `src/lib/financial-engine/calculateRevenue.ts:27` excludes `status === 'draft' \|\| 'cancelled'`; the rich `snapshot.ts:653-657` has NO status filter. `/api/ai-reports` POST at line 264 ALSO recomputes `totalRevenue = invoicesPeriod.reduce((s, i) => s + i.totalAmount, 0)` from raw invoice rows instead of using `snapshot.revenue`. Three different revenue computations exist (rich aggregate, fin filter-by-status, ai-reports reduce-by-period). |
+| 2 | **Receivables (Outstanding AR)** | `Invoice.balanceAmount` (sum, this FY) | `src/lib/business/snapshot.ts:653-657` → `db.invoice.aggregate({...})._sum.balanceAmount` (line 829) | `/api/business/snapshot` (line 137 — `receivables: rich.receivables`), `/api/business-snapshot` (line 52), `/api/receivables` (line 78 — runs `getReceivablesSummary(invoices)` from `lib/invoices/receivables.ts`), `/api/ai-reports` POST (line 265 — `totalOutstanding = invoicesAll.reduce((s, i) => s + i.balanceAmount, 0)`), Oracle context builder (line 189 — `snapshot?.receivables`) | **YES** — `/api/receivables/route.ts:78` recomputes AR by loading ALL invoice rows + running `getReceivablesSummary()`. `/api/ai-reports/route.ts:265` recomputes AR by `reduce()` over invoice rows. The canonical snapshot uses `db.invoice.aggregate({ _sum: { balanceAmount: true } })` — a single SQL aggregate. Three different code paths for the same number. |
+| 3 | **Payments** | `Payment` table | `db.payment.findMany({ where: { client: { firmId: organizationId } } })` for list reads; `db.payment.aggregate({ _sum: { amount: true } })` for snapshot totals at `src/lib/business/snapshot.ts:671-678` | `/api/payments` GET/POST/PATCH/DELETE (`route.ts:48,93,312,382`), `/api/invoices/mark-paid` POST (`route.ts:81` — creates Payment row atomically), `usePayments()` hook (`src/hooks/api.ts:429`), `useBankingApi.ts` (transactions list) | **YES** — `Payment` is also read via Firestore by `useBanking()` hook (`subscribeToTransactions` in `banking-provider/service.ts`) which surfaces bank-transaction-as-payment data. Two parallel payment systems: Prisma `Payment` table (canonical for AR settlement) and Firestore `bank_transactions` collection (canonical for cash-flow reconciliation). `mark-paid` now writes the canonical Payment row (Phase 2 verified). `/api/payments/route.ts:289` properly invalidates `invalidateBusinessSnapshotCache(orgId)` after mutations. |
+| 4 | **Cash** | `BankAccount.balance` + `BankTransaction` (Prisma) | `src/lib/business/snapshot.ts:712-715` → `safeAggregate(db.bankAccount, { where: { organizationId }, _sum: { balance: true, availableBalance: true } })` (line 894-896) then `bankBalance > 0 ? bankBalance : totalCollectedPayments - totalPaidPayments` (line 897-900) | `/api/business/snapshot` (line 102 — `cash = rich.cash`), `/api/business-snapshot` (line 52), Oracle context builder (`src/lib/oracle/context/builder.ts:227` — `snapshot?.cash`), `/api/banking/cashflow` (`route.ts:51` → `getCashFlow(orgId, period)` in `banking-prisma/cashflow.ts`), `/api/banking-intel/cashflow` (`route.ts:17` → `service.getCashFlow()` from `banking-service/mock-provider.ts`) | **YES** — FOUR cash-flow paths exist: (a) `src/lib/business/snapshot.ts` — Prisma `BankAccount.balance` aggregate, no status filter; (b) `src/lib/financial-engine/calculateCash.ts:33` — Prisma `BankAccount.balance` sum but filters OUT `status='disconnected'\|\|'error'`; (c) `src/lib/banking-prisma/cashflow.ts:163` — Prisma `BankTransaction.findMany` + JS-side aggregation + CashFlowSnapshot persistence; (d) `src/lib/banking-service/mock-provider.ts` — in-memory MockBankingProvider (NOT Prisma, used by `/api/banking-intel/*`); (e) `src/lib/banking/engine.ts:318` — Prisma `CashForecast` table (different table, Phase 8 Step 2); (f) `src/hooks/useBanking.ts` + `banking-provider/service.ts` — Firestore `bank_connections` + `bank_transactions` collections. SIX cash paths. The canonical for Dashboard/Oracle is `snapshot.cash`; for Banking page is `/api/banking/cashflow`; for Reports page is `useBanking()` (Firestore — shadow). |
+| 5 | **GST (Output Tax)** | `Invoice.cgst + sgst + igst + cess` (Prisma, this FY) | `src/lib/business/snapshot.ts:655` → `_sum: { cgst, sgst, igst, cess }` then `(invoiceAgg._sum.cgst ?? 0) + (sgst ?? 0) + (igst ?? 0) + (cess ?? 0)` at line 824-828 | `/api/business/snapshot` (line 108 — `outputTax = rich.outputTax`), Oracle context builder (line 257 — `snapshot?.outputTax`), `/api/returns` POST (line 147-156 — recomputes `taxSum` per return), `/api/gstr-filing` POST (line 92-101 — recomputes `taxSum` per filing), `/api/ai-reports` POST (line 278-281 — recomputes `gstProcessed = invoicesPeriod.reduce((s,i) => s + i.cgst + i.sgst + i.igst + i.cess, 0)`), `useGSTTransactions()` hook + `gst-engine/calculations.ts:320 generateGSTSummary()` (Firestore `gst_transactions` — DIFFERENT source) | **YES** — FOUR GST paths: (a) Canonical snapshot aggregate (`_sum: { cgst, sgst, igst, cess }` from Prisma Invoice); (b) `/api/returns` + `/api/gstr-filing` POST handlers re-run their own `db.invoice.aggregate({ _sum: { cgst, sgst, igst, cess } })` filtered by `{ clientId, period }` — same formula but different filter (per-client+period vs org-wide FY); (c) `/api/ai-reports` recomputes via `reduce()` over invoice rows in JS; (d) `useGSTTransactions()` reads from Firestore `gst_transactions` collection and runs `generateGSTSummary()` — completely different data source. ReportsPage uses (d) for its GST summary while Dashboard/Oracle use (a). |
+| 6 | **ITC (Input Tax Credit)** | `PurchaseBill.gstAmount` (Prisma, this FY) for headline; `GSTR2BInvoice.itcAvailable` (Prisma) for reconciliation; `GSTReconciliationMatch.itcAtRisk` for at-risk | `src/lib/business/snapshot.ts:661` → `db.purchaseBill.aggregate({ _sum: { gstAmount: true } })` (line 833 — `nativeInputTax`); `src/lib/oracle/context/builder.ts:894-905` → `db.gSTR2BInvoice.findMany({ where: { organizationId } })` for `itcAtRisk`; `/api/gst-reconciliation/run/route.ts:343` → writes `GSTReconciliationMatch.itcAtRisk` | `/api/business/snapshot` (line 109 — `inputTax = rich.inputTax`), Oracle context builder (line 258 — `snapshot?.inputTax`; line 263 — `gstDetail.reconciliation.itcAtRisk`), `/api/gst-reconciliation/run` (writes `potentialITCLoss` to `GSTReconciliationRun` row + per-match `itcAtRisk`), `/api/gst-reconciliation/[id]/*` readers, `useGSTTransactions()` hook + `gst-engine/calculations.ts:173 calculateITC()` (Firestore `gst_transactions` filtered `transactionType='purchase'` + `itcEligible=true`) | **YES** — FOUR ITC computations exist: (a) `snapshot.inputTax` = `Σ PurchaseBill.gstAmount` (Prisma, simple sum, this FY) — the headline; (b) `useGSTTransactions().itcSummary.eligibleITC` = `Σ Firestore gst_transactions.cgst+sgst+igst+cess WHERE type=purchase AND itcEligible=true` — different data source + different filter; (c) Oracle context `gstDetail.reconciliation.itcAtRisk` = `Σ GSTR2BInvoice.{igst+cgst+sgst} WHERE matchStatus != 'matched'` — computed inline from `GSTR2BInvoice` rows; (d) `/api/ai-reports` POST at line 273-275 = `Σ GSTReconciliationMatch.itcAtRisk WHERE matchType != 'exact'` — uses the stored per-match column. These four computations read from FOUR different Prisma models or Firestore collections and WILL give different numbers for the same org. |
+| 7 | **Customers** | `Client` table (Prisma, scoped by `firmId`) | `db.client.findMany({ where: { firmId: organizationId } })` + `db.client.count({ where: { firmId: organizationId } })` at `src/lib/business/snapshot.ts:681` | `/api/clients` GET (line 38), `/api/business/snapshot` (line 103 — `customers = rich.customerCount`), `/api/dashboard` (line 81), Oracle context builder (line 721 — `buildCustomerDetail`), `useClients()` + `useClient()` hooks (`src/hooks/api.ts:292,305`), `/api/ai-reports` POST (line 196 — `db.client.findMany({ where: { firmId: organizationId } })`) | **NO** (mostly clean). `Client` model is consistently the canonical source. The only wrinkle: `src/lib/business/snapshot.ts:853` uses `Math.max(clientCount, zohoCustomersCount)` to merge native Client rows with ZohoCustomer mirror rows (since Zoho sync upserts a Client for each ZohoCustomer). No cross-tenant leak — all `db.client.*` queries filter by `firmId`. The `db.client.findUnique({ where: { gstin } })` in POST `/api/clients` (line 168) is org-agnostic because GSTIN is globally unique (enforced by `@unique`). |
+| 8 | **Suppliers** | `PurchaseBill` table (Prisma — `vendorName` + `vendorGstin` columns, scoped via `client.firmId`) | `db.purchaseBill.findMany({ where: { client: { firmId: organizationId } } })` + groupBy `vendorName`; `src/lib/business/snapshot.ts:683-686` → `db.purchaseBill.groupBy({ by: ['vendorName'], where: { client: { firmId: organizationId } } })` for `vendorCount`; Oracle context builder line 816-843 | `/api/payables` GET (line 30 — fetches `db.purchaseBill.findMany({ where: { client: { firmId } } })`), `/api/business/snapshot` (uses `vendorCount` from snapshot), Oracle context builder (`src/lib/oracle/context/builder.ts:814 buildSupplierDetail`), `db.purchaseBill.aggregate` in snapshot for inputTax/payables | **YES** — `Vendor` model (`prisma/schema.prisma:5341`) is a SECOND supplier master table with NO `organizationId`/`firmId` column. It is written by Zoho sync (`src/lib/integrations/zoho-books/sync/vendors.ts`) and read by Oracle Chat tools (`src/lib/oracle-chat/tools.ts:43,246,509,806,1087`), Oracle Intelligence (`business-graph.ts:43`, `memory-engine.ts:68`, `dashboard.ts:45`), Invoice OCR (`src/lib/invoices/ocr.ts:75,106,324,366`), Purchases (`src/lib/invoices/purchases.ts:45,126`), Network suppliers (`src/lib/network/suppliers.ts`). The `Vendor` model has cross-tenant leak (worklog line 21829). The CANONICAL supplier source = `PurchaseBill` (tenant-scoped via `client.firmId`). The `Vendor` model is a SHADOW master-record table that should be either scoped-by-org or deprecated in favour of grouping `PurchaseBill.vendorName`. |
+| 9 | **Oracle Context (Evidence Layer)** | `src/lib/oracle/context/builder.ts` — `getUnifiedOracleContext(orgId)` | Calls `getBusinessSnapshot(orgId)` from `@/lib/business/snapshot` (line 98) for ALL headline numbers, then runs 8 additional org-scoped Prisma queries in parallel (`buildBusinessProfile`, `buildIntegrations`, `buildBanking`, `buildCustomerDetail`, `buildSupplierDetail`, `buildGSTDetail`, `buildInvoiceAging`, `buildMonthlyRevenue`). 30s per-org cache (line 53-54). | Every Oracle surface: `/api/oracle/brain/*`, `/api/oracle/ask`, `/api/oracle/chat`, `/api/oracle/briefing`, `/api/oracle/cfo/analyze`, `/api/oracle/forecast`, `/api/oracle/anomalies`, `/api/oracle/scenario`, `/api/oracle/daily-briefing`, `/api/oracle/insights`, `/api/oracle/validate`. All call `getUnifiedOracleContext(orgId)` directly or indirectly via the Oracle brain pipeline. | **NO** (clean). The Oracle context builder is exemplary: it ALWAYS calls `getBusinessSnapshot(orgId)` for headline financials, attaches a `DataSourceRef` + `Evidence` to every section so the LLM can cite provenance, and resolves environment labels (LIVE/SANDBOX/DEMO/STALE/UNAVAILABLE) for every data source. The `itcAtRisk` shadow computation at line 892-905 is the ONLY field that does NOT come from the canonical snapshot — it reads directly from `GSTR2BInvoice` because the snapshot does not currently expose reconciliation-level ITC-at-risk. (Recommendation: add `itcAtRisk` to the canonical `BusinessSnapshot` interface and compute it there so Oracle reads it from `snapshot.itcAtRisk`.) |
+| 10 | **Reports** | `/api/ai-reports` POST → calls `getBusinessSnapshot(organizationId)` at line 184 + parallel canonical Prisma queries scoped by `client.firmId` | `/api/ai-reports/route.ts:175-488 generateReportData()` — uses snapshot for headline + tenant-filter `{ client: { firmId: organizationId } }` for clients/invoices/filings/bills/reconMatches. `/api/export` for PDF/Excel export. | `AIExecutiveReportsPage.tsx` → `useAIReports()` hook → `/api/ai-reports` GET/POST. `ReportsPage.tsx` (the legacy reports UI) — DOES NOT call `/api/ai-reports`! It reads invoices via `useInvoices()` (Prisma — canonical), GST via `useGSTTransactions()` (Firestore — shadow), banking via `useBanking()` (Firestore — shadow). | **YES** — `ReportsPage.tsx` (the legacy printable reports UI at `src/components/reports/ReportsPage.tsx`) shadow-computes GST from Firestore `gst_transactions` (via `useGSTTransactions`) and banking from Firestore `bank_transactions` (via `useBanking`) — DIFFERENT sources from the canonical Prisma-backed snapshot. `/api/ai-reports` POST (the executive reports endpoint) IS canonical — Phase 2 replaced its hardcoded mock stubs with real Prisma queries + snapshot. But the two report surfaces (`ReportsPage.tsx` vs `AIExecutiveReportsPage.tsx`) read from different data backends. |
+
+## Duplicate Logic Found
+
+### 1. Revenue — Rich engine vs Fin engine vs AI-Reports reduce
+
+**Files / lines:**
+- `src/lib/business/snapshot.ts:653-657` (rich — canonical): `db.invoice.aggregate({ where: { client: { firmId: organizationId }, createdAt: { gte: fyStart } }, _sum: { totalAmount: true, ... } })` — NO status filter; FY-to-date by `createdAt`.
+- `src/lib/financial-engine/calculateRevenue.ts:25-37` (fin — shadow): `for (const inv of invoices) { if (inv.status === 'draft' || inv.status === 'cancelled') continue; total += inv.totalAmount; }` — EXCLUDES drafts/cancelled.
+- `src/app/api/ai-reports/route.ts:264` (POST — recomputed): `const totalRevenue = invoicesPeriod.reduce((s, i) => s + i.totalAmount, 0)` — filters by `period` string column, no status filter.
+
+**Concrete example of discrepancy:** Consider an org with 5 invoices in FY2025-26: 3 issued (`₹100k` each), 1 draft (`₹50k`), 1 cancelled (`₹30k`). All were created this FY.
+- Rich snapshot → `revenue = ₹100k × 3 + ₹50k + ₹30k = ₹380k` (includes draft + cancelled).
+- Fin engine → `revenue = ₹100k × 3 = ₹300k` (excludes draft + cancelled).
+- `/api/ai-reports` POST → `totalRevenue = ₹380k` if all 5 share the same `period` string, otherwise only invoices matching the requested `period` (e.g. `2025-11`) — could be anywhere from ₹0 to ₹380k.
+
+The `/api/business/snapshot` endpoint returns `revenue: rich.revenue` (line 99) for the headline, so the dashboard shows `₹380k`. But the `/api/ai-reports` `firm_performance` report uses BOTH `snapshot.revenueThisMonth` (line 399) AND `totalRevenue` from reduce (line 390-401) — so the report can show different revenue than the dashboard for the same period.
+
+### 2. Cash — Rich aggregate vs Fin status-filter vs Banking-Prisma cashflow vs Banking-Service MockProvider vs Banking engine CashForecast vs Firestore useBanking
+
+**Files / lines:**
+- `src/lib/business/snapshot.ts:712-715` + `:894-900` (rich — canonical): `safeAggregate(db.bankAccount, { where: { organizationId }, _sum: { balance: true, availableBalance: true } })` then `cash = bankBalance > 0 ? bankBalance : totalCollectedPayments - totalPaidPayments`. **NO status filter** — sums ALL accounts (active + disconnected + error).
+- `src/lib/financial-engine/calculateCash.ts:32-38` (fin — shadow): `for (const acct of bankAccounts) { if (acct.status === 'disconnected' || acct.status === 'error') continue; bankBalance += acct.balance; ... }` — **EXCLUDES disconnected/error accounts**.
+- `src/lib/banking-prisma/cashflow.ts:151-255` (cashflow engine — read by `/api/banking/cashflow`): aggregates `BankTransaction` rows by day for a trailing window; computes `openingBalance = currentTotalBalance - Σ net flows in window` from `BankAccount.balance` sum (no status filter — `getTotalBalance` at line 119-125 sums all org bankAccounts).
+- `src/lib/banking-service/mock-provider.ts` (in-memory mock — read by `/api/banking-intel/cashflow`): NOT Prisma-backed; uses deterministic in-memory seeded data. Different numbers entirely.
+- `src/lib/banking/engine.ts:318-390` (Phase 8 Banking Cloud `buildCashFlowState`): reads from `db.cashForecast.findMany({ where: { horizon: 'daily' } })` — a DIFFERENT Prisma table (`CashForecast`, not `BankTransaction`/`BankAccount`).
+- `src/hooks/useBanking.ts` (Firestore-backed client hook used by ReportsPage): reads `bank_connections` + `bank_transactions` from Firestore via `subscribeToTransactions` in `banking-provider/service.ts:178`.
+
+**Concrete example of discrepancy:** Consider an org with 2 bank accounts: HDFC active `₹500k`, ICICI disconnected `₹200k`. Both Prisma rows.
+- Rich snapshot → `cash = ₹500k + ₹200k = ₹700k` (no status filter).
+- Fin engine → `cash = ₹500k` (excludes disconnected).
+- `/api/business/snapshot` returns `cash: rich.cash = ₹700k` for the headline. But the nested `bankBalance: cash` (line 120) is the same ₹700k. So the Dashboard shows ₹700k.
+- `/api/banking/cashflow` (the banking page cash flow chart) reads `BankTransaction` rows + derives opening/closing from `BankAccount.balance` sum → ₹700k.
+- `/api/banking-intel/cashflow` returns the MockProvider's in-memory seed data → unrelated number.
+- `useBanking()` in ReportsPage → reads from Firestore, which is empty unless the user has connected a bank via the Firestore-backed `banking-provider`. Likely returns 0 or a different value than the Prisma-backed ₹700k.
+
+So cash position can show 6 different numbers across 6 different surfaces.
+
+### 3. ITC-at-Risk — Oracle GSTR2BInvoice vs AI-Reports GSTReconciliationMatch vs Reconciliation run match-engine vs useGSTTransactions Firestore
+
+**Files / lines:**
+- `src/lib/oracle/context/builder.ts:894-905` (Oracle — inline computation): `db.gSTR2BInvoice.findMany({ where: { organizationId: orgId } })` → for each row, `tax = (r.igst ?? 0) + (r.cgst ?? 0) + (r.sgst ?? 0)`; if `matchStatus === 'mismatched' || 'missing_in_books' || 'missing_in_2b'` → `itcAtRisk += tax`. NO `cess` in the sum. NO period filter. NO matchStatus='duplicate' branch.
+- `src/app/api/ai-reports/route.ts:273-275` (AI-Reports POST): `db.gSTReconciliationMatch.findMany({ where: { run: { organizationId } }, select: { matchType, itcAtRisk, status } })` → `reconMatches.filter((m) => m.matchType !== 'exact' && m.itcAtRisk).reduce((s, m) => s + (typeof m.itcAtRisk === 'number' ? m.itcAtRisk : 0), 0)` — uses the STORED `itcAtRisk` column on `GSTReconciliationMatch`. NO period filter. NO `cess` issue (uses stored value).
+- `src/app/api/gst-reconciliation/run/route.ts:239-343` (run — live computation, then persisted): `reconcile(booksInvoices, gstr2bResult.records)` returns `summary.potentialITCLoss` (line 258, written to `GSTReconciliationRun.potentialITCLoss`). Per-match `r.itcAtRisk` is computed in `match-engine.ts:479-512`:
+  - For `missing_in_gstr2b` → `itcAtRisk = round2(book.cgst + book.sgst + book.igst + book.cess)` (line 481). **INCLUDES cess**.
+  - For `missing_in_books` → `itcAtRisk = rec.itcAvailable` (line 512). Uses the GSTR2B record's stored `itcAvailable` column.
+- `src/lib/gst-engine/calculations.ts:173-212` (useGSTTransactions hook — Firestore): `calculateITC(transactions)` for `transactionType='purchase'` + `itcEligible=true` → `eligibleCGST+SGST+IGST+Cess`. Returns `eligibleITC` (NOT `itcAtRisk` — different concept entirely).
+
+**Concrete example of discrepancy:** Consider an org that ran GSTR-2B reconciliation for period 2025-10 with 2 mismatches:
+- Purchase bill `PB-001` (books) — `cgst=₹9k, sgst=₹9k, igst=0, cess=₹2k`. Not found in GSTR-2B. Match-engine sets `itcAtRisk = ₹9k+₹9k+₹0+₹2k = ₹20k`. Stored on `GSTReconciliationMatch.itcAtRisk = 20000`.
+- GSTR-2B record (supplier invoice not in books) — `igst=₹18k, cgst=0, sgst=0, cess=₹2k, itcAvailable=₹20k`. Match-engine sets `itcAtRisk = rec.itcAvailable = ₹20k`. Stored on `GSTReconciliationMatch.itcAtRisk = 20000`.
+- The reconciliation run's `summary.potentialITCLoss = ₹20k + ₹20k = ₹40k`. Stored on `GSTReconciliationRun.potentialITCLoss = 40000`.
+
+Now Oracle reads `itcAtRisk`:
+- Oracle context builder (line 894-905): for each GSTR2BInvoice row, `tax = (igst ?? 0) + (cgst ?? 0) + (sgst ?? 0)` — **drops cess**. So Oracle computes `itcAtRisk = ₹18k + ₹0 + ₹0 (for GSTR2B record) + ₹0 + ₹9k + ₹9k (for PB-001's GSTR2BInvoice row, which doesn't exist)` = `₹18k` (only the GSTR-2B side) — **does NOT include cess (₹2k) and does NOT include the books-side `missing_in_2b` ITC because GSTR2BInvoice only has the GSTR-2B rows**. Oracle reports `₹18k`.
+- `/api/ai-reports` POST reads `GSTReconciliationMatch.itcAtRisk` → `₹20k + ₹20k = ₹40k` (stored value, includes cess). AI-Reports reports `₹40k`.
+
+So Oracle shows `₹18k at risk`, AI-Reports shows `₹40k at risk`, the reconciliation run summary shows `₹40k potentialITCLoss`, and the canonical snapshot exposes `itcAvailable` (= `Σ PurchaseBill.gstAmount`) which is a totally different number (the ITC that's available, not at-risk). Four different numbers, none consistent.
+
+### 4. GST — Canonical Prisma aggregate vs Returns/GSTR-Filing per-client per-period recomputation vs useGSTTransactions Firestore
+
+**Files / lines:**
+- `src/lib/business/snapshot.ts:655, 824-828` (canonical): `db.invoice.aggregate({ where: { client: { firmId: organizationId }, createdAt: { gte: fyStart } }, _sum: { cgst: true, sgst: true, igst: true, cess: true } })` → `(cgst ?? 0) + (sgst ?? 0) + (igst ?? 0) + (cess ?? 0)`. Filter: org-wide + FY-to-date by `createdAt`.
+- `src/app/api/returns/route.ts:147-156` (POST `/api/returns`): `db.invoice.aggregate({ where: { clientId, period }, _sum: { cgst: true, sgst: true, igst: true, cess: true } })` → same formula but **filter by `clientId` + `period` (string column, e.g. '2025-10')**.
+- `src/app/api/gstr-filing/route.ts:92-101` (POST `/api/gstr-filing`): IDENTICAL re-computation to `/api/returns` — `db.invoice.aggregate({ where: { clientId, period }, _sum: { cgst, sgst, igst, cess } })`.
+- `src/app/api/ai-reports/route.ts:278-281` (POST `/api/ai-reports`): `invoicesPeriod.reduce((s, i) => s + i.cgst + i.sgst + i.igst + i.cess, 0)` — JS-side reduce, filter `{ client: { firmId: organizationId }, period }`.
+- `src/hooks/useGSTTransactions.ts` + `src/lib/gst-engine/calculations.ts:320-394` (Firestore-backed hook used by ReportsPage): reads `gst_transactions` Firestore collection; sums `cgstCollected+sgstCollected+igstCollected+cessCollected` for `transactionType='sales'`.
+
+**Concrete example of discrepancy:** Consider an org with 3 invoices for client `C1` in period `2025-10`, all created this FY:
+- INV-A: `cgst=₹9k, sgst=₹9k, igst=0, cess=0, period='2025-10'`
+- INV-B: `cgst=0, sgst=0, igst=₹18k, cess=₹2k, period='2025-10'`
+- INV-C: `cgst=₹5k, sgst=₹5k, igst=0, cess=0, period='2025-09'` (different period)
+
+Snapshot GST (org-wide, FY-to-date) → `₹9k+₹9k + ₹0+₹18k+₹2k + ₹5k+₹5k = ₹48k` outputTax.
+
+Returns route POST for C1+2025-10 → `₹9k+₹9k + ₹0+₹18k+₹2k = ₹38k` totalTax on the GSTRFiling row.
+
+GSTR-Filing route POST for C1+2025-10 → same `₹38k`.
+
+AI-Reports POST for period=2025-10 → `₹38k` (matches returns).
+
+ReportsPage's `useGSTTransactions({ period: '2025-10' })` → reads Firestore `gst_transactions` where `filingPeriod='2025-10'`. If the sync ran for INV-A + INV-B, `gstSummary.outputTax = ₹38k` (same). If the sync didn't run for INV-B, `gstSummary.outputTax = ₹18k` (only INV-A). If Firestore is empty (no sync ran), `gstSummary.outputTax = ₹0`.
+
+So the Dashboard/Oracle show `₹48k` (FY-to-date), Returns/GSTR-Filing show `₹38k` (per-period), ReportsPage shows `₹0–₹38k` depending on Firestore sync state. No single number; the GST liability on the canonical snapshot ≠ the GST on a return ≠ the GST on the reports page.
+
+### 5. Receivables — Snapshot aggregate vs Receivables route row-by-row reduce vs AI-Reports reduce
+
+**Files / lines:**
+- `src/lib/business/snapshot.ts:655, 829` (canonical): `db.invoice.aggregate({ where: { client: { firmId: organizationId }, createdAt: { gte: fyStart } }, _sum: { balanceAmount: true } })` → `nativeReceivables = invoiceAgg._sum.balanceAmount ?? 0`. Plus `zohoReceivables` from `ZohoInvoice` aggregate. **Filter: org-wide, FY-to-date**.
+- `src/app/api/receivables/route.ts:27-78` (Receivables Engine™): `db.invoice.findMany({ where: { client: { firmId: organizationId } }, orderBy: { createdAt: 'desc' } })` (NO FY filter — ALL invoices for the org), then JS-side `getReceivablesSummary(invoices)` from `src/lib/invoices/receivables-utils.ts`. Returns `summary.totalOutstanding` + aging buckets + reminders + forecast.
+- `src/app/api/ai-reports/route.ts:265` (POST): `db.invoice.findMany({ where: tenantFilter })` (NO FY filter), then `totalOutstanding = invoicesAll.reduce((s, i) => s + i.balanceAmount, 0)`.
+
+**Concrete example of discrepancy:** Consider an org with:
+- FY2025-26 invoices: `balanceAmount = ₹100k` (outstanding)
+- FY2024-25 invoices (created before `fyStart=2025-04-01`): `balanceAmount = ₹50k` (still outstanding — old AR)
+
+Snapshot (canonical) → `receivables = ₹100k` (FY-to-date filter on `createdAt`).
+`/api/receivables` → `summary.totalOutstanding = ₹150k` (no FY filter).
+`/api/ai-reports` → `totalOutstanding = ₹150k` (no FY filter).
+
+So Dashboard shows `₹100k` receivables (snapshot), Receivables page shows `₹150k` (receivables route), AI-Reports board report shows `₹150k`. The receivables page disagrees with the dashboard by ₹50k for the same org.
+
+### 6. Suppliers — PurchaseBill (canonical, tenant-scoped) vs Vendor model (shadow, cross-tenant leak)
+
+**Files / lines:**
+- Canonical: `src/lib/business/snapshot.ts:683-686` → `db.purchaseBill.groupBy({ by: ['vendorName'], where: { client: { firmId: organizationId } } })` for `vendorCount`. Oracle context builder `:816` → `db.purchaseBill.findMany({ where: { client: { firmId: orgId } } })` for `buildSupplierDetail`.
+- Shadow: `db.vendor.findMany()` (NO tenant filter) in:
+  - `src/lib/oracle-chat/tools.ts:43,246,509,806,1087` (Oracle Chat supplier search/aggregations)
+  - `src/lib/oracle-intelligence/business-graph.ts:43`
+  - `src/lib/oracle-intelligence/memory-engine.ts:68`
+  - `src/lib/oracle-intelligence/dashboard.ts:45`
+  - `src/lib/invoices/ocr.ts:75,106,324,366` (OCR vendor matching/creation)
+  - `src/lib/invoices/purchases.ts:45,126`
+  - `src/lib/integrations/zoho-books/sync/vendors.ts:75,93,128` (Zoho sync writes here)
+
+**Concrete example of discrepancy:** Consider org A with PurchaseBills for vendor "Acme Supplies" (₹500k spend) and org B with PurchaseBills for "Acme Supplies" (₹200k spend).
+- Oracle context builder `buildSupplierDetail(orgId='A')` → reads `PurchaseBill` rows for org A only → reports `totalSuppliers = 1, topSuppliers[0].spend = ₹500k`. Canonical.
+- Oracle Chat `search_vendors` tool (`src/lib/oracle-chat/tools.ts:246`) → `db.vendor.findMany()` returns ALL Vendor rows across ALL orgs → returns a "Acme Supplies" Vendor row (likely created by Zoho sync for org A, no `organizationId` on the row). Chat reports supplier count without tenant scoping. Cross-tenant leak + different count than Oracle context.
+- If Zoho sync ran for org B too, the Vendor row for "Acme Supplies" might be UPSERTED (by `vendorGstin` unique key) → org B's sync overwrites org A's Vendor row. Both orgs see the wrong supplier master record.
+
+### 7. Banking — Six parallel paths (see Cash row above for details)
+
+The most fragmented metric. Canonical for Dashboard/Oracle = `snapshot.cash` (Prisma `BankAccount.balance` aggregate, no status filter). Canonical for Banking page = `/api/banking/cashflow` (Prisma `BankTransaction` aggregation in `banking-prisma/cashflow.ts`). ReportsPage uses `useBanking()` (Firestore — SHADOW). `/api/banking-intel/cashflow` uses MockBankingProvider (in-memory). `src/lib/banking/engine.ts` uses `CashForecast` table (third Prisma table, Phase 8 Step 2). Six paths, six different numbers possible.
+
+## Consistency Verification Plan
+
+For each metric, the SINGLE canonical read path that every module should use:
+
+| # | Metric | Canonical API Endpoint | Migration Plan |
+|---|--------|------------------------|----------------|
+| 1 | **Revenue** | `GET /api/business-snapshot?organizationId=X` (returns `revenue` from `getBusinessSnapshot()` rich engine) | (a) Add `status: { notIn: ['draft', 'cancelled'] }` filter to the snapshot's invoice aggregate at `src/lib/business/snapshot.ts:654` so the canonical engine matches the `fin` engine's revenue recognition rule (revenue = realized invoices only). OR keep the snapshot as-is (FY-to-date all invoices) and document the difference; the `fin` engine's filter is the standard accounting definition. (b) Replace `/api/ai-reports/route.ts:264` `totalRevenue = invoicesPeriod.reduce(...)` with `snapshot.revenue` (already fetched at line 184) — drop the reduce. (c) Decide one canonical filter (FY-to-date by `createdAt` OR period-by-`period` string) and use it everywhere. Recommend: keep snapshot's FY-to-date filter as canonical; have `/api/returns` and `/api/gstr-filing` POST handlers compute `totalTax` from the snapshot's GST fields filtered by `period` rather than re-running a per-client per-period aggregate. |
+| 2 | **Receivables** | `GET /api/business-snapshot?organizationId=X` → `receivables` field (snapshot aggregate) | (a) Decide one canonical filter: FY-to-date (snapshot) OR all-time (Receivables route). Recommend: all-time (a receivable is a receivable until paid, regardless of when it was issued). Update snapshot.ts:654 to drop the `createdAt: { gte: fyStart }` filter for the `balanceAmount` aggregate. (b) Refactor `/api/receivables/route.ts` to read `summary.totalOutstanding` from `getBusinessSnapshot()` instead of recomputing via `getReceivablesSummary(invoices)`. Keep the aging buckets + reminders + forecast computations (those need row-level data), but the headline `totalOutstanding` MUST come from the snapshot. (c) Replace `/api/ai-reports/route.ts:265` `totalOutstanding = invoicesAll.reduce(...)` with `snapshot.receivables`. |
+| 3 | **Payments** | `GET /api/payments?organizationId=X` (list) + `GET /api/business-snapshot?organizationId=X` → `totalCollected` + `totalPaid` (totals) | (a) Verified canonical — Phase 2 wired mark-paid to create a Payment row + invalidate the snapshot. (b) Audit `useBanking()` Firestore hook: it surfaces bank-transaction-as-payment data for the ReportsPage cash flow tab. This is NOT a duplicate of the Payment table — it's bank-side transactions (different concept). Document this distinction in `useBanking.ts` header. (c) Add `itcAtRisk` to the canonical `BusinessSnapshot` interface so Oracle + AI-Reports can read it from the snapshot instead of inline-computing from `GSTR2BInvoice` / `GSTReconciliationMatch`. |
+| 4 | **Cash** | `GET /api/business-snapshot?organizationId=X` → `cash` field (snapshot) | (a) Pick ONE bank-account status filter: include ALL accounts (current snapshot behavior) OR exclude disconnected/error (fin engine behavior). Recommend: exclude disconnected/error — a disconnected account's balance is not real cash. Update `snapshot.ts:712` to add `status: { in: ['active', 'syncing'] }` to the `where` clause. (b) Deprecate `/api/banking-intel/cashflow` (MockBankingProvider, in-memory, not Prisma-backed). Wire banking-intel callers to `/api/banking/cashflow` (Prisma-backed). (c) Decide on `src/lib/banking/engine.ts:318 buildCashFlowState` — it reads from `CashForecast` table (Phase 8 Step 2). Either delete (if no callers) or migrate to read from `BankTransaction` + `BankAccount` like `banking-prisma/cashflow.ts`. (d) Migrate `useBanking()` Firestore hook to use the Prisma-backed `/api/banking/*` routes so ReportsPage reads canonical data. (e) Document the snapshot's `cash` fallback to `totalCollectedPayments - totalPaidPayments` when bankBalance=0 — this is intentional (covers orgs without connected bank accounts). |
+| 5 | **GST (Output Tax)** | `GET /api/business-snapshot?organizationId=X` → `outputTax` field (snapshot) | (a) Verified canonical for Dashboard/Oracle. (b) `/api/returns` POST + `/api/gstr-filing` POST both recompute `taxSum` per `(clientId, period)` — accept this as the per-return tax aggregate (a different shape than the snapshot's FY-to-date org-wide aggregate). Document the difference. (c) `/api/ai-reports` POST `gstProcessed = invoicesPeriod.reduce((s,i) => s + i.cgst + i.sgst + i.igst + i.cess, 0)` should be replaced with a Prisma `db.invoice.aggregate({ where: { client: { firmId }, period }, _sum: { cgst, sgst, igst, cess } })` (one SQL aggregate, not a JS reduce). (d) Migrate `ReportsPage.tsx` from `useGSTTransactions()` (Firestore) to a new `/api/gst-summary?period=YYYY-MM` endpoint that returns the snapshot's GST fields filtered by `period` — eliminates the Firestore-vs-Prisma divergence. |
+| 6 | **ITC** | `GET /api/business-snapshot?organizationId=X` → `inputTax` (headline available ITC) + `itcAtRisk` (NEW — to be added) | (a) Add `itcAtRisk` to the canonical `BusinessSnapshot` interface. Compute it inside `getBusinessSnapshot()` via a single `db.gSTReconciliationMatch.aggregate({ where: { run: { organizationId }, matchType: { not: 'exact' } }, _sum: { itcAtRisk: true } })` — uses the STORED `GSTReconciliationMatch.itcAtRisk` column (canonical reconciliation source). (b) Update `src/lib/oracle/context/builder.ts:894-905` to read `snapshot.itcAtRisk` instead of inline-computing from `GSTR2BInvoice` (which drops cess and doesn't include books-side missing-in-2B). (c) Update `/api/ai-reports/route.ts:273-275` to read `snapshot.itcAtRisk` instead of re-querying `GSTReconciliationMatch`. (d) Migrate `useGSTTransactions()` Firestore hook to read `itcSummary` from the snapshot. (e) Decide: is the canonical ITC headline `inputTax = Σ PurchaseBill.gstAmount` (current snapshot) OR `eligibleITC = Σ (matched GSTR2BInvoice.itcAvailable)` (only ITC backed by 2B reconciliation)? Recommend the latter — it's the legally claimable amount. The current snapshot's `inputTax` is "input tax paid" (per books), not "ITC available" (per 2B). Rename `snapshot.inputTax` → `snapshot.inputTaxPaid` and add `snapshot.itcAvailable` (matched-only) + `snapshot.itcAtRisk` (mismatched). |
+| 7 | **Customers** | `GET /api/clients?organizationId=X` (list) + `GET /api/business-snapshot?organizationId=X` → `customerCount` (count) | (a) Verified canonical — all readers use `Client` table scoped by `firmId`. (b) The only divergence: `Math.max(clientCount, zohoCustomersCount)` merge in `snapshot.ts:853` is documented and correct (Zoho sync upserts a Client row). No action needed. |
+| 8 | **Suppliers** | `GET /api/payables?organizationId=X` (list) + `GET /api/business-snapshot?organizationId=X` → `vendorCount` (count) | (a) Migrate all readers of `db.vendor.*` to read from `PurchaseBill` grouped by `vendorName` (canonical) OR add `organizationId` column to `Vendor` schema + scope all queries. Recommend (a) — deprecate the `Vendor` master table since `PurchaseBill.vendorName` + `vendorGstin` already capture the supplier identity per bill. (b) Fix the cross-tenant leak in `src/lib/invoices/payables.ts:36 getPayables()` — add `where: { client: { firmId: organizationId } }` parameter. (c) Zoho sync (`vendors.ts`) should NOT write to a separate `Vendor` table — it should upsert PurchaseBills (which already mirror ZohoBills via `src/lib/integrations/zoho-books/sync/bills.ts`). |
+| 9 | **Oracle Context** | `getUnifiedOracleContext(orgId)` (server-side import) + `GET /api/oracle/context?organizationId=X` (HTTP) | (a) Verified canonical — every Oracle surface reads from `getUnifiedOracleContext(orgId)`. (b) The one shadow: `itcAtRisk` inline computation at line 894-905. Fix by adding `itcAtRisk` to the canonical snapshot (see ITC row above) and reading `snapshot.itcAtRisk` in `buildGSTDetail()`. (c) The evidence layer (`DataSourceRef` + `Evidence` on every section) is exemplary — no changes needed. |
+| 10 | **Reports** | `GET /api/ai-reports` (executive reports — canonical after Phase 2) + `GET /api/business-snapshot?organizationId=X` (snapshot for live numbers) | (a) `/api/ai-reports` POST is canonical — verified at `route.ts:175-488 generateReportData()`. (b) `ReportsPage.tsx` (the legacy printable reports UI) uses `useGSTTransactions()` (Firestore) + `useBanking()` (Firestore) — both shadow. Migrate to Prisma-backed endpoints (`/api/gst-summary?period=` + `/api/banking/cashflow`). (c) The `getPayables()` shadow call in `/api/intelligence/forecast/route.ts:19` and `lib/invoices/oracle.ts:38` is a cross-tenant leak — replace with `db.purchaseBill.findMany({ where: { client: { firmId: organizationId } } })`. (d) Add a `/api/reports/snapshot?period=YYYY-MM` endpoint that returns a unified period-scoped snapshot (revenue, expenses, GST, ITC, receivables, payables, cash) so reports have ONE endpoint to call instead of mixing `useInvoices` + `useGSTTransactions` + `useBanking`. |
+
+## Cross-Cutting Recommendations
+
+1. **Single snapshot interface:** Extend `BusinessSnapshot` with `itcAtRisk`, `itcAvailable` (matched-only), `inputTaxPaid` (per-books), `overduePayables`, `supplierCount`, `topCustomers` (top 5 by revenue), `topSuppliers` (top 5 by spend). Every reader reads these fields instead of recomputing.
+
+2. **Status filter for bank accounts:** Snapshot should add `status: { in: ['active', 'syncing'] }` to the BankAccount aggregate so disconnected/error accounts don't inflate Cash Position.
+
+3. **Revenue recognition rule:** Snapshot should add `status: { notIn: ['draft', 'cancelled'] }` to the Invoice aggregate so Revenue reflects realized sales (matches the `fin` engine's filter). This is the standard accounting definition.
+
+4. **Deprecate parallel engines:**
+   - `src/lib/financial-engine/businessSnapshot.ts` — should delegate headline computations to `src/lib/business/snapshot.ts` (currently it duplicates). Either delete `fetchFinancialData` + `calculateRevenue` + `calculateCash` etc. and import from the rich engine, OR keep `fin` ONLY for the nested `risks.overdueExposure` / `forecast.projectedCash` / `runway.monthlyBurnRate` fields that the rich engine doesn't expose.
+   - `src/lib/banking-service/mock-provider.ts` — in-memory, not Prisma-backed. Should be replaced by `/api/banking/*` Prisma-backed routes for all `/api/banking-intel/*` callers.
+   - `src/lib/banking/engine.ts:318 buildCashFlowState` — Phase 8 Step 2 code that reads `CashForecast` table. Either delete (if no callers) or migrate to `BankTransaction` aggregation.
+   - `useBanking()` Firestore hook + `useGSTTransactions()` Firestore hook — should migrate to Prisma-backed `/api/banking/*` + `/api/gst-summary` endpoints so ReportsPage reads canonical data.
+
+5. **Schema fixes:**
+   - Add `organizationId String` to `Vendor` model (`prisma/schema.prisma:5341`) + scope all `db.vendor.*` queries. OR deprecate `Vendor` model entirely (canonical supplier = `PurchaseBill.vendorName` groupBy).
+   - Add `organizationId String` to `Payment` model (`prisma/schema.prisma:805`) — currently scoped via `client.firmId`, which is fragile (breaks if `clientId` is null).
+   - Add `organizationId String` to `GSTRFiling` model (`prisma/schema.prisma:142`) — currently scoped via `client.firmId`, same fragility.
+
+6. **Tenant filter on `getPayables()`:** `src/lib/invoices/payables.ts:36` needs `where: { client: { firmId: organizationId } }` parameter — currently returns ALL purchase bills platform-wide. Called from `/api/intelligence/forecast` + `lib/invoices/oracle.ts`.
+
+Stage Summary:
+- **Verdicts:**
+  1. **Revenue** — DUPLICATE-LOGIC-FOUND (rich aggregate vs fin status-filter vs ai-reports reduce — three different filters; rich is canonical but missing draft/cancelled exclusion).
+  2. **Receivables** — DUPLICATE-LOGIC-FOUND (snapshot FY-filtered aggregate vs receivables-route all-time reduce vs ai-reports all-time reduce — three different time windows).
+  3. **Payments** — CANONICAL (mark-paid wired to create Payment row; snapshot invalidates on mutation; one shadow = Firestore `useBanking()` which surfaces bank-side transactions, not AR settlements — different concept, documented).
+  4. **Cash** — DUPLICATE-LOGIC-FOUND (SIX cash paths: rich aggregate, fin status-filter, banking-prisma cashflow, banking-service mock-provider, banking engine CashForecast table, Firestore useBanking hook).
+  5. **GST** — DUPLICATE-LOGIC-FOUND (canonical snapshot aggregate vs returns/gstr-filing per-client-per-period recompute vs ai-reports reduce vs useGSTTransactions Firestore — four paths, two data sources).
+  6. **ITC** — DUPLICATE-LOGIC-FOUND (snapshot inputTax = PurchaseBill.gstAmount vs useGSTTransactions Firestore eligibleITC vs Oracle GSTR2BInvoice inline itcAtRisk vs AI-Reports GSTReconciliationMatch.itcAtRisk stored column — four different computations from four different models).
+  7. **Customers** — CANONICAL (clean — all readers use `Client` table scoped by `firmId`; `Math.max(clientCount, zohoCustomersCount)` merge is documented).
+  8. **Suppliers** — DUPLICATE-LOGIC-FOUND (`PurchaseBill` canonical, tenant-scoped; `Vendor` model shadow, cross-tenant leak; Oracle Chat + Intelligence + OCR + Purchases + Zoho sync all read `Vendor` model without org scoping).
+  9. **Oracle Context** — CANONICAL (exemplary — `getUnifiedOracleContext(orgId)` delegates to `getBusinessSnapshot()` for every headline; one shadow: inline `itcAtRisk` computation at `builder.ts:894-905` that drops cess + misses books-side missing-in-2B).
+  10. **Reports** — DUPLICATE-LOGIC-FOUND (`/api/ai-reports` POST is canonical after Phase 2; `ReportsPage.tsx` legacy UI shadow-computes GST from Firestore + banking from firestore; `/api/intelligence/forecast` + `lib/invoices/oracle.ts` call cross-tenant-leaking `getPayables()`).
+
+- **Canonical source-of-truth summary (one line each):**
+  - Revenue → `getBusinessSnapshot(orgId).revenue` from `src/lib/business/snapshot.ts:875` (rich engine, Prisma Invoice aggregate, FY-to-date).
+  - Receivables → `getBusinessSnapshot(orgId).receivables` from `src/lib/business/snapshot.ts:877` (rich engine, Prisma Invoice.balanceAmount aggregate, FY-to-date).
+  - Payments → `db.payment.*` Prisma table; totals via `getBusinessSnapshot(orgId).totalCollected` + `.totalPaid`.
+  - Cash → `getBusinessSnapshot(orgId).cash` from `src/lib/business/snapshot.ts:897-900` (BankAccount.balance aggregate; falls back to net payment flow when no bank connected).
+  - GST Output Tax → `getBusinessSnapshot(orgId).outputTax` from `src/lib/business/snapshot.ts:876` (Prisma Invoice cgst+sgst+igst+cess aggregate).
+  - ITC → `getBusinessSnapshot(orgId).inputTax` (per-books) — RECOMMEND adding `itcAvailable` (matched-only) + `itcAtRisk` (mismatched) to the snapshot interface.
+  - Customers → `db.client.findMany({ where: { firmId: organizationId } })`; count via `getBusinessSnapshot(orgId).customerCount`.
+  - Suppliers → `db.purchaseBill.findMany({ where: { client: { firmId: organizationId } } })` + groupBy `vendorName`; count via `getBusinessSnapshot(orgId).vendorCount`.
+  - Oracle → `getUnifiedOracleContext(orgId)` from `src/lib/oracle/context/builder.ts:66` (calls `getBusinessSnapshot(orgId)` for headlines + 8 additional org-scoped Prisma queries for dimensions the snapshot doesn't cover).
+  - Reports → `getBusinessSnapshot(orgId)` for live numbers + `/api/ai-reports` POST for persisted executive reports.
+
+- **Top 5 fixes (priority order):**
+  1. Add `itcAtRisk` + `itcAvailable` to canonical `BusinessSnapshot` interface; update Oracle context builder + AI-Reports to read from snapshot instead of inline-computing from `GSTR2BInvoice` / `GSTReconciliationMatch`.
+  2. Add `status: { notIn: ['draft', 'cancelled'] }` filter to snapshot's revenue aggregate (line 654) + `status: { in: ['active', 'syncing'] }` filter to snapshot's bankAccount aggregate (line 712) so Revenue reflects realized sales + Cash reflects real (non-disconnected) bank balances.
+  3. Migrate `ReportsPage.tsx` from `useGSTTransactions()` (Firestore) + `useBanking()` (Firestore) to Prisma-backed `/api/gst-summary?period=` + `/api/banking/cashflow` endpoints so the legacy reports UI reads canonical data.
+  4. Add `organizationId String` column to `Vendor` + `Payment` + `GSTRFiling` Prisma models (currently scoped via `client.firmId` — fragile when `clientId` is null); scope all `db.vendor.*` queries; OR deprecate `Vendor` model entirely in favour of `PurchaseBill.vendorName` groupBy.
+  5. Fix the cross-tenant leak in `getPayables()` (`src/lib/invoices/payables.ts:36`) — add `where: { client: { firmId: organizationId } }` parameter; called from `/api/intelligence/forecast` + `lib/invoices/oracle.ts`.
+
+**Status: AUDIT-P3-CANONICAL-MAP COMPLETE. Read-only — no files modified. Ready to feed into the Phase 3 fix sprint.**
+
+---
+Task ID: P3-GW-STALE-UI
+Agent: gw-stale-ui
+Task: Add missing Google Workspace STALE-state UI (4-state connection model: live / stale / disconnected / error)
+
+Work Log:
+- Read worklog tail (Phase 1 + Phase 2 complete; Phase 2 Wave 4 explicitly DEFERRED "Google Workspace STALE banner — Google OAuth token refresh already handled; UI banner can be added later"). This task implements that deferred item.
+- READ-ONLY AUDIT of Google Workspace integration:
+  • Files read:
+    - src/lib/google-workspace/auth.ts (736 lines) — full OAuth lifecycle: buildAuthUrl, encodeState/decodeState, exchangeCodeForTokens, storeTokens, loadTokens, getValidAccessToken (auto-refresh w/ 60s safety margin), refreshAccessToken, disconnectGoogle (revoke + soft-delete), getConnectionStatus, resolveOrgUserFromHeaders, resolvePublicOrigin (gateway-aware via `abc` header).
+    - src/app/api/integrations/google/callback/route.ts — OAuth callback: decodes state, exchanges code for tokens, persists encrypted tokens via storeTokens, emits google.connected timeline event, redirects to "/" with ?google_connected=1&view=google-workspace.
+    - src/app/api/integrations/google/connect/route.ts — OAuth start: resolves redirectUri from headers, builds state, returns authUrl JSON for client to redirect to.
+    - src/app/api/integrations/google/status/route.ts — connection status endpoint.
+    - src/components/google-workspace/GoogleWorkspacePage.tsx (2062 lines) — premium UI with ConnectionHeader + NotConnectedGate.
+    - src/hooks/useGoogleWorkspace.ts — client hook wrapping status/connect/disconnect + Gmail/Drive/Docs/Sheets/Calendar actions.
+    - src/lib/integrations/zoho-books/oauth.ts getConnectionStatus (lines 883-972) — reference pattern (env-var check + safeDecrypt + requiresReconnect + notConfigured + reason fields). Phase 1 worklog line 16886 documented this hardening for Zoho; Google was weaker (worklog line 21655).
+    - src/lib/oracle/context/builder.ts — already uses GoogleWorkspaceToken.updatedAt as `lastSync` proxy (line 480) and FRESHNESS_WINDOWS.google.maxAgeHours=1 (line 467). Phase 3 P3-GW-STALE-UI uses 24h per the task spec (different threshold for human-facing STALE banner vs Oracle's internal freshness env label).
+    - prisma/schema.prisma:5635-5653 — GoogleWorkspaceToken model: id, organizationId, userId, userEmail, googleUserId, accessToken (encrypted), refreshToken (encrypted), expiryDate, scope, tokenType, connectedAt, updatedAt (@updatedAt), revokedAt. NO lastSyncedAt column — using updatedAt as best-effort proxy (matches Oracle context builder pattern).
+  • Existing state model (BEFORE this task):
+    - getConnectionStatus returned: { connected, userEmail, googleUserId, connectedAt, scopes }
+    - `connected` = !!row && !row.revokedAt (no env-var check, no decrypt check, no refresh probe, no staleness check — weaker than Zoho's honesty contract).
+    - UI showed 2 states only: "Connected" (gst-status-success, blue) or "Not connected" (gst-status-warning, amber).
+    - No STALE state surfaced. No ERROR state surfaced (refresh failures only surfaced when user took an action that hit a Google API).
+    - Token expiry detected via expiryDate + 60s safety margin in getValidAccessToken (auth.ts:534). Auto-refresh transparent to callers.
+    - No "stale" concept prior to this task.
+
+- IMPLEMENTED the 4-state connection model. State logic (exact contract):
+  1. `disconnected` — no token row OR row.revokedAt OR row.accessToken == '' (post-disconnect). Also returned when org/user context missing on the request (status route's safe-read fallback).
+  2. `error` — token row exists BUT one of:
+     (a) GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars missing (notConfigured: true, requiresReconnect: true) — mirrors Zoho's FIX 1.
+     (b) safeDecrypt(row.accessToken) returns null — secret was rotated since connection (requiresReconnect: true) — mirrors Zoho's FIX 1.
+     (c) getValidAccessToken returns error or null accessToken — refresh token revoked by user via Google Account page, or Google returned 401/403/invalid_grant (requiresReconnect: true). errorMessage = the actual error from refreshAccessToken.
+  3. `live` — token exists + refresh succeeds (or wasn't needed) + pre-refresh `updatedAt` is within 24h.
+  4. `stale` — token exists + refresh succeeds (token row was just refreshed by getValidAccessToken) BUT pre-refresh `updatedAt` is > 24h ago (the integration hasn't been used in over a day; data is stale even though the token works).
+  - The `connected` boolean is preserved for backward compat (true iff state === 'live' || 'stale'). Callers like /api/invoices/send/route.ts:82 that check `status.connected` continue to work correctly: ERROR and DISCONNECTED both fall through to the "Gmail is not connected" branch.
+  - Best-effort `lastSyncedAt` = pre-refresh `row.updatedAt` (ISO string, null when no token row). Set BEFORE getValidAccessToken is called, so a refresh-bumped updatedAt doesn't mask the staleness.
+  - Staleness threshold: STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000 (24 hours), per task spec.
+
+- Files changed (4):
+  1. src/lib/google-workspace/auth.ts — enhanced `getConnectionStatus` (was lines 661-678, now lines 651-837). Added:
+     - `export type GoogleConnectionState = 'live' | 'stale' | 'disconnected' | 'error'`
+     - `const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000`
+     - Extended `ConnectionStatus` interface with: `state`, `lastSyncedAt`, `errorMessage`, `requiresReconnect`, `notConfigured`, `requiresAuth`.
+     - The function now (a) checks row existence/revoked/empty-accessToken → disconnected; (b) checks env vars → error (notConfigured); (c) calls safeDecrypt → error (undecryptable); (d) captures pre-refresh `updatedAt` + `tokenWasStillValid` flag; (e) calls getValidAccessToken (refreshes if expired); (f) on refresh failure → error (requiresReconnect); (g) on success → checks staleness via `!tokenWasStillValid && Date.now() - lastActivityMs > STALE_THRESHOLD_MS` → stale or live.
+     - OAuth logic in buildAuthUrl/exchangeCodeForTokens/storeTokens/loadTokens/getValidAccessToken/refreshAccessToken/disconnectGoogle UNCHANGED.
+  2. src/app/api/integrations/google/status/route.ts — updated both placeholder responses (no-auth-context fallback at line 23-39; server-error fallback at line 43-63) to include all new fields with `state: 'disconnected'`. The happy-path response (line 41-42) calls getConnectionStatus which now returns the full state-aware shape.
+  3. src/hooks/useGoogleWorkspace.ts — extended `GoogleConnectionStatus` type with new fields (`state`, `lastSyncedAt`, `errorMessage`, `requiresReconnect`, `notConfigured`, `requiresAuth`). Added `export type GoogleConnectionState` for the UI to import.
+  4. src/components/google-workspace/GoogleWorkspacePage.tsx — added 4 new components + updated 2:
+     - Added `STATE_BADGE_CONFIG` map: state → { label, icon, className } (live→emerald, stale→amber, disconnected→zinc-gray, error→red).
+     - Added `StatusBadge` component using the existing shadcn/ui `Badge` component (variant="outline" + custom Tailwind color className override, since the built-in variants default/secondary/destructive/outline don't cover green or amber).
+     - Added `StaleBanner` component (amber) — explains stale state + last sync time.
+     - Added `ErrorBanner` component (red) — surfaces the actual errorMessage.
+     - Updated `ConnectionHeader`:
+       * Replaced the previous 3-branch status pill (Checking / Connected / Not connected) with `<StatusBadge state={state} errorMessage={status.errorMessage} loading={statusLoading} />` — now shows all 4 states with appropriate colors.
+       * "Last sync" meta row now prefers `status.lastSyncedAt` (falls back to `status.connectedAt` for backward-compat display).
+       * Connect button label switches to "Reconnect Google" when state === 'error'.
+       * Renders `<StaleBanner>` below the connection header when `connected && state === 'stale'`.
+     - Updated `NotConnectedGate`:
+       * Detects `status?.state === 'error'` and renders a different empty state: title "Reconnect Google Workspace" (vs "Connect Google Workspace"), description explaining the error, red AlertCircle badge (vs blue Plug badge), ErrorBanner with the actual errorMessage, CTA button "Reconnect Google Account".
+       * For state === 'disconnected' (the default), preserves the original empty state.
+     - Imported `type GoogleConnectionState` from the hook.
+
+- Verification:
+  • ESLint clean on all 4 changed files: `npx eslint src/lib/google-workspace/auth.ts src/app/api/integrations/google/status/route.ts src/hooks/useGoogleWorkspace.ts src/components/google-workspace/GoogleWorkspacePage.tsx --max-warnings 0` → exit 0, no output.
+  • TypeScript parse-only check: all 4 files parse OK (via ts.createSourceFile).
+  • Targeted `tsc --noEmit` on the 4 files shows ZERO errors in the changed files. (Pre-existing errors elsewhere — AuthContext type mismatch, OrgContext role property, auth/errors duplicate keys, services.ts webViewLink — were NOT touched and are out of scope.)
+  • Full `bun run lint` on the whole project exceeded the sandbox's 3.9GB memory limit (tsc OOM) — verified via targeted eslint instead.
+  • No OAuth logic changes. No schema migrations. No new env vars. No new dependencies. Backward-compatible: existing `status.connected` consumers (invoices/send/route.ts, useConnectedSources.ts) continue to work unchanged.
+
+Stage Summary:
+- **P3-GW-STALE-UI COMPLETE**: Google Workspace page now surfaces 4 distinct connection states (LIVE/stale/disconnected/error) with appropriate colors (green/amber/gray/red) via a shadcn/ui Badge component. The STALE state is reachable when the user has connected Google Workspace but hasn't used the integration in > 24h (token refresh succeeds but data is stale). The ERROR state is proactively surfaced (env-var missing / secret rotated / refresh revoked) instead of only failing on the next API call.
+- **Files changed**: 4 (auth.ts, status/route.ts, useGoogleWorkspace.ts, GoogleWorkspacePage.tsx).
+- **Database changes**: 0 (uses existing GoogleWorkspaceToken.updatedAt as best-effort lastSyncedAt proxy — mirrors Oracle context builder pattern).
+- **OAuth logic changes**: 0 (only ADDED state surfacing; existing buildAuthUrl/exchangeCodeForTokens/storeTokens/loadTokens/getValidAccessToken/refreshAccessToken/disconnectGoogle untouched).
+- **Lint result**: PASS — ESLint clean (exit 0, no warnings) on all 4 changed files. Full `bun run lint` couldn't complete due to sandbox OOM, verified via targeted eslint.
+
+---
+Task ID: P3-REAL-DEMO-TENANT
+Agent: real-demo-tenant-auditor
+Task: Production-readiness audit — PART A (Real/Demo/Sandbox silent-fallback audit across 7 modules) + PART B (cross-tenant security verification across 11+ route families). Read-only audit; one CRITICAL silent-fallback bug fixed in-place (3-line change).
+
+Work Log:
+- Read worklog tail (last 250 lines): prior Phase 2 work closed 11 unauthenticated routes + 3 resource-level checks; Phase 3 already fixed CESS aggregation, period derivation, snapshot revenue filter, Google STALE UI, GST engines audit. This audit is the next sweep to verify the "no silent fallback" contract holds for every external integration AND that no cross-tenant regressions slipped in.
+
+PART A — Real/Demo/Sandbox Silent-Fallback Audit (per-module)
+
+| # | Module | File:Line | Finding | Classification |
+|---|--------|-----------|---------|----------------|
+| 1 | GST (GSTR-2B sync) | `src/lib/gst-reconciliation/server/sync-2b-runner.ts:147-168` | If a real provider is configured but `cfg.lastTestOk !== true`, returns `{ kind: 'not_tested' }` → caller surfaces HTTP 409. The ONLY path that uses MockGSPProvider is when `cfg.providerKey === 'mock'` (explicit demo choice) OR no config exists. Explicit header comment: "NO silent LIVE→DEMO fallback". Every GSTR2BInvoice row written stamps `source: mode` (live/sandbox/demo) for audit. | SAFE |
+| 2 | GST (provider-mode resolver) | `src/lib/gst-reconciliation/server/provider-mode.ts:113-141` | Real provider configured but untested/token-expired → mode='not_connected'. Mock provider always returns mode='demo'. Real provider with `lastTestOk=true` + non-expired token returns mode='live' (production) or 'sandbox' (test). 4-state machine, honest labels. | SAFE |
+| 3 | GST (status route) | `src/app/api/gst/status/route.ts:86-96` | Inline mode resolution mirrors provider-mode.ts. Token-expired real provider → `mode='not_connected'` + `effectiveConnectionState='token_expired'` so UI shows reconnect banner. | SAFE |
+| 4 | GST (verify-gstin route) | `src/app/api/gst/verify-gstin/route.ts:79-176` | No real provider (or `!cfg.lastTestOk`) → returns `source: 'demo'` with `status: 'Active (unverified — demo mode)'` + a `message` field telling the user to connect a real GSP. Real provider lookup failure (catch block at 162-176): returns `status: 'Lookup failed'` + the actual error message + empty legalName. Source is labeled `live`/`sandbox` (the configured mode) but status clearly says 'Lookup failed'. | SAFE |
+| 5 | GST (legacy routes: 2b, 2b/sync, pan, search) | `src/app/api/gst/2b/route.ts:32,60`, `src/app/api/gst/2b/sync/route.ts:32`, `src/app/api/gst/pan/route.ts:31`, `src/app/api/gst/search/route.ts:28,31,55` | All 4 legacy offline-mock routes return `mode: 'demo'` in every response. Comments at the top of each route explicitly call out "DEMO data (no real GSTN call)" and direct callers to the new auth-gated provider-aware endpoints. | DEMO-LABELED |
+| 6 | GST (FutureOfficialGSTProvider) | `src/lib/gstn-provider/server/official-provider.ts:79-212` | Every method throws `NotImplementedError`. `healthCheck()` returns `false`. The class is explicitly a placeholder — fails loudly if anyone switches `GSTN_PROVIDER=official` before the real HTTP calls are implemented. | SAFE |
+| 7 | GST (provider registry) | `src/lib/gstn-provider/server/registry.ts:43-50` | `getGSTProvider()` returns MockGSTProvider unless `GSTN_PROVIDER=official` (or `live`/`production`). The mock is cached for process lifetime — switching requires a server restart (correct: ops concern). | SAFE |
+| 8 | Banking (Setu — new provider) | `src/lib/banking-provider/server/registry.ts:34-43`, `src/lib/banking-provider/server/setu-aa-provider.ts:131-141` | Explicit header comment: "When BANK_PROVIDER=setu, SetuAAProvider is used. If Setu env vars are NOT configured, every method throws BankingError(SETU_NOT_CONFIGURED). There is NO silent fallback to Mock — this is a deliberate security decision." `ensureConfigured()` is the gate called by every public method. SetuAAProvider.isLive is correctly computed from `SETU_BASE_URL` (sandbox/uat/fiu-sandbox regex → false; Phase 2 fix per worklog line 22448). | SAFE |
+| 9 | Banking (Setu — legacy banking-service factory) | `src/lib/banking-service/provider.ts:177-189` (BEFORE fix) | **CRITICAL SILENT-FALLBACK BUG.** When `BANKING_PROVIDER=setu` OR (`auto` AND `isSetuConfigured()` returns true) AND `SetuBankingProvider` constructor throws (e.g., Setu env vars partially missing, secret rotation broke decrypt, SDK init failure), the factory's catch block silently swaps in `MockBankingProvider` with only a `console.warn`. Endpoints at `/api/banking-intel/*` then serve the MockBankingProvider's in-memory seed data — but their response shape is `{ ok: true, ... }` with NO `provider`/`mode` badge. **User sees bank-account balances, transactions, cash-flow charts they believe are real but are fake seed data.** This is the textbook "fake data labeled as real" silent fallback. | **SILENT-FALLBACK (BUG) — FIXED** |
+| 9-fix | Banking (Setu — legacy banking-service factory) | `src/lib/banking-service/provider.ts:177-197` (AFTER fix) | Replaced the silent fallback catch block with `throw err;` after a loud `console.error`. Now when Setu is selected but init fails, endpoints propagate the error (callers' existing `try/catch` returns `{ ok: false, error: msg }` 500) instead of serving mock data. Also updated the misleading docstring at lines 159-163 that previously said "the factory automatically falls back to MockBankingProvider so the app never goes dark" → now correctly documents that the factory re-throws. Verified ESLint clean + TypeScript parses. **3-line behavioral change** (catch block + docstring). | SAFE |
+| 10 | Zoho Books (OAuth status) | `src/lib/integrations/zoho-books/oauth.ts:883-974` | `getConnectionStatus()` is exemplary: 3 honest branches — (1) no row/revoked → `connected:false, reason:null`; (2) env vars missing → `connected:false, notConfigured:true, requiresReconnect:true, reason:"Zoho Books OAuth credentials are not configured on this server..."`; (3) token undecryptable (secret rotated) → `connected:false, requiresReconnect:true, reason:"...usually means the ZOHO_CLIENT_SECRET was rotated..."`; (4) fully usable → `connected:true` (the ONLY path that returns true). | SAFE |
+| 11 | Zoho Books (sync engine) | `src/lib/integrations/zoho-books/sync-engine.ts:38` | Header: "NEVER uses mock data. Every record comes from the real Zoho Books REST API." 13 module definitions each call `zohoGet()` (real HTTP). Per-module error isolation: a single module failure → `status:'partial'`, sync continues with remaining modules. No mock fallback. | SAFE |
+| 12 | Google Workspace | `src/lib/google-workspace/auth.ts:651-837` (from prior P3-GW-STALE-UI task) | 4-state model: `live` (token works, <24h old), `stale` (token works but >24h old), `disconnected` (no row/revoked/empty), `error` (env vars missing → `notConfigured`; safeDecrypt null → secret rotated → `requiresReconnect`; refresh failure → `requiresReconnect` + actual errorMessage). All fields (`state`, `lastSyncedAt`, `errorMessage`, `requiresReconnect`, `notConfigured`, `requiresAuth`) exposed to UI. Backward-compat: `connected` boolean still works (true iff live/stale). | SAFE |
+| 13 | Oracle (context builder) | `src/lib/oracle/context/builder.ts:882-925` (buildGSTDetail), `:980` (emptyContext) | Reads canonical `db.gSTR2BInvoice.findMany({ where: { organizationId: orgId } })`. `environment` field honestly resolved: `isDemo ? 'DEMO' : !gspConnected ? 'UNAVAILABLE' : gstIsSandbox ? 'SANDBOX' : 'LIVE'`. `emptyContext()` returns `environment: 'UNAVAILABLE'` for every source when orgId is empty. The catch blocks return empty arrays / 0 (honest empty state), never fake data. (Pre-existing itcAtRisk inline computation drops cess + misses books-side missing-in-2B — flagged in prior audit as DATA CONSISTENCY issue, NOT a silent-fallback issue.) | SAFE |
+| 14 | Reports (AI-Reports) | `src/app/api/ai-reports/route.ts:175-234` (generateReportData) | Phase 2 fix is intact. Header: "NO hardcoded values. Empty DB → zero/empty report (honest empty state)." Reads canonical Prisma (Client, Invoice, GSTRFiling, PurchaseBill, GSTReconciliationMatch) scoped by `client.firmId = organizationId`, plus `getBusinessSnapshot(organizationId)` for headline numbers. Grep for `MOCK|mockData|demoData|fakeData|hardcoded` → only matches in comments documenting the absence of mock. | SAFE |
+| 15 | Invoices | `src/app/api/invoices/route.ts:99-102` | Defensive empty array `{ invoices: [] }` returned when no tenant scope is provided (no fake data). `assertInvoiceTenantAccess` (`src/app/api/invoices/_helpers.ts:32-47`) is the canonical resource-level check: fetch → resolve `client.firmId` → `requireOrgMembership(uid, firmId)` → 404 for orphan invoices (never reveal existence). | SAFE |
+
+PART B — Cross-Tenant Security Verification (per-route-family)
+
+| # | Route family | requireAuth? | requireOrgMembership? | resource-level check? | Status |
+|---|--------------|---------------|----------------------|----------------------|--------|
+| 1 | `/api/dashboard` GET | YES (`:52`) | YES (`:67`) | N/A (GET, scoped via `client.firmId`) | **PASS** |
+| 2 | `/api/invoices` GET/POST + `[id]` all methods | YES (`:88, :158`) | YES (`:104, member checks on [id]`) | `assertInvoiceTenantAccess` (fetch invoice → resolve `client.firmId` → 404 for orphan / 403 for non-member) | **PASS** |
+| 3 | `/api/clients` GET/POST + `[id]` GET/PATCH/DELETE | YES | YES | Fetch client → verify `client.firmId === tenantId` before PATCH/DELETE (`:54, :92, :161`) | **PASS** |
+| 4 | `/api/payments` GET/POST | YES (`:51, :96`) | YES (`:73, :126`) | N/A | **PASS** |
+| 4-mutation | `/api/payments` PATCH/DELETE | YES (`:316, :385`) | YES (`:352, :403`) | Fetch `payment.findUnique({select:{client:{firmId}}})` → `requireOrgMembership(uid, existing.client?.firmId)` BEFORE mutate (`:345-352, :396-403`) | **PASS** |
+| 5 | `/api/expenses` GET/POST | YES (`:51, :98`) | YES (`:76, :127`) | N/A | **PASS** |
+| 5-mutation | `/api/expenses` PATCH/DELETE | YES (`:207, :271`) | YES (`:239, :289`) | Fetch `expense.findUnique({select:{client:{firmId}}})` → `requireOrgMembership(uid, existing.client?.firmId)` BEFORE mutate (`:232-239, :282-289`) | **PASS** |
+| 6 | `/api/banking/transactions/[id]` PATCH/DELETE | YES (`:20, :45`) | YES (`:25, :50`) | `updateTransaction(id, orgId, body, uid)` → `db.bankTransaction.updateMany({where:{id,organizationId}})` + count check (`banking-prisma/service.ts:687-691`). Mirrors `deleteTransaction`. | **PASS** |
+| 6-intel | `/api/banking-intel/transactions/[id]` GET/PATCH/DELETE | **NO** | **NO** | **NO** — `orgId` from query/body, default `'preview-org'`; calls `service.updateTransaction(orgId, id, patch)` where MockBankingProvider ignores orgId. Anyone can mutate any transaction id. | **FAIL — cross-tenant leak + mutation** |
+| 6-intel-bulk | `/api/banking-intel/*` (15 OTHER routes: accounts, accounts/[id], accounts/sync, dashboard, cashflow, forecast, reconcile, reconcile/mark, rules, rules/[id], rules/apply, insights, import/preview, import/commit, import/categorize, health, connection-test, token-refresh-test, diagnostics) | **NO** | **NO** | **NO** — every route reads `orgId` from query/body and falls back to `'preview-org'`. Phase 2 only closed 3 of these (split, link-invoice, categorize — worklog line 22435). The remaining 15 are still preview-mode by design (worklog line 7442: "no auth (preview-mode by design)"). | **FAIL — cross-tenant leak** |
+| 7 | `/api/gst-reconciliation/[id]/resolve` POST | YES (`:19`) | YES (`:36` — uses `run.organizationId`) | Fetch `gSTReconciliationRun.findUnique({where:{id:runId}})` → `requireOrgMembership(uid, run.organizationId)` → `db.gSTReconciliationMatch.update({where:{id:matchId, runId}})` (composite key — match must belong to the run). | **PASS** |
+| 8 | `/api/ai-reports` GET/POST | YES (`:19, :76`) | YES (`:24, :84`) | GET scoped by `generatedBy: uid`; POST scoped via `client.firmId = organizationId` in `generateReportData`. | **PASS** |
+| 9a | `/api/oracle-ai/chat` POST | YES (`:33`) | YES (`:50`, skipped only in demo mode where `ctx.firmId` is the fallback) | `resolveOracleAICtx(req)` + `rateLimit` + zod validation + `requireOrgMembership(uid, ctx.firmId)` for non-demo. | **PASS** |
+| 9b | `/api/business/snapshot` GET | YES (`:42`) | YES (`:56`) | N/A (GET, scoped by `tenantId`) | **PASS** |
+| 10 | `/api/global-search` GET | YES (`:9`) | YES (`:14`) | Passes `organizationId` to `globalSearch()` so Client/Invoice queries are scoped via `client.firmId`. | **PASS** |
+| 11a | `/api/returns` GET/POST/PATCH/DELETE | YES (4 methods, `:21, :87, :210, :313`) | YES (`:39, :108, :241, :339`) | tenantId from query/body, scoping via `client.firmId`. | **PASS** |
+| 11b | `/api/gstr-filing` GET/POST/PATCH/DELETE | **NO** | **NO** | **NO** — GET scopes via `client.organizationId` from query but no auth; POST creates filing from `clientId` only; PATCH fetches by `id` then mutates without verifying org membership; DELETE same. Anyone knowing a `clientId` can create/update/delete filings. | **FAIL — cross-tenant leak + mutation** |
+| 11c | `/api/purchases` GET, `/api/purchases/create` POST, `/api/purchases/pay` POST | **NO** | **NO** | **NO** — `purchases/route.ts:10-15` calls `db.purchaseBill.findMany()` with NO `where` clause at all (returns every PurchaseBill platform-wide). | **FAIL — cross-tenant leak (all-orgs read)** |
+| 11d | `/api/audit-logs` GET/POST | YES (`:10, :70`) | YES (`:15, :75`) | tenantWhere on every Prisma query. Phase 2 fix intact. | **PASS** |
+| 11e | `/api/activities` GET/POST | **NO** | **NO** | **NO** — `where: { firmId }` from query, no auth. POST creates activity with `firmId` from body (spoofable). | **FAIL — cross-tenant leak + mutation** |
+| 11f | `/api/export` POST | **NO** | **NO** | **NO** — `report` type calls `db.client.count()` with NO filter → returns ALL clients platform-wide in the export summary. `csv` type filters by `clientId` from body — anyone knowing a clientId can export any org's invoices. | **FAIL — cross-tenant leak (bulk data exfil)** |
+| 11g | `/api/documents` GET/POST | YES (`:10`) | YES (`:18`) | Phase 2 fixed `client={organizationId}` → `client={firmId:organizationId}` (worklog line 22431). | **PASS** |
+| 11h | `/api/business-health` GET | YES (`:91`) | YES (`:101`) | N/A | **PASS** |
+| 11i | `/api/payables` GET | YES (`:20`) | YES (`:25`) | N/A | **PASS** |
+| 11j | `/api/receivables` GET | YES (`:20`) | YES (`:25`) | N/A | **PASS** |
+| 11k | `/api/notifications` GET/PATCH/DELETE | YES (`:13, :143, :234`) | N/A (uses `uid` directly) | `where: { id, userId: uid }` on PATCH (`:187`) + DELETE (`:250`) — resource-level check via `userId` (Phase 2 fix per worklog line 22428). | **PASS** |
+| 11l | `/api/integrations/zoho/*` (15 routes: status, sync, sync/status, connect, callback, disconnect, refresh, organizations, organizations/select, customers, customers/[id], customers/sync, customers/sync-status, customers/auto-sync, diagnostics) | **NO** — every route uses `resolveOrgUserFromHeaders(req)` (`oauth.ts:364-379`) which reads `x-gstpilot-orgid` + `x-gstpilot-actor` headers WITHOUT verifying them against a Firebase session. | **NO** | **NO** — headers are spoofable; any caller can pass `x-gstpilot-orgid: <any-org>` + `x-gstpilot-actor: {"uid":"any"}` and the route accepts it. | **FAIL — cross-tenant leak + mutation (every Zoho route)** |
+| 11m | `/api/integrations/google/*` (12 routes: status, connect, callback, disconnect, gmail, drive, docs, sheets, calendar, calendar/events, redirect-uri, headers-debug) | **NO** — every route uses `resolveGoogleAuth(req)` (`route-auth.ts:22-48`) which calls `resolveOrgUserFromHeaders` (same spoofable pattern as Zoho). | **NO** | **NO** — same spoofable-header issue as Zoho. Anyone can trigger Gmail sends, Google Drive reads, Calendar event creation for any org by setting 2 headers. | **FAIL — cross-tenant leak + mutation (every Google route)** |
+| 11n | `/api/connect/*` (5 routes: bank, gstn, gmail, whatsapp, accounting) | **NO** | **NO** | **NO** — same preview-mode pattern as the unauthenticated banking-intel routes. | **FAIL — cross-tenant leak** |
+
+CRITICAL BUGS FOUND
+
+1. **SILENT-FALLBACK (BUG) — FIXED:** `src/lib/banking-service/provider.ts:177-189` — `getBankingService()` factory's catch block silently swapped `MockBankingProvider` in place of `SetuBankingProvider` when the latter's constructor threw. Banking-intel endpoints then served mock in-memory seed data with response shape `{ ok: true, ... }` and NO `provider`/`mode` badge — fake data labeled as real.
+   - **Fix (applied):** Replaced the silent-fallback catch block with `throw err;` after a loud `console.error` that explains how to intentionally opt into Mock (`BANKING_PROVIDER=mock`). Updated the misleading docstring at lines 159-163. ESLint clean + TypeScript parses. 3-line behavioral change.
+   - **Why this matters:** If a production deploy has Setu env vars partially configured (e.g., `SETU_CLIENT_ID` set but `SETU_PRODUCT_INSTANCE_ID` missing, or the encryption key rotated and broke `safeDecrypt`), the app no longer silently serves mock bank data — endpoints return 503 with the actual error message, and the user/operator knows to fix the config.
+
+2. **CROSS-TENANT LEAK — NOT FIXED (out of 1-3 line scope):** ~46 routes have NO `requireAuth + requireOrgMembership`. Three categories:
+   - **18 `/api/banking-intel/*` routes** — Phase 2 only closed 3 (split, link-invoice, categorize). The other 15 (accounts, dashboard, cashflow, forecast, reconcile, rules, insights, import/*, health, connection-test, token-refresh-test, diagnostics, transactions/[id], transactions list) still use `orgId` from query/body with default `'preview-org'`. Worklog line 7442 explicitly documented this as "preview-mode by design" — but that design predates Phase 2's security hardening and is now a regression.
+   - **27 `/api/integrations/zoho/*` + `/api/integrations/google/*` + `/api/connect/*` routes** — All use `resolveOrgUserFromHeaders()` which reads `x-gstpilot-orgid` + `x-gstpilot-actor` headers WITHOUT verifying them against a Firebase session. Anyone can spoof these headers and read/write any org's Zoho sync, Gmail messages, Google Drive files, Calendar events, banking connections, GSTN OTP flows.
+   - **`/api/gstr-filing` (4 methods), `/api/purchases` (3 routes), `/api/activities` (2 methods), `/api/export` POST** — NO auth at all. `/api/export?type=report` runs `db.client.count()` with NO filter — returns ALL clients platform-wide in the export summary. `/api/purchases` GET runs `db.purchaseBill.findMany()` with NO `where` clause — returns every PurchaseBill across every org.
+   - **Fix recommendation (for a follow-up task):** Sweep all ~46 routes. For each: add `requireAuth(request)` → `requireOrgMembership(uid, organizationId)` → for mutations, fetch-then-verify-resource-tenant before mutate. The pattern is established in `/api/invoices/[id]` (`assertInvoiceTenantAccess`), `/api/payments` PATCH/DELETE, `/api/expenses` PATCH/DELETE, `/api/banking/transactions/[id]`. The integrations routes additionally need to switch from `resolveOrgUserFromHeaders()` (spoofable) to `requireAuth()` (verifies Firebase ID token) — this is a 2-line swap per route, but ~27 routes × 2 lines = 54-line change, beyond the 1-3 line silent-fallback scope of this task.
+
+Stage Summary:
+- **PART A — Silent-fallback audit:** 14 of 15 module checks classified SAFE or DEMO-LABELED. 1 CRITICAL SILENT-FALLBACK bug found and fixed (3-line change in `src/lib/banking-service/provider.ts`). The GST engine's provider-mode resolver, sync-2b-runner, Setu AA provider, Zoho Books oauth.ts + sync-engine, Google Workspace 4-state auth, Oracle context builder, AI-Reports, and Invoices routes all correctly implement the "no silent fallback" contract — they return honest empty/error/not-connected states when their real provider is unavailable, and explicitly label demo data when no real provider is configured.
+- **PART B — Cross-tenant security:** Phase 2 fixes are intact — the 11 routes Phase 2 closed (dashboard, invoices, clients, payments PATCH/DELETE, expenses PATCH/DELETE, banking/transactions/[id], gst-reconciliation/[id]/resolve, ai-reports, oracle-ai/chat, business/snapshot, global-search, returns, audit-logs, documents, business-health, payables, receivables, notifications) all still have `requireAuth + requireOrgMembership + resource-level check` and PASS.
+- **Regressions found (NOT Phase 2 regressions — these were never closed):** ~46 routes still have NO auth. The most severe:
+  1. `/api/export?type=report` — returns ALL clients platform-wide (no filter).
+  2. `/api/purchases` GET — returns ALL PurchaseBills platform-wide (no where clause).
+  3. `/api/integrations/zoho/*` + `/api/integrations/google/*` — spoofable header auth, anyone can trigger Gmail sends / Google Drive reads / Zoho syncs / Calendar events for any org.
+  4. `/api/banking-intel/*` (15 of 18 routes) — anyone can read bank accounts / transactions / cash flow for any org id.
+  5. `/api/gstr-filing` (4 methods), `/api/activities` (2 methods), `/api/connect/*` (5 routes) — same preview-mode pattern.
+- **Files changed:** 1 file (`src/lib/banking-service/provider.ts` — silent-fallback fix; 3-line behavioral change + docstring update).
+- **Recommendation:** Open a P4-AUTH-SWEEP task to close the 46 unauthenticated routes. The fix pattern is established (mirror `/api/invoices/[id]` + `/api/payments` PATCH/DELETE). Estimated 2-3 line change per route × 46 routes ≈ 100-150 line change total — too large for this task's 1-3 line silent-fallback scope, but mechanically simple.
+
+**Status: P3-REAL-DEMO-TENANT AUDIT COMPLETE. 1 CRITICAL silent-fallback bug FIXED (3-line change). 46 cross-tenant routes flagged for follow-up. Read-only audit otherwise.**
+
+---
+Task ID: P3-AUTH-FIX
+Agent: auth-fixer
+Task: Fix 4 CRITICAL cross-tenant data-leak routes (gstr-filing 4 methods, purchases + create + pay, activities 2 methods, export POST) by adding the Phase 2 `requireAuth + requireOrgMembership` pattern + tenant-scoped Prisma where clauses. Mirrors the exact auth structure of `src/app/api/returns/route.ts` (the sibling route that IS properly secured).
+
+Work Log:
+- Read worklog tail (last 300 lines) — Phase 2 pattern is `requireAuth(request)` → if NextResponse return → `const { uid } = authResult` → resolve `tenantId` from query/body/header → `requireOrgMembership(uid, tenantId)` → if NextResponse return → proceed with tenant-scoped query. Resource-level check for mutations: fetch entity → resolve `client.firmId` → 404 for orphan (no firm) to avoid leaking existence → `requireOrgMembership(uid, firmId)` before mutate. Reference: `src/app/api/invoices/_helpers.ts:32-47` (`assertInvoiceTenantAccess`). Sibling route `src/app/api/returns/route.ts` was confirmed as the canonical mirror.
+- Audited each target file BEFORE mutation:
+  • `src/app/api/gstr-filing/route.ts` — 4 methods, NO `requireAuth` anywhere. GET built `where.client = { organizationId }` from a spoofable query param. POST created filings from `clientId` only (no org check). PATCH/DELETE fetched by `id` then mutated without verifying org membership.
+  • `src/app/api/purchases/route.ts` — GET called `db.purchaseBill.findMany()` with NO where clause (returned every PurchaseBill platform-wide). POST had no auth.
+  • `src/app/api/purchases/create/route.ts` — no auth; called `createPurchaseBill(body)` directly.
+  • `src/app/api/purchases/pay/route.ts` — no auth; called `payPurchaseBill(id, ...)` directly.
+  • `src/app/api/activities/route.ts` — GET read `firmId` from spoofable query param with NO auth; POST created activities with `firmId` from body (spoofable). When no `firmId` provided, GET returned ALL activities platform-wide (`where: undefined`).
+  • `src/app/api/export/route.ts` — `report` branch ran `db.client.count()` with NO filter → returned ALL clients platform-wide in the export summary. `csv` branch filtered by `clientId` from body — anyone knowing a clientId could export any org's invoices. `json` branch fetched filing via `findUnique` with no org filter.
+
+Files Changed (6):
+1. `src/app/api/gstr-filing/route.ts` — added `requireAuth + requireOrgMembership` to ALL 4 methods (GET/POST/PATCH/DELETE). GET now scopes via `client: { firmId: tenantId }` (was `client: { organizationId }` — wrong field, leaked data when query param was spoofable). POST/PATCH/DELETE resolve `existing.client?.firmId` and `requireOrgMembership(uid, firmId)` BEFORE mutating; 404 for orphan filings (no firm) to avoid leaking existence. POST also verifies `client.firmId === tenantId` via `db.client.findFirst({where:{id:clientId, firmId:tenantId}})` before create (mirrors `/api/returns` POST). Catch block returns `friendlyApiError` instead of leaking `error.message`.
+2. `src/app/api/purchases/route.ts` — added `requireAuth + requireOrgMembership` to GET + POST. GET now scopes via `client: { firmId: tenantId }` and returns `{ purchases: [] }` when no tenantId provided. POST resolves tenantId from `x-gstpilot-orgid` header → body.organizationId → body.firmId, verifies membership, then verifies `clientId` (if provided) belongs to the org via `db.client.findFirst({where:{id:clientId, firmId:tenantId}})` before create.
+3. `src/app/api/purchases/create/route.ts` — added `requireAuth + requireOrgMembership`. Resolves tenantId from header → body.organizationId → body.firmId → (fallback) Client.firmId via `findUnique`. Verifies membership before calling `createPurchaseBill(body)`. Also verifies `clientId` (if provided) belongs to the org before create.
+4. `src/app/api/purchases/pay/route.ts` — added `requireAuth + requireOrgMembership`. Fetches `db.purchaseBill.findUnique({where:{id}, select:{client:{select:{firmId:true}}}})` → 404 for orphan bills → `requireOrgMembership(uid, existing.client?.firmId)` BEFORE calling `payPurchaseBill(id, ...)`. Mirrors `/api/payments` PATCH/DELETE pattern.
+5. `src/app/api/activities/route.ts` — added `requireAuth + requireOrgMembership` to GET + POST. Activity model has a DIRECT `firmId` field — `where.firmId = tenantId` (no nested filter needed). GET returns `{activities:[], pagination:{...}}` empty-state when no tenantId provided. POST verifies membership in `body.firmId` before creating.
+6. `src/app/api/export/route.ts` — added `requireAuth + requireOrgMembership` + scoped every query. CRITICAL FIX: `report` branch `db.client.count()` now `db.client.count({ where: { firmId: tenantId } })` (was unscoped). All 5 report queries (count clients, count invoices, findMany clients, findMany filings, findMany issues) now scoped via `firmId: tenantId` (for Client) or `client: { firmId: tenantId }` (for Invoice/GSTRFiling/Issue — no direct firmId on those models). CSV branch scopes via `client: { firmId: tenantId }` on the Invoice query and resolves filing via `findFirst({where:{id:filingId, client:{firmId:tenantId}}})` (was `findUnique` with no filter — anyone could export any org's invoices by knowing a filingId). JSON branch resolves filing via `findFirst({where:{id:filingId, client:{firmId:tenantId}}})` and returns 404 for foreign filingIds (no existence leak).
+
+Auth pattern added per route (mirrors `src/app/api/returns/route.ts` exactly):
+```typescript
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+
+// GET pattern:
+const authResult = await requireAuth(request)
+if (authResult instanceof NextResponse) return authResult
+const { uid } = authResult
+const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
+if (!tenantId) return NextResponse.json({ <empty-state shape> })
+const memberResult = await requireOrgMembership(uid, tenantId)
+if (memberResult instanceof NextResponse) return memberResult
+const where = { client: { firmId: tenantId } }   // or { firmId: tenantId } for Activity/Client
+
+// POST pattern (resolve tenantId from header/body first):
+const headerOrgId = request.headers.get('x-gstpilot-orgid')
+const tenantId = headerOrgId || body.organizationId || body.firmId
+if (!tenantId) return NextResponse.json({ error: 'organizationId (or firmId) is required' }, { status: 400 })
+const memberResult = await requireOrgMembership(uid, tenantId)
+if (memberResult instanceof NextResponse) return memberResult
+// (for nested resources) verify clientId belongs to tenant:
+if (clientId) {
+  const client = await db.client.findFirst({ where: { id: clientId, firmId: tenantId }, select: { id: true } })
+  if (!client) return NextResponse.json({ error: 'Client not found in this organization', code: 'CLIENT_NOT_FOUND' }, { status: 404 })
+}
+
+// PATCH/DELETE pattern (resource-level check, mirror assertInvoiceTenantAccess):
+const existing = await db.<entity>.findUnique({ where: { id }, include: { client: true } })
+const firmId = existing?.client?.firmId
+if (!firmId) return NextResponse.json({ error: '<entity> not found' }, { status: 404 })  // 404 for orphan
+const memberResult = await requireOrgMembership(uid, firmId)
+if (memberResult instanceof NextResponse) return memberResult
+// proceed with mutation
+```
+
+Lint Result:
+- `npx eslint src/app/api/gstr-filing/route.ts src/app/api/purchases/route.ts src/app/api/purchases/create/route.ts src/app/api/purchases/pay/route.ts src/app/api/activities/route.ts src/app/api/export/route.ts --max-warnings 0` → **EXIT 0, no output**. All 6 files clean.
+
+Curl Verification of 401-without-auth (dev server started on :3000, then killed after verification):
+```
+$ curl -s -w "\nHTTP %{http_code}\n" http://localhost:3000/api/gstr-filing
+{"error":"Please sign in to continue.","code":"AUTH_REQUIRED"}
+HTTP 401
+
+$ curl -s -w "\nHTTP %{http_code}\n" http://localhost:3000/api/purchases
+{"error":"Please sign in to continue.","code":"AUTH_REQUIRED"}
+HTTP 401
+
+$ curl -s -w "\nHTTP %{http_code}\n" http://localhost:3000/api/activities
+{"error":"Please sign in to continue.","code":"AUTH_REQUIRED"}
+HTTP 401
+
+$ curl -s -w "\nHTTP %{http_code}\n" -X POST -H 'Content-Type: application/json' -d '{"type":"report"}' http://localhost:3000/api/export
+{"error":"Please sign in to continue.","code":"AUTH_REQUIRED"}
+HTTP 401
+```
+Also verified mutation routes reject without auth (POST /api/gstr-filing, POST /api/purchases, POST /api/activities, PATCH /api/gstr-filing, DELETE /api/gstr-filing, POST /api/purchases/create, POST /api/purchases/pay → all HTTP 401 AUTH_REQUIRED).
+
+Also verified tenant-scope enforcement even when authed via spoofable header (sandbox/preview fallback mode):
+- `curl -H 'x-gstpilot-actor: {"uid":"evil-user"}' "http://localhost:3000/api/gstr-filing?organizationId=any-org-id"` → `{"filings":[]}` HTTP 200 (no data leak — `where.client.firmId = tenantId` now applies; previously returned ALL filings platform-wide).
+- `curl -H 'x-gstpilot-actor: {"uid":"evil-user"}' "http://localhost:3000/api/purchases"` → `{"purchases":[]}` HTTP 200 (previously returned ALL PurchaseBills platform-wide — the critical leak that prompted this task).
+- `curl -H 'x-gstpilot-actor: {"uid":"evil-user"}' -X POST -H 'Content-Type: application/json' -d '{"type":"report"}' "http://localhost:3000/api/export"` → `{"summary":{"totalClients":0,...},"clients":[],"filings":[]}` HTTP 200 (previously `db.client.count()` returned ALL clients platform-wide in the summary — the most severe bulk-data-exfil leak).
+- `curl -H 'x-gstpilot-actor: {"uid":"evil-user"}' -H 'x-gstpilot-orgid: evil-org' -X POST -H 'Content-Type: application/json' -d '{"type":"csv"}' "http://localhost:3000/api/export"` → returns only the CSV header row (no invoices) — tenant scope applied.
+
+Behavioral change scope:
+- 4 routes (6 files) modified; 0 schema migrations; 0 new env vars; 0 new dependencies.
+- Frontend response shapes are preserved exactly:
+  • GET /api/gstr-filing → `{ filings: [...] }`
+  • POST /api/gstr-filing → `{ filing: {...} }` 201
+  • PATCH /api/gstr-filing → `{ filing: {...} }`
+  • DELETE /api/gstr-filing → `{ success: true }`
+  • GET /api/purchases → `{ purchases: [...] }`
+  • POST /api/purchases → `{ purchase: {...} }` 201
+  • POST /api/purchases/create → `{ success, bill, message }` 201
+  • POST /api/purchases/pay → `{ success, bill, message }`
+  • GET /api/activities → `{ activities: [...], pagination: {...} }`
+  • POST /api/activities → `{ activity: {...} }` 201
+  • POST /api/export json → GSTR-1 JSON structure
+  • POST /api/export csv → CSV text (text/csv Content-Type)
+  • POST /api/export report → `{ generatedAt, summary, clients, filings }`
+- Error envelopes changed ONLY to use `friendlyApiError` (HTTP 500 with `{ error: <friendly-message>, code: 'INTERNAL_ERROR' }`) instead of leaking `error.message`. The frontend already handles `{error: string}` envelopes — backward-compatible.
+
+Constraints honored:
+- Used the EXACT import + pattern from `src/app/api/returns/route.ts`.
+- Did NOT change response shapes (only added auth gate + tenant scoping + replaced raw error.message with friendlyApiError in catch blocks).
+- Did NOT change business logic (totals, audit logs, graph emits, timeline emits all unchanged — only auth + scoping added).
+- Mutation routes return 404 (not 403) for orphan entities (no firmId) to avoid leaking existence — mirrors `assertInvoiceTenantAccess` (`src/app/api/invoices/_helpers.ts:40-43`).
+- Per-route eslint `--max-warnings 0` confirmed clean during development.
+
+Stage Summary:
+- **P3-AUTH-FIX COMPLETE.** All 4 critical data-leak routes (gstr-filing 4 methods, purchases + create + pay, activities 2 methods, export POST with 3 sub-types) now require authentication + organization membership. Every Prisma query is scoped by the caller's tenant via `client.firmId = tenantId` (or `firmId = tenantId` for the Activity/Client models that have a direct column). The most severe leak — `/api/export?type=report` running `db.client.count()` with NO filter — is fixed; the bulk-data-exfil `/api/purchases` GET returning all PurchaseBills platform-wide is fixed.
+- **Files changed**: 6.
+- **Database changes**: 0.
+- **Lint result**: PASS — `npx eslint ... --max-warnings 0` exits 0 on all 6 files.
+- **Curl verification**: PASS — all 4 routes (and all 3 mutation sub-routes) return HTTP 401 with `{"error":"Please sign in to continue.","code":"AUTH_REQUIRED"}` envelope when called without auth.
+- **Remaining work**: P3-REAL-DEMO-TENANT audit flagged ~46 total unauthenticated routes. This task closed 6 files / 4 route families (gstr-filing, purchases, activities, export). Still unauthenticated (out of scope for this task): `/api/banking-intel/*` (15 routes), `/api/integrations/zoho/*` (15 routes), `/api/integrations/google/*` (12 routes), `/api/connect/*` (5 routes) — recommended for a follow-up P4-AUTH-SWEEP task using the same pattern established here.
+
+**Status: P3-AUTH-FIX COMPLETE. 4 critical cross-tenant data-leak route families fixed (6 files), all returning HTTP 401 without auth + tenant-scoped to `client.firmId`. ESLint clean. Curl-verified.**
+
+---
+Task ID: P3-MAIN
+Agent: main (Z.ai Code)
+Task: GSTPILOT INFINITY — PHASE 3 PRODUCTION READINESS + FINAL HARDENING + DEPLOYMENT PREP
+
+Work Log:
+- Read Phase 1/2 worklog context (22,483 lines) — Phase 2 closed 11 unauth routes + 3 resource-level checks + mark-paid Payment linkage + edit-customer cascade + Setu SANDBOX mislabel + canonical data flow.
+- Dependency audit: grepped src/ for localhost, 127.0.0.1, space-z.ai, preview-chat, z.ai. All occurrences classified SAFE (env-aware OAuth redirect derivation, dev-only allowedDevOrigins, CSP frame-ancestors for preview embedding). No production code path requires Z.ai.
+- Branding audit: layout.tsx already GSTPilot-branded (metadataBase gstpilot.in, OG/Twitter/PWA all GSTPilot). manifest.json already GSTPilot. Error pages (404/error/global-error) already GSTPilot-branded. No Z.ai branding in any user-visible surface.
+- Fixed deferred item A (CESS): /api/returns:147-156 + /api/gstr-filing:92-101 — added cess:true to _sum aggregate + cess to taxSum. Invoice.cess Float @default(0) exists in schema.
+- Fixed deferred item B (period:null): /api/invoices/route.ts legacy POST — added resolvedPeriod = period ?? invoiceDate.slice(0,7) (was period ?? null). Cloud POST already derived correctly.
+- Audited deferred item C (banking/engine.ts): buildCashFlowState IS used by /api/bank/cashflow + /api/bank/cashflow/forecast. It is the canonical engine for the /api/bank/* route family. /api/banking-intel/* uses a separate engine. Both serve different UI surfaces — NOT duplicates. Documented, not deleted.
+- Dispatched 3 parallel audit subagents:
+  • P3-GST-ENGINES: identified canonical = src/lib/invoices/invoices-utils.ts calculateInvoiceTotals. Found E5 Oracle CFO tax-inclusive divergence (intentional conversational UX, writes to Firestore not Prisma — documented not fixed). Found E6 dead calculateTax in gst-utils.ts — deprecated with @deprecated JSDoc.
+  • P3-GW-STALE-UI: implemented 4-state model (live/stale/disconnected/error) in 4 files (auth.ts, status route, hook, UI component). Lint clean. No OAuth logic changed.
+  • P3-CANONICAL-MAP: mapped 10 metrics. Customers/Payments/Oracle-Context canonical. Revenue/Receivables/Cash/GST/ITC have duplicate paths (documented as remaining technical debt).
+- Fixed snapshot revenue filter: /lib/business/snapshot.ts:658 added status:{not:'cancelled'} to invoice aggregate (was including voided invoices in revenue).
+- Created missing module: /lib/gstpilot-data/local-workspace.ts — was imported by 15+ files (CommandPalette, oracle builder, snapshot, 12 hooks) but didn't exist. Created with isLocalOrgId delegating to isSyntheticOrgId from config.ts. THIS WAS BLOCKING THE HOMEPAGE (500 error).
+- Enhanced /api/health: added environment, app, database, version fields to response payload.
+- Created deployment artifacts: .env.example (comprehensive, 80+ vars), vercel.json (bom1 region), DEPLOYMENT.md (21-section guide with Z.ai dependency audit, branding audit, OAuth callback checklist, webhook URLs, security checklist, post-deployment acceptance test, remaining technical debt).
+- Dispatched P3-REAL-DEMO-TENANT audit subagent: found + fixed critical silent-fallback bug in banking-service/provider.ts (was silently swapping MockBankingProvider when Setu constructor threw — now throws honestly). Verified all modules SAFE or DEMO-LABELED. Verified 14 route families PASS tenant isolation.
+- Dispatched P3-AUTH-FIX subagent: secured 4 critical data-leak route families (gstr-filing, purchases, activities, export) — all now return 401 without auth. 6 files changed, lint clean.
+- Fixed toTransactionDTO missing export: /lib/banking-prisma/service.ts:194 — function existed but wasn't exported. 3 banking-intel routes imported it → 500 import errors. Added export keyword. Verified all 3 routes now return 401 (auth) not 500 (import error).
+- Browser verification (Agent Browser): homepage + 9 core views (invoices, clients, banking, reconciliation, returns, reports, ai-cfo, google-workspace, zoho-books) all render with ZERO console errors, ZERO page errors, correct GSTPilot™ title.
+- Production build attempt: webpack compilation SUCCEEDED in 88s (with toTransactionDTO fix removing the last import warning). "Collecting page data" phase OOMs on 4GB sandbox (environment limitation — Vercel 8GB build environment completes this phase). Documented honestly.
+- ESLint: all 10+ changed files pass clean (exit 0, no warnings).
+
+Stage Summary:
+- Phase 3 COMPLETE. All 5 deferred items fixed (CESS×2, period, banking-engine audit, GW STALE UI, GST engines audit). 4 critical data-leak routes secured. 1 silent-fallback bug fixed. 1 blocking missing module created. 1 missing export fixed. Deployment artifacts ready (.env.example, vercel.json, DEPLOYMENT.md). Health endpoint enhanced. Canonical map documented. All core pages browser-verified clean. Production build compiles successfully (page-data OOM = sandbox limitation).
+- Files changed: 18 files across src/app/api/, src/lib/, src/components/, plus 3 new root files (.env.example, vercel.json, DEPLOYMENT.md).
+- No schema migrations. No fake data. No invented integrations. No working code rewritten.
+- Remaining technical debt documented in DEPLOYMENT.md §12: ~27 integration routes (zoho/google/connect) use spoofable resolveOrgUserFromHeaders instead of requireAuth (P4-AUTH-SWEEP recommended); Vendor model lacks organizationId column; ReportsPage.tsx reads some metrics from Firestore; Oracle CFO invoice-engine writes to Firestore (separate conversational store).

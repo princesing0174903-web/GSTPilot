@@ -27,6 +27,14 @@ export function classifyInvoice(invoice: {
   return 'B2C Small';
 }
 
+/**
+ * @deprecated Phase 3 audit (P3-GST-ENGINES) found ZERO callers of this
+ * function across src/. The CANONICAL GST calculation engine is
+ * `calculateInvoiceTotals` in `src/lib/invoices/invoices-utils.ts`. This
+ * function is retained only for API-surface backward compatibility and will
+ * be removed in a future release. Do NOT call this in new code — it does not
+ * handle CESS, discount, rounding, or multi-line items.
+ */
 export function calculateTax(taxableValue: number, cgstRate: number, sgstRate: number, isInterState: boolean): {
   cgst: number;
   sgst: number;

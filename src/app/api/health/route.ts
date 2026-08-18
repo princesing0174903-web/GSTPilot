@@ -32,9 +32,25 @@ export async function GET() {
       ? Date.now() - new Date(beforeCache.timestamp).getTime()
       : 0;
 
+    // Surface the database check + environment explicitly so deployment
+    // health probes (Vercel, k8s, UptimeRobot) can branch without walking
+    // the full checks array. Environment is derived from NODE_ENV (set by
+    // the hosting platform) — never trust client-supplied values.
+    const dbCheck = health.checks.find((c) => c.name === 'database' || c.name === 'db');
+    const environment = process.env.NODE_ENV === 'production' ? 'production'
+      : process.env.NODE_ENV === 'test' ? 'test'
+      : 'development';
+
     return NextResponse.json(
       {
         ok: true,
+        status: health.overall,
+        environment,
+        app: 'gstpilot-infinity',
+        version: health.version,
+        database: dbCheck?.status ?? 'unknown',
+        uptime: health.uptime,
+        timestamp: health.timestamp,
         health,
         cachedAt: health.timestamp,
         cacheAgeMs,
@@ -44,6 +60,7 @@ export async function GET() {
         headers: {
           'Cache-Control': 'no-store, max-age=0',
           'X-Health-Overall': health.overall,
+          'X-Environment': environment,
         },
       },
     );

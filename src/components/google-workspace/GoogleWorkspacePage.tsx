@@ -51,7 +51,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useGoogleWorkspace } from '@/hooks/useGoogleWorkspace';
+import { useGoogleWorkspace, type GoogleConnectionState } from '@/hooks/useGoogleWorkspace';
 import { useOrg } from '@/contexts/OrgContext';
 
 type ServiceTab = 'gmail' | 'drive' | 'docs' | 'sheets' | 'calendar';
@@ -194,6 +194,120 @@ function EmptyState({
   );
 }
 
+// ─── Connection state badge (4 states) ───────────────────────────────────────
+//
+// P3-GW-STALE-UI — surfaces the 4-state connection model from
+// /api/integrations/google/status:
+//
+//   • live          — token valid, recently synced (within 24h)   → green
+//   • stale         — token exists + refresh succeeds, but no data
+//                      sync in > 24h                              → amber
+//   • disconnected  — no token / never connected / revoked        → gray
+//   • error         — token refresh failed permanently, OR env
+//                      vars missing, OR token undecryptable      → red
+//
+// Uses the existing shadcn/ui Badge component with custom Tailwind color
+// overrides (the built-in variants default/secondary/destructive/outline
+// don't cover green or amber, so we layer className on top of variant="outline").
+
+interface StateBadgeConfig {
+  label: string;
+  icon: LucideIcon;
+  className: string;
+}
+
+const STATE_BADGE_CONFIG: Record<GoogleConnectionState, StateBadgeConfig> = {
+  live: {
+    label: 'Live',
+    icon: CheckCircle2,
+    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  },
+  stale: {
+    label: 'Stale',
+    icon: Clock,
+    className: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  },
+  disconnected: {
+    label: 'Disconnected',
+    icon: XCircle,
+    className: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400',
+  },
+  error: {
+    label: 'Error',
+    icon: AlertCircle,
+    className: 'border-red-500/30 bg-red-500/10 text-red-400',
+  },
+};
+
+function StatusBadge({
+  state,
+  errorMessage,
+  loading = false,
+}: {
+  state: GoogleConnectionState | null;
+  errorMessage?: string | null;
+  loading?: boolean;
+}) {
+  if (loading || !state) {
+    return (
+      <Badge variant="outline" className="border-zinc-500/30 bg-zinc-500/10 text-zinc-400">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Checking
+      </Badge>
+    );
+  }
+  const cfg = STATE_BADGE_CONFIG[state];
+  const Icon = cfg.icon;
+  return (
+    <Badge
+      variant="outline"
+      className={cfg.className}
+      title={errorMessage ?? undefined}
+    >
+      <Icon className="h-3 w-3" />
+      {cfg.label}
+    </Badge>
+  );
+}
+
+// ─── Stale banner (shown when state === 'stale') ─────────────────────────────
+
+function StaleBanner({ lastSyncedAt }: { lastSyncedAt: string | null }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-300"
+    >
+      <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="flex-1 leading-relaxed">
+        <span className="font-semibold text-amber-200">Stale data.</span>{' '}
+        Your Google Workspace data hasn&apos;t synced in over 24 hours
+        {lastSyncedAt ? ` (last sync ${timeAgo(lastSyncedAt)})` : ''}.
+        Live Gmail, Drive, Docs, Sheets and Calendar data may be delayed. Try refreshing or take an action (e.g. fetch Gmail) to re-sync.
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Error banner (shown when state === 'error') ─────────────────────────────
+
+function ErrorBanner({ message }: { message: string | null }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/5 px-3 py-2.5 text-xs text-red-300"
+    >
+      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="flex-1 leading-relaxed">
+        <span className="font-semibold text-red-200">Connection error.</span>{' '}
+        {message ?? 'Google Workspace token refresh failed. Please reconnect your account.'}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Skeletons ───────────────────────────────────────────────────────────────
 
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
@@ -269,6 +383,7 @@ function ConnectionHeader() {
   }, [disconnect]);
 
   const connected = !!status?.connected;
+  const state = status?.state ?? null;
   const email = status?.userEmail ?? null;
   const initials = getInitials(email);
 
@@ -297,19 +412,12 @@ function ConnectionHeader() {
                 <h2 className="gst-card-title text-base">
                   {connected ? (email ?? 'Connected account') : 'Google Workspace'}
                 </h2>
-                {statusLoading ? (
-                  <span className="gst-status gst-status-neutral">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Checking
-                  </span>
-                ) : connected ? (
-                  <span className="gst-status gst-status-success">
-                    <CheckCircle2 className="h-3 w-3" /> Connected
-                  </span>
-                ) : (
-                  <span className="gst-status gst-status-warning">
-                    <XCircle className="h-3 w-3" /> Not connected
-                  </span>
-                )}
+                {/* P3-GW-STALE-UI — 4-state status badge (live/stale/disconnected/error) */}
+                <StatusBadge
+                  state={state}
+                  errorMessage={status?.errorMessage}
+                  loading={statusLoading}
+                />
               </div>
               <p className="gst-description max-w-md">
                 {connected
@@ -327,7 +435,7 @@ function ConnectionHeader() {
                 ) : null}
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5" />
-                  Last sync <span className="font-medium text-foreground/80">{timeAgo(status?.connectedAt ?? null)}</span>
+                  Last sync <span className="font-medium text-foreground/80">{timeAgo(status?.lastSyncedAt ?? status?.connectedAt ?? null)}</span>
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
@@ -367,7 +475,7 @@ function ConnectionHeader() {
                 className="gst-btn gst-btn-primary gst-btn-sm"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
-                Connect Google
+                {state === 'error' ? 'Reconnect Google' : 'Connect Google'}
               </button>
             )}
           </div>
@@ -378,6 +486,13 @@ function ConnectionHeader() {
           <div className="relative mt-4 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             {connectError}
+          </div>
+        ) : null}
+
+        {/* P3-GW-STALE-UI — Stale banner (only when state === 'stale') */}
+        {connected && state === 'stale' ? (
+          <div className="relative mt-4">
+            <StaleBanner lastSyncedAt={status?.lastSyncedAt ?? null} />
           </div>
         ) : null}
 
@@ -438,6 +553,7 @@ function NotConnectedGate({ children, onConnect }: { children: React.ReactNode; 
     );
   }
   if (!status?.connected) {
+    const isError = status?.state === 'error';
     return (
       <div className="gst-card gst-animate-in relative overflow-hidden p-8 md:p-12">
         <div className="pointer-events-none absolute -top-32 right-0 h-72 w-72 rounded-full bg-[#2563EB]/10 blur-3xl" />
@@ -447,16 +563,32 @@ function NotConnectedGate({ children, onConnect }: { children: React.ReactNode; 
           <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-[#2563EB]/20 to-[#4285F4]/5 ring-1 ring-[#2563EB]/30">
             <GoogleGlyph className="h-12 w-12" />
             <div className="absolute -bottom-2 -right-2 flex h-9 w-9 items-center justify-center rounded-full bg-[#0A0A0A] ring-2 ring-[#0A0A0A]">
-              <Plug className="h-4 w-4 text-[#60A5FA]" />
+              {isError ? (
+                <AlertCircle className="h-4 w-4 text-[#F87171]" />
+              ) : (
+                <Plug className="h-4 w-4 text-[#60A5FA]" />
+              )}
             </div>
           </div>
 
           <div className="space-y-2 max-w-md">
-            <h3 className="gst-section-title">Connect Google Workspace</h3>
+            {/* P3-GW-STALE-UI — title + description differ for ERROR vs DISCONNECTED */}
+            <h3 className="gst-section-title">
+              {isError ? 'Reconnect Google Workspace' : 'Connect Google Workspace'}
+            </h3>
             <p className="gst-description">
-              Unlock a premium integration with Gmail, Drive, Docs, Sheets and Calendar. Send invoices via Gmail, sync GSTR reports to Drive, export financials to Sheets, and never miss a GST deadline on Calendar.
+              {isError
+                ? 'Your Google Workspace connection is no longer working. This usually means access was revoked, the OAuth client secret was rotated, or the server is missing credentials. Reconnect to restore Gmail, Drive, Docs, Sheets and Calendar.'
+                : 'Unlock a premium integration with Gmail, Drive, Docs, Sheets and Calendar. Send invoices via Gmail, sync GSTR reports to Drive, export financials to Sheets, and never miss a GST deadline on Calendar.'}
             </p>
           </div>
+
+          {/* P3-GW-STALE-UI — surface the error message (if any) above the CTA */}
+          {isError && status?.errorMessage ? (
+            <div className="w-full max-w-md">
+              <ErrorBanner message={status.errorMessage} />
+            </div>
+          ) : null}
 
           {/* Service chips */}
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -483,7 +615,7 @@ function NotConnectedGate({ children, onConnect }: { children: React.ReactNode; 
               className="gst-btn gst-btn-primary gst-btn-lg"
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-              Connect Google Account
+              {isError ? 'Reconnect Google Account' : 'Connect Google Account'}
             </button>
             <span className="gst-caption inline-flex items-center gap-1.5">
               <Lock className="h-3.5 w-3.5 text-emerald-500" />

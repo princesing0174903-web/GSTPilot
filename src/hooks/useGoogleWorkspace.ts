@@ -17,12 +17,36 @@ import { auth } from '@/lib/firebase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * The 4-state connection model surfaced by /api/integrations/google/status.
+ *
+ *   • `live`          — token valid, recently synced (within 24h)
+ *   • `stale`         — token exists + refresh succeeds, but no successful
+ *                       data sync in > 24h
+ *   • `disconnected`  — no token / user never connected / revoked
+ *   • `error`         — token refresh failed permanently, OR env vars missing,
+ *                       OR stored token undecryptable (secret rotated)
+ */
+export type GoogleConnectionState = 'live' | 'stale' | 'disconnected' | 'error';
+
 export interface GoogleConnectionStatus {
+  /** @deprecated backward-compat boolean — prefer `state`. */
   connected: boolean;
+  state: GoogleConnectionState;
   userEmail: string | null;
   googleUserId: string | null;
   connectedAt: string | null;
+  /** Best-effort proxy for "last successful data sync" (token row's updatedAt). */
+  lastSyncedAt: string | null;
   scopes: string[];
+  /** Human-readable error message when state === 'error'. null otherwise. */
+  errorMessage: string | null;
+  /** True when the user must re-run the OAuth flow (refresh revoked / undecryptable). */
+  requiresReconnect: boolean;
+  /** True when GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are missing. */
+  notConfigured: boolean;
+  /** True when org/user context missing on the request. */
+  requiresAuth: boolean;
 }
 
 interface ApiError {

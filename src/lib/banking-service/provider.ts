@@ -157,8 +157,10 @@ export interface BankingService {
  *   2. Otherwise → MockBankingProvider (in-memory seed data).
  *
  * If SetuBankingProvider fails to initialize (missing creds / SDK error),
- * the factory automatically falls back to MockBankingProvider so the app
- * never goes dark.
+ * the factory RE-THROWS the error (P3-REAL-DEMO-TENANT) — it does NOT
+ * silently fall back to MockBankingProvider. A silent fallback would
+ * present fake seed data as real, which violates the "no silent fallback"
+ * contract. To intentionally use Mock (sandbox/demo), set BANKING_PROVIDER=mock.
  *
  * The chosen provider is cached on `globalThis.__BANKING_SERVICE__` so the
  * same instance survives HMR + request cycles.
@@ -180,13 +182,18 @@ export async function getBankingService(): Promise<BankingService> {
       svc = new SetuBankingProvider();
       console.log('[banking-service] Provider: SetuBankingProvider (production, live banking data)');
     } catch (err) {
+      // CRITICAL (P3-REAL-DEMO-TENANT): do NOT silently fall back to Mock.
+      // If Setu was selected (BANKING_PROVIDER=setu, or auto + isSetuConfigured())
+      // but the SetuBankingProvider constructor threw, the user EXPECTS live
+      // banking data — silently serving MockBankingProvider's in-memory seed
+      // would present fake data as real. Surface the error so endpoints return
+      // 503 SETU_NOT_CONFIGURED and the user knows to fix the config.
+      // To intentionally use Mock (sandbox/demo), set BANKING_PROVIDER=mock.
       console.error(
-        '[banking-service] SetuBankingProvider failed to initialize — falling back to Mock:',
+        '[banking-service] SetuBankingProvider failed to initialize — REFUSING to fall back to Mock (silent-fallback would present fake data as real). Set BANKING_PROVIDER=mock to intentionally use the Mock provider.',
         err instanceof Error ? err.message : err,
       );
-      const { MockBankingProvider } = await import('./mock-provider');
-      svc = new MockBankingProvider();
-      console.warn('[banking-service] Provider: MockBankingProvider (fallback)');
+      throw err;
     }
   } else {
     const { MockBankingProvider } = await import('./mock-provider');

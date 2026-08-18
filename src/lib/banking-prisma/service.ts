@@ -191,7 +191,7 @@ type TxnRow = {
   updatedAt: Date;
 };
 
-function toTransactionDTO(row: TxnRow): BankingTransaction {
+export function toTransactionDTO(row: TxnRow): BankingTransaction {
   return {
     id: row.id,
     organizationId: row.organizationId,

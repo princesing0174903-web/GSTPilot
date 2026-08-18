@@ -146,11 +146,14 @@ export async function POST(request: Request) {
 
     const totalTax = await db.invoice.aggregate({
       where: { clientId, period },
-      _sum: { cgst: true, sgst: true, igst: true },
+      _sum: { cgst: true, sgst: true, igst: true, cess: true },
     })
 
     const taxSum =
-      (totalTax._sum.cgst ?? 0) + (totalTax._sum.sgst ?? 0) + (totalTax._sum.igst ?? 0)
+      (totalTax._sum.cgst ?? 0) +
+      (totalTax._sum.sgst ?? 0) +
+      (totalTax._sum.igst ?? 0) +
+      (totalTax._sum.cess ?? 0)
 
     const ret = await db.gSTRFiling.create({
       data: {

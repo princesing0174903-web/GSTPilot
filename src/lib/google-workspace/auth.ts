@@ -650,14 +650,66 @@ export async function disconnectGoogle(
 
 // ─── Status ──────────────────────────────────────────────────────────────────
 
+/**
+ * The 4-state connection model surfaced to the Google Workspace UI.
+ *
+ *   • `live`          — token valid, recently synced (within 24h)
+ *   • `stale`         — token exists + refresh succeeds, but no successful data
+ *                       sync in > 24h (best-effort proxy: token row's updatedAt)
+ *   • `disconnected`  — no token row / user never connected / revoked
+ *   • `error`         — token refresh failed permanently (Google returned 401/403/
+ *                       invalid_grant), OR env vars missing, OR stored token
+ *                       cannot be decrypted (secret rotated)
+ *
+ * Mirrors the 4-state contract requested by Phase 3 (P3-GW-STALE-UI). The
+ * `connected` boolean is preserved for backward compat (true iff state is
+ * `live` or `stale`).
+ */
+export type GoogleConnectionState = 'live' | 'stale' | 'disconnected' | 'error';
+
+/** Window after which a token row with no activity is considered STALE. */
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export interface ConnectionStatus {
+  /** @deprecated backward-compat boolean — prefer `state`. true iff state is `live` or `stale`. */
   connected: boolean;
+  /** 4-state connection model. */
+  state: GoogleConnectionState;
   userEmail: string | null;
   googleUserId: string | null;
   connectedAt: string | null;
+  /**
+   * Best-effort proxy for "last successful data sync". Uses the token row's
+   * `updatedAt` (set on every refresh, which happens on every successful
+   * Google API call via `getValidAccessToken`). null when no token row exists.
+   */
+  lastSyncedAt: string | null;
   scopes: string[];
+  /** Human-readable error message when state === 'error'. null otherwise. */
+  errorMessage: string | null;
+  /** True when the user must re-run the OAuth flow (refresh token revoked / undecryptable). */
+  requiresReconnect: boolean;
+  /** True when GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are missing. */
+  notConfigured: boolean;
+  /** Backward-compat: true when org/user context missing on the request. */
+  requiresAuth: boolean;
 }
 
+/**
+ * Resolve the 4-state connection model for an org+user pair. Mirrors Zoho's
+ * honesty contract (env-var check + safeDecrypt) and adds:
+ *
+ *   • Token refresh probe — if the access token is expired, attempt a refresh.
+ *     A permanent refresh failure (Google 401/403/invalid_grant) surfaces as
+ *     state='error' so the user is proactively prompted to reconnect.
+ *   • Staleness check — uses the pre-refresh `updatedAt` to determine whether
+ *     the integration has been used in the last 24h. If not, state='stale'.
+ *
+ * This function does NOT change OAuth logic. It only adds read-only state
+ * surfacing. The refresh attempt reuses the existing `getValidAccessToken`
+ * path (the same one every Google service lib uses), so the surfaced state
+ * matches what a real API call would experience.
+ */
 export async function getConnectionStatus(
   organizationId: string,
   userId: string,
@@ -665,15 +717,122 @@ export async function getConnectionStatus(
   const row = await db.googleWorkspaceToken.findUnique({
     where: { organizationId_userId: { organizationId, userId } },
   });
-  if (!row || row.revokedAt) {
-    return { connected: false, userEmail: null, googleUserId: null, connectedAt: null, scopes: [] };
+
+  // DISCONNECTED — no token row OR revoked OR access token wiped (post-disconnect).
+  if (!row || row.revokedAt || !row.accessToken) {
+    return {
+      connected: false,
+      state: 'disconnected',
+      userEmail: row?.userEmail ?? null,
+      googleUserId: row?.googleUserId ?? null,
+      connectedAt: row?.connectedAt.toISOString() ?? null,
+      lastSyncedAt: row?.updatedAt.toISOString() ?? null,
+      scopes: row?.scope ? row.scope.split(' ') : [],
+      errorMessage: null,
+      requiresReconnect: false,
+      notConfigured: false,
+      requiresAuth: false,
+    };
   }
+
+  // ERROR (not configured) — env vars missing. Mirrors Zoho's pattern.
+  const hasClientId = Boolean(process.env.GOOGLE_CLIENT_ID);
+  const hasClientSecret = Boolean(process.env.GOOGLE_CLIENT_SECRET);
+  if (!hasClientId || !hasClientSecret) {
+    return {
+      connected: false,
+      state: 'error',
+      userEmail: row.userEmail,
+      googleUserId: row.googleUserId,
+      connectedAt: row.connectedAt.toISOString(),
+      lastSyncedAt: row.updatedAt.toISOString(),
+      scopes: row.scope ? row.scope.split(' ') : [],
+      errorMessage:
+        'Google Workspace OAuth credentials are not configured on this server. An administrator must set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before the connection can be used.',
+      requiresReconnect: true,
+      notConfigured: true,
+      requiresAuth: false,
+    };
+  }
+
+  // ERROR (undecryptable) — secret was rotated since the connection was made.
+  const decryptedAccess = safeDecrypt(row.accessToken);
+  if (!decryptedAccess) {
+    return {
+      connected: false,
+      state: 'error',
+      userEmail: row.userEmail,
+      googleUserId: row.googleUserId,
+      connectedAt: row.connectedAt.toISOString(),
+      lastSyncedAt: row.updatedAt.toISOString(),
+      scopes: row.scope ? row.scope.split(' ') : [],
+      errorMessage:
+        'The stored Google Workspace tokens cannot be decrypted. This usually means the GOOGLE_CLIENT_SECRET was rotated since the last connection. Please reconnect Google Workspace.',
+      requiresReconnect: true,
+      notConfigured: false,
+      requiresAuth: false,
+    };
+  }
+
+  // Capture the pre-refresh `updatedAt`. If the access token is expired,
+  // getValidAccessToken will refresh + persist a new expiryDate (bumping
+  // updatedAt to now). We want the staleness check to use the OLD value so
+  // a user who hasn't touched the integration in > 24h sees STALE even after
+  // a successful refresh.
+  const preRefreshUpdatedAt = row.updatedAt;
+  const preRefreshExpiryMs = row.expiryDate ? row.expiryDate.getTime() : 0;
+  const tokenWasStillValid = preRefreshExpiryMs > Date.now() + 60_000;
+
+  // Ensure a valid access token (refreshes if expired). This is the SAME path
+  // every Google service lib uses — so the state we surface matches what a
+  // real API call would experience.
+  const { accessToken, error } = await getValidAccessToken(organizationId, userId);
+
+  // ERROR (refresh failed) — Google returned 401/403/invalid_grant. The user
+  // revoked access via their Google Account page, or the refresh token was
+  // otherwise invalidated. They must re-run the OAuth flow.
+  if (error || !accessToken) {
+    return {
+      connected: false,
+      state: 'error',
+      userEmail: row.userEmail,
+      googleUserId: row.googleUserId,
+      connectedAt: row.connectedAt.toISOString(),
+      lastSyncedAt: preRefreshUpdatedAt.toISOString(),
+      scopes: row.scope ? row.scope.split(' ') : [],
+      errorMessage:
+        error ??
+        'Google Workspace token refresh failed. The user may have revoked access. Please reconnect Google Workspace.',
+      requiresReconnect: true,
+      notConfigured: false,
+      requiresAuth: false,
+    };
+  }
+
+  // Token is healthy (either was valid or just refreshed). Determine staleness
+  // based on the PRE-refresh `updatedAt`:
+  //   • If the access token was still valid (not refreshed), `updatedAt` is
+  //     within the last hour (Google access tokens last 1h) → never stale.
+  //   • If the access token was expired and just refreshed, `updatedAt` may
+  //     be > 24h ago (the user hasn't touched the integration in over a day)
+  //     → STALE.
+  const lastActivityMs = preRefreshUpdatedAt.getTime();
+  const isStale =
+    !tokenWasStillValid &&
+    Date.now() - lastActivityMs > STALE_THRESHOLD_MS;
+
   return {
     connected: true,
+    state: isStale ? 'stale' : 'live',
     userEmail: row.userEmail,
     googleUserId: row.googleUserId,
     connectedAt: row.connectedAt.toISOString(),
+    lastSyncedAt: preRefreshUpdatedAt.toISOString(),
     scopes: row.scope ? row.scope.split(' ') : [],
+    errorMessage: null,
+    requiresReconnect: false,
+    notConfigured: false,
+    requiresAuth: false,
   };
 }
 

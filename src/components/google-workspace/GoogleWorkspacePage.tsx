@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useGoogleWorkspace, type GoogleConnectionState } from '@/hooks/useGoogleWorkspace';
 import { useOrg } from '@/contexts/OrgContext';
+import { toast } from 'sonner';
 
 type ServiceTab = 'gmail' | 'drive' | 'docs' | 'sheets' | 'calendar';
 
@@ -368,7 +369,20 @@ function ConnectionHeader() {
 
   const handleConnect = useCallback(async () => {
     setConnectError(null);
-    const { authUrl, error } = await connect();
+    const { authUrl, error, notConfigured, requiredEnvVars } = await connect();
+    if (notConfigured) {
+      // Honest "configuration required" state — the server has no Google
+      // OAuth credentials. Show exactly what's needed instead of a misleading error.
+      const vars = requiredEnvVars?.length
+        ? requiredEnvVars.join(', ')
+        : 'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET';
+      const msg = `Google Workspace is not configured on this server. An administrator must set: ${vars}`;
+      setConnectError(msg);
+      toast.error('Google Workspace is not configured', {
+        description: 'An administrator must add the Google OAuth credentials before you can connect.',
+      });
+      return;
+    }
     if (error) {
       setConnectError(error);
       return;
@@ -2096,7 +2110,20 @@ export default function GoogleWorkspacePage() {
   }, []);
 
   const handleConnect = useCallback(async () => {
-    const { authUrl, error } = await connect();
+    const { authUrl, error, notConfigured, requiredEnvVars } = await connect();
+    if (notConfigured) {
+      const vars = requiredEnvVars?.length
+        ? requiredEnvVars.join(', ')
+        : 'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET';
+      setOauthBanner({
+        ok: false,
+        message: `Google Workspace is not configured on this server. An administrator must set: ${vars}`,
+      });
+      toast.error('Google Workspace is not configured', {
+        description: 'An administrator must add the Google OAuth credentials before you can connect.',
+      });
+      return;
+    }
     if (error) {
       setOauthBanner({ ok: false, message: error });
       return;

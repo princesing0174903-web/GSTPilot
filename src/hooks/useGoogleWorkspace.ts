@@ -83,21 +83,22 @@ async function gfetch<T>(
   path: string,
   headers: Record<string, string>,
   init?: RequestInit,
-): Promise<{ ok: boolean; data: T | null; error: string | null; status: number }> {
+): Promise<{ ok: boolean; data: T | null; error: string | null; status: number; body: Record<string, unknown> | null }> {
   try {
     const res = await fetch(path, { ...init, headers });
     const body = (await res.json().catch(() => ({}))) as (T & Partial<ApiError>) | ApiError;
     if (!res.ok) {
       const error = ('error' in body && body.error) || `Request failed (${res.status})`;
-      return { ok: false, data: null, error, status: res.status };
+      return { ok: false, data: null, error, status: res.status, body: body as Record<string, unknown> | null };
     }
-    return { ok: true, data: body as T, error: null, status: res.status };
+    return { ok: true, data: body as T, error: null, status: res.status, body: body as Record<string, unknown> | null };
   } catch (err) {
     return {
       ok: false,
       data: null,
       error: err instanceof Error ? err.message : 'Network error.',
       status: 0,
+      body: null,
     };
   }
 }
@@ -144,7 +145,15 @@ export function useGoogleWorkspace() {
   }, [refreshStatus]);
 
   // ── OAuth connect — returns the consent URL for the client to redirect to ──
-  const connect = useCallback(async (): Promise<{ authUrl: string | null; error: string | null }> => {
+  // Surfaces `notConfigured` + `requiredEnvVars` when the server returns
+  // GOOGLE_NOT_CONFIGURED (HTTP 503) so the UI can show an honest
+  // "Configuration required" state instead of a misleading error.
+  const connect = useCallback(async (): Promise<{
+    authUrl: string | null;
+    error: string | null;
+    notConfigured?: boolean;
+    requiredEnvVars?: string[];
+  }> => {
     // Attach the Firebase ID token if available so the server can verify it.
     let bearer = '';
     try {
@@ -157,7 +166,17 @@ export function useGoogleWorkspace() {
       '/api/integrations/google/connect?return=/google-workspace',
       headers,
     );
-    return { authUrl: res.data?.authUrl ?? null, error: res.error };
+    const body = res.body ?? {};
+    const notConfigured = body.code === 'GOOGLE_NOT_CONFIGURED' || body.requiresConfig === true;
+    const requiredEnvVars = Array.isArray(body.requiredEnvVars)
+      ? (body.requiredEnvVars as string[])
+      : undefined;
+    return {
+      authUrl: res.data?.authUrl ?? null,
+      error: res.error,
+      notConfigured: notConfigured || undefined,
+      requiredEnvVars,
+    };
   }, [buildHeaders]);
 
   // ── Disconnect ──

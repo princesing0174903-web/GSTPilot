@@ -26,7 +26,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { resolvePublicOrigin, resolveRedirectUri } from '@/lib/google-workspace';
+import {
+  getGoogleOAuthConfig,
+  GOOGLE_SCOPES,
+  isGoogleConfigured,
+  resolvePublicOrigin,
+  resolveRedirectUri,
+} from '@/lib/google-workspace';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -34,13 +40,60 @@ export const runtime = 'nodejs';
 export async function GET(req: Request) {
   const origin = resolvePublicOrigin(req);
   const redirectUri = resolveRedirectUri(req);
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const envRedirectUri = process.env.GOOGLE_REDIRECT_URI;
+
+  // Resolve static config safely (won't throw even if creds are missing).
+  const config = (() => {
+    try {
+      return getGoogleOAuthConfig();
+    } catch {
+      return null;
+    }
+  })();
+
   return NextResponse.json({
     ok: true,
-    redirectUri,
-    origin,
-    host: req.headers.get('host'),
-    forwardedHost: req.headers.get('x-forwarded-host'),
-    forwardedProto: req.headers.get('x-forwarded-proto'),
-    envRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? null,
+    timestamp: new Date().toISOString(),
+    configured: isGoogleConfigured(),
+    redirectUri,                                  // ← the EXACT URI sent to Google
+    origin,                                       // resolved public origin
+    redirectUriSource: envRedirectUri ? 'env' : 'dynamic',
+    registeredUrisExpected: {
+      env: envRedirectUri ?? '(not set — derived from request origin)',
+    },
+    clientIdPrefix: clientId
+      ? clientId.slice(0, 20) + (clientId.length > 20 ? '…' : '')
+      : null,
+    scopes: GOOGLE_SCOPES.split(' '),
+    envVars: {
+      GOOGLE_CLIENT_ID: Boolean(clientId),
+      GOOGLE_CLIENT_SECRET: Boolean(clientSecret),
+      GOOGLE_REDIRECT_URI: Boolean(envRedirectUri),
+      GOOGLE_OAUTH_STATE_SECRET: Boolean(process.env.GOOGLE_OAUTH_STATE_SECRET),
+      GOOGLE_OAUTH_STATE_STRICT: process.env.GOOGLE_OAUTH_STATE_STRICT === 'true',
+    },
+    requestHeaders: {
+      host: req.headers.get('host'),
+      origin: req.headers.get('origin'),
+      abc: req.headers.get('abc') ? '(present — Z.ai gateway)' : null,
+      xForwardedHost: req.headers.get('x-forwarded-host'),
+      xForwardedProto: req.headers.get('x-forwarded-proto'),
+    },
+    googleConsoleRequirements: {
+      authorizedJavaScriptOrigins: [origin],
+      authorizedRedirectUris: [redirectUri],
+      note:
+        'Register the redirect URI above EXACTLY (protocol + host + port + path) in Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client → Authorized redirect URIs. For local dev AND production, register BOTH URIs. Also enable the Gmail, Drive, Sheets, and Calendar APIs for your project.',
+    },
+    config: config
+      ? {
+          clientIdPresent: Boolean(config.clientId),
+          clientSecretPresent: Boolean(config.clientSecret),
+          redirectUriFromConfig: config.redirectUri,
+        }
+      : null,
   });
 }

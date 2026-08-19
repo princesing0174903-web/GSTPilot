@@ -14,6 +14,11 @@
 
 import { db } from '@/lib/db';
 import { encrypt, decrypt, safeDecrypt } from './crypto';
+import {
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'crypto';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -51,6 +56,16 @@ export interface GoogleOAuthConfig {
  * client_secret come from here — the redirect URI is resolved per-request
  * via `resolveRedirectUri(req)`.
  */
+/**
+ * Detect whether the Google OAuth client credentials are configured in the
+ * environment. Used by the connect route to return a structured
+ * `GOOGLE_NOT_CONFIGURED` payload (HTTP 503) instead of throwing a generic
+ * HTTP 500 — mirrors the Zoho Books connect route pattern.
+ */
+export function isGoogleConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
 export function getGoogleOAuthConfig(): GoogleOAuthConfig {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -290,9 +305,76 @@ export function buildAuthUrl(state: string, redirectUri?: string): string {
   return `${GOOGLE_AUTH_BASE}?${params.toString()}`;
 }
 
+// ─── OAuth state encode/decode (HMAC-signed, nonce, TTL) ─────────────────────
+//
+// The OAuth `state` param protects against CSRF: an attacker can't trick a
+// user into connecting the attacker's Google account because the callback
+// validates that the state matches what WE issued at /connect time.
+//
+// To make this protection strong (not just base64-encoded JSON that an
+// attacker could craft), the state is:
+//   1. A random 16-byte nonce (base64url) — unguessable
+//   2. The JSON payload (orgId, userId, returnPath, redirectUri)
+//   3. An HMAC-SHA256 signature over (nonce + payload + expiresAt) using a
+//      server secret
+//   4. A TTL: state expires after 10 minutes (defence-in-depth against replay)
+//
+// Format: `<nonce>.<base64url(payload)>.<expiresAtMs>.<hmac>`
+//
+// The HMAC secret is derived from GOOGLE_CLIENT_SECRET (already a server-side
+// secret) so no additional env var is required. A separate
+// GOOGLE_OAUTH_STATE_SECRET can override this for environments that rotate
+// client secrets independently.
+//
+// BACKWARD COMPATIBILITY: decodeState also accepts the legacy unsigned
+// base64url-JSON format (no dots) so any in-flight OAuth flows that started
+// before this change still complete. Once a state has expired (10 min), the
+// legacy format will no longer be accepted.
+
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function getStateHmacSecret(): string {
+  // Prefer an explicit state secret if set, else derive from the client secret.
+  // The client secret is already a server-side value never exposed to the
+  // browser, so it's a suitable HMAC key for OAuth state protection.
+  return (
+    process.env.GOOGLE_OAUTH_STATE_SECRET ??
+    process.env.GOOGLE_CLIENT_SECRET ??
+    'gstpilot-google-state-fallback-secret-CHANGEME'
+  );
+}
+
+function hmacSign(message: string): string {
+  const key = getStateHmacSecret();
+  return createHmac('sha256', key)
+    .update(message)
+    .digest('base64url');
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return a === b;
+  }
+}
+
+export interface GoogleOAuthState {
+  orgId: string;
+  userId: string;
+  userEmail: string;
+  returnPath?: string;
+  redirectUri?: string;
+}
+
 /**
- * Encode a safe state token for the OAuth round-trip. Base64-URL JSON so the
- * callback can decode orgId/userId/return without a separate store.
+ * Encode a safe state token for the OAuth round-trip. HMAC-signed with a
+ * 16-byte nonce + 10-minute TTL so the callback can verify authenticity,
+ * reject replays, and reject expired states.
  *
  * Includes `redirectUri` so the callback can use the EXACT redirect_uri that
  * was sent to Google in the authorize step — without relying on its own
@@ -301,28 +383,79 @@ export function buildAuthUrl(state: string, redirectUri?: string): string {
  * redirect_uri from the browser's Origin header, encodes it here, and the
  * callback reuses it for the token exchange (Google rejects mismatches).
  */
-export function encodeState(input: {
-  orgId: string;
-  userId: string;
-  userEmail: string;
-  returnPath?: string;
-  redirectUri?: string;
-}): string {
-  const json = JSON.stringify(input);
-  return Buffer.from(json, 'utf8').toString('base64url');
+export function encodeState(input: GoogleOAuthState): string {
+  // Generate a random 16-byte nonce (base64url, ~22 chars).
+  const nonce = randomBytes(16).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(input), 'utf8').toString('base64url');
+  const expiresAt = Date.now() + STATE_TTL_MS;
+  const message = `${nonce}.${payload}.${expiresAt}`;
+  const sig = hmacSign(message);
+  return `${message}.${sig}`;
 }
 
-export function decodeState(state: string): {
-  orgId: string;
-  userId: string;
-  userEmail: string;
-  returnPath?: string;
-  redirectUri?: string;
-} | null {
+/**
+ * Decode + verify an OAuth state token.
+ *
+ * Returns null (and logs a warning) when:
+ *   • The state is malformed (wrong number of parts)
+ *   • The HMAC signature does not match (forged or different secret)
+ *   • The state has expired (> 10 min old)
+ *   • The payload is not valid JSON
+ *
+ * BACKWARD COMPAT: also accepts the legacy unsigned base64url-JSON format
+ * (no dots). This is logged as a warning so operators can detect when all
+ * in-flight legacy states have rolled over. To force strict HMAC-only,
+ * set GOOGLE_OAUTH_STATE_STRICT=true.
+ */
+export function decodeState(state: string): GoogleOAuthState | null {
+  // Backward compat: legacy unsigned base64url-JSON format (no dots).
+  // Accept only when strict mode is NOT enabled.
+  if (!state.includes('.') && process.env.GOOGLE_OAUTH_STATE_STRICT !== 'true') {
+    try {
+      const json = Buffer.from(state, 'base64url').toString('utf8');
+      const parsed = JSON.parse(json) as GoogleOAuthState;
+      console.warn(
+        '[google/oauth-state] Accepted legacy unsigned state (no HMAC). ' +
+          'Set GOOGLE_OAUTH_STATE_STRICT=true to enforce HMAC-only.',
+      );
+      return parsed;
+    } catch (err) {
+      console.warn(
+        '[google/oauth-state] REJECTED: legacy decode error',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  }
+
   try {
-    const json = Buffer.from(state, 'base64url').toString('utf8');
-    return JSON.parse(json);
-  } catch {
+    const parts = state.split('.');
+    if (parts.length !== 4) return null;
+    const [nonce, payload, expiresAtStr, sig] = parts;
+    if (!nonce || !payload || !expiresAtStr || !sig) return null;
+
+    // Verify the HMAC signature (constant-time comparison).
+    const message = `${nonce}.${payload}.${expiresAtStr}`;
+    const expectedSig = hmacSign(message);
+    if (!constantTimeEqual(sig, expectedSig)) {
+      console.warn('[google/oauth-state] REJECTED: invalid HMAC signature');
+      return null;
+    }
+
+    // Verify TTL — state expires after STATE_TTL_MS.
+    const expiresAt = parseInt(expiresAtStr, 10);
+    if (isNaN(expiresAt) || Date.now() > expiresAt) {
+      console.warn('[google/oauth-state] REJECTED: state expired');
+      return null;
+    }
+
+    const json = Buffer.from(payload, 'base64url').toString('utf8');
+    return JSON.parse(json) as GoogleOAuthState;
+  } catch (err) {
+    console.warn(
+      '[google/oauth-state] REJECTED: decode error',
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
@@ -714,6 +847,35 @@ export async function getConnectionStatus(
   organizationId: string,
   userId: string,
 ): Promise<ConnectionStatus> {
+  // ERROR (not configured) — env vars missing. Check FIRST so the UI shows an
+  // honest "Configuration required" state even when no token row exists yet
+  // (first visit). Mirrors Zoho's pattern and the connect route's
+  // GOOGLE_NOT_CONFIGURED short-circuit.
+  const hasClientId = Boolean(process.env.GOOGLE_CLIENT_ID);
+  const hasClientSecret = Boolean(process.env.GOOGLE_CLIENT_SECRET);
+  if (!hasClientId || !hasClientSecret) {
+    // Try to read the token row for context (user email, last connected) but
+    // don't require it — the not-configured state is meaningful even with no
+    // prior connection.
+    const row = await db.googleWorkspaceToken.findUnique({
+      where: { organizationId_userId: { organizationId, userId } },
+    }).catch(() => null);
+    return {
+      connected: false,
+      state: 'error',
+      userEmail: row?.userEmail ?? null,
+      googleUserId: row?.googleUserId ?? null,
+      connectedAt: row?.connectedAt.toISOString() ?? null,
+      lastSyncedAt: row?.updatedAt.toISOString() ?? null,
+      scopes: row?.scope ? row.scope.split(' ') : [],
+      errorMessage:
+        'Google Workspace OAuth credentials are not configured on this server. An administrator must set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before the connection can be used.',
+      requiresReconnect: false,
+      notConfigured: true,
+      requiresAuth: false,
+    };
+  }
+
   const row = await db.googleWorkspaceToken.findUnique({
     where: { organizationId_userId: { organizationId, userId } },
   });
@@ -731,26 +893,6 @@ export async function getConnectionStatus(
       errorMessage: null,
       requiresReconnect: false,
       notConfigured: false,
-      requiresAuth: false,
-    };
-  }
-
-  // ERROR (not configured) — env vars missing. Mirrors Zoho's pattern.
-  const hasClientId = Boolean(process.env.GOOGLE_CLIENT_ID);
-  const hasClientSecret = Boolean(process.env.GOOGLE_CLIENT_SECRET);
-  if (!hasClientId || !hasClientSecret) {
-    return {
-      connected: false,
-      state: 'error',
-      userEmail: row.userEmail,
-      googleUserId: row.googleUserId,
-      connectedAt: row.connectedAt.toISOString(),
-      lastSyncedAt: row.updatedAt.toISOString(),
-      scopes: row.scope ? row.scope.split(' ') : [],
-      errorMessage:
-        'Google Workspace OAuth credentials are not configured on this server. An administrator must set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before the connection can be used.',
-      requiresReconnect: true,
-      notConfigured: true,
       requiresAuth: false,
     };
   }

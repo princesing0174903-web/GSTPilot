@@ -884,6 +884,37 @@ export async function getConnectionStatus(
   organizationId: string,
   userId: string,
 ): Promise<ZohoConnectionStatus> {
+  // ERROR (not configured) — env vars missing. Check FIRST so the UI shows an
+  // honest "Configuration required" state even when no token row exists yet
+  // (first visit). Mirrors the connect route's ZOHO_NOT_CONFIGURED
+  // short-circuit and the Google Workspace pattern.
+  const hasClientId = Boolean(process.env.ZOHO_CLIENT_ID);
+  const hasClientSecret = Boolean(process.env.ZOHO_CLIENT_SECRET);
+  if (!hasClientId || !hasClientSecret) {
+    // Try to read the token row for context (user email, last connected) but
+    // don't require it — the not-configured state is meaningful even with no
+    // prior connection.
+    const row = (await db.zohoBooksToken.findUnique({
+      where: { organizationId_userId: { organizationId, userId } },
+    }).catch(() => null)) as ZohoTokenRow | null;
+    return {
+      connected: false,
+      userEmail: row?.userEmail ?? null,
+      zohoUserId: row?.zohoUserId ?? null,
+      connectedAt: row?.connectedAt.toISOString() ?? null,
+      lastConnectedAt: row?.updatedAt.toISOString() ?? null,
+      scopes: row?.scope ? row.scope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      organizationName: row?.zohoOrgName ?? null,
+      zohoOrgId: row?.zohoOrgId ?? null,
+      dataCenter: row?.dataCenter ?? null,
+      scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
+      requiresReconnect: false,
+      notConfigured: true,
+      reason:
+        'Zoho Books OAuth credentials are not configured on this server. An administrator must set ZOHO_CLIENT_ID and ZOHO_CLIENT_SECRET before the connection can be used.',
+    };
+  }
+
   const row = (await db.zohoBooksToken.findUnique({
     where: { organizationId_userId: { organizationId, userId } },
   })) as ZohoTokenRow | null;
@@ -904,29 +935,6 @@ export async function getConnectionStatus(
       requiresReconnect: false,
       notConfigured: false,
       reason: null,
-    };
-  }
-
-  // Case 2: Token row exists — verify the server can actually USE it.
-  //   (a) Are the OAuth client credentials configured?
-  const hasClientId = Boolean(process.env.ZOHO_CLIENT_ID);
-  const hasClientSecret = Boolean(process.env.ZOHO_CLIENT_SECRET);
-  if (!hasClientId || !hasClientSecret) {
-    return {
-      connected: false,
-      userEmail: row.userEmail,
-      zohoUserId: row.zohoUserId,
-      connectedAt: row.connectedAt.toISOString(),
-      lastConnectedAt: row.updatedAt.toISOString(),
-      scopes: row.scope ? row.scope.split(',').map((s) => s.trim()).filter(Boolean) : [],
-      organizationName: row.zohoOrgName,
-      zohoOrgId: row.zohoOrgId,
-      dataCenter: row.dataCenter,
-      scopeAreas: ZOHO_BOOKS_SCOPE_AREAS,
-      requiresReconnect: true,
-      notConfigured: true,
-      reason:
-        'Zoho Books OAuth credentials are not configured on this server. An administrator must set ZOHO_CLIENT_ID and ZOHO_CLIENT_SECRET before the connection can be used.',
     };
   }
 

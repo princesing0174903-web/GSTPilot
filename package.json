@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3072' npx next dev -p 3000 --webpack",
-    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "build": "next build --webpack && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "start": "NODE_ENV=production node .next/standalone/server.js",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

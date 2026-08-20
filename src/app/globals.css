@@ -43,6 +43,10 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-elevated-foreground: var(--surface-elevated-foreground);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
@@ -52,66 +56,46 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────────────────
-   LIGHT MODE (default root)
+   GSTPILOT INFINITY™ — DARK-FIRST GLOBAL THEME (single canonical system)
+   ───────────────────────────────────────────────────────────────────────────────
+   PRIMARY BACKGROUND: hsla(0, 0%, 12%, 1)  =  hsl(0, 0%, 12%)  =  #1F1F1F
+   PRIMARY TEXT:       #FFFFFF  (white / near-white)
+
+   This is the ONLY theme. There is no light mode. The `:root` selector IS
+   the dark theme — no `.dark` class needed. The `.dark` class is kept for
+   backward-compat with shadcn components that use `dark:` variants, but it
+   inherits the same values as `:root`.
+
+   Surface hierarchy (subtle elevation, all neutral, no random colors):
+     background         = hsl(0, 0%, 12%)    #1F1F1F   (page)
+     surface            = hsl(0, 0%, 14%)    #242424   (cards, panels)
+     surface-elevated   = hsl(0, 0%, 17%)   2#2B2B2B   (modals, popovers)
+     input              = hsl(0, 0%, 10%)    #1A1A1A   (inputs)
+     border             = hsl(0, 0%, 22%)    #383838   (subtle)
    ─────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: #FFFFFF;
-  --foreground: #0A0A0A;
-  --card: #FAFAFA;
-  --card-foreground: #0A0A0A;
-  --popover: #FFFFFF;
-  --popover-foreground: #0A0A0A;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F4F4F5;
-  --secondary-foreground: #0A0A0A;
-  --muted: #F4F4F5;
-  --muted-foreground: #71717A;
-  --accent: #F4F4F5;
-  --accent-foreground: #0A0A0A;
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --border: #E4E4E7;
-  --input: #E4E4E7;
-  --ring: #2563EB;
-  --chart-1: #2563EB;
-  --chart-2: #8B5CF6;
-  --chart-3: #F59E0B;
-  --chart-4: #EF4444;
-  --chart-5: #64748B;
-  --radius: 0.625rem;
-  --sidebar: #FAFAFA;
-  --sidebar-foreground: #0A0A0A;
-  --sidebar-primary: #2563EB;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F4F4F5;
-  --sidebar-accent-foreground: #0A0A0A;
-  --sidebar-border: #E4E4E7;
-  --sidebar-ring: #2563EB;
-}
-
-/* ───────────────────────────────────────────────────────────────────────────────
-   DARK MODE (default theme — pure black enterprise)
-   ─────────────────────────────────────────────────────────────────────────────── */
-.dark {
-  --background: #000000;
+  --background: hsl(0, 0%, 12%);
   --foreground: #FFFFFF;
-  --card: #111111;
+  --surface: hsl(0, 0%, 14%);
+  --surface-foreground: #FFFFFF;
+  --surface-elevated: hsl(0, 0%, 17%);
+  --surface-elevated-foreground: #FFFFFF;
+  --card: hsl(0, 0%, 14%);
   --card-foreground: #FFFFFF;
-  --popover: #0A0A0A;
+  --popover: hsl(0, 0%, 17%);
   --popover-foreground: #FFFFFF;
   --primary: #2563EB;
   --primary-foreground: #FFFFFF;
-  --secondary: #181818;
+  --secondary: hsl(0, 0%, 18%);
   --secondary-foreground: #FFFFFF;
-  --muted: #0B0B0B;
-  --muted-foreground: #A1A1AA;
-  --accent: #181818;
+  --muted: hsl(0, 0%, 16%);
+  --muted-foreground: hsla(0, 0%, 100%, 0.55);
+  --accent: hsl(0, 0%, 18%);
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: #222222;
-  --input: #161616;
+  --border: hsl(0, 0%, 22%);
+  --input: hsl(0, 0%, 10%);
   --ring: #2563EB;
   --chart-1: #2563EB;
   --chart-2: #8B5CF6;
@@ -119,14 +103,58 @@
   --chart-4: #EF4444;
   --chart-5: #64748B;
   --radius: 0.625rem;
-  --sidebar: #080808;
+  --sidebar: hsl(0, 0%, 10%);
   --sidebar-foreground: #FFFFFF;
   --sidebar-primary: #2563EB;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #181818;
+  --sidebar-accent: hsl(0, 0%, 16%);
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #1F1F1F;
+  --sidebar-border: hsl(0, 0%, 20%);
   --sidebar-ring: #2563EB;
+  --caret-color: #FFFFFF;
+}
+
+/* `.dark` class inherits the same `:root` values — kept for backward-compat
+   with shadcn components that use `dark:` Tailwind variants. */
+.dark {
+  --background: hsl(0, 0%, 12%);
+  --foreground: #FFFFFF;
+  --surface: hsl(0, 0%, 14%);
+  --surface-foreground: #FFFFFF;
+  --surface-elevated: hsl(0, 0%, 17%);
+  --surface-elevated-foreground: #FFFFFF;
+  --card: hsl(0, 0%, 14%);
+  --card-foreground: #FFFFFF;
+  --popover: hsl(0, 0%, 17%);
+  --popover-foreground: #FFFFFF;
+  --primary: #2563EB;
+  --primary-foreground: #FFFFFF;
+  --secondary: hsl(0, 0%, 18%);
+  --secondary-foreground: #FFFFFF;
+  --muted: hsl(0, 0%, 16%);
+  --muted-foreground: hsla(0, 0%, 100%, 0.55);
+  --accent: hsl(0, 0%, 18%);
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --border: hsl(0, 0%, 22%);
+  --input: hsl(0, 0%, 10%);
+  --ring: #2563EB;
+  --chart-1: #2563EB;
+  --chart-2: #8B5CF6;
+  --chart-3: #F59E0B;
+  --chart-4: #EF4444;
+  --chart-5: #64748B;
+  --radius: 0.625rem;
+  --sidebar: hsl(0, 0%, 10%);
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: hsl(0, 0%, 16%);
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: hsl(0, 0%, 20%);
+  --sidebar-ring: #2563EB;
+  --caret-color: #FFFFFF;
 }
 
 /* ───────────────────────────────────────────────────────────────────────────────
@@ -181,9 +209,20 @@
     overflow: hidden;
   }
 
-  /* Force pure black canvas in dark mode — kill any residual tint */
+  /* Force the canonical dark background — kill any residual tint.
+     Uses the --background token (hsl(0, 0%, 12%) = #1F1F1F) so the entire
+     app uses ONE consistent primary background. */
   .dark body {
-    background-color: #000000 !important;
+    background-color: var(--background) !important;
+  }
+  body {
+    background-color: var(--background) !important;
+  }
+
+  /* Ensure the text caret (cursor) is visible white in all inputs/textareas.
+     This fixes the "can't see what I'm typing" issue on dark backgrounds. */
+  input, textarea, [contenteditable] {
+    caret-color: var(--caret-color, #FFFFFF);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -835,6 +874,40 @@
      • rose-*       → red-* (warning accent)
      • orange-*     → amber-* (warning accent)
    ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ── WHITE → DARK SURFACE (critical: bg-white is the #1 light-theme leak) ──────
+   246 solid `bg-white` occurrences across 126 files render as pure white in
+   dark mode because there's NO `.dark .bg-white` override by default.
+   This converts ALL solid `bg-white` to the canonical dark card surface
+   (--card = hsl(0, 0%, 14%) = #242424). Opacity variants (bg-white/N where
+   N ≤ 20) are left alone — those are intentional subtle overlays. */
+.dark .bg-white,
+.bg-white:not(.bg-white\/\d+):not([class*="bg-white/"]) {
+  background-color: var(--card) !important;
+}
+
+/* ── BLACK TEXT → WHITE (fixes dark text on dark background) ───────────────────
+   `text-black` without an opacity modifier renders as pure black (#000000)
+   which is invisible on the dark primary background. Convert to white. */
+.dark .text-black,
+.text-black:not(.text-black\/\d+):not([class*="text-black/"]) {
+  color: var(--foreground) !important;
+}
+
+/* ── WHITE/OPACITY overlays — keep as subtle white tints (NOT solid white) ─── */
+.dark .bg-white\/5 { background-color: rgba(255, 255, 255, 0.05) !important; }
+.dark .bg-white\/10 { background-color: rgba(255, 255, 255, 0.10) !important; }
+.dark .bg-white\/20 { background-color: rgba(255, 255, 255, 0.20) !important; }
+
+/* ── ZINC-50/100 (light) → dark surface (same as slate) ──────────────────────── */
+.dark .bg-zinc-50, .dark .bg-zinc-100, .dark .bg-zinc-200 {
+  background-color: var(--card) !important;
+}
+
+/* ── NEUTRAL-50/100 (light) → dark surface ──────────────────────────────────── */
+.dark .bg-neutral-50, .dark .bg-neutral-100, .dark .bg-neutral-200 {
+  background-color: var(--card) !important;
+}
 
 /* ── GRAY → ZINC (neutral cool gray) ────────────────────────────────────────── */
 .dark .bg-gray-50, .dark .bg-gray-100, .dark .bg-gray-200, .dark .bg-gray-300,

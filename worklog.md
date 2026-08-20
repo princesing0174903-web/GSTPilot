@@ -23834,3 +23834,50 @@ Files changed (7):
 
 Files removed (1):
 - src/app/api/integrations/google/calendar/route.ts (byte-identical duplicate of calendar/events/route.ts)
+
+---
+Task ID: OAUTH-LOAD-1 (Load existing Google + Zoho credentials into runtime)
+Agent: Main credential-loader orchestrator (this session)
+
+Task: Find the user's previously-supplied Google + Zoho OAuth credentials in any config source, load them into the runtime, restart the dev server, and browser-test the real OAuth flows.
+
+Work Log:
+- Audited ALL config sources for Google + Zoho credentials:
+  • /home/z/my-project/.env                          -> only DATABASE_URL (50 bytes)
+  • /home/z/my-project/.env.local                    -> MISSING (does not exist)
+  • /home/z/my-project/.env.development              -> MISSING
+  • /home/z/my-project/.env.production               -> MISSING
+  • /home/z/my-project/.env.setu.template            -> SETU_* only (no Google/Zoho)
+  • /tmp/my-project/.env                             -> only DATABASE_URL (stale snapshot)
+  • /home/z/.envrc / .bashrc / .profile / .bash_profile -> MISSING (no shell config)
+  • /etc/secrets / /run/secrets                     -> MISSING (no secret mounts)
+  • shell environment (env | grep GOOGLE|ZOHO)        -> ALL MISSING
+  • git history (all branches)                       -> only DATABASE_URL ever committed
+  • functions/.env                                    -> MISSING
+  • No GOOGLE_APPLICATION_CREDENTIALS / service-account JSON files
+  • No ~/.zai / ~/.config sandbox secret injection
+- Recreated /home/z/my-project/src/lib/gstpilot-data/local-workspace.ts (was deleted by sandbox reset between sessions — same known issue from prior session).
+- Restarted dev server (webpack, 3072MB heap, setsid -f).
+- Probed /api/integrations/google/redirect-uri -> configured=false, envVars={GOOGLE_CLIENT_ID:false, GOOGLE_CLIENT_SECRET:false, GOOGLE_REDIRECT_URI:false, GOOGLE_OAUTH_STATE_SECRET:false, GOOGLE_OAUTH_STATE_STRICT:false}, redirectUri=http://localhost:3000/api/integrations/google/callback
+- Probed /api/integrations/zoho/diagnostics -> configured=false, envVars={ZOHO_CLIENT_ID:false, ZOHO_CLIENT_SECRET:false, ZOHO_REDIRECT_URI:false, ZOHO_REDIRECT_URI_PUBLIC:false, ZOHO_DC:false, ZOHO_REDIRECT_URI_DYNAMIC:false}, dataCenter=in, accountsUrl=https://accounts.zoho.in, apiBaseUrl=https://www.zohoapis.in/books/v3, redirectUri=http://localhost:3000/api/integrations/zoho/callback
+- Checked Prisma DB for previously-stored encrypted OAuth tokens (proof OAuth worked previously):
+  • GoogleWorkspaceToken: 2 rows
+    - [G0] org=preview-org user=princesing0174903@gmail.com connected=2026-07-13 revoked=N
+    - [G1] org=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 user=princesing0174903@gmail.com connected=2026-07-17 revoked=N
+  • ZohoBooksToken: 4 rows
+    - [Z0] org=preview-org user=preview@gstpilot.app zohoOrg=GSTPilot Oracle dc=in connected=2026-07-15 revoked=N
+    - [Z1] org=preview-org user=princesing0174903@gmail.com zohoOrg=GSTPilot Oracle dc=in connected=2026-07-15 revoked=Y
+    - [Z2] org=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 user=princesing0174903@gmail.com zohoOrg=GSTPilot Oracle dc=in connected=2026-07-17 revoked=N
+    - [Z3] org=local-uxWjLy6YKUUtmdMe7OfkF6qPe5S2 user=princesingh2892011@gmail.com zohoOrg=null dc=in connected=2026-08-11 revoked=N
+- Confirmed via crypto.ts source: the AES-256-GCM encryption key for these token rows is derived FROM GOOGLE_CLIENT_SECRET / ZOHO_CLIENT_SECRET (no separate INTEGRATION_ENCRYPTION_KEY env var needed). Therefore, if the user provides the SAME GOOGLE_CLIENT_SECRET and ZOHO_CLIENT_SECRET they used previously, the existing 2+4 encrypted token rows will decrypt successfully and the existing connections will RESUME — no re-OAuth required.
+
+Stage Summary:
+- **Root cause confirmed**: The user's previously-supplied GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET are TRULY MISSING from EVERY available configuration source in this sandbox (env files, shell environment, git history, secret mounts, DB). The sandbox environment was reset between sessions and the .env file reverted to only DATABASE_URL.
+- **Proof OAuth worked previously**: 2 Google + 4 Zoho encrypted token rows persist in the Prisma DB, dated July-August 2026. User emails: princesing0174903@gmail.com, princesingh2892011@gmail.com, preview@gstpilot.app.
+- **Recovery path**: User needs to provide the SAME 4 credentials they used previously (NOT new ones). The OAuth client apps in Google Cloud Console and Zoho API Console are unchanged — only the env vars in this sandbox need to be restored.
+- **No re-OAuth required** (if same secrets provided): Because the AES-256-GCM key is derived from GOOGLE_CLIENT_SECRET / ZOHO_CLIENT_SECRET, providing the same secrets will allow the existing encrypted tokens to decrypt and the existing connections to resume working immediately.
+- **BLOCKED**: Cannot proceed with browser OAuth test until user provides the 4 existing credentials via the secure environment configuration. Per user's explicit Section 8 instructions: do NOT ask them to recreate the Google/Zoho apps; just list the missing variables and STOP.
+
+Artifacts produced:
+- /home/z/my-project/src/lib/gstpilot-data/local-workspace.ts (recreated — was deleted by sandbox reset)
+- /home/z/my-project/.env (unchanged — only DATABASE_URL; cannot add credentials without user supplying them)

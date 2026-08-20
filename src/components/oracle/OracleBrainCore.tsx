@@ -78,6 +78,23 @@ export interface OracleBrainCoreProps {
    * to the requested page (e.g. invoices, customers, reports). Wired to the
    * dashboard's setCurrentView by the OracleBrain wrapper. */
   onNavigate?: (view: string, entityId?: string) => void;
+  /** Async function that returns the auth headers for the current user.
+   *
+   * REQUIRED for production. The Oracle routes (`/api/oracle/brain`,
+   * `/api/oracle/brain/confirm`, `/api/oracle/brain/sessions`, etc.) all use
+   * `requireAuth` + `requireOrgMembership` which expect EITHER:
+   *   - `Authorization: Bearer <Firebase ID token>` (preferred — verified via
+   *     Firebase Admin SDK), OR
+   *   - `x-gstpilot-actor: {"uid":"...","email":"..."}` header (fallback when
+   *     the Admin SDK is unavailable, e.g. sandbox/preview)
+   *
+   * Without these headers, every Oracle route returns HTTP 401 AUTH_REQUIRED.
+   *
+   * The function is async so it can refresh the Firebase ID token before each
+   * request (tokens expire hourly). Built by `OracleBrain` (which has access
+   * to `useAuth` + `useOrg`); passed down as a prop so this module stays
+   * context-free (no Firebase import). */
+  getAuthHeaders?: () => Promise<Record<string, string>>;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -602,7 +619,34 @@ function useCountUp(target: number, durationMs = 800, deps: any[] = []): number 
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: OracleBrainCoreProps) {
+export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getAuthHeaders }: OracleBrainCoreProps) {
+  // ─── Auth-aware fetch wrapper ─────────────────────────────────────────────────
+  // The Oracle routes (/api/oracle/brain, /api/oracle/brain/confirm,
+  // /api/oracle/brain/sessions, /api/oracle/brain/memory, etc.) all use
+  // requireAuth() + requireOrgMembership(). Without auth headers, every call
+  // returns HTTP 401 AUTH_REQUIRED.
+  //
+  // This helper calls getAuthHeaders() (passed from OracleBrain, which has
+  // useAuth + useOrg access) to get the current Firebase Bearer token + the
+  // x-gstpilot-orgid / x-gstpilot-actor headers, then merges them into the
+  // fetch options. Falls back to raw fetch() if getAuthHeaders is not provided
+  // (e.g. in the lightweight preview build).
+  const oracleFetch = useCallback(async (input: string, init: RequestInit = {}) => {
+    let headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+    if (getAuthHeaders) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...headers, ...authHeaders };
+      } catch (err) {
+        console.warn('[oracle-fetch] getAuthHeaders failed, proceeding without auth headers:', err);
+      }
+    }
+    // Always ensure Content-Type is set for POST/PUT/PATCH with a body.
+    if (init.body && !headers['Content-Type'] && !headers['content-type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return fetch(input, { ...init, headers });
+  }, [getAuthHeaders]);
   // ─── Chat state ───
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -718,7 +762,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const refreshSessions = useCallback(async () => {
     if (!orgId) return;
     try {
-      const res = await fetch(`/api/oracle/brain/sessions?orgId=${encodeURIComponent(orgId)}`);
+      const res = await oracleFetch(`/api/oracle/brain/sessions?orgId=${encodeURIComponent(orgId)}`);
       if (res.ok) {
         const data = await res.json();
         setSessions(data.sessions ?? []);
@@ -731,7 +775,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const refreshMemory = useCallback(async () => {
     if (!orgId) return;
     try {
-      const res = await fetch(`/api/oracle/brain/memory?orgId=${encodeURIComponent(orgId)}`);
+      const res = await oracleFetch(`/api/oracle/brain/memory?orgId=${encodeURIComponent(orgId)}`);
       if (res.ok) {
         const data = await res.json();
         setMemory(data.facts ?? []);
@@ -747,7 +791,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     setLoadingSession(true);
     setSessionsOpen(false);
     try {
-      const res = await fetch(
+      const res = await oracleFetch(
         `/api/oracle/brain/sessions/${sessionId}?orgId=${encodeURIComponent(orgId)}`
       );
       if (res.ok) {
@@ -821,7 +865,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     abortRef.current = controller;
 
     try {
-      const res = await fetch('/api/oracle/brain', {
+      const res = await oracleFetch('/api/oracle/brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // ORACLE-UI-UPGRADE: send the active copilot mode in the POST body so
@@ -1077,7 +1121,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     updateActionPart(toolCallId, p => ({ ...p, state: 'executing' }));
 
     try {
-      const res = await fetch('/api/oracle/brain/confirm', {
+      const res = await oracleFetch('/api/oracle/brain/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1135,7 +1179,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     }
     updateActionPart(toolCallId, p => ({ ...p, state: 'cancelled' }));
     try {
-      await fetch('/api/oracle/brain/confirm', {
+      await oracleFetch('/api/oracle/brain/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1172,7 +1216,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
     updateWorkflowPart(wfId, p => ({ ...p, state: 'executing', stepResults: [] }));
 
     try {
-      const res = await fetch('/api/oracle/brain/workflow/execute', {
+      const res = await oracleFetch('/api/oracle/brain/workflow/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, orgId, sessionId: currentSessionId }),
@@ -1347,7 +1391,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const deleteSession = useCallback(async (sessionId: string) => {
     if (!orgId) return;
     try {
-      await fetch(`/api/oracle/brain/sessions/${sessionId}?orgId=${encodeURIComponent(orgId)}`, {
+      await oracleFetch(`/api/oracle/brain/sessions/${sessionId}?orgId=${encodeURIComponent(orgId)}`, {
         method: 'DELETE',
       });
       if (currentSessionId === sessionId) {
@@ -1363,7 +1407,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
   const deleteMemory = useCallback(async (factId: string) => {
     if (!orgId) return;
     try {
-      await fetch(`/api/oracle/brain/memory?orgId=${encodeURIComponent(orgId)}&id=${encodeURIComponent(factId)}`, {
+      await oracleFetch(`/api/oracle/brain/memory?orgId=${encodeURIComponent(orgId)}&id=${encodeURIComponent(factId)}`, {
         method: 'DELETE',
       });
       refreshMemory();
@@ -1579,6 +1623,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate }: Or
             orgId={orgId}
             onNavigate={onNavigate}
             onAction={(prompt) => sendMessage(prompt)}
+            getAuthHeaders={getAuthHeaders}
           />
 
           {/* 1. CFO Hero — greeting + health score */}

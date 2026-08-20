@@ -180,6 +180,10 @@ export interface ExecutiveBriefingPanelProps {
   /** Called when a CTA in the briefing is clicked (e.g. "Send Reminder"). */
   onAction?: (prompt: string) => void;
   className?: string;
+  /** Async function returning auth headers for the current user. The briefing
+   *  route uses requireAuth + requireOrgMembership — without these headers it
+   *  returns HTTP 401 AUTH_REQUIRED. Built by OracleBrain from useAuth/useOrg. */
+  getAuthHeaders?: () => Promise<Record<string, string>>;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -190,6 +194,7 @@ export function ExecutiveBriefingPanel({
   onNavigate,
   onAction,
   className,
+  getAuthHeaders,
 }: ExecutiveBriefingPanelProps) {
   // Default: expanded on desktop (sm+), collapsed on mobile.
   const [expanded, setExpanded] = useState<boolean>(
@@ -204,9 +209,18 @@ export function ExecutiveBriefingPanel({
     setLoading(true);
     setError(null);
     try {
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (getAuthHeaders) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          Object.assign(headers, authHeaders);
+        } catch (err) {
+          console.warn('[executive-briefing] getAuthHeaders failed:', err);
+        }
+      }
       const res = await fetch(
         `/api/oracle/executive-briefing?orgId=${encodeURIComponent(orgId)}`,
-        { headers: { Accept: 'application/json' } },
+        { headers },
       );
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
@@ -224,7 +238,7 @@ export function ExecutiveBriefingPanel({
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [orgId, getAuthHeaders]);
 
   // Fetch when expanded AND orgId changes
   useEffect(() => {

@@ -40,9 +40,14 @@ export function OracleLauncher() {
   const orbY = useMotionValue(0);
   const dragStartRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
-  // Don't render on the /oracle page itself (no need for the launcher there)
-  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/oracle')) {
-    return null;
+  // Don't render on the /oracle page or the /?view=oracle-brain dashboard view
+  // (no need for the launcher when the user is already on Oracle — it would
+  // overlap the Oracle composer's send button at the bottom-right).
+  if (typeof window !== 'undefined') {
+    const { pathname, search } = window.location;
+    if (pathname.startsWith('/oracle')) return null;
+    const params = new URLSearchParams(search);
+    if (params.get('view') === 'oracle-brain') return null;
   }
 
   const handleClick = () => {

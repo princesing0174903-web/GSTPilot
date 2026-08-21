@@ -307,13 +307,21 @@ export function DashboardContent() {
 
       {/* ═══ PREMIUM FLOATING DOCK (Notifications · Help) ═══ */}
       {/* Oracle button removed from dock — the canonical Oracle launcher is
-          <OracleLauncher /> mounted globally in providers.tsx. */}
-      <FloatingDock
-        onNotificationsToggle={() => {
-          setNotificationsOpen((v) => !v)
-        }}
-        notificationsOpen={notificationsOpen}
-      />
+          <OracleLauncher /> mounted globally in providers.tsx.
+          The dock is also hidden on the Oracle view — the floating
+          Notification bell + Help buttons were overlapping the Oracle
+          composer/conversation area at the bottom of the screen, making it
+          feel cluttered and obstructing the send button on mobile. The
+          underlying functionality is NOT removed — Notifications remain
+          accessible via the top-bar Bell (Header) and Help via ⌘K. */}
+      {currentView !== 'oracle-brain' && (
+        <FloatingDock
+          onNotificationsToggle={() => {
+            setNotificationsOpen((v) => !v)
+          }}
+          notificationsOpen={notificationsOpen}
+        />
+      )}
 
       {/* ═══ NOTIFICATIONS SHEET (wired to /api/notifications) ═══ */}
       <NotificationsSheet

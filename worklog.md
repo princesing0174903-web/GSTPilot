@@ -24301,3 +24301,41 @@ Artifacts:
 - /home/z/my-project/.env (restored with user's Google + Zoho + Gemini credentials)
 - /home/z/my-project/.next/standalone/server.js (production build — 153MB, boots in 115ms)
 - /home/z/my-project/.next/BUILD_ID (production build success marker)
+
+---
+Task ID: ORACLE-FLOATING-REMOVE-1 (Remove floating Notification + Help from Oracle)
+Agent: Main orchestrator (this session)
+
+Task: Remove the floating Notification bell + Help buttons from the Oracle AI interface (bottom-right), without breaking the underlying functionality. Keep them on other pages.
+
+Work Log:
+- Found the floating controls: `src/components/layout/FloatingDock.tsx` renders the bottom-right dock with "Notifications" + "Help · ⌘K" buttons (fixed bottom-5 right-5 z-50). Rendered by `DashboardShell.tsx` line 311.
+- Also found `src/components/oracle/OracleLauncher.tsx` — a separate floating bottom-right FAB (the Oracle orb) that only hid on the `/oracle` route, not on `/?view=oracle-brain` (the dashboard Oracle view).
+- FIX 1: Updated `DashboardShell.tsx` to conditionally render FloatingDock only when `currentView !== 'oracle-brain'`. Added a comment explaining the dock is hidden on Oracle because it was overlapping the composer/send button, and that notifications remain accessible via the top-bar Bell + Help via ⌘K.
+- FIX 2: Updated `OracleLauncher.tsx` to also return null when `?view=oracle-brain` is in the URL query params (previously only hid on `/oracle` pathname). This prevents the Oracle orb FAB from overlapping the Oracle composer on the dashboard Oracle view.
+- Browser-verified on Oracle page (`/?view=oracle-brain`):
+  • Zero floating bottom-right interactive buttons (eval returned "NONE — no floating buttons" at both 1440px and 375px mobile)
+  • Composer (textbox "Ask Oracle in General mode…") + Send button unobstructed
+  • Top-bar Notifications Bell still present at top:12px (functionality preserved — not floating, part of header)
+  • No console errors
+- Browser-verified on Dashboard (`/?view=dashboard`):
+  • Floating dock STILL present with "Notifications" + "Help · ⌘K" buttons (eval confirmed: "Notifications | Help · ⌘K")
+  • Functionality preserved on all non-Oracle pages
+- Responsive verified: Oracle at 375px (mobile) has zero floating buttons, composer fully visible + unobstructed.
+
+Stage Summary:
+- Floating Notification bell + Help button REMOVED from Oracle page only
+- OracleLauncher orb FAB also hidden on Oracle view (was overlapping composer)
+- Underlying functionality preserved: Notifications accessible via top-bar Bell + Help via ⌘K Command Palette
+- Other pages (Dashboard, Invoices, Customers, etc.) retain the floating dock
+- No console errors, no functional regression
+- Responsive: verified at 375px (mobile) + 1440px (desktop)
+
+Files changed (2):
+- src/components/DashboardShell.tsx (conditional render: `{currentView !== 'oracle-brain' && <FloatingDock .../>}`)
+- src/components/oracle/OracleLauncher.tsx (also hide when `?view=oracle-brain` in URL)
+
+Screenshots:
+- /home/z/my-project/oracle-floating-removed.png (Oracle at 1440px — no floating buttons)
+- /home/z/my-project/oracle-375-no-floating.png (Oracle at 375px mobile — no floating buttons)
+- /home/z/my-project/oracle-1440-no-floating.png (Oracle full page at 1440px)

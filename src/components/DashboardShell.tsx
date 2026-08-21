@@ -37,7 +37,6 @@ import {
 import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
-import { FloatingDock } from '@/components/layout/FloatingDock'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 // NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
 // experience at /oracle, launched by <OracleLauncher /> (mounted globally in
@@ -305,23 +304,12 @@ export function DashboardContent() {
         </SheetContent>
       </Sheet>
 
-      {/* ═══ PREMIUM FLOATING DOCK (Notifications · Help) ═══ */}
-      {/* Oracle button removed from dock — the canonical Oracle launcher is
-          <OracleLauncher /> mounted globally in providers.tsx.
-          The dock is also hidden on the Oracle view — the floating
-          Notification bell + Help buttons were overlapping the Oracle
-          composer/conversation area at the bottom of the screen, making it
-          feel cluttered and obstructing the send button on mobile. The
-          underlying functionality is NOT removed — Notifications remain
-          accessible via the top-bar Bell (Header) and Help via ⌘K. */}
-      {currentView !== 'oracle-brain' && (
-        <FloatingDock
-          onNotificationsToggle={() => {
-            setNotificationsOpen((v) => !v)
-          }}
-          notificationsOpen={notificationsOpen}
-        />
-      )}
+      {/* ═══ FLOATING DOCK REMOVED ═══ */}
+      {/* The bottom-right floating Notification bell + Help buttons have been
+          removed entirely from the right side. Notifications remain accessible
+          via the top-bar Bell (Header) and Help via the ⌘K Command Palette.
+          The FloatingDock component is kept in src/components/layout/ for
+          reference but is no longer rendered anywhere. */}
 
       {/* ═══ NOTIFICATIONS SHEET (wired to /api/notifications) ═══ */}
       <NotificationsSheet

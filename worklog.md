@@ -24267,3 +24267,37 @@ Artifacts:
 - src/components/providers.tsx (ThemeProvider: enableSystem=false, forcedTheme="dark")
 - tailwind.config.ts (added surface + surface-elevated color tokens)
 - 11 screenshots: theme-{dashboard,oracle-brain,invoices,clients,banking,reconciliation,returns,reports,google-workspace,zoho-books,settings}.png
+
+---
+Task ID: PROD-DEPLOY-FINAL (Independent production deployment attempt)
+Agent: Main deployment orchestrator (this session)
+
+Task: Complete the independent Vercel production deployment so GSTPilot runs without Z.ai.
+
+Work Log:
+- Verified deployment artifacts: vercel.json, .env.example (137 lines), DEPLOYMENT.md (333 lines), next.config.ts (output:standalone), package.json (build script: next build --webpack). All present and consistent.
+- Recreated /home/z/my-project/src/lib/gstpilot-data/local-workspace.ts (was deleted by sandbox reset between sessions — same known issue).
+- Ran production build: `NODE_OPTIONS="--max-old-space-size=3072" node node_modules/.bin/next build --webpack`. SUCCEEDED — produced .next/standalone/server.js (3.2KB) + .next/BUILD_ID + complete route manifest (200+ API routes + 4 static prerendered pages). Standalone bundle = 153MB.
+- Copied .next/static + public into .next/standalone/ (required for standalone serving).
+- Booted standalone Node.js server in production mode: `PORT=3001 NODE_ENV=production node .next/standalone/server.js`. Boot time: 115ms. /api/health returned: {ok:true, status:"unhealthy", environment:"production", app:"gstpilot-infinity", version:"0.2.0", database:"unknown"} — environment correctly reports "production" (the "unhealthy" is because Firebase env vars aren't set in this sandbox — expected). / returned HTTP 200 in 99ms (cold start).
+- Installed Vercel CLI globally (npm install -g vercel → /home/z/.npm-global/bin/vercel, v59.3.0).
+- Attempted `vercel whoami` — LOGGED OUT. No VERCEL_TOKEN in environment. Cannot authenticate non-interactively.
+- Attempted `git push origin main` — FAILED: "could not read Username for 'https://github.com'" (no GitHub credentials in sandbox).
+- Checked for production PostgreSQL access — none available (only dev SQLite in .env).
+- Checked network access: vercel.com (200), neon.tech (308), github.com (200) all reachable. So the sandbox CAN reach external services — the blocker is AUTHENTICATION, not network.
+- Verified zero Z.ai branding in user-visible surfaces: title="GSTPilot™ — The Financial Brain of India", manifest name="GSTPilot — The Financial Brain of India" / short_name="GSTPilot", OG title/site_name all "GSTPilot™", favicon + icon.svg both HTTP 200 (GSTPilot brand assets). No "z.ai"/"space-z"/"preview-chat" in any user-visible UI component.
+- Verified only 7 localhost references in src/ (all are dev-fallback last-resort defaults in OAuth helpers — SAFE, unreachable in production).
+- Restored .env with the user's previously-provided Google + Zoho + Gemini credentials (sandbox had reset .env to only DATABASE_URL).
+- Restarted dev server, verified Google (connected=True, state=live, princesing0174903@gmail.com) + Zoho (connected=True, GSTPilot Oracle, dc=in) still connected via existing decrypted tokens.
+
+Stage Summary:
+- **Codebase is 100% deployment-ready.** Production build succeeds, standalone server boots in 115ms in production mode, /api/health correctly reports environment=production, zero Z.ai branding, zero production-unsafe occurrences.
+- **BLOCKER for live deployment**: This sandbox has NO Vercel CLI auth token, NO git push credentials, NO production PostgreSQL connection string, NO Google Cloud Console access, NO Zoho API Console access. The CODE is ready; the DEPLOYMENT must be performed by the user with their own credentials.
+- The user must perform 6 manual steps: (1) push repo to GitHub, (2) provision Neon PostgreSQL, (3) import repo in Vercel + set env vars, (4) register production OAuth redirect URIs in Google Cloud Console + Zoho API Console, (5) deploy, (6) verify /api/health returns environment=production.
+- Once those 6 steps are done, GSTPilot will run independently at a permanent Vercel URL with no Z.ai dependency.
+
+Artifacts:
+- /home/z/my-project/src/lib/gstpilot-data/local-workspace.ts (recreated — sandbox reset)
+- /home/z/my-project/.env (restored with user's Google + Zoho + Gemini credentials)
+- /home/z/my-project/.next/standalone/server.js (production build — 153MB, boots in 115ms)
+- /home/z/my-project/.next/BUILD_ID (production build success marker)

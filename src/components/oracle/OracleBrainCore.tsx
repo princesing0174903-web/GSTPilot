@@ -1382,6 +1382,9 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
       const lastUserIdx = withoutLast.map(m => m.role).lastIndexOf('user');
       if (lastUserIdx === -1) return prev;
       const lastUserMsg = withoutLast[lastUserIdx];
+      // CRITICAL: Never regenerate if the last user message is empty/whitespace.
+      // This prevents accidental auto-submission when the user hasn't entered text.
+      if (!lastUserMsg.content || !lastUserMsg.content.trim()) return prev;
       const remaining = withoutLast.slice(0, lastUserIdx);
       queueMicrotask(() => sendMessage(lastUserMsg.content));
       return remaining;

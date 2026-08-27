@@ -87,6 +87,11 @@ export interface ZohoRefreshResult {
   expiresIn: number | null;
   apiDomain: string | null;
   error: string | null;
+  /** True when the refresh token is genuinely revoked/invalid (HTTP 400 +
+   *  invalid_grant, HTTP 401/403). False for temporary errors (network timeout,
+   *  429, 5xx) — in those cases the token is still valid and the user should
+   *  NOT be told to reconnect. */
+  permanent: boolean;
 }
 
 /** Database row shape (minus the encrypted token strings) for read paths. */

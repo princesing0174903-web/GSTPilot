@@ -651,31 +651,33 @@ export async function loadTokens(
  * cached access token has expired. This is the single entry point all Google
  * service libs should call before hitting a Google API.
  *
- * Returns `{ accessToken, error }` — on error, the caller should surface a
- * "reconnect Google" prompt to the user.
+ * Returns `{ accessToken, error, permanent }` — on error, the caller should check
+ * `permanent`: if true, the refresh token is genuinely revoked and the user
+ * must re-run OAuth; if false, the failure was temporary (network, rate limit)
+ * and the connection should remain CONNECTED.
  */
 export async function getValidAccessToken(
   organizationId: string,
   userId: string,
-): Promise<{ accessToken: string | null; error: string | null }> {
+): Promise<{ accessToken: string | null; error: string | null; permanent: boolean }> {
   const { tokens, stored } = await loadTokens(organizationId, userId);
   if (!tokens || !stored) {
-    return { accessToken: null, error: 'Google Workspace is not connected. Connect your account first.' };
+    return { accessToken: null, error: 'Google Workspace is not connected. Connect your account first.', permanent: true };
   }
 
   // If the access token is still valid (with a 60s safety margin), use it.
   if (tokens.expiryDate && tokens.expiryDate.getTime() > Date.now() + 60_000) {
-    return { accessToken: tokens.accessToken, error: null };
+    return { accessToken: tokens.accessToken, error: null, permanent: false };
   }
 
   // Need to refresh.
   if (!tokens.refreshToken) {
-    return { accessToken: null, error: 'No refresh token available. Please reconnect Google Workspace.' };
+    return { accessToken: null, error: 'No refresh token available. Please reconnect Google Workspace.', permanent: true };
   }
 
   const refreshed = await refreshAccessToken(tokens.refreshToken);
   if (refreshed.error || !refreshed.accessToken) {
-    return { accessToken: null, error: refreshed.error ?? 'Token refresh failed.' };
+    return { accessToken: null, error: refreshed.error ?? 'Token refresh failed.', permanent: refreshed.permanent };
   }
 
   // Persist the new access token + expiry.
@@ -694,17 +696,26 @@ export async function getValidAccessToken(
     console.warn('[google-workspace] failed to persist refreshed token:', err);
   }
 
-  return { accessToken: refreshed.accessToken, error: null };
+  return { accessToken: refreshed.accessToken, error: null, permanent: false };
 }
 
 interface RefreshResult {
   accessToken: string | null;
   expiresIn: number | null;
   error: string | null;
+  /** True when the refresh token is genuinely revoked/invalid (HTTP 400 + invalid_grant,
+   *  HTTP 401/403). False for temporary errors (network timeout, 429, 5xx) —
+   *  in those cases the token is still valid and the user should NOT be told to reconnect. */
+  permanent: boolean;
 }
 
 /**
  * Exchange a refresh token for a new access token.
+ *
+ * Returns `{ accessToken, expiresIn, error, permanent }`. When `permanent` is true,
+ * the refresh token is genuinely revoked and the user MUST re-run OAuth. When
+ * `permanent` is false, the failure was temporary (network, rate limit, server
+ * error) and the connection should remain CONNECTED — just marked STALE.
  */
 export async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
   const { clientId, clientSecret } = getGoogleOAuthConfig();
@@ -723,19 +734,32 @@ export async function refreshAccessToken(refreshToken: string): Promise<RefreshR
     });
     if (!resp.ok) {
       const text = await resp.text();
-      return { accessToken: null, expiresIn: null, error: `Refresh failed (${resp.status}): ${text}` };
+      // HTTP 400 + invalid_grant = refresh token genuinely revoked by the user.
+      // HTTP 401/403 = invalid client credentials (config issue, not temporary).
+      // These are PERMANENT — the user must re-run OAuth.
+      const isPermanent = resp.status === 400 || resp.status === 401 || resp.status === 403;
+      return {
+        accessToken: null,
+        expiresIn: null,
+        error: `Refresh failed (${resp.status}): ${text}`,
+        permanent: isPermanent,
+      };
     }
     const data = (await resp.json()) as { access_token?: string; expires_in?: number };
     return {
       accessToken: data.access_token ?? null,
       expiresIn: data.expires_in ?? null,
       error: null,
+      permanent: false,
     };
   } catch (err) {
+    // Network error (DNS, timeout, connection refused) — TEMPORARY.
+    // The refresh token is still valid; the user should NOT be told to reconnect.
     return {
       accessToken: null,
       expiresIn: null,
       error: err instanceof Error ? err.message : 'Token refresh request failed.',
+      permanent: false,
     };
   }
 }
@@ -928,24 +952,49 @@ export async function getConnectionStatus(
   // Ensure a valid access token (refreshes if expired). This is the SAME path
   // every Google service lib uses — so the state we surface matches what a
   // real API call would experience.
-  const { accessToken, error } = await getValidAccessToken(organizationId, userId);
+  const { accessToken, error, permanent } = await getValidAccessToken(organizationId, userId);
 
-  // ERROR (refresh failed) — Google returned 401/403/invalid_grant. The user
-  // revoked access via their Google Account page, or the refresh token was
-  // otherwise invalidated. They must re-run the OAuth flow.
+  // ERROR (refresh failed) — distinguish PERMANENT vs TEMPORARY failures.
+  //
+  // PERMANENT (permanent === true): Google returned 400/invalid_grant or
+  // 401/403. The refresh token is genuinely revoked. The user must re-run OAuth.
+  //
+  // TEMPORARY (permanent === false): Network timeout, rate limit (429), or
+  // Google API 5xx. The DB token is STILL VALID — the refresh just couldn't
+  // reach Google right now. We must NOT mark the connection as disconnected.
+  // Instead, return connected: true + state: 'stale' so the UI shows "Live
+  // data may be delayed" (not "Reconnect required").
   if (error || !accessToken) {
+    if (permanent) {
+      return {
+        connected: false,
+        state: 'error',
+        userEmail: row.userEmail,
+        googleUserId: row.googleUserId,
+        connectedAt: row.connectedAt.toISOString(),
+        lastSyncedAt: preRefreshUpdatedAt.toISOString(),
+        scopes: row.scope ? row.scope.split(' ') : [],
+        errorMessage:
+          error ??
+          'Google Workspace token refresh failed. The user may have revoked access. Please reconnect Google Workspace.',
+        requiresReconnect: true,
+        notConfigured: false,
+        requiresAuth: false,
+      };
+    }
+    // TEMPORARY failure — token is still in the DB, refresh just couldn't reach
+    // Google right now. Keep the connection as CONNECTED + STALE so the user
+    // is NOT told to reconnect. They can retry by refreshing the page.
     return {
-      connected: false,
-      state: 'error',
+      connected: true,
+      state: 'stale',
       userEmail: row.userEmail,
       googleUserId: row.googleUserId,
       connectedAt: row.connectedAt.toISOString(),
       lastSyncedAt: preRefreshUpdatedAt.toISOString(),
       scopes: row.scope ? row.scope.split(' ') : [],
-      errorMessage:
-        error ??
-        'Google Workspace token refresh failed. The user may have revoked access. Please reconnect Google Workspace.',
-      requiresReconnect: true,
+      errorMessage: `Live data temporarily unavailable: ${error}. The connection is still active — try refreshing in a moment.`,
+      requiresReconnect: false,
       notConfigured: false,
       requiresAuth: false,
     };

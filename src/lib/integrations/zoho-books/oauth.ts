@@ -713,18 +713,19 @@ export async function loadTokens(
 export async function getValidAccessToken(
   organizationId: string,
   userId: string,
-): Promise<{ accessToken: string | null; error: string | null }> {
+): Promise<{ accessToken: string | null; error: string | null; permanent: boolean }> {
   const { tokens, stored } = await loadTokens(organizationId, userId);
   if (!tokens || !stored) {
     return {
       accessToken: null,
       error: 'Zoho Books is not connected. Connect your account first.',
+      permanent: true,
     };
   }
 
   // Still valid? Return immediately.
   if (tokens.expiryDate && tokens.expiryDate.getTime() > Date.now() + 60_000) {
-    return { accessToken: tokens.accessToken, error: null };
+    return { accessToken: tokens.accessToken, error: null, permanent: false };
   }
 
   // Need to refresh.
@@ -732,12 +733,13 @@ export async function getValidAccessToken(
     return {
       accessToken: null,
       error: 'No refresh token available. Please reconnect Zoho Books.',
+      permanent: true,
     };
   }
 
   const refreshed = await refreshAccessToken(tokens.refreshToken);
   if (refreshed.error || !refreshed.accessToken) {
-    return { accessToken: null, error: refreshed.error ?? 'Token refresh failed.' };
+    return { accessToken: null, error: refreshed.error ?? 'Token refresh failed.', permanent: refreshed.permanent };
   }
 
   const newExpiry = refreshed.expiresIn
@@ -781,11 +783,16 @@ export async function refreshAccessToken(refreshToken: string): Promise<ZohoRefr
     });
     if (!resp.ok) {
       const text = await resp.text();
+      // HTTP 400 + invalid_grant = refresh token genuinely revoked.
+      // HTTP 401/403 = invalid client credentials.
+      // These are PERMANENT — the user must re-run OAuth.
+      const isPermanent = resp.status === 400 || resp.status === 401 || resp.status === 403;
       return {
         accessToken: null,
         expiresIn: null,
         apiDomain: null,
         error: `Refresh failed (${resp.status}): ${text.slice(0, 500)}`,
+        permanent: isPermanent,
       };
     }
     const data = (await resp.json()) as {
@@ -800,6 +807,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<ZohoRefr
         expiresIn: null,
         apiDomain: null,
         error: data.error ?? 'No access_token in refresh response.',
+        permanent: true,
       };
     }
     return {
@@ -807,13 +815,17 @@ export async function refreshAccessToken(refreshToken: string): Promise<ZohoRefr
       expiresIn: data.expires_in ?? null,
       apiDomain: data.api_domain ?? null,
       error: null,
+      permanent: false,
     };
   } catch (err) {
+    // Network error (DNS, timeout, connection refused) — TEMPORARY.
+    // The refresh token is still valid; the user should NOT be told to reconnect.
     return {
       accessToken: null,
       expiresIn: null,
       apiDomain: null,
       error: err instanceof Error ? err.message : 'Token refresh request failed.',
+      permanent: false,
     };
   }
 }

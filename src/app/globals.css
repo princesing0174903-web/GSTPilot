@@ -58,7 +58,7 @@
 /* ───────────────────────────────────────────────────────────────────────────────
    GSTPILOT INFINITY™ — DARK-FIRST GLOBAL THEME (single canonical system)
    ───────────────────────────────────────────────────────────────────────────────
-   PRIMARY BACKGROUND: hsla(0, 0%, 12%, 1)  =  hsl(0, 0%, 12%)  =  #1F1F1F
+   PRIMARY BACKGROUND: hsla(0, 0%, 12%, 1)  =  hsl(0, 0%, 0%)  =  #1F1F1F
    PRIMARY TEXT:       #FFFFFF  (white / near-white)
 
    This is the ONLY theme. There is no light mode. The `:root` selector IS
@@ -67,35 +67,35 @@
    inherits the same values as `:root`.
 
    Surface hierarchy (subtle elevation, all neutral, no random colors):
-     background         = hsl(0, 0%, 12%)    #1F1F1F   (page)
-     surface            = hsl(0, 0%, 14%)    #242424   (cards, panels)
-     surface-elevated   = hsl(0, 0%, 17%)   2#2B2B2B   (modals, popovers)
-     input              = hsl(0, 0%, 10%)    #1A1A1A   (inputs)
-     border             = hsl(0, 0%, 22%)    #383838   (subtle)
+     background         = hsl(0, 0%, 0%)    #1F1F1F   (page)
+     surface            = hsl(0, 0%, 6%)    #242424   (cards, panels)
+     surface-elevated   = hsl(0, 0%, 6%)   2#2B2B2B   (modals, popovers)
+     input              = hsl(0, 0%, 6%)    #1A1A1A   (inputs)
+     border             = hsl(0, 0%, 18%)    #383838   (subtle)
    ─────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: hsl(0, 0%, 12%);
+  --background: hsl(0, 0%, 0%);
   --foreground: #FFFFFF;
-  --surface: hsl(0, 0%, 14%);
+  --surface: hsl(0, 0%, 6%);
   --surface-foreground: #FFFFFF;
-  --surface-elevated: hsl(0, 0%, 17%);
+  --surface-elevated: hsl(0, 0%, 6%);
   --surface-elevated-foreground: #FFFFFF;
-  --card: hsl(0, 0%, 14%);
+  --card: hsl(0, 0%, 6%);
   --card-foreground: #FFFFFF;
-  --popover: hsl(0, 0%, 17%);
+  --popover: hsl(0, 0%, 6%);
   --popover-foreground: #FFFFFF;
   --primary: #2563EB;
   --primary-foreground: #FFFFFF;
-  --secondary: hsl(0, 0%, 18%);
+  --secondary: hsl(0, 0%, 12%);
   --secondary-foreground: #FFFFFF;
-  --muted: hsl(0, 0%, 16%);
+  --muted: hsl(0, 0%, 6%);
   --muted-foreground: hsla(0, 0%, 100%, 0.55);
-  --accent: hsl(0, 0%, 18%);
+  --accent: hsl(0, 0%, 12%);
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: hsl(0, 0%, 22%);
-  --input: hsl(0, 0%, 10%);
+  --border: hsl(0, 0%, 18%);
+  --input: hsl(0, 0%, 6%);
   --ring: #2563EB;
   --chart-1: #2563EB;
   --chart-2: #8B5CF6;
@@ -103,11 +103,11 @@
   --chart-4: #EF4444;
   --chart-5: #64748B;
   --radius: 0.625rem;
-  --sidebar: hsl(0, 0%, 10%);
+  --sidebar: hsl(0, 0%, 6%);
   --sidebar-foreground: #FFFFFF;
   --sidebar-primary: #2563EB;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: hsl(0, 0%, 16%);
+  --sidebar-accent: hsl(0, 0%, 6%);
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: hsl(0, 0%, 20%);
   --sidebar-ring: #2563EB;
@@ -117,28 +117,28 @@
 /* `.dark` class inherits the same `:root` values — kept for backward-compat
    with shadcn components that use `dark:` Tailwind variants. */
 .dark {
-  --background: hsl(0, 0%, 12%);
+  --background: hsl(0, 0%, 0%);
   --foreground: #FFFFFF;
-  --surface: hsl(0, 0%, 14%);
+  --surface: hsl(0, 0%, 6%);
   --surface-foreground: #FFFFFF;
-  --surface-elevated: hsl(0, 0%, 17%);
+  --surface-elevated: hsl(0, 0%, 6%);
   --surface-elevated-foreground: #FFFFFF;
-  --card: hsl(0, 0%, 14%);
+  --card: hsl(0, 0%, 6%);
   --card-foreground: #FFFFFF;
-  --popover: hsl(0, 0%, 17%);
+  --popover: hsl(0, 0%, 6%);
   --popover-foreground: #FFFFFF;
   --primary: #2563EB;
   --primary-foreground: #FFFFFF;
-  --secondary: hsl(0, 0%, 18%);
+  --secondary: hsl(0, 0%, 12%);
   --secondary-foreground: #FFFFFF;
-  --muted: hsl(0, 0%, 16%);
+  --muted: hsl(0, 0%, 6%);
   --muted-foreground: hsla(0, 0%, 100%, 0.55);
-  --accent: hsl(0, 0%, 18%);
+  --accent: hsl(0, 0%, 12%);
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: hsl(0, 0%, 22%);
-  --input: hsl(0, 0%, 10%);
+  --border: hsl(0, 0%, 18%);
+  --input: hsl(0, 0%, 6%);
   --ring: #2563EB;
   --chart-1: #2563EB;
   --chart-2: #8B5CF6;
@@ -146,11 +146,11 @@
   --chart-4: #EF4444;
   --chart-5: #64748B;
   --radius: 0.625rem;
-  --sidebar: hsl(0, 0%, 10%);
+  --sidebar: hsl(0, 0%, 6%);
   --sidebar-foreground: #FFFFFF;
   --sidebar-primary: #2563EB;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: hsl(0, 0%, 16%);
+  --sidebar-accent: hsl(0, 0%, 6%);
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: hsl(0, 0%, 20%);
   --sidebar-ring: #2563EB;
@@ -210,7 +210,7 @@
   }
 
   /* Force the canonical dark background — kill any residual tint.
-     Uses the --background token (hsl(0, 0%, 12%) = #1F1F1F) so the entire
+     Uses the --background token (hsl(0, 0%, 0%) = #1F1F1F) so the entire
      app uses ONE consistent primary background. */
   .dark body {
     background-color: var(--background) !important;
@@ -239,10 +239,11 @@
    UTILITY CLASSES — redefined flat / clean (no gradients, no glows)
    ─────────────────────────────────────────────────────────────────────────────── */
 
-/* Glass surface → flat solid card (no blur, no transparency) */
+/* Glass surface → flat solid card (no blur, no transparency).
+   Uses --card token (#242424 in dark theme) for proper depth hierarchy. */
 .glass-surface,
 .glass-surface-strong {
-  background-color: var(--sidebar) !important;
+  background-color: var(--card) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid var(--border) !important;
@@ -879,7 +880,7 @@
    246 solid `bg-white` occurrences across 126 files render as pure white in
    dark mode because there's NO `.dark .bg-white` override by default.
    This converts ALL solid `bg-white` to the canonical dark card surface
-   (--card = hsl(0, 0%, 14%) = #242424). Opacity variants (bg-white/N where
+   (--card = hsl(0, 0%, 6%) = #242424). Opacity variants (bg-white/N where
    N ≤ 20) are left alone — those are intentional subtle overlays. */
 .dark .bg-white,
 .bg-white:not(.bg-white\/\d+):not([class*="bg-white/"]) {
@@ -1392,10 +1393,13 @@
   line-height: 1.5 !important;
 }
 
-/* Generic glass-surface card override — premium padding */
+/* Generic glass-surface card override — premium padding.
+   Uses #242424 (slightly LIGHTER than the page #1F1F1F) for proper depth
+   hierarchy: page → card → elevated. Previously #111111 which was DARKER
+   than the page, making the page look gray by comparison. */
 .dark .glass-surface,
 .dark .glass-surface-strong {
-  background-color: #111111 !important;
+  background-color: #0A0A0A !important;
   border: 1px solid var(--border-card) !important;
   border-radius: var(--r-lg) !important;
   box-shadow: var(--shadow-sm) !important;

@@ -47,7 +47,7 @@ import { boot } from '@/lib/perf/boot-tracer';
 // securetoken.googleapis.com / firebaselogging-pa.googleapis.com can hang
 // indefinitely. This bounds the entire init flow so the user is never stuck
 // on a loading screen because Firebase Auth is unreachable.
-const FIREBASE_INIT_TIMEOUT_MS = 8_000;
+const FIREBASE_INIT_TIMEOUT_MS = 5_000;
 
 // ── Lazy Firebase + org-service loaders ───────────────────────────────────────
 // @/lib/firebase and @/lib/auth/organizations both pull in the Firebase SDK

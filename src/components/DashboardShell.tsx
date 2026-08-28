@@ -151,7 +151,7 @@ export function DashboardContent() {
       </a>
 
       {/* ═══ TOP BAR ═══ */}
-      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-[#1F1F1F] bg-[#000000] px-4 md:px-6">
+      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-black px-4 md:px-6">
         {/* Mobile sidebar toggle (visible below lg). The desktop rail is
             rendered in the two-column workspace below. */}
         <button

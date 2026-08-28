@@ -324,6 +324,12 @@ export function useZohoBooks() {
   const orgId = organization?.id ?? null;
   const userId = user?.id ?? null;
 
+  // Context ready flag — the UI uses this to disable Connect/Disconnect buttons
+  // until both org + user are available. Prevents the "Organization + user
+  // context required" error that occurs when the connect request is sent
+  // before OrgContext finishes resolving.
+  const contextReady = Boolean(orgId && userId);
+
   const refreshStatus = useCallback(async () => {
     // Skip until BOTH orgId + userId are present. Calling /status with an
     // empty actor.uid would force the route to return its
@@ -454,6 +460,15 @@ export function useZohoBooks() {
     notConfigured?: boolean;
     requiredEnvVars?: string[];
   }> => {
+    // GUARD: Do not send the connect request until org + user context is ready.
+    // This prevents the "Organization + user context required" error that
+    // occurs when the button is clicked before OrgContext resolves.
+    if (!orgId || !userId) {
+      return {
+        authUrl: null,
+        error: 'Your workspace is still loading. Please wait a moment and try again.',
+      };
+    }
     let bearer = '';
     try {
       if (auth.currentUser) {
@@ -485,7 +500,7 @@ export function useZohoBooks() {
       return { authUrl: null, error: res.error };
     }
     return { authUrl: res.data?.authUrl ?? null, error: null };
-  }, [buildHeaders]);
+  }, [buildHeaders, orgId, userId]);
 
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
     setPending(true);
@@ -795,6 +810,8 @@ export function useZohoBooks() {
     statusLoading,
     statusError,
     refreshStatus,
+    // context readiness (for disabling Connect button until org+user are available)
+    contextReady,
     connect,
     disconnect,
     refresh,

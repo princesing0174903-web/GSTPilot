@@ -395,11 +395,15 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
 
     setTimedOut(false);
     let startTime = Date.now();
-    // 8s timeout — this is a UI safety boundary, not an auth failure. The
+    // 15s timeout — this is a UI safety boundary, not an auth failure. The
     // underlying request continues running; if it succeeds later, the
     // dashboard hydrates automatically. The timeout screen just gives the
     // user a MANUAL "Retry" option — no auto-reload, no auto-logout.
-    const TIMEOUT_SECONDS = 8;
+    // Increased from 8s to 15s because the Firebase init timeout is now 5s,
+    // giving a 10s buffer for the local-workspace fallback to complete
+    // BEFORE the dashboard timeout fires. This prevents the loading gate
+    // from appearing during normal sandbox/preview use.
+    const TIMEOUT_SECONDS = 15;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);

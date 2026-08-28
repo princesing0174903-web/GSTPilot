@@ -131,7 +131,7 @@ export function LeftNav({
           // Sidebar owns its full height (parent gives it h-full via the shell).
           // overflow-hidden on the nav itself — only the primary nav list below
           // scrolls, never the whole nav. The footer is pinned (shrink-0).
-          'flex h-full flex-col overflow-hidden border-r border-[#1A1A1A] bg-[#0A0A0A]',
+          'flex h-full flex-col overflow-hidden border-r border-white/[0.06] bg-black',
           expandedCls,
         )}
       >

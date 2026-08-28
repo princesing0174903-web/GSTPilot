@@ -118,6 +118,12 @@ export function useGoogleWorkspace() {
   const orgId = organization?.id ?? null;
   const userId = user?.id ?? null;
 
+  // Context ready flag — the UI uses this to disable Connect/Disconnect buttons
+  // until both org + user are available. Prevents the "Organization + user
+  // context required" error that occurs when the connect request is sent
+  // before OrgContext finishes resolving.
+  const contextReady = Boolean(orgId && userId);
+
   // ── Refresh the connection status ──
   // Skip until BOTH orgId + userId are present. Calling /status with an
   // empty actor.uid would force the route to return its
@@ -154,6 +160,15 @@ export function useGoogleWorkspace() {
     notConfigured?: boolean;
     requiredEnvVars?: string[];
   }> => {
+    // GUARD: Do not send the connect request until org + user context is ready.
+    // This prevents the "Organization + user context required" error that
+    // occurs when the button is clicked before OrgContext resolves.
+    if (!orgId || !userId) {
+      return {
+        authUrl: null,
+        error: 'Your workspace is still loading. Please wait a moment and try again.',
+      };
+    }
     // Attach the Firebase ID token if available so the server can verify it.
     let bearer = '';
     try {
@@ -177,7 +192,7 @@ export function useGoogleWorkspace() {
       notConfigured: notConfigured || undefined,
       requiredEnvVars,
     };
-  }, [buildHeaders]);
+  }, [buildHeaders, orgId, userId]);
 
   // ── Disconnect ──
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
@@ -304,6 +319,8 @@ export function useGoogleWorkspace() {
     statusLoading,
     statusError,
     refreshStatus,
+    // context readiness (for disabling Connect button until org+user are available)
+    contextReady,
     // oauth
     connect,
     disconnect,

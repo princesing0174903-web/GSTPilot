@@ -11,8 +11,10 @@
 
 import 'server-only';
 
-import { getValidAccessToken, loadTokens } from '@/lib/google-workspace/auth';
-import { drive } from '@/lib/google-workspace/services';
+// Google integration removed — stub for rebuild
+const getValidAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
+const loadTokens = async () => ({ tokens: null, stored: null });
+const drive = { listFiles: async () => ({ files: [] }) };
 import type {
   Collector,
   CollectorContext,

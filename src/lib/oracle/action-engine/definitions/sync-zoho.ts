@@ -17,8 +17,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';
-import { runZohoFullSync } from '@/lib/integrations/zoho-books/sync-engine';
-import type { SyncEngineResult, SyncModuleResult } from '@/lib/integrations/zoho-books/sync-engine';
+// Zoho integration removed — stub for rebuild
+const runZohoFullSync = async () => ({ ok: false, error: 'Zoho integration rebuilding' });
+type SyncEngineResult = { ok: boolean; error?: string };
+type SyncModuleResult = { module: string; fetched: number; imported: number; updated: number; failed: number };
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import {
   registerAction,

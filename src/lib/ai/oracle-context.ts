@@ -36,10 +36,12 @@
 
 import { db } from '@/lib/db';
 import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot';
-import { getValidAccessToken as getZohoAccessToken } from '@/lib/integrations/zoho-books/oauth';
-import { listZohoCustomers } from '@/lib/integrations/zoho-books/customers';
-import { getValidAccessToken as getGoogleAccessToken } from '@/lib/google-workspace/auth';
-import { gmail } from '@/lib/google-workspace/services';
+// Zoho integration removed — stub for rebuild
+const getZohoAccessToken = async () => ({ accessToken: null, error: 'Zoho integration rebuilding', permanent: false });
+const listZohoCustomers = async () => ({ customers: [], error: 'Zoho integration rebuilding' });
+// Google integration removed — stub for rebuild
+const getGoogleAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
+const gmail = { listMessages: async () => ({ messages: [] }) };
 
 // ─── Public types ────────────────────────────────────────────────────────────
 

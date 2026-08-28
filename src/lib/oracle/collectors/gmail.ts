@@ -11,8 +11,10 @@
 
 import 'server-only';
 
-import { getValidAccessToken, loadTokens } from '@/lib/google-workspace/auth';
-import { gmail } from '@/lib/google-workspace/services';
+// Google integration removed — stub for rebuild
+const getValidAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
+const loadTokens = async () => ({ tokens: null, stored: null });
+const gmail = { listMessages: async () => ({ messages: [] }) };
 import type {
   Collector,
   CollectorContext,

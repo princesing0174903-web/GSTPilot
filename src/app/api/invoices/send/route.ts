@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 import { assertInvoiceTenantAccess } from '../_helpers';
-import { getConnectionStatus } from '@/lib/google-workspace/auth';
+// Google integration removed — stub for rebuild
+const getConnectionStatus = async () => ({ connected: false, state: 'disconnected' });
 import type { SendChannel } from '@/lib/invoices/types';
 
 export const dynamic = 'force-dynamic';

@@ -10,8 +10,10 @@
 
 import 'server-only';
 
-import { getValidAccessToken, loadTokens } from '@/lib/google-workspace/auth';
-import { calendar } from '@/lib/google-workspace/services';
+// Google integration removed — stub for rebuild
+const getValidAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
+const loadTokens = async () => ({ tokens: null, stored: null });
+const calendar = { listEvents: async () => ({ events: [] }) };
 import type {
   CalendarData,
   CalendarEventSummary,

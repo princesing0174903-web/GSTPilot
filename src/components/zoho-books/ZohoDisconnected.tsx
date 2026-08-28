@@ -86,6 +86,8 @@ export function ZohoDisconnected({
   lastConnectedAt?: string | null;
   /** Zoho Books organization name (shown in the reconnect prompt if known). */
   organizationName?: string | null;
+  /** True when org+user context is available (Connect button disabled until true) */
+  contextReady?: boolean;
 }) {
   const [connecting, setConnecting] = useState(false);
   // Don't pre-populate from status — the status reason is shown in the
@@ -96,6 +98,7 @@ export function ZohoDisconnected({
   const [requiredEnvVars, setRequiredEnvVars] = useState<string[] | undefined>();
 
   const handleConnect = useCallback(async () => {
+    if (!contextReady) return; // Guard: don't send request without org+user context
     setConnecting(true);
     setNotConfigured(false);
     try {
@@ -127,7 +130,7 @@ export function ZohoDisconnected({
     } finally {
       setConnecting(false);
     }
-  }, [connect]);
+  }, [connect, contextReady]);
 
   return (
     <div
@@ -254,13 +257,13 @@ export function ZohoDisconnected({
             <Button
               size="lg"
               onClick={handleConnect}
-              disabled={connecting}
+              disabled={connecting || !contextReady}
               className="w-full sm:w-auto"
             >
               {connecting ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : null}
-              {connecting ? 'Connecting…' : requiresReconnect ? 'Reconnect Zoho Books' : 'Connect Zoho Books'}
+              {!contextReady ? 'Loading workspace…' : connecting ? 'Connecting…' : requiresReconnect ? 'Reconnect Zoho Books' : 'Connect Zoho Books'}
             </Button>
             <a
               href="#"

@@ -362,12 +362,13 @@ function ResultBanner({ result }: { result: ActionResult | null }) {
 // All actions still call the existing `useGoogleWorkspace` hook methods.
 
 function ConnectionHeader() {
-  const { status, statusLoading, connect, disconnect, pending, refreshStatus } = useGoogleWorkspace();
+  const { status, statusLoading, connect, disconnect, pending, refreshStatus, contextReady } = useGoogleWorkspace();
   const { organization } = useOrg();
   const [connectError, setConnectError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleConnect = useCallback(async () => {
+    if (!contextReady) return; // Guard: don't send request without org+user context
     setConnectError(null);
     const { authUrl, error, notConfigured, requiredEnvVars } = await connect();
     if (notConfigured) {
@@ -388,7 +389,7 @@ function ConnectionHeader() {
       return;
     }
     if (authUrl) window.location.href = authUrl;
-  }, [connect]);
+  }, [connect, contextReady]);
 
   const confirmDisconnect = useCallback(async () => {
     setConfirmOpen(false);
@@ -485,11 +486,11 @@ function ConnectionHeader() {
               <button
                 type="button"
                 onClick={handleConnect}
-                disabled={pending}
+                disabled={pending || !contextReady}
                 className="gst-btn gst-btn-primary gst-btn-sm"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
-                {state === 'error' ? 'Reconnect Google' : 'Connect Google'}
+                {!contextReady ? 'Loading workspace…' : state === 'error' ? 'Reconnect Google' : 'Connect Google'}
               </button>
             )}
           </div>
@@ -557,7 +558,7 @@ function ConnectionHeader() {
 // ─── Not-connected gate (premium empty state) ────────────────────────────────
 
 function NotConnectedGate({ children, onConnect }: { children: React.ReactNode; onConnect: () => void }) {
-  const { status, statusLoading, pending } = useGoogleWorkspace();
+  const { status, statusLoading, pending, contextReady } = useGoogleWorkspace();
   if (statusLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-2">
@@ -625,11 +626,11 @@ function NotConnectedGate({ children, onConnect }: { children: React.ReactNode; 
             <button
               type="button"
               onClick={onConnect}
-              disabled={pending}
+              disabled={pending || !contextReady}
               className="gst-btn gst-btn-primary gst-btn-lg"
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-              {isError ? 'Reconnect Google Account' : 'Connect Google Account'}
+              {!contextReady ? 'Loading workspace…' : isError ? 'Reconnect Google Account' : 'Connect Google Account'}
             </button>
             <span className="gst-caption inline-flex items-center gap-1.5">
               <Lock className="h-3.5 w-3.5 text-emerald-500" />

@@ -140,6 +140,7 @@ export default function ZohoBooksPage() {
     organizationsLoading,
     listOrganizations,
     selectOrganization,
+    contextReady,
   } = useZohoBooks();
 
   // Wrap the hook's sync trigger so the page can pass a single callback down.
@@ -192,6 +193,7 @@ export default function ZohoBooksPage() {
           reason={status?.reason ?? null}
           lastConnectedAt={status?.lastConnectedAt ?? null}
           organizationName={status?.organizationName ?? null}
+          contextReady={contextReady}
         />
       </div>
     );

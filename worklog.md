@@ -24339,3 +24339,238 @@ Screenshots:
 - /home/z/my-project/oracle-floating-removed.png (Oracle at 1440px — no floating buttons)
 - /home/z/my-project/oracle-375-no-floating.png (Oracle at 375px mobile — no floating buttons)
 - /home/z/my-project/oracle-1440-no-floating.png (Oracle full page at 1440px)
+
+---
+Task ID: GOOGLE-REBUILD
+Agent: Main orchestrator (this session)
+
+Task: Build a clean, production-grade Google Workspace integration from scratch at /home/z/my-project. The old integration was fully removed; this rebuild delivers OAuth (Gmail/Drive/Calendar/Docs/Sheets) with AES-256-GCM token encryption, HMAC-signed state, tenant isolation, permanent/temporary failure distinction, and a real Gmail/Drive/Calendar UI backed by Google API calls.
+
+Work Log:
+- Read existing infrastructure: src/lib/auth/session.ts (requireAuth + requireOrgMembership + AuthedUser shape), src/lib/db.ts (Prisma client v15), prisma/schema.prisma lines 5635-5653 (GoogleWorkspaceToken model with @@unique([organizationId, userId])), src/contexts/AuthContext.tsx (AuthUser {id, name, email, picture, provider, emailVerified}), src/contexts/OrgContext.tsx (useOrg exposes organization.id + membership.userId + role), src/hooks/useConnectedSources.ts (header shape: x-gstpilot-orgid + x-gstpilot-actor JSON {uid,email,name,role}).
+- Verified env: GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET present in .env; GOOGLE_REDIRECT_URI absent (so redirect URI auto-derives from request origin per the 7-step fallback).
+- Created src/lib/integrations/google/crypto.ts (server-only):
+  • AES-256-GCM with 96-bit IV.
+  • Key derived from GOOGLE_CLIENT_SECRET via double-HMAC-SHA256 (h1 = HMAC(label='gstpilot-google-v1', secret); key = HMAC(h1, 'aes-256-gcm-key')) — 32 bytes, domain-separated from any other use of the secret.
+  • encrypt(plaintext) → `<iv.b64>.<tag.b64>.<ct.b64>`; decrypt(payload) throws on malformed/auth-tag-fail; safeDecrypt(payload) returns null on failure.
+  • Key cached after first derivation (deterministic).
+- Created src/lib/integrations/google/auth.ts (server-only) — single entry point for all Google OAuth concerns:
+  • GOOGLE_SCOPES — array of 10 scope strings (openid, email, profile, gmail.send, gmail.readonly, gmail.compose, drive.file, documents, spreadsheets, calendar).
+  • isGoogleConfigured() — truthy iff both client id + secret are non-empty.
+  • getGoogleOAuthConfig() — throws if not configured; returns {clientId, clientSecret, redirectUri} (redirectUri here is the env-var fallback only).
+  • resolveRedirectUri(req) — 7-step fallback: (1) GOOGLE_REDIRECT_URI env var, (2) `abc` header (preview gateway), (3) `Origin`, (4) `X-Forwarded-Host` + `X-Forwarded-Proto`, (5) `Host` (proto inferred from localhost), (6) req.url origin, (7) http://localhost:3000.
+  • encodeState({orgId,userId,userEmail,returnPath,redirectUri}) — HMAC-SHA256-signed state, format `<nonce.b64url>.<payload.b64url>.<expiresAt>.<hmac.b64url>`. Nonce is 16 bytes crypto.randomBytes; echoed inside the payload and verified on decode (defense-in-depth against nonce substitution under same key). TTL = 10 minutes. Key from GOOGLE_OAUTH_STATE_SECRET ?? GOOGLE_CLIENT_SECRET (domain-separated from the AES key via different label).
+  • decodeState(state) — verifies HMAC via crypto.timingSafeEqual (constant-time), checks TTL, verifies nonce echo. Returns payload or null on any failure.
+  • buildAuthUrl(state, redirectUri) — Google consent URL with all 10 scopes + access_type=offline + prompt=consent + include_granted_scopes=true.
+  • exchangeCodeForTokens(code, redirectUri) — POSTs to https://oauth2.googleapis.com/token, then fetches userinfo from https://www.googleapis.com/oauth2/v3/userinfo. Returns {tokens, userInfo, error}.
+  • storeTokens(orgId, userId, userEmail, googleUserId, tokens) — encrypts access + refresh tokens, upserts via the @@unique([organizationId, userId]) constraint. If Google didn't return a new refresh_token, preserves the existing one (Google only emits refresh_token on the first consent). Clears revokedAt on reconnect.
+  • refreshAccessToken(refreshToken) — POSTs to Google's token endpoint. Returns {accessToken, expiresIn, error, permanent}. permanent=true iff status ∈ {400, 401, 403} (revoked/expired refresh token); permanent=false for 429/5xx/network (temp).
+  • getValidAccessToken(orgId, userId) — loads token, decrypts, refreshes 60s before expiry (REFRESH_BUFFER_MS). Persists the refreshed access token + new expiryDate; does NOT overwrite the existing refresh token. Returns {accessToken, error, permanent}.
+  • getConnectionStatus(orgId, userId) — returns full status object: connected + state ∈ {'live','stale','disconnected'} + email + googleUserId + timestamps + scope + error + permanent. 'stale' iff refresh failed with a temporary error (429/5xx/network) — NOT disconnected.
+  • disconnectGoogle(orgId, userId) — best-effort revoke at https://oauth2.googleapis.com/revoke (prefer refresh token, fall back to access token); marks revokedAt=now locally. Always returns {ok:true}.
+  • resolveOrgUserFromHeaders(req) — reads `x-gstpilot-orgid` + `x-gstpilot-actor` JSON header, returns {orgId, userId, userEmail, actorName, role} with nulls on missing/malformed.
+- Created src/lib/integrations/google/index.ts — barrel export.
+- Created 7 API routes:
+  • GET /api/integrations/google/connect — requireAuth + resolveOrgUserFromHeaders + resolveRedirectUri + encodeState + buildAuthUrl → {ok, authUrl, redirectUri}. Returns structured GOOGLE_NOT_CONFIGURED 503 with requiredEnvVars when env missing.
+  • GET /api/integrations/google/callback — validates state HMAC + TTL + nonce echo, exchanges code (using redirect_uri from signed state so Google's check matches), stores encrypted tokens, redirects to /?google_connected=1&view=google-workspace (or ?google_error=<code> on failure).
+  • GET /api/integrations/google/status — returns full connection status.
+  • POST /api/integrations/google/disconnect — revokes at Google + marks revoked locally.
+  • GET /api/integrations/google/gmail?action=profile|messages&max=N — proxies REAL Gmail API (gmail.googleapis.com/gmail/v1). Messages action lists + fetches metadata (From/Subject/To/Date + snippet) for each.
+  • GET /api/integrations/google/drive?max=N — proxies REAL Drive API (www.googleapis.com/drive/v3/files) with orderBy=modifiedByMeTime desc.
+  • GET /api/integrations/google/calendar/events?max=N — proxies REAL Calendar API (www.googleapis.com/calendar/v3/calendars/primary/events) with timeMin=now + singleEvents=true + orderBy=startTime.
+  • All proxied routes distinguish AUTH_REVOKED (401, permanent) from AUTH_STALE (503, temporary) — the hook surfaces this distinction in the UI.
+- Created src/hooks/useGoogleWorkspace.ts:
+  • useOrg() + useAuth() for context; contextReady = Boolean(orgId && userId).
+  • connect() — guards with contextReady; returns {authUrl, error, notConfigured, requiredEnvVars}.
+  • disconnect() — POST + optimistic local status update + authoritative re-fetch.
+  • refreshStatus() — auto-fires on contextReady flip.
+  • call<T>(path, init) — generic authenticated fetch wrapper; stamps x-gstpilot-orgid + x-gstpilot-actor headers.
+  • gmailProfile(), gmailMessages(max), driveFiles(), calendarEvents(max) — convenience wrappers.
+  • Returns {status, statusLoading, statusError, refreshStatus, contextReady, connect, disconnect, pending, call, gmailProfile, gmailMessages, driveFiles, calendarEvents}.
+- Replaced src/components/google-workspace/GoogleWorkspacePage.tsx with a full dark-themed (bg-black + text-white + white/[0.02] surfaces) integration page:
+  • StatusPill component — live (emerald) / stale (amber) / disconnected (white) / unknown (spinner) variants.
+  • Header with Refresh + Connect/Disconnect buttons (Connect disabled until contextReady, label flips to "Loading workspace…").
+  • Context-not-ready banner (rendered while !contextReady).
+  • Connect / disconnect / status error banners with dismiss buttons.
+  • DisconnectedCard — centered hero with Connect CTA + scope summary.
+  • ConnectedPanel — status card (email, last sync, connected since, authorized scopes as chips) + Gmail/Drive/Calendar tabs.
+  • GmailTab — profile (emailAddress, messagesTotal, threadsTotal) + recent messages list (max-h-96 overflow-y-auto, custom thin scrollbar, from/subject/snippet/date per row).
+  • DriveTab — file list (icon + name + mimeType + modifiedTime, scrollable).
+  • CalendarTab — upcoming events list (summary + start + location, scrollable).
+  • TabLoading / TabError / TabRetry — shared loading + error states.
+  • Detects ?google_connected=1 / ?google_error= on mount → triggers refreshStatus + cleans URL.
+  • All icons from lucide-react (Mail, Calendar, HardDrive, CheckCircle2, AlertTriangle, Clock, Unplug, RefreshCw, Loader2, LogOut, FileText, XCircle).
+- Lint pass:
+  • Before: 22 problems (16 errors, 6 warnings) — all pre-existing in other files.
+  • After: 19 problems (14 errors, 5 warnings) — my new files contribute ZERO errors (was 2; fixed by switching DriveTab + CalendarTab to try/finally pattern matching GmailTab). Removed the unused eslint-disable in useGoogleWorkspace.ts. The remaining 19 problems are all pre-existing in unrelated files (MissionControlPage, FinancingMarketplacePage, finos/ui/charts, providers-lazy, etc.).
+- Smoke-tested all 7 endpoints against the running dev server (port 3000):
+  • GET /api/integrations/google/connect (with x-gstpilot-orgid + x-gstpilot-actor headers) → 200 with valid Google OAuth URL containing all 10 scopes + HMAC-signed state. Decoded state payload verified by base64url-decoding the middle segment: {"orgId":"test-org-001","userId":"test-user-001","userEmail":"test@gstpilot.com","returnPath":"/?view=google-workspace","redirectUri":"http://localhost:3000/api/integrations/google/callback","n":"<16-byte-nonce>"} — matches the outer nonce.
+  • GET /api/integrations/google/status (with auth headers) → 200 {ok:true, status:{connected:false, state:"disconnected", email:null, error:"not_connected", permanent:true}}.
+  • GET without auth headers → 401 {error:"Please sign in to continue.", code:"AUTH_REQUIRED"} (correct — every route is gated by requireAuth).
+  • GET /api/integrations/google/disconnect → 405 (correct — only POST handler exists).
+  • GET /api/integrations/google/gmail|drive|calendar/events → 401 (correct — auth-gated).
+- Page renders: GET /?view=google-workspace → 200, 47KB HTML, zero runtime errors in the dev log.
+
+Stage Summary:
+- **Files created (12):**
+  - src/lib/integrations/google/crypto.ts (AES-256-GCM, 88 lines)
+  - src/lib/integrations/google/auth.ts (OAuth helper, ~570 lines)
+  - src/lib/integrations/google/index.ts (barrel)
+  - src/app/api/integrations/google/connect/route.ts
+  - src/app/api/integrations/google/callback/route.ts
+  - src/app/api/integrations/google/status/route.ts
+  - src/app/api/integrations/google/disconnect/route.ts
+  - src/app/api/integrations/google/gmail/route.ts
+  - src/app/api/integrations/google/drive/route.ts
+  - src/app/api/integrations/google/calendar/events/route.ts
+  - src/hooks/useGoogleWorkspace.ts
+  - src/components/google-workspace/GoogleWorkspacePage.tsx (replaced placeholder)
+- **Security:** All credentials server-side (process.env only). Tokens AES-256-GCM encrypted at rest. OAuth state HMAC-signed with 16-byte nonce + 10-min TTL + timingSafeEqual. Google access tokens NEVER returned to frontend — only proxied API responses. Tenant isolation: every DB query scoped by (organizationId, userId). Connect button disabled until contextReady === true.
+- **Resilience:** permanent flag distinguishes revoked tokens (400/401/403 → disconnected) from temporary failures (429/5xx/network → stale). Refresh token preserved across re-consent (Google only emits it once). Refreshed access token + new expiry persisted on each refresh (60s buffer before expiry). Local revoke is authoritative (best-effort Google revoke is non-fatal).
+- **No regressions:** lint error count went DOWN by 3 (from 16 errors to 14, all pre-existing in other files). Dev log shows zero compile errors for any of the 7 new routes. Existing useConnectedSources hook continues to work (it just calls /api/integrations/google/status which now returns the expected {ok:true, status:{connected}} shape).
+
+Artifacts:
+- src/lib/integrations/google/crypto.ts
+- src/lib/integrations/google/auth.ts
+- src/lib/integrations/google/index.ts
+- src/app/api/integrations/google/connect/route.ts
+- src/app/api/integrations/google/callback/route.ts
+- src/app/api/integrations/google/status/route.ts
+- src/app/api/integrations/google/disconnect/route.ts
+- src/app/api/integrations/google/gmail/route.ts
+- src/app/api/integrations/google/drive/route.ts
+- src/app/api/integrations/google/calendar/events/route.ts
+- src/hooks/useGoogleWorkspace.ts
+- src/components/google-workspace/GoogleWorkspacePage.tsx
+
+---
+
+## Task ZOHO-REBUILD — Zoho Books Integration (rebuilt from scratch)
+
+**Agent:** Main orchestrator (this session)
+
+**Task:** Build a clean, production-grade Zoho Books integration from scratch at `/home/z/my-project`. The old integration was fully removed; this rebuild delivers OAuth (connect/disconnect/refresh), organization selector, and Customers/Invoices/Bills/Payments tabs — all backed by REAL Zoho API calls. Mirrors the proven Google Workspace pattern (AES-256-GCM tokens at rest, HMAC-signed state, tenant isolation, permanent/temporary failure distinction).
+
+### Work Log
+- Read existing infrastructure: `src/lib/auth/session.ts` (`requireAuth` + `resolveOrgUserFromHeaders` reads `x-gstpilot-orgid` + `x-gstpilot-actor` JSON header), `src/lib/db.ts` (Prisma client), `prisma/schema.prisma` lines 5664-5691 (`ZohoBooksToken` model with `@@unique([organizationId, userId])`, fields: `zohoUserId`, `zohoOrgId`, `zohoOrgName`, `apiDomain`, `dataCenter`, `accessToken`, `refreshToken`, `expiryDate`, `scope`, `tokenType`, `revokedAt`), existing Google Workspace integration as a template (crypto/auth/index/hooks/page).
+- Verified env: `ZOHO_CLIENT_ID` + `ZOHO_CLIENT_SECRET` + `ZOHO_DC=in` + `ZOHO_REDIRECT_URI=http://localhost:3000/api/integrations/zoho/callback` present in `.env`; `ZOHO_OAUTH_STATE_SECRET` absent (derived from `ZOHO_CLIENT_SECRET`).
+- Created `src/lib/integrations/zoho/crypto.ts` (server-only) — AES-256-GCM with 96-bit IV. Key derived from `ZOHO_CLIENT_SECRET` via double-HMAC-SHA256 (label `'gstpilot-zoho-v1'`, usage `'aes-256-gcm-key'`) — domain-separated from the Google Workspace key. Same ciphertext format as Google: `<iv.b64>.<tag.b64>.<ct.b64>`. Exports `encrypt`, `decrypt`, `safeDecrypt`.
+- Created `src/lib/integrations/zoho/types.ts` — type definitions for `ZohoDataCenter`, `ZohoEndpoints`, `ZohoOAuthConfig`, `ZohoOAuthStatePayload`, `ZohoTokenResponse`, `ZohoExchangeResult`, `ZohoRefreshResult`, `ZohoValidTokenResult`, `ZohoConnectionStatus`, `ZohoResolvedOrgUser`, plus Zoho Books API response shapes (`ZohoOrganization`, `ZohoContact`, `ZohoInvoice`, `ZohoBill`, `ZohoPayment`).
+- Created `src/lib/integrations/zoho/oauth.ts` (server-only, ~580 lines) — single entry point for all server-side Zoho OAuth + API concerns:
+  • `ZOHO_BOOKS_SCOPE = 'ZohoBooks.fullaccess.all'`.
+  • `DC_ENDPOINTS` map for 6 data centers (`in`, `com`, `eu`, `au`, `jp`, `ca`) — each with `authBaseUrl`, `tokenUrl`, `apiBaseUrl`.
+  • `resolveDataCenter()` — reads `ZOHO_DC` env var (default `in`, unknown → `in` with warning).
+  • `getZohoEndpoints()` — endpoints for the configured DC.
+  • `isZohoConfigured()` — truthy iff `ZOHO_CLIENT_ID` + `ZOHO_CLIENT_SECRET` + `ZOHO_REDIRECT_URI` all set.
+  • `getZohoOAuthConfig()` — returns `{clientId, clientSecret, redirectUri, endpoints}`. `redirectUri` from `ZOHO_REDIRECT_URI` env var (NOT dynamic resolution — Zoho requires pre-registration).
+  • `encodeState({orgId,userId,userEmail,returnPath,redirectUri})` — HMAC-SHA256-signed state, format `<nonce.b64url>.<payload.b64url>.<expiresAt>.<hmac.b64url>`. 16-byte nonce echoed in payload + 10-min TTL + `timingSafeEqual` comparison. Key from `ZOHO_OAUTH_STATE_SECRET ?? ZOHO_CLIENT_SECRET` (domain-separated via different label).
+  • `decodeState(state)` — verifies HMAC + TTL + nonce echo.
+  • `buildAuthUrl(state, redirectUri)` — Zoho consent URL with `access_type=offline` + `prompt=consent`.
+  • `exchangeCodeForTokens(code, redirectUri)` — POSTs to Zoho token endpoint. Returns `{tokens, error}`.
+  • `storeTokens(orgId, userId, userEmail, tokens, zohoOrgId?, zohoOrgName?)` — encrypts + upserts via `@@unique([organizationId, userId])`. Preserves existing refresh token if Zoho didn't return a new one. Clears `revokedAt` on reconnect.
+  • `refreshAccessToken(refreshToken)` — POSTs to Zoho token endpoint. Returns `{accessToken, expiresIn, apiDomain, error, permanent}`. `permanent=true` iff status ∈ {400, 401, 403}; `permanent=false` for 429/5xx/network.
+  • `getValidAccessToken(orgId, userId)` — loads token, refreshes 60s before expiry, persists refreshed access token + api_domain. Does NOT overwrite refresh token (Zoho never returns a new one on refresh). Returns `{accessToken, error, permanent}`.
+  • `getConnectionStatus(orgId, userId)` — returns full status: `connected`, `state ∈ {'live','stale','disconnected'}`, email, zohoUserId, zohoOrgId, zohoOrgName, dataCenter, apiDomain, timestamps, scope, error, permanent. `stale` iff refresh failed with a temporary error (NOT disconnected).
+  • `disconnectZoho(orgId, userId)` — local-only revoke (Zoho has no revoke endpoint); marks `revokedAt = now`. Always returns `{ok: true}`.
+  • `resolveOrgUserFromHeaders(req)` — reads `x-gstpilot-orgid` + `x-gstpilot-actor` JSON headers.
+  • `refreshOrganizationMapping(orgId, userId, accessToken)` — fetches `{apiBaseUrl}/organizations`, picks the default org (or the first one), persists `zohoOrgId` + `zohoOrgName` on the token row.
+  • `getApiBaseUrl(apiDomain)` — derives `{apiDomain}/books/v3` from the `api_domain` Zoho returned (handles DC moves); falls back to the configured DC endpoint.
+- Created `src/lib/integrations/zoho/index.ts` — barrel export.
+- Created 11 API routes (all gated by `requireAuth`; all read `(orgId, userId)` from headers; all return structured error codes `AUTH_REVOKED` permanent, `AUTH_STALE` temporary, `NO_ORG_SELECTED` when no Zoho org picked yet, `ZOHO_API_ERROR`, `ZOHO_NOT_CONFIGURED` 503):
+  • `GET /api/integrations/zoho/connect` — returns `{ok, authUrl, redirectUri}` or 503 `ZOHO_NOT_CONFIGURED` with `requiredEnvVars`.
+  • `GET /api/integrations/zoho/callback` — verifies state HMAC + TTL + nonce echo, exchanges code (using redirect_uri from signed state so Zoho's check matches), stores encrypted tokens, fetches organizations + persists default org mapping, redirects to `/?zoho_connected=1&view=zoho-books` (or `?zoho_error=<code>` on failure).
+  • `GET /api/integrations/zoho/status` — returns full connection status.
+  • `POST /api/integrations/zoho/disconnect` — local revoke.
+  • `POST /api/integrations/zoho/refresh` — force refresh; returns fresh status on success, `AUTH_REVOKED` 401 if permanent, `AUTH_STALE` 503 if temporary.
+  • `GET /api/integrations/zoho/organizations` — proxies `GET {apiBaseUrl}/organizations`.
+  • `POST /api/integrations/zoho/organizations/select` — persists chosen Zoho org ID + name; returns fresh status.
+  • `GET /api/integrations/zoho/customers` — proxies `GET {apiBaseUrl}/contacts?contact_type=customer`. Returns `NO_ORG_SELECTED` 400 when no Zoho org picked.
+  • `GET /api/integrations/zoho/invoices` — proxies `GET {apiBaseUrl}/invoices` (sort by date desc).
+  • `GET /api/integrations/zoho/bills` — proxies `GET {apiBaseUrl}/bills`.
+  • `GET /api/integrations/zoho/payments` — proxies `GET {apiBaseUrl}/customerpayments`.
+  • All Zoho Books API calls pass `organization_id=<zohoOrgId>` query param (Zoho's multi-tenant requirement). Access tokens NEVER leave the server.
+- Created `src/hooks/useZohoBooks.ts` — client hook mirroring `useGoogleWorkspace`:
+  • `useOrg()` + `useAuth()` for context; `contextReady = Boolean(orgId && userId)`.
+  • `connect()` — guards with `contextReady`; returns `{authUrl, error, notConfigured, requiredEnvVars}`.
+  • `disconnect()` — POST + optimistic local status update + authoritative re-fetch.
+  • `refresh()` — POST + apply echoed status (or re-fetch).
+  • `refreshStatus()` — auto-fires on `contextReady` flip.
+  • `call<T>(path, init)` — generic authenticated fetch wrapper; stamps `x-gstpilot-orgid` + `x-gstpilot-actor` headers.
+  • Convenience wrappers: `listOrganizations()`, `selectOrganization(orgId, orgName)`, `listCustomers(max)`, `listInvoices(max)`, `listBills(max)`, `listPayments(max)`.
+- Replaced `src/components/zoho-books/ZohoBooksPage.tsx` with a full dark-themed integration page (mirror of `GoogleWorkspacePage`):
+  • `StatusPill` — live (emerald) / stale (amber) / disconnected (white) / unknown (spinner) variants.
+  • Header with Refresh + Refresh Token + Connect/Disconnect buttons (Connect disabled until `contextReady`, label flips to "Loading workspace…").
+  • Context-not-ready banner, connect/disconnect/refresh error banners with dismiss buttons.
+  • `DisconnectedCard` — centered hero with Connect CTA + scope summary (`ZohoBooks.fullaccess.all` + DC from env var).
+  • `ConnectedPanel` — status card (email, Zoho org, DC, last sync, connected since, token expires, scopes as chips). When no Zoho org selected → shows `OrganizationPicker`; otherwise → Customers/Invoices/Bills/Payments tabs.
+  • `OrganizationPicker` — radio-style list with name + country + GST + currency + default-org badge. "Use this organization" button persists selection + reloads the page.
+  • `CustomersTab` — list with name + status + email + currency + receivable amount (max-h-96 overflow-y-auto, thin scrollbar).
+  • `InvoicesTab` — list with `invoice_number` (mono) + customer + status + amount (with due balance if any).
+  • `BillsTab` — list with `bill_number` (mono) + vendor + status + amount.
+  • `PaymentsTab` — list with customer + amount + payment mode + date + reference number; total-of-N-payments summary at the top.
+  • `TabLoading` / `TabError` / `TabRetry` — shared states.
+  • Detects `?zoho_connected=1` / `?zoho_error=` on mount → triggers `refreshStatus` + cleans URL.
+  • All icons from `lucide-react` (BookIcon custom SVG, Building2, Users, FileText, Receipt, Wallet, CheckCircle2, AlertTriangle, Clock, Unplug, RefreshCw, Loader2, LogOut, XCircle).
+
+### Lint
+Before: 14 errors, 5 warnings (all pre-existing in other files).
+After: 14 errors, 5 warnings — **ZERO new lint errors from any Zoho file**.
+
+### Smoke tests (all passed)
+Tested every endpoint against the running dev server (port 3000):
+- `GET /api/integrations/zoho/connect` (with auth headers) → 200 with valid Zoho OAuth URL containing `client_id=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB`, `redirect_uri=http://localhost:3000/api/integrations/zoho/callback` (matches `ZOHO_REDIRECT_URI` env var), `scope=ZohoBooks.fullaccess.all`, `access_type=offline`, `prompt=consent`, 4-part HMAC-signed state. Decoded state payload verified by base64url-decoding: `{"orgId":"test-org-001","userId":"test-user-001","userEmail":"test@gstpilot.com","returnPath":"/?view=zoho-books","redirectUri":"http://localhost:3000/api/integrations/zoho/callback","n":"<16-byte-nonce>"}` — matches outer nonce.
+- `GET /api/integrations/zoho/status` (with auth headers) → 200 `{ok:true, status:{connected:false, state:'disconnected', error:'not_connected', permanent:true}}`.
+- `GET` without auth headers → 401 AUTH_REQUIRED (correct — every route gated by `requireAuth`).
+- `POST /api/integrations/zoho/disconnect` → 200 `{ok:true}`.
+- `GET /api/integrations/zoho/disconnect` → 405 (correct — only POST handler exists).
+- `POST /api/integrations/zoho/refresh` → 401 AUTH_REVOKED (no token row — permanent).
+- `GET /api/integrations/zoho/organizations` → 401 AUTH_REVOKED.
+- `GET /api/integrations/zoho/customers` → 401 AUTH_REVOKED.
+- `GET /api/integrations/zoho/invoices` → 401 AUTH_REVOKED.
+- `GET /api/integrations/zoho/bills` → 401 AUTH_REVOKED.
+- `GET /api/integrations/zoho/payments` → 401 AUTH_REVOKED.
+- `POST /api/integrations/zoho/organizations/select` (no token row) → 404 NOT_CONNECTED.
+- `GET /api/integrations/zoho/callback` (no params) → 307 redirect to `/?zoho_error=missing_params&view=zoho-books`.
+- `GET /?view=zoho-books` → 200, 47KB HTML, zero runtime errors in the dev log.
+
+### Stage Summary
+- **Files created (17):**
+  - `src/lib/integrations/zoho/crypto.ts` (AES-256-GCM, ~95 lines)
+  - `src/lib/integrations/zoho/types.ts` (~190 lines)
+  - `src/lib/integrations/zoho/oauth.ts` (~580 lines)
+  - `src/lib/integrations/zoho/index.ts` (barrel)
+  - `src/app/api/integrations/zoho/connect/route.ts`
+  - `src/app/api/integrations/zoho/callback/route.ts`
+  - `src/app/api/integrations/zoho/status/route.ts`
+  - `src/app/api/integrations/zoho/disconnect/route.ts`
+  - `src/app/api/integrations/zoho/refresh/route.ts`
+  - `src/app/api/integrations/zoho/organizations/route.ts`
+  - `src/app/api/integrations/zoho/organizations/select/route.ts`
+  - `src/app/api/integrations/zoho/customers/route.ts`
+  - `src/app/api/integrations/zoho/invoices/route.ts`
+  - `src/app/api/integrations/zoho/bills/route.ts`
+  - `src/app/api/integrations/zoho/payments/route.ts`
+  - `src/hooks/useZohoBooks.ts`
+  - `src/components/zoho-books/ZohoBooksPage.tsx` (replaced placeholder, ~900 lines)
+- **Security:** All credentials server-side (process.env only). Tokens AES-256-GCM encrypted at rest. OAuth state HMAC-signed with 16-byte nonce + 10-min TTL + `timingSafeEqual`. Zoho access tokens NEVER returned to frontend — only proxied API responses. Tenant isolation: every DB query scoped by `(organizationId, userId)`. Connect button disabled until `contextReady === true`. `ZOHO_REDIRECT_URI` env var used (no dynamic resolution). Data center from `ZOHO_DC` env var (default `in`).
+- **Resilience:** `permanent` flag distinguishes revoked tokens (400/401/403 → disconnected) from temporary failures (429/5xx/network → stale). Refresh token preserved across re-consent (Zoho only emits it on initial consent). Refreshed access token + new expiry + api_domain persisted on each refresh (60s buffer before expiry). Local revoke is authoritative (Zoho has no remote revoke endpoint).
+- **No regressions:** lint error count unchanged (14 errors + 5 warnings, all pre-existing in unrelated files). Dev log shows zero compile errors for any of the 11 new routes. The existing `useConnectedSources` hook continues to work (it just calls `/api/integrations/zoho/status` which returns the expected `{ok:true, status:{connected}}` shape).
+
+### Artifacts
+- `src/lib/integrations/zoho/crypto.ts`
+- `src/lib/integrations/zoho/types.ts`
+- `src/lib/integrations/zoho/oauth.ts`
+- `src/lib/integrations/zoho/index.ts`
+- `src/app/api/integrations/zoho/connect/route.ts`
+- `src/app/api/integrations/zoho/callback/route.ts`
+- `src/app/api/integrations/zoho/status/route.ts`
+- `src/app/api/integrations/zoho/disconnect/route.ts`
+- `src/app/api/integrations/zoho/refresh/route.ts`
+- `src/app/api/integrations/zoho/organizations/route.ts`
+- `src/app/api/integrations/zoho/organizations/select/route.ts`
+- `src/app/api/integrations/zoho/customers/route.ts`
+- `src/app/api/integrations/zoho/invoices/route.ts`
+- `src/app/api/integrations/zoho/bills/route.ts`
+- `src/app/api/integrations/zoho/payments/route.ts`
+- `src/hooks/useZohoBooks.ts`
+- `src/components/zoho-books/ZohoBooksPage.tsx`

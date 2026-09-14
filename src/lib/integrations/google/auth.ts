@@ -778,32 +778,9 @@ export interface ResolvedOrgUser {
 }
 
 // resolveOrgUserFromHeaders is now canonical in @/lib/auth/session.
-// Re-exported for backward compatibility.
+// Re-exported for backward compatibility (Batch 4 consolidated the duplicate
+// implementations into a single source of truth).
 export { resolveOrgUserFromHeaders } from '@/lib/auth/session';
-  const orgId = req.headers.get('x-gstpilot-orgid')?.trim() || null;
-  const actorRaw = req.headers.get('x-gstpilot-actor');
-  let userId: string | null = null;
-  let userEmail: string | null = null;
-  let actorName: string | null = null;
-  let role: string | null = null;
-  if (actorRaw) {
-    try {
-      const parsed = JSON.parse(actorRaw) as {
-        uid?: string;
-        email?: string;
-        name?: string;
-        role?: string;
-      };
-      if (parsed.uid && typeof parsed.uid === 'string') userId = parsed.uid;
-      if (parsed.email) userEmail = parsed.email;
-      if (parsed.name) actorName = parsed.name;
-      if (parsed.role) role = parsed.role;
-    } catch {
-      /* malformed header — leave nulls */
-    }
-  }
-  return { orgId, userId, userEmail, actorName, role };
-}
 
 // ── Re-exports for convenience ────────────────────────────────────────────────
 

@@ -746,47 +746,11 @@ export async function disconnectZoho(
 // client hook (`useZohoBooks`). Returns nulls if either is missing so
 // callers can return a 400 without throwing.
 
-export function resolveOrgUserFromHeaders(req: Request): ZohoResolvedOrgUser {
-  const orgId = req.headers.get('x-gstpilot-orgid')?.trim() || null;
-  const actorRaw = req.headers.get('x-gstpilot-actor');
-  let userId: string | null = null;
-  let userEmail: string | null = null;
-  let actorName: string | null = null;
-  let role: string | null = null;
-  if (actorRaw) {
-    try {
-      const parsed = JSON.parse(actorRaw) as {
-        uid?: string;
-        email?: string;
-        name?: string;
-        role?: string;
-      };
-      if (parsed.uid && typeof parsed.uid === 'string') userId = parsed.uid;
-      if (parsed.email) userEmail = parsed.email;
-      if (parsed.name) actorName = parsed.name;
-      if (parsed.role) role = parsed.role;
-    } catch {
-      /* malformed header — leave nulls */
-    }
-  }
-  return { orgId, userId, userEmail, actorName, role };
-}
-
-// ── Organization Mapping ─────────────────────────────────────────────────────
-
-interface ZohoOrganizationsResponse {
-  organizations?: ZohoOrganization[];
-  code?: number; // Zoho returns 0 on success
-  message?: string;
-}
-
-/**
- * Derive the Books API base URL for a given `api_domain` returned by Zoho.
- *
- * Zoho's `api_domain` looks like `https://www.zohoapis.in` (no path). We
- * append `/books/v3` to it. Falls back to the configured DC endpoint when
- * `api_domain` is missing.
- */
+// resolveOrgUserFromHeaders is now canonical in @/lib/auth/session.
+// Re-exported for backward compatibility.
+// resolveOrgUserFromHeaders is now canonical in @/lib/auth/session.
+// Re-exported for backward compatibility with existing imports from this barrel.
+export { resolveOrgUserFromHeaders } from '@/lib/auth/session';
 export function getApiBaseUrl(apiDomain: string | null | undefined): string {
   if (apiDomain) {
     const trimmed = apiDomain.replace(/\/+$/, '');

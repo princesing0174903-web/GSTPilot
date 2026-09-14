@@ -403,7 +403,7 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     // giving a 10s buffer for the local-workspace fallback to complete
     // BEFORE the dashboard timeout fires. This prevents the loading gate
     // from appearing during normal sandbox/preview use.
-    const TIMEOUT_SECONDS = 15;
+    const TIMEOUT_SECONDS = 30;
     const interval = setInterval(() => {
       const secs = Math.floor((Date.now() - startTime) / 1000);
       setElapsed(secs);

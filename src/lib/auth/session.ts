@@ -79,6 +79,42 @@ export interface AuthedUser {
   fromHeaderFallback: boolean;
 }
 
+// ── resolveOrgUserFromHeaders ────────────────────────────────────────────────
+//
+// CANONICAL implementation — the SINGLE source of truth for extracting
+// org + user context from request headers. All API routes should use this
+// instead of having their own copy.
+//
+// Reads:
+//   x-gstpilot-orgid:  <orgId string>
+//   x-gstpilot-actor:  {"uid":"...","email":"..."}  (JSON)
+//
+// Returns { orgId, userId, userEmail } — all nullable.
+
+export function resolveOrgUserFromHeaders(req: Request): {
+  orgId: string | null;
+  userId: string | null;
+  userEmail: string | null;
+} {
+  const orgId = req.headers.get('x-gstpilot-orgid')?.trim() || null;
+  const actorHeader = req.headers.get('x-gstpilot-actor') ?? '';
+  let userId: string | null = null;
+  let userEmail: string | null = null;
+  if (actorHeader) {
+    try {
+      const parsed = JSON.parse(actorHeader) as { uid?: string; email?: string };
+      if (parsed.uid && typeof parsed.uid === 'string') {
+        userId = parsed.uid;
+        userEmail = parsed.email ?? null;
+      }
+    } catch {
+      // Malformed header — fall through to null.
+    }
+  }
+  return { orgId, userId, userEmail };
+}
+
+
 // ── Friendly error envelopes ─────────────────────────────────────────────────
 
 function unauthorized(message: string, code: string) {

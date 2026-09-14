@@ -1641,7 +1641,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
 
           {/* 2. Top priority card */}
           {topInsight && (
-            <TopPriorityCard insight={topInsight} onAction={sendMessage} disabled={isStreaming || !orgId} />
+            <TopPriorityCard insight={topInsight} onAction={sendMessage} disabled={isStreaming} />
           )}
 
           {/* 3. Metrics row */}
@@ -1652,13 +1652,13 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
             insights={insights}
             loading={snapshotLoading}
             onAction={sendMessage}
-            disabled={isStreaming || !orgId}
+            disabled={isStreaming}
           />
 
           {/* 5. Ask Oracle — mode-aware quick action chips */}
           <AskOracleChips
             onPrompt={sendMessage}
-            disabled={isStreaming || !orgId}
+            disabled={isStreaming}
             mode={mode}
           />
 
@@ -1731,7 +1731,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
                   key={i}
                   type="button"
                   onClick={() => sendMessage(prompt)}
-                  disabled={isStreaming || !orgId}
+                  disabled={isStreaming}
                   className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-medium text-zinc-300 bg-[#0A0A0A] border border-[#1F1F1F] hover:border-emerald-500/40 hover:bg-[#0F0F0F] hover:text-white transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Sparkle className="h-3 w-3 text-emerald-400" />
@@ -1753,7 +1753,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
                   }
                 }}
                 placeholder={`Ask Oracle in ${activeMode.label} mode…`}
-                disabled={isStreaming || !orgId}
+                disabled={isStreaming}
                 className="h-12 pr-4 pl-4 bg-[#0A0A0A] border-[#1F1F1F] text-white placeholder:text-zinc-600 rounded-xl text-[15px] focus-visible:ring-1 focus-visible:ring-[#2563EB]/40 focus-visible:border-[#2563EB]/40"
               />
             </div>

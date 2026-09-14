@@ -777,13 +777,9 @@ export interface ResolvedOrgUser {
   role: string | null;
 }
 
-export function resolveOrgUserFromHeaders(req: Request): {
-  orgId: string | null;
-  userId: string | null;
-  userEmail: string | null;
-  actorName: string | null;
-  role: string | null;
-} {
+// resolveOrgUserFromHeaders is now canonical in @/lib/auth/session.
+// Re-exported for backward compatibility.
+export { resolveOrgUserFromHeaders } from '@/lib/auth/session';
   const orgId = req.headers.get('x-gstpilot-orgid')?.trim() || null;
   const actorRaw = req.headers.get('x-gstpilot-actor');
   let userId: string | null = null;

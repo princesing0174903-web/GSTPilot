@@ -25,18 +25,7 @@ export const dynamic = 'force-dynamic';
 // is still marked as "sent" (business intent) so the workflow progresses,
 // but the UI must surface the undelivered state honestly.
 
-function resolveOrgUserFromHeaders(req: Request): { orgId: string | null; userId: string | null } {
-  const orgId = req.headers.get('x-gstpilot-orgid');
-  const actorRaw = req.headers.get('x-gstpilot-actor');
-  let userId: string | null = null;
-  if (actorRaw) {
-    try {
-      const parsed = JSON.parse(actorRaw) as { uid?: string };
-      if (parsed.uid) userId = parsed.uid;
-    } catch { /* ignore */ }
-  }
-  return { orgId: orgId?.trim() || null, userId };
-}
+// resolveOrgUserFromHeaders is now imported from @/lib/auth/session (canonical)
 
 export async function POST(req: Request) {
   try {

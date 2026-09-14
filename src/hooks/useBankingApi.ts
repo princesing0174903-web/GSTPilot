@@ -6,14 +6,17 @@
 // The single client-side entry point for all banking data. Mirrors the
 // useInvoicesApi pattern: typed fetch wrappers with loading/error states.
 //
-// All requests go through fetchWithTimeout which auto-injects the
-// x-gstpilot-actor header (uid/email) so requireAuth succeeds in sandbox mode.
+// All requests go through the canonical fetchWithTimeout (@/lib/async) which
+// auto-injects BOTH the `x-gstpilot-actor` and `x-gstpilot-orgid` headers
+// (read from localStorage `gstpilot_session` + `gstpilot_org_id`) so
+// requireAuth() + resolveOrgUserFromHeaders() succeed in sandbox mode.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrg } from '@/contexts/OrgContext';
 import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
+import { fetchWithTimeout } from '@/lib/async/fetchWithTimeout';
 import type {
   BankingAccount,
   BankingAccountListResult,
@@ -31,39 +34,36 @@ import type {
   TransactionQuery,
 } from '@/lib/banking-prisma/types';
 
-// ─── fetchWithTimeout ─────────────────────────────────────────────────────────
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit = {},
-  timeoutMs = 30_000,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 // ─── Actor header ─────────────────────────────────────────────────────────────
+//
+// NOTE: This hook deliberately emits the SAME {uid, email} minimal shape that
+// the canonical useOrgUserHeaders() does. The server's resolver tolerates
+// optional `name`/`role` fields — it only reads `uid` + `email` — so we keep
+// the existing minimal shape here for backwards-compat with any banking
+// routes that depend on it.
 
 function useActorHeader() {
   const { user } = useAuth();
-  const uid = user?.uid ?? 'local-user';
+  const { organization } = useOrg();
+  const uid = user?.uid ?? user?.id ?? 'local-user';
   const email = user?.email ?? 'local@gstpilot.dev';
-  return `{"uid":"${uid}","email":"${email}"}`;
+  // Include orgId in the closure so callers using this header are bound to
+  // the resolved org (matches what fetchWithTimeout now auto-injects).
+  const orgId = organization?.id ?? '';
+  return useMemo(() => {
+    const actor = JSON.stringify({ uid, email });
+    return { actor, orgId };
+  }, [uid, email, orgId]);
 }
 
 // ─── Generic API call helper ──────────────────────────────────────────────────
+//
+// Wraps the canonical fetchWithTimeout. The header-set now includes BOTH
+// the explicit x-gstpilot-actor (kept for explicit-ness) AND lets
+// fetchWithTimeout auto-add x-gstpilot-orgid from localStorage. The query
+// param organizationId is kept for routes that read it that way (older
+// pattern), but the org header is now also present for routes that read
+// headers — so banking-intel endpoints work either way.
 
 async function apiCall<T>(
   url: string,
@@ -76,6 +76,7 @@ async function apiCall<T>(
   const res = await fetchWithTimeout(fullUrl, {
     ...options,
     headers: {
+      'Content-Type': 'application/json',
       ...options?.headers,
       'x-gstpilot-actor': actorHeader,
     },
@@ -129,9 +130,20 @@ export interface UseBankingApi {
 
 export function useBankingApi(): UseBankingApi {
   const { user } = useAuth();
-  const { currentOrg } = useOrg();
-  const actorHeader = useActorHeader();
-  const orgId = currentOrg?.id || 'local';
+  const { currentOrg, organization } = useOrg();
+  const actorInfo = useActorHeader();
+  // Preserve existing fallback chain: `currentOrg?.id` → `organization?.id`
+  // → `'local'`. The previous code only read `currentOrg?.id` (which is
+  // undefined on the OrgContext type — pre-existing bug), so `orgId` always
+  // evaluated to `'local'` in sandbox. We now also check `organization?.id`
+  // first so the canonical org id is used when available; this matches what
+  // fetchWithTimeout now auto-injects via the `x-gstpilot-orgid` header.
+  const orgId =
+    actorInfo.orgId ||
+    organization?.id ||
+    (currentOrg as { id?: string } | undefined)?.id ||
+    'local';
+  const actorHeader = actorInfo.actor;
 
   const call = useCallback(
     <T>(url: string, options?: RequestInit) => apiCall<T>(url, orgId, actorHeader, options),

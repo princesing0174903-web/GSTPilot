@@ -285,9 +285,53 @@ export interface FetchState<T> {
   refetch: () => void;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// useFetch / apiPost / apiPatch / apiDelete — thin wrappers around the
+// canonical fetchWithTimeout primitive (@/lib/async). They preserve the
+// existing signatures used across the banking-intelligence tabs so call
+// sites don't need to change, but gain:
+//   • Auto-injected `x-gstpilot-actor` + `x-gstpilot-orgid` headers (read
+//     from localStorage — see fetchWithTimeout.injectAuthHeaders).
+//   • 30s AbortController-based timeout (configurable via the options arg
+//     accepted by apiPost/apiPatch/apiDelete).
+//   • Standardized `FetchHttpError` (carries .status + .body) +
+//     `FetchTimeoutError` thrown on failure — callers can `instanceof`
+//     check to distinguish 401/403/404/422/429/5xx/network/timeout.
+//   • A friendly `error.message` extracted from the server JSON body
+//     (the same `{ ok: false, error: '…' }` shape every banking-intel
+//     route already returns).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { fetchWithTimeout, FetchTimeoutError, FetchHttpError } from '@/lib/async';
+
+export { FetchTimeoutError, FetchHttpError };
+
+/** Optional per-call options accepted by apiPost/apiPatch/apiDelete. */
+export interface ApiOptions {
+  /** AbortController-based timeout in ms (default: 30_000). */
+  timeoutMs?: number;
+  /** External AbortSignal (e.g. for cancel-on-unmount). */
+  signal?: AbortSignal;
+}
+
+async function extractApiError(res: Response): Promise<string> {
+  try {
+    const body = (await res.clone().json()) as { ok?: boolean; error?: string };
+    if (body && typeof body === 'object' && typeof body.error === 'string') {
+      return body.error;
+    }
+  } catch {
+    // body isn't JSON — fall through
+  }
+  return `Request failed (${res.status})`;
+}
+
 /**
  * useFetch — minimal data-fetching hook with AbortController + refetch.
  * Re-fetches whenever the URL changes (or `deps` change).
+ *
+ * Wraps `fetchWithTimeout` so callers get auth header injection + 30s
+ * timeout + JSON-error extraction for free.
  */
 export function useFetch<T>(url: string | null, deps: unknown[] = []): FetchState<T> {
   const [data, setData] = React.useState<T | null>(null);
@@ -303,78 +347,108 @@ export function useFetch<T>(url: string | null, deps: unknown[] = []): FetchStat
       setError(null);
       return;
     }
-    const ctrl = new AbortController();
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } })
+    fetchWithTimeout(url, { headers: { Accept: 'application/json' } })
       .then(async (r) => {
-        const json = await r.json().catch(() => ({}));
         if (!r.ok) {
-          throw new Error(
-            (json && typeof json === 'object' && 'error' in json && String((json as { error: unknown }).error)) ||
-              `Request failed (${r.status})`,
-          );
+          const msg = await extractApiError(r);
+          throw new FetchHttpError(r.status, msg, null);
         }
-        return json as T;
+        const json = (await r.json().catch(() => ({}))) as T;
+        return json;
       })
       .then((j) => {
+        if (cancelled) return;
         setData(j);
         setLoading(false);
       })
       .catch((e: unknown) => {
+        if (cancelled) return;
         if (e instanceof DOMException && e.name === 'AbortError') return;
-        const msg = e instanceof Error ? e.message : 'Network error';
-        setError(msg);
+        if (e instanceof FetchHttpError) {
+          setError(e.message);
+        } else if (e instanceof FetchTimeoutError) {
+          setError(`Request timed out after ${e.timeoutMs}ms`);
+        } else {
+          setError(e instanceof Error ? e.message : 'Network error');
+        }
         setLoading(false);
       });
-    return () => ctrl.abort();
+    return () => {
+      cancelled = true;
+    };
   }, [url, tick, memoDeps]);
 
   return { data, loading, error, refetch: () => setTick((t) => t + 1) };
 }
 
 /** POST JSON; throws on non-ok. Returns parsed JSON. */
-export async function apiPost<T = unknown>(url: string, body: unknown): Promise<T> {
-  const r = await fetch(url, {
+export async function apiPost<T = unknown>(
+  url: string,
+  body: unknown,
+  options?: ApiOptions,
+): Promise<T> {
+  const r = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body ?? {}),
+    timeoutMs: options?.timeoutMs,
+    signal: options?.signal,
   });
   const json = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Record<string, unknown>;
   if (!r.ok || !json.ok) {
-    throw new Error(json.error || `Request failed (${r.status})`);
+    const msg = json.error || (await extractApiError(r));
+    throw new FetchHttpError(r.status, msg, json);
   }
   return json as T;
 }
 
 /** PATCH JSON; throws on non-ok. Returns parsed JSON. */
-export async function apiPatch<T = unknown>(url: string, body: unknown): Promise<T> {
-  const r = await fetch(url, {
+export async function apiPatch<T = unknown>(
+  url: string,
+  body: unknown,
+  options?: ApiOptions,
+): Promise<T> {
+  const r = await fetchWithTimeout(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body ?? {}),
+    timeoutMs: options?.timeoutMs,
+    signal: options?.signal,
   });
   const json = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Record<string, unknown>;
   if (!r.ok || !json.ok) {
-    throw new Error(json.error || `Request failed (${r.status})`);
+    const msg = json.error || (await extractApiError(r));
+    throw new FetchHttpError(r.status, msg, json);
   }
   return json as T;
 }
 
 /** DELETE JSON; throws on non-ok. Body optional. Returns parsed JSON. */
-export async function apiDelete<T = unknown>(url: string, body?: unknown): Promise<T> {
+export async function apiDelete<T = unknown>(
+  url: string,
+  body?: unknown,
+  options?: ApiOptions,
+): Promise<T> {
   const init: RequestInit = {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
   };
   if (body !== undefined) {
-    init.headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
-  const r = await fetch(url, init);
+  const r = await fetchWithTimeout(url, {
+    ...init,
+    timeoutMs: options?.timeoutMs,
+    signal: options?.signal,
+  });
   const json = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Record<string, unknown>;
   if (!r.ok || !json.ok) {
-    throw new Error(json.error || `Request failed (${r.status})`);
+    const msg = json.error || (await extractApiError(r));
+    throw new FetchHttpError(r.status, msg, json);
   }
   return json as T;
 }

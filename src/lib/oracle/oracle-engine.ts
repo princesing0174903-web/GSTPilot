@@ -73,6 +73,13 @@ async function runCollectorSafe(
   try {
     return await collectFn(ctx);
   } catch (err) {
+    // Distinguish "collector returned no data" from "collector threw" by
+    // emitting a console.warn with the error message. The returned object
+    // still carries `.error` so downstream UI surfaces it.
+    console.warn(
+      `[oracle-engine] collector "${collectorId}" failed:`,
+      err instanceof Error ? err.message : err,
+    );
     return {
       source: collectorId,
       connected: false,
@@ -112,6 +119,12 @@ async function runAnalyzerSafe(
   try {
     return await analyzeFn(dataset);
   } catch (err) {
+    // Distinguish "analyzer produced no signals" from "analyzer threw" so a
+    // genuine DB/provider failure doesn't silently look like an empty dataset.
+    console.warn(
+      `[oracle-engine] analyzer "${analyzerId}" failed:`,
+      err instanceof Error ? err.message : err,
+    );
     return {
       analyzer: analyzerId,
       signals: [],

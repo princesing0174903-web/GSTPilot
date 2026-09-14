@@ -13,7 +13,7 @@
  *     'app' screen (within 1 render cycle, <100ms). Do NOT wait for OrgContext.
  *  3. The dashboard shell renders instantly. OrgContext resolves in the
  *     background. Org-dependent widgets show a lightweight inline loader.
- *  4. If OrgContext exceeds 8s → show "Unable to load dashboard" with Retry.
+ *  4. If OrgContext exceeds 30s → show "Unable to load dashboard" with Retry.
  *  5. If authentication fails → show a proper error page with Retry Login.
  *  6. Every auth step is logged to the console for debugging.
  */
@@ -372,7 +372,7 @@ function AutoProvisionWorkspace() {
 //   • The dashboard shell renders IMMEDIATELY (progressive rendering) — the
 //     user sees the app structure within milliseconds, and org-dependent
 //     widgets show inline loaders while the org resolves in the background.
-//   • If org resolution exceeds 8s, a NON-DESTRUCTIVE timeout screen appears
+//   • If org resolution exceeds 30s, a NON-DESTRUCTIVE timeout screen appears
 //     with a MANUAL "Retry" button. The session is preserved. The user can
 //     also "Continue waiting" (dismiss the timeout screen and keep waiting).
 //   • The underlying org-resolution request continues running — if it
@@ -395,12 +395,12 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
 
     setTimedOut(false);
     let startTime = Date.now();
-    // 15s timeout — this is a UI safety boundary, not an auth failure. The
+    // 30s timeout — this is a UI safety boundary, not an auth failure. The
     // underlying request continues running; if it succeeds later, the
     // dashboard hydrates automatically. The timeout screen just gives the
     // user a MANUAL "Retry" option — no auto-reload, no auto-logout.
-    // Increased from 8s to 15s because the Firebase init timeout is now 5s,
-    // giving a 10s buffer for the local-workspace fallback to complete
+    // Increased (Batch 4) from 15s to 30s because the Firebase init timeout is
+    // 5s, giving a 25s buffer for the local-workspace fallback to complete
     // BEFORE the dashboard timeout fires. This prevents the loading gate
     // from appearing during normal sandbox/preview use.
     const TIMEOUT_SECONDS = 30;
@@ -432,7 +432,7 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
     setTimedOut(false);
   }, []);
 
-  // ── Timeout state: org loading exceeded 8s. MANUAL Retry only.
+  // ── Timeout state: org loading exceeded 30s. MANUAL Retry only.
   // NO auto-reload. NO auto-logout. Session is preserved.
   if (timedOut) {
     return (
@@ -471,7 +471,7 @@ function DashboardTimeoutBoundary({ children }: { children: React.ReactNode }) {
   // structure (top bar, left nav, breadcrumb) within milliseconds of auth
   // resolving, instead of waiting for org resolution to complete.
   //
-  // The `timedOut` state (6s) still provides an escape hatch with Retry +
+  // The `timedOut` state (30s) still provides an escape hatch with Retry +
   // Continue-in-local-mode if org resolution genuinely hangs.
   return <>{children}</>;
 }
@@ -571,7 +571,7 @@ export function AppRouter() {
   }
 
   // ── Authenticated → ALWAYS render the dashboard. The DashboardTimeoutBoundary
-  // handles ALL sub-states: loading shell, org error (retry), 8s timeout, and
+  // handles ALL sub-states: loading shell, org error (retry), 30s timeout, and
   // the fully-resolved dashboard. This is the SINGLE entry point for any
   // signed-in user — they never fall through to the landing page.
   if (isAuthenticated) {

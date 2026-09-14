@@ -19,8 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from 'react';
-import { useOrg } from '@/contexts/OrgContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgUserHeaders } from '@/hooks/useOrgUserHeaders';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,12 +211,8 @@ const UNKNOWN_STATUS: ZohoStatus = {
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 export function useZohoBooks(): UseZohoBooksResult {
-  const { organization, membership, role } = useOrg();
-  const { user } = useAuth();
-
-  const orgId = organization?.id ?? null;
-  const userId = user?.id ?? membership?.userId ?? null;
-  const contextReady = Boolean(orgId && userId);
+  const buildHeadersCtx = useOrgUserHeaders();
+  const contextReady = buildHeadersCtx().contextReady;
 
   const [status, setStatus] = useState<ZohoStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -225,23 +220,20 @@ export function useZohoBooks(): UseZohoBooksResult {
   const [pending, setPending] = useState(false);
 
   // ── Header builder ──
+  // Delegates to the canonical useOrgUserHeaders() so all integration hooks
+  // (useZohoBooks + useGoogleWorkspace + useConnectedSources) emit an
+  // identical `x-gstpilot-orgid` + `x-gstpilot-actor` JSON shape.
   const buildHeaders = useCallback(
     (extra?: Record<string, string>): Record<string, string> => ({
-      'Content-Type': 'application/json',
-      'x-gstpilot-orgid': orgId ?? '',
-      'x-gstpilot-actor': JSON.stringify({
-        uid: userId ?? '',
-        email: user?.email ?? membership?.userEmail ?? '',
-        name: user?.name ?? membership?.userDisplayName ?? null,
-        role: role ?? null,
-      }),
+      ...buildHeadersCtx().headers,
       ...(extra ?? {}),
     }),
-    [orgId, userId, user, membership, role]
+    [buildHeadersCtx]
   );
 
   // ── Status ──
   const refreshStatus = useCallback(async () => {
+    const { orgId, userId } = buildHeadersCtx();
     if (!orgId || !userId) {
       setStatus(UNKNOWN_STATUS);
       return;
@@ -266,7 +258,7 @@ export function useZohoBooks(): UseZohoBooksResult {
     } finally {
       setStatusLoading(false);
     }
-  }, [orgId, userId, buildHeaders]);
+  }, [buildHeadersCtx, buildHeaders]);
 
   // Auto-load status when context becomes ready.
   useEffect(() => {

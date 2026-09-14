@@ -49,9 +49,9 @@
 //   in sync with the server's reconciliation schema.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { useCallback } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { useOrg } from '@/contexts/OrgContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgUserHeaders } from '@/hooks/useOrgUserHeaders';
 
 /** A single selectable source row for the dropdown. */
 export interface ConnectedSource {
@@ -73,30 +73,11 @@ export interface UseConnectedSourcesResult {
   loading: boolean;
 }
 
-// ─── Header builder (mirrors useZohoBooks / useGoogleWorkspace) ─────────────
+// ─── Header builder ─────────────────────────────────────────────────────
 //
-// The Zoho + Google status endpoints resolve (orgId, userId) from the
-// `x-gstpilot-orgid` and `x-gstpilot-actor` request headers — they don't
-// read query params. Without these headers the endpoints return 400 and the
-// hook would (correctly) treat the source as not-connected. We mirror the
-// exact header shape used by the dedicated integration hooks so the same
-// ZohoBooksToken / GoogleToken row can be located.
-
-function useOrgUserHeaders(): () => Record<string, string> {
-  const { organization, membership, role } = useOrg();
-  const { user } = useAuth();
-
-  return () => ({
-    'Content-Type': 'application/json',
-    'x-gstpilot-orgid': organization?.id ?? '',
-    'x-gstpilot-actor': JSON.stringify({
-      uid: user?.id ?? membership?.userId ?? '',
-      email: user?.email ?? membership?.userEmail ?? '',
-      name: user?.name ?? membership?.userDisplayName ?? null,
-      role: role ?? null,
-    }),
-  });
-}
+// Delegates to the canonical useOrgUserHeaders() hook so all integration
+// hooks (useZohoBooks + useGoogleWorkspace + useConnectedSources) emit an
+// identical `x-gstpilot-orgid` + `x-gstpilot-actor` JSON shape.
 
 // ─── API response shapes (subset) ────────────────────────────────────────────
 
@@ -138,9 +119,9 @@ const MANUAL_SOURCE: ConnectedSource = {
  * only the two built-ins so the dropdown is never visually empty.
  */
 export function useConnectedSources(): UseConnectedSourcesResult {
-  const { organization } = useOrg();
-  const orgId = organization?.id ?? null;
-  const buildHeaders = useOrgUserHeaders();
+  const getHeaders = useOrgUserHeaders();
+  const { orgId } = getHeaders();
+  const buildHeaders = useCallback(() => getHeaders().headers, [getHeaders]);
 
   const queries = useQueries({
     queries: [
@@ -155,7 +136,8 @@ export function useConnectedSources(): UseConnectedSourcesResult {
             if (!res.ok) return false;
             const body = (await res.json().catch(() => ({}))) as ZohoStatusResponse;
             return Boolean(body?.status?.connected);
-          } catch {
+          } catch (e) {
+            console.warn('[useConnectedSources] zoho-status failed:', e);
             return false;
           }
         },
@@ -174,7 +156,8 @@ export function useConnectedSources(): UseConnectedSourcesResult {
             if (!res.ok) return false;
             const body = (await res.json().catch(() => ({}))) as GoogleStatusResponse;
             return Boolean(body?.status?.connected);
-          } catch {
+          } catch (e) {
+            console.warn('[useConnectedSources] google-workspace-status failed:', e);
             return false;
           }
         },
@@ -187,14 +170,15 @@ export function useConnectedSources(): UseConnectedSourcesResult {
         queryFn: async () => {
           if (!orgId) return false;
           try {
-            const res = await fetch('/api/bank/accounts');
+            const res = await fetch('/api/bank/accounts', { headers: buildHeaders() });
             if (!res.ok) return false;
             const body = (await res.json().catch(() => ({}))) as BankAccountsResponse;
             const count = Array.isArray(body?.accounts)
               ? body.accounts.length
               : body?.accountCount ?? 0;
             return count > 0;
-          } catch {
+          } catch (e) {
+            console.warn('[useConnectedSources] bank-accounts-count failed:', e);
             return false;
           }
         },

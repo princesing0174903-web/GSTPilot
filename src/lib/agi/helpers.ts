@@ -12,16 +12,32 @@ export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
-  } catch {
+  } catch (err) {
+    // AGI memory cells store JSON-serialized action payloads — corruption
+    // here usually indicates a partial write. Log so it's not invisible.
+    console.warn(
+      '[agi/helpers] parseJson failed — returning fallback:',
+      err instanceof Error ? err.message : err,
+    );
     return fallback;
   }
 }
 
-/** Safe Prisma accessor — returns [] if the model call fails. */
+/**
+ * Safe Prisma accessor — returns [] if the model call fails.
+ *
+ * NOTE: still returns [] to preserve the existing contract, but now logs
+ * the underlying error so an unreachable DB is distinguishable from a
+ * genuinely empty result set.
+ */
 export async function safeFindMany<T>(fn: () => Promise<T[]>): Promise<T[]> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[agi/helpers] safeFindMany failed — returning []:',
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
@@ -29,7 +45,11 @@ export async function safeFindMany<T>(fn: () => Promise<T[]>): Promise<T[]> {
 export async function safeCount(fn: () => Promise<number>): Promise<number> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[agi/helpers] safeCount failed — returning 0:',
+      err instanceof Error ? err.message : err,
+    );
     return 0;
   }
 }
@@ -37,7 +57,11 @@ export async function safeCount(fn: () => Promise<number>): Promise<number> {
 export async function safeAggregate<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[agi/helpers] safeAggregate failed — returning null:',
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
@@ -45,7 +69,11 @@ export async function safeAggregate<T>(fn: () => Promise<T>): Promise<T | null> 
 export async function safeFirst<T>(fn: () => Promise<T | null>): Promise<T | null> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[agi/helpers] safeFirst failed — returning null:',
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }

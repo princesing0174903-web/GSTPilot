@@ -110,10 +110,25 @@ async function doFetch(
  * Throws `FetchTimeoutError` on timeout, `FetchHttpError` on non-2xx responses.
  *
  * AUTO-AUTH: For relative `/api/` requests in the browser, automatically
- * injects the `x-gstpilot-actor` header (JSON {uid, email}) read from
- * localStorage. This is the sandbox/preview fallback that requireAuth()
- * expects when the Firebase Admin SDK isn't configured. Without this header,
- * every requireAuth-gated route returns 401 AUTH_REQUIRED.
+ * injects BOTH auth + org headers that the server's `requireAuth()` +
+ * `resolveOrgUserFromHeaders()` expect:
+ *
+ *   • `x-gstpilot-actor`  — JSON `{uid, email, name?, role?}` read from
+ *     localStorage `gstpilot_session` (written by AuthContext).
+ *   • `x-gstpilot-orgid`  — the current organization id read from
+ *     localStorage `gstpilot_org_id` (written by OrgContext).
+ *
+ * Both are SKIP-IF-ALREADY-SET — callers that need a different value
+ * (e.g. integration-specific org impersonation) can override by passing
+ * the header explicitly.
+ *
+ * This is the sandbox/preview fallback path. In production with Firebase
+ * Admin configured, the server reads the session cookie instead and these
+ * headers are advisory only — never authoritative.
+ *
+ * Without this injection, every requireAuth-gated route returns 401
+ * AUTH_REQUIRED in sandbox mode, and every org-scoped query returns 400
+ * NO_ORG_CONTEXT.
  */
 function injectAuthHeaders(input: string | URL, init: RequestInit): RequestInit {
   // Only inject for browser-side relative /api/ requests.
@@ -121,35 +136,48 @@ function injectAuthHeaders(input: string | URL, init: RequestInit): RequestInit 
   const urlStr = typeof input === 'string' ? input : input.toString();
   if (!urlStr.startsWith('/api/') && !urlStr.startsWith('./api/')) return init;
 
-  // Don't override if the caller already set the header.
-  const existingHeaders = init.headers as Record<string, string> | undefined;
-  if (existingHeaders && (existingHeaders['x-gstpilot-actor'] || existingHeaders['X-Gstpilot-Actor'])) {
-    return init;
-  }
+  // Normalize existing headers into a plain object so we can check + merge.
+  const existing = (init.headers as Record<string, string> | undefined) ?? {};
 
-  // Read the cached session from localStorage (set by AuthContext).
+  // ── x-gstpilot-actor (uid + email) ──
+  const hasActor =
+    existing['x-gstpilot-actor'] !== undefined ||
+    existing['X-Gstpilot-Actor'] !== undefined;
   let actorJson: string | null = null;
-  try {
-    const raw = localStorage.getItem('gstpilot_session');
-    if (raw) {
-      const session = JSON.parse(raw) as { id?: string; email?: string };
-      if (session.id) {
-        actorJson = JSON.stringify({ uid: session.id, email: session.email ?? '' });
+  if (!hasActor) {
+    try {
+      const raw = localStorage.getItem('gstpilot_session');
+      if (raw) {
+        const session = JSON.parse(raw) as { id?: string; email?: string };
+        if (session.id) {
+          actorJson = JSON.stringify({ uid: session.id, email: session.email ?? '' });
+        }
       }
+    } catch {
+      // localStorage not available or session corrupted — skip injection.
     }
-  } catch {
-    // localStorage not available or session corrupted — skip injection.
   }
 
-  if (!actorJson) return init;
+  // ── x-gstpilot-orgid ──
+  const hasOrgId =
+    existing['x-gstpilot-orgid'] !== undefined ||
+    existing['X-Gstpilot-OrgId'] !== undefined;
+  let orgId: string | null = null;
+  if (!hasOrgId) {
+    try {
+      orgId = localStorage.getItem('gstpilot_org_id');
+    } catch {
+      // localStorage not available — skip injection.
+    }
+  }
 
-  return {
-    ...init,
-    headers: {
-      ...(init.headers as Record<string, string> | undefined),
-      'x-gstpilot-actor': actorJson,
-    },
-  };
+  if (!actorJson && !orgId) return init;
+
+  const merged: Record<string, string> = { ...existing };
+  if (actorJson) merged['x-gstpilot-actor'] = actorJson;
+  if (orgId) merged['x-gstpilot-orgid'] = orgId;
+
+  return { ...init, headers: merged };
 }
 
 export async function fetchWithTimeout(

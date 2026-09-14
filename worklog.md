@@ -24574,3 +24574,444 @@ Tested every endpoint against the running dev server (port 3000):
 - `src/app/api/integrations/zoho/payments/route.ts`
 - `src/hooks/useZohoBooks.ts`
 - `src/components/zoho-books/ZohoBooksPage.tsx`
+
+---
+Task ID: BATCH5-AUDIT-3
+Agent: Explore agent
+Task: Audit timeout and retry implementations + loading state machines
+
+Work Log:
+- Walked the project tree (src/lib, src/hooks, src/components, src/app/api) and ran ripgrep for `setTimeout(`, `AbortSignal.timeout`, `AbortController`, `signal:` in fetch, `FIREBASE_INIT_TIMEOUT_MS|TIMEOUT_SECONDS|TIMEOUT_MS|_TIMEOUT`, `maxRetries|maxAttempts`, `exponential|backoff`, `isPending|isLoading`, `state === '...'`, and `type ...Status = ...`.
+- Verified Batch 4 changes by reading the actual constants in `src/contexts/OrgContext.tsx` and `src/components/AppRouter.tsx`.
+- Read the four key retry primitives: `lib/reliability/retry.ts`, `lib/oracle-cfo/retry.ts`, `lib/dynamic-retry.ts`, `lib/oracle/oracle-recovery.ts`, plus `lib/async/withTimeout.ts`, `lib/async/fetchWithTimeout.ts`, `lib/api.ts`, `lib/setu/utils.ts`, `lib/queue/task-queue.ts`, `lib/ai-pipeline/server/processor.ts`, `lib/connections/auto-sync.ts`, `lib/oracle-cfo/communication-engine.ts`.
+- Catalogued every UI loading-gate (`loadingTimedOut`, `timedOut`, `setTimedOut`) and the boolean `isLoading`/`isPending` patterns used across the app.
+
+## 1. Timeout implementations
+
+### 1A. UI loading gates (NOT real fetch timeouts — these are visual safety bounds)
+| File:Line | Value | Purpose |
+|---|---|---|
+| `src/components/AppRouter.tsx:406` | `TIMEOUT_SECONDS = 30` (30s) | DashboardTimeoutBoundary — org-resolution gate; manual Retry/Continue-waiting. **Batch 4 ✓ verified at 30s.** Comments on L398/L402/L435/L474/L575 are STALE — they still say "6s/8s/15s" but the actual value is 30s. |
+| `src/contexts/OrgContext.tsx:50` | `FIREBASE_INIT_TIMEOUT_MS = 5_000` (5s) | Hard deadline for Firebase SDK init (`loadFirebase()`). **Batch 4 ✓ verified at 5s.** |
+| `src/contexts/OrgContext.tsx:81` | `FIRESTORE_OP_TIMEOUT_MS = 3_000` (3s) | Per-Firestore-op deadline in org-resolution path. MAX_RETRIES=0 (fail-fast). |
+| `src/contexts/AuthContext.tsx:512-518` | 5s | `isLoading` safety timeout — clears stuck spinner. |
+| `src/components/dashboard/DashboardPage.tsx:619` | 8_000 ms | `loadingTimedOut` — surfaces partial dashboard data when snapshot/metrics/timeline APIs stall. |
+| `src/components/mission-control/MissionControlPage.tsx:645` | 3500 ms | UI loading gate. |
+| `src/components/business-dna/BusinessDNApage.tsx:570` | 3500 ms | UI loading gate. |
+| `src/components/oracle/OraclePanel.tsx:224` | 2500 ms | `setTimedOut(true)` — inline skeleton fallback. |
+| `src/hooks/use-firestore.ts:135` | 30_000 ms | Watchdog — forces `setLoading(false)` if org still resolving after 30s. |
+| `src/components/providers-lazy.tsx:52` | `BOOT_TIMEOUT_MS = 8_000` | Shows slow-boot notice if providers prefetch exceeds 8s. |
+| `src/components/shared/DevServerReconnect.tsx:35` | `PING_TIMEOUT_MS = 8_000` (interval 15s) | Dev-only ping abort; threshold=2 failures. |
+| `src/components/oracle/OracleChat.tsx:763, 810` | `STREAM_SAFETY_TIMEOUT_MS = 90_000` (90s) | Stream watchdog — aborts + shows error if LLM stalls mid-stream. |
+| `src/app/api/oracle/chat/route.ts:435` | 120_000 ms | Server-side stream watchdog — calls `safeFinish` if upstream LLM never closes the stream. |
+
+### 1B. Real fetch / network timeouts
+| File:Line | Value | Purpose |
+|---|---|---|
+| `src/lib/api.ts:13` | `DEFAULT_TIMEOUT_MS = 30_000` (30s) | Default for apiGet/apiPost/apiPatch/apiPut/apiDelete (5 entry points). |
+| `src/lib/async/fetchWithTimeout.ts:160` | `timeoutMs = 30_000` | Default for the generic fetch wrapper (used everywhere). |
+| `src/hooks/useOracleInsights.ts:31,32` | `FETCH_TIMEOUT_MS = 30_000`, `TOKEN_TIMEOUT_MS = 10_000` | Oracle insights fetch + Firebase token-acquisition race. |
+| `src/hooks/useOracleDailyBriefing.ts:19` | `FETCH_TIMEOUT_MS = 15_000` | Daily briefing fetch. |
+| `src/hooks/useBusinessSnapshot.ts:31` | `FETCH_TIMEOUT_MS = 8_000` | Snapshot fetch (also used as cache TTL). |
+| `src/hooks/useWorkflowPipeline.ts:20` | `FETCH_TIMEOUT_MS = 15_000` | Workflow pipeline fetch. |
+| `src/hooks/useAIRecommendations.ts:59` | `FETCH_TIMEOUT_MS = 30_000` | AI recommendations fetch. |
+| `src/hooks/useBankingApi.ts:39` | default `timeoutMs = 30_000` | Local `fetchWithTimeout` for banking endpoints. |
+| `src/lib/oracle-cfo/payment-link-engine.ts:627, 712` | `AbortSignal.timeout(15000)` (15s) ×2 | Payment link engine HTTP calls. |
+| `src/lib/setu/auth.ts:82`, `src/lib/setu/client.ts:150` | `AbortSignal.timeout(15000)` (configurable via `SETU_TIMEOUT_MS` env, default 15s) | Setu AA provider calls. |
+| `src/lib/gst-reconciliation/server/mastersindia-provider.ts:64` | `DEFAULT_TIMEOUT_MS = 30_000` | GSP fetch (throws `GSP_TIMEOUT`/504 on abort). |
+| `src/lib/gst-reconciliation/server/generic-web-provider.ts:41` | `DEFAULT_TIMEOUT_MS = 30_000` | Generic GSP web fetch. |
+| `src/lib/integrations/generic-adapters.ts:44` | default `15000` ms | Generic integration adapter fetch. |
+| `src/lib/global-enterprise/currency.ts:35` | 5_000 ms | FX rate fetch. |
+| `src/lib/ecosystem/webhooks.ts:237` | 4_000 ms (hard-coded) | Outbound webhook delivery. |
+| `src/lib/health/checks.ts:33` | `CHECK_TIMEOUT_MS = 5_000` | Per-check deadline in /api/health. |
+| `src/lib/billing-provider/service.ts:96` | `FIRESTORE_TIMEOUT_MS = 6000` | Firestore call (throws `FIRESTORE_TIMEOUT`/503). |
+| `src/lib/erp-provider/service.ts:93` | `FIRESTORE_TIMEOUT_MS = 6000` | Same pattern. |
+| `src/lib/communication-provider/service.ts:131` | `FIRESTORE_TIMEOUT_MS = 6000` | Same pattern. |
+| `src/lib/oracle-core/context.ts:24` | `MODULE_TIMEOUT_MS = 6_000` | Per-module deadline in context engine. |
+| `src/lib/oracle/action-engine/definitions/sync-zoho.ts:35` | `SYNC_TIMEOUT_MS = 25_000` | Zoho sync race (Promise.race with a 25s sentinel). |
+| `src/lib/banking-service/providers/setu-provider.ts:79` | `SESSION_POLL_TIMEOUT_MS = 60 * 1000` | Setu AA session consent polling. |
+| `src/lib/reliability/retry.ts:60` | `maxDelayMs = 10_000` (10s) | Retry delay cap (not a fetch timeout). |
+| `src/lib/reliability/retry.ts:135` | configurable | `withTimeout(fn, timeoutMs)` helper (used by `retryWithBreaker`). |
+
+### 1C. setTimeout used for delays/animations (not timeouts — excluded from counts)
+Debounce (250ms), toast auto-dismiss (1600–4000ms), print delay (250–500ms), focus shift (100–300ms), simulated progress (600–1500ms in RunMyCompany/RunIndiaBusiness/Returns/WorkflowStudio/GenerateWorkbench/GSTRFiling/AICopilot), OracleThinkingAnimation step interval, etc.
+
+## 2. Retry implementations
+
+### 2A. Generic retry primitives (re-usable libraries)
+| File | maxAttempts | Delay strategy | Retried errors |
+|---|---|---|---|
+| `src/lib/reliability/retry.ts` `retryWithBackoff` | 5 (default) | exp 200ms × 2^(n-1), full jitter, cap 10s, optional wall-clock `timeoutMs` | ECONNRESET/ETIMEDOUT/ECONNREFUSED/EPIPE/ENOTFOUND/EAI_AGAIN/UND_ERR_SOCKET/UND_ERR_CONNECT_TIMEOUT/EAGAIN; Firebase UNAVAILABLE/DEADLINE_EXCEEDED/INTERNAL/RESOURCE_EXHAUSTED/ABORTED; HTTP 429/5xx; "network error"/"timeout"/"rate limit" strings; `retryable: true` opt-in |
+| `src/lib/reliability/retry.ts` `retryWithBreaker` | as above + circuit breaker (`CircuitState = CLOSED|OPEN|HALF_OPEN`) | as above | as above + breaker fallback |
+| `src/lib/async/fetchWithTimeout.ts` | `retries = 0` (default off) | exp `retryDelayMs × 2^attempt` (default 500ms base) | 5xx + TypeError network errors only; **never retries timeouts or external aborts** |
+| `src/lib/oracle-cfo/retry.ts` `withRetry` | 3 (default) | exp `baseDelayMs × 2^(attempt-1)` (200ms base, cap 2000ms) + 0–100ms jitter | network/timeout/rate-limit classifiers; returns structured `CFOError` |
+| `src/lib/oracle-cfo/communication-engine.ts` `retryCommunicationSend` | 5 | exp `baseBackoffMs × 2^attempts` (2s base, cap 60s) → 2s/4s/8s/16s/32s | network/timeout/5xx/429/SMTP 421 |
+| `src/lib/oracle-cfo/tools.ts` per-tool `withRetry` policy | 2–3 (per tool) | LINEAR `policy.backoffMs × attempt` (200–500ms base) — NOT exponential despite the comment | transient errors (per-tool `shouldRetry`) |
+| `src/lib/oracle/oracle-recovery.ts` `withRetry` | 3 (default) | exp `baseDelay × 2^attempt` (1000ms base → 1s/2s/4s) | `isTransientError(err)` via `toFriendlyError().retryable` |
+| `src/lib/dynamic-retry.ts` `withRetry` | 3 (default) | exp `300 × 2^attempt` (300ms/600ms/1200ms) | chunk-load failures only; falls back to single page reload |
+| `src/lib/setu/client.ts` + `src/lib/setu/utils.ts:133` `backoffMs` | 3 (env `SETU_MAX_RETRIES`) | exp `500 × 2^attempt`, cap 10s + 0–250ms jitter | HTTP 429/500/502/503/504; **401 → refresh token + retry ONCE (not counted)** |
+| `src/lib/queue/task-queue.ts` | per queue type: invoice=5, gst=5, erp=4, bank=4, notification=3, ai=3, email=4, report=3, export=2 | exp `30_000 × 2^(attempts-1)`, cap 10 min; dead-letter after max | any failure (re-queued via `lockedUntil`) |
+| `src/lib/ai-pipeline/server/processor.ts` | 3 (default) | exp `1000 × 2^newRetryCount`, cap 30s | `isRetryableGenError(err)` |
+| `src/lib/connections/auto-sync.ts` | per-item `maxAttempts` | LINEAR-ISH `BACKOFF_MINS = [1, 5, 15]` (1m/5m/15m) — comment calls it "exponential" but it's a fixed schedule | any failure (re-queued with incremented attempts) |
+| `src/lib/banking-provider/server/scheduler.ts` | 3 (default) | exponential (per `shouldRetry` + `retryCount`) | retryable banking errors |
+| `src/lib/gstn-provider/server/scheduler.ts` | 3 (default) | exponential | retryable GST sync errors |
+| `src/lib/erp-provider/server/scheduler.ts` + `conflict-resolver.ts` | 3 (default) | exp `30s → 2m → 8m` (capped) | retryable ERP sync errors |
+| `src/lib/communication-provider/server/automation-engine.ts` | 3 (default `schedule.maxRetries`) | exp `2^newRetry × 60s` (2/4/8 min) | retryable send errors |
+| `src/lib/reliability/offline-sync.ts` | 5 (`MAX_ATTEMPTS_PER_OP`) | uses `retryWithBackoff` | same as `retryWithBackoff` |
+| `src/contexts/OrgContext.tsx:208` | `MAX_RETRIES = 0` (disabled) | n/a | n/a — fail-fast, fallback to local workspace |
+
+### 2B. Client-side retry loops (custom, NOT using the libraries)
+| File | maxRetries | Delay | Retried errors |
+|---|---|---|---|
+| `src/components/oracle/OracleChat.tsx:379-443` `fetchWithRetry` | 3 | exp `2^attempt × 1000` (1s/2s/4s); 401/403 → single 1500ms refresh retry | HTTP 400/500 + network errors; 401/403 → token refresh + 1 silent retry, then SessionExpiredError |
+| `src/components/banking/BankingOraclePanel.tsx:1189` | 3 | LINEAR `800 × attempt` (800ms/1600ms/2400ms) | any error |
+| `src/components/gst-reconciliation/GSTReconciliationPage.tsx:591` | 3 | LINEAR `600 × (i+1)` / `800 × (i+1)` | any fetch failure (dev-flake mitigation) |
+
+### 2C. Per-job retry fields plumbed through Firestore/Prisma
+| File | Field | Default |
+|---|---|---|
+| `src/hooks/useGenerationJobs.ts:200, 301` | `maxRetries` | 3 |
+| `src/hooks/useCommunications.ts:356, 580` | `maxRetries` | 3 |
+| `src/hooks/useGSTConnection.ts:414` | `maxRetries` | 3 |
+| `src/hooks/useBanking.ts:368` | `maxRetries` | 3 |
+| `src/lib/banking-provider/service.ts:380, 423` | `maxRetries` | 3 |
+| `src/lib/gstn-provider/service.ts:545, 589` | `maxRetries` | 3 |
+| `src/lib/erp-provider/service.ts:253, 303` | `maxRetries` | 3 |
+| `src/lib/communication-provider/service.ts:626, 728` | `maxRetries` | 3 |
+| `src/lib/ai-pipeline/service.ts:224` | `maxRetries` | 3 |
+| `src/lib/execution-cloud/engine.ts:452` | `maxRetries` | 3 |
+| `src/app/api/execution/run/route.ts:58` | `maxRetries` | 3 |
+| `src/app/api/ai/jobs/route.ts:79` | `maxRetries` | 3 |
+| `src/app/api/execution/retry/route.ts` | enforces existing `maxRetries` | — (manual retry endpoint) |
+| `src/app/api/communication/automation/retry/route.ts` | enforces existing `maxRetries` | — (manual retry endpoint) |
+
+## 3. Inconsistent timeout values (grouped)
+
+| Value | # of places | Examples |
+|---|---|---|
+| 2.5s (2500ms) | 1 | OraclePanel UI gate |
+| 3s (3000ms) | 1 | `FIRESTORE_OP_TIMEOUT_MS` (OrgContext) |
+| 3.5s (3500ms) | 2 | MissionControlPage, BusinessDNApage UI gates |
+| 4s (4000ms) | 1 | `lib/ecosystem/webhooks.ts` (hard-coded) |
+| 5s (5000ms) | 4 | `FIREBASE_INIT_TIMEOUT_MS`, `CHECK_TIMEOUT_MS`, `lib/global-enterprise/currency.ts`, AuthContext `isLoading` safety |
+| 6s (6000ms) | 4 | billing/erp/communication `FIRESTORE_TIMEOUT_MS`, `MODULE_TIMEOUT_MS` |
+| 8s (8000ms) | 4 | `BOOT_TIMEOUT_MS`, `PING_TIMEOUT_MS`, DashboardPage UI gate, `useBusinessSnapshot.FETCH_TIMEOUT_MS` |
+| 10s (10000ms) | 1 | `useOracleInsights.TOKEN_TIMEOUT_MS` (token race) |
+| 15s (15000ms) | ~8 | Setu (auth/client/utils), generic-adapters, payment-link-engine (×2), useOracleDailyBriefing, useWorkflowPipeline |
+| 25s (25000ms) | 1 | `SYNC_TIMEOUT_MS` (sync-zoho action) |
+| 30s (30000ms) | ~9 | `DEFAULT_TIMEOUT_MS` (api.ts), use-firestore watchdog, useOracleInsights, useAIRecommendations, mastersindia/generic-web GSP providers, AppRouter `TIMEOUT_SECONDS` (DashboardTimeoutBoundary), useBankingApi default |
+| 60s (60000ms) | 1 | `SESSION_POLL_TIMEOUT_MS` (Setu AA) |
+| 90s (90000ms) | 1 | `STREAM_SAFETY_TIMEOUT_MS` (OracleChat client) |
+| 120s (120000ms) | 1 | oracle chat API route `streamWatchdog` |
+
+**Observation:** 11 distinct timeout magnitudes across the codebase. The 6s vs 8s UI gates, 5s vs 6s vs 8s vs 15s fetch bounds, and 30s vs 60s vs 90s vs 120s stream bounds could be consolidated into ~4–5 standardised values (e.g. `UI_GATE_MS`, `FETCH_DEFAULT_MS`, `FETCH_SHORT_MS`, `STREAM_WATCHDOG_MS`).
+
+## 4. Loading state machines
+
+### 4A. Custom loading-state enums (hand-rolled)
+| File:Line | Type | States |
+|---|---|---|
+| `src/app/banking/consent/return/page.tsx:26` | `PageState` | `'loading' \| 'success' \| 'pending' \| 'failure' \| 'no-consent'` |
+| `src/components/oracle/OracleLogo.tsx:30` | `OracleLogoState` | `'idle' \| 'thinking' \| 'streaming' \| 'done'` |
+| `src/components/oracle/oracle-voice.ts:16` | `VoiceRecorderState` | `'idle' \| 'recording' \| 'transcribing'` |
+| `src/components/agents/AgentsPage.tsx:62` | `AgentStatus` | `'idle' \| 'running' \| 'paused' \| 'completed' \| 'error'` |
+| `src/components/shared/DevServerReconnect.tsx:26` | `ConnectionState` | `'connected' \| 'reconnecting'` |
+| `src/components/team/TeamManagementPage.tsx:98` | `SaveState` | `'idle' \| 'saving' \| 'saved'` |
+| `src/components/oracle/WorkflowCards.tsx` (inline) | state | `'pending' \| 'success' \| 'partial' \| 'failed'` |
+| `src/components/oracle/OracleBrainCore.tsx` (inline) | part.state | `'pending' \| 'error' \| 'success'` |
+| `src/components/oracle/OracleWorkspace.tsx` (inline) | state | `'pending' \| 'success' \| 'partial' \| 'failed'` |
+| `src/components/oracle/OracleAvatar.tsx` (inline) | state | includes `'happy' \| 'success'` |
+| `src/lib/execution/types.ts:195` | `WorkflowStatus` | `'idle' \| 'running' \| 'paused' \| 'completed' \| 'aborted'` |
+| `src/lib/execution-cloud/types.ts:132` | `WorkerStatus` | `'idle' \| 'busy' \| 'offline' \| 'draining'` |
+| `src/lib/reliability/circuit-breaker.ts:17` | `CircuitState` | `'CLOSED' \| 'OPEN' \| 'HALF_OPEN'` |
+| `src/lib/data-intelligence/types.ts:150` | `ObservabilityStatus` | `'healthy' \| 'warning' \| 'critical' \| 'down'` |
+| `src/lib/health/types.ts:26` | `HealthStatus` | `'healthy' \| 'degraded' \| 'unhealthy' \| 'unknown'` |
+
+### 4B. Boolean `isLoading` / `isPending` (no enum)
+- Context-level: `AuthContext.isLoading`, `OrgContext.loading`, `lib/oracle-store.ts` per-message `isLoading`.
+- React Query: most pages use `useQuery`/`useMutation` (`isLoading`, `isPending`, `isFetching`) — e.g. ClientDetailPage, DocumentVaultPage, TDSPage, EmbeddedFinancePage, WorkingCapitalPage, LegalNoticesPage, ExecutionEnginePage, AnalyticsPage, GlobalSearch, InvoiceWorkspacePage, FirmCommandCenterPage, ExecutiveWarRoomPage, AIOperatingRoomPage, ClientPortalPage (local useState).
+- Mutation `isPending`: ClientDetailPage (delete/markReady/fileReturn/prepareFiling/runRecon/saveEdit), ExecutionEnginePage, DocumentVaultPage.
+
+### 4C. UI loading-gate pattern (`loadingTimedOut` boolean flipped by setTimeout)
+| File | Gate value |
+|---|---|
+| `src/components/dashboard/DashboardPage.tsx:603, 619` | 8s |
+| `src/components/mission-control/MissionControlPage.tsx:642, 645` | 3.5s |
+| `src/components/business-dna/BusinessDNApage.tsx:567, 570` | 3.5s |
+| `src/components/oracle/OraclePanel.tsx:224` | 2.5s |
+
+## 5. Batch 4 verification — CONFIRMED
+
+- ✓ `FIREBASE_INIT_TIMEOUT_MS = 5_000` (5s) — `src/contexts/OrgContext.tsx:50`
+- ✓ `DashboardTimeoutBoundary` uses `TIMEOUT_SECONDS = 30` (30s) — `src/components/AppRouter.tsx:406`
+- ⚠️ **Documentation debt**: comments on AppRouter.tsx lines 398 ("15s timeout"), 402 ("Increased from 8s to 15s"), 435 ("8s"), 474 ("6s state"), 575 ("8s timeout") are STALE — actual value is 30s. Recommend a follow-up task to refresh these comments so the next reader doesn't think the boundary still fires at 6–15s.
+
+## Next Actions (recommended for a future batch)
+1. Consolidate the 11 distinct timeout magnitudes into a small set of named constants in `src/lib/async/timeouts.ts` (e.g. `UI_GATE_SHORT_MS=2500`, `UI_GATE_LONG_MS=8000`, `FETCH_DEFAULT_MS=30000`, `FETCH_SHORT_MS=15000`, `STREAM_WATCHDOG_MS=90000`).
+2. Replace the 3 hand-rolled client retry loops (OracleChat, BankingOraclePanel, GSTReconciliationPage) with `lib/reliability/retry.ts`'s `retryWithBackoff` so error-classification logic is unified.
+3. Refresh the stale comments in `AppRouter.tsx` to reflect the actual 30s `TIMEOUT_SECONDS`.
+4. Standardise the per-job `maxRetries: 3` default — extract to a single `DEFAULT_MAX_RETRIES` constant.
+5. Document the linear-vs-exponential backoff inconsistency in `lib/oracle-cfo/tools.ts` (comment says "exponential" but code is `backoffMs × attempt` = linear).
+
+Stage Summary:
+- Timeout implementations found: 40 (11 UI loading gates + 24 real fetch/network timeouts + 5 dual-purpose; breakdown by value: 2.5s×1, 3s×1, 3.5s×2, 4s×1, 5s×4, 6s×4, 8s×4, 10s×1, 15s×8, 25s×1, 30s×9, 60s×1, 90s×1, 120s×1)
+- Retry implementations found: 25 (11 generic retry primitives/libraries + 3 client-side custom loops + 11 per-job maxRetries fields plumbed through services; 6 different backoff strategies: exp+full-jitter, exp+small-jitter, exp no-jitter, linear, fixed-schedule [1/5/15min], cap-only)
+- Loading state machines found: 15 custom enums + 4 boolean loadingTimedOut UI-gate components + 30+ React-Query isLoading/isPending consumers
+
+---
+
+Task ID: BATCH5-AUDIT-1
+Agent: Explore agent
+Task: Audit fetch wrappers, API clients, hooks, component-level fetch
+
+Work Log:
+- Read worklog.md tail (lines 24176–24576). Confirmed prior Cleanup Batch 4 context: `resolveOrgUserFromHeaders(req)` lives in BOTH `src/lib/integrations/zoho/oauth.ts` (line 474 of zoho/oauth.ts maps `orgId/userId/userEmail` from `x-gstpilot-orgid` + `x-gstpilot-actor` headers) AND was previously duplicated in `src/lib/google-workspace/auth.ts`; the recent ZOHO-REBUILD task (lines 24448+) re-implemented both integrations cleanly with `call<T>()`-style client hooks. Note: there is NO exact "Cleanup Batch 4" entry in worklog.md by that name — the term appears to refer to the prior `resolveOrgUserFromHeaders` consolidation work (P3-AUTH-FIX + OAuth-FIX-1, lines 23024+ / 23780+).
+- Read `package.json` — confirmed installed HTTP libs: only `@tanstack/react-query@^5.82.0` + `@tanstack/react-query-devtools@^5.101.0`. NO axios, NO ky, NO got, NO swr, NO ofetch, NO node-fetch, NO undici. All fetch is native `globalThis.fetch`.
+- Inspected `src/lib/async/fetchWithTimeout.ts` (238 lines) — the canonical fetch wrapper: `fetchWithTimeout` + `parseJsonSafely` + `FetchTimeoutError` + `FetchHttpError`. 30s default timeout, 0 retries default (configurable), exponential backoff, **auto-injects `x-gstpilot-actor` header from localStorage when calling `/api/*` in the browser** (lines 118-153 — sandbox/preview fallback for `requireAuth()`). NO `Authorization` header injection (Firebase ID token must be passed by caller). NO `x-gstpilot-orgid` injection either (that's the caller's job).
+- Inspected `src/lib/api.ts` (110 lines) — typed wrappers: `apiGet<T>`, `apiPost<T>`, `apiPatch<T>`, `apiPut<T>`, `apiDelete<T>`. All wrap `fetchWithTimeout`, default 30s timeout, JSON parse, error normalization via `parseError(res)`. Re-exports `FetchTimeoutError`. NO auth header injection (delegated to `fetchWithTimeout`'s auto-injection).
+- Inspected `src/hooks/api.ts` (1303+ lines) — TanStack Query layer. Internal `apiFetch<T>(url, options)` helper wraps `fetchWithTimeout` with `retries: 1`, sets `Content-Type: application/json`, broadcasts `gstpilot:session-expired` event on 401. Exports `queryKeys` factory + ~30 hooks (`useDashboardMetrics`, `useClients`, `useCreateClient`, `useInvoices`, etc.). NO own timeout/retry primitives — relies on `fetchWithTimeout`.
+- Discovered DUPLICATE API helper layer in `src/components/banking-intelligence/helpers.tsx` lines 286-380: `useFetch<T>` hook + `apiPost<T>` + `apiPatch<T>` + `apiDelete<T>` — uses RAW `fetch()` (no timeout, no retry, no auth header injection, no AbortController except in `useFetch`). Used by 7 banking-intelligence tabs + BankingIntelligencePage. This is a duplicate of `@/lib/api` and `@/lib/async/fetchWithTimeout`.
+- Inspected `src/hooks/useBankingApi.ts` (lines 36-89) — contains its OWN local `fetchWithTimeout` (NOT imported from `@/lib/async`) + its own `apiCall<T>` helper + its own `useActorHeader()` hook that builds `{"uid":"...","email":"..."}` string. Adds `x-gstpilot-actor` header + `?organizationId=X` query param (NOT `x-gstpilot-orgid` header). 30s timeout, no retry, JSON parse, throws `Error` on non-ok.
+- Inspected `src/hooks/useZohoBooks.ts` (518 lines) — has `call<T>(path, init)` generic + `buildHeaders()` that stamps BOTH `x-gstpilot-orgid` AND `x-gstpilot-actor` JSON header (full {uid,email,name,role}). NO timeout. NO retry. JSON parse via `.json().catch(() => ({}))`. Errors returned as `{data:null, error, code}` (never throws).
+- Inspected `src/hooks/useGoogleWorkspace.ts` (397 lines) — exact mirror of `useZohoBooks`. Same `call<T>` pattern. Same `buildHeaders()` shape. Same error style.
+- Inspected `src/hooks/useConnectedSources.ts` (250 lines) — has `useOrgUserHeaders()` hook that returns the SAME header shape as useZohoBooks/useGoogleWorkspace `buildHeaders` (third copy of the same logic). Calls raw `fetch()` with `useQueries` from TanStack Query (retry:1, staleTime:30s). Silent `catch → return false` per query.
+- Inspected `src/hooks/useOracleInsights.ts`, `useOracleDailyBriefing.ts`, `useWorkflowPipeline.ts`, `useBusinessSnapshot.ts`, `useAIRecommendations.ts` — all use the shared `fetchWithTimeout` + their own AbortController (for cancel-on-unmount) + Firebase `getIdToken()` for Authorization Bearer. Different timeouts per hook (30s / 30s / 15s / 30s / 30s).
+- Inspected `src/hooks/useInvoicesApi.ts` (575 lines) — uses shared `fetchWithTimeout` with per-call `{ timeoutMs: 20_000, retries: 1 }` for most calls, `25_000ms` for PDF gen. No own AbortController. Passes `organizationId` as query param.
+- Enumerated hooks calling raw `fetch()` directly (NO `fetchWithTimeout`, NO auth headers): useAIAlerts, useAIPredictions, useAIInsights, useAIAnalysis, useBanking, useBilling, useBusinessScore, useOracle, useOracleBrain, useOracleChat, useTimelineEvents, useGSTConnection, useERP, useCommunications, useGenerationJobs. These rely on either: (a) cookies/same-origin session, (b) the route not calling `requireAuth`, OR (c) `fetchWithTimeout`'s auto-injection NOT being applied (since they bypass it). Likely silent 401s in sandbox mode.
+- Counted component-level direct `fetch()` calls: **390 occurrences across 98 files** in `src/components/`. Only 5 components add `x-gstpilot-orgid`+`x-gstpilot-actor` headers manually: `SettingsPage.tsx`, `settings/GSTSection.tsx`, `reports/ReportsPage.tsx`, `oracle/OracleBrain.tsx`, `command-palette/CommandPalette.tsx`. The remaining ~93 components either:
+  - Use `fetchWithTimeout` from `@/lib/async` (auto-injects `x-gstpilot-actor`), OR
+  - Use `apiGet/apiPost/apiPatch/apiDelete` from `@/lib/api` (which uses `fetchWithTimeout` under the hood), OR
+  - Use the duplicate `apiPost/apiPatch/apiDelete` from `banking-intelligence/helpers.tsx` (no auth), OR
+  - Call raw `fetch()` directly with NO auth headers (will fail `requireAuth` in sandbox/preview).
+- Identified server-side fetch helpers in `src/lib/`:
+  • `src/lib/integrations/zoho/oauth.ts` — `exchangeCodeForTokens`, `refreshAccessToken`, `refreshOrganizationMapping`. Raw `fetch()` to Zoho OAuth endpoints, NO timeout, NO retry, NO AbortController. Returns `{tokens, error}` (error normalization done by caller).
+  • `src/lib/integrations/google/auth.ts` — `exchangeCodeForTokens`, `refreshAccessToken`, `disconnectGoogle`. Raw `fetch()` to Google OAuth endpoints, NO timeout, NO retry.
+  • `src/lib/setu/client.ts` — `SetuClient` class with `request<T>()` method. Uses `AbortSignal.timeout(15_000ms)`, retry on 429/5xx with exponential backoff + jitter, honors `Retry-After`, 401 single-retry with token refresh, rate limiter (5 concurrent / 100ms spacing), structured logging. Most mature client in the codebase.
+  • `src/lib/setu/auth.ts` — `SetuAuth` class. OAuth2 client_credentials, single-flight refresh, 60s safety margin, `AbortSignal.timeout(15_000ms)`.
+  • `src/lib/integrations/generic-adapters.ts` — local `fetchJson<T>(opts)` with AbortController + 15s default timeout. 401/403 → `IntegrationAuthError`. Used by 7 connector stubs (outlook/cashfree/payu/stripe/tally/zoho_books/quickbooks + 6 bank connectors).
+  • `src/lib/gst-reconciliation/server/mastersindia-provider.ts` — local `fetchJson<T>(url, opts)` with AbortController + 30s default timeout + typed errors (`GSPAuthError`, `GSPRateLimitError`, `GSPGSTNOutageError`, `GSPTimeout`).
+  • `src/lib/gst-reconciliation/server/generic-web-provider.ts` — local `fetchJson<T>` with AbortController + 30s default + typed errors (DUPLICATE pattern of mastersindia).
+  • `src/lib/oracle-cfo/payment-link-engine.ts` — direct `fetch()` to Razorpay/Stripe APIs with `signal: AbortSignal.timeout(15000)`. NO retry, NO auth normalization beyond HTTP status.
+  • `src/lib/ecosystem/webhooks.ts` line 237 — `setTimeout(() => controller.abort(), 4000)` for webhook fanout delivery. 4-second timeout.
+  • `src/lib/global-enterprise/currency.ts` line 35 — `setTimeout(() => controller.abort(), 5_000)` for live FX rate fetch from exchangerate.host.
+  • `src/lib/reliability/retry.ts` — generic `retryWithBackoff` + `withTimeout` (Promise.race style with AbortController). 5 attempts default, 200ms initial delay, 10s cap, full jitter, `isRetryableError` heuristic. Also `retryWithBreaker` integrating `getCircuitBreaker`.
+  • `src/lib/async/withTimeout.ts` — Promise.race `withTimeout` for non-fetch promises (used to wrap Firestore SDK calls that can hang for minutes). Separate `TimeoutError` class.
+  • `src/lib/firestore-service.ts` line 485 — server-to-server fetch to `/api/gstr-filing/{id}/file` (same-process, no auth needed).
+  • `src/lib/gstpilot-data/invoice-ingestion.ts` line 299 — `callExtractionApi()` to `/api/invoices/extract` (same-process, no auth).
+- Searched package.json: confirmed `axios`, `ky`, `got`, `swr`, `ofetch`, `node-fetch`, `undici`, `wretch`, `cross-fetch` are NOT installed. All HTTP is native fetch.
+- Enumerated AbortController / AbortSignal usage: 25 files. 7 in `src/lib/` (server-side timeouts), 4 in `src/hooks/` (cancel-on-unmount), 5 in `src/components/` (cancel-on-unmount), 1 in `src/app/api/oracle/brain/workflow/execute/route.ts` (server-side workflow abort). Plus `src/lib/async/useSafePolling.ts` + `src/lib/async/fetchWithTimeout.ts` (the primitives).
+- Enumerated timeout values per file:
+  • `fetchWithTimeout.ts` → 30_000ms (configurable via `timeoutMs`)
+  • `useBankingApi.ts` (local) → 30_000ms default
+  • `mastersindia-provider.ts` → 30_000ms (DEFAULT_TIMEOUT_MS)
+  • `generic-web-provider.ts` → 30_000ms (DEFAULT_TIMEOUT_MS)
+  • `generic-adapters.ts` → 15_000ms default (configurable)
+  • `oracle-cfo/payment-link-engine.ts` → 15_000ms (AbortSignal.timeout)
+  • `setu/auth.ts` → 15_000ms (AbortSignal.timeout, configurable via `config.timeoutMs`)
+  • `setu/client.ts` → 15_000ms (AbortSignal.timeout, configurable via `config.timeoutMs`)
+  • `ecosystem/webhooks.ts` → 4_000ms
+  • `global-enterprise/currency.ts` → 5_000ms
+  • `reliability/retry.ts` → configurable via `opts.timeoutMs`
+  • `useOracleInsights.ts` → FETCH_TIMEOUT_MS = 30_000
+  • `useWorkflowPipeline.ts` → FETCH_TIMEOUT_MS = 15_000
+  • `useInvoicesApi.ts` → 20_000ms (most calls) / 25_000ms (PDF gen)
+
+Stage Summary:
+- **Fetch wrapper layers found: 4** (canonical `@/lib/async/fetchWithTimeout`, typed `@/lib/api`, TanStack Query `@/hooks/api` `apiFetch`, and a DUPLICATE bare-`fetch` set in `src/components/banking-intelligence/helpers.tsx` — `useFetch`, `apiPost`, `apiPatch`, `apiDelete`).
+- **Hooks that wrap fetch: 21** in `src/hooks/` (useERP, useCommunications, useAIAlerts, useGoogleWorkspace, useAIPredictions, useClients, useGSTConnection, useAIInsights, useBankingApi, useTimelineEvents, useConnectedSources, useAIAnalysis, useZohoBooks, useOracle, useBanking, useGenerationJobs, useOracleBrain, useBilling, useOracleChat, useBusinessScore, useInvoicesApi, useOracleInsights, useOracleDailyBriefing, useBusinessSnapshot, useWorkflowPipeline, useAIRecommendations). Of these:
+  • 3 have a generic `call<T>(path, init)` helper: useZohoBooks, useGoogleWorkspace, useBankingApi (with its own `apiCall`).
+  • 3 have a `buildHeaders()` helper that constructs `x-gstpilot-orgid` + `x-gstpilot-actor`: useZohoBooks, useGoogleWorkspace, useConnectedSources (3 copies of the same logic — consolidation candidate).
+  • 1 has its OWN duplicate `fetchWithTimeout`: useBankingApi (should switch to `@/lib/async/fetchWithTimeout`).
+  • 6 use the shared `fetchWithTimeout` properly (useClients, useInvoicesApi, useOracleInsights, useOracleDailyBriefing, useBusinessSnapshot, useWorkflowPipeline, useAIRecommendations).
+  • ~15 use raw `fetch()` directly with NO auth headers — likely silent 401 failures in sandbox mode.
+- **Component-level direct `fetch()` calls: 390 occurrences across 98 files** in `src/components/`. Only 5 files (SettingsPage, GSTSection, ReportsPage, OracleBrain, CommandPalette) manually add `x-gstpilot-orgid` + `x-gstpilot-actor` headers. ~20 files import the shared `@/lib/api` `apiGet/apiPost/...` or `@/lib/async` `fetchWithTimeout`. The remainder use raw `fetch()` (will fail auth in sandbox/preview without `x-gstpilot-actor` header).
+- **Server-side fetch helpers: 12** files in `src/lib/` (zoho/oauth.ts, google/auth.ts, setu/client.ts, setu/auth.ts, generic-adapters.ts, mastersindia-provider.ts, generic-web-provider.ts, oracle-cfo/payment-link-engine.ts, ecosystem/webhooks.ts, global-enterprise/currency.ts, reliability/retry.ts, async/withTimeout.ts, firestore-service.ts, gstpilot-data/invoice-ingestion.ts).
+- **HTTP libraries installed: 1** (TanStack React Query). NO axios/ky/got/swr/ofetch/undici.
+- **AbortController usage: 25 files** (server + client). 8 use `setTimeout(() => controller.abort(), ms)`; 4 use `AbortSignal.timeout(ms)`; rest use it for cancel-on-unmount or workflow abort.
+- **Custom timeout values: 6 distinct values** in use: 4s (webhooks), 5s (currency), 15s (setu/generic-adapters/oracle-cfo-payment-links/useWorkflowPipeline), 20s (useInvoicesApi), 25s (useInvoicesApi PDF), 30s (canonical fetchWithTimeout/mastersindia/useOracleInsights/useBankingApi-local).
+
+**Consolidation opportunities identified (for follow-up tasks, NOT executed here):**
+1. **Duplicate `fetchWithTimeout` in `src/hooks/useBankingApi.ts:36-55`** → delete and import from `@/lib/async`.
+2. **Duplicate `apiPost/apiPatch/apiDelete/useFetch` in `src/components/banking-intelligence/helpers.tsx:286-380`** → replace with `@/lib/api` equivalents. These DO NOT inject auth headers (raw `fetch`) — likely silent 401s in sandbox.
+3. **3 copies of `buildHeaders()` (useZohoBooks, useGoogleWorkspace, useConnectedSources)** all build the same `{Content-Type, x-gstpilot-orgid, x-gstpilot-actor: JSON.stringify({uid,email,name,role})}` shape. Plus 5 component-level copies (SettingsPage, GSTSection, ReportsPage, OracleBrain, CommandPalette). Plus `useBankingApi.useActorHeader()` builds a slightly different shape (`{"uid":"...","email":"..."}` without `name`/`role`). Consolidation candidate: extract to `@/lib/auth/buildOrgUserHeaders()` (server) + `@/lib/auth/useOrgUserHeaders()` (client).
+4. **15+ hooks call raw `fetch()` with no auth headers** — these are silently broken in sandbox mode. Each should switch to `fetchWithTimeout` (which auto-injects `x-gstpilot-actor`) or `apiGet/apiPost` from `@/lib/api`.
+5. **Inconsistent timeout values** (4s/5s/15s/20s/25s/30s) — server-side timeouts are per-provider-configurable, but client-side hooks use ad-hoc values. Consolidation candidate: define a `DEFAULT_TIMEOUT_MS` constant in `@/lib/async` and import everywhere.
+6. **3 separate `fetchJson<T>` implementations** (generic-adapters.ts, mastersindia-provider.ts, generic-web-provider.ts) with different timeouts + error types but identical structure. Consolidation candidate: extract to `@/lib/async/fetchJson` parameterized by error factory.
+7. **`reliability/retry.ts`** has its own `TimeoutError` and `withTimeout` — DIFFERENT from `@/lib/async/withTimeout.ts`'s `TimeoutError` and `withTimeout` (different signatures, different error classes). Consolidation candidate: unify on one.
+
+---
+
+## Task ID: BATCH5-AUDIT-2
+**Agent:** Explore agent
+**Task:** Audit silent failure patterns (catch -> [], {}, null, 0, true/false, fire-and-forget `.catch(() => {})`) across `src/lib/`, `src/hooks/`, `src/components/`, `src/app/api/` (server-side catch blocks only). EXCLUDE: `src/lib/business/snapshot.ts` and `src/lib/ai/oracle-context.ts` (already cleaned in Batch 3 — verified clean: every catch has `console.warn('[snapshot|oracle-context] …failed:', err)`).
+
+### Work Log
+- Read worklog tail (lines 24176+) for prior context. Confirmed prior audit references at lines 8664, 8856, 9111, 9199, 9217, 9622, 9953, 13775, 17891 already documented specific silent-failure hotspots. Verified Batch 3 cleanup of `src/lib/business/snapshot.ts` (lines 228, 239, 254, 714, 778, 786, 798, 811, 826 all carry `console.warn("[snapshot] …failed:", err)` + `.catch((e) => { console.warn(...); return X })` form) and `src/lib/ai/oracle-context.ts` (catches at lines 186, 262, 337, 375, 423, 460 all have `console.warn('[oracle-context] …failed:', err)`).
+- Ran 14 multiline ripgrep patterns across `src/lib/`, `src/hooks/`, `src/components/`, `src/app/api/`. Used `multiline: true`, `-A 1 -B 2`, `output_mode: content`. Cross-checked counts with `output_mode: count` to enumerate per-file density.
+- Classified every match into one of:
+  - **SILENT** — bare `catch { return X }` / `.catch(() => X)` with NO console.* and NO `setError(...)` before the return. These are the audit targets.
+  - **WARNED** — catches with `console.warn`/`console.error` (NOT silent — already Batch-3-style clean). Listed for completeness but not action items.
+  - **UI-HANDLED** — catches in hooks that call `setError(err.message)` before returning null/false (NOT silent — user sees the error).
+  - **INTENTIONAL** — catches with an explicit `// ignore` or `// silently drop` comment, OR fire-and-forget activity/graph-log writes whose failure is by-design non-fatal per documented module contract (`lib/graph/live-update.ts:22` "event logging failures are swallowed to avoid breaking the calling route"; `lib/activity-logger.ts:14` "Activity logging is observability, not a critical path"; `lib/observability/logger.ts:164` "Logging must NEVER throw. Swallow any I/O error silently.").
+  - **JSON-PARSE FALLBACK** — catches around `JSON.parse(stringFromDB)` that return `{}`/`[]`/`null` — by-design fallback for corrupted JSON columns. Acceptable, but should log a warn so we can detect corruption.
+- Verified 4 specific high-impact silent catches by reading the surrounding code (lines noted below) to confirm no nearby log/UI surface.
+
+### Stage Summary
+- **Total silent failure patterns found (EXCLUDING excluded files): 187** — broken down as follows:
+
+| # | Category | Count | Severity |
+|---|----------|-------|----------|
+| A | `.catch(() => {})` empty promise catch (fire-and-forget DB / fetch / graph-event writes) | 124 occurrences / 52 files | Medium — most are best-effort observability (graph events, activity logs, session-update writes) where swallow is by-design; ~30 are real data writes (session.lastMessageAt, payment.paidAmount, audit log) where silent failure causes stale state |
+| B | `catch { return []; }` (try/catch returning empty array, NO log) | 22 occurrences / 12 files | High — masks DB/Firestore failures as "no data found" |
+| C | `catch { return 0; }` (try/catch returning zero, NO log) | 18 occurrences / 11 files | High — masks count failures as "no records exist" |
+| D | `catch { return {}; }` (try/catch returning empty object, NO log) | 11 occurrences / 11 files | Medium — most are JSON.parse fallbacks (acceptable), but 2 mask real data shape |
+| E | `catch { return null; }` (try/catch returning null, NO log) | 4 occurrences / 3 files | Medium — JSON.parse / findUnique fallbacks |
+| F | `catch { return (true\|false); }` (try/catch returning bool, NO log) | 4 occurrences / 2 files | Low — all are date-parsing fallbacks |
+| G | `catch { return { ...empty-default-shape }; }` (mask-API-error-as-empty-success) | 7 occurrences / 6 files | **HIGH** — API returns 200 with all-zero payload; client cannot distinguish "no data" from "DB down" |
+| H | Empty `catch {}` blocks (pure swallow — no return) | 23 occurrences / 11 files | Medium — graph-event emission (mostly intentional per module contract) |
+| I | `.catch(() => null)` (promise catch returning null) | 38 occurrences / 18 files | Medium — most are `req.json()` body-parse fallbacks followed by `if (!body) return 400` (acceptable); ~10 are DB `findUnique`/`update` calls that should warn |
+| J | `.catch(() => [])` (promise catch returning empty array) | ~45 occurrences / 14 files | Medium — DB `findMany` failures masked as "no rows" |
+| K | `.catch(() => 0)` (promise catch returning zero) | 28 occurrences / 11 files | Medium — DB `count` failures masked as "no records" |
+| L | `.catch(() => ({}))` (promise catch returning empty object) | 40+ occurrences / 22 files | Low — `res.json()` parse fallbacks (acceptable) |
+| M | Intentional `// ignore` comments | 11 occurrences / 9 files | Informational |
+
+**Already-cleaned files (Batch 3, verified):**
+- `src/lib/business/snapshot.ts` — 9 catches, every one has `console.warn("[snapshot] …failed:", err instanceof Error ? err.message : err)` before the empty fallback. ✅ CLEAN.
+- `src/lib/ai/oracle-context.ts` — 6 catches, every one has `console.warn('[oracle-context] …failed:', err)`. ✅ CLEAN.
+
+### Files needing cleanup (highest impact first)
+
+#### 🔴 CRITICAL — masks API failure as empty-success (priority 1)
+
+| File | Line(s) | Pattern | Why critical |
+|------|---------|---------|--------------|
+| `src/lib/oracle-cfo/gstpilot-context.ts` | 254 | `catch { return { customers: [], products: [], invoices: [], vendors: [], expenses: [], payments: [], ..., loaded: false }; }` | The entire CFO context loader fails silently — Oracle CFO agent receives an "empty business" payload with `loaded: false` and has no way to distinguish "no data yet" from "Prisma is down". NO console.warn. |
+| `src/lib/recommendations/engine.ts` | 223 | `catch { return { count: 0, totalAmount: 0, invoiceNumbers: [] }; }` | Invoice-overdue lookup fails → recommendation engine reports "0 overdue invoices" instead of "lookup failed". NO log. |
+| `src/lib/oracle/oracle-engine.ts` | 114 | `catch (err) { return { analyzer: analyzerId, signals: [], metrics: {} }; }` | Has `err` param but never logs it. Analyzer crashes silently produce empty signals — Oracle briefing shows "no signals" instead of "analyzer crashed". |
+| `src/lib/intelligence/market.ts` | 294 | `catch { return { sentiment: 'neutral', summary: 'Indian economic outlook is neutral.', indicators: [] }; }` | Market-pulse failure returns a plausible-looking neutral summary. NO log. Misleading content, not just empty data. |
+| `src/lib/oracle-evolution/workspace-store.ts` | 189 | `catch { return { pinnedChats: [], savedPrompts: SEED_PROMPTS, drafts: [], favorites: [], shared: [], recentActions: [], generatedReports: [] }; }` | Workspace-state load failure → user's saved prompts/chats silently replaced with SEED_PROMPTS. Data-loss-style bug masked as "fresh install". |
+| `src/lib/oracle/context/builder.ts` | 871 | `catch { return { totalSuppliers: 0, topSuppliers: [], overduePayables: 0, source: { system: 'Prisma · PurchaseBill', environment: 'UNAVAILABLE', lastUpdatedAt: null } }; }` | Returns `environment: 'UNAVAILABLE'` flag — partial mitigation, but no log, no metric, no alert. Operator has no signal that supplier context is degraded. |
+| `src/lib/cfo/insights.ts` | 590 | `catch (err) { // Fail-safe: never throw — return empty-but-valid structures so the API route can still respond 200 with a sensible empty payload. return { topRisks: [], topOpportunities: [], urgentActions: [], summaries: [] }; }` | Comment acknowledges the swallow. API returns 200 with empty arrays — frontend cannot detect backend failure. Should at minimum `console.warn('[cfo/insights] …failed:', err)`. |
+
+#### 🟠 HIGH — masks DB failures as "no data" (priority 2)
+
+| File | Line(s) | Pattern | Notes |
+|------|---------|---------|-------|
+| `src/lib/data-intelligence/helpers.ts` | 13, 22, 30, 38 | `safeFindMany`/`safeCount`/`safeAggregate`/`parseJson` all `catch { return fallback; }` with NO log | **Centralised silent-failure helpers** — used across all of `src/lib/data-intelligence/*`, `src/lib/intelligence/*`, `src/lib/compliance-cloud/*`. Single fix here cascades to ~30 callsites. Mirror the `snapshot.ts` `safeCount` pattern: add `console.warn('[helpers] safeFindMany failed:', err instanceof Error ? err.message : err)`. |
+| `src/lib/agi/helpers.ts` | 22, 30, 38 | Same as above — `safeFindMany`/`safeCount`/`safeAggregate`/`parseJson` cloned for AGI subsystem | Same fix; same cascade. |
+| `src/lib/agi/reasoning.ts` | 357, 452 | `catch { return 0; }` + `try { return await fn(); } catch { return []; }` | AGI observation-builder failures look like "no approvals pending" / "no observations". |
+| `src/lib/agi/goals.ts` | 131 | `const ceoData = await fetchCEOData().catch(() => null);` | CEO data fetch failure → null silently — `refreshGoalProgress` then logs `live=null` and silently no-ops. |
+| `src/lib/agi/dashboard.ts` | 53, 54 | `fetchCEOData().catch(() => null)` + `getCommandDashboard().catch(() => null)` | AGI dashboard renders with `live=null` → falls back to demo numbers WITHOUT any warning. |
+| `src/lib/agi/twin.ts` | 111 | `const ceoData = await fetchCEOData().catch(() => null);` | Same — twin simulation runs against demo state silently. |
+| `src/lib/oracle-cfo/invoice-engine.ts` | 337 | `catch { return []; }` | Invoice list failure → empty list, no log. |
+| `src/lib/oracle-cfo/gst-report-engine.ts` | 475, 494, 513, 525 | 4× `catch { return []; }` | GST report fetch failures → empty arrays. GSTR-2B comparison silently shows "no data for period". |
+| `src/lib/oracle-cfo/approval.ts` | 250, 272 | 2× `catch { return []; }` | Approval-request + audit-entry loads silently empty. |
+| `src/lib/oracle-cfo/business-context.ts` | 367 | `catch { // Firestore may be unreachable in preview/dev — return empty; return []; }` | Has comment but no log. Acceptable in preview mode but should log so dev knows. |
+| `src/lib/oracle-cfo/tools.ts` | 143 | `catch { return []; }` | Tools list failure → empty list. |
+| `src/lib/compliance-cloud/{policy-engine,audit-cloud,score-engine,risk-engine,update-engine,legal-center}.ts` | see counts in audit | 8× `catch { return []; }` | Compliance-cloud subsystem silently returns empty lists on DB failure. Compliance posture silently degrades to "all clear". |
+| `src/lib/compliance-cloud/risk-engine-helpers.ts` | 19, 33, 49 | 3× `catch { return 0; }` | Risk-count helpers silently return 0 on failure. |
+| `src/lib/gstpilot-data/{products,invoices,expenses,customers,vendors,payments}.ts` | see audit | 6× `catch { return []; }` | Firestore read failures → empty arrays. |
+| `src/lib/oracle/proactive.ts` | 91, 101 | 2× `catch { return 0; }` | Pending GST filing count + open notice count silently 0 → Oracle says "no pending items" when DB is down. |
+| `src/lib/autonomous/observer.ts` | 177, 187, 195 | 3× `catch { return 0; }` | Autonomous-observer counts silently 0. |
+| `src/lib/autonomous/orchestrator.ts` | 160 | `catch { return 0; }` | Approval count silently 0. |
+| `src/lib/ai-provider/server/orchestrator.ts` | 318, 345 | 2× `catch { return []; }` | AI orchestrator context-builder failures → empty arrays. |
+| `src/lib/connections/alerts.ts` | 261 | `catch (err) { console.error('markAllAlertsRead error:', err); return 0; }` | ✅ WARNED — not silent. |
+| `src/lib/intelligence/{predictive,feed,market,recommendations}.ts` | see audit | 5× `catch { return 0; }` | Intelligence subsystem — failures silently degrade to 0. |
+| `src/app/api/oracle/brain/autonomous-suggestions/route.ts` | 62, 67 | 2× `try { return await db.X.count(...) } catch { return 0; }` | Token-count failures silently 0 — autonomous suggestions treat "0 connections" as truth. |
+| `src/lib/execution-cloud/engine.ts` | 1002, 1011, 1004, 1012 | `count = await db.X.count().catch(() => 0)` wrapped in outer try/catch | Double-swallow — outer catch also no-ops. |
+| `src/lib/twin/timeline.ts` | 62, 104, 130, 154, 180, 207, 226, 253, 289, 330, 362, 382, 401, 422 | 14× `.catch(() => [])` | Digital-twin timeline silently returns empty for any failed Prisma query. |
+| `src/lib/twin/snapshots.ts` | 124, 128, 132, 136, 140, 144 | 6× `.catch(() => [])` | Twin snapshot silently empty — drives digital-twin simulation with no data. |
+| `src/lib/workflow/engine.ts` | 168, 176, 184, 192, 200, 208, 213, 216, 219, 222, 223, 226, 229, 230, 233 | 15× `.catch(() => [])` / `.catch(() => 0)` | Workflow dashboard silently shows zero counts on DB failure. |
+| `src/lib/ai-provider/server/orchestrator.ts` | 119, 122, 125, 134, 681, 682 | `.catch(() => [])` on `listInvoices`/`listGstTransactions`/`getBankConnections`/bank-txns; `.catch(() => 0)` on `clearMemoriesByType` | AI analysis orchestrator silently produces "no business data" — Oracle tells user "I couldn't find any invoices" when the DB is actually down. |
+| `src/lib/abos/engine.ts` | 1505 | `await db.client.count().catch(() => 0)` | ABOS vendor-count derived from client count — silently 0 if DB down. |
+| `src/lib/oracle/brain/tools.ts` | 154, 209, 251, 295, 317, 364, 422, 663, 734, 996, 1005, 1499, 1504, 1509, 1514, 1519, 1520, 1572, 1609 | 19× `.catch(() => [])` / `.catch(() => 0)` / `.catch(() => {})` | Oracle brain tool calls — every tool silently returns empty results on DB failure. User sees "no customers found" / "no overdue invoices" instead of "database error". **Highest user-visible blast radius.** |
+| `src/lib/oracle/context/builder.ts` | 763, 888 | `.catch(() => 0)` on invoice-overdue count; `try {...} catch {}` on GSP profile fetch | Oracle context builder silently degrades — Oracle doesn't know what it doesn't know. |
+| `src/lib/oracle/action-engine/definitions/{sync-google,sync-zoho,generate-gst-return}.ts` | 63, 103, 99, 70, 110 | `.catch(() => 0)` on token counts / invoice counts | Action-engine precondition checks silently report "0 connected" → action refuses to run with "not connected" instead of "DB error". |
+| `src/lib/intelligence/analyze-engine.ts` | 115, 116 | `.catch(() => [])` / `.catch(() => ({ recommendations: [], totalPotentialImpactInr: 0, oracleSummary: '', asOfDate: today }))` | Anonymous-industry predictions silently empty. |
+| `src/lib/intelligence/orchestrator.ts` | 226, 230, 231, 235, 243 | `.catch(() => 0)` on `seedMarketIndicators`/`getGlobalOrgCount`/`getGlobalRecordCount`/`getActivePredictionCount` | Intelligence orchestrator silently shows "0 contributions" — intelligence cloud looks empty when DB is down. |
+| `src/lib/global-enterprise/{expansion,cross-border-twin,consolidation,dashboard}.ts` | see audit | 8+× `.catch(() => null)` on consolidation/treasury/payroll/executive/compliance reports | Global-enterprise dashboard silently degrades — each subsystem returns null/empty, dashboard renders zeros. |
+| `src/lib/billing-provider/server/ai-bridge.ts` | 286, 597 | `.catch(() => 0)` / `catch { return []; }` | Billing-provider AI bridge silently empty. |
+| `src/lib/erp-provider/server/ai-bridge.ts` | 185, 375 | Same pattern | ERP-provider AI bridge silently empty. |
+| `src/lib/communication-provider/server/ai-bridge.ts` | 182, 521 | Same pattern | Communication-provider AI bridge silently empty. |
+| `src/lib/ai-provider/server/orchestrator.ts` | 681, 682 | `clearMemoriesByType(...).catch(() => 0)` | Memory clear failure → 0 cleared (silent). Stale memories persist. |
+| `src/lib/rmb/run-agent.ts` | 352 | `.catch(() => [])` on RMB-filing list | RMB agent silently runs against 0 filings. |
+| `src/lib/services/invoices.ts` | 140, 379, 196, 305, 343, 431, 501 | `.catch(() => [])` on invoice-number generator + 5× `.catch(() => {})` on activity-log writes | Invoice-number generator failure → silently generates "INV-2024-0001" (collides with existing). Activity logs are observability (acceptable). |
+| `src/app/api/settings/data-export/route.ts` | 48, 49, 50, 51, 52, 53, 54, 55, 56, 57 | 10× `.catch(() => null)` / `.catch(() => [])` on `firm`/`firmSettings`/`client`/`invoice`/`zohoX` findMany | **DATA EXPORT** — if any Prisma query fails, the export silently omits that table. User downloads a partial backup with no indication. HIGH severity for compliance. |
+| `src/app/api/settings/billing/route.ts` | 42, 43, 44, 45 | 4× `.catch(() => 0)` on `client`/`invoice`/`zohoInvoice`/`zohoCustomer` counts | Billing-usage counts silently 0 — billing page underreports usage. |
+| `src/app/api/settings/delete-workspace/route.ts` | 97–119 | 18× `.then(r => r.count).catch(() => 0)` on `deleteMany` for every Zoho + native table | Workspace deletion: if a table-delete fails, `count` silently 0 — workspace deletion reports "0 rows deleted" but the table still exists. HIGH severity — leaves orphan data. |
+| `src/app/api/oracle/brain/route.ts` | 203, 177, 241, 242, 682, 810, 1076, 691, 820, 837, 916, 969, 988, 1086, 1094, 215, 1037 | mix of `.catch(() => [])`, `.catch(() => null)`, `.catch(() => {})`, `catch {}` | Oracle brain SSE route — context fetch failures + session-update writes silently dropped. User sees "Oracle is thinking..." indefinitely if context build fails. |
+| `src/app/api/payments/route.ts` | 306 | `.catch(() => null)` on `client.findUnique` | Payment-create client-lookup failure → silently `null` → "no client found" 404 instead of "DB error" 500. |
+| `src/app/api/payroll/route.ts` | 79 | `.catch(() => null)` on `payslip.create` | Payslip creation silently fails → payroll run reports success but payslip row missing. HIGH severity. |
+
+#### 🟡 MEDIUM — fire-and-forget `.catch(() => {})` on data writes (priority 3)
+
+These are mostly best-effort observability writes (graph events, activity logs, session metadata) where the swallow is by-design per the module contract. Listed because they cause silent state drift when the write matters:
+
+| File | Line(s) | What fails silently |
+|------|---------|---------------------|
+| `src/contexts/OrgContext.tsx` | 294, 354 | `setCurrentOrganization` write + `fetchOrganizationMembers` — if the write fails, user's `currentOrganizationId` is NOT persisted server-side (next reload may pick a different org). Previously flagged in worklog line 5855. **STILL NOT FIXED.** |
+| `src/lib/oracle-ai/{knowledge,tasks,engine}.ts` | 163, 159, 186, 740 | `updateMany`/`update` on oracle-ai rows — failures silently `null` → caller treats as "row not found" and returns 404. |
+| `src/lib/queue/task-queue.ts` | 233, 246, 269, 276, 289 | `persist`/`deletePersisted` on task queue — failures silently dropped → in-memory queue drifts from persisted state. |
+| `src/lib/oracle-cfo/tools.ts` | 438, 452, 570, 682, 788, 991, 1197 | Activity-log writes after CFO tool execution — failure means the activity audit trail has gaps. (Audit trail is compliance-relevant.) |
+| `src/lib/services/{invoices,expenses,customers,payments}.ts` | see counts | 15× `.catch(() => {})` on activity-log writes — same audit-trail concern. |
+| `src/app/api/oracle/brain/route.ts` | 691, 820, 837, 916, 969, 988, 1086, 1094 | Session-update writes (lastMessageAt, status, errorMessage) — failures silently dropped → session metadata drifts from reality. |
+| `src/app/api/connect/{accounting,bank,gmail,whatsapp}/route.ts` | 72, 73, 61, 106, 61, 112 | `syncedRecord.deleteMany` + graph event writes — failure means stale synced records persist across reconnect. |
+| `src/app/api/team-members/route.ts` | 184 | `graphEvents.teamMemberAdded` — graph event swallow (intentional per module contract). |
+| `src/app/api/connectors/[id]/sync/route.ts` | 267, 372, 274, 112 | Graph event + syncedRecord writes — same. |
+| `src/hooks/useERP.ts` | 283, 310, 334 | `cascadeDisconnect` + `updateConnection` writes — UI shows "disconnected" but server-side state may not persist. |
+| `src/hooks/useCommunications.ts` | 357, 389, 400, 581, 613, 624 | `db.communicationSyncLog.update` for status — failures silently dropped → sync-log shows stale "running" forever. |
+| `src/hooks/useGSTConnection.ts` | 326, 393, 459, 471, 478, 415 | Same — sync-log writes silently fail. |
+| `src/hooks/useBanking.ts` | 344, 411, 422, 428, 369 | Same — sync-log writes silently fail. |
+| `src/lib/data-quality/engine.ts` | 232, 246 | `dataQualityAlert.update` / `.create` — failures silently dropped → data-quality alerts never resolve / never appear. |
+| `src/lib/oracle-cfo/payment-link-engine.ts` | 1135 | `deleteDoc` rollback — failure means created records orphan after a failed transaction. |
+| `src/components/.../AppMarketplacePage.tsx`, `IntegrationMarketplacePage.tsx`, `OracleEvolutionPanel.tsx`, `ConnectionsPage.tsx`, `DigitalTwinPage.tsx`, `AIOperatingRoomPage.tsx`, `OracleBrainCore.tsx`, `BusinessGraphPanel.tsx`, `OracleMessage.tsx`, `InvoiceWorkspacePage.tsx`, `GlobalIntelligenceCloudPage.tsx`, `APIPlatformPage.tsx` | see counts | 21× `.catch(() => {})` on UI-triggered fetches — failures leave UI in stale state with no error toast. (Pattern flagged in worklog line 13775 for EnterpriseCloudPage — same anti-pattern exists in these 12 components.) |
+
+#### 🟢 LOW — intentional / acceptable (no action needed)
+
+- `src/lib/observability/logger.ts:164` — "Logging must NEVER throw. Swallow any I/O error silently." ✅ documented.
+- `src/lib/observability/performance.ts:48, 95` — buffer ops must never throw. ✅ documented.
+- `src/lib/observability/error-tracking.ts:342, 400` — "ignore logger import errors" ✅ documented.
+- `src/lib/graph/live-update.ts:22` — "event logging failures are swallowed to avoid breaking the calling route." ✅ documented (covers all `graphEvents.X()` swallows).
+- `src/lib/activity-logger.ts:14` — "Activity logging is observability, not a critical path." ✅ documented.
+- `src/lib/dynamic-retry.ts:75, 131, 152` — sessionStorage / chunk-error-reload guard swallows. ✅ documented in worklog line 16991.
+- `src/lib/banking-prisma/import.ts:286` — skip rows with unparseable dates. ✅ documented (CSV import is best-effort).
+- `src/lib/banking-service/{mock-provider,intelligence}.ts` — mock-only, not production code paths.
+- `src/hooks/api.ts:41` — "ignore — older browsers" CustomEvent dispatch. ✅ documented.
+- `src/hooks/useOracleChat.ts:311` — "ignore malformed events" SSE event parsing. ✅ documented.
+- All `req.json().catch(() => ({}))` / `.catch(() => null)` patterns in `src/app/api/**/route.ts` followed by `if (!body) return 400` — proper error surface. ✅ acceptable.
+- All `JSON.parse(s)` catches returning `{}`/`[]`/fallback when `s` comes from a DB column — by-design fallback for corrupted JSON columns. Should add `console.warn` to detect corruption but not blocking.
+
+### Cross-cutting observations
+
+1. **`src/lib/data-intelligence/helpers.ts` is the root cause of ~30 silent failures.** Fixing `safeFindMany`/`safeCount`/`safeAggregate` to log a `console.warn` (mirroring `snapshot.ts:228` `safeCount`) cascades to every intelligence/compliance-cloud/AGI subsystem that imports them. **Single highest-leverage fix.**
+
+2. **`src/lib/oracle/brain/tools.ts` has 19 silent catches.** Every Oracle brain tool silently returns empty results on DB failure. This is the highest user-visible blast radius — users will see "no customers found" / "no overdue invoices" / "no bank accounts connected" when the database is actually down, and have no way to tell.
+
+3. **`src/lib/twin/{timeline,snapshots}.ts` has 20 silent catches.** Digital-twin simulation runs against empty data without warning — twin simulation results are meaningless if any of the 20 source queries failed, but the UI shows them as if real.
+
+4. **`src/lib/workflow/engine.ts` has 15 silent catches.** Workflow dashboard silently shows zero counts — operations team has no signal that the workflow engine is degraded.
+
+5. **`src/app/api/settings/data-export/route.ts` has 10 silent catches.** Most concerning: a data-export (compliance-relevant backup) silently omits tables that fail to query. User downloads a partial backup with no indication.
+
+6. **`src/app/api/settings/delete-workspace/route.ts` has 18 silent catches.** Workspace deletion reports "0 rows deleted" for tables that fail to delete — orphans persist silently. (Mitigated by the fact that the workspace itself is deleted, but the count is misleading.)
+
+7. **`src/lib/agi/{goals,dashboard,twin,reasoning}.ts` all swallow `fetchCEOData().catch(() => null)`.** When CEO-data fetch fails, AGI subsystems silently fall back to demo/null state. AGI dashboard would render with stale demo numbers and no warning. (Already flagged in worklog line 5149 for `useOracleInsights.ts` — same root pattern.)
+
+8. **`src/lib/oracle-cfo/gstpilot-context.ts:254` is the worst single-line silent failure.** Returns a fully-populated default object with `loaded: false` — the CFO Oracle agent receives this and treats it as "no business data yet" instead of "context load failed". NO log, NO metric, NO alert.
+
+9. **The `src/lib/oracle/oracle-engine.ts:114` catch holds an `err` parameter it never uses.** Trivially fixable — `catch (err) { console.warn('[oracle-engine] analyzer', analyzerId, 'failed:', err); return { ... }; }`.
+
+### Recommended Batch 5 cleanup priorities (for a future Fix agent)
+
+1. **Tier 1 (critical, ~7 files):** Fix the 7 "mask-API-failure-as-empty-success" catches in §CRITICAL table. Each one silently returns a valid-looking payload on failure. Add `console.warn('[module] X failed:', err instanceof Error ? err.message : err);` before the empty return. No behavioral change — just adds a log line.
+
+2. **Tier 2 (high-leverage, 3 files):** Fix the centralised silent-failure helpers in `src/lib/data-intelligence/helpers.ts`, `src/lib/agi/helpers.ts`, `src/lib/command-network/helpers.ts`. Mirror the `snapshot.ts:228` `safeCount` pattern. Cascades to ~60 callsites.
+
+3. **Tier 3 (high-visibility, 1 file):** Fix the 19 silent catches in `src/lib/oracle/brain/tools.ts`. Each tool should `console.warn('[oracle/brain/tools] tool X failed:', err)` before returning empty results. Consider also returning a `toolError` field in the tool result so the Oracle agent can tell the user "I couldn't reach the database" instead of "no records found".
+
+4. **Tier 4 (compliance, 2 files):** Fix the 28 silent catches in `src/app/api/settings/{data-export,delete-workspace}/route.ts`. Data export should fail loudly (return 500) if any table query fails — partial exports are worse than no export. Delete-workspace should report which tables failed to delete.
+
+5. **Tier 5 (medium, ~10 files):** Fix the silent catches in `src/lib/{twin,workflow,compliance-cloud,gstpilot-data,oracle-cfo}/*.ts`. Same pattern — add `console.warn` before the empty return.
+
+6. **Defer:** The 124 `.catch(() => {})` fire-and-forget catches on activity-log / graph-event / session-metadata writes are mostly intentional per documented module contracts. Skip these unless the specific write is compliance-relevant (audit logs, payment records, payroll records). Audit log writes in `src/lib/oracle-cfo/tools.ts` (438, 452, 570, 682, 788, 991, 1197) and `src/lib/services/{invoices,expenses,customers,payments}.ts` (15 sites) should at minimum `console.warn` — they're compliance-relevant.
+

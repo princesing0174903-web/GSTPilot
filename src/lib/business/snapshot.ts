@@ -225,7 +225,8 @@ async function safeCount(model: any, where: Record<string, unknown>): Promise<nu
   try {
     if (!model || typeof model.count !== 'function') return 0;
     return await model.count({ where });
-  } catch {
+  } catch (e) {
+    console.warn('[snapshot] safeCount failed:', e instanceof Error ? e.message : e);
     return 0;
   }
 }
@@ -235,7 +236,8 @@ async function safeFindFirst(model: any, args: Record<string, unknown>): Promise
   try {
     if (!model || typeof model.findFirst !== 'function') return null;
     return await model.findFirst(args);
-  } catch {
+  } catch (e) {
+    console.warn('[snapshot] safeFindFirst failed:', e instanceof Error ? e.message : e);
     return null;
   }
 }
@@ -249,7 +251,8 @@ async function safeAggregate(model: any, args: Record<string, unknown>): Promise
   try {
     if (!model || typeof model.aggregate !== 'function') return empty;
     return await model.aggregate(args);
-  } catch {
+  } catch (e) {
+    console.warn('[snapshot] safeAggregate failed:', e instanceof Error ? e.message : e);
     return empty;
   }
 }
@@ -708,7 +711,7 @@ export async function getBusinessSnapshot(
         status: { not: 'filed' },
         createdAt: { lt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000) },
       },
-    }).catch(() => 0),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma query failed, returning 0:", e instanceof Error ? e.message : e); return 0; }),
     // BankAccount native balances — org-scoped. BankAccount has an
     // organizationId column (schema.prisma:2987), so this is safe.
     // Phase 2 fix: previously returned null due to a stale comment claiming
@@ -772,7 +775,7 @@ export async function getBusinessSnapshot(
         createdAt: { gte: thisMonthStart, lte: now },
       },
       _sum: { totalAmount: true },
-    }).catch(() => ({ _sum: { totalAmount: 0 } })),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma aggregation failed, returning empty:", e instanceof Error ? e.message : e); return { _sum: { totalAmount: 0 } }; }),
     // ── NEW: Revenue trend (previous month) ──
     db.invoice.aggregate({
       where: {
@@ -780,7 +783,7 @@ export async function getBusinessSnapshot(
         createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
       },
       _sum: { totalAmount: true },
-    }).catch(() => ({ _sum: { totalAmount: 0 } })),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma aggregation failed, returning empty:", e instanceof Error ? e.message : e); return { _sum: { totalAmount: 0 } }; }),
     // ── NEW: Top customer concentration (groupBy buyerName, top 1 by revenue) ──
     db.invoice.groupBy({
       by: ['buyerName'],
@@ -792,7 +795,7 @@ export async function getBusinessSnapshot(
       _sum: { totalAmount: true },
       orderBy: { _sum: { totalAmount: 'desc' } },
       take: 1,
-    }).catch(() => [] as Array<{ buyerName: string | null; _sum: { totalAmount: number | null } }>),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma groupBy failed, returning empty:", e instanceof Error ? e.message : e); return [] as Array<{ buyerName: string | null; _sum: { totalAmount: number | null } }>; }),
     // ── NEW: Overdue invoice stats (count + sum of balanceAmount past due) ──
     // Synchronous so the Health Score has accurate overdue data without waiting
     // for the background `detectAndEmitOverdueInvoices` task.
@@ -805,7 +808,7 @@ export async function getBusinessSnapshot(
       },
       _sum: { balanceAmount: true, totalAmount: true },
       _count: true,
-    }).catch(() => ({ _sum: { balanceAmount: 0, totalAmount: 0 }, _count: 0 })),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma bank aggregation failed, returning empty:", e instanceof Error ? e.message : e); return { _sum: { balanceAmount: 0, totalAmount: 0 }, _count: 0 }; }),
     // ── NEW: Recent paid customer payments (for avgDaysToPay) ──
     // We fetch the last 200 completed customer payments that are linked to an
     // invoice. Their linked invoice dates are fetched in a follow-up query
@@ -820,7 +823,7 @@ export async function getBusinessSnapshot(
       select: { invoiceId: true, paymentDate: true },
       orderBy: { createdAt: 'desc' },
       take: 200,
-    }).catch(() => [] as Array<{ invoiceId: string | null; paymentDate: string }>),
+    }).catch((e: unknown) => { console.warn("[snapshot] Prisma payments query failed, returning empty:", e instanceof Error ? e.message : e); return [] as Array<{ invoiceId: string | null; paymentDate: string }>; }),
   ]);
 
   // ── Extract values (all default to 0 if null — honest empty state) ──

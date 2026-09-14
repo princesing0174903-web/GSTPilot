@@ -18,7 +18,7 @@
 
 import { db } from '@/lib/db';
 // Zoho integration removed — stub for rebuild
-const runZohoFullSync = async () => ({ ok: false, error: 'Zoho integration rebuilding' });
+const runZohoFullSync = async () => ({ ok: false, error: 'Zoho Books integration not available' });
 type SyncEngineResult = { ok: boolean; error?: string };
 type SyncModuleResult = { module: string; fetched: number; imported: number; updated: number; failed: number };
 import { emitTimelineEvent } from '@/lib/timeline/emit';

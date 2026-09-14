@@ -12,7 +12,7 @@
 import 'server-only';
 
 // Google integration removed — stub for rebuild
-const getValidAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
+const getValidAccessToken = async () => ({ accessToken: null, error: 'Google Workspace integration not available', permanent: true });
 const loadTokens = async () => ({ tokens: null, stored: null });
 const gmail = { listMessages: async () => ({ messages: [] }) };
 import type {

@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { requireAuth, friendlyApiError } from '@/lib/auth/session';
 import { assertInvoiceTenantAccess } from '../_helpers';
 // Google integration removed — stub for rebuild
-const getConnectionStatus = async () => ({ connected: false, state: 'disconnected' });
+const getConnectionStatus = async () => ({ connected: false, state: 'disconnected', errorMessage: 'Google Workspace integration not available' });
 import type { SendChannel } from '@/lib/invoices/types';
 
 export const dynamic = 'force-dynamic';

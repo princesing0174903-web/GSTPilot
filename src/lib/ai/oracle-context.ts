@@ -36,12 +36,13 @@
 
 import { db } from '@/lib/db';
 import { getBusinessSnapshot, type BusinessSnapshot } from '@/lib/business/snapshot';
-// Zoho integration removed — stub for rebuild
-const getZohoAccessToken = async () => ({ accessToken: null, error: 'Zoho integration rebuilding', permanent: false });
-const listZohoCustomers = async () => ({ customers: [], error: 'Zoho integration rebuilding' });
-// Google integration removed — stub for rebuild
-const getGoogleAccessToken = async () => ({ accessToken: null, error: 'Google integration rebuilding', permanent: false });
-const gmail = { listMessages: async () => ({ messages: [] }) };
+// Google/Zoho integration removed — these stubs return UNAVAILABLE status
+// so Oracle knows the integrations are not connected, rather than seeing
+// empty arrays that could be mistaken for 'connected but no data'.
+const getZohoAccessToken = async () => ({ accessToken: null, error: 'Zoho Books integration not available', permanent: true });
+const listZohoCustomers = async () => ({ customers: [], error: 'Zoho Books integration not available' });
+const getGoogleAccessToken = async () => ({ accessToken: null, error: 'Google Workspace integration not available', permanent: true });
+const gmail = { listMessages: async () => ({ messages: [], error: 'Google Workspace integration not available' }) };
 
 // ─── Public types ────────────────────────────────────────────────────────────
 

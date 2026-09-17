@@ -168,6 +168,11 @@ export async function POST(request: NextRequest) {
 
   const orgResult = await requireOrgMembership(uid, orgId);
   if (orgResult instanceof NextResponse) return orgResult;
+  // orgResult is now { ok: true, role: string } — use the actual role for
+  // tool-permission gating instead of hardcoding 'owner'. This closes the
+  // Batch 6 TODO at line 897 and makes the canonical permission system
+  // respect per-role tool allowlists defined in tool-permissions.ts.
+  const userRole = orgResult.role;
 
   // ─── Resolve / create session ───────────────────────────────────────────────
   if (sessionId) {
@@ -894,7 +899,7 @@ Now respond to the user's message. Remember: think, then act, then explain.`;
             const permCheck = checkToolPermission(call.tool, {
               uid: userId ?? 'anonymous',
               orgId,
-              role: 'owner', // TODO: use actual role from requireOrgMembership result
+              role: userRole, // Batch 6: use actual role from requireOrgMembership
             });
             if (!permCheck.allowed) {
               send({ type: 'tool-error', tool: call.tool, error: permCheck.denialReason ?? 'Permission denied' });

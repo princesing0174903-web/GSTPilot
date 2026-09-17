@@ -1,0 +1,468 @@
+{
+  "exitCode": 0,
+  "signal": null,
+  "startedAt": "2026-08-14T09:26:09.400Z",
+  "finishedAt": "2026-08-14T09:28:21.956Z",
+  "durationMs": 132556,
+  "globalPeakParent": {
+    "rssBytes": 49737728,
+    "rssMB": 47,
+    "phase": "collecting-data"
+  },
+  "globalPeakChild": {
+    "rssBytes": 92020736,
+    "rssMB": 88,
+    "phase": "startup:child"
+  },
+  "phasePeaks": {
+    "startup": {
+      "rssMB": 47,
+      "heapMB": 6,
+      "heapUsedMB": 5,
+      "durationMs": 90262
+    },
+    "startup:child": {
+      "rssMB": 88,
+      "heapMB": 0,
+      "heapUsedMB": 0,
+      "durationMs": 90262
+    },
+    "collecting-data": {
+      "rssMB": 47,
+      "heapMB": 6,
+      "heapUsedMB": 5,
+      "durationMs": 12264
+    },
+    "collecting-data:child": {
+      "rssMB": 88,
+      "heapMB": 0,
+      "heapUsedMB": 0,
+      "durationMs": 12264
+    },
+    "generating-static": {
+      "rssMB": 47,
+      "heapMB": 6,
+      "heapUsedMB": 5,
+      "durationMs": 6335
+    },
+    "generating-static:child": {
+      "rssMB": 88,
+      "heapMB": 0,
+      "heapUsedMB": 0,
+      "durationMs": 6335
+    },
+    "finalizing": {
+      "rssMB": 47,
+      "heapMB": 6,
+      "heapUsedMB": 5,
+      "durationMs": 23695
+    },
+    "finalizing:child": {
+      "rssMB": 79,
+      "heapMB": 0,
+      "heapUsedMB": 0,
+      "durationMs": 23695
+    }
+  },
+  "sampleCount": 264,
+  "samples": [
+    {
+      "t": 1786699569901,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699571904,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699573904,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699575906,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699577907,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699579908,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699581909,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699583912,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699585914,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699587916,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699589921,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699591922,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699593923,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699595926,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699597928,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699599929,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699601930,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699603932,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699605933,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699607935,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699609945,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699611947,
+      "phase": "startup",
+      "rssMB": 45,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699613948,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699615950,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699617951,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699619952,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699621953,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699623955,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699625982,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699627984,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699629985,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699631999,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699634000,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699636001,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699638004,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699640006,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699642014,
+      "phase": "startup",
+      "rssMB": 46,
+      "heapMB": 4
+    },
+    {
+      "t": 1786699644012,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699646018,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699648020,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699650021,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699652023,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699654024,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699656026,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699658028,
+      "phase": "startup",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699660029,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699662037,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699664037,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699666037,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699668039,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699670041,
+      "phase": "collecting-data",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699672042,
+      "phase": "generating-static",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699674044,
+      "phase": "generating-static",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699676046,
+      "phase": "generating-static",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699678047,
+      "phase": "generating-static",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699680048,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699682050,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699684052,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699686055,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699688057,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699690058,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699692060,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699694063,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699696064,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699698065,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    },
+    {
+      "t": 1786699700066,
+      "phase": "finalizing",
+      "rssMB": 47,
+      "heapMB": 5
+    }
+  ],
+  "stdoutTail": "├ ƒ /api/oracle/brain/reminders\n├ ƒ /api/oracle/brain/reports\n├ ƒ /api/oracle/brain/search\n├ ƒ /api/oracle/brain/sessions\n├ ƒ /api/oracle/brain/sessions/[id]\n├ ƒ /api/oracle/brain/tasks\n├ ƒ /api/oracle/brain/timeline\n├ ƒ /api/oracle/brain/workflow/execute\n├ ƒ /api/oracle/brain/workflow/plan\n├ ƒ /api/oracle/briefing\n├ ƒ /api/oracle/cfo/analyze\n├ ƒ /api/oracle/cfo/audit\n├ ƒ /api/oracle/cfo/communicate/create\n├ ƒ /api/oracle/cfo/communicate/execute\n├ ƒ /api/oracle/cfo/execute\n├ ƒ /api/oracle/cfo/invoice/create\n├ ƒ /api/oracle/cfo/invoice/execute\n├ ƒ /api/oracle/cfo/invoice/pdf\n├ ƒ /api/oracle/cfo/payment-link/create\n├ ƒ /api/oracle/cfo/payment-link/execute\n├ ƒ /api/oracle/cfo/payment-link/webhook\n├ ƒ /api/oracle/cfo/report/export\n├ ƒ /api/oracle/chat\n├ ƒ /api/oracle/context\n├ ƒ /api/oracle/conversations\n├ ƒ /api/oracle/daily-briefing\n├ ƒ /api/oracle/dashboard\n├ ƒ /api/oracle/diagnose\n├ ƒ /api/oracle/documents\n├ ƒ /api/oracle/executives\n├ ƒ /api/oracle/forecast\n├ ƒ /api/oracle/insights\n├ ƒ /api/oracle/learn\n├ ƒ /api/oracle/memory\n├ ƒ /api/oracle/models\n├ ƒ /api/oracle/plan\n├ ƒ /api/oracle/query\n├ ƒ /api/oracle/real-data\n├ ƒ /api/oracle/reasoning\n├ ƒ /api/oracle/recommendations\n├ ƒ /api/oracle/route\n├ ƒ /api/oracle/search\n├ ƒ /api/oracle/sources\n├ ƒ /api/oracle/speak\n├ ƒ /api/oracle/transcribe\n├ ƒ /api/oracle/tts\n├ ƒ /api/oracle/validate\n├ ƒ /api/org-modules\n├ ƒ /api/organizations\n├ ƒ /api/pan/verify\n├ ƒ /api/payables\n├ ƒ /api/payables/pay\n├ ƒ /api/payables/schedule\n├ ƒ /api/payments\n├ ƒ /api/payments/create\n├ ƒ /api/payments/reconcile\n├ ƒ /api/payroll\n├ ƒ /api/payroll/payslip\n├ ƒ /api/payroll/process\n├ ƒ /api/permissions\n├ ƒ /api/platform/apis\n├ ƒ /api/platform/billing\n├ ƒ /api/platform/create-org\n├ ƒ /api/platform/dashboard\n├ ƒ /api/platform/install\n├ ƒ /api/platform/invite\n├ ƒ /api/platform/marketplace\n├ ƒ /api/platform/monitoring\n├ ƒ /api/platform/organizations\n├ ƒ /api/platform/provision\n├ ƒ /api/platform/security\n├ ƒ /api/platform/subscribe\n├ ƒ /api/platform/subscriptions\n├ ƒ /api/platform/users\n├ ƒ /api/plugins\n├ ƒ /api/policies\n├ ƒ /api/policy/approve\n├ ƒ /api/policy/reject\n├ ƒ /api/portal/chat\n├ ƒ /api/provision\n├ ƒ /api/purchases\n├ ƒ /api/purchases/create\n├ ƒ /api/purchases/pay\n├ ƒ /api/queue/stats\n├ ƒ /api/receivables\n├ ƒ /api/receivables/recover\n├ ƒ /api/receivables/reminder\n├ ƒ /api/recommendations\n├ ƒ /api/reconcile\n├ ƒ /api/reconciliation\n├ ƒ /api/returns\n├ ƒ /api/rmb\n├ ƒ /api/rmb/command\n├ ƒ /api/rmb/delegate\n├ ƒ /api/rmb/orchestrate\n├ ƒ /api/rmb/run-agent\n├ ƒ /api/roles\n├ ƒ /api/scaling/ai-stats\n├ ƒ /api/scaling/signed-upload\n├ ƒ /api/scaling/storage-usage\n├ ƒ /api/security\n├ ƒ /api/seed\n├ ƒ /api/settings/api-keys\n├ ƒ /api/settings/api-keys/[id]\n├ ƒ /api/settings/audit-log\n├ ƒ /api/settings/billing\n├ ƒ /api/settings/data-export\n├ ƒ /api/settings/delete-workspace\n├ ƒ /api/settings/logout\n├ ƒ /api/settings/notifications\n├ ƒ /api/settings/organization\n├ ƒ /api/settings/password\n├ ƒ /api/settings/profile\n├ ƒ /api/settings/sessions\n├ ƒ /api/settings/theme\n├ ƒ /api/sms\n├ ƒ /api/subscriptions\n├ ƒ /api/switch-organization\n├ ƒ /api/sync-queue\n├ ƒ /api/system-health\n├ ƒ /api/system/health\n├ ƒ /api/tds\n├ ƒ /api/tds/calculate\n├ ƒ /api/tds/prepare\n├ ƒ /api/team-members\n├ ƒ /api/team-members/[id]\n├ ƒ /api/team-performance\n├ ƒ /api/tenant\n├ ƒ /api/timeline\n├ ƒ /api/twin/anomalies\n├ ƒ /api/twin/forecast\n├ ƒ /api/twin/history\n├ ƒ /api/twin/kpis\n├ ƒ /api/twin/playback\n├ ƒ /api/twin/replay\n├ ƒ /api/twin/simulate\n├ ƒ /api/twin/snapshots\n├ ƒ /api/twin/state\n├ ƒ /api/upi\n├ ƒ /api/upi/payment-request\n├ ƒ /api/upi/sync\n├ ƒ /api/usage\n├ ƒ /api/users\n├ ƒ /api/validate-email\n├ ƒ /api/validation\n├ ƒ /api/webhooks\n├ ƒ /api/webhooks/email\n├ ƒ /api/webhooks/register\n├ ƒ /api/webhooks/whatsapp\n├ ƒ /api/whatsapp\n├ ƒ /api/workflow/pipeline\n├ ƒ /api/workflows\n├ ƒ /api/workload\n├ ƒ /api/workspaces\n├ ○ /icon.svg\n├ ○ /oracle\n└ ○ /oracle-preview\n\n\nƒ Proxy (Middleware)\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+  "stderrTail": "⚠ The \"middleware\" file convention is deprecated. Please use \"proxy\" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy\n⚠ Compiled with warnings in 88s\n\n./node_modules/@protobufjs/inquire/index.js\nCritical dependency: the request of a dependency is an expression\n\nImport trace for requested module:\n./node_modules/@protobufjs/inquire/index.js\n./node_modules/protobufjs/src/util/minimal.js\n./node_modules/protobufjs/src/index-minimal.js\n./node_modules/protobufjs/src/index-light.js\n./node_modules/protobufjs/src/index.js\n./node_modules/protobufjs/index.js\n./node_modules/@grpc/proto-loader/build/src/index.js\n./node_modules/@firebase/firestore/dist/index.node.mjs\n./node_modules/firebase/firestore/dist/index.mjs\n./src/app/api/billing/downgrade/route.ts\n\n"
+}

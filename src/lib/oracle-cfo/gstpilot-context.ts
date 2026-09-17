@@ -251,7 +251,15 @@ export async function loadGSTpilotSnapshot(
         : totalPayable,
       loaded: true,
     };
-  } catch {
+  } catch (err) {
+    // Batch 6: was silent — now logs so "no data yet" stays distinguishable
+    // from "the DB query threw". Returns loaded:false so the caller
+    // (formatGSTpilotContextBlock) can render the explicit "registry
+    // temporarily unavailable" message instead of fake zeros.
+    console.warn(
+      '[oracle-cfo/gstpilot-context] loadGSTpilotSnapshot failed — returning loaded:false:',
+      err instanceof Error ? err.message : err,
+    );
     return {
       customers: [],
       products: [],

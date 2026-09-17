@@ -562,7 +562,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Creates an in-memory demo user + persists to localStorage so the app
   // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox

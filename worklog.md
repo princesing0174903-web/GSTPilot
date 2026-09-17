@@ -25089,3 +25089,306 @@ Artifacts:
 - src/components/AppRouter.tsx (comments fixed)
 - src/lib/integrations/google/auth.ts (syntax error fixed)
 
+
+---
+Task ID: BATCH6-AUDIT-UI-ROUTES
+Agent: Explore agent
+Task: Audit Oracle UI entrypoints + API routes + duplicate paths
+
+Work Log:
+- Read prior worklog tail (Batches 1–5; canonical auth+org layer from Batch 4 already in place at src/lib/auth/session.ts; Batch 5 finished refactoring fetch wrappers + Tier 1/2 silent failures).
+- Listed src/components/oracle/ (58 files — 47 .tsx components + 11 .ts helpers), src/app/oracle/ (2 files), src/lib/oracle/ (92 files incl. brain/ action-engine/ collectors/ analyzers/ context/ intelligence/ pipeline/ workflow-engine/ subdirs), src/app/api/oracle/ (39 top-level + 17 brain/* + 12 cfo/* = 68 routes + 2 stale .bak/.legacy-backup files in chat/).
+- Searched for `view=oracle` literal — only 5 files match (worklog, src/app/oracle/page.tsx, src/components/layout/LeftNav.tsx, src/components/DashboardShell.tsx, src/components/oracle/OracleLauncher.tsx). Confirmed: the canonical URL is `/?view=oracle-brain` (NOT `?view=oracle` — that string only appears in stale DashboardShell comment).
+- Read DashboardViews.tsx (lines 1–200) — confirmed: view 'oracle-brain' → OracleBrainPage (dynamic import of `@/components/oracle/OracleBrain`). 7 legacy view names ('oracle-chat', 'oracle-ai', 'oracle-cfo', 'ai-business-copilot', 'oracle-intelligence', 'finos', 'ai-cfo') redirect to 'oracle-brain' via VIEW_REDIRECTS map (non-destructive — component files still on disk).
+- Read src/app/oracle/page.tsx (21 lines) — confirmed: standalone `/oracle` Next.js route redirects to `/?view=oracle-brain` (NOT a renderer — just a redirect). Comment says it used to render `<OracleChat />` directly but that broke AuthContext; now it just bounces to the main shell.
+- Read OracleBrain.tsx (98 lines) — thin wrapper that pulls orgId from OrgContext + Firebase ID token from useAuth, then renders `<OracleBrainCore>`. Confirmed canonical.
+- Grep'd `oracleFetch('/api/oracle/brain'` in OracleBrainCore.tsx — confirmed line 868 is the streaming POST to `/api/oracle/brain`. Also confirms `/api/oracle/brain/confirm` (line 1124, 1182), `/api/oracle/brain/sessions` (765), `/api/oracle/brain/sessions/[id]` (795, 1397), `/api/oracle/brain/memory` (778, 1413), `/api/oracle/brain/workflow/execute` (1219) — these 8 endpoints are the live ones the canonical UI actually calls.
+- Read /api/oracle/chat/route.ts (610 lines) — imports `runPipeline` from `@/lib/oracle/pipeline/orchestrator` + 6 brain submodules (memory-engine, semantic-search, decision-log, task-engine, reminder-engine, learning-engine). Pipeline-based SSE stream.
+- Read /api/oracle/brain/route.ts (1117 lines) — imports `ORACLE_TOOL_MAP` from `@/lib/oracle/brain/tools` + memory + context/builder + copilot-modes + tool-permissions + prompt-sanitizer + action-engine + workflow-engine. Tool-call loop (4 iterations max). This is the canonical brain.
+- Read /api/oracle/ask/route.ts (108 lines) — imports `reason` from `@/lib/oracle-core/reasoning` + `explain` from `@/lib/oracle-core/explainable` + `auditLog` from `@/lib/oracle-core/security`. NON-streaming. Different engine entirely (oracle-core, not oracle/brain).
+- Verified /api/oracle/brain/ask/route.ts and /api/oracle/brain/chat/route.ts DO NOT EXIST (Glob returned empty — no nesting duplication within brain/).
+- Listed src/app/api/oracle-brain/ (6 routes: dashboard, reasoning, graph, timeline, command, memory) — all import `@/lib/oracle-intelligence/*` (different lib family from canonical `@/lib/oracle/brain/*`).
+- Listed src/app/api/oracle-chat/ (4 routes: route, proactive, conversations/[id], conversations) — imports `@/lib/oracle-chat/agent` + `@/lib/oracle-chat/types`.
+- Listed src/app/api/oracle-ai/ (12 routes: chat, sessions, sessions/[id], sessions/[id]/messages, agents, tasks, tasks/[id], tools, knowledge, knowledge/[id], artifacts, stats) — imports `@/lib/oracle-ai/*`.
+- Read /api/finos/oracle/route.ts (192 lines) — FinOS-era chat endpoint with explicit comment: "richer, current Oracle endpoint lives at /api/oracle/chat". Imports `@/lib/business/snapshot`. Uses `OracleChatRequest` type from `@/components/oracle/oracle-types` (re-exports of the old type).
+- Read /api/oracle-chat/route.ts (88 lines) — imports `runOracleAgent` from `@/lib/oracle-chat/agent` (separate oracle-chat agent family).
+- Read /api/oracle-ai/chat/route.ts (90 lines) — imports `streamChat` from `@/lib/oracle-ai/engine` + `resolveOracleAICtx` from `@/lib/oracle-ai/api-auth` (separate oracle-ai engine family).
+- Listed src/app/api/oracle/chat/ contents: route.ts (26 KB, current) + route.ts.bak (112 KB, pre-refactor backup from Jul 23) + route.ts.legacy-backup (111 KB, even-older legacy from Jul 18). Confirmed backups import `BRAND_IDENTITY_PROMPT_BLOCK` from `@/components/oracle/oracle-brand` (no longer used by current route.ts).
+- Glob'd `src/lib/oracle*/index.ts` AND `src/lib/oracle*/**/index.ts` — confirmed: NO top-level barrel exists for oracle/, oracle-ai/, oracle-chat/, oracle-core/, oracle-cfo/, oracle-evolution/, oracle-intelligence/, or oracle-production/. Only 4 SUB-directory barrels exist inside src/lib/oracle/: collectors/index.ts, analyzers/index.ts, workflow-engine/index.ts, action-engine/index.ts.
+- Glob'd src/lib/oracle-brain/** — confirmed does NOT exist as a separate top-level lib directory. The brain code lives at `src/lib/oracle/brain/` (a sub-directory of oracle/). The string `oracle-brain` appears only as a route name (`/api/oracle-brain/`) or view name (`view=oracle-brain`), never as a lib import.
+- Grep'd `from '@/lib/oracle-brain` — 0 matches. Grep'd `from '@/lib/oracle/brain` — 17 files (1 action-engine definition + 1 modes route + 1 chat route + 13 brain sub-routes + 3 components). Grep'd `from '@/lib/oracle-core` — 14 files (13 routes + OracleIntelligenceCorePage.tsx). Grep'd `from '@/lib/oracle-chat` — 9 files (1 hook + 4 routes + 4 components). Grep'd `from '@/lib/oracle-ai` — 16 files (12 routes + 4 components). Grep'd `from '@/lib/oracle-intelligence` — 7 files (6 routes + 1 component).
+- Grep'd external imports of `@/components/oracle/Oracle*` — only 6 active callers outside src/components/oracle/: DashboardViews.tsx (OracleBrain), DashboardPage.tsx (ProactiveOracleBriefing), HomeScreen.tsx (OracleCommandCenter — but HomeScreen itself is dead), ClientRegistryPage.tsx + InvoiceWorkspacePage.tsx + ReturnsPage.tsx + CRMPage.tsx + FinancePage.tsx (all use AskOracleButton), OraclePreviewApp.tsx (OracleBrainCore for preview mode).
+- Grep'd `OracleChat` references — 2 separate components exist: `src/components/oracle/OracleChat.tsx` (default export, calls /api/oracle/chat, also imports OracleBrainPanel — DEAD, only referenced by dead code) and `src/components/oracle-chat/OracleChat.tsx` (named export, calls /api/oracle-chat via useOracleChat hook — DEAD, view 'oracle-chat' redirects to 'oracle-brain').
+- Grep'd `OraclePanel`/`OracleWorkspace`/`OracleDockSidebar`/`OracleCommandCenter` — all are DEAD: OraclePanel + OracleDockSidebar confirmed removed by DashboardShell.tsx line 41 comment ("NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page"); OracleWorkspace is only used by OraclePanel; OracleCommandCenter is only used by HomeScreen.tsx (which itself is not imported anywhere).
+- Grep'd `/api/oracle-brain/` callsites — only 2 (src/hooks/useOracleBrain.ts:97 calls /api/oracle-brain/dashboard; line 126 calls /api/oracle-brain/command). useOracleBrain hook is itself DEAD (only referenced by OracleBrainDashboard.tsx component, which is not reachable from canonical UI).
+
+Stage Summary:
+- Total Oracle UI files: 58 in src/components/oracle/ (47 .tsx + 11 .ts helpers) + 11 in src/components/oracle-chat/ + 4 in src/components/oracle-ai/ + 1 in src/components/oracle-brain/ + 1 in src/components/oracle-intelligence-core/ + 2 Next.js page files in src/app/oracle/ + 1 launcher = ~78 Oracle UI files total.
+- Canonical Oracle UI component: src/components/oracle/OracleBrain.tsx (thin wrapper) → src/components/oracle/OracleBrainCore.tsx (3045-line real implementation). Renders at `/?view=oracle-brain` via DashboardViews.tsx line 60 + line 78. The standalone `/oracle` URL just redirects to `/?view=oracle-brain`.
+- Total Oracle API routes: 68 active under /api/oracle/* (39 top-level + 17 under /api/oracle/brain/* + 12 under /api/oracle/cfo/*). Plus 23 routes in 4 PARALLEL legacy families: /api/oracle-brain/* (6 routes), /api/oracle-chat/* (4 routes), /api/oracle-ai/* (12 routes), /api/finos/oracle/route.ts (1 route). Grand total = 91 Oracle API route handlers + 2 stale .bak/.legacy-backup files in /api/oracle/chat/.
+- Duplicate route paths identified:
+  • THREE chat endpoints doing the same thing (chat-with-LLM about business data):
+    - /api/oracle/chat/route.ts (610 lines, pipeline-based, imports @/lib/oracle/pipeline/orchestrator — DEAD, used only by dead OracleChat/OracleWorkspace components)
+    - /api/oracle/brain/route.ts (1117 lines, tool-call loop, imports @/lib/oracle/brain/tools — CANONICAL, used by OracleBrainCore)
+    - /api/oracle/ask/route.ts (108 lines, non-streaming, imports @/lib/oracle-core/reasoning — DEAD, used only by OracleIntelligenceCorePage.tsx)
+  • FOUR parallel route trees doing the same thing (chat-with-LLM about business data):
+    - /api/oracle/* (canonical — 68 routes, uses @/lib/oracle/* + @/lib/oracle/brain/*)
+    - /api/oracle-brain/* (6 routes, uses @/lib/oracle-intelligence/* — DEAD, used by useOracleBrain hook + OracleBrainDashboard.tsx component)
+    - /api/oracle-chat/* (4 routes, uses @/lib/oracle-chat/* — DEAD, used by useOracleChat hook + oracle-chat/ components)
+    - /api/oracle-ai/* (12 routes, uses @/lib/oracle-ai/* — DEAD, used by oracle-ai/ components)
+    - /api/finos/oracle/route.ts (1 route, FinOS-era — DEAD, comment in route.ts itself says "richer, current Oracle endpoint lives at /api/oracle/chat")
+  • NESTING duplication: NONE. /api/oracle/brain/ask/ and /api/oracle/brain/chat/ subpaths do NOT exist. /api/oracle/brain/route.ts IS the chat endpoint (siblings are /api/oracle/chat/route.ts and /api/oracle/ask/route.ts).
+  • STALE BACKUPS in /api/oracle/chat/: route.ts.bak (112 KB, Jul 23) + route.ts.legacy-backup (111 KB, Jul 18). Both pre-date the current 26 KB route.ts. They reference @/components/oracle/oracle-brand which the current route no longer imports.
+- Barrel exports: NONE at top level. src/lib/oracle/index.ts DOES NOT EXIST. src/lib/oracle-ai/index.ts DOES NOT EXIST. src/lib/oracle-chat/index.ts DOES NOT EXIST. src/lib/oracle-core/index.ts DOES NOT EXIST. src/lib/oracle-cfo/index.ts DOES NOT EXIST. src/lib/oracle-intelligence/index.ts DOES NOT EXIST. src/lib/oracle-brain/ DOES NOT EXIST AS A DIRECTORY (the brain code lives at src/lib/oracle/brain/, a sub-directory of oracle/ — NOT a parallel top-level lib). Only 4 SUB-directory barrels exist inside src/lib/oracle/: collectors/index.ts, analyzers/index.ts, workflow-engine/index.ts, action-engine/index.ts.
+
+Canonical identification:
+- Canonical Oracle UI: src/components/oracle/OracleBrain.tsx → OracleBrainCore.tsx (DashboardViews view=oracle-brain, line 60 + 78)
+- Canonical Oracle chat API: POST /api/oracle/brain (called by OracleBrainCore.tsx line 868)
+- Canonical Oracle lib: src/lib/oracle/brain/* + src/lib/oracle/context/builder.ts + src/lib/oracle/action-engine/ + src/lib/oracle/workflow-engine/
+
+Parallel/dead to consolidate in a future Fix agent (BATCH 6 cleanup targets):
+- DUPLICATE CHAT ROUTES (3 in /api/oracle/ + 4 parallel trees = 7 chat endpoints total): keep /api/oracle/brain/route.ts, archive the rest.
+- DEAD UI component trees (5 trees): src/components/oracle-chat/* (5 files), src/components/oracle-ai/* (4 files), src/components/oracle-brain/* (1 file), src/components/oracle-intelligence-core/* (1 file), src/components/oracle/{OracleChat,OraclePanel,OracleWorkspace,OracleDockSidebar,OracleCommandCenter}.tsx (5 files).
+- DEAD hooks: src/hooks/useOracleChat.ts, src/hooks/useOracleBrain.ts.
+- STALE backups: src/app/api/oracle/chat/route.ts.bak + route.ts.legacy-backup (224 KB combined).
+- View-redirect targets in DashboardViews.tsx VIEW_REDIRECTS map (lines 117–123): 7 Oracle view aliases point to 'oracle-brain' (kept non-destructive per project policy — components stay on disk).
+
+---
+Task ID: BATCH6-AUDIT-ENGINES
+Agent: Explore agent
+Task: Audit Oracle engines + context builders + tool registries + permissions + memory + collectors + prompt builders
+
+Work Log:
+- Read prior worklog (BATCH5-AUDIT-1/2/3 + BATCH5-COMPLETE) to understand the canonical auth+fetch+helper layer already in place. Noted that Batch 5 already logged the worst single-line silent failure (`oracle-cfo/gstpilot-context.ts:254` returns `loaded:false` with no log) and the 19 silent catches in `oracle/brain/tools.ts`.
+- Walked `src/lib/` and listed every `oracle*` directory + the loose `oracle-*.ts` single files (oracle-store.ts, oracle-conversations.ts, oracle-intelligence.ts). Captured sizes and per-subdirectory listings.
+- For each Oracle implementation directory, ran ripgrep for `from '@/lib/oracle-...'` across `src/` to identify consumers and flag dead/orphan modules.
+- Read headers + exported symbols of every context-builder, tool-registry, permission, memory, collector, and prompt-builder file. Cross-referenced imports to classify each as canonical / duplicate / orphan.
+- Counted tool-name declarations per registry (`name: '...'` for array-style registries; `registerTool({` calls for the registry pattern; `registerAction(` calls in `action-engine/definitions/`).
+- Identified duplicate tool-name overlaps across the six tool registries by comparing name lists side-by-side (createInvoice, createTask, sendReminder, generateGSTReturn, markInvoicePaid, queryInvoices↔search_invoices↔fetch-financials, etc.).
+- Verified the canonical permission gate is `oracle/brain/tool-permissions.ts` (3-tier: read-only / confirmation / strong-confirm) and that `CONFIRMATION_REQUIRED_TOOLS` Set in `oracle/brain/tools.ts:1858` is a parallel legacy gate that the brain route consults BEFORE the canonical tier check.
+- Confirmed memory implementations are heavily duplicated — four parallel "OracleMemory" writers (brain/memory-engine.ts, brain/memory.ts, memory-store.ts, oracle-core/memory.ts) plus a fifth misnamed "memory engine" that is actually a data aggregator (oracle-intelligence/memory-engine.ts) and a sixth user-email-keyed service (business-memory.ts).
+- Confirmed collectors under `oracle/collectors/*` feed ONLY `oracle/oracle-engine.ts` (used by `/api/oracle/briefing/route.ts`) — the canonical `/api/oracle/chat/route.ts` does NOT use these collectors; it goes through the pipeline orchestrator + brain tools. Google-API collectors (gmail/calendar/drive) are stubbed to "integration not available" returning empty arrays (not a NOT_AVAILABLE sentinel).
+- Confirmed `oracle-core/prompts.ts` (294 lines), `oracle-cfo/reasoning.ts` (~520 lines), `oracle-cfo/explainable.ts` (~290 lines), `oracle-production/data-layer.ts` (1.6K lines), and the loose `oracle-intelligence.ts` (1.3K lines) all have ZERO TypeScript import consumers — they are dead code.
+
+Stage Summary:
+- Oracle lib directories (sizes):
+  • src/lib/oracle/ — 1.6M, ~20 root files + 7 subdirs (action-engine/, analyzers/, brain/, collectors/, context/, intelligence/, pipeline/, workflow-engine/)
+  • src/lib/oracle-cfo/ — 568K, 21 files
+  • src/lib/oracle-core/ — 272K, 12 files (legacy Oracle Intelligence Core™)
+  • src/lib/oracle-intelligence/ — 108K, 8 files (Phase 1 brain dashboard modules)
+  • src/lib/oracle-chat/ — 132K, 4 files (Oracle Chat tool registry)
+  • src/lib/oracle-evolution/ — 100K, 6 files
+  • src/lib/oracle-ai/ — 100K, 7 files (Oracle AI Workspace — separate surface)
+  • src/lib/oracle-production/ — 68K, 1 file (data-layer.ts) — DEAD CODE
+  • src/lib/oracle-intelligence.ts — 52K, 1 file — DEAD CODE (only nav label string matches)
+  • src/lib/oracle-conversations.ts — 32K, 1 file (client hook for OracleChat UI)
+  • src/lib/oracle-store.ts — 32K, 1 file (client Zustand store)
+- Canonical engine: src/lib/oracle/ (specifically oracle/pipeline/orchestrator.ts for chat + oracle/brain/* for the Brain API + oracle/action-engine/* for write actions). /api/oracle/chat/route.ts (the live chat) calls `runPipeline` from `oracle/pipeline/orchestrator.ts`. /api/oracle/brain/route.ts (the Brain API surface) calls `ORACLE_TOOLS` + `checkToolPermission` directly. /api/oracle/briefing/route.ts calls the legacy `generateOracleBriefing` from `oracle/oracle-engine.ts` (uses collectors+analyzers).
+- Context builders (7 live + 1 type-only):
+  • src/lib/oracle/context/builder.ts (1045 lines) — CANONICAL "Unified Financial Context Builder" — calls getBusinessSnapshot + org-scoped Prisma + 30s cache + Evidence/DataSourceRef on every section. 11 silent `.catch(() => null/[])` blocks (lines 448-968).
+  • src/lib/oracle/context/types.ts (470 lines) — type defs for the unified context.
+  • src/lib/ai/oracle-context.ts (712 lines) — duplicate builder used ONLY by `@/lib/ai/gemini-service.ts`. Google/Zoho stubbed to UNAVAILABLE. Silent `return null` on failure (lines 186, 262, 337, 375, 423, 460).
+  • src/lib/oracle-cfo/business-context.ts (426 lines) — CFO BusinessContext loader. Prisma + Firestore (adminDb). `safeFirestore()` swallows errors silently (line 367 catch{} → returns []).
+  • src/lib/oracle-cfo/gstpilot-context.ts (460 lines) — WORST silent failure (flagged in Batch 5). Returns fully-populated default object with `loaded:false` on catch (lines 254-274). NO log.
+  • src/lib/oracle/events-context.ts (245 lines) — loads recent events / sync state / data quality. Has `catch (err)` (line 141) but doesn't propagate.
+  • src/lib/oracle/real-data.ts (865 lines) — RealDataSnapshot aggregator. 11 silent `.catch(() => [])` (lines 129, 138, 142, 146, 374, 394-402, 581, 623).
+  • src/lib/oracle/sources.ts (327 lines) — GST Law knowledge-base seed (NOT a context builder, but co-located).
+  • src/lib/oracle/documents.ts (244 lines) — document context.
+- Tool registries (6 registries + 1 action registry = 7 total):
+  • src/lib/oracle/brain/tools.ts (1967 lines) — `ORACLE_TOOLS: OracleTool[]` array with **29 named tools** + `CONFIRMATION_REQUIRED_TOOLS` Set (30 tools) + `ORACLE_TOOL_MAP` + `buildToolsPromptBlock` + `parseToolCalls` + `stripToolCalls`. CANONICAL for /api/oracle/brain.
+  • src/lib/oracle-cfo/tools.ts (1588 lines) — `CFO_TOOLS: Tool[]` array with **10 tools** (Create Invoice, Send Payment Reminder Email/WhatsApp, Create Payment Link, Generate Collection Report, Prepare GST Return, Create Task, Mark Invoice as Paid, Generate GST Report, Send Email/WhatsApp). Firestore-backed. Used by /api/oracle/cfo/execute.
+  • src/lib/oracle-chat/tools.ts (1187 lines) — `TOOL_DEFINITIONS: Record<ToolName, ...>` with **20 named tools** + 5 unregistered callable functions (period_comparison, gst_forecast, vendor_price_trends, customer_churn_risk, board_summary). Prisma-backed. Used by /api/oracle-chat.
+  • src/lib/oracle-ai/tools.ts (512 lines) — Map-based `registerTool()` registry with **11 tools** (query-business-context, search-knowledge, search-memory, fetch-financials, fetch-receivables, fetch-payables, fetch-gst-returns, fetch-notices, create-artifact, create-task, list-tasks, update-task). Used by oracle-ai/engine.ts.
+  • src/lib/oracle/pipeline/tools.ts (443 lines) — `TOOL_DEFS` (9 static defs) + `TOOL_EXECUTORS` record + `runToolSafe`. CANONICAL for /api/oracle/chat via pipeline orchestrator.
+  • src/lib/oracle/action-engine/registry.ts (271 lines) — `registerAction(action)` Map-based registry for `OracleAction` interface with **34 registered actions** (one per file in `definitions/`). Used by brain route via `isRegisteredAction` + `getAction`.
+  • src/lib/oracle/action-engine/engine.ts (306 lines) — buildConfirmation + executeAndRefresh + cancelAction (engine on top of the registry).
+  • DUPLICATE TOOL NAMES across registries: `createInvoice` (brain + cfo + action-engine), `createTask` (brain + cfo + action-engine + ai), `sendReminder` (brain + cfo + action-engine), `generateGSTReturn` (brain + cfo + action-engine), `markInvoicePaid` (brain + cfo + action-engine), `queryInvoices` ↔ `search_invoices` ↔ `fetch-financials` ↔ `invoices` (brain vs chat vs ai vs pipeline).
+- Permission systems (2 PARALLEL — should be unified):
+  • src/lib/oracle/brain/tool-permissions.ts (221 lines) — CANONICAL 3-tier (`read-only` / `confirmation` / `strong-confirm`) `TOOL_PERMISSIONS` Record with ~50 tools classified. `checkToolPermission` + `verifyConfirmation` + `getToolTier` + `toolsAtTier` + `buildPermissionPromptBlock`. Used by /api/oracle/brain/route.ts + /api/oracle/brain/confirm/route.ts.
+  • src/lib/oracle/brain/tools.ts:1858 `CONFIRMATION_REQUIRED_TOOLS` Set — legacy flat list of 30 tool names that "require confirmation". Used by /api/oracle/brain/route.ts:637,735 to filter tool calls into the action-confirm pipeline. Overlaps the `confirmation` + `strong-confirm` tiers in tool-permissions.ts but is consulted BEFORE the tier check.
+- Memory implementations (8+ systems — heavily duplicated):
+  • src/lib/oracle/brain/memory-engine.ts (533 lines) — Prisma `OracleBrainMemory`. CRUD + search + conversation memory + context snapshot. Used by /api/oracle/chat + /api/oracle/brain/memory. CANONICAL.
+  • src/lib/oracle/brain/memory.ts (211 lines) — Prisma `OracleMemory`. saveMemory/recallMemory/getWorkspaceMemoryBlock/autoExtractFacts. Used by /api/oracle/brain + create-task action. DUPLICATE of memory-engine.ts.
+  • src/lib/oracle/memory-store.ts (284 lines) — Prisma `OracleMemory` (same model as above). loadMemorySnapshot/rememberFact/extractAndPersistFacts/renderMemoryBlock. Used by pipeline orchestrator + /api/oracle/chat. DUPLICATE of memory.ts + memory-engine.ts.
+  • src/lib/oracle-core/memory.ts (252 lines) — Prisma model (legacy). writeMemory/searchMemory/getMemoryStats. Has ORACLE-SECURITY-FIX comment + still falls back to global FIRM_ID with warning. Used by /api/oracle/memory only. DUPLICATE legacy.
+  • src/lib/oracle-intelligence/memory-engine.ts (391 lines) — MISNAMED. Reads invoices/customers/vendors from Prisma as "memory records" — actually a data aggregator. buildMemorySnapshot/getMemoryStats. Used by /api/oracle-brain/memory only.
+  • src/lib/business-memory.ts (~700+ lines) — USER-EMAIL-KEYED (not orgId-keyed) memory with 9 categories. Used by /api/memory/* (6 routes). Different keying model.
+  • src/lib/oracle/brain/learning-engine.ts (272 lines) — Prisma `BrainLearning`. recordLearning + inferPreferencesFromBehavior. CANONICAL for learning. Used by /api/oracle/chat.
+  • src/lib/oracle-core/learning.ts (237 lines) — Prisma legacy model. recordLearning. DUPLICATE of learning-engine.ts. Used by /api/oracle/learn only.
+  • src/lib/oracle/brain/decision-log.ts (293 lines) — Prisma `BrainDecision`. logDecision + lifecycle. UNIQUE (no duplicates). Used by /api/oracle/chat.
+- Collectors (7 files, feed ONLY the legacy /api/oracle/briefing route):
+  • src/lib/oracle/collectors/index.ts (33 lines) — registry `COLLECTORS: Collector[]` (invoices, gst, banking, gmail, calendar, drive).
+  • src/lib/oracle/collectors/invoices.ts (176 lines) — Prisma invoices/purchase-bills/expenses/payments.
+  • src/lib/oracle/collectors/gst.ts (193 lines) — Prisma GSTProfile/Returns/Filings/2B/Notices.
+  • src/lib/oracle/collectors/banking.ts (128 lines) — Prisma bank accounts + transactions.
+  • src/lib/oracle/collectors/gmail.ts (187 lines) — STUBBED to "Google Workspace integration not available".
+  • src/lib/oracle/collectors/calendar.ts (125 lines) — STUBBED.
+  • src/lib/oracle/collectors/drive.ts (118 lines) — STUBBED.
+  • PATTERN: All collectors return `connected:false` + empty data on failure — never a NOT_AVAILABLE sentinel. The canonical /api/oracle/chat route does NOT use these collectors — it goes through the pipeline orchestrator (which calls runToolSafe on `TOOL_EXECUTORS` in `oracle/pipeline/tools.ts`). The brain route's `getConnectedIntegrations` tool queries Prisma token tables directly.
+- Prompt builders (5 live + 2 dead):
+  • src/lib/oracle/brain/copilot-modes.ts (240 lines) — `COPILOT_MODES` Record (11 modes). Each mode has systemPromptFragment + toolAllowlist. CANONICAL. Used by brain route + CopilotModeSelector + OracleBrainCore.
+  • src/lib/oracle/brain/prompt-sanitizer.ts (159 lines) — Prompt-injection defense (sanitizeRecordField, buildUntrustedDataBlock, detectInjectionAttempt, buildSafeSystemPromptSuffix). CANONICAL. Used by brain route.
+  • src/lib/oracle/brain/daily-summary.ts (300 lines) — getDailySummary. Used by /api/oracle/brain/daily-summary.
+  • src/lib/oracle-cfo/explain.ts (27K, ~725 lines) — buildDecisionCard. Used by /api/oracle/cfo/analyze.
+  • src/lib/oracle-cfo/reasoning.ts (19K, ~520 lines) — runReasoningPipeline. DEAD CODE — zero imports.
+  • src/lib/oracle-cfo/explainable.ts (11K, ~290 lines) — computeConfidence/generateAlternatives/identifyRisks/buildAnswerParts/parseAiBrief. DEAD CODE — zero imports.
+  • src/lib/oracle-core/prompts.ts (294 lines) — `TEMPLATES` Record of versioned prompts. DEAD CODE — zero imports.
+- Duplicate implementations identified (consolidation candidates for Batch 6 Fix agent):
+  1. Context builders — 4 parallel builders (oracle/context/builder.ts canonical, ai/oracle-context.ts, oracle-cfo/business-context.ts, oracle-cfo/gstpilot-context.ts). The CFO pair (business-context.ts + gstpilot-context.ts) are CFO-Oracle-specific and write to different backends (Prisma+Firestore vs Firestore-only).
+  2. Tool registries — 6 parallel registries with overlapping tool names (brain / cfo / chat / ai / pipeline / action-engine). Action-engine (34 actions) is the most complete; brain tools.ts (29 tools) is the read-side counterpart. The cfo/chat/ai registries overlap with both.
+  3. Permission gates — 2 parallel (tool-permissions.ts canonical 3-tier + CONFIRMATION_REQUIRED_TOOLS Set in tools.ts). Brain route consults BOTH — can be unified.
+  4. Memory implementations — 4 parallel OracleMemory writers (brain/memory-engine.ts + brain/memory.ts + memory-store.ts + oracle-core/memory.ts) writing to similar Prisma models with overlapping memory-block renderers. Plus 1 misnamed data-aggregator (oracle-intelligence/memory-engine.ts) and 1 user-keyed service (business-memory.ts).
+  5. Learning engines — 2 parallel (brain/learning-engine.ts canonical + oracle-core/learning.ts legacy).
+  6. Collectors — 7 files feeding ONLY the legacy /api/oracle/briefing route. The canonical /api/oracle/chat route bypasses them entirely (uses pipeline tools.ts instead). Google-API collectors are stubbed.
+  7. Prompt builders — 2 dead (oracle-core/prompts.ts + oracle-cfo/reasoning.ts + oracle-cfo/explainable.ts) that should be deleted.
+  8. Entire dead modules — `oracle-production/data-layer.ts` (1.6K lines) + `oracle-intelligence.ts` (1.3K lines) have ZERO imports.
+
+---
+Task ID: BATCH6-AUDIT-SPECIAL
+Agent: Explore agent
+Task: Audit Oracle special modules (briefing/anomaly/forecast/scenario/evidence/freshness/modes/agents/cfo) + dead code
+
+Work Log:
+- Read tail of worklog (BATCH5-COMPLETE + sibling BATCH6-AUDIT-ENGINES) to confirm canonical Oracle chat surface = `/api/oracle/brain` ← `OracleBrainCore` ← `OracleBrain` ← `DashboardViews.tsx` line 60. Noted sibling audit already mapped parallel Oracle lib trees (`oracle/`, `oracle-ai/`, `oracle-cfo/`, `oracle-chat/`, `oracle-core/`, `oracle-evolution/`, `oracle-intelligence/`, `oracle-production/`, `oracle-intelligence.ts`, `oracle-store.ts`, `oracle-conversations.ts`) and confirmed `oracle-production/data-layer.ts` + `oracle-intelligence.ts` are dead.
+- For each of the 10 audit topics, ran targeted ripgrep + Read on the candidate canonical + duplicate file. Cross-referenced import-graph traces from the canonical entry chain (`DashboardViews → OracleBrain → OracleBrainCore → /api/oracle/brain`) to classify each implementation as CANONICAL / DUPLICATE / DEAD.
+- Verified route-reachability by greppin fetch() / apiGet() callsites across `src/components/**` + `src/hooks/**` for every `/api/oracle/*` route, then traced each caller back to the canonical entry. Any route whose only callers are orphan components is itself dead.
+- Confirmed the `VIEW_REDIRECTS` map in `DashboardViews.tsx` (lines 115–136) explicitly collapses 7 Oracle view aliases (`oracle-chat`, `oracle-ai`, `oracle-cfo`, `ai-business-copilot`, `oracle-intelligence`, `finos`, `ai-cfo`) onto `oracle-brain`, marking their UI components non-destructively dead.
+- Verified the `DISABLED VIEWS` set in `DashboardViews.tsx` (lines 190–193) lists `autonomous-finance`, `workflow-studio`, `oracle-actions`, `financial-intelligence`, `smart-reconciliation`, `predictive-compliance`, `intelligent-collections` as placeholder views — meaning the corresponding `src/components/autonomous-finance/*` pages are NEVER rendered.
+- Verified the `BATCH6-AUDIT-ENGINES` sibling audit already catalogued tool registries / context builders / memory systems / collectors / prompt builders / dead engines. Deliberately did NOT duplicate those findings — focused this report on the 10 special-module topics assigned + cross-cutting dead-file inventory.
+- Cross-checked `cfo/insights.ts` (Tier-1 Batch 5 fix added `console.warn` to `generateSmartCFOInsights` catch) and discovered the function has ZERO callers — Batch 5's silent-failure fix landed on a dead function (still correct, but no runtime benefit).
+
+Stage Summary:
+- **Executive briefing implementations** (5 found):
+  1. `src/lib/oracle/executive-briefing.ts` (527 lines) — CANONICAL. 8-section deterministic briefing reading from `getUnifiedOracleContext` + `detectAnomalies`. Called by `/api/oracle/executive-briefing/route.ts` (46 lines) → `ExecutiveBriefingPanel.tsx` (alive via `OracleBrainCore.tsx` line 1623). Has its OWN local `assembleBriefing(ctx, anomalies)` helper — NOT the one in `briefing.ts`.
+  2. `src/lib/oracle/briefing.ts` (231 lines) — DEAD. Exports `assembleBriefing(input: AssembleInput)` (different signature). Sole caller is `oracle-engine.ts:25` → sole caller is `/api/oracle/briefing/route.ts` (50 lines) → no frontend callers (only docstring mentions). Entire chain orphaned.
+  3. `src/lib/oracle/daily-briefing.ts` (346 lines) — CANONICAL for "Proactive CFO" 4-section briefing (done/needsAttention/watchlist). Called by `/api/oracle/daily-briefing/route.ts` → `useOracleDailyBriefing` hook → `ProactiveOracleBriefing.tsx` → `DashboardPage.tsx`.
+  4. `src/lib/oracle/brain/daily-summary.ts` (300 lines) — LIVE. Different concept (PROMPT 6 "good morning" summary). Called by `/api/oracle/brain/daily-summary/route.ts` → `OracleBrainPanel.tsx` (alive via OracleBrainCore).
+  5. `src/app/api/oracle/brain/briefing/route.ts` (554 lines) — DEAD. Self-contained LLM-based briefing using ZAI. No frontend callers (only a comment in `OracleBrainCore.tsx:465` says "mirrors /api/oracle/brain/briefing logic" — the client reimplements the logic and never fetches the route).
+
+- **Anomaly detector implementations** (2 found):
+  1. `src/lib/oracle/intelligence/anomaly-detector.ts` (520 lines) — CANONICAL. Pure-function statistical + business-rule detector. 12 anomaly kinds, evidenceId-cited, hasSufficientData flag. Input: `UnifiedOracleContext`. Called by `/api/oracle/anomalies/route.ts` (44 lines, but route itself has no frontend caller — DEAD) + `executive-briefing.ts` (alive via ExecutiveBriefingPanel). Lib itself IS alive via the executive-briefing chain.
+  2. `src/lib/twin/anomaly.ts` (443 lines) — PARALLEL impl in the Digital Twin subsystem. 11 anomaly types, takes no context (fetches raw CFO Phase-1 data itself). Called by `twin/orchestrator.ts` + `/api/twin/anomalies/route.ts` → `DigitalTwinPage.tsx` (alive but DigitalTwin is in the "Vision modules — beautiful shells, no real backend" placeholder set per `DashboardViews.tsx` line 161–169, so reachable only via direct `?view=digital-twin` URL).
+  - **Duplication**: same business intent (revenue_drop/expense_spike/cash_decline/duplicate_payment/customer_payment_delay/compliance_lag) implemented twice with different signatures + different anomaly kinds. Twin version is self-contained (fetches its own data); oracle version reads unified context.
+
+- **Forecaster implementations** (3 found, plus 4 "forecast-ish" siblings):
+  1. `src/lib/oracle/intelligence/forecaster.ts` (680 lines) — CANONICAL. 6 forecast kinds (cash_flow/revenue/receivables/gst_liability/itc_recovery/runway), honest confidence scores, sufficient:false on inadequate data. Reads `UnifiedOracleContext`. Called by `/api/oracle/forecast/route.ts` (59 lines) → `OracleEvolutionPanel.tsx:202` (alive). Route itself is alive.
+  2. `src/lib/twin/forecast.ts` (150 lines) — PARALLEL impl. Exports `computeTwinForecast()`. Called by `twin/orchestrator.ts` + `/api/twin/forecast/route.ts` + `intelligence/simulate-engine.ts` + `intelligence/predictive-engine.ts` (alive in lib graph but DigitalTwin surface is a placeholder).
+  3. `src/lib/oracle-evolution/forecasting.ts` (437 lines) + `forecasting-format.ts` (17 lines) — Separate "Oracle Evolution" forecasting UI helper. Called by `OracleEvolutionPanel.tsx` (alive).
+  4. `src/lib/invoices/forecast.ts` (245 lines) — Invoice-specific forecasting helper. Called by `invoice-cloud/InvoiceCloudPage.tsx` (which is dead per `VIEW_REDIRECTS['invoice-cloud'] = 'invoices'`).
+  5. `src/lib/banking-service/forecast.ts` (248 lines) — Banking-specific forecast. (Not traced to a live caller in this audit.)
+  6. `src/lib/oracle/action-engine/definitions/forecast-cash-flow.ts` (161 lines) — Action-Engine definition for the `forecastCashFlow` tool. Used by brain route's tool registry.
+  7. `src/lib/banking/cashflow.ts` (242 lines) — Banking cashflow analysis helper (used by banking route).
+  - **Verdict**: canonical for Oracle is `oracle/intelligence/forecaster.ts`. The `twin/forecast.ts`, `oracle-evolution/forecasting.ts`, `invoices/forecast.ts`, `banking-service/forecast.ts`, `banking/cashflow.ts` are domain-specific siblings — not pure duplicates, but overlap heavily.
+
+- **Scenario engine implementations** (1 found):
+  1. `src/lib/oracle/intelligence/scenario-engine.ts` (496 lines) — CANONICAL + ONLY. Pure-function what-if simulator (6 kinds: collections_improve / revenue_drops / gst_liability_increases / large_customer_late / expense_increase / custom). Always labels `isSimulation:true` + cites evidenceId. Called by `/api/oracle/scenario/route.ts` (77 lines) — but the route has NO frontend caller (verified — no fetch to `/api/oracle/scenario` anywhere). So route is dead; lib is canonical-but-unconsumed.
+  - No competing scenario engine exists. Twin/orchestrator has a "simulate" concept but it's a full-state replay, not a what-if projection.
+
+- **Evidence/citations modules**:
+  - CANONICAL: `src/lib/oracle/context/types.ts` (470 lines) defines `Evidence` interface (line 98) + `DataSourceRef` (line 74) + `evidenceIndex: Record<string, Evidence>` on the UnifiedOracleContext. Every metric in `context/builder.ts` attaches a `source: DataSourceRef` with `system` + `environment` + `lastUpdatedAt` + `deepLink`. Oracle surfaces cite evidenceId → UI renders clickable source cards (see `EvidenceCard.tsx`).
+  - CANONICAL knowledge-base citations: `src/lib/oracle/sources.ts` (327 lines) — GST Law/CBIC Circulars knowledge base. `retrieveSources(query, topK)` + `ensureSourcesSeeded()`. Called by `/api/oracle/sources/route.ts` (50 lines — but no frontend caller, route is DEAD). Used internally by `/api/oracle/brain/route.ts` to inject citable GST law references into the system prompt.
+  - DUPLICATE: `src/lib/oracle/documents.ts` (244 lines) — VLM-based document extraction (PDF/Excel/invoices/GST notices/bank statements). Called by `/api/oracle/documents/route.ts` → `OracleChat.tsx:1005` (but `OracleChat.tsx` is dead per briefing audit above). So `documents.ts` is transitively dead.
+  - DUPLICATE competing `OracleSource` types (5 places):
+    • `oracle/sources.ts:20` — `OracleSourceRef` (canonical — DB-backed)
+    • `oracle-store.ts:42` — `OracleSource` interface (Zustand store type, alive via `OracleCommandCenter`)
+    • `oracle-conversations.ts:31` — `OracleSource` interface (alive via `AskOracleButton` + `OracleMessage`)
+    • `oracle-intelligence.ts:60` — `OracleSource` interface (file is DEAD per sibling audit)
+    • `ai/oracle-context.ts:49` — `OracleSources` (plural, alive via `gemini-service.ts`)
+    • `app/api/intelligence/route.ts:34` — local `OracleSource` (route is a parallel `/api/intelligence` impl)
+
+- **Freshness tracking**:
+  - CANONICAL: `src/lib/oracle/context/types.ts:60` — `FreshnessWindow { maxAgeHours, label }` + `FRESHNESS_WINDOWS` record (line 461) covering 8 source types (invoices/banking/gst/gstr2b/zoho/google/expenses/payments) with per-source maxAgeHours (1h Google → 720h GSTR-2B).
+  - CANONICAL: `resolveEnvironment(connectionState, lastUpdatedAt, window, isDemoWorkspace)` (line 401) returns `LIVE | SANDBOX | DEMO | STALE | UNAVAILABLE`. Used throughout `context/builder.ts`.
+  - CANONICAL UI: `EnvironmentBadge.tsx` + `environmentLabel()` + `environmentBadgeClass()` + `ago()` (lines 421–458).
+  - SECONDARY: `oracle/pipeline/confidence.ts:47-49` — `daysStale * 2` freshness penalty subtracted from confidence score (separate computation, not duplicated).
+  - SECONDARY: `oracle/real-data.ts:33` — `lastSyncAt: string | null` field on RealDataSnapshot connectors.
+  - SECONDARY: `oracle/events-context.ts:28` — `lastSyncedAt` field on event context.
+  - **Verdict**: clean canonical design. No competing freshness systems.
+
+- **Copilot modes** (1 canonical, 1 dead route):
+  - CANONICAL: `src/lib/oracle/brain/copilot-modes.ts` (240 lines) — `COPILOT_MODES` Record of **11 modes** (general, cfo, gst, cash-flow, receivables, payables, tax, operations, invoices, customers, banking). Each mode carries `systemPromptFragment` + `preferredTools` (gated by user permissions) + `suggestedPrompts` + `accentClass`. Helpers: `parseModePrefix()` (text-prefix routing like "CFO, ..."), `getModeToolAllowlist()`, `listModes()`. Used by:
+    • `/api/oracle/brain/route.ts` — injects active mode's `systemPromptFragment` + `suggestedPrompts` into system prompt (line 299) + emits `mode` event in SSE (line 516).
+    • `OracleBrainCore.tsx` — client state `useState<CopilotModeId>('general')` + `localStorage` persistence + handles `data.mode` from SSE.
+    • `CopilotModeSelector.tsx` — dropdown UI.
+  - DEAD ROUTE: `src/app/api/oracle/modes/route.ts` (28 lines) — public `GET /api/oracle/modes` returns the same `listModes()` data, but NO frontend caller (the UI imports `COPILOT_MODES` directly, bypassing the API). Route exists but is unconsumed.
+
+- **AI employees/agents invoked by Oracle** (3 distinct agent systems — NOT duplicates, but parallel):
+  1. `src/lib/oracle/pipeline/agents.ts` (446 lines) — CANONICAL for chat. 7 specialist agents (cfo / gst / risk / business-analyst / collections / forecast / compliance) running in PARALLEL via `runAgents()`. Pure functions taking `BusinessSnapshot` + `intent`. Each returns `AgentFinding[]`. Called by `oracle/pipeline/orchestrator.ts:runPipeline()` ← `/api/oracle/chat/route.ts:33` (dead per briefing audit). So the chat-side agents are TECHNICALLY DEAD too — `/api/oracle/chat` was replaced by `/api/oracle/brain`.
+  2. `src/lib/oracle-evolution/agents.ts` (275 lines) — Separate "8 specialist agents" registry (finance / gst / tax / audit / collections / cashflow / compliance / reporting). `AGENT_LIST`, `routeToAgent(query)`, `getAgentById(id)`. Called by `/api/oracle/agents/route.ts` → `OracleEvolutionPanel.tsx:318` (alive).
+  3. `src/lib/oracle/brain/copilot-modes.ts` — 11 modes (above). NOT agents (per its own docstring "Modes are NOT separate AI agents — they're a system-prompt + tool-allowlist overlay on the same Oracle brain").
+  - SEPARATE "AI employee" modules Oracle can invoke (not in oracle/ tree):
+    • `src/lib/oracle-core/orchestrator.ts` (674 lines) — `listAIModules()` returns 17 AI modules (oracle, ceo, cfo, coo, cto, cro, legal, hr, marketing, operations, graph, knowledge, twin, autonomous, connectivity, factory, event). Called by `/api/oracle/executives/route.ts` (25 lines — DEAD, no frontend caller).
+    • `src/lib/autonomous/executives.ts` (329 lines), `src/lib/global-enterprise/executives.ts` (723 lines), `src/lib/workforce/employee-engine.ts` (833 lines) — three parallel "AI employee" engines for the autonomous-enterprise / global-enterprise / workforce subsystems. NOT directly invoked by Oracle chat.
+  - **Verdict**: Oracle itself (via `/api/oracle/brain`) does NOT invoke any AI-employee modules — it uses its own tool-call loop (`ORACLE_TOOL_MAP` in `brain/tools.ts`) + copilot modes. The "agents" in `oracle-evolution/agents.ts` are reachable from Oracle via the OracleEvolutionPanel sidebar but are a separate UX, not an LLM-routing layer.
+
+- **Financial intelligence / CFO modules** (4 parallel CFO concepts):
+  1. `src/lib/autonomous-finance/financial-intelligence.ts` (453 lines) — PURE FUNCTION client-side engine. Exports `computeFinancialIntelligence(input: IntelligenceInput): FinancialIntelligenceReport` + `FinancialIntelligenceSnapshot` type + `formatCurrency()` helper. Used by `src/components/autonomous-finance/{FinancialIntelligencePage,AutonomousFinanceDashboard,SmartReconciliationPage,IntelligentCollectionsPage}.tsx` — ALL 4 of which are DEAD (the autonomous-finance views are in the `DISABLED VIEWS` placeholder set). So `financial-intelligence.ts` is transitively dead.
+  2. `src/lib/cfo/insights.ts` (614 lines) — Server-side "Smart CFO Insights" engine. Exports `buildSmartInsights(): Promise<SmartCFOInsights>` (line 553) which calls `generateCFOInsights` + `buildFinancialAnalysis` in parallel. NO callers anywhere in src/ (verified). DEAD CODE — including the Batch 5 Tier-1 `console.warn` fix that landed on the dead `generateSmartCFOInsights` catch block (worklog line 25054). Fix is correct but has no runtime effect.
+  3. `src/lib/cfo/engine.ts` (1388 lines) — CANONICAL "AI CFO Core Engine". Exports `generateCFOInsights(userId)` (line 1235) + 5 sub-modules. Deterministic + transparent (no LLM). Used widely: `cfo/insights.ts` (dead), `cfo/reports.ts`, `cfo/simulator.ts`, `rmb/engine.ts`, `network/engine.ts`, `graph/engine.ts`, `abos/engine.ts`, `/api/ai-cfo/route.ts` (alive via `RunMyCompanyPage.tsx`), `/api/rmb/{delegate,command,orchestrate}/route.ts`, `/api/execution-cloud/{execute,billing}/route.ts`. 11 live callsites.
+  4. `src/lib/oracle-cfo/engine.ts` (350 lines) — SEPARATE Oracle CFO conversational engine. Exports `askCFO(request: CFOAskRequest): Promise<CFOAnswer>` (different signature). Orchestrates `loadBusinessContext` → `runReasoningPipeline` → `detectActionIntent` → `createPendingApproval` → ZAI LLM call → `parseAiBrief`. NO direct import callers (verified — grep `from '@/lib/oracle-cfo/engine'` returned ZERO). The sibling files in `oracle-cfo/` (tools, approval, business-context, gstpilot-context, communication-engine, invoice-engine, invoice-pdf, invoice-comms, gst-report-engine, gst-report-export, gst-report-explain, intent, explain, explainable, payment-link-engine, payment-link-comms, reasoning, retry, audit, types) ARE alive (used by `/api/oracle/cfo/{analyze,execute,communicate,invoice,payment-link,report}/*` routes), but `engine.ts` itself is dead — the Oracle CFO routes use the individual modules directly, not the `askCFO` orchestrator.
+  - DUPLICATE `computeFinancialIntelligence` symbol collision (SAME NAME, different signatures):
+    • `src/lib/cfo/phase1/orchestrator.ts:234` — server-side `computeFinancialIntelligence(organizationId)` — used by `ceo/data.ts`, `autonomous/self-healing.ts`, `/api/ai-cfo/intelligence/route.ts` (alive via `RunMyCompanyPage.tsx`).
+    • `src/lib/autonomous-finance/financial-intelligence.ts:142` — client-side `computeFinancialIntelligence(input: IntelligenceInput)` — used by dead autonomous-finance components.
+    • Same export name → confusing; the client-side version is dead.
+
+- **Stale/dead Oracle files** (verified by import-graph trace from canonical entry `DashboardViews → OracleBrain → OracleBrainCore → /api/oracle/brain`):
+  - **Stale backup files** (2 files, 3565 lines):
+    • `src/app/api/oracle/chat/route.ts.bak` — 1788 lines, .bak extension (TypeScript ignores, but on disk). Pre-July-23 snapshot of route.ts.
+    • `src/app/api/oracle/chat/route.ts.legacy-backup` — 1777 lines, .legacy-backup extension. Pre-July-18 snapshot.
+  - **Dead lib modules** (verified zero non-self imports):
+    • `src/lib/oracle-production/data-layer.ts` — 1523 lines, exports `getProductionDataSnapshot` + `buildBusinessContext` + `formatContextForLLM` — ZERO importers. (Already flagged by BATCH6-AUDIT-ENGINES.)
+    • `src/lib/oracle-intelligence.ts` — 1096 lines standalone file (the loose one, NOT the `oracle-intelligence/` directory) — ZERO importers. (Already flagged by BATCH6-AUDIT-ENGINES.)
+    • `src/lib/cfo/insights.ts` — 614 lines, `buildSmartInsights()` has ZERO callers. **NEW finding.**
+    • `src/lib/oracle-cfo/engine.ts` — 350 lines, `askCFO()` has ZERO callers (sibling modules in oracle-cfo/ are alive). **NEW finding.**
+    • `src/lib/oracle-cfo/reasoning.ts` — ~520 lines, ZERO importers. (Already flagged by BATCH6-AUDIT-ENGINES.)
+    • `src/lib/oracle-cfo/explainable.ts` — ~290 lines, ZERO importers. (Already flagged.)
+    • `src/lib/oracle-core/prompts.ts` — 294 lines, ZERO importers. (Already flagged.)
+    • `src/lib/oracle/briefing.ts` — 231 lines, `assembleBriefing(input)` called only by `oracle-engine.ts` which is itself dead (chain → `/api/oracle/briefing/route.ts` has no frontend caller). **NEW finding.**
+    • `src/lib/oracle/oracle-engine.ts` — ~330 lines, `generateOracleBriefing()` called only by `/api/oracle/briefing/route.ts` which has no frontend caller. **NEW finding.**
+    • `src/lib/oracle/collectors/{gmail,calendar,drive}.ts` — 3 files (187+125+118 = 430 lines) — STUBBED to "integration not available" returning empty arrays. Only consumed by the dead `oracle-engine.ts` chain. **NEW finding.**
+    • `src/lib/oracle/collectors/{invoices,gst,banking}.ts` — 3 files (176+193+128 = 497 lines) — real implementations but only consumed by dead `oracle-engine.ts` chain. **NEW finding.**
+    • `src/lib/oracle/analyzers/{cashflow,compliance,deadlines,productivity,receivables}.ts` — 5 files — only consumed by dead `oracle-engine.ts` chain. **NEW finding.**
+  - **Dead route handlers** (route exists but no frontend caller):
+    • `/api/oracle/briefing/route.ts` (50 lines) — chain root of dead `oracle-engine.ts`/`briefing.ts`/collectors/analyzers above.
+    • `/api/oracle/brain/briefing/route.ts` (554 lines) — LLM-based briefing, no fetch callers.
+    • `/api/oracle/brain/autonomous-suggestions/route.ts` (325 lines) — no fetch callers.
+    • `/api/oracle/anomalies/route.ts` (44 lines) — no fetch callers (the `detectAnomalies` lib IS alive via executive-briefing, but the route is not).
+    • `/api/oracle/scenario/route.ts` (77 lines) — no fetch callers (the `runScenario` lib has no other consumers, so the entire scenario subsystem is dormant).
+    • `/api/oracle/sources/route.ts` (50 lines) — no fetch callers (the `retrieveSources` lib is used internally by `/api/oracle/brain/route.ts` for prompt injection; the route is for browsing).
+    • `/api/oracle/real-data/route.ts` (36 lines) — no fetch callers.
+    • `/api/oracle/recommendations/route.ts` (57 lines) — no fetch callers.
+    • `/api/oracle/query/route.ts` (123 lines) — no fetch callers.
+    • `/api/oracle/executives/route.ts` (25 lines) — no fetch callers (calls `listAIModules` from `oracle-core/orchestrator.ts`).
+    • `/api/oracle/modes/route.ts` (28 lines) — no fetch callers (lib `COPILOT_MODES` is imported directly by UI).
+    • `/api/oracle/dashboard/route.ts` (25 lines) — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/insights/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/memory/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/reasoning/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/route/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/context/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/audit/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/ask/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/models/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/learn/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/plan/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/analyze/route.ts` — called only by dead `OracleIntelligenceCorePage.tsx`.
+    • `/api/oracle/chat/route.ts` (609 lines) — called only by dead `OracleChat.tsx` + `OracleWorkspace.tsx`.
+    • `/api/oracle/speak/route.ts` (124 lines), `/api/oracle/transcribe/route.ts` (41 lines), `/api/oracle/asr/route.ts` (59 lines), `/api/oracle/tts/route.ts` (74 lines) — called only by `oracle-voice.ts` which is dead (only importer is dead `OracleVoiceOverlay.tsx`).
+  - **Dead UI component trees** (orphaned — only sibling imports, no parent renders them):
+    • `src/components/oracle-chat/*` (7 files: ChatInput, ConfidenceMeter, Messages, OracleChat, OracleMarkdown, ProactiveInsights, ThinkingTrail) — ZERO external importers. View `oracle-chat` redirected to `oracle-brain`.
+    • `src/components/oracle-ai/*` (4 files: ArtifactRenderer, MessageBubble, OracleAIWorkspacePage, useOracleAIChat) — ZERO external importers. View `oracle-ai` redirected to `oracle-brain`.
+    • `src/components/oracle-brain/OracleBrainDashboard.tsx` (630 lines) — ZERO external importers.
+    • `src/components/oracle-intelligence-core/OracleIntelligenceCorePage.tsx` (3032 lines) — ZERO external importers. View `oracle-intelligence` redirected to `oracle-brain`. Sole caller of 13 dead `/api/oracle/{dashboard,insights,memory,reasoning,route,context,audit,ask,models,learn,plan,analyze}` routes.
+    • `src/components/autonomous-finance/*` (7 files: FinancialIntelligencePage, AutonomousFinanceDashboard, SmartReconciliationPage, IntelligentCollectionsPage, PredictiveCompliancePage, WorkflowStudioPage, OracleActionsPanel) — ZERO external importers. Views listed in DISABLED VIEWS set (lines 190–193).
+    • `src/components/ai-cfo/{AICFODashboardPage,AICFOPhase1Sections}.tsx` — ZERO external importers. View `ai-cfo` redirected to `oracle-brain`.
+    • `src/components/oracle/{OracleChat,OraclePanel,OracleWorkspace,OracleDockSidebar,OracleRightPanel,OracleWelcome,OracleWelcomeScreen,OracleInput,OracleInputBar,OracleAgentPanel,OracleSidebar,OracleStatusBar,OracleCommandCenter,OracleBrainPanel,OracleMessage,OracleMessageActions,OracleMarkdown,OracleLogo,OracleAvatar,OracleThinkingAnimation,OracleThinkingStatus,OracleVoiceOverlay,OracleHistory,OracleFollowUps,OracleActions,OracleActionCards,OracleResponseCards,OracleRichAnswer,OracleDataCard,OracleExecutiveResponse,OracleLeftSidebar,OracleInsightsPanel,OracleLauncher,OracleNotifications,OracleEmptyState,BusinessGraphPanel,ConnectorsPanel,MemoryPanel,StructuredQueryCard,ExecutiveBrief}.tsx` + `oracle-{memory,proactive,tasks,voice}.ts` (~40 files) — only sibling imports; the transitive closure starting from the canonical entry (OracleBrain/OracleBrainCore + 6 directly-imported siblings + AskOracleButton + ProactiveOracleBriefing + OracleCommandCenter-already-listed-as-dead + their direct .ts deps) leaves ~40 components unreached. (Sibling audit BATCH6-AUDIT-ENGINES already enumerated the most prominent 5; this audit confirmed the broader count.)
+    • `src/components/oracle-cfo/{CFOAssistantPanel,InvoiceActionCard,PaymentLinkActionCard,CommunicationActionCard}.tsx` (4 files, ~3.7K lines) — only importer is dead `OracleWorkspace.tsx`.
+  - **Dead hooks**:
+    • `src/hooks/useOracleChat.ts` — only caller is dead `components/oracle-chat/OracleChat.tsx`.
+    • `src/hooks/useOracleBrain.ts` — only caller is dead `components/oracle-brain/OracleBrainDashboard.tsx`.
+  - **DEPRECATED marker** in live route: `src/app/api/oracle/brain/route.ts:65` — `// DEPRECATED — replaced by the generic Action Engine (src/lib/oracle/action-engine).` marks the `buildActionPreviewFallback(tool, args)` function (lines 71–87). Still consulted as a fallback when `buildConfirmation()` cannot resolve a tool (line 786). Should be removed once `createTask` + `generateGSTReturn` are migrated into the Action Engine (both are ALREADY registered as Action Engine definitions in `oracle/action-engine/definitions/`, so the fallback is technically unreachable for those — but the brain route still calls it as a defensive default).
+  - **"Legacy" markers** in lib (informational, not stale code):
+    • `src/lib/oracle/real-data.ts:698` — "Legacy mode (no orgId passed): keep the original output for backwards compat" (backwards-compat shim — alive, intentionally retained).
+    • `src/lib/oracle-cfo/tools.ts:163-212` — "Legacy clients (firestore-schema) — mapped as before" + "Legacy invoices — mapped as before" (mapping shims for old schema — alive).
+    • `src/lib/oracle/action-engine/definitions/{create-task,generate-gst-return}.ts:5` — "Migrated from the legacy inline tool in tools.ts into the generic Action Engine." (migration comments — alive).
+

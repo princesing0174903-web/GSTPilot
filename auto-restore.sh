@@ -40,12 +40,18 @@ ZOHO_REDIRECT_URI_DYNAMIC=true
 
 # ─── GitHub OAuth App (Sign In with GitHub) ─────────────────────────────────
 # Required for the "Continue with GitHub" button on the login page.
-# Leave empty if not yet configured — the button will surface a friendly
-# "not configured" error and the rest of the app continues to work.
-GITHUB_APP_CLIENT_ID=
-GITHUB_APP_CLIENT_SECRET=
+# These are the REAL GitHub App credentials (GSTPilot Infinity GitHub App).
+# The Client ID is public (appears in the OAuth URL); the Client Secret is
+# server-side only and never sent to the browser, never logged, never stored
+# in the database. auto-restore.sh only writes these values when the .env is
+# being rebuilt from scratch (sandbox reset wipes the file).
+GITHUB_APP_CLIENT_ID=Iv23lihNSU4aLjSsMUot
+GITHUB_APP_CLIENT_SECRET=b5c34b55f8c04983f9b317d68bf85cbb84e57419
 # Optional: explicit callback URL (defaults to runtime origin + /api/auth/github/callback)
-# GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
+# Set to the preview callback URL registered in the GitHub App so the token
+# exchange matches exactly. The GitHub App's registered callback URL is:
+#   https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/api/auth/github/callback
+GITHUB_REDIRECT_URI=https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/api/auth/github/callback
 # Optional: separate secret for signing OAuth state + session JWTs (defaults to
 # a domain-separated HMAC of GITHUB_APP_CLIENT_SECRET)
 # GITHUB_OAUTH_STATE_SECRET=

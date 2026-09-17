@@ -57,7 +57,7 @@ export interface AuthUser {
   name: string;
   email: string;
   picture?: string;
-  provider: 'email' | 'google' | 'demo';
+  provider: 'email' | 'google' | 'demo' | 'github';
   emailVerified: boolean;
 }
 
@@ -83,6 +83,11 @@ interface AuthContextType {
   /** Google OAuth sign-in. Returns `needsNewTab: true` if the user must
    *  complete sign-in in a new top-level tab (iframe sandbox limitation). */
   signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; needsNewTab?: boolean }>;
+  /** GitHub OAuth sign-in. Redirects the browser to GitHub's consent page.
+   *  On success, the callback sets a session cookie + redirects back to
+   *  `?github_connected=1`, which AuthContext detects on mount and uses to
+   *  hydrate the user from the cookie (NO Firebase Auth required). */
+  signInWithGitHub: () => Promise<{ authUrl: string | null; error: string | null; notConfigured?: boolean }>;
   /** Send a password-reset email. */
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   /** Clear the `isLoading` flag (called by OrgContext when the org resolves). */
@@ -95,7 +100,11 @@ const SESSION_KEY = 'gstpilot_session';
 
 // ── Convert a Firebase User to our lightweight AuthUser ──
 function firebaseToAuthUser(fbUser: FirebaseUser): AuthUser {
-  const provider = fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email';
+  const providerId = fbUser.providerData[0]?.providerId;
+  const provider: AuthUser['provider'] =
+    providerId === 'google.com' ? 'google' :
+    providerId === 'github.com' ? 'github' :
+    'email';
   return {
     id: fbUser.uid,
     name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
@@ -323,6 +332,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // effectively logged out from the app's perspective.
       console.warn('[Auth] logout error:', friendlyAuthError(err));
     }
+    // Also clear the GitHub session cookie if present (server-side logout).
+    try {
+      await fetch('/api/auth/github/logout', { method: 'POST', cache: 'no-store' });
+    } catch {
+      // Non-fatal — the cookie expires in 7 days on its own.
+    }
     setUser(null);
     setNeedsOnboarding(false);
     setError(null);
@@ -435,7 +450,120 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Sign in with a demo account (preview mode) ──
+  // ── Sign in with GitHub ──
+  // Calls /api/auth/github/authorize to get the OAuth consent URL, then
+  // redirects the browser there. GitHub redirects back to
+  // /api/auth/github/callback, which sets the session cookie + redirects
+  // to /?github_connected=1. The restoreGitHubSession effect below picks
+  // that up and hydrates the user from the cookie.
+  const signInWithGitHub = useCallback(async () => {
+    console.log('[Auth] GitHub Sign-In started');
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/github/authorize', { cache: 'no-store' });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        authUrl?: string;
+        error?: string;
+        code?: string;
+        notConfigured?: boolean;
+        requiredEnvVars?: string[];
+      };
+      if (!res.ok || !body.ok || !body.authUrl) {
+        const notConfigured = body.code === 'GITHUB_NOT_CONFIGURED';
+        setIsLoading(false);
+        return {
+          authUrl: null,
+          error: body.error ?? 'Failed to start GitHub sign-in.',
+          notConfigured,
+        };
+      }
+      // IMPORTANT: redirect the top-level window (NOT a popup). Popups are
+      // blocked inside iframes (sandbox preview panel).
+      if (typeof window !== 'undefined') {
+        window.location.href = body.authUrl;
+      }
+      // Don't clear isLoading here — the redirect will reload the page.
+      // The restoreGitHubSession effect will fire on the new page load.
+      return { authUrl: body.authUrl, error: null };
+    } catch (err) {
+      console.error('[Auth] GitHub sign-in exception:', err);
+      setIsLoading(false);
+      return {
+        authUrl: null,
+        error: err instanceof Error ? err.message : 'GitHub sign-in failed.',
+      };
+    }
+  }, []);
+
+  // ── Restore GitHub session from cookie ──
+  // Runs once on mount. If the URL has ?github_connected=1 (set by the
+  // callback) OR the cached session has provider='github', call
+  // /api/auth/github/session to hydrate the user from the cookie.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const githubConnected = url.searchParams.get('github_connected') === '1';
+    const githubError = url.searchParams.get('github_error');
+    if (githubError) {
+      // Clean the URL + surface a friendly error.
+      url.searchParams.delete('github_error');
+      window.history.replaceState({}, '', url.toString());
+      setError('GitHub sign-in failed. Please try again.');
+      return;
+    }
+    if (!githubConnected) return;
+    // Clean the URL.
+    url.searchParams.delete('github_connected');
+    window.history.replaceState({}, '', url.toString());
+
+    let active = true;
+    console.log('[Auth] ?github_connected=1 detected — restoring GitHub session from cookie');
+    fetch('/api/auth/github/session', { cache: 'no-store' })
+      .then(async (res) => {
+        if (!active) return;
+        if (res.status === 401) {
+          console.warn('[Auth] GitHub session cookie missing/expired.');
+          setError('GitHub sign-in did not complete. Please try again.');
+          setIsLoading(false);
+          return;
+        }
+        const body = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          user?: AuthUser;
+          error?: string;
+        };
+        if (!body.ok || !body.user) {
+          console.warn('[Auth] GitHub session restore failed:', body.error);
+          setError(body.error ?? 'GitHub sign-in failed.');
+          setIsLoading(false);
+          return;
+        }
+        console.log('[Auth] GitHub session restored — uid:', body.user.id);
+        // Mark as non-demo so onAuthStateChanged's null-fire doesn't wipe us.
+        isDemoSessionRef.current = false;
+        setUser(body.user);
+        cachedUserIdRef.current = body.user.id;
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify(body.user));
+        } catch {
+          /* non-fatal */
+        }
+        setIsInitializing(false);
+        boot.mark('auth ready');
+        console.log('[Auth] Initialization complete (GitHub session) — isInitializing=false');
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn('[Auth] GitHub session fetch exception:', err);
+        setError('GitHub sign-in did not complete. Please try again.');
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Creates an in-memory demo user + persists to localStorage so the app
   // renders even when Firebase Auth / Firestore are unreachable (e.g. sandbox
   // preview). The OrgContext will create a matching demo org.
@@ -575,6 +703,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
+        signInWithGitHub,
         resetPassword,
         clearIsLoading,
       }}

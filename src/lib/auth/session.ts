@@ -134,7 +134,12 @@ function forbidden(message: string, code: string) {
  *
  * Token resolution order:
  *   1. `Authorization: Bearer <token>` header (preferred — verified via Admin SDK)
- *   2. `x-gstpilot-actor` header JSON `{uid, email}` (fallback when Admin SDK
+ *   2. `gstpilot_session_jwt` cookie (GitHub OAuth session — HMAC-signed JWT,
+ *      verified locally without the Admin SDK. Issued by
+ *      `/api/auth/github/callback` after a successful GitHub login. NEVER
+ *      trusted for write operations that require email verification —
+ *      `emailVerified` is true ONLY if GitHub returned a verified email.)
+ *   3. `x-gstpilot-actor` header JSON `{uid, email}` (fallback when Admin SDK
  *      credentials aren't configured — sandbox/preview mode)
  *
  * In fallback mode, the uid is trusted as-is. This is the SAME trust model
@@ -174,7 +179,32 @@ export async function requireAuth(req: Request): Promise<AuthedUser | NextRespon
     }
   }
 
-  // ── Path 2: x-gstpilot-actor header (fallback) ──
+  // ── Path 2: GitHub session JWT cookie ──
+  // Issued by /api/auth/github/callback after a successful GitHub OAuth login.
+  // HMAC-signed JWT — verified locally WITHOUT the Admin SDK (so it works in
+  // sandbox where Firebase Admin credentials aren't configured). The cookie
+  // is HttpOnly + SameSite=Lax, so it's safe to trust for identity.
+  try {
+    const cookieHeader = req.headers.get('cookie') ?? '';
+    const jwtCookie = parseCookie(cookieHeader).get('gstpilot_session_jwt');
+    if (jwtCookie) {
+      const { verifyJwt } = await import('@/lib/integrations/github/session');
+      const claims = verifyJwt(jwtCookie);
+      if (claims && claims.provider === 'github') {
+        return {
+          uid: claims.uid,
+          email: claims.email,
+          emailVerified: claims.emailVerified,
+          fromHeaderFallback: false,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[session] GitHub session cookie verification failed:', (err as Error).message);
+    // Fall through to header-based trust.
+  }
+
+  // ── Path 3: x-gstpilot-actor header (fallback) ──
   const actorHeader = req.headers.get('x-gstpilot-actor') ?? '';
   if (actorHeader) {
     try {
@@ -196,6 +226,25 @@ export async function requireAuth(req: Request): Promise<AuthedUser | NextRespon
     'Please sign in to continue.',
     'AUTH_REQUIRED'
   );
+}
+
+// ── Cookie parser (lightweight, no dependency) ───────────────────────────────
+//
+// Next.js route handlers receive cookies via the `cookie` header. We parse
+// it here rather than relying on `next/headers` so this works in pure
+// WebAPI Request handlers (used by `requireAuth` callers).
+
+function parseCookie(cookieHeader: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) out.set(key, decodeURIComponent(value));
+  }
+  return out;
 }
 
 // ── requireOrgMembership ────────────────────────────────────────────────────

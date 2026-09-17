@@ -38,6 +38,19 @@ ZOHO_DC=in
 ZOHO_REDIRECT_URI=http://localhost:3000/api/integrations/zoho/callback
 ZOHO_REDIRECT_URI_DYNAMIC=true
 
+# ─── GitHub OAuth App (Sign In with GitHub) ─────────────────────────────────
+# Required for the "Continue with GitHub" button on the login page.
+# Leave empty if not yet configured — the button will surface a friendly
+# "not configured" error and the rest of the app continues to work.
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+# Optional: explicit callback URL (defaults to runtime origin + /api/auth/github/callback)
+# GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
+# Optional: separate secret for signing OAuth state + session JWTs (defaults to
+# a domain-separated HMAC of GITHUB_APP_CLIENT_SECRET)
+# GITHUB_OAUTH_STATE_SECRET=
+# SESSION_JWT_SECRET=
+
 # ─── AI / Oracle (Gemini) ─────────────────────────────────────────────────────
 AI_PROVIDER=gemini
 GEMINI_API_KEY=AQ.Ab8RN6Iuse7Y5dENE2WcpJ3KD2ccJ0Yf2BuawVsIn2lhkQYxlQ
@@ -46,6 +59,17 @@ ENV_EOF
   echo "[auto-restore] .env restored."
 else
   echo "[auto-restore] .env OK (Google credentials present)."
+fi
+
+# ─── 1b. Ensure GitHub env vars exist (idempotent — never overwrites) ────────
+# If the .env was restored from an old snapshot that doesn't have GitHub vars,
+# append them so the GitHub Sign-In button can detect configuration state.
+if ! grep -q "^GITHUB_APP_CLIENT_ID=" .env 2>/dev/null; then
+  echo "" >> .env
+  echo "# ─── GitHub OAuth App (Sign In with GitHub) ─────────────────────────" >> .env
+  echo "GITHUB_APP_CLIENT_ID=" >> .env
+  echo "GITHUB_APP_CLIENT_SECRET=" >> .env
+  echo "[auto-restore] GitHub env vars added (empty — fill in to enable GitHub Sign-In)."
 fi
 
 # ─── 2. Restore local-workspace.ts if missing ────────────────────────────────

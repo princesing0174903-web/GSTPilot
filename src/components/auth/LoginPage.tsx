@@ -23,6 +23,7 @@ import {
   Loader2,
   AlertCircle,
   Chrome,
+  Github,
   UserPlus,
   ArrowLeft,
   KeyRound,
@@ -45,6 +46,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     signInWithEmail: ctxSignInWithEmail,
     signUpWithEmail: ctxSignUpWithEmail,
     signInWithGoogle: ctxSignInWithGoogle,
+    signInWithGitHub: ctxSignInWithGitHub,
     resetPassword: ctxResetPassword,
   } = useAuth();
 
@@ -153,6 +155,32 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       }
     } catch {
       setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
+      setLocalLoading(false);
+    }
+  };
+
+  // ── GitHub Sign In ──
+  // Calls /api/auth/github/authorize, gets the OAuth consent URL, then
+  // redirects the top-level window there. The callback sets a session
+  // cookie + redirects back to /?github_connected=1, which AuthContext
+  // detects and uses to hydrate the session.
+  const handleGitHubSignIn = async () => {
+    setLocalError(null);
+    setLocalLoading(true);
+    try {
+      const { error: githubError, notConfigured } = await ctxSignInWithGitHub();
+      if (githubError) {
+        setLocalError(
+          notConfigured
+            ? 'GitHub Sign-In is not configured on this server. Ask your administrator to set GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET.'
+            : githubError
+        );
+        setLocalLoading(false);
+      }
+      // On success, the browser is being redirected to GitHub — don't clear
+      // localLoading until the redirect completes.
+    } catch {
+      setLocalError('An unexpected error occurred during GitHub sign-in. Please try again.');
       setLocalLoading(false);
     }
   };
@@ -434,6 +462,21 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                   <Chrome className="h-4 w-4" />
                 )}
                 Continue with Google
+              </Button>
+
+              {/* GitHub Sign In */}
+              <Button
+                variant="outline"
+                onClick={handleGitHubSignIn}
+                disabled={combinedLoading}
+                className="w-full h-11 glass-surface border-white/[0.10] hover:bg-white/[0.06] text-white font-medium gap-2.5 mb-4 press-scale rounded-xl"
+              >
+                {combinedLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Github className="h-4 w-4" />
+                )}
+                Continue with GitHub
               </Button>
 
               {/* Open in new tab prompt — shown when iframe is detected */}

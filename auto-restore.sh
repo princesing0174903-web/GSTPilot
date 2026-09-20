@@ -30,6 +30,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # ─── Google Workspace OAuth ──────────────────────────────────────────────────
 GOOGLE_CLIENT_ID=44040248808-3v5kgq04ghog7uddc4n51mps0jr8r946.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=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
+# Explicit redirect URI — MUST exactly match an entry in Google Cloud Console
+# under APIs & Services → Credentials → OAuth 2.0 Client → Authorized redirect URIs.
+# Using the preview URL (not localhost) ensures Google's check always matches.
+GOOGLE_REDIRECT_URI=https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/api/integrations/google/callback
 
 # ─── Zoho Books OAuth ─────────────────────────────────────────────────────────
 ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB

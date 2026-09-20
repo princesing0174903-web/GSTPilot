@@ -32,9 +32,51 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-function failRedirect(code: string): NextResponse {
+/**
+ * Detect the app origin from the incoming request so redirects land on the
+ * correct domain (preview OR localhost). Mirrors the GitHub callback's
+ * detectOrigin logic. Prefers GOOGLE_REDIRECT_URI's origin (set in .env to
+ * the preview URL), then falls back to request headers.
+ */
+function detectOrigin(req: Request): string {
+  // 1. Env var (preferred — set to the preview URL in .env)
+  const envUri = process.env.GOOGLE_REDIRECT_URI;
+  if (envUri) {
+    try {
+      return new URL(envUri).origin;
+    } catch {
+      // fall through
+    }
+  }
+  // 2. abc header (preview gateway marker)
+  const url = new URL(req.url);
+  const abc = req.headers.get('abc');
+  if (abc) {
+    const proto = url.protocol.replace(':', '');
+    return `${proto}://${abc}`;
+  }
+  // 3. Origin header
+  const origin = req.headers.get('origin');
+  if (origin) return origin;
+  // 4. X-Forwarded-Host + X-Forwarded-Proto
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto');
+  if (fwdHost) {
+    return `${fwdProto ?? 'https'}://${fwdHost}`;
+  }
+  // 5. Host header (proto inferred from localhost)
+  const host = req.headers.get('host');
+  if (host) {
+    const isLocal = host.startsWith('localhost') || host.startsWith('127.');
+    return `${isLocal ? 'http' : 'https'}://${host}`;
+  }
+  // 6. req.url origin
+  return `${url.protocol}//${url.host}`;
+}
+
+function failRedirect(req: Request, code: string): NextResponse {
   const url = `/?google_error=${encodeURIComponent(code)}&view=google-workspace`;
-  return NextResponse.redirect(new URL(url, 'http://localhost:3000'));
+  return NextResponse.redirect(new URL(url, detectOrigin(req)));
 }
 
 export async function GET(req: Request) {
@@ -45,23 +87,24 @@ export async function GET(req: Request) {
 
   // User declined consent on Google's page.
   if (googleError) {
-    return failRedirect(`google_${googleError}`);
+    return failRedirect(req, `google_${googleError}`);
   }
   if (!code || !stateParam) {
-    return failRedirect('missing_params');
+    return failRedirect(req, 'missing_params');
   }
 
   // ── Verify state ──
   const state = decodeState(stateParam);
   if (!state) {
-    return failRedirect('invalid_state');
+    return failRedirect(req, 'invalid_state');
   }
 
   // ── Exchange code for tokens (uses the redirect_uri from the signed state
   //    so Google's check matches the one used to build the auth URL) ──
   const exchange = await exchangeCodeForTokens(code, state.redirectUri);
   if (exchange.error || !exchange.tokens?.access_token) {
-    return failRedirect('exchange_failed');
+    console.warn('[google/callback] Token exchange failed:', exchange.error);
+    return failRedirect(req, 'exchange_failed');
   }
 
   // ── Persist tokens (AES-256-GCM) ──
@@ -82,12 +125,12 @@ export async function GET(req: Request) {
     );
   } catch (e) {
     console.error('[google/callback] storeTokens failed:', e);
-    return failRedirect('persistence_failed');
+    return failRedirect(req, 'persistence_failed');
   }
 
-  // ── Redirect back to the app ──
+  // ── Redirect back to the app (origin detected from request, NOT hardcoded localhost) ──
   const returnPath = state.returnPath ?? '/?view=google-workspace';
   const sep = returnPath.includes('?') ? '&' : '?';
   const finalUrl = `${returnPath}${sep}google_connected=1`;
-  return NextResponse.redirect(new URL(finalUrl, 'http://localhost:3000'));
+  return NextResponse.redirect(new URL(finalUrl, detectOrigin(req)));
 }

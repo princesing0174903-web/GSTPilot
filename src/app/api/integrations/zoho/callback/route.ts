@@ -36,9 +36,51 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-function failRedirect(code: string): NextResponse {
+/**
+ * Detect the app origin from the incoming request so redirects land on the
+ * correct domain (preview OR localhost). Mirrors the Google + GitHub callback
+ * detectOrigin logic. Prefers ZOHO_REDIRECT_URI's origin (set in .env to the
+ * preview URL), then falls back to request headers.
+ */
+function detectOrigin(req: Request): string {
+  // 1. Env var (preferred — set to the preview URL in .env)
+  const envUri = process.env.ZOHO_REDIRECT_URI;
+  if (envUri) {
+    try {
+      return new URL(envUri).origin;
+    } catch {
+      // fall through
+    }
+  }
+  // 2. abc header (preview gateway marker)
+  const url = new URL(req.url);
+  const abc = req.headers.get('abc');
+  if (abc) {
+    const proto = url.protocol.replace(':', '');
+    return `${proto}://${abc}`;
+  }
+  // 3. Origin header
+  const origin = req.headers.get('origin');
+  if (origin) return origin;
+  // 4. X-Forwarded-Host + X-Forwarded-Proto
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto');
+  if (fwdHost) {
+    return `${fwdProto ?? 'https'}://${fwdHost}`;
+  }
+  // 5. Host header (proto inferred from localhost)
+  const host = req.headers.get('host');
+  if (host) {
+    const isLocal = host.startsWith('localhost') || host.startsWith('127.');
+    return `${isLocal ? 'http' : 'https'}://${host}`;
+  }
+  // 6. req.url origin
+  return `${url.protocol}//${url.host}`;
+}
+
+function failRedirect(req: Request, code: string): NextResponse {
   const url = `/?zoho_error=${encodeURIComponent(code)}&view=zoho-books`;
-  return NextResponse.redirect(new URL(url, 'http://localhost:3000'));
+  return NextResponse.redirect(new URL(url, detectOrigin(req)));
 }
 
 export async function GET(req: Request) {
@@ -49,23 +91,23 @@ export async function GET(req: Request) {
 
   // User declined consent on Zoho's page.
   if (zohoError) {
-    return failRedirect(`zoho_${zohoError}`);
+    return failRedirect(req, `zoho_${zohoError}`);
   }
   if (!code || !stateParam) {
-    return failRedirect('missing_params');
+    return failRedirect(req, 'missing_params');
   }
 
   // ── Verify state ──
   const state = decodeState(stateParam);
   if (!state) {
-    return failRedirect('invalid_state');
+    return failRedirect(req, 'invalid_state');
   }
 
   // ── Exchange code for tokens (uses the redirect_uri from the signed state) ──
   const exchange = await exchangeCodeForTokens(code, state.redirectUri);
   if (exchange.error || !exchange.tokens?.access_token) {
     console.error('[zoho/callback] exchange failed:', exchange.error);
-    return failRedirect('exchange_failed');
+    return failRedirect(req, 'exchange_failed');
   }
 
   // ── Persist tokens (AES-256-GCM) ──
@@ -85,7 +127,7 @@ export async function GET(req: Request) {
     );
   } catch (e) {
     console.error('[zoho/callback] storeTokens failed:', e);
-    return failRedirect('persistence_failed');
+    return failRedirect(req, 'persistence_failed');
   }
 
   // ── Fetch organizations + persist the default org mapping ──
@@ -105,9 +147,9 @@ export async function GET(req: Request) {
     // Non-fatal.
   }
 
-  // ── Redirect back to the app ──
+  // ── Redirect back to the app (origin detected from request, NOT hardcoded localhost) ──
   const returnPath = state.returnPath ?? '/?view=zoho-books';
   const sep = returnPath.includes('?') ? '&' : '?';
   const finalUrl = `${returnPath}${sep}zoho_connected=1`;
-  return NextResponse.redirect(new URL(finalUrl, 'http://localhost:3000'));
+  return NextResponse.redirect(new URL(finalUrl, detectOrigin(req)));
 }

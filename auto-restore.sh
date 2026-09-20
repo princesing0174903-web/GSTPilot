@@ -39,8 +39,11 @@ GOOGLE_REDIRECT_URI=https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.sp
 ZOHO_CLIENT_ID=1000.KO5C1LU7AWX944NFH7GDGD6DMOI0MB
 ZOHO_CLIENT_SECRET=4a105deba4d40600f7578097dd044c010393ff6e9a
 ZOHO_DC=in
-ZOHO_REDIRECT_URI=http://localhost:3000/api/integrations/zoho/callback
-ZOHO_REDIRECT_URI_DYNAMIC=true
+# Explicit redirect URI — MUST exactly match an entry in Zoho API Console
+# under Credentials → Self Client → Authorized Redirect URIs.
+# Using the preview URL (not localhost) ensures Zoho's check always matches.
+ZOHO_REDIRECT_URI=https://preview-chat-79916a4d-1449-42eb-9867-d92b791821a4.space-z.ai/api/integrations/zoho/callback
+ZOHO_REDIRECT_URI_DYNAMIC=false
 
 # ─── GitHub OAuth App (Sign In with GitHub) ─────────────────────────────────
 # Required for the "Continue with GitHub" button on the login page.
